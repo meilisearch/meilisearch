@@ -221,6 +221,7 @@ fn open_or_create_database_unchecked(
     // we don't want to create anything in the data.ms yet, thus we
     // wrap our two builders in a closure that'll be executed later.
     let auth_controller = AuthController::new(&opt.db_path, &opt.master_key);
+    let instance_features = opt.to_instance_features();
     let index_scheduler_builder = || -> anyhow::Result<_> {
         Ok(IndexScheduler::new(IndexSchedulerOptions {
             version_file_path: opt.db_path.join(VERSION_FILE_NAME),
@@ -238,6 +239,7 @@ fn open_or_create_database_unchecked(
             max_number_of_tasks: 1_000_000,
             index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().get_bytes() as usize,
             index_count: DEFAULT_INDEX_COUNT,
+            instance_features,
         })?)
     };
 
