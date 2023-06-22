@@ -274,6 +274,12 @@ pub enum Action {
     #[serde(rename = "keys.delete")]
     #[deserr(rename = "keys.delete")]
     KeysDelete,
+    #[serde(rename = "experimental.get")]
+    #[deserr(rename = "experimental.get")]
+    ExperimentalFeaturesGet,
+    #[serde(rename = "experimental.update")]
+    #[deserr(rename = "experimental.update")]
+    ExperimentalFeaturesUpdate,
 }
 
 impl Action {
@@ -310,6 +316,8 @@ impl Action {
             KEYS_GET => Some(Self::KeysGet),
             KEYS_UPDATE => Some(Self::KeysUpdate),
             KEYS_DELETE => Some(Self::KeysDelete),
+            EXPERIMENTAL_FEATURES_GET => Some(Self::ExperimentalFeaturesGet),
+            EXPERIMENTAL_FEATURES_UPDATE => Some(Self::ExperimentalFeaturesUpdate),
             _otherwise => None,
         }
     }
@@ -352,4 +360,6 @@ pub mod actions {
     pub const KEYS_GET: u8 = KeysGet.repr();
     pub const KEYS_UPDATE: u8 = KeysUpdate.repr();
     pub const KEYS_DELETE: u8 = KeysDelete.repr();
+    pub const EXPERIMENTAL_FEATURES_GET: u8 = ExperimentalFeaturesGet.repr();
+    pub const EXPERIMENTAL_FEATURES_UPDATE: u8 = ExperimentalFeaturesUpdate.repr();
 }
