@@ -407,6 +407,7 @@ make_setting_route!(
             json!({
                 "faceting": {
                     "max_values_per_facet": setting.as_ref().and_then(|s| s.max_values_per_facet.set()),
+                    "sort_facet_values_by": setting.as_ref().and_then(|s| s.sort_facet_values_by.clone().set()),
                 },
             }),
             Some(req),
@@ -545,6 +546,10 @@ pub async fn update_all(
                     .as_ref()
                     .set()
                     .and_then(|s| s.max_values_per_facet.as_ref().set()),
+                "sort_facet_values_by": new_settings.faceting
+                    .as_ref()
+                    .set()
+                    .and_then(|s| s.sort_facet_values_by.as_ref().set()),
             },
             "pagination": {
                 "max_total_hits": new_settings.pagination

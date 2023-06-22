@@ -26,7 +26,8 @@ use crate::readable_slices::ReadableSlices;
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdWordCountCodec, GeoPoint, ObkvCodec,
-    Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, BEU16, BEU32,
+    OrderBy, Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, BEU16,
+    BEU32,
 };
 
 /// The HNSW data-structure that we serialize, fill and search in.
@@ -71,6 +72,7 @@ pub mod main_key {
     pub const EXACT_WORDS: &str = "exact-words";
     pub const EXACT_ATTRIBUTES: &str = "exact-attributes";
     pub const MAX_VALUES_PER_FACET: &str = "max-values-per-facet";
+    pub const SORT_FACET_VALUES_BY: &str = "sort-facet-values-by";
     pub const PAGINATION_MAX_TOTAL_HITS: &str = "pagination-max-total-hits";
 }
 
@@ -1296,6 +1298,31 @@ impl Index {
 
     pub(crate) fn delete_max_values_per_facet(&self, txn: &mut RwTxn) -> heed::Result<bool> {
         self.main.delete::<_, Str>(txn, main_key::MAX_VALUES_PER_FACET)
+    }
+
+    pub fn sort_facet_values_by(&self, txn: &RoTxn) -> heed::Result<HashMap<String, OrderBy>> {
+        let mut orders = self
+            .main
+            .get::<_, Str, SerdeJson<HashMap<String, OrderBy>>>(
+                txn,
+                main_key::SORT_FACET_VALUES_BY,
+            )?
+            .unwrap_or_default();
+        // Insert the default ordering if it is not already overwritten by the user.
+        orders.entry("*".to_string()).or_insert(OrderBy::Lexicographic);
+        Ok(orders)
+    }
+
+    pub(crate) fn put_sort_facet_values_by(
+        &self,
+        txn: &mut RwTxn,
+        val: &HashMap<String, OrderBy>,
+    ) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeJson<_>>(txn, main_key::SORT_FACET_VALUES_BY, &val)
+    }
+
+    pub(crate) fn delete_sort_facet_values_by(&self, txn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(txn, main_key::SORT_FACET_VALUES_BY)
     }
 
     pub fn pagination_max_total_hits(&self, txn: &RoTxn) -> heed::Result<Option<usize>> {

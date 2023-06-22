@@ -75,8 +75,6 @@ pub struct SearchQuery {
     pub sort: Option<Vec<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)] // TODO
-    pub sort_facet_values_by: Option<FacetValuesSort>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
     pub highlight_pre_tag: String,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
@@ -136,8 +134,6 @@ pub struct SearchQueryWithIndex {
     pub sort: Option<Vec<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)] // TODO
-    pub sort_facet_values_by: Option<FacetValuesSort>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
     pub highlight_pre_tag: String,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
@@ -170,7 +166,6 @@ impl SearchQueryWithIndex {
             filter,
             sort,
             facets,
-            sort_facet_values_by,
             highlight_pre_tag,
             highlight_post_tag,
             crop_marker,
@@ -196,7 +191,6 @@ impl SearchQueryWithIndex {
                 filter,
                 sort,
                 facets,
-                sort_facet_values_by,
                 highlight_pre_tag,
                 highlight_post_tag,
                 crop_marker,
@@ -581,12 +575,29 @@ pub fn perform_search(
                 .unwrap_or(DEFAULT_VALUES_PER_FACET);
             facet_distribution.max_values_per_facet(max_values_by_facet);
 
+            let sort_facet_values_by =
+                index.sort_facet_values_by(&rtxn).map_err(milli::Error::from)?;
+            let default_sort_facet_values_by =
+                sort_facet_values_by.get("*").copied().unwrap_or_default();
+
             if fields.iter().all(|f| f != "*") {
+                let fields: Vec<_> = fields
+                    .into_iter()
+                    .map(|n| {
+                        (
+                            n,
+                            sort_facet_values_by
+                                .get(n)
+                                .copied()
+                                .unwrap_or(default_sort_facet_values_by),
+                        )
+                    })
+                    .collect();
                 facet_distribution.facets(fields);
             }
             let distribution = facet_distribution
                 .candidates(candidates)
-                .order_by(query.sort_facet_values_by.map_or_else(Default::default, Into::into))
+                .default_order_by(default_sort_facet_values_by)
                 .execute()?;
             let stats = facet_distribution.compute_stats()?;
             (Some(distribution), Some(stats))
