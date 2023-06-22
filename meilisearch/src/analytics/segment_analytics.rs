@@ -36,7 +36,7 @@ use crate::routes::{create_all_stats, Stats};
 use crate::search::{
     FacetSearchResult, MatchingStrategy, SearchQuery, SearchQueryWithIndex, SearchResult,
     DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
-    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
+    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
 };
 use crate::Opt;
 
@@ -960,27 +960,7 @@ pub struct FacetSearchAggregator {
 
 impl FacetSearchAggregator {
     pub fn from_query(query: &FacetSearchQuery, request: &HttpRequest) -> Self {
-        let FacetSearchQuery {
-            facet_query: _,
-            facet_name,
-            q,
-            offset,
-            limit,
-            page,
-            hits_per_page,
-            attributes_to_retrieve,
-            attributes_to_crop,
-            crop_length,
-            attributes_to_highlight,
-            show_matches_position,
-            filter,
-            sort,
-            facets,
-            highlight_pre_tag,
-            highlight_post_tag,
-            crop_marker,
-            matching_strategy,
-        } = query;
+        let FacetSearchQuery { facet_query: _, facet_name, q, filter, matching_strategy } = query;
 
         let mut ret = Self::default();
         ret.timestamp = Some(OffsetDateTime::now_utc());
@@ -989,23 +969,8 @@ impl FacetSearchAggregator {
         ret.user_agents = extract_user_agents(request).into_iter().collect();
         ret.facet_names = Some(facet_name.clone()).into_iter().collect();
 
-        ret.additional_search_parameters_provided = q.is_some()
-            || *offset != DEFAULT_SEARCH_OFFSET()
-            || *limit != DEFAULT_SEARCH_LIMIT()
-            || page.is_some()
-            || hits_per_page.is_some()
-            || attributes_to_retrieve.is_some()
-            || attributes_to_crop.is_some()
-            || *crop_length != DEFAULT_CROP_LENGTH()
-            || attributes_to_highlight.is_some()
-            || *show_matches_position
-            || filter.is_some()
-            || sort.is_some()
-            || facets.is_some()
-            || *highlight_pre_tag != DEFAULT_HIGHLIGHT_PRE_TAG()
-            || *highlight_post_tag != DEFAULT_HIGHLIGHT_POST_TAG()
-            || *crop_marker != DEFAULT_CROP_MARKER()
-            || *matching_strategy != MatchingStrategy::default();
+        ret.additional_search_parameters_provided =
+            q.is_some() || filter.is_some() || *matching_strategy != MatchingStrategy::default();
 
         ret
     }

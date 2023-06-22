@@ -1,5 +1,3 @@
-use std::collections::{BTreeSet, HashSet};
-
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
@@ -26,7 +24,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 // TODO improve the error messages
 #[derive(Debug, Clone, Default, PartialEq, deserr::Deserr)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase)]
 pub struct FacetSearchQuery {
     #[deserr(default, error = DeserrJsonError<InvalidFacetSearchQuery>)]
     pub facet_query: Option<String>,
@@ -36,40 +34,8 @@ pub struct FacetSearchQuery {
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
-    #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
-    pub offset: usize,
-    #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
-    pub limit: usize,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
-    pub page: Option<usize>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
-    pub hits_per_page: Option<usize>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
-    pub attributes_to_retrieve: Option<BTreeSet<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
-    pub attributes_to_crop: Option<Vec<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
-    pub crop_length: usize,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
-    pub attributes_to_highlight: Option<HashSet<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>, default)]
-    pub show_matches_position: bool,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>, default)]
-    pub show_ranking_score: bool,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>, default)]
-    pub show_ranking_score_details: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
-    pub sort: Option<Vec<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
-    pub facets: Option<Vec<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
-    pub highlight_pre_tag: String,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
-    pub highlight_post_tag: String,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
-    pub crop_marker: String,
     #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
     pub matching_strategy: MatchingStrategy,
 }
@@ -117,27 +83,36 @@ pub async fn search(
 
 impl From<FacetSearchQuery> for SearchQuery {
     fn from(value: FacetSearchQuery) -> Self {
+        let FacetSearchQuery {
+            facet_query: _,
+            facet_name: _,
+            q,
+            vector,
+            filter,
+            matching_strategy,
+        } = value;
+
         SearchQuery {
-            q: value.q,
-            offset: value.offset,
-            limit: value.limit,
-            page: value.page,
-            hits_per_page: value.hits_per_page,
-            attributes_to_retrieve: value.attributes_to_retrieve,
-            attributes_to_crop: value.attributes_to_crop,
-            crop_length: value.crop_length,
-            attributes_to_highlight: value.attributes_to_highlight,
-            show_matches_position: value.show_matches_position,
-            show_ranking_score: value.show_ranking_score,
-            show_ranking_score_details: value.show_ranking_score_details,
-            filter: value.filter,
-            sort: value.sort,
-            facets: value.facets,
-            highlight_pre_tag: value.highlight_pre_tag,
-            highlight_post_tag: value.highlight_post_tag,
-            crop_marker: value.crop_marker,
-            matching_strategy: value.matching_strategy,
-            vector: value.vector,
+            q,
+            offset: DEFAULT_SEARCH_OFFSET(),
+            limit: DEFAULT_SEARCH_LIMIT(),
+            page: None,
+            hits_per_page: None,
+            attributes_to_retrieve: None,
+            attributes_to_crop: None,
+            crop_length: DEFAULT_CROP_LENGTH(),
+            attributes_to_highlight: None,
+            show_matches_position: false,
+            show_ranking_score: false,
+            show_ranking_score_details: false,
+            filter,
+            sort: None,
+            facets: None,
+            highlight_pre_tag: DEFAULT_HIGHLIGHT_PRE_TAG(),
+            highlight_post_tag: DEFAULT_HIGHLIGHT_POST_TAG(),
+            crop_marker: DEFAULT_CROP_MARKER(),
+            matching_strategy,
+            vector,
         }
     }
 }
