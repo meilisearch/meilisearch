@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use memmap2::Mmap;
 
-/// Wrapper around Mmap allowing to virtualy clone grenad-chunks
+/// Wrapper around Mmap allowing to virtually clone grenad-chunks
 /// in a parallel process like the indexing.
 #[derive(Debug, Clone)]
 pub struct ClonableMmap {

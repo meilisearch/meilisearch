@@ -160,7 +160,7 @@ impl BatchKind {
 impl BatchKind {
     /// Returns a `ControlFlow::Break` if you must stop right now.
     /// The boolean tell you if an index has been created by the batched task.
-    /// To ease the writting of the code. `true` can be returned when you don't need to create an index
+    /// To ease the writing of the code. `true` can be returned when you don't need to create an index
     /// but false can't be returned if you needs to create an index.
     // TODO use an AutoBatchKind as input
     pub fn new(
@@ -214,7 +214,7 @@ impl BatchKind {
 
     /// Returns a `ControlFlow::Break` if you must stop right now.
     /// The boolean tell you if an index has been created by the batched task.
-    /// To ease the writting of the code. `true` can be returned when you don't need to create an index
+    /// To ease the writing of the code. `true` can be returned when you don't need to create an index
     /// but false can't be returned if you needs to create an index.
     #[rustfmt::skip]
     fn accumulate(self, id: TaskId, kind: AutobatchKind, index_already_exists: bool, primary_key: Option<&str>) -> ControlFlow<BatchKind, BatchKind> {

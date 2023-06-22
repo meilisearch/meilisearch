@@ -1785,7 +1785,7 @@ mod tests {
             assert_eq!(task.kind.as_kind(), k);
         }
 
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "everything_is_succesfully_registered");
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "everything_is_successfully_registered");
     }
 
     #[test]
