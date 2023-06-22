@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize, Serializer};
 
 use crate::deserr::DeserrJsonError;
 use crate::error::deserr_codes::*;
+use crate::facet_values_sort::FacetValuesSort;
 
 /// The maximimum number of results that the engine
 /// will be able to return in one search call.
@@ -102,6 +103,9 @@ pub struct FacetingSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     pub max_values_per_facet: Setting<usize>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
+    pub sort_facet_values_by: Setting<BTreeMap<String, FacetValuesSort>>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
@@ -398,12 +402,21 @@ pub fn apply_settings_to_builder(
         Setting::NotSet => (),
     }
 
-    match settings.faceting {
-        Setting::Set(ref value) => match value.max_values_per_facet {
-            Setting::Set(val) => builder.set_max_values_per_facet(val),
-            Setting::Reset => builder.reset_max_values_per_facet(),
-            Setting::NotSet => (),
-        },
+    match &settings.faceting {
+        Setting::Set(FacetingSettings { max_values_per_facet, sort_facet_values_by }) => {
+            match max_values_per_facet {
+                Setting::Set(val) => builder.set_max_values_per_facet(*val),
+                Setting::Reset => builder.reset_max_values_per_facet(),
+                Setting::NotSet => (),
+            }
+            match sort_facet_values_by {
+                Setting::Set(val) => builder.set_sort_facet_values_by(
+                    val.iter().map(|(name, order)| (name.clone(), (*order).into())).collect(),
+                ),
+                Setting::Reset => builder.reset_sort_facet_values_by(),
+                Setting::NotSet => (),
+            }
+        }
         Setting::Reset => builder.reset_max_values_per_facet(),
         Setting::NotSet => (),
     }
@@ -475,6 +488,13 @@ pub fn settings(
     let faceting = FacetingSettings {
         max_values_per_facet: Setting::Set(
             index.max_values_per_facet(rtxn)?.unwrap_or(DEFAULT_VALUES_PER_FACET),
+        ),
+        sort_facet_values_by: Setting::Set(
+            index
+                .sort_facet_values_by(rtxn)?
+                .into_iter()
+                .map(|(name, sort)| (name, sort.into()))
+                .collect(),
         ),
     };
 

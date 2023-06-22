@@ -10,7 +10,6 @@ use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::index_uid::IndexUid;
-use meilisearch_types::milli::OrderBy;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
@@ -62,8 +61,6 @@ pub struct SearchQuery {
     pub sort: Option<Vec<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)] // TODO
-    pub sort_facet_values_by: Option<FacetValuesSort>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
     pub highlight_pre_tag: String,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
@@ -115,8 +112,6 @@ pub struct SearchQueryWithIndex {
     pub sort: Option<Vec<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)] // TODO
-    pub sort_facet_values_by: Option<FacetValuesSort>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
     pub highlight_pre_tag: String,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
@@ -144,7 +139,6 @@ impl SearchQueryWithIndex {
             filter,
             sort,
             facets,
-            sort_facet_values_by,
             highlight_pre_tag,
             highlight_post_tag,
             crop_marker,
@@ -166,7 +160,6 @@ impl SearchQueryWithIndex {
                 filter,
                 sort,
                 facets,
-                sort_facet_values_by,
                 highlight_pre_tag,
                 highlight_post_tag,
                 crop_marker,
@@ -198,26 +191,6 @@ impl From<MatchingStrategy> for TermsMatchingStrategy {
         match other {
             MatchingStrategy::Last => Self::Last,
             MatchingStrategy::All => Self::All,
-        }
-    }
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Eq, Deserr)]
-#[deserr(rename_all = camelCase)]
-pub enum FacetValuesSort {
-    /// Facet values are sorted in alphabetical order, ascending from A to Z.
-    #[default]
-    Alpha,
-    /// Facet values are sorted by decreasing count.
-    /// The count is the number of records containing this facet value in the results of the query.
-    Count,
-}
-
-impl From<FacetValuesSort> for OrderBy {
-    fn from(val: FacetValuesSort) -> Self {
-        match val {
-            FacetValuesSort::Alpha => OrderBy::Lexicographic,
-            FacetValuesSort::Count => OrderBy::Count,
         }
     }
 }
@@ -476,12 +449,29 @@ pub fn perform_search(
                 .unwrap_or(DEFAULT_VALUES_PER_FACET);
             facet_distribution.max_values_per_facet(max_values_by_facet);
 
+            let sort_facet_values_by =
+                index.sort_facet_values_by(&rtxn).map_err(milli::Error::from)?;
+            let default_sort_facet_values_by =
+                sort_facet_values_by.get("*").copied().unwrap_or_default();
+
             if fields.iter().all(|f| f != "*") {
+                let fields: Vec<_> = fields
+                    .into_iter()
+                    .map(|n| {
+                        (
+                            n,
+                            sort_facet_values_by
+                                .get(n)
+                                .copied()
+                                .unwrap_or(default_sort_facet_values_by),
+                        )
+                    })
+                    .collect();
                 facet_distribution.facets(fields);
             }
             let distribution = facet_distribution
                 .candidates(candidates)
-                .order_by(query.sort_facet_values_by.map_or_else(Default::default, Into::into))
+                .default_order_by(default_sort_facet_values_by)
                 .execute()?;
             let stats = facet_distribution.compute_stats()?;
             (Some(distribution), Some(stats))

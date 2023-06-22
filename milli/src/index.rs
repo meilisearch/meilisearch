@@ -23,8 +23,8 @@ use crate::heed_codec::{ScriptLanguageCodec, StrBEU16Codec, StrRefCodec};
 use crate::{
     default_criteria, BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec, Criterion,
     DocumentId, ExternalDocumentsIds, FacetDistribution, FieldDistribution, FieldId,
-    FieldIdWordCountCodec, GeoPoint, ObkvCodec, Result, RoaringBitmapCodec, RoaringBitmapLenCodec,
-    Search, U8StrStrCodec, BEU16, BEU32,
+    FieldIdWordCountCodec, GeoPoint, ObkvCodec, OrderBy, Result, RoaringBitmapCodec,
+    RoaringBitmapLenCodec, Search, U8StrStrCodec, BEU16, BEU32,
 };
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
@@ -62,6 +62,7 @@ pub mod main_key {
     pub const EXACT_WORDS: &str = "exact-words";
     pub const EXACT_ATTRIBUTES: &str = "exact-attributes";
     pub const MAX_VALUES_PER_FACET: &str = "max-values-per-facet";
+    pub const SORT_FACET_VALUES_BY: &str = "sort-facet-values-by";
     pub const PAGINATION_MAX_TOTAL_HITS: &str = "pagination-max-total-hits";
 }
 
@@ -1234,6 +1235,31 @@ impl Index {
         self.main.delete::<_, Str>(txn, main_key::MAX_VALUES_PER_FACET)
     }
 
+    pub fn sort_facet_values_by(&self, txn: &RoTxn) -> heed::Result<HashMap<String, OrderBy>> {
+        let mut orders = self
+            .main
+            .get::<_, Str, SerdeJson<HashMap<String, OrderBy>>>(
+                txn,
+                main_key::SORT_FACET_VALUES_BY,
+            )?
+            .unwrap_or_default();
+        // Insert the default ordering if it is not already overwritten by the user.
+        orders.entry("*".to_string()).or_insert(OrderBy::Lexicographic);
+        Ok(orders)
+    }
+
+    pub(crate) fn put_sort_facet_values_by(
+        &self,
+        txn: &mut RwTxn,
+        val: &HashMap<String, OrderBy>,
+    ) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeJson<_>>(txn, main_key::SORT_FACET_VALUES_BY, &val)
+    }
+
+    pub(crate) fn delete_sort_facet_values_by(&self, txn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(txn, main_key::SORT_FACET_VALUES_BY)
+    }
+
     pub fn pagination_max_total_hits(&self, txn: &RoTxn) -> heed::Result<Option<usize>> {
         self.main.get::<_, Str, OwnedType<usize>>(txn, main_key::PAGINATION_MAX_TOTAL_HITS)
     }
@@ -1472,9 +1498,9 @@ pub(crate) mod tests {
 
         db_snap!(index, field_distribution,
             @r###"
-        age              1     
-        id               2     
-        name             2     
+        age              1
+        id               2
+        name             2
         "###
         );
 
@@ -1492,9 +1518,9 @@ pub(crate) mod tests {
 
         db_snap!(index, field_distribution,
             @r###"
-        age              1     
-        id               2     
-        name             2     
+        age              1
+        id               2
+        name             2
         "###
         );
 
@@ -1508,9 +1534,9 @@ pub(crate) mod tests {
 
         db_snap!(index, field_distribution,
             @r###"
-        has_dog          1     
-        id               2     
-        name             2     
+        has_dog          1
+        id               2
+        name             2
         "###
         );
     }

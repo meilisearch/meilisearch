@@ -16,9 +16,9 @@ use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::search::{
-    add_search_rules, perform_search, FacetValuesSort, MatchingStrategy, SearchQuery,
-    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
-    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
+    add_search_rules, perform_search, MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH,
+    DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
+    DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
 };
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -58,8 +58,6 @@ pub struct SearchQueryGet {
     show_matches_position: Param<bool>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchFacets>)]
     facets: Option<CS<String>>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidSearchFacets>)] // TODO
-    sort_facet_values_by: Option<FacetValuesSort>,
     #[deserr( default = DEFAULT_HIGHLIGHT_PRE_TAG(), error = DeserrQueryParamError<InvalidSearchHighlightPreTag>)]
     highlight_pre_tag: String,
     #[deserr( default = DEFAULT_HIGHLIGHT_POST_TAG(), error = DeserrQueryParamError<InvalidSearchHighlightPostTag>)]
@@ -94,7 +92,6 @@ impl From<SearchQueryGet> for SearchQuery {
             sort: other.sort.map(|attr| fix_sort_query_parameters(&attr)),
             show_matches_position: other.show_matches_position.0,
             facets: other.facets.map(|o| o.into_iter().collect()),
-            sort_facet_values_by: other.sort_facet_values_by,
             highlight_pre_tag: other.highlight_pre_tag,
             highlight_post_tag: other.highlight_post_tag,
             crop_marker: other.crop_marker,
