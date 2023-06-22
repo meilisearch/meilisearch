@@ -98,13 +98,13 @@ pub struct TypoSettings {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-#[deserr(rename_all = camelCase, deny_unknown_fields)]
+#[deserr(deny_unknown_fields, rename_all = camelCase, where_predicate = __Deserr_E: deserr::MergeWithError<DeserrJsonError<InvalidSettingsFaceting>> + deserr::MergeWithError<DeserrJsonError<InvalidSettingsFacetingMaxValuesPerFacet>> + deserr::MergeWithError<DeserrJsonError<InvalidSettingsFacetingSortFacetValuesBy>>)]
 pub struct FacetingSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsFacetingMaxValuesPerFacet>)]
     pub max_values_per_facet: Setting<usize>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsFacetingSortFacetValuesBy>)]
     pub sort_facet_values_by: Setting<BTreeMap<String, FacetValuesSort>>,
 }
 
