@@ -41,6 +41,7 @@ pub async fn multi_search_with_post(
     let queries = params.into_inner().queries;
 
     let mut multi_aggregate = MultiSearchAggregator::from_queries(&queries, &req);
+    let features = index_scheduler.features()?;
 
     // Explicitly expect a `(ResponseError, usize)` for the error type rather than `ResponseError` only,
     // so that `?` doesn't work if it doesn't use `with_index`, ensuring that it is not forgotten in case of code
@@ -74,8 +75,9 @@ pub async fn multi_search_with_post(
                         err
                     })
                     .with_index(query_index)?;
+
                 let search_result =
-                    tokio::task::spawn_blocking(move || perform_search(&index, query))
+                    tokio::task::spawn_blocking(move || perform_search(&index, query, features))
                         .await
                         .with_index(query_index)?;
 
