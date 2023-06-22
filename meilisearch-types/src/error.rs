@@ -271,6 +271,7 @@ InvalidTaskStatuses                   , InvalidRequest       , BAD_REQUEST ;
 InvalidTaskTypes                      , InvalidRequest       , BAD_REQUEST ;
 InvalidTaskUids                       , InvalidRequest       , BAD_REQUEST  ;
 IoError                               , System               , UNPROCESSABLE_ENTITY;
+FeatureNotEnabled                     , InvalidRequest       , BAD_REQUEST ;
 MalformedPayload                      , InvalidRequest       , BAD_REQUEST ;
 MaxFieldsLimitExceeded                , InvalidRequest       , BAD_REQUEST ;
 MissingApiKeyActions                  , InvalidRequest       , BAD_REQUEST ;

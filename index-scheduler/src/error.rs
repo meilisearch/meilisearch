@@ -123,6 +123,8 @@ pub enum Error {
     IoError(#[from] std::io::Error),
     #[error(transparent)]
     Persist(#[from] tempfile::PersistError),
+    #[error(transparent)]
+    FeatureNotEnabled(#[from] FeatureNotEnabledError),
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
@@ -140,6 +142,16 @@ pub enum Error {
     #[cfg(test)]
     #[error("Planned failure for tests.")]
     PlannedFailure,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error(
+    "{disabled_action} requires enabling the `{feature}` experimental feature. See {issue_link}"
+)]
+pub struct FeatureNotEnabledError {
+    pub disabled_action: &'static str,
+    pub feature: &'static str,
+    pub issue_link: &'static str,
 }
 
 impl Error {
@@ -170,6 +182,7 @@ impl Error {
             | Error::FileStore(_)
             | Error::IoError(_)
             | Error::Persist(_)
+            | Error::FeatureNotEnabled(_)
             | Error::Anyhow(_) => true,
             Error::CreateBatch(_)
             | Error::CorruptedTaskQueue
@@ -214,6 +227,7 @@ impl ErrorCode for Error {
             Error::FileStore(e) => e.error_code(),
             Error::IoError(e) => e.error_code(),
             Error::Persist(e) => e.error_code(),
+            Error::FeatureNotEnabled(_) => Code::FeatureNotEnabled,
 
             // Irrecoverable errors
             Error::Anyhow(_) => Code::Internal,
