@@ -111,7 +111,7 @@ pub fn create_app(
                 analytics.clone(),
             )
         })
-        .configure(|cfg| routes::configure(cfg, opt.experimental_enable_metrics))
+        .configure(routes::configure)
         .configure(|s| dashboard(s, enable_dashboard));
 
     let app = app.wrap(actix_web::middleware::Condition::new(

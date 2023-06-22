@@ -19,6 +19,7 @@ pub async fn get_metrics(
     index_scheduler: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, Data<IndexScheduler>>,
     auth_controller: Data<AuthController>,
 ) -> Result<HttpResponse, ResponseError> {
+    index_scheduler.features()?.check_metrics()?;
     let auth_filters = index_scheduler.filters();
     if !auth_filters.all_indexes_authorized() {
         let mut error = ResponseError::from(AuthenticationError::InvalidToken);
