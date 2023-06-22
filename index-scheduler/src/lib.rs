@@ -794,6 +794,12 @@ impl IndexScheduler {
         Ok(res)
     }
 
+    // Return true if there is at least one task that is processing.
+    pub fn is_task_processing(&self) -> Result<bool> {
+        let processing_tasks = self.processing_tasks.read().unwrap().processing.len();
+        Ok(processing_tasks > 0)
+    }
+
     /// Return true iff there is at least one task associated with this index
     /// that is processing.
     pub fn is_index_processing(&self, index: &str) -> Result<bool> {
@@ -1806,6 +1812,24 @@ mod tests {
             .register(KindWithContent::IndexDeletion { index_uid: S("index_a") })
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_third_task");
+    }
+
+    #[test]
+    fn test_task_is_processing() {
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
+        file0.persist().unwrap();
+
+        let _ = index_scheduler
+            .register(replace_document_import_task("catto", None, 0, documents_count0))
+            .unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_a_task");
+
+        handle.advance_till([Start, BatchCreated, InsideProcessBatch]);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_task_processing");
+
+        assert_eq!(index_scheduler.is_task_processing().unwrap(), true);
     }
 
     /// We send a lot of tasks but notify the tasks scheduler only once as

@@ -50,4 +50,14 @@ lazy_static! {
         &["kind", "value"]
     )
     .expect("Can't create a metric");
+    pub static ref MEILISEARCH_LAST_UPDATE: IntGauge = register_int_gauge!(opts!(
+        "meilisearch_last_update",
+        "Meilisearch Last Update"
+    ))
+    .expect("Can't create a metric");
+    pub static ref MEILISEARCH_IS_INDEXING: IntGauge = register_int_gauge!(opts!(
+        "meilisearch_is_indexing",
+        "Meilisearch Is Indexing"
+    ))
+    .expect("Can't create a metric");
 }
