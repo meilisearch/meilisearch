@@ -46,6 +46,7 @@ pub type Checked = settings::Checked;
 pub type Unchecked = settings::Unchecked;
 
 pub type Task = updates::UpdateEntry;
+pub type Kind = updates::UpdateMeta;
 
 // everything related to the errors
 pub type ResponseError = errors::ResponseError;
@@ -107,8 +108,11 @@ impl V2Reader {
     pub fn indexes(&self) -> Result<impl Iterator<Item = Result<V2IndexReader>> + '_> {
         Ok(self.index_uuid.iter().map(|index| -> Result<_> {
             V2IndexReader::new(
-                index.uid.clone(),
                 &self.dump.path().join("indexes").join(format!("index-{}", index.uuid)),
+                index,
+                BufReader::new(
+                    File::open(self.dump.path().join("updates").join("data.jsonl")).unwrap(),
+                ),
             )
         }))
     }
@@ -143,16 +147,42 @@ pub struct V2IndexReader {
 }
 
 impl V2IndexReader {
-    pub fn new(name: String, path: &Path) -> Result<Self> {
+    pub fn new(path: &Path, index_uuid: &IndexUuid, tasks: BufReader<File>) -> Result<Self> {
         let meta = File::open(path.join("meta.json"))?;
         let meta: DumpMeta = serde_json::from_reader(meta)?;
 
+        let mut created_at = None;
+        let mut updated_at = None;
+
+        for line in tasks.lines() {
+            let task: Task = serde_json::from_str(&line?)?;
+
+            if !(task.uuid == index_uuid.uuid && task.is_finished()) {
+                continue;
+            }
+
+            let new_created_at = match task.update.meta() {
+                Kind::DocumentsAddition { .. } | Kind::Settings(_) => task.update.finished_at(),
+                _ => None,
+            };
+            let new_updated_at = task.update.finished_at();
+
+            if created_at.is_none() || created_at > new_created_at {
+                created_at = new_created_at;
+            }
+
+            if updated_at.is_none() || updated_at < new_updated_at {
+                updated_at = new_updated_at;
+            }
+        }
+
+        let current_time = OffsetDateTime::now_utc();
+
         let metadata = IndexMetadata {
-            uid: name,
+            uid: index_uuid.uid.clone(),
             primary_key: meta.primary_key,
-            // FIXME: Iterate over the whole task queue to find the creation and last update date.
-            created_at: OffsetDateTime::now_utc(),
-            updated_at: OffsetDateTime::now_utc(),
+            created_at: created_at.unwrap_or(current_time),
+            updated_at: updated_at.unwrap_or(current_time),
         };
 
         let ret = V2IndexReader {
