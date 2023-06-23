@@ -74,7 +74,7 @@ Take a look at the complete [Meilisearch integration list](https://www.meilisear
 
 Experienced users will want to keep our [API Reference](https://www.meilisearch.com/docs/reference/api/overview) close at hand.
 
-We also offer a wide range of dedicated guides to all Meilisearch features, such as [filtering](https://www.meilisearch.com/docs/learn/advanced/filtering), [sorting](https://www.meilisearch.com/docs/learn/advanced/sorting), [geosearch](https://www.meilisearch.com/docs/learn/advanced/geosearch), [API keys](https://www.meilisearch.com/docs/learn/security/master_api_keys), and [tenant tokens](https://www.meilisearch.com/docs/learn/security/tenant_tokens).
+We also offer a wide range of dedicated guides to all Meilisearch features, such as [filtering](https://www.meilisearch.com/docs/learn/fine_tuning_results/filtering), [sorting](https://www.meilisearch.com/docs/learn/fine_tuning_results/sorting), [geosearch](https://www.meilisearch.com/docs/learn/fine_tuning_results/geosearch), [API keys](https://www.meilisearch.com/docs/learn/security/master_api_keys), and [tenant tokens](https://www.meilisearch.com/docs/learn/security/tenant_tokens).
 
 Finally, for more in-depth information, refer to our articles explaining fundamental Meilisearch concepts such as [documents](https://www.meilisearch.com/docs/learn/core_concepts/documents) and [indexes](https://www.meilisearch.com/docs/learn/core_concepts/indexes).
 
