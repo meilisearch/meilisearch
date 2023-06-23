@@ -37,7 +37,7 @@ Meilisearch helps you shape a delightful search experience in a snap, offering f
 
 - **Search-as-you-type:** find search results in less than 50 milliseconds
 - **[Typo tolerance](https://www.meilisearch.com/docs/learn/getting_started/customizing_relevancy#typo-tolerance):** get relevant matches even when queries contain typos and misspellings
-- **[Filtering](https://www.meilisearch.com/docs/learn/getting_started/filtering_and_sorting) and [faceted search](https://www.meilisearch.com/docs/learn/fine_tuning_results/faceted_search):** enhance your user's search experience with custom filters and build a faceted search interface in a few lines of code
+- **[Filtering](https://www.meilisearch.com/docs/learn/fine_tuning_results/filtering) and [faceted search](https://www.meilisearch.com/docs/learn/fine_tuning_results/faceted_search):** enhance your user's search experience with custom filters and build a faceted search interface in a few lines of code
 - **[Sorting](https://www.meilisearch.com/docs/learn/fine_tuning_results/sorting):** sort results based on price, date, or pretty much anything else your users need
 - **[Synonym support](https://www.meilisearch.com/docs/learn/getting_started/customizing_relevancy#synonyms):** configure synonyms to include more relevant content in your search results
 - **[Geosearch](https://www.meilisearch.com/docs/learn/fine_tuning_results/geosearch):** filter and sort documents based on geographic data
