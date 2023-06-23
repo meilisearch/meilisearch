@@ -10,6 +10,7 @@ members = [
     "file-store",
     "permissive-json-pointer",
     "milli",
+    "index-stats",
     "filter-parser",
     "flatten-serde-json",
     "json-depth-checker",

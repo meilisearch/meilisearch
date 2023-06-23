@@ -93,10 +93,10 @@ pub mod db_name {
 #[derive(Clone)]
 pub struct Index {
     /// The LMDB environment which this index is associated with.
-    pub(crate) env: heed::Env,
+    pub env: heed::Env,
 
     /// Contains many different types (e.g. the fields ids map).
-    pub(crate) main: PolyDatabase,
+    pub main: PolyDatabase,
 
     /// A word and all the documents ids containing the word.
     pub word_docids: Database<Str, RoaringBitmapCodec>,
@@ -150,7 +150,7 @@ pub struct Index {
     pub field_id_docid_facet_strings: Database<FieldDocIdFacetStringCodec, Str>,
 
     /// Maps the document id to the document as an obkv store.
-    pub(crate) documents: Database<OwnedType<BEU32>, ObkvCodec>,
+    pub documents: Database<OwnedType<BEU32>, ObkvCodec>,
 }
 
 impl Index {

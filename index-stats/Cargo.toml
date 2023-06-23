@@ -1,0 +1,12 @@
+[package]
+name = "index-stats"
+description = "A small program that computes internal stats of a Meilisearch index"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+anyhow = "1.0.71"
+clap = { version = "4.3.5", features = ["derive"] }
+milli = { path = "../milli" }
+piechart = "1.0.0"
