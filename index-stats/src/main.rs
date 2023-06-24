@@ -13,10 +13,18 @@ use piechart::{Chart, Color, Data};
 struct Args {
     /// The path to the LMDB Meilisearch index database.
     path: PathBuf,
+
+    /// The radius of the graphs
+    #[clap(long, default_value_t = 10)]
+    graph_radius: u16,
+
+    /// The radius of the graphs
+    #[clap(long, default_value_t = 6)]
+    graph_aspect_ratio: u16,
 }
 
 fn main() -> anyhow::Result<()> {
-    let Args { path } = Args::parse();
+    let Args { path, graph_radius, graph_aspect_ratio } = Args::parse();
     let env = EnvOpenOptions::new().max_dbs(24).open(path)?;
 
     // TODO not sure to keep that...
@@ -119,30 +127,46 @@ fn main() -> anyhow::Result<()> {
         list.into_iter().map(|(db, name)| compute_stats(&rtxn, db).map(|s| (s, name))).collect();
     let mut stats = result?;
 
-    println!("{:>30} Number of Entries", "");
+    println!("{:1$} Number of Entries", "", graph_radius as usize * 2);
     stats.sort_by_key(|(s, _)| Reverse(s.number_of_entries));
     let data = compute_graph_data(stats.iter().map(|(s, n)| (s.number_of_entries as f32, *n)));
-    Chart::new().radius(20).aspect_ratio(6).legend(true).draw(&data);
-    print!("\r\n\r\n\r\n");
+    Chart::new().radius(graph_radius).aspect_ratio(graph_aspect_ratio).draw(&data);
+    display_legend(&data);
+    print!("\r\n");
 
-    println!("{:>30} Size of Entries", "");
+    println!("{:1$} Size of Entries", "", graph_radius as usize * 2);
     stats.sort_by_key(|(s, _)| Reverse(s.size_of_entries));
     let data = compute_graph_data(stats.iter().map(|(s, n)| (s.size_of_entries as f32, *n)));
-    Chart::new().radius(20).aspect_ratio(6).legend(true).draw(&data);
-    print!("\r\n\r\n\r\n");
+    Chart::new().radius(graph_radius).aspect_ratio(graph_aspect_ratio).draw(&data);
+    display_legend(&data);
+    print!("\r\n");
 
-    println!("{:>30} Size of Data", "");
+    println!("{:1$} Size of Data", "", graph_radius as usize * 2);
     stats.sort_by_key(|(s, _)| Reverse(s.size_of_data));
     let data = compute_graph_data(stats.iter().map(|(s, n)| (s.size_of_data as f32, *n)));
-    Chart::new().radius(20).aspect_ratio(6).legend(true).draw(&data);
-    print!("\r\n\r\n\r\n");
+    Chart::new().radius(graph_radius).aspect_ratio(graph_aspect_ratio).draw(&data);
+    display_legend(&data);
+    print!("\r\n");
 
-    println!("{:>30} Size of Keys", "");
+    println!("{:1$} Size of Keys", "", graph_radius as usize * 2);
     stats.sort_by_key(|(s, _)| Reverse(s.size_of_keys));
     let data = compute_graph_data(stats.iter().map(|(s, n)| (s.size_of_keys as f32, *n)));
-    Chart::new().radius(20).aspect_ratio(6).legend(true).draw(&data);
+    Chart::new().radius(graph_radius).aspect_ratio(graph_aspect_ratio).draw(&data);
+    display_legend(&data);
 
     Ok(())
+}
+
+fn display_legend(data: &[Data]) {
+    let total: f32 = data.iter().map(|d| d.value).sum();
+    for Data { label, value, color, fill } in data {
+        println!(
+            "{} {} {:.02}%",
+            color.unwrap().paint(fill.to_string()),
+            label,
+            value / total * 100.0
+        );
+    }
 }
 
 fn compute_graph_data<'a>(stats: impl IntoIterator<Item = (f32, &'a str)>) -> Vec<Data> {
