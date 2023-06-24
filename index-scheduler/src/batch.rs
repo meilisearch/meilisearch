@@ -86,6 +86,10 @@ pub(crate) enum Batch {
         tasks: Vec<Task>,
         index_has_been_created: bool,
     },
+    IndexClear {
+        index_uids: Vec<String>,
+        task: Task,
+    },
     IndexSwap {
         task: Task,
     },
@@ -155,6 +159,7 @@ impl Batch {
             | Batch::TaskDeletion(task)
             | Batch::Dump(task)
             | Batch::IndexCreation { task, .. }
+            | Batch::IndexClear { task, .. }
             | Batch::IndexDocumentDeletionByFilter { task, .. }
             | Batch::IndexUpdate { task, .. } => vec![task.uid],
             Batch::SnapshotCreation(tasks) | Batch::IndexDeletion { tasks, .. } => {
@@ -190,6 +195,7 @@ impl Batch {
             | TaskDeletion(_)
             | SnapshotCreation(_)
             | Dump(_)
+            | IndexClear { .. }
             | IndexSwap { .. } => None,
             IndexOperation { op, .. } => Some(op.index_uid()),
             IndexCreation { index_uid, .. }
@@ -454,6 +460,14 @@ impl IndexScheduler {
                 index_has_been_created: must_create_index,
                 tasks: self.get_existing_tasks(rtxn, ids)?,
             })),
+            BatchKind::IndexClear { id } => {
+                let task = self.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
+                let index_uids = match &task.kind {
+                    KindWithContent::IndexClear { index_uids } => index_uids.clone(),
+                    _ => unreachable!(),
+                };
+                Ok(Some(Batch::IndexClear { index_uids, task }))
+            }
             BatchKind::IndexSwap { id } => {
                 let task = self.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
                 Ok(Some(Batch::IndexSwap { task }))
@@ -1017,6 +1031,13 @@ impl IndexScheduler {
                 }
 
                 Ok(tasks)
+            }
+            Batch::IndexClear { index_uids, mut task } => {
+                let wtxn = self.env.write_txn()?;
+                self.index_mapper.delete_indexes(wtxn, index_uids, false)?;
+                task.status = Status::Succeeded;
+
+                Ok(vec![task])
             }
             Batch::IndexSwap { mut task } => {
                 let mut wtxn = self.env.write_txn()?;

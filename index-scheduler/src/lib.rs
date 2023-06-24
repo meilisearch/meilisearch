@@ -1341,6 +1341,7 @@ impl<'a> Dump<'a> {
                 KindDump::IndexDeletion => KindWithContent::IndexDeletion {
                     index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
                 },
+                KindDump::IndexClear { index_uids } => KindWithContent::IndexClear { index_uids },
                 KindDump::IndexCreation { primary_key } => KindWithContent::IndexCreation {
                     index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
                     primary_key,

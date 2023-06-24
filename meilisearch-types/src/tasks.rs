@@ -46,6 +46,7 @@ impl Task {
             | SnapshotCreation
             | TaskCancelation { .. }
             | TaskDeletion { .. }
+            | IndexClear { .. }
             | IndexSwap { .. } => None,
             DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
@@ -72,6 +73,7 @@ impl Task {
             | KindWithContent::DocumentClear { .. }
             | KindWithContent::SettingsUpdate { .. }
             | KindWithContent::IndexDeletion { .. }
+            | KindWithContent::IndexClear { .. }
             | KindWithContent::IndexCreation { .. }
             | KindWithContent::IndexUpdate { .. }
             | KindWithContent::IndexSwap { .. }
@@ -110,6 +112,9 @@ pub enum KindWithContent {
         new_settings: Box<Settings<Unchecked>>,
         is_deletion: bool,
         allow_index_creation: bool,
+    },
+    IndexClear {
+        index_uids: Vec<String>,
     },
     IndexDeletion {
         index_uid: String,
@@ -156,6 +161,7 @@ impl KindWithContent {
             KindWithContent::SettingsUpdate { .. } => Kind::SettingsUpdate,
             KindWithContent::IndexCreation { .. } => Kind::IndexCreation,
             KindWithContent::IndexDeletion { .. } => Kind::IndexDeletion,
+            KindWithContent::IndexClear { .. } => Kind::IndexDeletion,
             KindWithContent::IndexUpdate { .. } => Kind::IndexUpdate,
             KindWithContent::IndexSwap { .. } => Kind::IndexSwap,
             KindWithContent::TaskCancelation { .. } => Kind::TaskCancelation,
@@ -181,6 +187,7 @@ impl KindWithContent {
             | IndexCreation { index_uid, .. }
             | IndexUpdate { index_uid, .. }
             | IndexDeletion { index_uid } => vec![index_uid],
+            IndexClear { index_uids } => index_uids.into_iter().map(|s| s.as_ref()).collect(),
             IndexSwap { swaps } => {
                 let mut indexes = HashSet::<&str>::default();
                 for swap in swaps {
@@ -214,7 +221,9 @@ impl KindWithContent {
                     deleted_documents: None,
                 })
             }
-            KindWithContent::DocumentClear { .. } | KindWithContent::IndexDeletion { .. } => {
+            KindWithContent::DocumentClear { .. }
+            | KindWithContent::IndexDeletion { .. }
+            | KindWithContent::IndexClear { .. } => {
                 Some(Details::ClearAll { deleted_documents: None })
             }
             KindWithContent::SettingsUpdate { new_settings, .. } => {
@@ -268,7 +277,7 @@ impl KindWithContent {
             KindWithContent::SettingsUpdate { new_settings, .. } => {
                 Some(Details::SettingsUpdate { settings: new_settings.clone() })
             }
-            KindWithContent::IndexDeletion { .. } => None,
+            KindWithContent::IndexDeletion { .. } | KindWithContent::IndexClear { .. } => None,
             KindWithContent::IndexCreation { primary_key, .. }
             | KindWithContent::IndexUpdate { primary_key, .. } => {
                 Some(Details::IndexInfo { primary_key: primary_key.clone() })
@@ -307,7 +316,7 @@ impl From<&KindWithContent> for Option<Details> {
             KindWithContent::SettingsUpdate { new_settings, .. } => {
                 Some(Details::SettingsUpdate { settings: new_settings.clone() })
             }
-            KindWithContent::IndexDeletion { .. } => None,
+            KindWithContent::IndexDeletion { .. } | KindWithContent::IndexClear { .. } => None,
             KindWithContent::IndexCreation { primary_key, .. } => {
                 Some(Details::IndexInfo { primary_key: primary_key.clone() })
             }

@@ -31,7 +31,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
             .route(web::get().to(list_indexes))
-            .route(web::post().to(SeqHandler(create_index))),
+            .route(web::post().to(SeqHandler(create_index)))
+            .route(web::delete().to(SeqHandler(delete_all_indexes))),
     )
     .service(
         web::scope("/{index_uid}")
@@ -105,6 +106,22 @@ pub async fn list_indexes(
 
     debug!("returns: {:?}", ret);
     Ok(HttpResponse::Ok().json(ret))
+}
+
+pub async fn delete_all_indexes(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_DELETE }>, Data<IndexScheduler>>,
+    _req: HttpRequest,
+    _analytics: web::Data<dyn Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    let filters = index_scheduler.filters();
+    let indexes = index_scheduler.index_names()?;
+    let indexes = indexes.into_iter().filter(|uid| filters.is_index_authorized(uid)).collect();
+
+    let task = KindWithContent::IndexClear { index_uids: indexes };
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
+
+    Ok(HttpResponse::Accepted().json(task))
 }
 
 #[derive(Deserr, Debug)]

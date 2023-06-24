@@ -192,19 +192,37 @@ impl IndexMapper {
         }
     }
 
+    pub fn delete_index(&self, wtxn: RwTxn, name: &str) -> Result<()> {
+        self.delete_indexes(wtxn, Some(name), true)
+    }
+
     /// Removes the index from the mapping table and the in-memory index map
     /// but keeps the associated tasks.
-    pub fn delete_index(&self, mut wtxn: RwTxn, name: &str) -> Result<()> {
-        let uuid = self
-            .index_mapping
-            .get(&wtxn, name)?
-            .ok_or_else(|| Error::IndexNotFound(name.to_string()))?;
+    pub fn delete_indexes(
+        &self,
+        mut wtxn: RwTxn,
+        names: impl IntoIterator<Item = impl AsRef<str>>,
+        error_on_missing_index: bool,
+    ) -> Result<()> {
+        let indexes = names
+            .into_iter()
+            .map(|name| {
+                let name = name.as_ref().to_string();
+                let uuid = self
+                    .index_mapping
+                    .get(&wtxn, &name)?
+                    .ok_or_else(|| Error::IndexNotFound(name.to_string()))?;
+                Ok((name, uuid))
+            })
+            .filter(|res| error_on_missing_index || res.is_ok())
+            .collect::<Result<Vec<_>>>()?;
 
-        // Not an error if the index had no stats in cache.
-        self.index_stats.delete(&mut wtxn, &uuid)?;
-
-        // Once we retrieved the UUID of the index we remove it from the mapping table.
-        assert!(self.index_mapping.delete(&mut wtxn, name)?);
+        for (name, uuid) in indexes.iter() {
+            // Not an error if the index had no stats in cache.
+            self.index_stats.delete(&mut wtxn, uuid)?;
+            // Once we retrieved the UUID of the index we remove it from the mapping table.
+            assert!(self.index_mapping.delete(&mut wtxn, name)?);
+        }
 
         wtxn.commit()?;
 
@@ -222,51 +240,63 @@ impl IndexMapper {
         //    This can not be caused by indexation because deleting an index happens in the scheduler itself, so cannot be concurrent with indexation.
         //
         // In these situations, reporting the error through a panic is in order.
-        let closing_event = loop {
-            let mut lock = self.index_map.write().unwrap();
-            match lock.start_deletion(&uuid) {
-                Ok(env_closing) => break env_closing,
-                Err(Some(reopen)) => {
-                    // drop the lock here so that we don't synchronously wait for the index to close.
-                    drop(lock);
-                    tries += 1;
-                    if tries >= 100 {
-                        panic!("Too many attempts to close index {name} prior to deletion.")
+        let indexes = indexes
+            .into_iter()
+            .map(|(name, uuid)| {
+                let closing_event = loop {
+                    let mut lock = self.index_map.write().unwrap();
+                    match lock.start_deletion(&uuid) {
+                        Ok(env_closing) => break env_closing,
+                        Err(Some(reopen)) => {
+                            // drop the lock here so that we don't synchronously wait for the index to close.
+                            drop(lock);
+                            tries += 1;
+                            if tries >= 100 {
+                                panic!("Too many attempts to close index {name} prior to deletion.")
+                            }
+                            let reopen =
+                                if let Some(reopen) = reopen.wait_timeout(Duration::from_secs(6)) {
+                                    reopen
+                                } else {
+                                    continue;
+                                };
+                            reopen.close(&mut self.index_map.write().unwrap());
+                            continue;
+                        }
+                        // TODO: what is this case, what does that mean?
+                        Err(None) => return None,
                     }
-                    let reopen = if let Some(reopen) = reopen.wait_timeout(Duration::from_secs(6)) {
-                        reopen
-                    } else {
-                        continue;
-                    };
-                    reopen.close(&mut self.index_map.write().unwrap());
-                    continue;
-                }
-                Err(None) => return Ok(()),
-            }
-        };
+                };
+                Some((name, uuid, closing_event))
+            })
+            .filter_map(|thingy| thingy)
+            .map(|(name, uuid, closing)| {
+                (name.to_string(), uuid, self.base_path.join(uuid.to_string()), closing)
+            })
+            .collect::<Vec<_>>();
 
         let index_map = self.index_map.clone();
-        let index_path = self.base_path.join(uuid.to_string());
-        let index_name = name.to_string();
         thread::Builder::new()
             .name(String::from("index_deleter"))
             .spawn(move || {
-                // We first wait to be sure that the previously opened index is effectively closed.
-                // This can take a lot of time, this is why we do that in a separate thread.
-                if let Some(closing_event) = closing_event {
-                    closing_event.wait();
-                }
+                for (name, uuid, index_path, closing_event) in indexes {
+                    // We first wait to be sure that the previously opened index is effectively closed.
+                    // This can take a lot of time, this is why we do that in a separate thread.
+                    if let Some(closing_event) = closing_event {
+                        closing_event.wait();
+                    }
 
-                // Then we remove the content from disk.
-                if let Err(e) = fs::remove_dir_all(&index_path) {
-                    error!(
-                        "An error happened when deleting the index {} ({}): {}",
-                        index_name, uuid, e
-                    );
-                }
+                    // Then we remove the content from disk.
+                    if let Err(e) = fs::remove_dir_all(&index_path) {
+                        error!(
+                            "An error happened when deleting the index {} ({}): {}",
+                            name, uuid, e
+                        );
+                    }
 
-                // Finally we remove the entry from the index map.
-                index_map.write().unwrap().end_deletion(&uuid);
+                    // Finally we remove the entry from the index map.
+                    index_map.write().unwrap().end_deletion(&uuid);
+                }
             })
             .unwrap();
 

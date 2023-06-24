@@ -32,6 +32,7 @@ enum AutobatchKind {
     },
     IndexCreation,
     IndexDeletion,
+    IndexClear,
     IndexUpdate,
     IndexSwap,
 }
@@ -74,6 +75,7 @@ impl From<KindWithContent> for AutobatchKind {
                 }
             }
             KindWithContent::IndexDeletion { .. } => AutobatchKind::IndexDeletion,
+            KindWithContent::IndexClear { .. } => AutobatchKind::IndexClear,
             KindWithContent::IndexCreation { .. } => AutobatchKind::IndexCreation,
             KindWithContent::IndexUpdate { .. } => AutobatchKind::IndexUpdate,
             KindWithContent::IndexSwap { .. } => AutobatchKind::IndexSwap,
@@ -122,6 +124,9 @@ pub enum BatchKind {
     },
     IndexDeletion {
         ids: Vec<TaskId>,
+    },
+    IndexClear {
+        id: TaskId,
     },
     IndexCreation {
         id: TaskId,
@@ -173,6 +178,7 @@ impl BatchKind {
         match AutobatchKind::from(kind) {
             K::IndexCreation => (Break(BatchKind::IndexCreation { id: task_id }), true),
             K::IndexDeletion => (Break(BatchKind::IndexDeletion { ids: vec![task_id] }), false),
+            K::IndexClear => (Break(BatchKind::IndexClear { id: task_id }), false),
             K::IndexUpdate => (Break(BatchKind::IndexUpdate { id: task_id }), false),
             K::IndexSwap => (Break(BatchKind::IndexSwap { id: task_id }), false),
             K::DocumentClear => (Continue(BatchKind::DocumentClear { ids: vec![task_id] }), false),
@@ -222,7 +228,7 @@ impl BatchKind {
 
         match (self, kind) {
             // We don't batch any of these operations
-            (this, K::IndexCreation | K::IndexUpdate | K::IndexSwap | K::DocumentDeletionByFilter) => Break(this),
+            (this, K::IndexCreation | K::IndexUpdate | K::IndexClear | K::IndexSwap | K::DocumentDeletionByFilter) => Break(this),
             // We must not batch tasks that don't have the same index creation rights if the index doesn't already exists.
             (this, kind) if !index_already_exists && this.allow_index_creation() == Some(false) && kind.allow_index_creation() == Some(true) => {
                 Break(this)
@@ -517,6 +523,7 @@ impl BatchKind {
             (
                 BatchKind::IndexCreation { .. }
                 | BatchKind::IndexDeletion { .. }
+                | BatchKind::IndexClear { .. }
                 | BatchKind::IndexUpdate { .. }
                 | BatchKind::IndexSwap { .. }
                 | BatchKind::DocumentDeletionByFilter { .. },
