@@ -2,6 +2,7 @@ pub mod compression;
 pub mod deserr;
 pub mod document_formats;
 pub mod error;
+pub mod features;
 pub mod index_uid;
 pub mod index_uid_pattern;
 pub mod keys;
