@@ -326,6 +326,10 @@ pub fn perform_search(
         features.check_score_details()?;
     }
 
+    if query.vector.is_some() {
+        features.check_vector()?;
+    }
+
     // compute the offset on the limit depending on the pagination mode.
     let (offset, limit) = if is_finite_pagination {
         let limit = query.hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
