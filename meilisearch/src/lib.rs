@@ -309,12 +309,16 @@ fn import_dump(
         keys.push(key);
     }
 
+    // 3. Import the runtime features.
+    let features = dump_reader.features()?.unwrap_or_default();
+    index_scheduler.put_runtime_features(features)?;
+
     let indexer_config = index_scheduler.indexer_config();
 
     // /!\ The tasks must be imported AFTER importing the indexes or else the scheduler might
     // try to process tasks while we're trying to import the indexes.
 
-    // 3. Import the indexes.
+    // 4. Import the indexes.
     for index_reader in dump_reader.indexes()? {
         let mut index_reader = index_reader?;
         let metadata = index_reader.metadata();
@@ -326,19 +330,19 @@ fn import_dump(
         let mut wtxn = index.write_txn()?;
 
         let mut builder = milli::update::Settings::new(&mut wtxn, &index, indexer_config);
-        // 3.1 Import the primary key if there is one.
+        // 4.1 Import the primary key if there is one.
         if let Some(ref primary_key) = metadata.primary_key {
             builder.set_primary_key(primary_key.to_string());
         }
 
-        // 3.2 Import the settings.
+        // 4.2 Import the settings.
         log::info!("Importing the settings.");
         let settings = index_reader.settings()?;
         apply_settings_to_builder(&settings, &mut builder);
         builder.execute(|indexing_step| log::debug!("update: {:?}", indexing_step), || false)?;
 
-        // 3.3 Import the documents.
-        // 3.3.1 We need to recreate the grenad+obkv format accepted by the index.
+        // 4.3 Import the documents.
+        // 4.3.1 We need to recreate the grenad+obkv format accepted by the index.
         log::info!("Importing the documents.");
         let file = tempfile::tempfile()?;
         let mut builder = DocumentsBatchBuilder::new(BufWriter::new(file));
@@ -349,7 +353,7 @@ fn import_dump(
         // This flush the content of the batch builder.
         let file = builder.into_inner()?.into_inner()?;
 
-        // 3.3.2 We feed it to the milli index.
+        // 4.3.2 We feed it to the milli index.
         let reader = BufReader::new(file);
         let reader = DocumentsBatchReader::from_reader(reader)?;
 
@@ -374,7 +378,7 @@ fn import_dump(
 
     let mut index_scheduler_dump = index_scheduler.register_dumped_task()?;
 
-    // 4. Import the tasks.
+    // 5. Import the tasks.
     for ret in dump_reader.tasks()? {
         let (task, file) = ret?;
         index_scheduler_dump.register_dumped_task(task, file)?;

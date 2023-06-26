@@ -107,6 +107,13 @@ impl DumpReader {
             DumpReader::Compat(compat) => compat.keys(),
         }
     }
+
+    pub fn features(&self) -> Result<Option<v6::RuntimeTogglableFeatures>> {
+        match self {
+            DumpReader::Current(current) => Ok(current.features()),
+            DumpReader::Compat(compat) => compat.features(),
+        }
+    }
 }
 
 impl From<V6Reader> for DumpReader {
@@ -188,6 +195,8 @@ pub(crate) mod test {
     use meili_snap::insta;
 
     use super::*;
+
+    // TODO: add `features` to tests
 
     #[test]
     fn import_dump_v5() {

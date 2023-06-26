@@ -2,6 +2,7 @@ use std::fs::{self, File};
 use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::Path;
 
+use log::debug;
 pub use meilisearch_types::milli;
 use tempfile::TempDir;
 use time::OffsetDateTime;
@@ -18,6 +19,7 @@ pub type Unchecked = meilisearch_types::settings::Unchecked;
 
 pub type Task = crate::TaskDump;
 pub type Key = meilisearch_types::keys::Key;
+pub type RuntimeTogglableFeatures = meilisearch_types::features::RuntimeTogglableFeatures;
 
 // ===== Other types to clarify the code of the compat module
 // everything related to the tasks
@@ -47,6 +49,7 @@ pub struct V6Reader {
     metadata: Metadata,
     tasks: BufReader<File>,
     keys: BufReader<File>,
+    features: Option<RuntimeTogglableFeatures>,
 }
 
 impl V6Reader {
@@ -58,11 +61,29 @@ impl V6Reader {
             Err(e) => return Err(e.into()),
         };
 
+        let feature_file = match fs::read(dump.path().join("experimental-features.json")) {
+            Ok(feature_file) => Some(feature_file),
+            Err(error) => match error.kind() {
+                // Allows the file to be missing, this will only result in all experimental features disabled.
+                ErrorKind::NotFound => {
+                    debug!("`experimental-features.json` not found in dump");
+                    None
+                }
+                _ => return Err(error.into()),
+            },
+        };
+        let features = if let Some(feature_file) = feature_file {
+            Some(serde_json::from_reader(&*feature_file)?)
+        } else {
+            None
+        };
+
         Ok(V6Reader {
             metadata: serde_json::from_reader(&*meta_file)?,
             instance_uid,
             tasks: BufReader::new(File::open(dump.path().join("tasks").join("queue.jsonl"))?),
             keys: BufReader::new(File::open(dump.path().join("keys.jsonl"))?),
+            features,
             dump,
         })
     }
@@ -128,6 +149,10 @@ impl V6Reader {
         Box::new(
             (&mut self.keys).lines().map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) }),
         )
+    }
+
+    pub fn features(&self) -> Option<RuntimeTogglableFeatures> {
+        self.features
     }
 }
 
