@@ -460,7 +460,7 @@ pub fn perform_search(
 
         if let Some(vector) = query.vector.as_ref() {
             if let Some(vectors) = extract_field("_vectors", &fields_ids_map, obkv)? {
-                insert_semantic_similarity(vector, vectors, &mut document);
+                insert_semantic_score(vector, vectors, &mut document);
             }
         }
 
@@ -549,7 +549,7 @@ fn insert_geo_distance(sorts: &[String], document: &mut Document) {
     }
 }
 
-fn insert_semantic_similarity(query: &[f32], vectors: Value, document: &mut Document) {
+fn insert_semantic_score(query: &[f32], vectors: Value, document: &mut Document) {
     let vectors =
         match serde_json::from_value(vectors).map(VectorOrArrayOfVectors::into_array_of_vectors) {
             Ok(vectors) => vectors,
@@ -560,7 +560,7 @@ fn insert_semantic_similarity(query: &[f32], vectors: Value, document: &mut Docu
         .map(|v| OrderedFloat(dot_product_similarity(query, &v)))
         .max()
         .map(OrderedFloat::into_inner);
-    document.insert("_semanticSimilarity".to_string(), json!(similarity));
+    document.insert("_semanticScore".to_string(), json!(similarity));
 }
 
 fn compute_formatted_options(
