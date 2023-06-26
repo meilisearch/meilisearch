@@ -417,7 +417,10 @@ pub fn apply_settings_to_builder(
                 Setting::NotSet => (),
             }
         }
-        Setting::Reset => builder.reset_max_values_per_facet(),
+        Setting::Reset => {
+            builder.reset_max_values_per_facet();
+            builder.reset_sort_facet_values_by();
+        }
         Setting::NotSet => (),
     }
 
