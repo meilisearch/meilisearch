@@ -28,7 +28,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 pub struct FacetSearchQuery {
     #[deserr(default, error = DeserrJsonError<InvalidFacetSearchQuery>)]
     pub facet_query: Option<String>,
-    #[deserr(error = DeserrJsonError<MissingFacetSearchFacetName>, missing_field_error = DeserrJsonError::missing_facet_search_facet_name)]
+    #[deserr(error = DeserrJsonError<InvalidFacetSearchFacetName>, missing_field_error = DeserrJsonError::missing_facet_search_facet_name)]
     pub facet_name: String,
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
