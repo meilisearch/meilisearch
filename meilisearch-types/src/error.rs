@@ -241,6 +241,7 @@ InvalidSearchMatchingStrategy         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchOffset                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchPage                     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchQ                        , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchVector                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowMatchesPosition      , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowRankingScore         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowRankingScoreDetails  , InvalidRequest       , BAD_REQUEST ;

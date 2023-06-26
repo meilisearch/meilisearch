@@ -34,7 +34,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchQ>)]
     q: Option<String>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidSearchQ>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchVector>)]
     vector: Option<Vec<f32>>,
     #[deserr(default = Param(DEFAULT_SEARCH_OFFSET()), error = DeserrQueryParamError<InvalidSearchOffset>)]
     offset: Param<usize>,

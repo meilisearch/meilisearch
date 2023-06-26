@@ -40,7 +40,7 @@ pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 pub struct SearchQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
