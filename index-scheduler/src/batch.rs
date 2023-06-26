@@ -839,6 +839,10 @@ impl IndexScheduler {
                     Ok(())
                 })?;
 
+                // 4. Dump experimental feature settings
+                let features = self.features()?.runtime_features();
+                dump.create_experimental_features(features)?;
+
                 let dump_uid = started_at.format(format_description!(
                     "[year repr:full][month repr:numerical][day padding:zero]-[hour padding:zero][minute padding:zero][second padding:zero][subsecond digits:3]"
                 )).unwrap();

@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use deserr::Deserr;
 use either::Either;
+use index_scheduler::RoFeatures;
 use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
@@ -281,6 +282,7 @@ pub fn add_search_rules(query: &mut SearchQuery, rules: IndexSearchRules) {
 pub fn perform_search(
     index: &Index,
     query: SearchQuery,
+    features: RoFeatures,
 ) -> Result<SearchResult, MeilisearchHttpError> {
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
@@ -305,6 +307,10 @@ pub fn perform_search(
     } else {
         ScoringStrategy::Skip
     });
+
+    if query.show_ranking_score_details {
+        features.check_score_details()?;
+    }
 
     // compute the offset on the limit depending on the pagination mode.
     let (offset, limit) = if is_finite_pagination {

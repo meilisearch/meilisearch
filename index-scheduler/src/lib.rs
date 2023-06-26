@@ -21,6 +21,7 @@ content of the scheduler or enqueue new tasks.
 mod autobatcher;
 mod batch;
 pub mod error;
+mod features;
 mod index_mapper;
 #[cfg(test)]
 mod insta_snapshot;
@@ -41,8 +42,10 @@ use std::time::Duration;
 
 use dump::{KindDump, TaskDump, UpdateFile};
 pub use error::Error;
+pub use features::RoFeatures;
 use file_store::FileStore;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
 use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn};
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
@@ -247,6 +250,8 @@ pub struct IndexSchedulerOptions {
     /// The maximum number of tasks stored in the task queue before starting
     /// to auto schedule task deletions.
     pub max_number_of_tasks: usize,
+    /// The experimental features enabled for this instance.
+    pub instance_features: InstanceTogglableFeatures,
 }
 
 /// Structure which holds meilisearch's indexes and schedules the tasks
@@ -289,6 +294,9 @@ pub struct IndexScheduler {
 
     /// In charge of creating, opening, storing and returning indexes.
     pub(crate) index_mapper: IndexMapper,
+
+    /// In charge of fetching and setting the status of experimental features.
+    features: features::FeatureData,
 
     /// Get a signal when a batch needs to be processed.
     pub(crate) wake_up: Arc<SignalEvent>,
@@ -360,6 +368,7 @@ impl IndexScheduler {
             planned_failures: self.planned_failures.clone(),
             #[cfg(test)]
             run_loop_iteration: self.run_loop_iteration.clone(),
+            features: self.features.clone(),
         }
     }
 }
@@ -398,9 +407,12 @@ impl IndexScheduler {
         };
 
         let env = heed::EnvOpenOptions::new()
-            .max_dbs(10)
+            .max_dbs(11)
             .map_size(budget.task_db_size)
             .open(options.tasks_path)?;
+
+        let features = features::FeatureData::new(&env, options.instance_features)?;
+
         let file_store = FileStore::new(&options.update_file_path)?;
 
         let mut wtxn = env.write_txn()?;
@@ -452,6 +464,7 @@ impl IndexScheduler {
             planned_failures,
             #[cfg(test)]
             run_loop_iteration: Arc::new(RwLock::new(0)),
+            features,
         };
 
         this.run();
@@ -1214,6 +1227,17 @@ impl IndexScheduler {
         Ok(IndexStats { is_indexing, inner_stats: index_stats })
     }
 
+    pub fn features(&self) -> Result<RoFeatures> {
+        let rtxn = self.read_txn()?;
+        self.features.features(rtxn)
+    }
+
+    pub fn put_runtime_features(&self, features: RuntimeTogglableFeatures) -> Result<()> {
+        let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
+        self.features.put_runtime_features(wtxn, features)?;
+        Ok(())
+    }
+
     pub(crate) fn delete_persisted_task_data(&self, task: &Task) -> Result<()> {
         match task.content_uuid() {
             Some(content_file) => self.delete_update_file(content_file),
@@ -1534,6 +1558,7 @@ mod tests {
                 indexer_config,
                 autobatching_enabled: true,
                 max_number_of_tasks: 1_000_000,
+                instance_features: Default::default(),
             };
             configuration(&mut options);
 
