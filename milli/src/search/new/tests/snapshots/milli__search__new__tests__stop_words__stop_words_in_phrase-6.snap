@@ -1,0 +1,129 @@
+---
+source: milli/src/search/new/tests/stop_words.rs
+expression: "format!(\"{document_scores:#?}\")"
+---
+[
+    [
+        Words(
+            Words {
+                matching_words: 3,
+                max_matching_words: 3,
+            },
+        ),
+        Typo(
+            Typo {
+                typo_count: 0,
+                max_typo_count: 2,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 1,
+                max_rank: 1,
+            },
+        ),
+        Fid(
+            Rank {
+                rank: 1,
+                max_rank: 1,
+            },
+        ),
+        Position(
+            Rank {
+                rank: 31,
+                max_rank: 31,
+            },
+        ),
+        ExactAttribute(
+            NoExactMatch,
+        ),
+        Exactness(
+            Rank {
+                rank: 4,
+                max_rank: 4,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 3,
+                max_matching_words: 3,
+            },
+        ),
+        Typo(
+            Typo {
+                typo_count: 0,
+                max_typo_count: 2,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 1,
+                max_rank: 1,
+            },
+        ),
+        Fid(
+            Rank {
+                rank: 1,
+                max_rank: 1,
+            },
+        ),
+        Position(
+            Rank {
+                rank: 31,
+                max_rank: 31,
+            },
+        ),
+        ExactAttribute(
+            NoExactMatch,
+        ),
+        Exactness(
+            Rank {
+                rank: 4,
+                max_rank: 4,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 3,
+                max_matching_words: 3,
+            },
+        ),
+        Typo(
+            Typo {
+                typo_count: 0,
+                max_typo_count: 2,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 1,
+                max_rank: 1,
+            },
+        ),
+        Fid(
+            Rank {
+                rank: 1,
+                max_rank: 1,
+            },
+        ),
+        Position(
+            Rank {
+                rank: 27,
+                max_rank: 31,
+            },
+        ),
+        ExactAttribute(
+            NoExactMatch,
+        ),
+        Exactness(
+            Rank {
+                rank: 4,
+                max_rank: 4,
+            },
+        ),
+    ],
+]

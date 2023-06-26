@@ -569,6 +569,10 @@ pub struct SearchAggregator {
     // facets
     facets_sum_of_terms: usize,
     facets_total_number_of_facets: usize,
+
+    // scoring
+    show_ranking_score: bool,
+    show_ranking_score_details: bool,
 }
 
 impl SearchAggregator {
@@ -631,6 +635,9 @@ impl SearchAggregator {
         ret.crop_marker = query.crop_marker != DEFAULT_CROP_MARKER();
         ret.crop_length = query.crop_length != DEFAULT_CROP_LENGTH();
         ret.show_matches_position = query.show_matches_position;
+
+        ret.show_ranking_score = query.show_ranking_score;
+        ret.show_ranking_score_details = query.show_ranking_score_details;
 
         ret
     }
@@ -706,6 +713,10 @@ impl SearchAggregator {
             let matching_strategy = self.matching_strategy.entry(key).or_insert(0);
             *matching_strategy = matching_strategy.saturating_add(value);
         }
+
+        // scoring
+        self.show_ranking_score |= other.show_ranking_score;
+        self.show_ranking_score_details |= other.show_ranking_score_details;
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
@@ -760,7 +771,11 @@ impl SearchAggregator {
                 },
                 "matching_strategy": {
                     "most_used_strategy": self.matching_strategy.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
-                }
+                },
+                "scoring": {
+                    "show_ranking_score": self.show_ranking_score,
+                    "show_ranking_score_details": self.show_ranking_score_details,
+                },
             });
 
             Some(Track {

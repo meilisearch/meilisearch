@@ -60,8 +60,41 @@ fn test_trap_basic() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("summer holiday");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"), @r###"
+    [
+        [
+            Proximity(
+                Rank {
+                    rank: 8,
+                    max_rank: 8,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 0,
+                    max_typo_count: 2,
+                },
+            ),
+        ],
+        [
+            Proximity(
+                Rank {
+                    rank: 8,
+                    max_rank: 8,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 0,
+                    max_typo_count: 2,
+                },
+            ),
+        ],
+    ]
+    "###);
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     // This is incorrect, 1 should come before 0
     insta::assert_debug_snapshot!(texts, @r###"

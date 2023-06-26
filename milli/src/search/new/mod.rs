@@ -44,6 +44,7 @@ use self::geo_sort::GeoSort;
 pub use self::geo_sort::Strategy as GeoSortStrategy;
 use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
+use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::apply_distinct_rule;
 use crate::{AscDesc, DocumentId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError};
 
@@ -350,6 +351,7 @@ pub fn execute_search(
     ctx: &mut SearchContext,
     query: &Option<String>,
     terms_matching_strategy: TermsMatchingStrategy,
+    scoring_strategy: ScoringStrategy,
     exhaustive_number_hits: bool,
     filters: &Option<Filter>,
     sort_criteria: &Option<Vec<AscDesc>>,
@@ -411,7 +413,16 @@ pub fn execute_search(
         universe =
             resolve_universe(ctx, &universe, &graph, terms_matching_strategy, query_graph_logger)?;
 
-        bucket_sort(ctx, ranking_rules, &graph, &universe, from, length, query_graph_logger)?
+        bucket_sort(
+            ctx,
+            ranking_rules,
+            &graph,
+            &universe,
+            from,
+            length,
+            scoring_strategy,
+            query_graph_logger,
+        )?
     } else {
         let ranking_rules =
             get_ranking_rules_for_placeholder_search(ctx, sort_criteria, geo_strategy)?;
@@ -422,17 +433,20 @@ pub fn execute_search(
             &universe,
             from,
             length,
+            scoring_strategy,
             placeholder_search_logger,
         )?
     };
 
-    let BucketSortOutput { docids, mut all_candidates } = bucket_sort_output;
+    let BucketSortOutput { docids, scores, mut all_candidates } = bucket_sort_output;
+
+    let fields_ids_map = ctx.index.fields_ids_map(ctx.txn)?;
 
     // The candidates is the universe unless the exhaustive number of hits
     // is requested and a distinct attribute is set.
     if exhaustive_number_hits {
         if let Some(f) = ctx.index.distinct_field(ctx.txn)? {
-            if let Some(distinct_fid) = ctx.index.fields_ids_map(ctx.txn)?.id(f) {
+            if let Some(distinct_fid) = fields_ids_map.id(f) {
                 all_candidates = apply_distinct_rule(ctx, distinct_fid, &all_candidates)?.remaining;
             }
         }
@@ -440,6 +454,7 @@ pub fn execute_search(
 
     Ok(PartialSearchResult {
         candidates: all_candidates,
+        document_scores: scores,
         documents_ids: docids,
         located_query_terms,
     })
@@ -491,4 +506,5 @@ pub struct PartialSearchResult {
     pub located_query_terms: Option<Vec<LocatedQueryTerm>>,
     pub candidates: RoaringBitmap,
     pub documents_ids: Vec<DocumentId>,
+    pub document_scores: Vec<Vec<ScoreDetails>>,
 }

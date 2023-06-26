@@ -1,0 +1,91 @@
+---
+source: milli/src/search/new/tests/geo_sort.rs
+expression: "format!(\"{scores:#?}\")"
+---
+[
+    [
+        GeoSort(
+            GeoSort {
+                target_point: [
+                    0.0,
+                    175.0,
+                ],
+                ascending: true,
+                value: Some(
+                    [
+                        0.0,
+                        178.0,
+                    ],
+                ),
+            },
+        ),
+    ],
+    [
+        GeoSort(
+            GeoSort {
+                target_point: [
+                    0.0,
+                    175.0,
+                ],
+                ascending: true,
+                value: Some(
+                    [
+                        0.0,
+                        -179.0,
+                    ],
+                ),
+            },
+        ),
+    ],
+    [
+        GeoSort(
+            GeoSort {
+                target_point: [
+                    0.0,
+                    175.0,
+                ],
+                ascending: true,
+                value: Some(
+                    [
+                        -89.0,
+                        0.0,
+                    ],
+                ),
+            },
+        ),
+    ],
+    [
+        GeoSort(
+            GeoSort {
+                target_point: [
+                    0.0,
+                    175.0,
+                ],
+                ascending: true,
+                value: Some(
+                    [
+                        88.0,
+                        0.0,
+                    ],
+                ),
+            },
+        ),
+    ],
+    [
+        GeoSort(
+            GeoSort {
+                target_point: [
+                    0.0,
+                    175.0,
+                ],
+                ascending: true,
+                value: Some(
+                    [
+                        0.0,
+                        0.0,
+                    ],
+                ),
+            },
+        ),
+    ],
+]

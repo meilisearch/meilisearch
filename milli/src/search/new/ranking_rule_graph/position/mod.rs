@@ -2,6 +2,7 @@ use fxhash::{FxHashMap, FxHashSet};
 use roaring::RoaringBitmap;
 
 use super::{ComputedCondition, RankingRuleGraphTrait};
+use crate::score_details::{Rank, ScoreDetails};
 use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::resolve_query_graph::compute_query_term_subset_docids_within_position;
@@ -77,6 +78,8 @@ impl RankingRuleGraphTrait for PositionGraph {
         let mut positions_for_costs = FxHashMap::<u32, Vec<u16>>::default();
 
         for position in all_positions {
+            // FIXME: bucketed position???
+            let distance = position.abs_diff(*term.positions.start());
             let cost = {
                 let mut cost = 0;
                 for i in 0..term.term_ids.len() {
@@ -84,15 +87,17 @@ impl RankingRuleGraphTrait for PositionGraph {
                     // Because if two words are in the same bucketed position (e.g. 32) and consecutive,
                     // then their position cost will be 32+32=64, but an ngram of these two words at the
                     // same position will have a cost of 32+32+1=65
-                    cost += cost_from_position(position as u32 + i as u32);
+                    cost += cost_from_distance(distance as u32 + i as u32);
                 }
                 cost
             };
             positions_for_costs.entry(cost).or_default().push(position);
         }
 
-        let mut edges = vec![];
+        let max_cost = term.term_ids.len() as u32 * 10;
+        let max_cost_exists = positions_for_costs.contains_key(&max_cost);
 
+        let mut edges = vec![];
         for (cost, positions) in positions_for_costs {
             edges.push((
                 cost,
@@ -100,12 +105,25 @@ impl RankingRuleGraphTrait for PositionGraph {
             ));
         }
 
+        if !max_cost_exists {
+            // artificial empty condition for computing max cost
+            edges.push((
+                max_cost,
+                conditions_interner
+                    .insert(PositionCondition { term: term.clone(), positions: Vec::default() }),
+            ));
+        }
+
         Ok(edges)
+    }
+
+    fn rank_to_score(rank: Rank) -> ScoreDetails {
+        ScoreDetails::Position(rank)
     }
 }
 
-fn cost_from_position(sum_positions: u32) -> u32 {
-    match sum_positions {
+fn cost_from_distance(distance: u32) -> u32 {
+    match distance {
         0 => 0,
         1 => 1,
         2..=4 => 2,

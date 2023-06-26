@@ -342,6 +342,25 @@ impl QueryGraph {
         }
         res
     }
+
+    /// Number of words in the phrases in this query graph
+    pub(crate) fn words_in_phrases_count(&self, ctx: &SearchContext) -> usize {
+        let mut word_count = 0;
+        for (_, node) in self.nodes.iter() {
+            match &node.data {
+                QueryNodeData::Term(term) => {
+                    let Some(phrase) = term.term_subset.original_phrase(ctx)
+                    else {
+                        continue
+                    };
+                    let phrase = ctx.phrase_interner.get(phrase);
+                    word_count += phrase.words.iter().copied().filter(|a| a.is_some()).count()
+                }
+                _ => continue,
+            }
+        }
+        word_count
+    }
 }
 
 fn add_node(nodes_data: &mut Vec<QueryNodeData>, node_data: QueryNodeData) -> u16 {

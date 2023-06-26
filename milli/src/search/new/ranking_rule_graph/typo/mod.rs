@@ -1,6 +1,7 @@
 use roaring::RoaringBitmap;
 
 use super::{ComputedCondition, RankingRuleGraphTrait};
+use crate::score_details::{self, Rank, ScoreDetails};
 use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::resolve_query_graph::compute_query_term_subset_docids;
@@ -74,5 +75,9 @@ impl RankingRuleGraphTrait for TypoGraph {
             ));
         }
         Ok(edges)
+    }
+
+    fn rank_to_score(rank: Rank) -> ScoreDetails {
+        ScoreDetails::Typo(score_details::Typo::from_rank(rank))
     }
 }

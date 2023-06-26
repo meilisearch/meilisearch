@@ -1,0 +1,60 @@
+---
+source: milli/src/search/new/tests/geo_sort.rs
+expression: "format!(\"{scores:#?}\")"
+---
+[
+    [
+        Words(
+            Words {
+                matching_words: 1,
+                max_matching_words: 1,
+            },
+        ),
+        GeoSort(
+            GeoSort {
+                target_point: [
+                    0.0,
+                    0.0,
+                ],
+                ascending: true,
+                value: None,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 1,
+                max_matching_words: 1,
+            },
+        ),
+        GeoSort(
+            GeoSort {
+                target_point: [
+                    0.0,
+                    0.0,
+                ],
+                ascending: true,
+                value: None,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 1,
+                max_matching_words: 1,
+            },
+        ),
+        GeoSort(
+            GeoSort {
+                target_point: [
+                    0.0,
+                    0.0,
+                ],
+                ascending: true,
+                value: None,
+            },
+        ),
+    ],
+]

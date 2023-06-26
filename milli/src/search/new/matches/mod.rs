@@ -510,6 +510,7 @@ mod tests {
                 &mut ctx,
                 &Some(query.to_string()),
                 crate::TermsMatchingStrategy::default(),
+                crate::score_details::ScoringStrategy::Skip,
                 false,
                 &None,
                 &None,

@@ -2488,8 +2488,12 @@ pub(crate) mod tests {
 
         let rtxn = index.read_txn().unwrap();
         let search = Search::new(&rtxn, &index);
-        let SearchResult { matching_words: _, candidates: _, mut documents_ids } =
-            search.execute().unwrap();
+        let SearchResult {
+            matching_words: _,
+            candidates: _,
+            document_scores: _,
+            mut documents_ids,
+        } = search.execute().unwrap();
         let primary_key_id = index.fields_ids_map(&rtxn).unwrap().id("primary_key").unwrap();
         documents_ids.sort_unstable();
         let docs = index.documents(&rtxn, documents_ids).unwrap();

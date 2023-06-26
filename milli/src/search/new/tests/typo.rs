@@ -160,8 +160,9 @@ fn test_no_typo() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quick brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0]");
+    insta::assert_snapshot!(format!("{document_scores:?}"), @"[[]]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -184,8 +185,14 @@ fn test_default_typo() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quick brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 23]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"), @r###"
+    [
+        [],
+        [],
+    ]
+    "###);
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -198,8 +205,9 @@ fn test_default_typo() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quack brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0]");
+    insta::assert_snapshot!(format!("{document_scores:?}"), @"[[]]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -211,8 +219,9 @@ fn test_default_typo() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quicest brownest fox jummps over the laziest dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[3]");
+    insta::assert_snapshot!(format!("{document_scores:?}"), @"[[]]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -229,8 +238,9 @@ fn test_phrase_no_typo_allowed() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the \"quick brewn\" fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[]");
+    insta::assert_snapshot!(format!("{document_scores:?}"), @"[]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @"[]");
 }
@@ -258,8 +268,9 @@ fn test_typo_exact_word() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quick brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0]");
+    insta::assert_snapshot!(format!("{document_scores:?}"), @"[[]]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -271,15 +282,17 @@ fn test_typo_exact_word() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quack brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[]");
+    insta::assert_snapshot!(format!("{document_scores:?}"), @"[]");
 
     // words not in exact_words (quicest, jummps) have normal typo handling
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quicest brownest fox jummps over the laziest dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[3]");
+    insta::assert_snapshot!(format!("{document_scores:?}"), @"[[]]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -290,9 +303,11 @@ fn test_typo_exact_word() {
     // exact words do not disable prefix (sunflowering OK, but no sunflowar)
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("network interconnection sunflower");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[16, 17, 18]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -327,9 +342,11 @@ fn test_typo_exact_attribute() {
     // Exact match returns both exact attributes and tolerant ones.
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("the quick brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 24, 25]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -350,9 +367,16 @@ fn test_typo_exact_attribute() {
     // 1 typo only returns the tolerant attribute
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("the quidk brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[24, 25]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"), @r###"
+    [
+        [],
+        [],
+    ]
+    "###);
     let texts = collect_field_values(&index, &txn, "tolerant_text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -364,9 +388,16 @@ fn test_typo_exact_attribute() {
     // combine with exact words
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("the quivk brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[23, 25]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"), @r###"
+    [
+        [],
+        [],
+    ]
+    "###);
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -385,9 +416,11 @@ fn test_typo_exact_attribute() {
     // No result in tolerant attribute
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("the quicest brownest fox jummps over the laziest dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[]");
+    insta::assert_snapshot!(format!("{document_scores:?}"), @"[]");
 }
 
 #[test]
@@ -397,9 +430,11 @@ fn test_ngram_typos() {
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("the extra lagant fox skyrocketed over the languorous dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6]");
+    insta::assert_snapshot!(format!("{document_scores:?}"), @"[[]]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -409,9 +444,11 @@ fn test_ngram_typos() {
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("the ex tra lagant fox skyrocketed over the languorous dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"), @"[]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @"[]");
 }
@@ -428,9 +465,11 @@ fn test_typo_ranking_rule_not_preceded_by_words_ranking_rule() {
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("the quick brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids: ids_1, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids: ids_1, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{ids_1:?}"), @"[0, 23, 7, 8, 9, 22, 10, 11, 1, 2, 12, 13, 4, 3, 5, 6, 21]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &ids_1);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -462,9 +501,11 @@ fn test_typo_ranking_rule_not_preceded_by_words_ranking_rule() {
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("the quick brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids: ids_2, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids: ids_2, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{ids_2:?}"), @"[0, 23, 7, 8, 9, 22, 10, 11, 1, 2, 12, 13, 4, 3, 5, 6, 21]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
 
     assert_eq!(ids_1, ids_2);
 }
@@ -478,9 +519,11 @@ fn test_typo_bucketing() {
     // First do the search with just the Words ranking rule
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("network interconnection sunflower");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[14, 15, 16, 17, 18, 20]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -504,9 +547,11 @@ fn test_typo_bucketing() {
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("network interconnection sunflower");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[16, 18, 17, 20, 15, 14]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -521,9 +566,11 @@ fn test_typo_bucketing() {
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("network interconnection sun flower");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[17, 19, 16, 18, 20, 15]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -555,9 +602,11 @@ fn test_typo_synonyms() {
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("the quick brown fox jumps over the lackadaisical dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 22, 23]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -569,12 +618,14 @@ fn test_typo_synonyms() {
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("the fast brownish fox jumps over the lackadaisical dog");
 
     // The interaction of ngrams + synonyms means that the multi-word synonyms end up having a typo cost.
     // This is probably not what we want.
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[21, 0, 22]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [

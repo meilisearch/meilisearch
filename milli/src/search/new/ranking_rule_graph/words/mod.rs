@@ -1,6 +1,7 @@
 use roaring::RoaringBitmap;
 
 use super::{ComputedCondition, RankingRuleGraphTrait};
+use crate::score_details::{self, Rank, ScoreDetails};
 use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::resolve_query_graph::compute_query_term_subset_docids;
@@ -41,9 +42,10 @@ impl RankingRuleGraphTrait for WordsGraph {
         _from: Option<&LocatedQueryTermSubset>,
         to_term: &LocatedQueryTermSubset,
     ) -> Result<Vec<(u32, Interned<Self::Condition>)>> {
-        Ok(vec![(
-            to_term.term_ids.len() as u32,
-            conditions_interner.insert(WordsCondition { term: to_term.clone() }),
-        )])
+        Ok(vec![(0, conditions_interner.insert(WordsCondition { term: to_term.clone() }))])
+    }
+
+    fn rank_to_score(rank: Rank) -> ScoreDetails {
+        ScoreDetails::Words(score_details::Words::from_rank(rank))
     }
 }
