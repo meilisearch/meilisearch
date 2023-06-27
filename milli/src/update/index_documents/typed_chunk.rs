@@ -249,7 +249,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 // convert the vector back to a Vec<f32>
                 let vector: Vec<f32> = pod_collect_to_vec(value);
 
-                // TODO Move this error in the vector extractor
+                // TODO Inform the user about the document that has a wrong `_vectors`
                 let found = vector.len();
                 let expected = *expected_dimensions.get_or_insert(found);
                 if expected != found {
