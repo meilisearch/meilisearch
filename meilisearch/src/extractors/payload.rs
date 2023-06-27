@@ -71,3 +71,40 @@ impl Stream for Payload {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use actix_http::encoding::Decoder as Decompress;
+    use actix_http::BoxedPayloadStream;
+    use bytes::Bytes;
+    use futures_util::StreamExt;
+    use meili_snap::snapshot;
+
+    use super::*;
+
+    #[actix_rt::test]
+    async fn payload_to_large() {
+        let stream = futures::stream::iter(vec![
+            Ok(Bytes::from("1")),
+            Ok(Bytes::from("2")),
+            Ok(Bytes::from("3")),
+            Ok(Bytes::from("4")),
+        ]);
+        let boxed_stream: BoxedPayloadStream = Box::pin(stream);
+        let actix_payload = dev::Payload::from(boxed_stream);
+
+        let payload = Payload {
+            limit: 3,
+            remaining: 3,
+            payload: Decompress::new(actix_payload, actix_http::ContentEncoding::Identity),
+        };
+
+        let mut enumerated_payload_stream = payload.enumerate();
+
+        while let Some((idx, chunk)) = enumerated_payload_stream.next().await {
+            if idx == 3 {
+                snapshot!(chunk.unwrap_err(), @"The provided payload reached the size limit. The maximum accepted payload size is 3 B.");
+            }
+        }
+    }
+}
