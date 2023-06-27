@@ -228,6 +228,8 @@ pub struct SearchHit {
     pub ranking_score: Option<f64>,
     #[serde(rename = "_rankingScoreDetails", skip_serializing_if = "Option::is_none")]
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
+    #[serde(rename = "_semanticScore", skip_serializing_if = "Option::is_none")]
+    pub semantic_score: Option<f32>,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -462,11 +464,13 @@ pub fn perform_search(
             insert_geo_distance(sort, &mut document);
         }
 
-        if let Some(vector) = query.vector.as_ref() {
-            if let Some(vectors) = extract_field("_vectors", &fields_ids_map, obkv)? {
-                insert_semantic_score(vector, vectors, &mut document);
-            }
-        }
+        let semantic_score = match query.vector.as_ref() {
+            Some(vector) => match extract_field("_vectors", &fields_ids_map, obkv)? {
+                Some(vectors) => compute_semantic_score(vector, vectors)?,
+                None => None,
+            },
+            None => None,
+        };
 
         let ranking_score =
             query.show_ranking_score.then(|| ScoreDetails::global_score(score.iter()));
@@ -479,6 +483,7 @@ pub fn perform_search(
             matches_position,
             ranking_score_details,
             ranking_score,
+            semantic_score,
         };
         documents.push(hit);
     }
@@ -553,18 +558,15 @@ fn insert_geo_distance(sorts: &[String], document: &mut Document) {
     }
 }
 
-fn insert_semantic_score(query: &[f32], vectors: Value, document: &mut Document) {
-    let vectors =
-        match serde_json::from_value(vectors).map(VectorOrArrayOfVectors::into_array_of_vectors) {
-            Ok(vectors) => vectors,
-            Err(_) => return,
-        };
-    let similarity = vectors
+fn compute_semantic_score(query: &[f32], vectors: Value) -> milli::Result<Option<f32>> {
+    let vectors = serde_json::from_value(vectors)
+        .map(VectorOrArrayOfVectors::into_array_of_vectors)
+        .map_err(InternalError::SerdeJson)?;
+    Ok(vectors
         .into_iter()
         .map(|v| OrderedFloat(dot_product_similarity(query, &v)))
         .max()
-        .map(OrderedFloat::into_inner);
-    document.insert("_semanticScore".to_string(), json!(similarity));
+        .map(OrderedFloat::into_inner))
 }
 
 fn compute_formatted_options(
