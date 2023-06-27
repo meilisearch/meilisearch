@@ -506,8 +506,8 @@ impl Segment {
         {
             let _ = self.batcher.push(post_multi_search).await;
         }
-        if let Some(post_facet_search) = take(post_facet_search_aggregator)
-            .into_event(&user, "Documents Searched by Facet-Search POST")
+        if let Some(post_facet_search) =
+            take(post_facet_search_aggregator).into_event(&user, "Facet Searched POST")
         {
             let _ = self.batcher.push(post_facet_search).await;
         }
@@ -1027,8 +1027,8 @@ impl FacetSearchAggregator {
                 },
                 "facets": {
                     "total_distinct_facet_count": self.facet_names.len(),
+                    "additional_search_parameters_provided": self.additional_search_parameters_provided,
                 },
-                "additional_search_parameters_provided": self.additional_search_parameters_provided,
             });
 
             Some(Track {
