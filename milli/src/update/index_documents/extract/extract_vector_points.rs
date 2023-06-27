@@ -50,16 +50,12 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                 }
             };
 
-            for (i, vector) in vectors.into_iter().enumerate() {
-                match u16::try_from(i) {
-                    Ok(i) => {
-                        let mut key = docid_bytes.to_vec();
-                        key.extend_from_slice(&i.to_ne_bytes());
-                        let bytes = cast_slice(&vector);
-                        writer.insert(key, bytes)?;
-                    }
-                    Err(_) => continue,
-                }
+            for (i, vector) in vectors.into_iter().enumerate().take(u16::MAX as usize) {
+                let index = u16::try_from(i).unwrap();
+                let mut key = docid_bytes.to_vec();
+                key.extend_from_slice(&index.to_be_bytes());
+                let bytes = cast_slice(&vector);
+                writer.insert(key, bytes)?;
             }
         }
         // else => the `_vectors` object was `null`, there is nothing to do
