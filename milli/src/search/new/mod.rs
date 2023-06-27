@@ -376,8 +376,40 @@ pub fn execute_search(
 
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
-    let mut located_query_terms = None;
+    if let Some(vector) = vector {
+        let mut searcher = Searcher::new();
+        let hnsw = ctx.index.vector_hnsw(ctx.txn)?.unwrap_or_default();
+        let ef = hnsw.len().min(100);
+        let mut dest = vec![Neighbor { index: 0, distance: 0 }; ef];
+        let vector = normalize_vector(vector.clone());
+        let neighbors = hnsw.nearest(&vector, ef, &mut searcher, &mut dest[..]);
 
+        let mut docids = Vec::new();
+        let mut uniq_docids = RoaringBitmap::new();
+        for Neighbor { index, distance: _ } in neighbors.iter() {
+            let index = BEU32::new(*index as u32);
+            let docid = ctx.index.vector_id_docid.get(ctx.txn, &index)?.unwrap().get();
+            if universe.contains(docid) && uniq_docids.insert(docid) {
+                docids.push(docid);
+                if docids.len() == (from + length) {
+                    break;
+                }
+            }
+        }
+
+        // return the nearest documents that are also part of the candidates
+        // along with a dummy list of scores that are useless in this context.
+        let docids: Vec<_> = docids.into_iter().skip(from).take(length).collect();
+
+        return Ok(PartialSearchResult {
+            candidates: universe,
+            document_scores: vec![Vec::new(); docids.len()],
+            documents_ids: docids,
+            located_query_terms: None,
+        });
+    }
+
+    let mut located_query_terms = None;
     let query_terms = if let Some(query) = query {
         // We make sure that the analyzer is aware of the stop words
         // this ensures that the query builder is able to properly remove them.
@@ -445,36 +477,7 @@ pub fn execute_search(
     };
 
     let BucketSortOutput { docids, scores, mut all_candidates } = bucket_sort_output;
-
     let fields_ids_map = ctx.index.fields_ids_map(ctx.txn)?;
-
-    let docids = match vector {
-        Some(vector) => {
-            // return the nearest documents that are also part of the candidates.
-            let mut searcher = Searcher::new();
-            let hnsw = ctx.index.vector_hnsw(ctx.txn)?.unwrap_or_default();
-            let ef = hnsw.len().min(100);
-            let mut dest = vec![Neighbor { index: 0, distance: 0 }; ef];
-            let vector = normalize_vector(vector.clone());
-            let neighbors = hnsw.nearest(&vector, ef, &mut searcher, &mut dest[..]);
-
-            let mut docids = Vec::new();
-            for Neighbor { index, distance: _ } in neighbors.iter() {
-                let index = BEU32::new(*index as u32);
-                let docid = ctx.index.vector_id_docid.get(ctx.txn, &index)?.unwrap().get();
-                if universe.contains(docid) {
-                    docids.push(docid);
-                    if docids.len() == (from + length) {
-                        break;
-                    }
-                }
-            }
-
-            docids.into_iter().skip(from).take(length).collect()
-        }
-        // return the search docids if the vector field is not specified
-        None => docids,
-    };
 
     // The candidates is the universe unless the exhaustive number of hits
     // is requested and a distinct attribute is set.
