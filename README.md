@@ -65,7 +65,7 @@ Say goodbye to server deployment and manual updates with [Meilisearch Cloud](htt
 
 ## 🧰 SDKs & integration tools
 
-Install one of our SDKs in your proj``ect for seamless integration between Meilisearch and your favorite language or framework!
+Install one of our SDKs in your project for seamless integration between Meilisearch and your favorite language or framework!
 
 Take a look at the complete [Meilisearch integration list](https://www.meilisearch.com/docs/learn/what_is_meilisearch/sdks).
 
