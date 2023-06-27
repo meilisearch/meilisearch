@@ -37,10 +37,10 @@ Meilisearch helps you shape a delightful search experience in a snap, offering f
 
 - **Search-as-you-type:** find search results in less than 50 milliseconds
 - **[Typo tolerance](https://www.meilisearch.com/docs/learn/getting_started/customizing_relevancy#typo-tolerance):** get relevant matches even when queries contain typos and misspellings
-- **[Filtering](https://www.meilisearch.com/docs/learn/advanced/filtering) and [faceted search](https://www.meilisearch.com/docs/learn/advanced/faceted_search):** enhance your user's search experience with custom filters and build a faceted search interface in a few lines of code
-- **[Sorting](https://www.meilisearch.com/docs/learn/advanced/sorting):** sort results based on price, date, or pretty much anything else your users need
+- **[Filtering](https://www.meilisearch.com/docs/learn/fine_tuning_results/filtering) and [faceted search](https://www.meilisearch.com/docs/learn/fine_tuning_results/faceted_search):** enhance your user's search experience with custom filters and build a faceted search interface in a few lines of code
+- **[Sorting](https://www.meilisearch.com/docs/learn/fine_tuning_results/sorting):** sort results based on price, date, or pretty much anything else your users need
 - **[Synonym support](https://www.meilisearch.com/docs/learn/getting_started/customizing_relevancy#synonyms):** configure synonyms to include more relevant content in your search results
-- **[Geosearch](https://www.meilisearch.com/docs/learn/advanced/geosearch):** filter and sort documents based on geographic data
+- **[Geosearch](https://www.meilisearch.com/docs/learn/fine_tuning_results/geosearch):** filter and sort documents based on geographic data
 - **[Extensive language support](https://www.meilisearch.com/docs/learn/what_is_meilisearch/language):** search datasets in any language, with optimized support for Chinese, Japanese, Hebrew, and languages using the Latin alphabet
 - **[Security management](https://www.meilisearch.com/docs/learn/security/master_api_keys):** control which users can access what data with API keys that allow fine-grained permissions handling
 - **[Multi-Tenancy](https://www.meilisearch.com/docs/learn/security/tenant_tokens):** personalize search results for any number of application tenants
@@ -74,7 +74,7 @@ Take a look at the complete [Meilisearch integration list](https://www.meilisear
 
 Experienced users will want to keep our [API Reference](https://www.meilisearch.com/docs/reference/api/overview) close at hand.
 
-We also offer a wide range of dedicated guides to all Meilisearch features, such as [filtering](https://www.meilisearch.com/docs/learn/advanced/filtering), [sorting](https://www.meilisearch.com/docs/learn/advanced/sorting), [geosearch](https://www.meilisearch.com/docs/learn/advanced/geosearch), [API keys](https://www.meilisearch.com/docs/learn/security/master_api_keys), and [tenant tokens](https://www.meilisearch.com/docs/learn/security/tenant_tokens).
+We also offer a wide range of dedicated guides to all Meilisearch features, such as [filtering](https://www.meilisearch.com/docs/learn/fine_tuning_results/filtering), [sorting](https://www.meilisearch.com/docs/learn/fine_tuning_results/sorting), [geosearch](https://www.meilisearch.com/docs/learn/fine_tuning_results/geosearch), [API keys](https://www.meilisearch.com/docs/learn/security/master_api_keys), and [tenant tokens](https://www.meilisearch.com/docs/learn/security/tenant_tokens).
 
 Finally, for more in-depth information, refer to our articles explaining fundamental Meilisearch concepts such as [documents](https://www.meilisearch.com/docs/learn/core_concepts/documents) and [indexes](https://www.meilisearch.com/docs/learn/core_concepts/indexes).
 
