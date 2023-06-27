@@ -6,6 +6,7 @@
 <h4 align="center">
   <a href="https://www.meilisearch.com">Website</a> |
   <a href="https://roadmap.meilisearch.com/tabs/1-under-consideration">Roadmap</a> |
+  <a href="https://www.meilisearch.com/pricing?utm_campaign=oss&utm_source=engine&utm_medium=meilisearch">Meilisearch Cloud</a> |
   <a href="https://blog.meilisearch.com">Blog</a> |
   <a href="https://www.meilisearch.com/docs">Documentation</a> |
   <a href="https://www.meilisearch.com/docs/faq">FAQ</a> |
@@ -58,9 +59,9 @@ For basic instructions on how to set up Meilisearch, add documents to an index, 
 
 You may also want to check out [Meilisearch 101](https://www.meilisearch.com/docs/learn/getting_started/filtering_and_sorting) for an introduction to some of Meilisearch's most popular features.
 
-## ☁️ Meilisearch cloud
+## ⚡ Supercharge your Meilisearch experience
 
-Let us manage your infrastructure so you can focus on integrating a great search experience. Try [Meilisearch Cloud](https://meilisearch.com/pricing) today.
+Say goodbye to server deployment and manual updates with [Meilisearch Cloud](https://www.meilisearch.com/pricing?utm_campaign=oss&utm_source=engine&utm_medium=meilisearch). No credit card required.
 
 ## 🧰 SDKs & integration tools
 
