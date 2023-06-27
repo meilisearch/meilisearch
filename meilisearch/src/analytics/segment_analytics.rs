@@ -548,6 +548,10 @@ pub struct SearchAggregator {
     // The maximum number of terms in a q request
     max_terms_number: usize,
 
+    // vector
+    // The maximum number of floats in a vector request
+    max_vector_size: usize,
+
     // every time a search is done, we increment the counter linked to the used settings
     matching_strategy: HashMap<String, usize>,
 
@@ -615,6 +619,10 @@ impl SearchAggregator {
 
         if let Some(ref q) = query.q {
             ret.max_terms_number = q.split_whitespace().count();
+        }
+
+        if let Some(ref vector) = query.vector {
+            ret.max_vector_size = vector.len();
         }
 
         if query.is_finite_pagination() {
