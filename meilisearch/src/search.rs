@@ -6,12 +6,13 @@ use std::time::Instant;
 use deserr::Deserr;
 use either::Either;
 use index_scheduler::RoFeatures;
+use log::warn;
 use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::index_uid::IndexUid;
-use meilisearch_types::milli::dot_product_similarity;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
+use meilisearch_types::milli::{dot_product_similarity, InternalError};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
@@ -300,6 +301,10 @@ pub fn perform_search(
     let rtxn = index.read_txn()?;
 
     let mut search = index.search(&rtxn);
+
+    if query.vector.is_some() && query.q.is_some() {
+        warn!("Ignoring the query string `q` when used with the `vector` parameter.");
+    }
 
     if let Some(ref vector) = query.vector {
         search.vector(vector.clone());
