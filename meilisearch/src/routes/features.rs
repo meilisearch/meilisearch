@@ -54,6 +54,7 @@ async fn patch_features(
         Data<IndexScheduler>,
     >,
     new_features: AwebJson<RuntimeTogglableFeatures, DeserrJsonError>,
+    req: HttpRequest,
     analytics: Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let features = index_scheduler.features()?;
@@ -65,7 +66,7 @@ async fn patch_features(
         vector_store: new_features.0.vector_store.unwrap_or(old_features.vector_store),
     };
 
-    analytics.publish("Experimental features PATCH".to_string(), json!(new_features), None);
+    analytics.publish("Experimental features Updated".to_string(), json!(new_features), Some(&req));
     index_scheduler.put_runtime_features(new_features)?;
     Ok(HttpResponse::Ok().json(new_features))
 }
@@ -77,13 +78,14 @@ async fn post_features(
     >,
     new_features: AwebJson<RuntimeTogglableFeatures, DeserrJsonError>,
     analytics: Data<dyn Analytics>,
+    req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
     let new_features = meilisearch_types::features::RuntimeTogglableFeatures {
         score_details: new_features.0.score_details.unwrap_or(false),
         vector_store: new_features.0.vector_store.unwrap_or(false),
     };
 
-    analytics.publish("Experimental features POST".to_string(), json!(new_features), None);
+    analytics.publish("Experimental features Updated".to_string(), json!(new_features), Some(&req));
     index_scheduler.put_runtime_features(new_features)?;
     Ok(HttpResponse::Ok().json(new_features))
 }
@@ -94,9 +96,14 @@ async fn delete_features(
         Data<IndexScheduler>,
     >,
     analytics: Data<dyn Analytics>,
+    req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
     let deleted_features = Default::default();
-    analytics.publish("Experimental features DELETE".to_string(), json!(null), None);
+    analytics.publish(
+        "Experimental features Updated".to_string(),
+        json!(deleted_features),
+        Some(&req),
+    );
     index_scheduler.put_runtime_features(deleted_features)?;
     Ok(HttpResponse::Ok().json(deleted_features))
 }
