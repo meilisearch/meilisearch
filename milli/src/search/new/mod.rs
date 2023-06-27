@@ -28,6 +28,7 @@ use db_cache::DatabaseCache;
 use exact_attribute::ExactAttribute;
 use graph_based_ranking_rule::{Exactness, Fid, Position, Proximity, Typo};
 use heed::RoTxn;
+use hnsw::Searcher;
 use interner::{DedupInterner, Interner};
 pub use logger::visual::VisualSearchLogger;
 pub use logger::{DefaultSearchLogger, SearchLogger};
@@ -39,6 +40,7 @@ use ranking_rules::{
 use resolve_query_graph::{compute_query_graph_docids, PhraseDocIdsCache};
 use roaring::RoaringBitmap;
 use sort::Sort;
+use space::Neighbor;
 
 use self::geo_sort::GeoSort;
 pub use self::geo_sort::Strategy as GeoSortStrategy;
@@ -46,7 +48,10 @@ use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::apply_distinct_rule;
-use crate::{AscDesc, DocumentId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError};
+use crate::{
+    normalize_vector, AscDesc, DocumentId, Filter, Index, Member, Result, TermsMatchingStrategy,
+    UserError, BEU32,
+};
 
 /// A structure used throughout the execution of a search query.
 pub struct SearchContext<'ctx> {
@@ -350,6 +355,7 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
 pub fn execute_search(
     ctx: &mut SearchContext,
     query: &Option<String>,
+    vector: &Option<Vec<f32>>,
     terms_matching_strategy: TermsMatchingStrategy,
     scoring_strategy: ScoringStrategy,
     exhaustive_number_hits: bool,
@@ -370,8 +376,40 @@ pub fn execute_search(
 
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
-    let mut located_query_terms = None;
+    if let Some(vector) = vector {
+        let mut searcher = Searcher::new();
+        let hnsw = ctx.index.vector_hnsw(ctx.txn)?.unwrap_or_default();
+        let ef = hnsw.len().min(100);
+        let mut dest = vec![Neighbor { index: 0, distance: 0 }; ef];
+        let vector = normalize_vector(vector.clone());
+        let neighbors = hnsw.nearest(&vector, ef, &mut searcher, &mut dest[..]);
 
+        let mut docids = Vec::new();
+        let mut uniq_docids = RoaringBitmap::new();
+        for Neighbor { index, distance: _ } in neighbors.iter() {
+            let index = BEU32::new(*index as u32);
+            let docid = ctx.index.vector_id_docid.get(ctx.txn, &index)?.unwrap().get();
+            if universe.contains(docid) && uniq_docids.insert(docid) {
+                docids.push(docid);
+                if docids.len() == (from + length) {
+                    break;
+                }
+            }
+        }
+
+        // return the nearest documents that are also part of the candidates
+        // along with a dummy list of scores that are useless in this context.
+        let docids: Vec<_> = docids.into_iter().skip(from).take(length).collect();
+
+        return Ok(PartialSearchResult {
+            candidates: universe,
+            document_scores: vec![Vec::new(); docids.len()],
+            documents_ids: docids,
+            located_query_terms: None,
+        });
+    }
+
+    let mut located_query_terms = None;
     let query_terms = if let Some(query) = query {
         // We make sure that the analyzer is aware of the stop words
         // this ensures that the query builder is able to properly remove them.
@@ -439,7 +477,6 @@ pub fn execute_search(
     };
 
     let BucketSortOutput { docids, scores, mut all_candidates } = bucket_sort_output;
-
     let fields_ids_map = ctx.index.fields_ids_map(ctx.txn)?;
 
     // The candidates is the universe unless the exhaustive number of hits

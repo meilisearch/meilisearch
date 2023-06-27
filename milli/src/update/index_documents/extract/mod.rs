@@ -4,6 +4,7 @@ mod extract_facet_string_docids;
 mod extract_fid_docid_facet_values;
 mod extract_fid_word_count_docids;
 mod extract_geo_points;
+mod extract_vector_points;
 mod extract_word_docids;
 mod extract_word_fid_docids;
 mod extract_word_pair_proximity_docids;
@@ -22,6 +23,7 @@ use self::extract_facet_string_docids::extract_facet_string_docids;
 use self::extract_fid_docid_facet_values::{extract_fid_docid_facet_values, ExtractedFacetValues};
 use self::extract_fid_word_count_docids::extract_fid_word_count_docids;
 use self::extract_geo_points::extract_geo_points;
+use self::extract_vector_points::extract_vector_points;
 use self::extract_word_docids::extract_word_docids;
 use self::extract_word_fid_docids::extract_word_fid_docids;
 use self::extract_word_pair_proximity_docids::extract_word_pair_proximity_docids;
@@ -45,6 +47,7 @@ pub(crate) fn data_from_obkv_documents(
     faceted_fields: HashSet<FieldId>,
     primary_key_id: FieldId,
     geo_fields_ids: Option<(FieldId, FieldId)>,
+    vectors_field_id: Option<FieldId>,
     stop_words: Option<fst::Set<&[u8]>>,
     max_positions_per_attributes: Option<u32>,
     exact_attributes: HashSet<FieldId>,
@@ -69,6 +72,7 @@ pub(crate) fn data_from_obkv_documents(
                     &faceted_fields,
                     primary_key_id,
                     geo_fields_ids,
+                    vectors_field_id,
                     &stop_words,
                     max_positions_per_attributes,
                 )
@@ -279,6 +283,7 @@ fn send_and_extract_flattened_documents_data(
     faceted_fields: &HashSet<FieldId>,
     primary_key_id: FieldId,
     geo_fields_ids: Option<(FieldId, FieldId)>,
+    vectors_field_id: Option<FieldId>,
     stop_words: &Option<fst::Set<&[u8]>>,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<(
@@ -302,6 +307,25 @@ fn send_and_extract_flattened_documents_data(
                 extract_geo_points(documents_chunk_cloned, indexer, primary_key_id, geo_fields_ids);
             let _ = match result {
                 Ok(geo_points) => lmdb_writer_sx_cloned.send(Ok(TypedChunk::GeoPoints(geo_points))),
+                Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
+            };
+        });
+    }
+
+    if let Some(vectors_field_id) = vectors_field_id {
+        let documents_chunk_cloned = flattened_documents_chunk.clone();
+        let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
+        rayon::spawn(move || {
+            let result = extract_vector_points(
+                documents_chunk_cloned,
+                indexer,
+                primary_key_id,
+                vectors_field_id,
+            );
+            let _ = match result {
+                Ok(vector_points) => {
+                    lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints(vector_points)))
+                }
                 Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
             };
         });

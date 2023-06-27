@@ -62,7 +62,7 @@ impl RoFeatures {
             Err(FeatureNotEnabledError {
                 disabled_action: "Passing `vector` as a query parameter",
                 feature: "vector store",
-                issue_link: "https://github.com/meilisearch/meilisearch/discussions/TODO",
+                issue_link: "https://github.com/meilisearch/product/discussions/677",
             }
             .into())
         }

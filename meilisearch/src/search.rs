@@ -6,18 +6,21 @@ use std::time::Instant;
 use deserr::Deserr;
 use either::Either;
 use index_scheduler::RoFeatures;
+use log::warn;
 use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
+use meilisearch_types::milli::{dot_product_similarity, InternalError};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
 use milli::{
     AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, Index, MatchBounds, MatcherBuilder,
-    SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
+    SortError, TermsMatchingStrategy, VectorOrArrayOfVectors, DEFAULT_VALUES_PER_FACET,
 };
+use ordered_float::OrderedFloat;
 use regex::Regex;
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -33,11 +36,13 @@ pub const DEFAULT_CROP_MARKER: fn() -> String = || "…".to_string();
 pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserr)]
+#[derive(Debug, Clone, Default, PartialEq, Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
+    pub vector: Option<Vec<f32>>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
@@ -86,13 +91,15 @@ impl SearchQuery {
 // This struct contains the fields of `SearchQuery` inline.
 // This is because neither deserr nor serde support `flatten` when using `deny_unknown_fields.
 // The `From<SearchQueryWithIndex>` implementation ensures both structs remain up to date.
-#[derive(Debug, Clone, PartialEq, Eq, Deserr)]
+#[derive(Debug, Clone, PartialEq, Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQueryWithIndex {
     #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
     pub index_uid: IndexUid,
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
+    pub vector: Option<Vec<f32>>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
@@ -136,6 +143,7 @@ impl SearchQueryWithIndex {
         let SearchQueryWithIndex {
             index_uid,
             q,
+            vector,
             offset,
             limit,
             page,
@@ -159,6 +167,7 @@ impl SearchQueryWithIndex {
             index_uid,
             SearchQuery {
                 q,
+                vector,
                 offset,
                 limit,
                 page,
@@ -220,6 +229,8 @@ pub struct SearchHit {
     pub ranking_score: Option<f64>,
     #[serde(rename = "_rankingScoreDetails", skip_serializing_if = "Option::is_none")]
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
+    #[serde(rename = "_semanticScore", skip_serializing_if = "Option::is_none")]
+    pub semantic_score: Option<f32>,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -227,6 +238,8 @@ pub struct SearchHit {
 pub struct SearchResult {
     pub hits: Vec<SearchHit>,
     pub query: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vector: Option<Vec<f32>>,
     pub processing_time_ms: u128,
     #[serde(flatten)]
     pub hits_info: HitsInfo,
@@ -289,6 +302,14 @@ pub fn perform_search(
 
     let mut search = index.search(&rtxn);
 
+    if query.vector.is_some() && query.q.is_some() {
+        warn!("Ignoring the query string `q` when used with the `vector` parameter.");
+    }
+
+    if let Some(ref vector) = query.vector {
+        search.vector(vector.clone());
+    }
+
     if let Some(ref query) = query.q {
         search.query(query);
     }
@@ -310,6 +331,10 @@ pub fn perform_search(
 
     if query.show_ranking_score_details {
         features.check_score_details()?;
+    }
+
+    if query.vector.is_some() {
+        features.check_vector()?;
     }
 
     // compute the offset on the limit depending on the pagination mode.
@@ -418,7 +443,6 @@ pub fn perform_search(
     formatter_builder.highlight_suffix(query.highlight_post_tag);
 
     let mut documents = Vec::new();
-
     let documents_iter = index.documents(&rtxn, documents_ids)?;
 
     for ((_id, obkv), score) in documents_iter.into_iter().zip(document_scores.into_iter()) {
@@ -445,6 +469,14 @@ pub fn perform_search(
             insert_geo_distance(sort, &mut document);
         }
 
+        let semantic_score = match query.vector.as_ref() {
+            Some(vector) => match extract_field("_vectors", &fields_ids_map, obkv)? {
+                Some(vectors) => compute_semantic_score(vector, vectors)?,
+                None => None,
+            },
+            None => None,
+        };
+
         let ranking_score =
             query.show_ranking_score.then(|| ScoreDetails::global_score(score.iter()));
         let ranking_score_details =
@@ -456,6 +488,7 @@ pub fn perform_search(
             matches_position,
             ranking_score_details,
             ranking_score,
+            semantic_score,
         };
         documents.push(hit);
     }
@@ -505,7 +538,8 @@ pub fn perform_search(
     let result = SearchResult {
         hits: documents,
         hits_info,
-        query: query.q.clone().unwrap_or_default(),
+        query: query.q.unwrap_or_default(),
+        vector: query.vector,
         processing_time_ms: before_search.elapsed().as_millis(),
         facet_distribution,
         facet_stats,
@@ -527,6 +561,17 @@ fn insert_geo_distance(sorts: &[String], document: &mut Document) {
             document.insert("_geoDistance".to_string(), json!(distance.round() as usize));
         }
     }
+}
+
+fn compute_semantic_score(query: &[f32], vectors: Value) -> milli::Result<Option<f32>> {
+    let vectors = serde_json::from_value(vectors)
+        .map(VectorOrArrayOfVectors::into_array_of_vectors)
+        .map_err(InternalError::SerdeJson)?;
+    Ok(vectors
+        .into_iter()
+        .map(|v| OrderedFloat(dot_product_similarity(query, &v)))
+        .max()
+        .map(OrderedFloat::into_inner))
 }
 
 fn compute_formatted_options(
@@ -654,6 +699,22 @@ fn make_document(
 
     let document = permissive_json_pointer::select_values(&document, displayed_attributes);
     Ok(document)
+}
+
+/// Extract the JSON value under the field name specified
+/// but doesn't support nested objects.
+fn extract_field(
+    field_name: &str,
+    field_ids_map: &FieldsIdsMap,
+    obkv: obkv::KvReaderU16,
+) -> Result<Option<serde_json::Value>, MeilisearchHttpError> {
+    match field_ids_map.id(field_name) {
+        Some(fid) => match obkv.get(fid) {
+            Some(value) => Ok(serde_json::from_slice(value).map(Some)?),
+            None => Ok(None),
+        },
+        None => Ok(None),
+    }
 }
 
 fn format_fields<A: AsRef<[u8]>>(

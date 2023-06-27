@@ -217,6 +217,8 @@ InvalidDocumentFields                 , InvalidRequest       , BAD_REQUEST ;
 MissingDocumentFilter                 , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentFilter                 , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentGeoField               , InvalidRequest       , BAD_REQUEST ;
+InvalidVectorDimensions               , InvalidRequest       , BAD_REQUEST ;
+InvalidVectorsType                    , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentId                     , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentLimit                  , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentOffset                 , InvalidRequest       , BAD_REQUEST ;
@@ -239,6 +241,7 @@ InvalidSearchMatchingStrategy         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchOffset                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchPage                     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchQ                        , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchVector                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowMatchesPosition      , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowRankingScore         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowRankingScoreDetails  , InvalidRequest       , BAD_REQUEST ;
@@ -335,6 +338,8 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidSortableAttribute { .. } => Code::InvalidSearchSort,
                     UserError::CriterionError(_) => Code::InvalidSettingsRankingRules,
                     UserError::InvalidGeoField { .. } => Code::InvalidDocumentGeoField,
+                    UserError::InvalidVectorDimensions { .. } => Code::InvalidVectorDimensions,
+                    UserError::InvalidVectorsType { .. } => Code::InvalidVectorsType,
                     UserError::SortError(_) => Code::InvalidSearchSort,
                     UserError::InvalidMinTypoWordLenSetting(_, _) => {
                         Code::InvalidSettingsTypoTolerance

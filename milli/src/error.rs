@@ -110,9 +110,13 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     },
     #[error(transparent)]
     InvalidGeoField(#[from] GeoError),
+    #[error("Invalid vector dimensions: expected: `{}`, found: `{}`.", .expected, .found)]
+    InvalidVectorDimensions { expected: usize, found: usize },
+    #[error("The `_vectors` field in the document with the id: `{document_id}` is not an array. Was expecting an array of floats or an array of arrays of floats but instead got `{value}`.")]
+    InvalidVectorsType { document_id: Value, value: Value },
     #[error("{0}")]
     InvalidFilter(String),
-    #[error("Invalid type for filter subexpression: `expected {}, found: {1}`.", .0.join(", "))]
+    #[error("Invalid type for filter subexpression: expected: {}, found: {1}.", .0.join(", "))]
     InvalidFilterExpression(&'static [&'static str], Value),
     #[error("Attribute `{}` is not sortable. {}",
         .field,

@@ -10,6 +10,7 @@ pub mod documents;
 
 mod asc_desc;
 mod criterion;
+pub mod distance;
 mod error;
 mod external_documents_ids;
 pub mod facet;
@@ -17,6 +18,7 @@ mod fields_ids_map;
 pub mod heed_codec;
 pub mod index;
 pub mod proximity;
+mod readable_slices;
 pub mod score_details;
 mod search;
 pub mod update;
@@ -30,6 +32,7 @@ use std::convert::{TryFrom, TryInto};
 use std::hash::BuildHasherDefault;
 
 use charabia::normalizer::{CharNormalizer, CompatibilityDecompositionNormalizer};
+pub use distance::dot_product_similarity;
 pub use filter_parser::{Condition, FilterCondition, Span, Token};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
@@ -282,6 +285,35 @@ pub fn is_faceted_by(field: &str, facet: &str) -> bool {
 
 pub fn normalize_facet(original: &str) -> String {
     CompatibilityDecompositionNormalizer.normalize_str(original.trim()).to_lowercase()
+}
+
+/// Represents either a vector or an array of multiple vectors.
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[serde(transparent)]
+pub struct VectorOrArrayOfVectors {
+    #[serde(with = "either::serde_untagged")]
+    inner: either::Either<Vec<f32>, Vec<Vec<f32>>>,
+}
+
+impl VectorOrArrayOfVectors {
+    pub fn into_array_of_vectors(self) -> Vec<Vec<f32>> {
+        match self.inner {
+            either::Either::Left(vector) => vec![vector],
+            either::Either::Right(vectors) => vectors,
+        }
+    }
+}
+
+/// Normalize a vector by dividing the dimensions by the length of it.
+pub fn normalize_vector(mut vector: Vec<f32>) -> Vec<f32> {
+    let squared: f32 = vector.iter().map(|x| x * x).sum();
+    let length = squared.sqrt();
+    if length <= f32::EPSILON {
+        vector
+    } else {
+        vector.iter_mut().for_each(|x| *x /= length);
+        vector
+    }
 }
 
 #[cfg(test)]

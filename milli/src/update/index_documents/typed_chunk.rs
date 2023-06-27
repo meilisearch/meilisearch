@@ -4,20 +4,27 @@ use std::convert::TryInto;
 use std::fs::File;
 use std::io;
 
+use bytemuck::allocation::pod_collect_to_vec;
 use charabia::{Language, Script};
 use grenad::MergerBuilder;
 use heed::types::ByteSlice;
 use heed::RwTxn;
+use hnsw::Searcher;
 use roaring::RoaringBitmap;
+use space::KnnPoints;
 
 use super::helpers::{
     self, merge_ignore_values, serialize_roaring_bitmap, valid_lmdb_key, CursorClonableMmap,
 };
 use super::{ClonableMmap, MergeFn};
+use crate::error::UserError;
 use crate::facet::FacetType;
 use crate::update::facet::FacetsUpdate;
-use crate::update::index_documents::helpers::as_cloneable_grenad;
-use crate::{lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index, Result};
+use crate::update::index_documents::helpers::{as_cloneable_grenad, try_split_array_at};
+use crate::{
+    lat_lng_to_xyz, normalize_vector, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index, Result,
+    BEU32,
+};
 
 pub(crate) enum TypedChunk {
     FieldIdDocidFacetStrings(grenad::Reader<CursorClonableMmap>),
@@ -38,6 +45,7 @@ pub(crate) enum TypedChunk {
     FieldIdFacetIsNullDocids(grenad::Reader<File>),
     FieldIdFacetIsEmptyDocids(grenad::Reader<File>),
     GeoPoints(grenad::Reader<File>),
+    VectorPoints(grenad::Reader<File>),
     ScriptLanguageDocids(HashMap<(Script, Language), RoaringBitmap>),
 }
 
@@ -220,6 +228,40 @@ pub(crate) fn write_typed_chunk_into_index(
             }
             index.put_geo_rtree(wtxn, &rtree)?;
             index.put_geo_faceted_documents_ids(wtxn, &geo_faceted_docids)?;
+        }
+        TypedChunk::VectorPoints(vector_points) => {
+            let mut hnsw = index.vector_hnsw(wtxn)?.unwrap_or_default();
+            let mut searcher = Searcher::new();
+
+            let mut expected_dimensions = match index.vector_id_docid.iter(wtxn)?.next() {
+                Some(result) => {
+                    let (vector_id, _) = result?;
+                    Some(hnsw.get_point(vector_id.get() as usize).len())
+                }
+                None => None,
+            };
+
+            let mut cursor = vector_points.into_cursor()?;
+            while let Some((key, value)) = cursor.move_on_next()? {
+                // convert the key back to a u32 (4 bytes)
+                let (left, _index) = try_split_array_at(key).unwrap();
+                let docid = DocumentId::from_be_bytes(left);
+                // convert the vector back to a Vec<f32>
+                let vector: Vec<f32> = pod_collect_to_vec(value);
+
+                // TODO Inform the user about the document that has a wrong `_vectors`
+                let found = vector.len();
+                let expected = *expected_dimensions.get_or_insert(found);
+                if expected != found {
+                    return Err(UserError::InvalidVectorDimensions { expected, found })?;
+                }
+
+                let vector = normalize_vector(vector);
+                let vector_id = hnsw.insert(vector, &mut searcher) as u32;
+                index.vector_id_docid.put(wtxn, &BEU32::new(vector_id), &BEU32::new(docid))?;
+            }
+            log::debug!("There are {} entries in the HNSW so far", hnsw.len());
+            index.put_vector_hnsw(wtxn, &hnsw)?;
         }
         TypedChunk::ScriptLanguageDocids(hash_pair) => {
             let mut buffer = Vec::new();
