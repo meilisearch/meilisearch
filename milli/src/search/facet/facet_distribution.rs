@@ -396,6 +396,8 @@ impl fmt::Debug for FacetDistribution<'_> {
 
 #[cfg(test)]
 mod tests {
+    use std::iter;
+
     use big_s::S;
     use maplit::hashset;
 
@@ -426,14 +428,14 @@ mod tests {
         let txn = index.read_txn().unwrap();
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .execute()
             .unwrap();
 
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2, "RED": 1}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates([0, 1, 2].iter().copied().collect())
             .execute()
             .unwrap();
@@ -441,7 +443,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2, "RED": 1}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates([1, 2].iter().copied().collect())
             .execute()
             .unwrap();
@@ -452,7 +454,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"  blue": 1, "RED": 1}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates([2].iter().copied().collect())
             .execute()
             .unwrap();
@@ -460,13 +462,22 @@ mod tests {
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"RED": 1}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates([0, 1, 2].iter().copied().collect())
             .max_values_per_facet(1)
             .execute()
             .unwrap();
 
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 1}}"###);
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(iter::once(("colour", OrderBy::Count)))
+            .candidates([0, 1, 2].iter().copied().collect())
+            .max_values_per_facet(1)
+            .execute()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2}}"###);
     }
 
     #[test]
@@ -498,14 +509,14 @@ mod tests {
         let txn = index.read_txn().unwrap();
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .execute()
             .unwrap();
 
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 4000, "Red": 6000}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .max_values_per_facet(1)
             .execute()
             .unwrap();
@@ -513,7 +524,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 4000}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..10_000).collect())
             .execute()
             .unwrap();
@@ -521,7 +532,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 4000, "Red": 6000}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..5_000).collect())
             .execute()
             .unwrap();
@@ -529,7 +540,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2000, "Red": 3000}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..5_000).collect())
             .execute()
             .unwrap();
@@ -537,13 +548,22 @@ mod tests {
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2000, "Red": 3000}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..5_000).collect())
             .max_values_per_facet(1)
             .execute()
             .unwrap();
 
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2000}}"###);
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(iter::once(("colour", OrderBy::Count)))
+            .candidates((0..5_000).collect())
+            .max_values_per_facet(1)
+            .execute()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), @r###"{"colour": {"Red": 3000}}"###);
     }
 
     #[test]
@@ -575,14 +595,14 @@ mod tests {
         let txn = index.read_txn().unwrap();
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .execute()
             .unwrap();
 
         milli_snap!(format!("{map:?}"), "no_candidates", @"ac9229ed5964d893af96a7076e2f8af5");
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .max_values_per_facet(2)
             .execute()
             .unwrap();
@@ -590,7 +610,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), "no_candidates_with_max_2", @r###"{"colour": {"0": 10, "1": 10}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..10_000).collect())
             .execute()
             .unwrap();
@@ -598,7 +618,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), "candidates_0_10_000", @"ac9229ed5964d893af96a7076e2f8af5");
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..5_000).collect())
             .execute()
             .unwrap();
@@ -635,14 +655,14 @@ mod tests {
         let txn = index.read_txn().unwrap();
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .compute_stats()
             .unwrap();
 
         milli_snap!(format!("{map:?}"), "no_candidates", @"{}");
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..1000).collect())
             .compute_stats()
             .unwrap();
@@ -650,7 +670,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), "candidates_0_1000", @r###"{"colour": (0.0, 999.0)}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((217..777).collect())
             .compute_stats()
             .unwrap();
@@ -687,14 +707,14 @@ mod tests {
         let txn = index.read_txn().unwrap();
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .compute_stats()
             .unwrap();
 
         milli_snap!(format!("{map:?}"), "no_candidates", @"{}");
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..1000).collect())
             .compute_stats()
             .unwrap();
@@ -702,7 +722,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), "candidates_0_1000", @r###"{"colour": (0.0, 1999.0)}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((217..777).collect())
             .compute_stats()
             .unwrap();
@@ -739,14 +759,14 @@ mod tests {
         let txn = index.read_txn().unwrap();
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .compute_stats()
             .unwrap();
 
         milli_snap!(format!("{map:?}"), "no_candidates", @"{}");
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..1000).collect())
             .compute_stats()
             .unwrap();
@@ -754,7 +774,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), "candidates_0_1000", @r###"{"colour": (0.0, 999.0)}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((217..777).collect())
             .compute_stats()
             .unwrap();
@@ -795,14 +815,14 @@ mod tests {
         let txn = index.read_txn().unwrap();
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .compute_stats()
             .unwrap();
 
         milli_snap!(format!("{map:?}"), "no_candidates", @"{}");
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..1000).collect())
             .compute_stats()
             .unwrap();
@@ -810,7 +830,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), "candidates_0_1000", @r###"{"colour": (0.0, 1998.0)}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once(("colour", OrderBy::default())))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((217..777).collect())
             .compute_stats()
             .unwrap();
