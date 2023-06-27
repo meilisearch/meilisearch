@@ -32,7 +32,7 @@ use std::convert::{TryFrom, TryInto};
 use std::hash::BuildHasherDefault;
 
 use charabia::normalizer::{CharNormalizer, CompatibilityDecompositionNormalizer};
-pub use distance::{dot_product_similarity, euclidean_squared_distance};
+pub use distance::dot_product_similarity;
 pub use filter_parser::{Condition, FilterCondition, Span, Token};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
@@ -304,7 +304,7 @@ impl VectorOrArrayOfVectors {
     }
 }
 
-/// Normalize a vector by dividing the dimensions by the lenght of it.
+/// Normalize a vector by dividing the dimensions by the length of it.
 pub fn normalize_vector(mut vector: Vec<f32>) -> Vec<f32> {
     let squared: f32 = vector.iter().map(|x| x * x).sum();
     let length = squared.sqrt();

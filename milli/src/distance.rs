@@ -7,10 +7,10 @@ pub struct DotProduct;
 impl Metric<Vec<f32>> for DotProduct {
     type Unit = u32;
 
-    // TODO explain me this function, I don't understand why f32.to_bits is ordered.
-    // I tried to do this and it wasn't OK <https://stackoverflow.com/a/43305015/1941280>
-    //
     // Following <https://docs.rs/space/0.17.0/space/trait.Metric.html>.
+    //
+    // Here is a playground that validate the ordering of the bit representation of floats in range 0.0..=1.0:
+    // <https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=6c59e31a3cc5036b32edf51e8937b56e>
     fn distance(&self, a: &Vec<f32>, b: &Vec<f32>) -> Self::Unit {
         let dist = 1.0 - dot_product_similarity(a, b);
         debug_assert!(!dist.is_nan());
@@ -22,23 +22,4 @@ impl Metric<Vec<f32>> for DotProduct {
 /// if both vectors are normalized. The higher the more similar the vectors are.
 pub fn dot_product_similarity(a: &[f32], b: &[f32]) -> f32 {
     a.iter().zip(b).map(|(a, b)| a * b).sum()
-}
-
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
-pub struct Euclidean;
-
-impl Metric<Vec<f32>> for Euclidean {
-    type Unit = u32;
-
-    fn distance(&self, a: &Vec<f32>, b: &Vec<f32>) -> Self::Unit {
-        let dist = euclidean_squared_distance(a, b).sqrt();
-        debug_assert!(!dist.is_nan());
-        dist.to_bits()
-    }
-}
-
-/// Return the squared euclidean distance between both vectors that will
-/// between 0.0 and +inf. The smaller the nearer the vectors are.
-pub fn euclidean_squared_distance(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b).map(|(a, b)| (a - b).powi(2)).sum()
 }
