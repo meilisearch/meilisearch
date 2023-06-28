@@ -960,7 +960,15 @@ pub struct FacetSearchAggregator {
 
 impl FacetSearchAggregator {
     pub fn from_query(query: &FacetSearchQuery, request: &HttpRequest) -> Self {
-        let FacetSearchQuery { facet_query: _, facet_name, q, filter, matching_strategy } = query;
+        let FacetSearchQuery {
+            facet_query: _,
+            facet_name,
+            vector,
+            q,
+            filter,
+            matching_strategy,
+            attributes_to_search_on,
+        } = query;
 
         let mut ret = Self::default();
         ret.timestamp = Some(OffsetDateTime::now_utc());
