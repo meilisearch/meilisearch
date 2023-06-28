@@ -16,7 +16,7 @@ fn create_buckets() -> [f64; 29] {
 }
 
 lazy_static! {
-    pub static ref HTTP_RESPONSE_TIME_CUSTOM_BUCKETS: [f64; 29] = create_buckets();
+    pub static ref MEILISEARCH_HTTP_RESPONSE_TIME_CUSTOM_BUCKETS: [f64; 29] = create_buckets();
     pub static ref MEILISEARCH_HTTP_REQUESTS_TOTAL: IntCounterVec = register_int_counter_vec!(
         opts!("meilisearch_http_requests_total", "Meilisearch HTTP requests total"),
         &["method", "path"]
@@ -39,10 +39,10 @@ lazy_static! {
     )
     .expect("Can't create a metric");
     pub static ref MEILISEARCH_HTTP_RESPONSE_TIME_SECONDS: HistogramVec = register_histogram_vec!(
-        "http_response_time_seconds",
-        "HTTP response times",
+        "meilisearch_http_response_time_seconds",
+        "Meilisearch HTTP response times",
         &["method", "path"],
-        HTTP_RESPONSE_TIME_CUSTOM_BUCKETS.to_vec()
+        MEILISEARCH_HTTP_RESPONSE_TIME_CUSTOM_BUCKETS.to_vec()
     )
     .expect("Can't create a metric");
     pub static ref MEILISEARCH_NB_TASKS: IntGaugeVec = register_int_gauge_vec!(
