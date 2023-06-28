@@ -38,6 +38,8 @@ pub struct FacetSearchQuery {
     pub filter: Option<Value>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
     pub matching_strategy: MatchingStrategy,
+    #[deserr(default, error = DeserrJsonError<InvalidAttributesToSearchOn>, default)]
+    pub attributes_to_search_on: Option<Vec<String>>,
 }
 
 pub async fn search(
@@ -90,6 +92,7 @@ impl From<FacetSearchQuery> for SearchQuery {
             vector,
             filter,
             matching_strategy,
+            attributes_to_search_on,
         } = value;
 
         SearchQuery {
@@ -113,6 +116,7 @@ impl From<FacetSearchQuery> for SearchQuery {
             crop_marker: DEFAULT_CROP_MARKER(),
             matching_strategy,
             vector,
+            attributes_to_search_on,
         }
     }
 }
