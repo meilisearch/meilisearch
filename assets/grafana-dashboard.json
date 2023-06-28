@@ -98,7 +98,7 @@
         "showThresholdMarkers": true,
         "text": {}
       },
-      "pluginVersion": "9.5.2",
+      "pluginVersion": "10.0.1",
       "targets": [
         {
           "datasource": {
@@ -158,7 +158,7 @@
         "showThresholdMarkers": true,
         "text": {}
       },
-      "pluginVersion": "9.5.2",
+      "pluginVersion": "10.0.1",
       "targets": [
         {
           "datasource": {
@@ -176,8 +176,7 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "c4085c47-f6d3-45dd-b761-6809055bb749"
+        "type": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -221,7 +220,7 @@
         "showThresholdMarkers": true,
         "text": {}
       },
-      "pluginVersion": "9.5.2",
+      "pluginVersion": "10.0.1",
       "targets": [
         {
           "datasource": {
@@ -241,8 +240,7 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "c4085c47-f6d3-45dd-b761-6809055bb749"
+        "type": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -282,7 +280,7 @@
         "showThresholdMarkers": true,
         "text": {}
       },
-      "pluginVersion": "9.5.2",
+      "pluginVersion": "10.0.1",
       "targets": [
         {
           "datasource": {
@@ -302,8 +300,7 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "c4085c47-f6d3-45dd-b761-6809055bb749"
+        "type": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -343,7 +340,7 @@
         "showThresholdMarkers": true,
         "text": {}
       },
-      "pluginVersion": "9.5.2",
+      "pluginVersion": "10.0.1",
       "targets": [
         {
           "datasource": {
@@ -363,8 +360,7 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "c4085c47-f6d3-45dd-b761-6809055bb749"
+        "type": "prometheus"
       },
       "description": "",
       "fieldConfig": {
@@ -411,8 +407,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -460,8 +455,7 @@
         },
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "c4085c47-f6d3-45dd-b761-6809055bb749"
+            "type": "prometheus"
           },
           "editorMode": "builder",
           "expr": "meilisearch_used_db_size_bytes{job=\"meilisearch\", instance=\"$instance\"}",
@@ -559,7 +553,7 @@
           },
           "editorMode": "builder",
           "exemplar": true,
-          "expr": "rate(http_response_time_seconds_sum{instance=\"$instance\", job=\"meilisearch\"}[5m]) / rate(http_response_time_seconds_count[5m])",
+          "expr": "rate(meilisearch_http_response_time_seconds_sum{instance=\"$instance\", job=\"meilisearch\"}[5m]) / rate(meilisearch_http_response_time_seconds_count[5m])",
           "interval": "",
           "legendFormat": "{{method}} {{path}}",
           "range": true,
@@ -571,8 +565,7 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "c4085c47-f6d3-45dd-b761-6809055bb749"
+        "type": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -615,8 +608,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -743,7 +735,7 @@
           "unit": "s"
         }
       },
-      "pluginVersion": "9.5.2",
+      "pluginVersion": "10.0.1",
       "reverseYBuckets": false,
       "targets": [
         {
@@ -752,7 +744,7 @@
           },
           "editorMode": "builder",
           "exemplar": true,
-          "expr": "sum by(le) (increase(http_response_time_seconds_bucket{path=\"/indexes/$Index/search\", instance=\"$instance\", job=\"meilisearch\"}[30s]))",
+          "expr": "sum by(le) (increase(meilisearch_http_response_time_seconds_bucket{path=\"/indexes/$Index/search\", instance=\"$instance\", job=\"meilisearch\"}[30s]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -1306,8 +1298,7 @@
           "value": "localhost:7700"
         },
         "datasource": {
-          "type": "prometheus",
-          "uid": "bb3298a4-9acf-4da1-b86a-813f29f50888"
+          "type": "prometheus"
         },
         "definition": "label_values(instance)",
         "hide": 0,
@@ -1329,12 +1320,11 @@
       {
         "current": {
           "selected": false,
-          "text": "mieli",
-          "value": "mieli"
+          "text": "index-word-count-10-count",
+          "value": "index-word-count-10-count"
         },
         "datasource": {
-          "type": "prometheus",
-          "uid": "bb3298a4-9acf-4da1-b86a-813f29f50888"
+          "type": "prometheus"
         },
         "definition": "label_values(index)",
         "hide": 0,
@@ -1371,6 +1361,6 @@
   "timezone": "",
   "title": "Meilisearch",
   "uid": "7wcZ94dnz",
-  "version": 6,
+  "version": 5,
   "weekStart": ""
 }
