@@ -82,8 +82,8 @@ where
         // We first fill the heap with values from the highest level
         let starting_key =
             FacetGroupKey { field_id, level: highest_level, left_bound: first_bound };
-        for el in db.range(rtxn, &(&starting_key..)).unwrap().take(usize::MAX) {
-            let (key, value) = el.unwrap();
+        for el in db.range(rtxn, &(&starting_key..))?.take(usize::MAX) {
+            let (key, value) = el?;
             // The range is unbounded on the right and the group size for the highest level is MAX,
             // so we need to check that we are not iterating over the next field id
             if key.field_id != field_id {
@@ -111,8 +111,8 @@ where
                 }
             } else {
                 let starting_key = FacetGroupKey { field_id, level: level.0 - 1, left_bound };
-                for el in db.range(rtxn, &(&starting_key..)).unwrap().take(group_size as usize) {
-                    let (key, value) = el.unwrap();
+                for el in db.range(rtxn, &(&starting_key..))?.take(group_size as usize) {
+                    let (key, value) = el?;
                     // The range is unbounded on the right and the group size for the highest level is MAX,
                     // so we need to check that we are not iterating over the next field id
                     if key.field_id != field_id {
@@ -193,10 +193,10 @@ where
         }
         let starting_key =
             FacetGroupKey { field_id: self.field_id, level, left_bound: starting_bound };
-        let iter = self.db.range(self.rtxn, &(&starting_key..)).unwrap().take(group_size);
+        let iter = self.db.range(self.rtxn, &(&starting_key..))?.take(group_size);
 
         for el in iter {
-            let (key, value) = el.unwrap();
+            let (key, value) = el?;
             // The range is unbounded on the right and the group size for the highest level is MAX,
             // so we need to check that we are not iterating over the next field id
             if key.field_id != self.field_id {
