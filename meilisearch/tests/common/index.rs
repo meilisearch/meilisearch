@@ -377,6 +377,11 @@ impl Index<'_> {
         self.service.get(url).await
     }
 
+    pub async fn facet_search(&self, query: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/facet-search", urlencode(self.uid.as_ref()));
+        self.service.post_encoded(url, query, self.encoder).await
+    }
+
     pub async fn update_distinct_attribute(&self, value: Value) -> (Value, StatusCode) {
         let url =
             format!("/indexes/{}/settings/{}", urlencode(self.uid.as_ref()), "distinct-attribute");
