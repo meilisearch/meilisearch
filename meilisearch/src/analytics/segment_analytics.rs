@@ -969,8 +969,11 @@ impl FacetSearchAggregator {
         ret.user_agents = extract_user_agents(request).into_iter().collect();
         ret.facet_names = Some(facet_name.clone()).into_iter().collect();
 
-        ret.additional_search_parameters_provided =
-            q.is_some() || filter.is_some() || *matching_strategy != MatchingStrategy::default();
+        ret.additional_search_parameters_provided = q.is_some()
+            || vector.is_some()
+            || filter.is_some()
+            || *matching_strategy != MatchingStrategy::default()
+            || attributes_to_search_on.is_some();
 
         ret
     }
