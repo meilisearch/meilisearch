@@ -128,10 +128,10 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         .map(|reader| (documents_ids, reader, script_language_docids))
 }
 
-fn extract_tokens_from_document<T: AsRef<[u8]>>(
+fn extract_tokens_from_document(
     obkv: &KvReader<FieldId>,
     searchable_fields: &Option<HashSet<FieldId>>,
-    tokenizer: &Tokenizer<T>,
+    tokenizer: &Tokenizer,
     max_positions_per_attributes: u32,
     buffers: &mut Buffers,
     script_language_word_count: &mut HashMap<Script, Vec<(Language, usize)>>,

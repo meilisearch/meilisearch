@@ -113,7 +113,7 @@ fn test_ignore_stop_words() {
             ),
             Position(
                 Rank {
-                    rank: 9,
+                    rank: 7,
                     max_rank: 11,
                 },
             ),
@@ -166,7 +166,7 @@ fn test_ignore_stop_words() {
             ),
             Position(
                 Rank {
-                    rank: 9,
+                    rank: 7,
                     max_rank: 11,
                 },
             ),
@@ -219,7 +219,7 @@ fn test_ignore_stop_words() {
             ),
             Position(
                 Rank {
-                    rank: 9,
+                    rank: 7,
                     max_rank: 11,
                 },
             ),
@@ -259,7 +259,7 @@ fn test_ignore_stop_words() {
             ),
             Proximity(
                 Rank {
-                    rank: 7,
+                    rank: 1,
                     max_rank: 8,
                 },
             ),
@@ -271,7 +271,7 @@ fn test_ignore_stop_words() {
             ),
             Position(
                 Rank {
-                    rank: 17,
+                    rank: 15,
                     max_rank: 21,
                 },
             ),
@@ -411,7 +411,7 @@ fn test_stop_words_in_phrase() {
             ),
             Proximity(
                 Rank {
-                    rank: 6,
+                    rank: 1,
                     max_rank: 8,
                 },
             ),
@@ -423,7 +423,7 @@ fn test_stop_words_in_phrase() {
             ),
             Position(
                 Rank {
-                    rank: 29,
+                    rank: 27,
                     max_rank: 31,
                 },
             ),

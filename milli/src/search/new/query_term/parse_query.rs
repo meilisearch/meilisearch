@@ -7,7 +7,7 @@ use crate::{Result, SearchContext, MAX_WORD_LENGTH};
 /// Convert the tokenised search query into a list of located query terms.
 pub fn located_query_terms_from_tokens(
     ctx: &mut SearchContext,
-    query: NormalizedTokenIter<&[u8]>,
+    query: NormalizedTokenIter,
     words_limit: Option<usize>,
 ) -> Result<Vec<LocatedQueryTerm>> {
     let nbr_typos = number_of_typos_allowed(ctx)?;
@@ -303,7 +303,8 @@ mod tests {
 
     #[test]
     fn start_with_hard_separator() -> Result<()> {
-        let tokenizer = TokenizerBuilder::new().build();
+        let mut builder = TokenizerBuilder::default();
+        let tokenizer = builder.build();
         let tokens = tokenizer.tokenize(".");
         let index = temp_index_with_documents();
         let rtxn = index.read_txn()?;
