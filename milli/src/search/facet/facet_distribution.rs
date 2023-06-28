@@ -246,14 +246,13 @@ impl<'a> FacetDistribution<'a> {
             }
             _ => {
                 let universe;
-                let candidates;
-                match &self.candidates {
-                    Some(cnd) => candidates = cnd,
+                let candidates = match &self.candidates {
+                    Some(cnd) => cnd,
                     None => {
                         universe = self.index.documents_ids(self.rtxn)?;
-                        candidates = &universe;
+                        &universe
                     }
-                }
+                };
 
                 self.facet_numbers_distribution_from_facet_levels(
                     field_id,
