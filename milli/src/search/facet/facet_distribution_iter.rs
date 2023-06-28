@@ -56,6 +56,9 @@ pub fn count_iterate_over_facet_distribution<'t, CB>(
 where
     CB: FnMut(&'t [u8], u64, DocumentId) -> Result<ControlFlow<()>>,
 {
+    /// # Important
+    /// The order of the fields determines the order in which the facet values will be returned.
+    /// This struct is inserted in a BinaryHeap and popped later on.
     #[derive(Debug, PartialOrd, Ord, PartialEq, Eq)]
     struct LevelEntry<'t> {
         /// The number of candidates in this entry.
