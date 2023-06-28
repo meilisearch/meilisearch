@@ -2,7 +2,10 @@ use std::borrow::Cow;
 use std::convert::TryInto;
 use std::mem::size_of;
 
+use heed::BytesDecode;
 use roaring::RoaringBitmap;
+
+use crate::heed_codec::BytesDecodeOwned;
 
 pub struct BoRoaringBitmapCodec;
 
@@ -13,7 +16,7 @@ impl BoRoaringBitmapCodec {
     }
 }
 
-impl heed::BytesDecode<'_> for BoRoaringBitmapCodec {
+impl BytesDecode<'_> for BoRoaringBitmapCodec {
     type DItem = RoaringBitmap;
 
     fn bytes_decode(bytes: &[u8]) -> Option<Self::DItem> {
@@ -25,6 +28,14 @@ impl heed::BytesDecode<'_> for BoRoaringBitmapCodec {
         }
 
         Some(bitmap)
+    }
+}
+
+impl BytesDecodeOwned for BoRoaringBitmapCodec {
+    type DItem = RoaringBitmap;
+
+    fn bytes_decode_owned(bytes: &[u8]) -> Option<Self::DItem> {
+        Self::bytes_decode(bytes)
     }
 }
 

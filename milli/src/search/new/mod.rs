@@ -20,7 +20,7 @@ mod sort;
 #[cfg(test)]
 mod tests;
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use bucket_sort::{bucket_sort, BucketSortOutput};
 use charabia::TokenizerBuilder;
@@ -46,6 +46,7 @@ use self::geo_sort::GeoSort;
 pub use self::geo_sort::Strategy as GeoSortStrategy;
 use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
+use crate::error::FieldIdMapMissingEntry;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::apply_distinct_rule;
 use crate::{
@@ -62,6 +63,7 @@ pub struct SearchContext<'ctx> {
     pub phrase_interner: DedupInterner<Phrase>,
     pub term_interner: Interner<QueryTerm>,
     pub phrase_docids: PhraseDocIdsCache,
+    pub restricted_fids: Option<Vec<u16>>,
 }
 
 impl<'ctx> SearchContext<'ctx> {
@@ -74,7 +76,65 @@ impl<'ctx> SearchContext<'ctx> {
             phrase_interner: <_>::default(),
             term_interner: <_>::default(),
             phrase_docids: <_>::default(),
+            restricted_fids: None,
         }
+    }
+
+    pub fn searchable_attributes(&mut self, searchable_attributes: &'ctx [String]) -> Result<()> {
+        let fids_map = self.index.fields_ids_map(self.txn)?;
+        let searchable_names = self.index.searchable_fields(self.txn)?;
+
+        let mut restricted_fids = Vec::new();
+        for field_name in searchable_attributes {
+            let searchable_contains_name =
+                searchable_names.as_ref().map(|sn| sn.iter().any(|name| name == field_name));
+            let fid = match (fids_map.id(field_name), searchable_contains_name) {
+                // The Field id exist and the field is searchable
+                (Some(fid), Some(true)) | (Some(fid), None) => fid,
+                // The field is searchable but the Field id doesn't exist => Internal Error
+                (None, Some(true)) => {
+                    return Err(FieldIdMapMissingEntry::FieldName {
+                        field_name: field_name.to_string(),
+                        process: "search",
+                    }
+                    .into())
+                }
+                // The field is not searchable => User error
+                _otherwise => {
+                    let mut valid_fields: BTreeSet<_> =
+                        fids_map.names().map(String::from).collect();
+
+                    // Filter by the searchable names
+                    if let Some(sn) = searchable_names {
+                        let searchable_names = sn.iter().map(|s| s.to_string()).collect();
+                        valid_fields = &valid_fields & &searchable_names;
+                    }
+
+                    let searchable_count = valid_fields.len();
+
+                    // Remove hidden fields
+                    if let Some(dn) = self.index.displayed_fields(self.txn)? {
+                        let displayable_names = dn.iter().map(|s| s.to_string()).collect();
+                        valid_fields = &valid_fields & &displayable_names;
+                    }
+
+                    let hidden_fields = searchable_count > valid_fields.len();
+                    let field = field_name.to_string();
+                    return Err(UserError::InvalidSearchableAttribute {
+                        field,
+                        valid_fields,
+                        hidden_fields,
+                    }
+                    .into());
+                }
+            };
+
+            restricted_fids.push(fid);
+        }
+
+        self.restricted_fids = Some(restricted_fids);
+
+        Ok(())
     }
 }
 

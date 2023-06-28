@@ -5,6 +5,7 @@ mod errors;
 mod formatted;
 mod multi;
 mod pagination;
+mod restrict_searchable;
 
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};

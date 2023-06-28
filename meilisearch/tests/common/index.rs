@@ -346,17 +346,24 @@ impl Index<'_> {
         query: Value,
         test: impl Fn(Value, StatusCode) + UnwindSafe + Clone,
     ) {
-        let (response, code) = self.search_post(query.clone()).await;
-        let t = test.clone();
-        if let Err(e) = catch_unwind(move || t(response, code)) {
-            eprintln!("Error with post search");
-            resume_unwind(e);
-        }
+        let post = self.search_post(query.clone()).await;
+
         let query = yaup::to_string(&query).unwrap();
-        let (response, code) = self.search_get(&query).await;
-        if let Err(e) = catch_unwind(move || test(response, code)) {
-            eprintln!("Error with get search");
-            resume_unwind(e);
+        let get = self.search_get(&query).await;
+
+        insta::allow_duplicates! {
+            let (response, code) = post;
+            let t = test.clone();
+            if let Err(e) = catch_unwind(move || t(response, code)) {
+                eprintln!("Error with post search");
+                resume_unwind(e);
+            }
+
+            let (response, code) = get;
+            if let Err(e) = catch_unwind(move || test(response, code)) {
+                eprintln!("Error with get search");
+                resume_unwind(e);
+            }
         }
     }
 

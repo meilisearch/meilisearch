@@ -79,6 +79,8 @@ pub struct SearchQuery {
     pub crop_marker: String,
     #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
     pub matching_strategy: MatchingStrategy,
+    #[deserr(default, error = DeserrJsonError<InvalidAttributesToSearchOn>, default)]
+    pub attributes_to_search_on: Option<Vec<String>>,
 }
 
 impl SearchQuery {
@@ -136,6 +138,8 @@ pub struct SearchQueryWithIndex {
     pub crop_marker: String,
     #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
     pub matching_strategy: MatchingStrategy,
+    #[deserr(default, error = DeserrJsonError<InvalidAttributesToSearchOn>, default)]
+    pub attributes_to_search_on: Option<Vec<String>>,
 }
 
 impl SearchQueryWithIndex {
@@ -162,6 +166,7 @@ impl SearchQueryWithIndex {
             highlight_post_tag,
             crop_marker,
             matching_strategy,
+            attributes_to_search_on,
         } = self;
         (
             index_uid,
@@ -186,6 +191,7 @@ impl SearchQueryWithIndex {
                 highlight_post_tag,
                 crop_marker,
                 matching_strategy,
+                attributes_to_search_on,
                 // do not use ..Default::default() here,
                 // rather add any missing field from `SearchQuery` to `SearchQueryWithIndex`
             },
@@ -312,6 +318,10 @@ pub fn perform_search(
 
     if let Some(ref query) = query.q {
         search.query(query);
+    }
+
+    if let Some(ref searchable) = query.attributes_to_search_on {
+        search.searchable_attributes(searchable);
     }
 
     let is_finite_pagination = query.is_finite_pagination();
