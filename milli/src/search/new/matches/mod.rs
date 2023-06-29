@@ -12,16 +12,16 @@ const DEFAULT_HIGHLIGHT_PREFIX: &str = "<em>";
 const DEFAULT_HIGHLIGHT_SUFFIX: &str = "</em>";
 
 /// Structure used to build a Matcher allowing to customize formating tags.
-pub struct MatcherBuilder<'a, A> {
+pub struct MatcherBuilder<'m> {
     matching_words: MatchingWords,
-    tokenizer: Tokenizer<'a, 'a, A>,
+    tokenizer: Tokenizer<'m>,
     crop_marker: Option<String>,
     highlight_prefix: Option<String>,
     highlight_suffix: Option<String>,
 }
 
-impl<'a, A> MatcherBuilder<'a, A> {
-    pub fn new(matching_words: MatchingWords, tokenizer: Tokenizer<'a, 'a, A>) -> Self {
+impl<'m> MatcherBuilder<'m> {
+    pub fn new(matching_words: MatchingWords, tokenizer: Tokenizer<'m>) -> Self {
         Self {
             matching_words,
             tokenizer,
@@ -46,7 +46,7 @@ impl<'a, A> MatcherBuilder<'a, A> {
         self
     }
 
-    pub fn build<'t, 'm>(&'m self, text: &'t str) -> Matcher<'t, 'm, A> {
+    pub fn build<'t>(&'m self, text: &'t str) -> Matcher<'t, 'm> {
         let crop_marker = match &self.crop_marker {
             Some(marker) => marker.as_str(),
             None => DEFAULT_CROP_MARKER,
@@ -103,17 +103,17 @@ pub struct MatchBounds {
 
 /// Structure used to analize a string, compute words that match,
 /// and format the source string, returning a highlighted and cropped sub-string.
-pub struct Matcher<'t, 'm, A> {
+pub struct Matcher<'t, 'm> {
     text: &'t str,
     matching_words: &'m MatchingWords,
-    tokenizer: &'m Tokenizer<'m, 'm, A>,
+    tokenizer: &'m Tokenizer<'m>,
     crop_marker: &'m str,
     highlight_prefix: &'m str,
     highlight_suffix: &'m str,
     matches: Option<(Vec<Token<'t>>, Vec<Match>)>,
 }
 
-impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
+impl<'t> Matcher<'t, '_> {
     /// Iterates over tokens and save any of them that matches the query.
     fn compute_matches(&mut self) -> &mut Self {
         /// some words are counted as matches only if they are close together and in the good order,
@@ -503,7 +503,7 @@ mod tests {
     use crate::index::tests::TempIndex;
     use crate::{execute_search, SearchContext};
 
-    impl<'a> MatcherBuilder<'a, &[u8]> {
+    impl<'a> MatcherBuilder<'a> {
         fn new_test(rtxn: &'a heed::RoTxn, index: &'a TempIndex, query: &str) -> Self {
             let mut ctx = SearchContext::new(index, rtxn);
             let crate::search::PartialSearchResult { located_query_terms, .. } = execute_search(
@@ -530,7 +530,7 @@ mod tests {
                 None => MatchingWords::default(),
             };
 
-            MatcherBuilder::new(matching_words, TokenizerBuilder::new().build())
+            MatcherBuilder::new(matching_words, TokenizerBuilder::default().into_tokenizer())
         }
     }
 
@@ -690,7 +690,7 @@ mod tests {
         // should crop the phrase instead of croping around the match.
         insta::assert_snapshot!(
             matcher.format(format_options),
-            @"… Split The World is a book written by Emily Henry…"
+            @"…Split The World is a book written by Emily Henry…"
         );
 
         // Text containing some matches.

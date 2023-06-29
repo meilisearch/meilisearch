@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::result::Result as StdResult;
 
-use charabia::{Tokenizer, TokenizerBuilder};
+use charabia::{Normalize, Tokenizer, TokenizerBuilder};
 use deserr::{DeserializeError, Deserr};
 use itertools::Itertools;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -423,6 +423,12 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         match self.stop_words {
             Setting::Set(ref stop_words) => {
                 let current = self.index.stop_words(self.wtxn)?;
+
+                // Apply an unlossy normalization on stop_words
+                let stop_words = stop_words
+                    .iter()
+                    .map(|w| w.as_str().normalize(&Default::default()).into_owned());
+
                 // since we can't compare a BTreeSet with an FST we are going to convert the
                 // BTreeSet to an FST and then compare bytes per bytes the two FSTs.
                 let fst = fst::Set::from_iter(stop_words)?;
@@ -446,7 +452,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_synonyms(&mut self) -> Result<bool> {
         match self.synonyms {
             Setting::Set(ref synonyms) => {
-                fn normalize(tokenizer: &Tokenizer<&[u8]>, text: &str) -> Vec<String> {
+                fn normalize(tokenizer: &Tokenizer, text: &str) -> Vec<String> {
                     tokenizer
                         .tokenize(text)
                         .filter_map(|token| {
@@ -647,7 +653,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_exact_words(&mut self) -> Result<()> {
         match self.exact_words {
             Setting::Set(ref mut words) => {
-                fn normalize(tokenizer: &Tokenizer<&[u8]>, text: &str) -> String {
+                fn normalize(tokenizer: &Tokenizer, text: &str) -> String {
                     tokenizer.tokenize(text).map(|token| token.lemma().to_string()).collect()
                 }
 

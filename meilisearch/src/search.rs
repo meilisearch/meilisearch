@@ -814,10 +814,10 @@ fn extract_field(
     }
 }
 
-fn format_fields<A: AsRef<[u8]>>(
+fn format_fields<'a>(
     document: &Document,
     field_ids_map: &FieldsIdsMap,
-    builder: &MatcherBuilder<'_, A>,
+    builder: &'a MatcherBuilder<'a>,
     formatted_options: &BTreeMap<FieldId, FormatOptions>,
     compute_matches: bool,
     displayable_ids: &BTreeSet<FieldId>,
@@ -862,9 +862,9 @@ fn format_fields<A: AsRef<[u8]>>(
     Ok((matches_position, document))
 }
 
-fn format_value<A: AsRef<[u8]>>(
+fn format_value<'a>(
     value: Value,
-    builder: &MatcherBuilder<'_, A>,
+    builder: &'a MatcherBuilder<'a>,
     format_options: Option<FormatOptions>,
     infos: &mut Vec<MatchBounds>,
     compute_matches: bool,

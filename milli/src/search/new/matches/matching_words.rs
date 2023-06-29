@@ -256,7 +256,8 @@ pub(crate) mod tests {
         let temp_index = temp_index_with_documents();
         let rtxn = temp_index.read_txn().unwrap();
         let mut ctx = SearchContext::new(&temp_index, &rtxn);
-        let tokenizer = TokenizerBuilder::new().build();
+        let mut builder = TokenizerBuilder::default();
+        let tokenizer = builder.build();
         let tokens = tokenizer.tokenize("split this world");
         let query_terms = located_query_terms_from_tokens(&mut ctx, tokens, None).unwrap();
         let matching_words = MatchingWords::new(ctx, query_terms);
