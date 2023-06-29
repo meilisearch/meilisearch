@@ -7,7 +7,7 @@ use log::error;
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
-pub use self::facet::{FacetDistribution, Filter, DEFAULT_VALUES_PER_FACET};
+pub use self::facet::{FacetDistribution, Filter, OrderBy, DEFAULT_VALUES_PER_FACET};
 pub use self::new::matches::{FormatOptions, MatchBounds, Matcher, MatcherBuilder, MatchingWords};
 use self::new::PartialSearchResult;
 use crate::error::UserError;

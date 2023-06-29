@@ -21,6 +21,9 @@ static DEFAULT_SETTINGS_VALUES: Lazy<HashMap<&'static str, Value>> = Lazy::new(|
         "faceting",
         json!({
             "maxValuesPerFacet": json!(100),
+            "sortFacetValuesBy": {
+                "*": "alpha"
+            }
         }),
     );
     map.insert(
@@ -63,6 +66,9 @@ async fn get_settings() {
         settings["faceting"],
         json!({
             "maxValuesPerFacet": 100,
+            "sortFacetValuesBy": {
+                "*": "alpha"
+            }
         })
     );
     assert_eq!(

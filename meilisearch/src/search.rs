@@ -6,6 +6,7 @@ use std::time::Instant;
 use deserr::Deserr;
 use either::Either;
 use index_scheduler::RoFeatures;
+use indexmap::IndexMap;
 use log::warn;
 use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::DeserrJsonError;
@@ -14,7 +15,7 @@ use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::{
-    dot_product_similarity, FacetValueHit, InternalError, SearchForFacetValues,
+    dot_product_similarity, FacetValueHit, InternalError, OrderBy, SearchForFacetValues,
 };
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
@@ -226,6 +227,26 @@ impl From<MatchingStrategy> for TermsMatchingStrategy {
     }
 }
 
+#[derive(Debug, Default, Clone, PartialEq, Eq, Deserr)]
+#[deserr(rename_all = camelCase)]
+pub enum FacetValuesSort {
+    /// Facet values are sorted in alphabetical order, ascending from A to Z.
+    #[default]
+    Alpha,
+    /// Facet values are sorted by decreasing count.
+    /// The count is the number of records containing this facet value in the results of the query.
+    Count,
+}
+
+impl From<FacetValuesSort> for OrderBy {
+    fn from(val: FacetValuesSort) -> Self {
+        match val {
+            FacetValuesSort::Alpha => OrderBy::Lexicographic,
+            FacetValuesSort::Count => OrderBy::Count,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct SearchHit {
     #[serde(flatten)]
@@ -253,7 +274,7 @@ pub struct SearchResult {
     #[serde(flatten)]
     pub hits_info: HitsInfo,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub facet_distribution: Option<BTreeMap<String, BTreeMap<String, u64>>>,
+    pub facet_distribution: Option<BTreeMap<String, IndexMap<String, u64>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facet_stats: Option<BTreeMap<String, FacetStats>>,
 }
@@ -554,10 +575,30 @@ pub fn perform_search(
                 .unwrap_or(DEFAULT_VALUES_PER_FACET);
             facet_distribution.max_values_per_facet(max_values_by_facet);
 
+            let sort_facet_values_by =
+                index.sort_facet_values_by(&rtxn).map_err(milli::Error::from)?;
+            let default_sort_facet_values_by =
+                sort_facet_values_by.get("*").copied().unwrap_or_default();
+
             if fields.iter().all(|f| f != "*") {
+                let fields: Vec<_> = fields
+                    .iter()
+                    .map(|n| {
+                        (
+                            n,
+                            sort_facet_values_by
+                                .get(n)
+                                .copied()
+                                .unwrap_or(default_sort_facet_values_by),
+                        )
+                    })
+                    .collect();
                 facet_distribution.facets(fields);
             }
-            let distribution = facet_distribution.candidates(candidates).execute()?;
+            let distribution = facet_distribution
+                .candidates(candidates)
+                .default_order_by(default_sort_facet_values_by)
+                .execute()?;
             let stats = facet_distribution.compute_stats()?;
             (Some(distribution), Some(stats))
         }

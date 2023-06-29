@@ -34,6 +34,7 @@ heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.6", default-f
     "sync-read-txn",
 ] }
 hnsw = { version = "0.11.0", features = ["serde1"] }
+indexmap = { version = "1.9.3", features = ["serde"] }
 json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
 memmap2 = "0.5.10"

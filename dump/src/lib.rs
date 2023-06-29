@@ -208,12 +208,13 @@ pub(crate) mod test {
     use std::str::FromStr;
 
     use big_s::S;
-    use maplit::btreeset;
+    use maplit::{btreemap, btreeset};
+    use meilisearch_types::facet_values_sort::FacetValuesSort;
     use meilisearch_types::index_uid_pattern::IndexUidPattern;
     use meilisearch_types::keys::{Action, Key};
+    use meilisearch_types::milli;
     use meilisearch_types::milli::update::Setting;
-    use meilisearch_types::milli::{self};
-    use meilisearch_types::settings::{Checked, Settings};
+    use meilisearch_types::settings::{Checked, FacetingSettings, Settings};
     use meilisearch_types::tasks::{Details, Status};
     use serde_json::{json, Map, Value};
     use time::macros::datetime;
@@ -263,7 +264,12 @@ pub(crate) mod test {
             synonyms: Setting::NotSet,
             distinct_attribute: Setting::NotSet,
             typo_tolerance: Setting::NotSet,
-            faceting: Setting::NotSet,
+            faceting: Setting::Set(FacetingSettings {
+                max_values_per_facet: Setting::Set(111),
+                sort_facet_values_by: Setting::Set(
+                    btreemap! { S("age") => FacetValuesSort::Count },
+                ),
+            }),
             pagination: Setting::NotSet,
             _kind: std::marker::PhantomData,
         };

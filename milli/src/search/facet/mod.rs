@@ -4,7 +4,7 @@ use heed::types::{ByteSlice, DecodeIgnore};
 use heed::{BytesDecode, RoTxn};
 use roaring::RoaringBitmap;
 
-pub use self::facet_distribution::{FacetDistribution, DEFAULT_VALUES_PER_FACET};
+pub use self::facet_distribution::{FacetDistribution, OrderBy, DEFAULT_VALUES_PER_FACET};
 pub use self::filter::{BadGeoError, Filter};
 use crate::heed_codec::facet::{FacetGroupKeyCodec, FacetGroupValueCodec, OrderedF64Codec};
 use crate::heed_codec::ByteSliceRefCodec;

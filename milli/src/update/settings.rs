@@ -14,7 +14,7 @@ use crate::error::UserError;
 use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
-use crate::{FieldsIdsMap, Index, Result};
+use crate::{FieldsIdsMap, Index, OrderBy, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum Setting<T> {
@@ -122,6 +122,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     /// Attributes on which typo tolerance is disabled.
     exact_attributes: Setting<HashSet<String>>,
     max_values_per_facet: Setting<usize>,
+    sort_facet_values_by: Setting<HashMap<String, OrderBy>>,
     pagination_max_total_hits: Setting<usize>,
 }
 
@@ -149,6 +150,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             min_word_len_one_typo: Setting::NotSet,
             exact_attributes: Setting::NotSet,
             max_values_per_facet: Setting::NotSet,
+            sort_facet_values_by: Setting::NotSet,
             pagination_max_total_hits: Setting::NotSet,
             indexer_config,
         }
@@ -273,6 +275,14 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
     pub fn reset_max_values_per_facet(&mut self) {
         self.max_values_per_facet = Setting::Reset;
+    }
+
+    pub fn set_sort_facet_values_by(&mut self, value: HashMap<String, OrderBy>) {
+        self.sort_facet_values_by = Setting::Set(value);
+    }
+
+    pub fn reset_sort_facet_values_by(&mut self) {
+        self.sort_facet_values_by = Setting::Reset;
     }
 
     pub fn set_pagination_max_total_hits(&mut self, value: usize) {
@@ -680,6 +690,20 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         Ok(())
     }
 
+    fn update_sort_facet_values_by(&mut self) -> Result<()> {
+        match self.sort_facet_values_by.as_ref() {
+            Setting::Set(value) => {
+                self.index.put_sort_facet_values_by(self.wtxn, value)?;
+            }
+            Setting::Reset => {
+                self.index.delete_sort_facet_values_by(self.wtxn)?;
+            }
+            Setting::NotSet => (),
+        }
+
+        Ok(())
+    }
+
     fn update_pagination_max_total_hits(&mut self) -> Result<()> {
         match self.pagination_max_total_hits {
             Setting::Set(max) => {
@@ -714,6 +738,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.update_min_typo_word_len()?;
         self.update_exact_words()?;
         self.update_max_values_per_facet()?;
+        self.update_sort_facet_values_by()?;
         self.update_pagination_max_total_hits()?;
 
         // If there is new faceted fields we indicate that we must reindex as we must
@@ -1515,6 +1540,7 @@ mod tests {
                     exact_words,
                     exact_attributes,
                     max_values_per_facet,
+                    sort_facet_values_by,
                     pagination_max_total_hits,
                 } = settings;
                 assert!(matches!(searchable_fields, Setting::NotSet));
@@ -1532,6 +1558,7 @@ mod tests {
                 assert!(matches!(exact_words, Setting::NotSet));
                 assert!(matches!(exact_attributes, Setting::NotSet));
                 assert!(matches!(max_values_per_facet, Setting::NotSet));
+                assert!(matches!(sort_facet_values_by, Setting::NotSet));
                 assert!(matches!(pagination_max_total_hits, Setting::NotSet));
             })
             .unwrap();

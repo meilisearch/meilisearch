@@ -1,19 +1,22 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ops::ControlFlow;
 use std::{fmt, mem};
 
 use heed::types::ByteSlice;
 use heed::BytesDecode;
+use indexmap::IndexMap;
 use roaring::RoaringBitmap;
+use serde::{Deserialize, Serialize};
 
 use crate::error::UserError;
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{
-    FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
-    OrderedF64Codec,
+    FacetGroupKeyCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec, OrderedF64Codec,
 };
 use crate::heed_codec::{ByteSliceRefCodec, StrRefCodec};
-use crate::search::facet::facet_distribution_iter;
+use crate::search::facet::facet_distribution_iter::{
+    count_iterate_over_facet_distribution, lexicographically_iterate_over_facet_distribution,
+};
 use crate::{FieldId, Index, Result};
 
 /// The default number of values by facets that will
@@ -24,10 +27,21 @@ pub const DEFAULT_VALUES_PER_FACET: usize = 100;
 /// the system to choose between one algorithm or another.
 const CANDIDATES_THRESHOLD: u64 = 3000;
 
+/// How should we fetch the facets?
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OrderBy {
+    /// By lexicographic order...
+    #[default]
+    Lexicographic,
+    /// Or by number of docids in common?
+    Count,
+}
+
 pub struct FacetDistribution<'a> {
-    facets: Option<HashSet<String>>,
+    facets: Option<HashMap<String, OrderBy>>,
     candidates: Option<RoaringBitmap>,
     max_values_per_facet: usize,
+    default_order_by: OrderBy,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
 }
@@ -38,18 +52,32 @@ impl<'a> FacetDistribution<'a> {
             facets: None,
             candidates: None,
             max_values_per_facet: DEFAULT_VALUES_PER_FACET,
+            default_order_by: OrderBy::default(),
             rtxn,
             index,
         }
     }
 
-    pub fn facets<I: IntoIterator<Item = A>, A: AsRef<str>>(&mut self, names: I) -> &mut Self {
-        self.facets = Some(names.into_iter().map(|s| s.as_ref().to_string()).collect());
+    pub fn facets<I: IntoIterator<Item = (A, OrderBy)>, A: AsRef<str>>(
+        &mut self,
+        names_ordered_by: I,
+    ) -> &mut Self {
+        self.facets = Some(
+            names_ordered_by
+                .into_iter()
+                .map(|(name, order_by)| (name.as_ref().to_string(), order_by))
+                .collect(),
+        );
         self
     }
 
     pub fn max_values_per_facet(&mut self, max: usize) -> &mut Self {
         self.max_values_per_facet = max;
+        self
+    }
+
+    pub fn default_order_by(&mut self, order_by: OrderBy) -> &mut Self {
+        self.default_order_by = order_by;
         self
     }
 
@@ -65,7 +93,7 @@ impl<'a> FacetDistribution<'a> {
         field_id: FieldId,
         facet_type: FacetType,
         candidates: &RoaringBitmap,
-        distribution: &mut BTreeMap<String, u64>,
+        distribution: &mut IndexMap<String, u64>,
     ) -> heed::Result<()> {
         match facet_type {
             FacetType::Number => {
@@ -134,9 +162,15 @@ impl<'a> FacetDistribution<'a> {
         &self,
         field_id: FieldId,
         candidates: &RoaringBitmap,
-        distribution: &mut BTreeMap<String, u64>,
+        order_by: OrderBy,
+        distribution: &mut IndexMap<String, u64>,
     ) -> heed::Result<()> {
-        facet_distribution_iter::iterate_over_facet_distribution(
+        let search_function = match order_by {
+            OrderBy::Lexicographic => lexicographically_iterate_over_facet_distribution,
+            OrderBy::Count => count_iterate_over_facet_distribution,
+        };
+
+        search_function(
             self.rtxn,
             self.index
                 .facet_id_f64_docids
@@ -159,9 +193,15 @@ impl<'a> FacetDistribution<'a> {
         &self,
         field_id: FieldId,
         candidates: &RoaringBitmap,
-        distribution: &mut BTreeMap<String, u64>,
+        order_by: OrderBy,
+        distribution: &mut IndexMap<String, u64>,
     ) -> heed::Result<()> {
-        facet_distribution_iter::iterate_over_facet_distribution(
+        let search_function = match order_by {
+            OrderBy::Lexicographic => lexicographically_iterate_over_facet_distribution,
+            OrderBy::Count => count_iterate_over_facet_distribution,
+        };
+
+        search_function(
             self.rtxn,
             self.index
                 .facet_id_string_docids
@@ -189,93 +229,47 @@ impl<'a> FacetDistribution<'a> {
         )
     }
 
-    /// Placeholder search, a.k.a. no candidates were specified. We iterate throught the
-    /// facet values one by one and iterate on the facet level 0 for numbers.
-    fn facet_values_from_raw_facet_database(
+    fn facet_values(
         &self,
         field_id: FieldId,
-    ) -> heed::Result<BTreeMap<String, u64>> {
-        let mut distribution = BTreeMap::new();
-
-        let db = self.index.facet_id_f64_docids;
-        let mut prefix = vec![];
-        prefix.extend_from_slice(&field_id.to_be_bytes());
-        prefix.push(0); // read values from level 0 only
-
-        let iter = db
-            .as_polymorph()
-            .prefix_iter::<_, ByteSlice, ByteSlice>(self.rtxn, prefix.as_slice())?
-            .remap_types::<FacetGroupKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>();
-
-        for result in iter {
-            let (key, value) = result?;
-            distribution.insert(key.left_bound.to_string(), value.bitmap.len());
-            if distribution.len() == self.max_values_per_facet {
-                break;
-            }
-        }
-
-        let iter = self
-            .index
-            .facet_id_string_docids
-            .as_polymorph()
-            .prefix_iter::<_, ByteSlice, ByteSlice>(self.rtxn, prefix.as_slice())?
-            .remap_types::<FacetGroupKeyCodec<StrRefCodec>, FacetGroupValueCodec>();
-
-        for result in iter {
-            let (key, value) = result?;
-
-            let docid = value.bitmap.iter().next().unwrap();
-            let key: (FieldId, _, &'a str) = (field_id, docid, key.left_bound);
-            let original_string =
-                self.index.field_id_docid_facet_strings.get(self.rtxn, &key)?.unwrap().to_owned();
-
-            distribution.insert(original_string, value.bitmap.len());
-            if distribution.len() == self.max_values_per_facet {
-                break;
-            }
-        }
-
-        Ok(distribution)
-    }
-
-    fn facet_values(&self, field_id: FieldId) -> heed::Result<BTreeMap<String, u64>> {
+        order_by: OrderBy,
+    ) -> heed::Result<IndexMap<String, u64>> {
         use FacetType::{Number, String};
 
-        match self.candidates {
-            Some(ref candidates) => {
+        let mut distribution = IndexMap::new();
+        match (order_by, &self.candidates) {
+            (OrderBy::Lexicographic, Some(cnd)) if cnd.len() <= CANDIDATES_THRESHOLD => {
                 // Classic search, candidates were specified, we must return facet values only related
                 // to those candidates. We also enter here for facet strings for performance reasons.
-                let mut distribution = BTreeMap::new();
-                if candidates.len() <= CANDIDATES_THRESHOLD {
-                    self.facet_distribution_from_documents(
-                        field_id,
-                        Number,
-                        candidates,
-                        &mut distribution,
-                    )?;
-                    self.facet_distribution_from_documents(
-                        field_id,
-                        String,
-                        candidates,
-                        &mut distribution,
-                    )?;
-                } else {
-                    self.facet_numbers_distribution_from_facet_levels(
-                        field_id,
-                        candidates,
-                        &mut distribution,
-                    )?;
-                    self.facet_strings_distribution_from_facet_levels(
-                        field_id,
-                        candidates,
-                        &mut distribution,
-                    )?;
-                }
-                Ok(distribution)
+                self.facet_distribution_from_documents(field_id, Number, cnd, &mut distribution)?;
+                self.facet_distribution_from_documents(field_id, String, cnd, &mut distribution)?;
             }
-            None => self.facet_values_from_raw_facet_database(field_id),
-        }
+            _ => {
+                let universe;
+                let candidates = match &self.candidates {
+                    Some(cnd) => cnd,
+                    None => {
+                        universe = self.index.documents_ids(self.rtxn)?;
+                        &universe
+                    }
+                };
+
+                self.facet_numbers_distribution_from_facet_levels(
+                    field_id,
+                    candidates,
+                    order_by,
+                    &mut distribution,
+                )?;
+                self.facet_strings_distribution_from_facet_levels(
+                    field_id,
+                    candidates,
+                    order_by,
+                    &mut distribution,
+                )?;
+            }
+        };
+
+        Ok(distribution)
     }
 
     pub fn compute_stats(&self) -> Result<BTreeMap<String, (f64, f64)>> {
@@ -291,6 +285,7 @@ impl<'a> FacetDistribution<'a> {
             Some(facets) => {
                 let invalid_fields: HashSet<_> = facets
                     .iter()
+                    .map(|(name, _)| name)
                     .filter(|facet| !crate::is_faceted(facet, &filterable_fields))
                     .collect();
                 if !invalid_fields.is_empty() {
@@ -300,7 +295,7 @@ impl<'a> FacetDistribution<'a> {
                     }
                     .into());
                 } else {
-                    facets.clone()
+                    facets.iter().map(|(name, _)| name).cloned().collect()
                 }
             }
             None => filterable_fields,
@@ -337,7 +332,7 @@ impl<'a> FacetDistribution<'a> {
         Ok(distribution)
     }
 
-    pub fn execute(&self) -> Result<BTreeMap<String, BTreeMap<String, u64>>> {
+    pub fn execute(&self) -> Result<BTreeMap<String, IndexMap<String, u64>>> {
         let fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
         let filterable_fields = self.index.filterable_fields(self.rtxn)?;
 
@@ -345,6 +340,7 @@ impl<'a> FacetDistribution<'a> {
             Some(ref facets) => {
                 let invalid_fields: HashSet<_> = facets
                     .iter()
+                    .map(|(name, _)| name)
                     .filter(|facet| !crate::is_faceted(facet, &filterable_fields))
                     .collect();
                 if !invalid_fields.is_empty() {
@@ -354,7 +350,7 @@ impl<'a> FacetDistribution<'a> {
                     }
                     .into());
                 } else {
-                    facets.clone()
+                    facets.iter().map(|(name, _)| name).cloned().collect()
                 }
             }
             None => filterable_fields,
@@ -363,7 +359,12 @@ impl<'a> FacetDistribution<'a> {
         let mut distribution = BTreeMap::new();
         for (fid, name) in fields_ids_map.iter() {
             if crate::is_faceted(name, &fields) {
-                let values = self.facet_values(fid)?;
+                let order_by = self
+                    .facets
+                    .as_ref()
+                    .and_then(|facets| facets.get(name).copied())
+                    .unwrap_or(self.default_order_by);
+                let values = self.facet_values(fid, order_by)?;
                 distribution.insert(name.to_string(), values);
             }
         }
@@ -374,25 +375,34 @@ impl<'a> FacetDistribution<'a> {
 
 impl fmt::Debug for FacetDistribution<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let FacetDistribution { facets, candidates, max_values_per_facet, rtxn: _, index: _ } =
-            self;
+        let FacetDistribution {
+            facets,
+            candidates,
+            max_values_per_facet,
+            default_order_by,
+            rtxn: _,
+            index: _,
+        } = self;
 
         f.debug_struct("FacetDistribution")
             .field("facets", facets)
             .field("candidates", candidates)
             .field("max_values_per_facet", max_values_per_facet)
+            .field("default_order_by", default_order_by)
             .finish()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::iter;
+
     use big_s::S;
     use maplit::hashset;
 
     use crate::documents::documents_batch_reader_from_objects;
     use crate::index::tests::TempIndex;
-    use crate::{milli_snap, FacetDistribution};
+    use crate::{milli_snap, FacetDistribution, OrderBy};
 
     #[test]
     fn few_candidates_few_facet_values() {
@@ -417,14 +427,14 @@ mod tests {
         let txn = index.read_txn().unwrap();
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .execute()
             .unwrap();
 
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2, "RED": 1}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates([0, 1, 2].iter().copied().collect())
             .execute()
             .unwrap();
@@ -432,7 +442,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2, "RED": 1}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates([1, 2].iter().copied().collect())
             .execute()
             .unwrap();
@@ -443,7 +453,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"  blue": 1, "RED": 1}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates([2].iter().copied().collect())
             .execute()
             .unwrap();
@@ -451,13 +461,22 @@ mod tests {
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"RED": 1}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates([0, 1, 2].iter().copied().collect())
             .max_values_per_facet(1)
             .execute()
             .unwrap();
 
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 1}}"###);
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(iter::once(("colour", OrderBy::Count)))
+            .candidates([0, 1, 2].iter().copied().collect())
+            .max_values_per_facet(1)
+            .execute()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2}}"###);
     }
 
     #[test]
@@ -489,14 +508,14 @@ mod tests {
         let txn = index.read_txn().unwrap();
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .execute()
             .unwrap();
 
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 4000, "Red": 6000}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .max_values_per_facet(1)
             .execute()
             .unwrap();
@@ -504,7 +523,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 4000}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..10_000).collect())
             .execute()
             .unwrap();
@@ -512,7 +531,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 4000, "Red": 6000}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..5_000).collect())
             .execute()
             .unwrap();
@@ -520,7 +539,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2000, "Red": 3000}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..5_000).collect())
             .execute()
             .unwrap();
@@ -528,13 +547,22 @@ mod tests {
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2000, "Red": 3000}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..5_000).collect())
             .max_values_per_facet(1)
             .execute()
             .unwrap();
 
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2000}}"###);
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(iter::once(("colour", OrderBy::Count)))
+            .candidates((0..5_000).collect())
+            .max_values_per_facet(1)
+            .execute()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), @r###"{"colour": {"Red": 3000}}"###);
     }
 
     #[test]
@@ -566,14 +594,14 @@ mod tests {
         let txn = index.read_txn().unwrap();
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .execute()
             .unwrap();
 
         milli_snap!(format!("{map:?}"), "no_candidates", @"ac9229ed5964d893af96a7076e2f8af5");
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .max_values_per_facet(2)
             .execute()
             .unwrap();
@@ -581,7 +609,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), "no_candidates_with_max_2", @r###"{"colour": {"0": 10, "1": 10}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..10_000).collect())
             .execute()
             .unwrap();
@@ -589,7 +617,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), "candidates_0_10_000", @"ac9229ed5964d893af96a7076e2f8af5");
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..5_000).collect())
             .execute()
             .unwrap();
@@ -626,14 +654,14 @@ mod tests {
         let txn = index.read_txn().unwrap();
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .compute_stats()
             .unwrap();
 
         milli_snap!(format!("{map:?}"), "no_candidates", @"{}");
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..1000).collect())
             .compute_stats()
             .unwrap();
@@ -641,7 +669,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), "candidates_0_1000", @r###"{"colour": (0.0, 999.0)}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((217..777).collect())
             .compute_stats()
             .unwrap();
@@ -678,14 +706,14 @@ mod tests {
         let txn = index.read_txn().unwrap();
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .compute_stats()
             .unwrap();
 
         milli_snap!(format!("{map:?}"), "no_candidates", @"{}");
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..1000).collect())
             .compute_stats()
             .unwrap();
@@ -693,7 +721,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), "candidates_0_1000", @r###"{"colour": (0.0, 1999.0)}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((217..777).collect())
             .compute_stats()
             .unwrap();
@@ -730,14 +758,14 @@ mod tests {
         let txn = index.read_txn().unwrap();
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .compute_stats()
             .unwrap();
 
         milli_snap!(format!("{map:?}"), "no_candidates", @"{}");
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..1000).collect())
             .compute_stats()
             .unwrap();
@@ -745,7 +773,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), "candidates_0_1000", @r###"{"colour": (0.0, 999.0)}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((217..777).collect())
             .compute_stats()
             .unwrap();
@@ -786,14 +814,14 @@ mod tests {
         let txn = index.read_txn().unwrap();
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .compute_stats()
             .unwrap();
 
         milli_snap!(format!("{map:?}"), "no_candidates", @"{}");
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..1000).collect())
             .compute_stats()
             .unwrap();
@@ -801,7 +829,7 @@ mod tests {
         milli_snap!(format!("{map:?}"), "candidates_0_1000", @r###"{"colour": (0.0, 1998.0)}"###);
 
         let map = FacetDistribution::new(&txn, &index)
-            .facets(std::iter::once("colour"))
+            .facets(iter::once(("colour", OrderBy::default())))
             .candidates((217..777).collect())
             .compute_stats()
             .unwrap();

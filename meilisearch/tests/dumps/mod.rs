@@ -36,7 +36,7 @@ async fn import_dump_v1_movie_raw() {
     assert_eq!(code, 200);
     assert_eq!(
         settings,
-        json!({"displayedAttributes": ["*"], "searchableAttributes": ["*"], "filterableAttributes": [], "sortableAttributes": [], "rankingRules": ["typo", "words", "proximity", "attribute", "exactness"], "stopWords": [], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100 }, "pagination": { "maxTotalHits": 1000 } })
+        json!({"displayedAttributes": ["*"], "searchableAttributes": ["*"], "filterableAttributes": [], "sortableAttributes": [], "rankingRules": ["typo", "words", "proximity", "attribute", "exactness"], "stopWords": [], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100, "sortFacetValuesBy": { "*": "alpha" } }, "pagination": { "maxTotalHits": 1000 } })
     );
 
     let (tasks, code) = index.list_tasks().await;
@@ -128,7 +128,7 @@ async fn import_dump_v1_movie_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         settings,
-        json!({ "displayedAttributes": ["genres", "id", "overview", "poster", "release_date", "title"], "searchableAttributes": ["title", "overview"], "filterableAttributes": ["genres"], "sortableAttributes": ["genres"], "rankingRules": ["typo", "words", "proximity", "attribute", "exactness"], "stopWords": ["of", "the"], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": { "oneTypo": 5, "twoTypos": 9 }, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100 }, "pagination": { "maxTotalHits": 1000 } })
+        json!({ "displayedAttributes": ["genres", "id", "overview", "poster", "release_date", "title"], "searchableAttributes": ["title", "overview"], "filterableAttributes": ["genres"], "sortableAttributes": ["genres"], "rankingRules": ["typo", "words", "proximity", "attribute", "exactness"], "stopWords": ["of", "the"], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": { "oneTypo": 5, "twoTypos": 9 }, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100, "sortFacetValuesBy": { "*": "alpha" } }, "pagination": { "maxTotalHits": 1000 } })
     );
 
     let (tasks, code) = index.list_tasks().await;
@@ -220,7 +220,7 @@ async fn import_dump_v1_rubygems_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         settings,
-        json!({"displayedAttributes": ["description", "id", "name", "summary", "total_downloads", "version"], "searchableAttributes": ["name", "summary"], "filterableAttributes": ["version"], "sortableAttributes": ["version"], "rankingRules": ["typo", "words", "fame:desc", "proximity", "attribute", "exactness", "total_downloads:desc"], "stopWords": [], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100 }, "pagination": { "maxTotalHits": 1000 }})
+        json!({"displayedAttributes": ["description", "id", "name", "summary", "total_downloads", "version"], "searchableAttributes": ["name", "summary"], "filterableAttributes": ["version"], "sortableAttributes": ["version"], "rankingRules": ["typo", "words", "fame:desc", "proximity", "attribute", "exactness", "total_downloads:desc"], "stopWords": [], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100, "sortFacetValuesBy": { "*": "alpha" } }, "pagination": { "maxTotalHits": 1000 }})
     );
 
     let (tasks, code) = index.list_tasks().await;
@@ -310,7 +310,7 @@ async fn import_dump_v2_movie_raw() {
     assert_eq!(code, 200);
     assert_eq!(
         settings,
-        json!({"displayedAttributes": ["*"], "searchableAttributes": ["*"], "filterableAttributes": [], "sortableAttributes": [], "rankingRules": ["words", "typo", "proximity", "attribute", "exactness"], "stopWords": [], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100 }, "pagination": { "maxTotalHits": 1000 } })
+        json!({"displayedAttributes": ["*"], "searchableAttributes": ["*"], "filterableAttributes": [], "sortableAttributes": [], "rankingRules": ["words", "typo", "proximity", "attribute", "exactness"], "stopWords": [], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100, "sortFacetValuesBy": { "*": "alpha" } }, "pagination": { "maxTotalHits": 1000 } })
     );
 
     let (tasks, code) = index.list_tasks().await;
@@ -402,7 +402,7 @@ async fn import_dump_v2_movie_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         settings,
-        json!({ "displayedAttributes": ["title", "genres", "overview", "poster", "release_date"], "searchableAttributes": ["title", "overview"], "filterableAttributes": ["genres"], "sortableAttributes": [], "rankingRules": ["words", "typo", "proximity", "attribute", "exactness"], "stopWords": ["of", "the"], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": { "oneTypo": 5, "twoTypos": 9 }, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100 }, "pagination": { "maxTotalHits": 1000 } })
+        json!({ "displayedAttributes": ["title", "genres", "overview", "poster", "release_date"], "searchableAttributes": ["title", "overview"], "filterableAttributes": ["genres"], "sortableAttributes": [], "rankingRules": ["words", "typo", "proximity", "attribute", "exactness"], "stopWords": ["of", "the"], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": { "oneTypo": 5, "twoTypos": 9 }, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100, "sortFacetValuesBy": { "*": "alpha" } }, "pagination": { "maxTotalHits": 1000 } })
     );
 
     let (tasks, code) = index.list_tasks().await;
@@ -494,7 +494,7 @@ async fn import_dump_v2_rubygems_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         settings,
-        json!({"displayedAttributes": ["name", "summary", "description", "version", "total_downloads"], "searchableAttributes": ["name", "summary"], "filterableAttributes": ["version"], "sortableAttributes": [], "rankingRules": ["typo", "words", "fame:desc", "proximity", "attribute", "exactness", "total_downloads:desc"], "stopWords": [], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100 }, "pagination": { "maxTotalHits": 1000 }})
+        json!({"displayedAttributes": ["name", "summary", "description", "version", "total_downloads"], "searchableAttributes": ["name", "summary"], "filterableAttributes": ["version"], "sortableAttributes": [], "rankingRules": ["typo", "words", "fame:desc", "proximity", "attribute", "exactness", "total_downloads:desc"], "stopWords": [], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100, "sortFacetValuesBy": { "*": "alpha" } }, "pagination": { "maxTotalHits": 1000 }})
     );
 
     let (tasks, code) = index.list_tasks().await;
@@ -584,7 +584,7 @@ async fn import_dump_v3_movie_raw() {
     assert_eq!(code, 200);
     assert_eq!(
         settings,
-        json!({"displayedAttributes": ["*"], "searchableAttributes": ["*"], "filterableAttributes": [], "sortableAttributes": [], "rankingRules": ["words", "typo", "proximity", "attribute", "exactness"], "stopWords": [], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100 }, "pagination": { "maxTotalHits": 1000 } })
+        json!({"displayedAttributes": ["*"], "searchableAttributes": ["*"], "filterableAttributes": [], "sortableAttributes": [], "rankingRules": ["words", "typo", "proximity", "attribute", "exactness"], "stopWords": [], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100, "sortFacetValuesBy": { "*": "alpha" } }, "pagination": { "maxTotalHits": 1000 } })
     );
 
     let (tasks, code) = index.list_tasks().await;
@@ -676,7 +676,7 @@ async fn import_dump_v3_movie_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         settings,
-        json!({ "displayedAttributes": ["title", "genres", "overview", "poster", "release_date"], "searchableAttributes": ["title", "overview"], "filterableAttributes": ["genres"], "sortableAttributes": [], "rankingRules": ["words", "typo", "proximity", "attribute", "exactness"], "stopWords": ["of", "the"], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": { "oneTypo": 5, "twoTypos": 9 }, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100 }, "pagination": { "maxTotalHits": 1000 } })
+        json!({ "displayedAttributes": ["title", "genres", "overview", "poster", "release_date"], "searchableAttributes": ["title", "overview"], "filterableAttributes": ["genres"], "sortableAttributes": [], "rankingRules": ["words", "typo", "proximity", "attribute", "exactness"], "stopWords": ["of", "the"], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": { "oneTypo": 5, "twoTypos": 9 }, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100, "sortFacetValuesBy": { "*": "alpha" } }, "pagination": { "maxTotalHits": 1000 } })
     );
 
     let (tasks, code) = index.list_tasks().await;
@@ -768,7 +768,7 @@ async fn import_dump_v3_rubygems_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         settings,
-        json!({"displayedAttributes": ["name", "summary", "description", "version", "total_downloads"], "searchableAttributes": ["name", "summary"], "filterableAttributes": ["version"], "sortableAttributes": [], "rankingRules": ["typo", "words", "fame:desc", "proximity", "attribute", "exactness", "total_downloads:desc"], "stopWords": [], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100 }, "pagination": { "maxTotalHits": 1000 } })
+        json!({"displayedAttributes": ["name", "summary", "description", "version", "total_downloads"], "searchableAttributes": ["name", "summary"], "filterableAttributes": ["version"], "sortableAttributes": [], "rankingRules": ["typo", "words", "fame:desc", "proximity", "attribute", "exactness", "total_downloads:desc"], "stopWords": [], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100, "sortFacetValuesBy": { "*": "alpha" } }, "pagination": { "maxTotalHits": 1000 } })
     );
 
     let (tasks, code) = index.list_tasks().await;
@@ -858,7 +858,7 @@ async fn import_dump_v4_movie_raw() {
     assert_eq!(code, 200);
     assert_eq!(
         settings,
-        json!({ "displayedAttributes": ["*"], "searchableAttributes": ["*"], "filterableAttributes": [], "sortableAttributes": [], "rankingRules": ["words", "typo", "proximity", "attribute", "exactness"], "stopWords": [], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100 }, "pagination": { "maxTotalHits": 1000 } })
+        json!({ "displayedAttributes": ["*"], "searchableAttributes": ["*"], "filterableAttributes": [], "sortableAttributes": [], "rankingRules": ["words", "typo", "proximity", "attribute", "exactness"], "stopWords": [], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100, "sortFacetValuesBy": { "*": "alpha" } }, "pagination": { "maxTotalHits": 1000 } })
     );
 
     let (tasks, code) = index.list_tasks().await;
@@ -950,7 +950,7 @@ async fn import_dump_v4_movie_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         settings,
-        json!({ "displayedAttributes": ["title", "genres", "overview", "poster", "release_date"], "searchableAttributes": ["title", "overview"], "filterableAttributes": ["genres"], "sortableAttributes": [], "rankingRules": ["words", "typo", "proximity", "attribute", "exactness"], "stopWords": ["of", "the"], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": { "oneTypo": 5, "twoTypos": 9 }, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100 }, "pagination": { "maxTotalHits": 1000 } })
+        json!({ "displayedAttributes": ["title", "genres", "overview", "poster", "release_date"], "searchableAttributes": ["title", "overview"], "filterableAttributes": ["genres"], "sortableAttributes": [], "rankingRules": ["words", "typo", "proximity", "attribute", "exactness"], "stopWords": ["of", "the"], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": { "oneTypo": 5, "twoTypos": 9 }, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100, "sortFacetValuesBy": { "*": "alpha" } }, "pagination": { "maxTotalHits": 1000 } })
     );
 
     let (tasks, code) = index.list_tasks().await;
@@ -1042,7 +1042,7 @@ async fn import_dump_v4_rubygems_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         settings,
-        json!({ "displayedAttributes": ["name", "summary", "description", "version", "total_downloads"], "searchableAttributes": ["name", "summary"], "filterableAttributes": ["version"], "sortableAttributes": [], "rankingRules": ["typo", "words", "fame:desc", "proximity", "attribute", "exactness", "total_downloads:desc"], "stopWords": [], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100 }, "pagination": { "maxTotalHits": 1000 } })
+        json!({ "displayedAttributes": ["name", "summary", "description", "version", "total_downloads"], "searchableAttributes": ["name", "summary"], "filterableAttributes": ["version"], "sortableAttributes": [], "rankingRules": ["typo", "words", "fame:desc", "proximity", "attribute", "exactness", "total_downloads:desc"], "stopWords": [], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100, "sortFacetValuesBy": { "*": "alpha" } }, "pagination": { "maxTotalHits": 1000 } })
     );
 
     let (tasks, code) = index.list_tasks().await;

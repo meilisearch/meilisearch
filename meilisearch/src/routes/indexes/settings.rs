@@ -401,12 +401,17 @@ make_setting_route!(
     analytics,
     |setting: &Option<meilisearch_types::settings::FacetingSettings>, req: &HttpRequest| {
         use serde_json::json;
+        use meilisearch_types::facet_values_sort::FacetValuesSort;
 
         analytics.publish(
             "Faceting Updated".to_string(),
             json!({
                 "faceting": {
                     "max_values_per_facet": setting.as_ref().and_then(|s| s.max_values_per_facet.set()),
+                    "sort_facet_values_by_star_count": setting.as_ref().and_then(|s| {
+                        s.sort_facet_values_by.as_ref().set().map(|s| s.iter().any(|(k, v)| k == "*" && v == &FacetValuesSort::Count))
+                    }),
+                    "sort_facet_values_by_total": setting.as_ref().and_then(|s| s.sort_facet_values_by.as_ref().set().map(|s| s.len())),
                 },
             }),
             Some(req),
@@ -545,6 +550,10 @@ pub async fn update_all(
                     .as_ref()
                     .set()
                     .and_then(|s| s.max_values_per_facet.as_ref().set()),
+                "sort_facet_values_by": new_settings.faceting
+                    .as_ref()
+                    .set()
+                    .and_then(|s| s.sort_facet_values_by.as_ref().set()),
             },
             "pagination": {
                 "max_total_hits": new_settings.pagination

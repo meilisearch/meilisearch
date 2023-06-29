@@ -5,7 +5,7 @@ use heed::EnvOpenOptions;
 use maplit::hashset;
 use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
-use milli::{FacetDistribution, Index, Object};
+use milli::{FacetDistribution, Index, Object, OrderBy};
 use serde_json::Deserializer;
 
 #[test]
@@ -63,12 +63,12 @@ fn test_facet_distribution_with_no_facet_values() {
 
     let txn = index.read_txn().unwrap();
     let mut distrib = FacetDistribution::new(&txn, &index);
-    distrib.facets(vec!["genres"]);
+    distrib.facets(vec![("genres", OrderBy::default())]);
     let result = distrib.execute().unwrap();
     assert_eq!(result["genres"].len(), 0);
 
     let mut distrib = FacetDistribution::new(&txn, &index);
-    distrib.facets(vec!["tags"]);
+    distrib.facets(vec![("tags", OrderBy::default())]);
     let result = distrib.execute().unwrap();
     assert_eq!(result["tags"].len(), 2);
 }
