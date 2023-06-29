@@ -15,7 +15,7 @@ use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::{
-    dot_product_similarity, FacetValueHit, OrderBy, InternalError, SearchForFacetValues,
+    dot_product_similarity, FacetValueHit, InternalError, OrderBy, SearchForFacetValues,
 };
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
