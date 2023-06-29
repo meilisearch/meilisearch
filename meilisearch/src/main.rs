@@ -186,7 +186,7 @@ Anonymous telemetry:\t\"Enabled\""
     }
 
     eprintln!();
-    eprintln!("Check out Meilisearch Cloud!\thttps://meilisearch.com/pricing");
+    eprintln!("Check out Meilisearch Cloud!\thttps://cloud.meilisearch.com/login?utm_campaign=oss&utm_source=engine&utm_medium=cli");
     eprintln!("Documentation:\t\t\thttps://www.meilisearch.com/docs");
     eprintln!("Source code:\t\t\thttps://github.com/meilisearch/meilisearch");
     eprintln!("Discord:\t\t\thttps://discord.meilisearch.com");
