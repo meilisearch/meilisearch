@@ -18,9 +18,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
             .route(web::get().to(SeqHandler(get_features)))
-            .route(web::patch().to(SeqHandler(patch_features)))
-            .route(web::delete().to(SeqHandler(delete_features)))
-            .route(web::post().to(SeqHandler(post_features))),
+            .route(web::patch().to(SeqHandler(patch_features))),
     );
 }
 
@@ -69,41 +67,4 @@ async fn patch_features(
     analytics.publish("Experimental features Updated".to_string(), json!(new_features), Some(&req));
     index_scheduler.put_runtime_features(new_features)?;
     Ok(HttpResponse::Ok().json(new_features))
-}
-
-async fn post_features(
-    index_scheduler: GuardedData<
-        ActionPolicy<{ actions::EXPERIMENTAL_FEATURES_UPDATE }>,
-        Data<IndexScheduler>,
-    >,
-    new_features: AwebJson<RuntimeTogglableFeatures, DeserrJsonError>,
-    analytics: Data<dyn Analytics>,
-    req: HttpRequest,
-) -> Result<HttpResponse, ResponseError> {
-    let new_features = meilisearch_types::features::RuntimeTogglableFeatures {
-        score_details: new_features.0.score_details.unwrap_or(false),
-        vector_store: new_features.0.vector_store.unwrap_or(false),
-    };
-
-    analytics.publish("Experimental features Updated".to_string(), json!(new_features), Some(&req));
-    index_scheduler.put_runtime_features(new_features)?;
-    Ok(HttpResponse::Ok().json(new_features))
-}
-
-async fn delete_features(
-    index_scheduler: GuardedData<
-        ActionPolicy<{ actions::EXPERIMENTAL_FEATURES_UPDATE }>,
-        Data<IndexScheduler>,
-    >,
-    analytics: Data<dyn Analytics>,
-    req: HttpRequest,
-) -> Result<HttpResponse, ResponseError> {
-    let deleted_features = Default::default();
-    analytics.publish(
-        "Experimental features Updated".to_string(),
-        json!(deleted_features),
-        Some(&req),
-    );
-    index_scheduler.put_runtime_features(deleted_features)?;
-    Ok(HttpResponse::Ok().json(deleted_features))
 }
