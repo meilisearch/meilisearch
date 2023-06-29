@@ -10,9 +10,12 @@ use log::warn;
 use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
-use meilisearch_types::milli::{dot_product_similarity, InternalError};
+use meilisearch_types::milli::{
+    dot_product_similarity, FacetValueHit, InternalError, SearchForFacetValues,
+};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
@@ -199,7 +202,7 @@ impl SearchQueryWithIndex {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserr)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserr)]
 #[deserr(rename_all = camelCase)]
 pub enum MatchingStrategy {
     /// Remove query words from last to first
@@ -278,6 +281,14 @@ pub struct FacetStats {
     pub max: f64,
 }
 
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FacetSearchResult {
+    pub facet_hits: Vec<FacetValueHit>,
+    pub facet_query: Option<String>,
+    pub processing_time_ms: u128,
+}
+
 /// Incorporate search rules in search query
 pub fn add_search_rules(query: &mut SearchQuery, rules: IndexSearchRules) {
     query.filter = match (query.filter.take(), rules.filter) {
@@ -298,15 +309,13 @@ pub fn add_search_rules(query: &mut SearchQuery, rules: IndexSearchRules) {
     }
 }
 
-pub fn perform_search(
-    index: &Index,
-    query: SearchQuery,
+fn prepare_search<'t>(
+    index: &'t Index,
+    rtxn: &'t RoTxn,
+    query: &'t SearchQuery,
     features: RoFeatures,
-) -> Result<SearchResult, MeilisearchHttpError> {
-    let before_search = Instant::now();
-    let rtxn = index.read_txn()?;
-
-    let mut search = index.search(&rtxn);
+) -> Result<(milli::Search<'t>, bool, usize, usize), MeilisearchHttpError> {
+    let mut search = index.search(rtxn);
 
     if query.vector.is_some() && query.q.is_some() {
         warn!("Ignoring the query string `q` when used with the `vector` parameter.");
@@ -328,7 +337,7 @@ pub fn perform_search(
     search.terms_matching_strategy(query.matching_strategy.into());
 
     let max_total_hits = index
-        .pagination_max_total_hits(&rtxn)
+        .pagination_max_total_hits(rtxn)
         .map_err(milli::Error::from)?
         .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
 
@@ -382,6 +391,20 @@ pub fn perform_search(
 
         search.sort_criteria(sort);
     }
+
+    Ok((search, is_finite_pagination, max_total_hits, offset))
+}
+
+pub fn perform_search(
+    index: &Index,
+    query: SearchQuery,
+    features: RoFeatures,
+) -> Result<SearchResult, MeilisearchHttpError> {
+    let before_search = Instant::now();
+    let rtxn = index.read_txn()?;
+
+    let (search, is_finite_pagination, max_total_hits, offset) =
+        prepare_search(index, &rtxn, &query, features)?;
 
     let milli::SearchResult { documents_ids, matching_words, candidates, document_scores, .. } =
         search.execute()?;
@@ -555,6 +578,29 @@ pub fn perform_search(
         facet_stats,
     };
     Ok(result)
+}
+
+pub fn perform_facet_search(
+    index: &Index,
+    search_query: SearchQuery,
+    facet_query: Option<String>,
+    facet_name: String,
+    features: RoFeatures,
+) -> Result<FacetSearchResult, MeilisearchHttpError> {
+    let before_search = Instant::now();
+    let rtxn = index.read_txn()?;
+
+    let (search, _, _, _) = prepare_search(index, &rtxn, &search_query, features)?;
+    let mut facet_search = SearchForFacetValues::new(facet_name, search);
+    if let Some(facet_query) = &facet_query {
+        facet_search.query(facet_query);
+    }
+
+    Ok(FacetSearchResult {
+        facet_hits: facet_search.execute()?,
+        facet_query,
+        processing_time_ms: before_search.elapsed().as_millis(),
+    })
 }
 
 fn insert_geo_distance(sorts: &[String], document: &mut Document) {

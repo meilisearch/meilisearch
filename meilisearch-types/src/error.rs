@@ -233,6 +233,7 @@ InvalidSearchAttributesToRetrieve     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchCropLength               , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchCropMarker               , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchFacets                   , InvalidRequest       , BAD_REQUEST ;
+InvalidFacetSearchFacetName           , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchFilter                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchHighlightPostTag         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchHighlightPreTag          , InvalidRequest       , BAD_REQUEST ;
@@ -242,6 +243,8 @@ InvalidSearchMatchingStrategy         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchOffset                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchPage                     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchQ                        , InvalidRequest       , BAD_REQUEST ;
+InvalidFacetSearchQuery               , InvalidRequest       , BAD_REQUEST ;
+InvalidFacetSearchName                , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchVector                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowMatchesPosition      , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowRankingScore         , InvalidRequest       , BAD_REQUEST ;
@@ -284,6 +287,7 @@ MissingApiKeyIndexes                  , InvalidRequest       , BAD_REQUEST ;
 MissingAuthorizationHeader            , Auth                 , UNAUTHORIZED ;
 MissingContentType                    , InvalidRequest       , UNSUPPORTED_MEDIA_TYPE ;
 MissingDocumentId                     , InvalidRequest       , BAD_REQUEST ;
+MissingFacetSearchFacetName           , InvalidRequest       , BAD_REQUEST ;
 MissingIndexUid                       , InvalidRequest       , BAD_REQUEST ;
 MissingMasterKey                      , Auth                 , UNAUTHORIZED ;
 MissingPayload                        , InvalidRequest       , BAD_REQUEST ;
@@ -339,6 +343,9 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidSortableAttribute { .. } => Code::InvalidSearchSort,
                     UserError::InvalidSearchableAttribute { .. } => {
                         Code::InvalidAttributesToSearchOn
+                    }
+                    UserError::InvalidFacetSearchFacetName { .. } => {
+                        Code::InvalidFacetSearchFacetName
                     }
                     UserError::CriterionError(_) => Code::InvalidSettingsRankingRules,
                     UserError::InvalidGeoField { .. } => Code::InvalidDocumentGeoField,

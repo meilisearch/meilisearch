@@ -78,15 +78,16 @@ pub const FACET_MIN_LEVEL_SIZE: u8 = 5;
 
 use std::fs::File;
 
+use heed::types::DecodeIgnore;
 use log::debug;
 use time::OffsetDateTime;
 
 use self::incremental::FacetsUpdateIncremental;
 use super::FacetsUpdateBulk;
 use crate::facet::FacetType;
-use crate::heed_codec::facet::{FacetGroupKeyCodec, FacetGroupValueCodec};
+use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec};
 use crate::heed_codec::ByteSliceRefCodec;
-use crate::{Index, Result};
+use crate::{Index, Result, BEU16};
 
 pub mod bulk;
 pub mod delete;
@@ -157,6 +158,43 @@ impl<'i> FacetsUpdate<'i> {
             );
             incremental_update.execute(wtxn)?;
         }
+
+        // We compute one FST by string facet
+        let mut text_fsts = vec![];
+        let mut current_fst: Option<(u16, fst::SetBuilder<Vec<u8>>)> = None;
+        let database = self.index.facet_id_string_docids.remap_data_type::<DecodeIgnore>();
+        for result in database.iter(wtxn)? {
+            let (facet_group_key, _) = result?;
+            if let FacetGroupKey { field_id, level: 0, left_bound } = facet_group_key {
+                current_fst = match current_fst.take() {
+                    Some((fid, fst_builder)) if fid != field_id => {
+                        let fst = fst_builder.into_set();
+                        text_fsts.push((fid, fst));
+                        Some((field_id, fst::SetBuilder::memory()))
+                    }
+                    Some((field_id, fst_builder)) => Some((field_id, fst_builder)),
+                    None => Some((field_id, fst::SetBuilder::memory())),
+                };
+
+                if let Some((_, fst_builder)) = current_fst.as_mut() {
+                    fst_builder.insert(left_bound)?;
+                }
+            }
+        }
+
+        if let Some((field_id, fst_builder)) = current_fst {
+            let fst = fst_builder.into_set();
+            text_fsts.push((field_id, fst));
+        }
+
+        // We remove all of the previous FSTs that were in this database
+        self.index.facet_id_string_fst.clear(wtxn)?;
+
+        // We write those FSTs in LMDB now
+        for (field_id, fst) in text_fsts {
+            self.index.facet_id_string_fst.put(wtxn, &BEU16::new(field_id), &fst)?;
+        }
+
         Ok(())
     }
 }

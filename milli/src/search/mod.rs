@@ -1,21 +1,30 @@
 use std::fmt;
 
+use fst::automaton::{Automaton, Str};
+use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
+use log::error;
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
 pub use self::facet::{FacetDistribution, Filter, DEFAULT_VALUES_PER_FACET};
 pub use self::new::matches::{FormatOptions, MatchBounds, Matcher, MatcherBuilder, MatchingWords};
 use self::new::PartialSearchResult;
+use crate::error::UserError;
+use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::{
-    execute_search, AscDesc, DefaultSearchLogger, DocumentId, Index, Result, SearchContext,
+    execute_search, normalize_facet, AscDesc, DefaultSearchLogger, DocumentId, FieldId, Index,
+    Result, SearchContext, BEU16,
 };
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
 static LEVDIST1: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(1, true));
 static LEVDIST2: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(2, true));
+
+/// The maximum number of facets returned by the facet search route.
+const MAX_NUMBER_OF_FACETS: usize = 100;
 
 pub mod facet;
 mod fst_utils;
@@ -232,6 +241,195 @@ pub fn build_dfa(word: &str, typos: u8, is_prefix: bool) -> DFA {
     } else {
         lev.build_dfa(word)
     }
+}
+
+pub struct SearchForFacetValues<'a> {
+    query: Option<String>,
+    facet: String,
+    search_query: Search<'a>,
+}
+
+impl<'a> SearchForFacetValues<'a> {
+    pub fn new(facet: String, search_query: Search<'a>) -> SearchForFacetValues<'a> {
+        SearchForFacetValues { query: None, facet, search_query }
+    }
+
+    pub fn query(&mut self, query: impl Into<String>) -> &mut Self {
+        self.query = Some(query.into());
+        self
+    }
+
+    fn one_original_value_of(
+        &self,
+        field_id: FieldId,
+        facet_str: &str,
+        any_docid: DocumentId,
+    ) -> Result<Option<String>> {
+        let index = self.search_query.index;
+        let rtxn = self.search_query.rtxn;
+        let key: (FieldId, _, &str) = (field_id, any_docid, facet_str);
+        Ok(index.field_id_docid_facet_strings.get(rtxn, &key)?.map(|v| v.to_owned()))
+    }
+
+    pub fn execute(&self) -> Result<Vec<FacetValueHit>> {
+        let index = self.search_query.index;
+        let rtxn = self.search_query.rtxn;
+
+        let filterable_fields = index.filterable_fields(rtxn)?;
+        if !filterable_fields.contains(&self.facet) {
+            return Err(UserError::InvalidFacetSearchFacetName {
+                field: self.facet.clone(),
+                valid_fields: filterable_fields.into_iter().collect(),
+            }
+            .into());
+        }
+
+        let fields_ids_map = index.fields_ids_map(rtxn)?;
+        let fid = match fields_ids_map.id(&self.facet) {
+            Some(fid) => fid,
+            // we return an empty list of results when the attribute has been
+            // set as filterable but no document contains this field (yet).
+            None => return Ok(Vec::new()),
+        };
+
+        let fst = match self.search_query.index.facet_id_string_fst.get(rtxn, &BEU16::new(fid))? {
+            Some(fst) => fst,
+            None => return Ok(vec![]),
+        };
+
+        let search_candidates = self.search_query.execute()?.candidates;
+
+        match self.query.as_ref() {
+            Some(query) => {
+                let query = normalize_facet(query);
+                let query = query.as_str();
+                let authorize_typos = self.search_query.index.authorize_typos(rtxn)?;
+                let field_authorizes_typos =
+                    !self.search_query.index.exact_attributes_ids(rtxn)?.contains(&fid);
+
+                if authorize_typos && field_authorizes_typos {
+                    let mut results = vec![];
+
+                    let exact_words_fst = self.search_query.index.exact_words(rtxn)?;
+                    if exact_words_fst.map_or(false, |fst| fst.contains(query)) {
+                        let key = FacetGroupKey { field_id: fid, level: 0, left_bound: query };
+                        if let Some(FacetGroupValue { bitmap, .. }) =
+                            index.facet_id_string_docids.get(rtxn, &key)?
+                        {
+                            let count = search_candidates.intersection_len(&bitmap);
+                            if count != 0 {
+                                let value = self
+                                    .one_original_value_of(fid, query, bitmap.min().unwrap())?
+                                    .unwrap_or_else(|| query.to_string());
+                                results.push(FacetValueHit { value, count });
+                            }
+                        }
+                    } else {
+                        let one_typo = self.search_query.index.min_word_len_one_typo(rtxn)?;
+                        let two_typos = self.search_query.index.min_word_len_two_typos(rtxn)?;
+
+                        let is_prefix = true;
+                        let automaton = if query.len() < one_typo as usize {
+                            build_dfa(query, 0, is_prefix)
+                        } else if query.len() < two_typos as usize {
+                            build_dfa(query, 1, is_prefix)
+                        } else {
+                            build_dfa(query, 2, is_prefix)
+                        };
+
+                        let mut stream = fst.search(automaton).into_stream();
+                        let mut length = 0;
+                        while let Some(facet_value) = stream.next() {
+                            let value = std::str::from_utf8(facet_value)?;
+                            let key = FacetGroupKey { field_id: fid, level: 0, left_bound: value };
+                            let docids = match index.facet_id_string_docids.get(rtxn, &key)? {
+                                Some(FacetGroupValue { bitmap, .. }) => bitmap,
+                                None => {
+                                    error!(
+                                        "the facet value is missing from the facet database: {key:?}"
+                                    );
+                                    continue;
+                                }
+                            };
+                            let count = search_candidates.intersection_len(&docids);
+                            if count != 0 {
+                                let value = self
+                                    .one_original_value_of(fid, value, docids.min().unwrap())?
+                                    .unwrap_or_else(|| query.to_string());
+                                results.push(FacetValueHit { value, count });
+                                length += 1;
+                            }
+                            if length >= MAX_NUMBER_OF_FACETS {
+                                break;
+                            }
+                        }
+                    }
+
+                    Ok(results)
+                } else {
+                    let automaton = Str::new(query).starts_with();
+                    let mut stream = fst.search(automaton).into_stream();
+                    let mut results = vec![];
+                    let mut length = 0;
+                    while let Some(facet_value) = stream.next() {
+                        let value = std::str::from_utf8(facet_value)?;
+                        let key = FacetGroupKey { field_id: fid, level: 0, left_bound: value };
+                        let docids = match index.facet_id_string_docids.get(rtxn, &key)? {
+                            Some(FacetGroupValue { bitmap, .. }) => bitmap,
+                            None => {
+                                error!(
+                                    "the facet value is missing from the facet database: {key:?}"
+                                );
+                                continue;
+                            }
+                        };
+                        let count = search_candidates.intersection_len(&docids);
+                        if count != 0 {
+                            let value = self
+                                .one_original_value_of(fid, value, docids.min().unwrap())?
+                                .unwrap_or_else(|| query.to_string());
+                            results.push(FacetValueHit { value, count });
+                            length += 1;
+                        }
+                        if length >= MAX_NUMBER_OF_FACETS {
+                            break;
+                        }
+                    }
+
+                    Ok(results)
+                }
+            }
+            None => {
+                let mut results = vec![];
+                let mut length = 0;
+                let prefix = FacetGroupKey { field_id: fid, level: 0, left_bound: "" };
+                for result in index.facet_id_string_docids.prefix_iter(rtxn, &prefix)? {
+                    let (FacetGroupKey { left_bound, .. }, FacetGroupValue { bitmap, .. }) =
+                        result?;
+                    let count = search_candidates.intersection_len(&bitmap);
+                    if count != 0 {
+                        let value = self
+                            .one_original_value_of(fid, left_bound, bitmap.min().unwrap())?
+                            .unwrap_or_else(|| left_bound.to_string());
+                        results.push(FacetValueHit { value, count });
+                        length += 1;
+                    }
+                    if length >= MAX_NUMBER_OF_FACETS {
+                        break;
+                    }
+                }
+                Ok(results)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+pub struct FacetValueHit {
+    /// The original facet value
+    pub value: String,
+    /// The number of documents associated to this facet
+    pub count: u64,
 }
 
 #[cfg(test)]

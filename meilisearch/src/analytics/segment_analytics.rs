@@ -1,5 +1,6 @@
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::fs;
+use std::mem::take;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -29,11 +30,13 @@ use super::{
 use crate::analytics::Analytics;
 use crate::option::{default_http_addr, IndexerOpts, MaxMemory, MaxThreads, ScheduleSnapshot};
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
+use crate::routes::indexes::facet_search::FacetSearchQuery;
 use crate::routes::tasks::TasksFilterQuery;
 use crate::routes::{create_all_stats, Stats};
 use crate::search::{
-    SearchQuery, SearchQueryWithIndex, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
-    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
+    FacetSearchResult, MatchingStrategy, SearchQuery, SearchQueryWithIndex, SearchResult,
+    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
 };
 use crate::Opt;
 
@@ -71,6 +74,7 @@ pub enum AnalyticsMsg {
     AggregateGetSearch(SearchAggregator),
     AggregatePostSearch(SearchAggregator),
     AggregatePostMultiSearch(MultiSearchAggregator),
+    AggregatePostFacetSearch(FacetSearchAggregator),
     AggregateAddDocuments(DocumentsAggregator),
     AggregateDeleteDocuments(DocumentsDeletionAggregator),
     AggregateUpdateDocuments(DocumentsAggregator),
@@ -139,6 +143,7 @@ impl SegmentAnalytics {
             batcher,
             post_search_aggregator: SearchAggregator::default(),
             post_multi_search_aggregator: MultiSearchAggregator::default(),
+            post_facet_search_aggregator: FacetSearchAggregator::default(),
             get_search_aggregator: SearchAggregator::default(),
             add_documents_aggregator: DocumentsAggregator::default(),
             delete_documents_aggregator: DocumentsDeletionAggregator::default(),
@@ -180,6 +185,10 @@ impl super::Analytics for SegmentAnalytics {
 
     fn post_search(&self, aggregate: SearchAggregator) {
         let _ = self.sender.try_send(AnalyticsMsg::AggregatePostSearch(aggregate));
+    }
+
+    fn post_facet_search(&self, aggregate: FacetSearchAggregator) {
+        let _ = self.sender.try_send(AnalyticsMsg::AggregatePostFacetSearch(aggregate));
     }
 
     fn post_multi_search(&self, aggregate: MultiSearchAggregator) {
@@ -354,6 +363,7 @@ pub struct Segment {
     get_search_aggregator: SearchAggregator,
     post_search_aggregator: SearchAggregator,
     post_multi_search_aggregator: MultiSearchAggregator,
+    post_facet_search_aggregator: FacetSearchAggregator,
     add_documents_aggregator: DocumentsAggregator,
     delete_documents_aggregator: DocumentsDeletionAggregator,
     update_documents_aggregator: DocumentsAggregator,
@@ -418,6 +428,7 @@ impl Segment {
                         Some(AnalyticsMsg::AggregateGetSearch(agreg)) => self.get_search_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregatePostSearch(agreg)) => self.post_search_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregatePostMultiSearch(agreg)) => self.post_multi_search_aggregator.aggregate(agreg),
+                        Some(AnalyticsMsg::AggregatePostFacetSearch(agreg)) => self.post_facet_search_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregateAddDocuments(agreg)) => self.add_documents_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregateDeleteDocuments(agreg)) => self.delete_documents_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregateUpdateDocuments(agreg)) => self.update_documents_aggregator.aggregate(agreg),
@@ -461,55 +472,74 @@ impl Segment {
                 })
                 .await;
         }
-        let get_search = std::mem::take(&mut self.get_search_aggregator)
-            .into_event(&self.user, "Documents Searched GET");
-        let post_search = std::mem::take(&mut self.post_search_aggregator)
-            .into_event(&self.user, "Documents Searched POST");
-        let post_multi_search = std::mem::take(&mut self.post_multi_search_aggregator)
-            .into_event(&self.user, "Documents Searched by Multi-Search POST");
-        let add_documents = std::mem::take(&mut self.add_documents_aggregator)
-            .into_event(&self.user, "Documents Added");
-        let delete_documents = std::mem::take(&mut self.delete_documents_aggregator)
-            .into_event(&self.user, "Documents Deleted");
-        let update_documents = std::mem::take(&mut self.update_documents_aggregator)
-            .into_event(&self.user, "Documents Updated");
-        let get_fetch_documents = std::mem::take(&mut self.get_fetch_documents_aggregator)
-            .into_event(&self.user, "Documents Fetched GET");
-        let post_fetch_documents = std::mem::take(&mut self.post_fetch_documents_aggregator)
-            .into_event(&self.user, "Documents Fetched POST");
-        let get_tasks =
-            std::mem::take(&mut self.get_tasks_aggregator).into_event(&self.user, "Tasks Seen");
-        let health =
-            std::mem::take(&mut self.health_aggregator).into_event(&self.user, "Health Seen");
 
-        if let Some(get_search) = get_search {
+        let Segment {
+            inbox: _,
+            opt: _,
+            batcher: _,
+            user,
+            get_search_aggregator,
+            post_search_aggregator,
+            post_multi_search_aggregator,
+            post_facet_search_aggregator,
+            add_documents_aggregator,
+            delete_documents_aggregator,
+            update_documents_aggregator,
+            get_fetch_documents_aggregator,
+            post_fetch_documents_aggregator,
+            get_tasks_aggregator,
+            health_aggregator,
+        } = self;
+
+        if let Some(get_search) =
+            take(get_search_aggregator).into_event(&user, "Documents Searched GET")
+        {
             let _ = self.batcher.push(get_search).await;
         }
-        if let Some(post_search) = post_search {
+        if let Some(post_search) =
+            take(post_search_aggregator).into_event(&user, "Documents Searched POST")
+        {
             let _ = self.batcher.push(post_search).await;
         }
-        if let Some(post_multi_search) = post_multi_search {
+        if let Some(post_multi_search) = take(post_multi_search_aggregator)
+            .into_event(&user, "Documents Searched by Multi-Search POST")
+        {
             let _ = self.batcher.push(post_multi_search).await;
         }
-        if let Some(add_documents) = add_documents {
+        if let Some(post_facet_search) =
+            take(post_facet_search_aggregator).into_event(&user, "Facet Searched POST")
+        {
+            let _ = self.batcher.push(post_facet_search).await;
+        }
+        if let Some(add_documents) =
+            take(add_documents_aggregator).into_event(&user, "Documents Added")
+        {
             let _ = self.batcher.push(add_documents).await;
         }
-        if let Some(delete_documents) = delete_documents {
+        if let Some(delete_documents) =
+            take(delete_documents_aggregator).into_event(&user, "Documents Deleted")
+        {
             let _ = self.batcher.push(delete_documents).await;
         }
-        if let Some(update_documents) = update_documents {
+        if let Some(update_documents) =
+            take(update_documents_aggregator).into_event(&user, "Documents Updated")
+        {
             let _ = self.batcher.push(update_documents).await;
         }
-        if let Some(get_fetch_documents) = get_fetch_documents {
+        if let Some(get_fetch_documents) =
+            take(get_fetch_documents_aggregator).into_event(&user, "Documents Fetched GET")
+        {
             let _ = self.batcher.push(get_fetch_documents).await;
         }
-        if let Some(post_fetch_documents) = post_fetch_documents {
+        if let Some(post_fetch_documents) =
+            take(post_fetch_documents_aggregator).into_event(&user, "Documents Fetched POST")
+        {
             let _ = self.batcher.push(post_fetch_documents).await;
         }
-        if let Some(get_tasks) = get_tasks {
+        if let Some(get_tasks) = take(get_tasks_aggregator).into_event(&user, "Tasks Seen") {
             let _ = self.batcher.push(get_tasks).await;
         }
-        if let Some(health) = health {
+        if let Some(health) = take(health_aggregator).into_event(&user, "Health Seen") {
             let _ = self.batcher.push(health).await;
         }
         let _ = self.batcher.flush().await;
@@ -896,6 +926,120 @@ impl MultiSearchAggregator {
                     "total_search_count": self.total_search_count,
                     "avg_search_count": (self.total_search_count as f64) / (self.total_received as f64),
                 }
+            });
+
+            Some(Track {
+                timestamp: self.timestamp,
+                user: user.clone(),
+                event: event_name.to_string(),
+                properties,
+                ..Default::default()
+            })
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct FacetSearchAggregator {
+    timestamp: Option<OffsetDateTime>,
+
+    // context
+    user_agents: HashSet<String>,
+
+    // requests
+    total_received: usize,
+    total_succeeded: usize,
+    time_spent: BinaryHeap<usize>,
+
+    // The set of all facetNames that were used
+    facet_names: HashSet<String>,
+
+    // As there been any other parameter than the facetName or facetQuery ones?
+    additional_search_parameters_provided: bool,
+}
+
+impl FacetSearchAggregator {
+    pub fn from_query(query: &FacetSearchQuery, request: &HttpRequest) -> Self {
+        let FacetSearchQuery {
+            facet_query: _,
+            facet_name,
+            vector,
+            q,
+            filter,
+            matching_strategy,
+            attributes_to_search_on,
+        } = query;
+
+        let mut ret = Self::default();
+        ret.timestamp = Some(OffsetDateTime::now_utc());
+
+        ret.total_received = 1;
+        ret.user_agents = extract_user_agents(request).into_iter().collect();
+        ret.facet_names = Some(facet_name.clone()).into_iter().collect();
+
+        ret.additional_search_parameters_provided = q.is_some()
+            || vector.is_some()
+            || filter.is_some()
+            || *matching_strategy != MatchingStrategy::default()
+            || attributes_to_search_on.is_some();
+
+        ret
+    }
+
+    pub fn succeed(&mut self, result: &FacetSearchResult) {
+        self.total_succeeded = self.total_succeeded.saturating_add(1);
+        self.time_spent.push(result.processing_time_ms as usize);
+    }
+
+    /// Aggregate one [SearchAggregator] into another.
+    pub fn aggregate(&mut self, mut other: Self) {
+        if self.timestamp.is_none() {
+            self.timestamp = other.timestamp;
+        }
+
+        // context
+        for user_agent in other.user_agents.into_iter() {
+            self.user_agents.insert(user_agent);
+        }
+
+        // request
+        self.total_received = self.total_received.saturating_add(other.total_received);
+        self.total_succeeded = self.total_succeeded.saturating_add(other.total_succeeded);
+        self.time_spent.append(&mut other.time_spent);
+
+        // facet_names
+        for facet_name in other.facet_names.into_iter() {
+            self.facet_names.insert(facet_name);
+        }
+
+        // additional_search_parameters_provided
+        self.additional_search_parameters_provided = self.additional_search_parameters_provided
+            | other.additional_search_parameters_provided;
+    }
+
+    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
+        if self.total_received == 0 {
+            None
+        } else {
+            // the index of the 99th percentage of value
+            let percentile_99th = 0.99 * (self.total_succeeded as f64 - 1.) + 1.;
+            // we get all the values in a sorted manner
+            let time_spent = self.time_spent.into_sorted_vec();
+            // We are only interested by the slowest value of the 99th fastest results
+            let time_spent = time_spent.get(percentile_99th as usize);
+
+            let properties = json!({
+                "user-agent": self.user_agents,
+                "requests": {
+                    "99th_response_time":  time_spent.map(|t| format!("{:.2}", t)),
+                    "total_succeeded": self.total_succeeded,
+                    "total_failed": self.total_received.saturating_sub(self.total_succeeded), // just to be sure we never panics
+                    "total_received": self.total_received,
+                },
+                "facets": {
+                    "total_distinct_facet_count": self.facet_names.len(),
+                    "additional_search_parameters_provided": self.additional_search_parameters_provided,
+                },
             });
 
             Some(Track {

@@ -128,6 +128,16 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
         }
     )]
     InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String> },
+    #[error("Attribute `{}` is not facet-searchable. {}",
+        .field,
+        match .valid_fields.is_empty() {
+            true => "This index does not have configured facet-searchable attributes. To make it facet-searchable add it to the `filterableAttributes` index settings.".to_string(),
+            false => format!("Available facet-searchable attributes are: `{}`. To make it facet-searchable add it to the `filterableAttributes` index settings.",
+                    valid_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
+                ),
+        }
+    )]
+    InvalidFacetSearchFacetName { field: String, valid_fields: BTreeSet<String> },
     #[error("Attribute `{}` is not searchable. Available searchable attributes are: `{}{}`.",
         .field,
         .valid_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),

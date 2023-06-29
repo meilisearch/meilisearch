@@ -24,6 +24,7 @@ use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
 
 pub mod documents;
+pub mod facet_search;
 pub mod search;
 pub mod settings;
 
@@ -44,6 +45,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(web::resource("/stats").route(web::get().to(SeqHandler(get_index_stats))))
             .service(web::scope("/documents").configure(documents::configure))
             .service(web::scope("/search").configure(search::configure))
+            .service(web::scope("/facet-search").configure(facet_search::configure))
             .service(web::scope("/settings").configure(settings::configure)),
     );
 }

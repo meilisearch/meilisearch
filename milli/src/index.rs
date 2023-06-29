@@ -21,7 +21,7 @@ use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
     FieldIdCodec, OrderedF64Codec,
 };
-use crate::heed_codec::{ScriptLanguageCodec, StrBEU16Codec, StrRefCodec};
+use crate::heed_codec::{FstSetCodec, ScriptLanguageCodec, StrBEU16Codec, StrRefCodec};
 use crate::readable_slices::ReadableSlices;
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
@@ -94,6 +94,7 @@ pub mod db_name {
     pub const FACET_ID_IS_NULL_DOCIDS: &str = "facet-id-is-null-docids";
     pub const FACET_ID_IS_EMPTY_DOCIDS: &str = "facet-id-is-empty-docids";
     pub const FACET_ID_STRING_DOCIDS: &str = "facet-id-string-docids";
+    pub const FACET_ID_STRING_FST: &str = "facet-id-string-fst";
     pub const FIELD_ID_DOCID_FACET_F64S: &str = "field-id-docid-facet-f64s";
     pub const FIELD_ID_DOCID_FACET_STRINGS: &str = "field-id-docid-facet-strings";
     pub const VECTOR_ID_DOCID: &str = "vector-id-docids";
@@ -154,6 +155,8 @@ pub struct Index {
     pub facet_id_f64_docids: Database<FacetGroupKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>,
     /// Maps the facet field id and ranges of strings with the docids that corresponds to them.
     pub facet_id_string_docids: Database<FacetGroupKeyCodec<StrRefCodec>, FacetGroupValueCodec>,
+    /// Maps the facet field id of the string facets with an FST containing all the facets values.
+    pub facet_id_string_fst: Database<OwnedType<BEU16>, FstSetCodec>,
 
     /// Maps the document id, the facet field id and the numbers.
     pub field_id_docid_facet_f64s: Database<FieldDocIdFacetF64Codec, Unit>,
@@ -206,6 +209,7 @@ impl Index {
         let facet_id_f64_docids = env.create_database(&mut wtxn, Some(FACET_ID_F64_DOCIDS))?;
         let facet_id_string_docids =
             env.create_database(&mut wtxn, Some(FACET_ID_STRING_DOCIDS))?;
+        let facet_id_string_fst = env.create_database(&mut wtxn, Some(FACET_ID_STRING_FST))?;
         let facet_id_exists_docids =
             env.create_database(&mut wtxn, Some(FACET_ID_EXISTS_DOCIDS))?;
         let facet_id_is_null_docids =
@@ -240,6 +244,7 @@ impl Index {
             field_id_word_count_docids,
             facet_id_f64_docids,
             facet_id_string_docids,
+            facet_id_string_fst,
             facet_id_exists_docids,
             facet_id_is_null_docids,
             facet_id_is_empty_docids,
