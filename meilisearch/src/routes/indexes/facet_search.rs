@@ -22,7 +22,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(search)));
 }
 
-// TODO improve the error messages
+/// # Important
+///
+/// Intentionally don't use `deny_unknown_fields` to ignore search parameters sent by user
 #[derive(Debug, Clone, Default, PartialEq, deserr::Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase)]
 pub struct FacetSearchQuery {
