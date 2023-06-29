@@ -705,7 +705,9 @@ dependencies = [
 
 [[package]]
 name = "charabia"
-version = "0.7.2"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb49850f555eb71aa6fc6d4d79420e81f4d89fa56e0e9c0f6d19aace2f56c554"
 dependencies = [
  "aho-corasick",
  "cow-utils",
