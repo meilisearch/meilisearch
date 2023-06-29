@@ -727,10 +727,10 @@ fn extract_field(
     }
 }
 
-fn format_fields(
+fn format_fields<'a>(
     document: &Document,
     field_ids_map: &FieldsIdsMap,
-    builder: &MatcherBuilder,
+    builder: &'a MatcherBuilder<'a>,
     formatted_options: &BTreeMap<FieldId, FormatOptions>,
     compute_matches: bool,
     displayable_ids: &BTreeSet<FieldId>,
@@ -775,9 +775,9 @@ fn format_fields(
     Ok((matches_position, document))
 }
 
-fn format_value(
+fn format_value<'a>(
     value: Value,
-    builder: &MatcherBuilder,
+    builder: &'a MatcherBuilder<'a>,
     format_options: Option<FormatOptions>,
     infos: &mut Vec<MatchBounds>,
     compute_matches: bool,
