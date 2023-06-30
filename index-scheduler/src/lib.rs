@@ -796,7 +796,7 @@ impl IndexScheduler {
 
     // Return true if there is at least one task that is processing.
     pub fn is_task_processing(&self) -> Result<bool> {
-        Ok(self.processing_tasks.read().unwrap().processing.is_empty())
+        Ok(!self.processing_tasks.read().unwrap().processing.is_empty())
     }
 
     /// Return true iff there is at least one task associated with this index
