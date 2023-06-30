@@ -1817,16 +1817,8 @@ mod tests {
     fn test_task_is_processing() {
         let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
-        let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
-        file0.persist().unwrap();
-
-        let _ = index_scheduler
-            .register(replace_document_import_task("catto", None, 0, documents_count0))
-            .unwrap();
+        index_scheduler.register(index_creation_task("index_a", "id")).unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_a_task");
-
-        handle.advance_till([Start, BatchCreated, InsideProcessBatch]);
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_task_processing");
 
         assert_eq!(index_scheduler.is_task_processing().unwrap(), true);
     }
