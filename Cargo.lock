@@ -480,7 +480,7 @@ checksum = "8c3c1a368f70d6cf7302d78f8f7093da241fb8e8807c05cc9e51a125895a6d5b"
 
 [[package]]
 name = "benchmarks"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1232,7 +1232,7 @@ checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 
 [[package]]
 name = "dump"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "anyhow",
  "big_s",
@@ -1440,7 +1440,7 @@ dependencies = [
 
 [[package]]
 name = "file-store"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "faux",
  "tempfile",
@@ -1462,7 +1462,7 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "insta",
  "nom",
@@ -1487,7 +1487,7 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "criterion",
  "serde_json",
@@ -1605,7 +1605,7 @@ dependencies = [
 
 [[package]]
 name = "fuzzers"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "arbitrary",
  "clap 4.3.0",
@@ -1955,7 +1955,7 @@ dependencies = [
 
 [[package]]
 name = "index-scheduler"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "anyhow",
  "big_s",
@@ -2118,7 +2118,7 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "criterion",
  "serde_json",
@@ -2524,7 +2524,7 @@ checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
 
 [[package]]
 name = "meili-snap"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "insta",
  "md5",
@@ -2533,7 +2533,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "actix-cors",
  "actix-http",
@@ -2622,7 +2622,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-auth"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "base64 0.21.2",
  "enum-iterator",
@@ -2641,7 +2641,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-types"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -2695,7 +2695,7 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "big_s",
  "bimap",
@@ -3032,7 +3032,7 @@ checksum = "478c572c3d73181ff3c2539045f6eb99e5491218eae919370993b890cdbdd98e"
 
 [[package]]
 name = "permissive-json-pointer"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "big_s",
  "serde_json",
