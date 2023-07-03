@@ -40,7 +40,7 @@ pub struct FacetSearchQuery {
     pub filter: Option<Value>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
     pub matching_strategy: MatchingStrategy,
-    #[deserr(default, error = DeserrJsonError<InvalidAttributesToSearchOn>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>, default)]
     pub attributes_to_search_on: Option<Vec<String>>,
 }
 
