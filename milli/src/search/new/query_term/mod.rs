@@ -175,9 +175,7 @@ impl QueryTermSubset {
 
     pub fn use_prefix_db(&self, ctx: &SearchContext) -> Option<Word> {
         let original = ctx.term_interner.get(self.original);
-        let Some(use_prefix_db) = original.zero_typo.use_prefix_db else {
-            return None
-        };
+        let Some(use_prefix_db) = original.zero_typo.use_prefix_db else { return None };
         let word = match &self.zero_typo_subset {
             NTypoTermSubset::All => Some(use_prefix_db),
             NTypoTermSubset::Subset { words, phrases: _ } => {
@@ -261,13 +259,15 @@ impl QueryTermSubset {
 
         match &self.one_typo_subset {
             NTypoTermSubset::All => {
-                let Lazy::Init(OneTypoTerm { split_words: _, one_typo }) = &original.one_typo else {
+                let Lazy::Init(OneTypoTerm { split_words: _, one_typo }) = &original.one_typo
+                else {
                     panic!()
                 };
                 result.extend(one_typo.iter().copied().map(Word::Derived))
             }
             NTypoTermSubset::Subset { words, phrases: _ } => {
-                let Lazy::Init(OneTypoTerm { split_words: _, one_typo }) = &original.one_typo else {
+                let Lazy::Init(OneTypoTerm { split_words: _, one_typo }) = &original.one_typo
+                else {
                     panic!()
                 };
                 result.extend(one_typo.intersection(words).copied().map(Word::Derived));
@@ -277,15 +277,11 @@ impl QueryTermSubset {
 
         match &self.two_typo_subset {
             NTypoTermSubset::All => {
-                let Lazy::Init(TwoTypoTerm { two_typos }) = &original.two_typo else {
-                    panic!()
-                };
+                let Lazy::Init(TwoTypoTerm { two_typos }) = &original.two_typo else { panic!() };
                 result.extend(two_typos.iter().copied().map(Word::Derived));
             }
             NTypoTermSubset::Subset { words, phrases: _ } => {
-                let Lazy::Init(TwoTypoTerm { two_typos }) = &original.two_typo else {
-                    panic!()
-                };
+                let Lazy::Init(TwoTypoTerm { two_typos }) = &original.two_typo else { panic!() };
                 result.extend(two_typos.intersection(words).copied().map(Word::Derived));
             }
             NTypoTermSubset::Nothing => {}
@@ -308,13 +304,15 @@ impl QueryTermSubset {
 
         match &self.one_typo_subset {
             NTypoTermSubset::All => {
-                let Lazy::Init(OneTypoTerm { split_words, one_typo: _ }) = &original.one_typo else {
+                let Lazy::Init(OneTypoTerm { split_words, one_typo: _ }) = &original.one_typo
+                else {
                     panic!();
                 };
                 result.extend(split_words.iter().copied());
             }
             NTypoTermSubset::Subset { phrases, .. } => {
-                let Lazy::Init(OneTypoTerm { split_words, one_typo: _ }) = &original.one_typo else {
+                let Lazy::Init(OneTypoTerm { split_words, one_typo: _ }) = &original.one_typo
+                else {
                     panic!();
                 };
                 if let Some(split_words) = split_words {

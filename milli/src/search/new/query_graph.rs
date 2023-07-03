@@ -349,10 +349,7 @@ impl QueryGraph {
         for (_, node) in self.nodes.iter() {
             match &node.data {
                 QueryNodeData::Term(term) => {
-                    let Some(phrase) = term.term_subset.original_phrase(ctx)
-                    else {
-                        continue
-                    };
+                    let Some(phrase) = term.term_subset.original_phrase(ctx) else { continue };
                     let phrase = ctx.phrase_interner.get(phrase);
                     word_count += phrase.words.iter().copied().filter(|a| a.is_some()).count()
                 }

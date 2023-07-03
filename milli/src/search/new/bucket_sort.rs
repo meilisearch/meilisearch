@@ -153,7 +153,12 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
             continue;
         }
 
-        let Some(next_bucket) = ranking_rules[cur_ranking_rule_index].next_bucket(ctx, logger, &ranking_rule_universes[cur_ranking_rule_index])? else {
+        let Some(next_bucket) = ranking_rules[cur_ranking_rule_index].next_bucket(
+            ctx,
+            logger,
+            &ranking_rule_universes[cur_ranking_rule_index],
+        )?
+        else {
             back!();
             continue;
         };
