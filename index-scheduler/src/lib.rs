@@ -1815,11 +1815,12 @@ mod tests {
 
     #[test]
     fn test_task_is_processing() {
-        let (index_scheduler, _handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         index_scheduler.register(index_creation_task("index_a", "id")).unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_a_task");
 
+        handle.advance_till([Start, BatchCreated]);
         assert!(index_scheduler.is_task_processing().unwrap());
     }
 
