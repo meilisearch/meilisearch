@@ -97,8 +97,7 @@ impl ScoreDetails {
                     let attribute_details = attribute_details
                         .as_object_mut()
                         .expect("attribute details was not an object");
-                    let Some(fid_details) = fid_details
-                    else {
+                    let Some(fid_details) = fid_details else {
                         unimplemented!("position not preceded by attribute");
                     };
 

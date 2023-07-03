@@ -206,11 +206,9 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
 
         let all_costs = state.all_costs.get(state.graph.query_graph.root_node);
         // Retrieve the cost of the paths to compute
-        let Some(&cost) = all_costs
-            .iter()
-            .find(|c| **c >= state.cur_cost) else {
-                self.state = None;
-                return Ok(None);
+        let Some(&cost) = all_costs.iter().find(|c| **c >= state.cur_cost) else {
+            self.state = None;
+            return Ok(None);
         };
         state.cur_cost = cost + 1;
 

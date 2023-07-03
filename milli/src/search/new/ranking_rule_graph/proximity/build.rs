@@ -18,7 +18,7 @@ pub fn build_edges(
         return Ok(vec![(
             right_ngram_max as u32,
             conditions_interner.insert(ProximityCondition::Term { term: right_term.clone() }),
-        )])
+        )]);
     };
 
     if left_term.positions.end() + 1 != *right_term.positions.start() {

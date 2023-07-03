@@ -75,8 +75,9 @@ impl<'ctx, Query> Sort<'ctx, Query> {
     }
 
     fn must_redact(index: &Index, rtxn: &'ctx heed::RoTxn, field_name: &str) -> Result<bool> {
-        let Some(displayed_fields) = index.displayed_fields(rtxn)?
-        else { return Ok(false); };
+        let Some(displayed_fields) = index.displayed_fields(rtxn)? else {
+            return Ok(false);
+        };
 
         Ok(!displayed_fields.iter().any(|&field| field == field_name))
     }
