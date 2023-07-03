@@ -18,7 +18,7 @@ mimalloc = { version = "0.1.36", default-features = false }
 serde_json = { version = "1.0.95", features = ["preserve_order"] }
 
 [dev-dependencies]
-criterion = { version = "0.4.0", features = ["html_reports"] }
+criterion = { version = "0.5.1", features = ["html_reports"] }
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 roaring = "0.10.1"
