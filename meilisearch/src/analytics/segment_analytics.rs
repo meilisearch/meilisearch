@@ -1145,6 +1145,7 @@ pub struct DocumentsDeletionAggregator {
     #[serde(rename = "user-agent")]
     user_agents: HashSet<String>,
 
+    #[serde(rename = "requests.total_received")]
     total_received: usize,
     per_document_id: bool,
     clear_all: bool,
@@ -1295,6 +1296,7 @@ pub struct HealthAggregator {
     #[serde(rename = "user-agent")]
     user_agents: HashSet<String>,
 
+    #[serde(rename = "requests.total_received")]
     total_received: usize,
 }
 
@@ -1345,7 +1347,7 @@ pub struct DocumentsFetchAggregator {
     #[serde(rename = "user-agent")]
     user_agents: HashSet<String>,
 
-    #[serde(rename = "requests.max_limit")]
+    #[serde(rename = "requests.total_received")]
     total_received: usize,
 
     // a call on ../documents/:doc_id
