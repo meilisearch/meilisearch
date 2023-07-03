@@ -72,7 +72,7 @@ pub struct SearchQueryGet {
     crop_marker: String,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchMatchingStrategy>)]
     matching_strategy: MatchingStrategy,
-    #[deserr(default, error = DeserrQueryParamError<InvalidAttributesToSearchOn>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToSearchOn>)]
     pub attributes_to_search_on: Option<CS<String>>,
 }
 

@@ -980,9 +980,9 @@ async fn search_on_unknown_field() {
                 snapshot!(json_string!(response), @r###"
                 {
                   "message": "Attribute `unknown` is not searchable. Available searchable attributes are: `id, title`.",
-                  "code": "invalid_attributes_to_search_on",
+                  "code": "invalid_search_attributes_to_search_on",
                   "type": "invalid_request",
-                  "link": "https://docs.meilisearch.com/errors#invalid_attributes_to_search_on"
+                  "link": "https://docs.meilisearch.com/errors#invalid_search_attributes_to_search_on"
                 }
                 "###);
             },

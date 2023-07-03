@@ -226,7 +226,7 @@ InvalidIndexLimit                     , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexOffset                    , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexPrimaryKey                , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexUid                       , InvalidRequest       , BAD_REQUEST ;
-InvalidAttributesToSearchOn   , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchAttributesToSearchOn     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToCrop         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToHighlight    , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToRetrieve     , InvalidRequest       , BAD_REQUEST ;
@@ -342,7 +342,7 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidFacetsDistribution { .. } => Code::InvalidSearchFacets,
                     UserError::InvalidSortableAttribute { .. } => Code::InvalidSearchSort,
                     UserError::InvalidSearchableAttribute { .. } => {
-                        Code::InvalidAttributesToSearchOn
+                        Code::InvalidSearchAttributesToSearchOn
                     }
                     UserError::InvalidFacetSearchFacetName { .. } => {
                         Code::InvalidFacetSearchFacetName
