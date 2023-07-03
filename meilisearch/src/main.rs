@@ -1,5 +1,5 @@
 use std::env;
-use std::io::Write;
+use std::io::{stderr, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -7,6 +7,7 @@ use actix_web::http::KeepAlive;
 use actix_web::web::Data;
 use actix_web::HttpServer;
 use index_scheduler::IndexScheduler;
+use is_terminal::IsTerminal;
 use meilisearch::analytics::Analytics;
 use meilisearch::{analytics, create_app, prototype_name, setup_meilisearch, Opt};
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
@@ -197,8 +198,7 @@ const WARNING_BG_COLOR: Option<Color> = Some(Color::Ansi256(178));
 const WARNING_FG_COLOR: Option<Color> = Some(Color::Ansi256(0));
 
 fn print_master_key_too_short_warning() {
-    let choice =
-        if atty::is(atty::Stream::Stderr) { ColorChoice::Auto } else { ColorChoice::Never };
+    let choice = if stderr().is_terminal() { ColorChoice::Auto } else { ColorChoice::Never };
     let mut stderr = StandardStream::stderr(choice);
     stderr
         .set_color(
@@ -223,8 +223,7 @@ fn print_master_key_too_short_warning() {
 }
 
 fn print_missing_master_key_warning() {
-    let choice =
-        if atty::is(atty::Stream::Stderr) { ColorChoice::Auto } else { ColorChoice::Never };
+    let choice = if stderr().is_terminal() { ColorChoice::Auto } else { ColorChoice::Never };
     let mut stderr = StandardStream::stderr(choice);
     stderr
         .set_color(
