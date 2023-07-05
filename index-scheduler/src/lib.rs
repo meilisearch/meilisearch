@@ -138,6 +138,12 @@ impl Query {
         index_vec.push(index_uid);
         Self { index_uids: Some(index_vec), ..self }
     }
+
+    // Removes the `from` and `limit` restrictions from the query.
+    // Useful to get the total number of tasks matching a filter.
+    pub fn without_limits(self) -> Self {
+        Query { limit: None, from: None, ..self }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -822,7 +828,8 @@ impl IndexScheduler {
         Ok(nbr_index_processing_tasks > 0)
     }
 
-    /// Return the task ids matching the query from the user's point of view.
+    /// Return the task ids matching the query along with the total number of tasks
+    /// by ignoring the from and limit parameters from the user's point of view.
     ///
     /// There are two differences between an internal query and a query executed by
     /// the user.
@@ -835,7 +842,13 @@ impl IndexScheduler {
         rtxn: &RoTxn,
         query: &Query,
         filters: &meilisearch_auth::AuthFilter,
-    ) -> Result<RoaringBitmap> {
+    ) -> Result<(RoaringBitmap, u64)> {
+        // compute all tasks matching the filter by ignoring the limits, to find the number of tasks matching
+        // the filter.
+        // As this causes us to compute the filter twice it is slightly inefficient, but doing it this way spares
+        // us from modifying the underlying implementation, and the performance remains sufficient.
+        // Should this change, we would modify `get_task_ids` to directly return the number of matching tasks.
+        let total_tasks = self.get_task_ids(rtxn, &query.clone().without_limits())?;
         let mut tasks = self.get_task_ids(rtxn, query)?;
 
         // If the query contains a list of index uid or there is a finite list of authorized indexes,
@@ -858,10 +871,11 @@ impl IndexScheduler {
             }
         }
 
-        Ok(tasks)
+        Ok((tasks, total_tasks.len()))
     }
 
-    /// Return the tasks matching the query from the user's point of view.
+    /// Return the tasks matching the query from the user's point of view along
+    /// with the total number of tasks matching the query, ignoring from and limit.
     ///
     /// There are two differences between an internal query and a query executed by
     /// the user.
@@ -873,11 +887,10 @@ impl IndexScheduler {
         &self,
         query: Query,
         filters: &meilisearch_auth::AuthFilter,
-    ) -> Result<Vec<Task>> {
+    ) -> Result<(Vec<Task>, u64)> {
         let rtxn = self.env.read_txn()?;
 
-        let tasks = self.get_task_ids_from_authorized_indexes(&rtxn, &query, filters)?;
-
+        let (tasks, total) = self.get_task_ids_from_authorized_indexes(&rtxn, &query, filters)?;
         let tasks = self.get_existing_tasks(
             &rtxn,
             tasks.into_iter().rev().take(query.limit.unwrap_or(u32::MAX) as usize),
@@ -888,16 +901,19 @@ impl IndexScheduler {
 
         let ret = tasks.into_iter();
         if processing.is_empty() {
-            Ok(ret.collect())
+            Ok((ret.collect(), total))
         } else {
-            Ok(ret
-                .map(|task| match processing.contains(task.uid) {
-                    true => {
+            Ok((
+                ret.map(|task| {
+                    if processing.contains(task.uid) {
                         Task { status: Status::Processing, started_at: Some(started_at), ..task }
+                    } else {
+                        task
                     }
-                    false => task,
                 })
-                .collect())
+                .collect(),
+                total,
+            ))
         }
     }
 
