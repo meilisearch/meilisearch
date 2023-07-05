@@ -761,17 +761,17 @@ impl SearchAggregator {
         if self.total_received == 0 {
             None
         } else {
-            // the index of the 99th percentage of value
-            let percentile_99th = 0.99 * (self.total_succeeded as f64 - 1.) + 1.;
             // we get all the values in a sorted manner
             let time_spent = self.time_spent.into_sorted_vec();
+            // the index of the 99th percentage of value
+            let percentile_99th = time_spent.len() * 99 / 100;
             // We are only interested by the slowest value of the 99th fastest results
-            let time_spent = time_spent.get(percentile_99th as usize);
+            let time_spent = time_spent.get(percentile_99th);
 
             let properties = json!({
                 "user-agent": self.user_agents,
                 "requests": {
-                    "99th_response_time":  time_spent.map(|t| format!("{:.2}", t)),
+                    "99th_response_time": time_spent.map(|t| format!("{:.2}", t)),
                     "total_succeeded": self.total_succeeded,
                     "total_failed": self.total_received.saturating_sub(self.total_succeeded), // just to be sure we never panics
                     "total_received": self.total_received,
