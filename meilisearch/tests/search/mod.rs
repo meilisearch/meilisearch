@@ -752,3 +752,127 @@ async fn faceting_max_values_per_facet() {
         )
         .await;
 }
+
+#[actix_rt::test]
+async fn experimental_feature_score_details() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = DOCUMENTS.clone();
+
+    index.add_documents(json!(documents), None).await;
+    index.wait_task(0).await;
+
+    index
+        .search(
+            json!({
+                "q": "train dragon",
+                "showRankingScoreDetails": true,
+            }),
+            |response, code| {
+                meili_snap::snapshot!(code, @"400 Bad Request");
+                meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+                {
+                  "message": "Computing score details requires enabling the `score details` experimental feature. See https://github.com/meilisearch/product/discussions/674",
+                  "code": "feature_not_enabled",
+                  "type": "invalid_request",
+                  "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+                }
+                "###);
+            },
+        )
+        .await;
+
+    let (response, code) = server.set_features(json!({"scoreDetails": true})).await;
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(response["scoreDetails"], @"true");
+
+    index
+        .search(
+            json!({
+                "q": "train dragon",
+                "showRankingScoreDetails": true,
+            }),
+            |response, code| {
+                meili_snap::snapshot!(code, @"200 OK");
+                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "How to Train Your Dragon: The Hidden World",
+                    "id": "166428",
+                    "_rankingScoreDetails": {
+                      "words": {
+                        "order": 0,
+                        "matchingWords": 2,
+                        "maxMatchingWords": 2,
+                        "score": 1.0
+                      },
+                      "typo": {
+                        "order": 1,
+                        "typoCount": 0,
+                        "maxTypoCount": 2,
+                        "score": 1.0
+                      },
+                      "proximity": {
+                        "order": 2,
+                        "score": 0.875
+                      },
+                      "attribute": {
+                        "order": 3,
+                        "attribute_ranking_order_score": 1.0,
+                        "query_word_distance_score": 0.8095238095238095,
+                        "score": 0.9365079365079364
+                      },
+                      "exactness": {
+                        "order": 4,
+                        "matchType": "noExactMatch",
+                        "matchingWords": 2,
+                        "maxMatchingWords": 2,
+                        "score": 0.3333333333333333
+                      }
+                    }
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
+async fn experimental_feature_vector_store() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = DOCUMENTS.clone();
+
+    index.add_documents(json!(documents), None).await;
+    index.wait_task(0).await;
+
+    let (response, code) = index
+        .search_post(json!({
+            "vector": [1.0, 2.0, 3.0],
+        }))
+        .await;
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "message": "Passing `vector` as a query parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "###);
+
+    let (response, code) = server.set_features(json!({"vectorStore": true})).await;
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(response["vectorStore"], @"true");
+
+    let (response, code) = index
+        .search_post(json!({
+            "vector": [1.0, 2.0, 3.0],
+        }))
+        .await;
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @"[]");
+}
