@@ -292,6 +292,7 @@ pub(crate) mod test {
         │    ├---- update_files/
         │    │    └---- 1.jsonl
         │    └---- queue.jsonl
+        ├---- experimental-features.json
         ├---- instance_uid.uuid
         ├---- keys.jsonl
         └---- metadata.json
