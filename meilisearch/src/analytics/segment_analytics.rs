@@ -843,6 +843,10 @@ pub struct MultiSearchAggregator {
     // sum of the number of search queries in the requests, use with total_received to compute an average
     total_search_count: usize,
 
+    // scoring
+    show_ranking_score: bool,
+    show_ranking_score_details: bool,
+
     // context
     user_agents: HashSet<String>,
 }
@@ -856,6 +860,9 @@ impl MultiSearchAggregator {
         let distinct_indexes: HashSet<_> =
             query.iter().map(|query| query.index_uid.as_str()).collect();
 
+        let show_ranking_score = query.iter().any(|query| query.show_ranking_score);
+        let show_ranking_score_details = query.iter().any(|query| query.show_ranking_score_details);
+
         Self {
             timestamp,
             total_received: 1,
@@ -863,6 +870,8 @@ impl MultiSearchAggregator {
             total_distinct_index_count: distinct_indexes.len(),
             total_single_index: if distinct_indexes.len() == 1 { 1 } else { 0 },
             total_search_count: query.len(),
+            show_ranking_score,
+            show_ranking_score_details,
             user_agents,
         }
     }
@@ -884,6 +893,9 @@ impl MultiSearchAggregator {
             this.total_distinct_index_count.saturating_add(other.total_distinct_index_count);
         let total_single_index = this.total_single_index.saturating_add(other.total_single_index);
         let total_search_count = this.total_search_count.saturating_add(other.total_search_count);
+        let show_ranking_score = this.show_ranking_score || other.show_ranking_score;
+        let show_ranking_score_details =
+            this.show_ranking_score_details || other.show_ranking_score_details;
         let mut user_agents = this.user_agents;
 
         for user_agent in other.user_agents.into_iter() {
@@ -899,6 +911,8 @@ impl MultiSearchAggregator {
             total_single_index,
             total_search_count,
             user_agents,
+            show_ranking_score,
+            show_ranking_score_details,
             // do not add _ or ..Default::default() here
         };
 
@@ -925,6 +939,10 @@ impl MultiSearchAggregator {
                 "searches": {
                     "total_search_count": self.total_search_count,
                     "avg_search_count": (self.total_search_count as f64) / (self.total_received as f64),
+                },
+                "scoring": {
+                    "show_ranking_score": self.show_ranking_score,
+                    "show_ranking_score_details": self.show_ranking_score_details,
                 }
             });
 
