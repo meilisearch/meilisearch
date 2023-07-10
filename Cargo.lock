@@ -1973,6 +1973,7 @@ dependencies = [
  "meilisearch-types",
  "nelson",
  "page_size 0.5.0",
+ "puffin",
  "roaring",
  "serde",
  "serde_json",
@@ -2499,6 +2500,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "lz4_flex"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b8c72594ac26bfd34f2d99dfced2edfaddfe8a476e3ff2ca0eb293d925c4f83"
+
+[[package]]
 name = "manifest-dir-macros"
 version = "0.1.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2587,6 +2594,8 @@ dependencies = [
  "pin-project-lite",
  "platform-dirs",
  "prometheus",
+ "puffin",
+ "puffin_http",
  "rand",
  "rayon",
  "regex",
@@ -2731,6 +2740,7 @@ dependencies = [
  "obkv",
  "once_cell",
  "ordered-float",
+ "puffin",
  "rand",
  "rand_pcg",
  "rayon",
@@ -3255,6 +3265,35 @@ name = "protobuf"
 version = "2.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "106dd99e98437432fed6519dedecfade6a06a73bb7b2a1e019fdd2bee5778d94"
+
+[[package]]
+name = "puffin"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76425abd4e1a0ad4bd6995dd974b52f414fca9974171df8e3708b3e660d05a21"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "byteorder",
+ "cfg-if",
+ "instant",
+ "lz4_flex",
+ "once_cell",
+ "parking_lot",
+ "serde",
+]
+
+[[package]]
+name = "puffin_http"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13bffc600c35913d282ae1e96a6ffcdf36dc7a7cdb9310e0ba15914d258c8193"
+dependencies = [
+ "anyhow",
+ "crossbeam-channel",
+ "log",
+ "puffin",
+]
 
 [[package]]
 name = "quote"

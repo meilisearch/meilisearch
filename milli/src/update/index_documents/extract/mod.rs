@@ -52,6 +52,8 @@ pub(crate) fn data_from_obkv_documents(
     max_positions_per_attributes: Option<u32>,
     exact_attributes: HashSet<FieldId>,
 ) -> Result<()> {
+    puffin::profile_function!();
+
     original_obkv_chunks
         .par_bridge()
         .map(|original_documents_chunk| {
@@ -238,11 +240,13 @@ fn spawn_extraction_task<FE, FS, M>(
     M::Output: Send,
 {
     rayon::spawn(move || {
+        puffin::profile_scope!("extract_multiple_chunks", name);
         let chunks: Result<M> =
             chunks.into_par_iter().map(|chunk| extract_fn(chunk, indexer)).collect();
         rayon::spawn(move || match chunks {
             Ok(chunks) => {
                 debug!("merge {} database", name);
+                puffin::profile_scope!("merge_multiple_chunks", name);
                 let reader = chunks.merge(merge_fn, &indexer);
                 let _ = lmdb_writer_sx.send(reader.map(serialize_fn));
             }

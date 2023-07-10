@@ -67,6 +67,9 @@ filter-parser = { path = "../filter-parser" }
 # documents words self-join
 itertools = "0.10.5"
 
+# profiling
+puffin = "0.16.0"
+
 # logging
 log = "0.4.17"
 logging_timer = "1.1.0"

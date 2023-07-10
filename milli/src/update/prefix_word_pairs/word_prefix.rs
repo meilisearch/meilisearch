@@ -191,6 +191,7 @@ pub fn index_word_prefix_database(
     chunk_compression_type: CompressionType,
     chunk_compression_level: Option<u32>,
 ) -> Result<()> {
+    puffin::profile_function!();
     debug!("Computing and writing the word prefix pair proximity docids into LMDB on disk...");
 
     // Make a prefix trie from the common prefixes that are shorter than self.max_prefix_length

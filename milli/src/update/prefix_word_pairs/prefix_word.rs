@@ -27,6 +27,8 @@ pub fn index_prefix_word_database(
     chunk_compression_type: CompressionType,
     chunk_compression_level: Option<u32>,
 ) -> Result<()> {
+    puffin::profile_function!();
+
     let max_proximity = max_proximity - 1;
     debug!("Computing and writing the word prefix pair proximity docids into LMDB on disk...");
 

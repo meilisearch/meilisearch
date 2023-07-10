@@ -67,6 +67,8 @@ permissive-json-pointer = { path = "../permissive-json-pointer" }
 pin-project-lite = "0.2.9"
 platform-dirs = "0.3.0"
 prometheus = { version = "0.13.3", features = ["process"] }
+puffin = "0.16.0"
+puffin_http = "0.13.0"
 rand = "0.8.5"
 rayon = "1.7.0"
 regex = "1.7.3"
