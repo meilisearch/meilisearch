@@ -723,6 +723,9 @@ impl SearchAggregator {
         // q
         self.max_terms_number = self.max_terms_number.max(other.max_terms_number);
 
+        // vector
+        self.max_vector_size = self.max_vector_size.max(other.max_vector_size);
+
         // pagination
         self.max_limit = self.max_limit.max(other.max_limit);
         self.max_offset = self.max_offset.max(other.max_offset);
@@ -788,6 +791,9 @@ impl SearchAggregator {
                 },
                 "q": {
                    "max_terms_number": self.max_terms_number,
+                },
+                "vector": {
+                    "max_vector_size": self.max_vector_size,
                 },
                 "pagination": {
                    "max_limit": self.max_limit,
