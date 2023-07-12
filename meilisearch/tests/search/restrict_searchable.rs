@@ -77,15 +77,15 @@ async fn search_no_searchable_attribute_set() {
         )
         .await;
 
-    index.update_settings_searchable_attributes(json!(["description", "*", "title"])).await;
+    index.update_settings_searchable_attributes(json!(["*"])).await;
     index.wait_task(2).await;
 
     index
         .search(
-            json!({"q": "Captain Marvel", "attributesToSearchOn": ["unknown"]}),
+            json!({"q": "Captain Marvel", "attributesToSearchOn": ["unknown", "title"]}),
             |response, code| {
                 snapshot!(code, @"200 OK");
-                snapshot!(response["hits"].as_array().unwrap().len(), @"0");
+                snapshot!(response["hits"].as_array().unwrap().len(), @"2");
             },
         )
         .await;
