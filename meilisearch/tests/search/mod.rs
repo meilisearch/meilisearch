@@ -888,7 +888,8 @@ async fn camelcased_words() {
         { "id": 0, "title": "DeLonghi" },
         { "id": 1, "title": "delonghi" },
         { "id": 2, "title": "TestAB" },
-        { "id": 3, "title": "testab" },
+        { "id": 3, "title": "TestAb" },
+        { "id": 4, "title": "testab" },
     ]);
     index.add_documents(documents, None).await;
     index.wait_task(0).await;
@@ -940,6 +941,10 @@ async fn camelcased_words() {
               },
               {
                 "id": 3,
+                "title": "TestAb"
+              },
+              {
+                "id": 4,
                 "title": "testab"
               }
             ]
@@ -958,6 +963,10 @@ async fn camelcased_words() {
               },
               {
                 "id": 3,
+                "title": "TestAb"
+              },
+              {
+                "id": 4,
                 "title": "testab"
               }
             ]
@@ -976,6 +985,10 @@ async fn camelcased_words() {
               },
               {
                 "id": 3,
+                "title": "TestAb"
+              },
+              {
+                "id": 4,
                 "title": "testab"
               }
             ]
@@ -994,6 +1007,10 @@ async fn camelcased_words() {
               },
               {
                 "id": 3,
+                "title": "TestAb"
+              },
+              {
+                "id": 4,
                 "title": "testab"
               }
             ]
@@ -1012,6 +1029,10 @@ async fn camelcased_words() {
               },
               {
                 "id": 3,
+                "title": "TestAb"
+              },
+              {
+                "id": 4,
                 "title": "testab"
               }
             ]
@@ -1019,8 +1040,27 @@ async fn camelcased_words() {
         })
         .await;
 
+    // with Typos
     index
-        .search(json!({"q": "tetsab"}), |response, code| {
+        .search(json!({"q": "dellonghi"}), |response, code| {
+            meili_snap::snapshot!(code, @"200 OK");
+            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 0,
+                "title": "DeLonghi"
+              },
+              {
+                "id": 1,
+                "title": "delonghi"
+              }
+            ]
+            "###);
+        })
+        .await;
+
+    index
+        .search(json!({"q": "TetsAB"}), |response, code| {
             meili_snap::snapshot!(code, @"200 OK");
             meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
             [
@@ -1030,6 +1070,10 @@ async fn camelcased_words() {
               },
               {
                 "id": 3,
+                "title": "TestAb"
+              },
+              {
+                "id": 4,
                 "title": "testab"
               }
             ]
@@ -1048,6 +1092,10 @@ async fn camelcased_words() {
               },
               {
                 "id": 3,
+                "title": "TestAb"
+              },
+              {
+                "id": 4,
                 "title": "testab"
               }
             ]
