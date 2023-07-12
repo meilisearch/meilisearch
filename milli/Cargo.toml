@@ -81,7 +81,7 @@ md5 = "0.7.0"
 rand = { version = "0.8.5", features = ["small_rng"] }
 
 [features]
-all-tokenizations = ["charabia/default"]
+all-tokenizations = ["charabia/chinese", "charabia/hebrew", "charabia/japanese", "charabia/thai", "charabia/korean", "charabia/greek"]
 
 # Use POSIX semaphores instead of SysV semaphores in LMDB
 # For more information on this feature, see heed's Cargo.toml
