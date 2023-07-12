@@ -22,7 +22,7 @@ expression: "format!(\"{document_scores:#?}\")"
     [
         Typo(
             Typo {
-                typo_count: 1,
+                typo_count: 0,
                 max_typo_count: 5,
             },
         ),

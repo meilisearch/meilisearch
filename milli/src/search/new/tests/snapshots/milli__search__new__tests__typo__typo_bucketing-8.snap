@@ -7,7 +7,7 @@ expression: "format!(\"{document_scores:#?}\")"
         Typo(
             Typo {
                 typo_count: 0,
-                max_typo_count: 6,
+                max_typo_count: 5,
             },
         ),
     ],
@@ -15,7 +15,31 @@ expression: "format!(\"{document_scores:#?}\")"
         Typo(
             Typo {
                 typo_count: 0,
-                max_typo_count: 6,
+                max_typo_count: 5,
+            },
+        ),
+    ],
+    [
+        Typo(
+            Typo {
+                typo_count: 0,
+                max_typo_count: 5,
+            },
+        ),
+    ],
+    [
+        Typo(
+            Typo {
+                typo_count: 0,
+                max_typo_count: 5,
+            },
+        ),
+    ],
+    [
+        Typo(
+            Typo {
+                typo_count: 1,
+                max_typo_count: 5,
             },
         ),
     ],
@@ -23,31 +47,7 @@ expression: "format!(\"{document_scores:#?}\")"
         Typo(
             Typo {
                 typo_count: 2,
-                max_typo_count: 6,
-            },
-        ),
-    ],
-    [
-        Typo(
-            Typo {
-                typo_count: 2,
-                max_typo_count: 6,
-            },
-        ),
-    ],
-    [
-        Typo(
-            Typo {
-                typo_count: 3,
-                max_typo_count: 6,
-            },
-        ),
-    ],
-    [
-        Typo(
-            Typo {
-                typo_count: 4,
-                max_typo_count: 6,
+                max_typo_count: 5,
             },
         ),
     ],

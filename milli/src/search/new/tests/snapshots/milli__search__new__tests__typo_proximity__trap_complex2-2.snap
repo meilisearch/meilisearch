@@ -7,7 +7,7 @@ expression: "format!(\"{document_scores:#?}\")"
         Typo(
             Typo {
                 typo_count: 1,
-                max_typo_count: 5,
+                max_typo_count: 4,
             },
         ),
         Proximity(
@@ -21,7 +21,7 @@ expression: "format!(\"{document_scores:#?}\")"
         Typo(
             Typo {
                 typo_count: 1,
-                max_typo_count: 5,
+                max_typo_count: 4,
             },
         ),
         Proximity(

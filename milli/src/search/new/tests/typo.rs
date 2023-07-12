@@ -550,14 +550,14 @@ fn test_typo_bucketing() {
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("network interconnection sunflower");
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[16, 18, 17, 20, 15, 14]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[16, 17, 18, 20, 15, 14]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
         "\"network interconnection sunflower\"",
-        "\"network interconnection sunflowering\"",
         "\"network interconnection sun flower\"",
+        "\"network interconnection sunflowering\"",
         "\"network interconnection sunflowar\"",
         "\"network interconnections sunflawer\"",
         "\"netwolk interconections sunflawar\"",
@@ -569,15 +569,15 @@ fn test_typo_bucketing() {
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("network interconnection sun flower");
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[17, 19, 16, 18, 20, 15]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[16, 17, 18, 19, 20, 15]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
-        "\"network interconnection sun flower\"",
-        "\"network interconnection sun flowering\"",
         "\"network interconnection sunflower\"",
+        "\"network interconnection sun flower\"",
         "\"network interconnection sunflowering\"",
+        "\"network interconnection sun flowering\"",
         "\"network interconnection sunflowar\"",
         "\"network interconnections sunflawer\"",
     ]
@@ -624,7 +624,7 @@ fn test_typo_synonyms() {
     // The interaction of ngrams + synonyms means that the multi-word synonyms end up having a typo cost.
     // This is probably not what we want.
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[21, 0, 22]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 21, 22]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"

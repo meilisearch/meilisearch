@@ -7,23 +7,23 @@ expression: "format!(\"{document_scores:#?}\")"
         Typo(
             Typo {
                 typo_count: 0,
-                max_typo_count: 13,
+                max_typo_count: 10,
             },
         ),
     ],
     [
         Typo(
             Typo {
-                typo_count: 2,
-                max_typo_count: 13,
+                typo_count: 0,
+                max_typo_count: 10,
             },
         ),
     ],
     [
         Typo(
             Typo {
-                typo_count: 2,
-                max_typo_count: 13,
+                typo_count: 0,
+                max_typo_count: 10,
             },
         ),
     ],

@@ -7,7 +7,7 @@ expression: "format!(\"{document_scores:#?}\")"
         Typo(
             Typo {
                 typo_count: 0,
-                max_typo_count: 13,
+                max_typo_count: 10,
             },
         ),
     ],
@@ -15,7 +15,7 @@ expression: "format!(\"{document_scores:#?}\")"
         Typo(
             Typo {
                 typo_count: 0,
-                max_typo_count: 13,
+                max_typo_count: 10,
             },
         ),
     ],
@@ -23,7 +23,7 @@ expression: "format!(\"{document_scores:#?}\")"
         Typo(
             Typo {
                 typo_count: 1,
-                max_typo_count: 13,
+                max_typo_count: 10,
             },
         ),
     ],
