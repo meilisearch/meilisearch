@@ -30,13 +30,13 @@ jobs:
         run: |
           apt-get update && apt-get install -y curl
           apt-get install build-essential -y
-      - name: Run test with Rust stable
+      - name: Setup test with Rust stable
         if: github.event_name != 'schedule'
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
-      - name: Run test with Rust nightly
+      - name: Setup test with Rust nightly
         if: github.event_name == 'schedule'
         uses: actions-rs/toolchain@v1
         with:
@@ -117,17 +117,17 @@ jobs:
         run: |
           apt-get update
           apt-get install --assume-yes build-essential curl
-      - uses: actions-rs/toolchain@v1 
-        with: 
-          toolchain: stable 
-          override: true 
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
       - name: Run cargo tree without default features and check lindera is not present
         run: |
           cargo tree -f '{p} {f}' -e normal --no-default-features | grep lindera -vqz
       - name: Run cargo tree with default features and check lindera is pressent
         run: |
           cargo tree -f '{p} {f}' -e normal | grep lindera -qz
-                
+
   # We run tests in debug also, to make sure that the debug_assertions are hit
   test-debug:
     name: Run tests in debug
