@@ -104,8 +104,10 @@ impl<'ctx> SearchContext<'ctx> {
                     }
                     .into())
                 }
+                // The field is not searchable, but the searchableAttributes are set to * => ignore field
+                (None, None) => continue,
                 // The field is not searchable => User error
-                _otherwise => {
+                (_fid, Some(false)) => {
                     let mut valid_fields: BTreeSet<_> =
                         fids_map.names().map(String::from).collect();
 
