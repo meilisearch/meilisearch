@@ -46,10 +46,6 @@ impl RankingRuleGraphTrait for TypoGraph {
         let term = to_term;
 
         let mut edges = vec![];
-        // Ngrams have a base typo cost
-        // 2-gram -> equivalent to 1 typo
-        // 3-gram -> equivalent to 2 typos
-        let base_cost = if term.term_ids.len() == 1 { 0 } else { term.term_ids.len() as u32 };
 
         for nbr_typos in 0..=term.term_subset.max_typo_cost(ctx) {
             let mut term = term.clone();
@@ -70,7 +66,7 @@ impl RankingRuleGraphTrait for TypoGraph {
             };
 
             edges.push((
-                nbr_typos as u32 + base_cost,
+                nbr_typos as u32,
                 conditions_interner.insert(TypoCondition { term, nbr_typos }),
             ));
         }
