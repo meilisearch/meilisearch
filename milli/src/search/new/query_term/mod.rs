@@ -63,13 +63,13 @@ struct ZeroTypoTerm {
     prefix_of: BTreeSet<Interned<String>>,
     /// All the synonyms of the original word or phrase
     synonyms: BTreeSet<Interned<Phrase>>,
+    /// The original word split into multiple consecutive words
+    split_words: Option<Interned<Phrase>>,
     /// A prefix in the prefix databases matching the original word
     use_prefix_db: Option<Interned<String>>,
 }
 #[derive(Default, Clone, PartialEq, Eq, Hash)]
 struct OneTypoTerm {
-    /// The original word split into multiple consecutive words
-    split_words: Option<Interned<Phrase>>,
     /// Words that are 1 typo away from the original word
     one_typo: BTreeSet<Interned<String>>,
 }
@@ -213,6 +213,7 @@ impl QueryTermSubset {
                     prefix_of,
                     synonyms: _,
                     use_prefix_db: _,
+                    split_words: _,
                 } = &original.zero_typo;
                 result.extend(zero_typo.iter().copied().map(|w| {
                     if original.ngram_words.is_some() {
@@ -235,6 +236,7 @@ impl QueryTermSubset {
                     exact: zero_typo,
                     prefix_of,
                     synonyms: _,
+                    split_words: _,
                     use_prefix_db: _,
                 } = &original.zero_typo;
                 if let Some(zero_typo) = zero_typo {
@@ -259,14 +261,14 @@ impl QueryTermSubset {
 
         match &self.one_typo_subset {
             NTypoTermSubset::All => {
-                let Lazy::Init(OneTypoTerm { split_words: _, one_typo }) = &original.one_typo
+                let Lazy::Init(OneTypoTerm { one_typo }) = &original.one_typo
                 else {
                     panic!()
                 };
                 result.extend(one_typo.iter().copied().map(Word::Derived))
             }
             NTypoTermSubset::Subset { words, phrases: _ } => {
-                let Lazy::Init(OneTypoTerm { split_words: _, one_typo }) = &original.one_typo
+                let Lazy::Init(OneTypoTerm { one_typo }) = &original.one_typo
                 else {
                     panic!()
                 };
@@ -297,32 +299,18 @@ impl QueryTermSubset {
         }
         let original = ctx.term_interner.get_mut(self.original);
 
-        let ZeroTypoTerm { phrase, exact: _, prefix_of: _, synonyms, use_prefix_db: _ } =
-            &original.zero_typo;
+        let ZeroTypoTerm {
+            phrase,
+            exact: _,
+            prefix_of: _,
+            split_words,
+            synonyms,
+            use_prefix_db: _,
+        } = &original.zero_typo;
+
         result.extend(phrase.iter().copied());
         result.extend(synonyms.iter().copied());
-
-        match &self.one_typo_subset {
-            NTypoTermSubset::All => {
-                let Lazy::Init(OneTypoTerm { split_words, one_typo: _ }) = &original.one_typo
-                else {
-                    panic!();
-                };
-                result.extend(split_words.iter().copied());
-            }
-            NTypoTermSubset::Subset { phrases, .. } => {
-                let Lazy::Init(OneTypoTerm { split_words, one_typo: _ }) = &original.one_typo
-                else {
-                    panic!();
-                };
-                if let Some(split_words) = split_words {
-                    if phrases.contains(split_words) {
-                        result.insert(*split_words);
-                    }
-                }
-            }
-            NTypoTermSubset::Nothing => {}
-        }
+        result.extend(split_words.iter().copied());
 
         Ok(result)
     }
@@ -406,18 +394,26 @@ impl QueryTermSubset {
 
 impl ZeroTypoTerm {
     fn is_empty(&self) -> bool {
-        let ZeroTypoTerm { phrase, exact: zero_typo, prefix_of, synonyms, use_prefix_db } = self;
+        let ZeroTypoTerm {
+            phrase,
+            exact: zero_typo,
+            prefix_of,
+            split_words,
+            synonyms,
+            use_prefix_db,
+        } = self;
         phrase.is_none()
             && zero_typo.is_none()
             && prefix_of.is_empty()
             && synonyms.is_empty()
+            && split_words.is_none()
             && use_prefix_db.is_none()
     }
 }
 impl OneTypoTerm {
     fn is_empty(&self) -> bool {
-        let OneTypoTerm { split_words, one_typo } = self;
-        one_typo.is_empty() && split_words.is_none()
+        let OneTypoTerm { one_typo } = self;
+        one_typo.is_empty()
     }
 }
 impl TwoTypoTerm {
@@ -483,16 +479,22 @@ impl QueryTerm {
         let mut words = BTreeSet::new();
         let mut phrases = BTreeSet::new();
 
-        let ZeroTypoTerm { phrase, exact: zero_typo, prefix_of, synonyms, use_prefix_db: _ } =
-            &self.zero_typo;
+        let ZeroTypoTerm {
+            phrase,
+            exact: zero_typo,
+            prefix_of,
+            synonyms,
+            split_words,
+            use_prefix_db: _,
+        } = &self.zero_typo;
         words.extend(zero_typo.iter().copied());
         words.extend(prefix_of.iter().copied());
         phrases.extend(phrase.iter().copied());
         phrases.extend(synonyms.iter().copied());
+        phrases.extend(split_words.iter().copied());
 
-        if let Lazy::Init(OneTypoTerm { split_words, one_typo }) = &self.one_typo {
+        if let Lazy::Init(OneTypoTerm { one_typo }) = &self.one_typo {
             words.extend(one_typo.iter().copied());
-            phrases.extend(split_words.iter().copied());
         };
 
         if let Lazy::Init(TwoTypoTerm { two_typos }) = &self.two_typo {

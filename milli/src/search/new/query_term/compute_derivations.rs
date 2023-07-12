@@ -250,8 +250,17 @@ pub fn partially_initialized_term_from_word(
             Some(ctx.phrase_interner.insert(Phrase { words }))
         })
         .collect();
-    let zero_typo =
-        ZeroTypoTerm { phrase: None, exact: zero_typo, prefix_of, synonyms, use_prefix_db };
+    let original_str = ctx.word_interner.get(word_interned).to_owned();
+    let split_words = find_split_words(ctx, original_str.as_str())?;
+
+    let zero_typo = ZeroTypoTerm {
+        phrase: None,
+        exact: zero_typo,
+        prefix_of,
+        synonyms,
+        split_words,
+        use_prefix_db,
+    };
 
     Ok(QueryTerm {
         original: word_interned,
@@ -276,7 +285,6 @@ impl Interned<QueryTerm> {
     fn initialize_one_typo_subterm(self, ctx: &mut SearchContext) -> Result<()> {
         let self_mut = ctx.term_interner.get_mut(self);
 
-        let allows_split_words = self_mut.allows_split_words();
         let QueryTerm {
             original,
             is_prefix,
@@ -309,31 +317,9 @@ impl Interned<QueryTerm> {
             })?;
         }
 
-        let split_words = if allows_split_words {
-            let original_str = ctx.word_interner.get(original).to_owned();
-            find_split_words(ctx, original_str.as_str())?
-        } else {
-            None
-        };
-
         let self_mut = ctx.term_interner.get_mut(self);
 
-        // Only add the split words to the derivations if:
-        // 1. the term is neither an ngram nor a phrase; OR
-        // 2. the term is an ngram, but the split words are different from the ngram's component words
-        let split_words = if let Some((ngram_words, split_words)) =
-            self_mut.ngram_words.as_ref().zip(split_words.as_ref())
-        {
-            let Phrase { words } = ctx.phrase_interner.get(*split_words);
-            if ngram_words.iter().ne(words.iter().flatten()) {
-                Some(*split_words)
-            } else {
-                None
-            }
-        } else {
-            split_words
-        };
-        let one_typo = OneTypoTerm { split_words, one_typo: one_typo_words };
+        let one_typo = OneTypoTerm { one_typo: one_typo_words };
 
         self_mut.one_typo = Lazy::Init(one_typo);
 
@@ -348,7 +334,6 @@ impl Interned<QueryTerm> {
             max_levenshtein_distance: max_nbr_typos,
             ..
         } = self_mut;
-        let original_str = ctx.word_interner.get(*original).to_owned();
         if two_typo.is_init() {
             return Ok(());
         }
@@ -386,10 +371,9 @@ impl Interned<QueryTerm> {
             )?;
         }
 
-        let split_words = find_split_words(ctx, original_str.as_str())?;
         let self_mut = ctx.term_interner.get_mut(self);
 
-        let one_typo = OneTypoTerm { one_typo: one_typo_words, split_words };
+        let one_typo = OneTypoTerm { one_typo: one_typo_words };
 
         let two_typo = TwoTypoTerm { two_typos: two_typo_words };
 

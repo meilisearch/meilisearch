@@ -269,6 +269,7 @@ impl PhraseBuilder {
                     zero_typo: ZeroTypoTerm {
                         phrase: Some(phrase),
                         exact: None,
+                        split_words: None,
                         prefix_of: BTreeSet::default(),
                         synonyms: BTreeSet::default(),
                         use_prefix_db: None,
