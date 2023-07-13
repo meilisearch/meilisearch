@@ -85,7 +85,12 @@ impl<'ctx> SearchContext<'ctx> {
         let searchable_names = self.index.searchable_fields(self.txn)?;
 
         let mut restricted_fids = Vec::new();
+        let mut contains_wildcard = false;
         for field_name in searchable_attributes {
+            if field_name == "*" {
+                contains_wildcard = true;
+                continue;
+            }
             let searchable_contains_name =
                 searchable_names.as_ref().map(|sn| sn.iter().any(|name| name == field_name));
             let fid = match (fids_map.id(field_name), searchable_contains_name) {
@@ -99,8 +104,10 @@ impl<'ctx> SearchContext<'ctx> {
                     }
                     .into())
                 }
+                // The field is not searchable, but the searchableAttributes are set to * => ignore field
+                (None, None) => continue,
                 // The field is not searchable => User error
-                _otherwise => {
+                (_fid, Some(false)) => {
                     let mut valid_fields: BTreeSet<_> =
                         fids_map.names().map(String::from).collect();
 
@@ -132,7 +139,7 @@ impl<'ctx> SearchContext<'ctx> {
             restricted_fids.push(fid);
         }
 
-        self.restricted_fids = Some(restricted_fids);
+        self.restricted_fids = (!contains_wildcard).then_some(restricted_fids);
 
         Ok(())
     }
