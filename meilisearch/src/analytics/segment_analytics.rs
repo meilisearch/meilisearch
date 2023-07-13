@@ -574,6 +574,10 @@ pub struct SearchAggregator {
     filter_total_number_of_criteria: usize,
     used_syntax: HashMap<String, usize>,
 
+    // attributes_to_search_on
+    // every time a search is done using attributes_to_search_on
+    attributes_to_search_on_total_number_of_uses: usize,
+
     // q
     // The maximum number of terms in a q request
     max_terms_number: usize,
@@ -645,6 +649,11 @@ impl SearchAggregator {
             ret.filter_with_geo_radius = stringified_filters.contains("_geoRadius(");
             ret.filter_with_geo_bounding_box = stringified_filters.contains("_geoBoundingBox(");
             ret.filter_sum_of_criteria_terms = RE.split(&stringified_filters).count();
+        }
+
+        // attributes_to_search_on
+        if let Some(_) = query.attributes_to_search_on {
+            ret.attributes_to_search_on_total_number_of_uses = 1;
         }
 
         if let Some(ref q) = query.q {
@@ -720,6 +729,12 @@ impl SearchAggregator {
             let used_syntax = self.used_syntax.entry(key).or_insert(0);
             *used_syntax = used_syntax.saturating_add(value);
         }
+
+        // attributes_to_search_on
+        self.attributes_to_search_on_total_number_of_uses = self
+            .attributes_to_search_on_total_number_of_uses
+            .saturating_add(other.attributes_to_search_on_total_number_of_uses);
+
         // q
         self.max_terms_number = self.max_terms_number.max(other.max_terms_number);
 
@@ -788,6 +803,9 @@ impl SearchAggregator {
                    "with_geoBoundingBox": self.filter_with_geo_bounding_box,
                    "avg_criteria_number": format!("{:.2}", self.filter_sum_of_criteria_terms as f64 / self.filter_total_number_of_criteria as f64),
                    "most_used_syntax": self.used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
+                },
+                "attributes_to_search_on": {
+                   "total_number_of_uses": self.attributes_to_search_on_total_number_of_uses,
                 },
                 "q": {
                    "max_terms_number": self.max_terms_number,
