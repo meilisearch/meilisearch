@@ -310,7 +310,7 @@ async fn exactness_ranking_rule_order() {
         },
         {
             "title": "Captain Marvel",
-            "desc": "CaptainMarvel",
+            "desc": "Captain the Marvel",
             "id": "2",
         }]),
     )
