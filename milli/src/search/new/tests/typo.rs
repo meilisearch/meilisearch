@@ -629,8 +629,8 @@ fn test_typo_synonyms() {
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
-        "\"the fast brownish fox jumps over the lackadaisical dog\"",
         "\"the quick brown fox jumps over the lazy dog\"",
+        "\"the fast brownish fox jumps over the lackadaisical dog\"",
         "\"the quick brown fox jumps over the lackadaisical dog\"",
     ]
     "###);

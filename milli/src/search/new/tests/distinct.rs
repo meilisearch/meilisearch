@@ -547,7 +547,7 @@ fn test_distinct_typo() {
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
 
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[3, 26, 0, 7, 8, 9, 15, 22, 18, 20, 25, 24]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 26, 0, 5, 8, 9, 15, 19, 22, 20, 25, 24]");
 
     let distinct_values = verify_distinct(&index, &txn, &documents_ids);
     insta::assert_debug_snapshot!(distinct_values, @r###"
@@ -559,8 +559,8 @@ fn test_distinct_typo() {
         "\"D\"",
         "\"E\"",
         "\"F\"",
-        "\"I\"",
         "\"G\"",
+        "\"I\"",
         "\"H\"",
         "__does_not_exist__",
         "__does_not_exist__",
@@ -570,15 +570,15 @@ fn test_distinct_typo() {
     let text_values = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(text_values, @r###"
     [
-        "\"the quick brown fox jumps over the lazy dog\"",
+        "\"the quick brown foxjumps over the lazy dog\"",
         "\"the quick brown fox jumps over the lazy dog\"",
         "\"the quick brown fox jamps over the lazy dog\"",
-        "\"the quick brown fox jumps over the lazy\"",
+        "\"the quickbrownfox jumps over the lazy\"",
         "\"the quick brown fox jumps over the lazy\"",
         "\"the quick brown fox jumps over the lazy\"",
         "\"the quick brownf fox jumps over\"",
+        "\"the quick brownfoxjumps\"",
         "\"the quick brown fox jumps\"",
-        "\"the qick brown fox jumps\"",
         "\"the quick brow fox jumps\"",
         "\"the quick brown\"",
         "\"the quick\"",
