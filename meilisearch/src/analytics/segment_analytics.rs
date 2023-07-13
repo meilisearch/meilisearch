@@ -576,7 +576,7 @@ pub struct SearchAggregator {
 
     // attributes_to_search_on
     // every time a search is done using attributes_to_search_on
-    attributes_to_search_on_total_number_of_use: usize,
+    attributes_to_search_on_total_number_of_uses: usize,
 
     // q
     // The maximum number of terms in a q request
@@ -653,7 +653,7 @@ impl SearchAggregator {
 
         // attributes_to_search_on
         if let Some(_) = query.attributes_to_search_on {
-            ret.attributes_to_search_on_total_number_of_use = 1;
+            ret.attributes_to_search_on_total_number_of_uses = 1;
         }
 
         if let Some(ref q) = query.q {
@@ -731,8 +731,8 @@ impl SearchAggregator {
         }
 
         // attributes_to_search_on
-        self.attributes_to_search_on_total_number_of_use +=
-            other.attributes_to_search_on_total_number_of_use;
+        self.attributes_to_search_on_total_number_of_uses +=
+            other.attributes_to_search_on_total_number_of_uses;
 
         // q
         self.max_terms_number = self.max_terms_number.max(other.max_terms_number);
@@ -801,7 +801,7 @@ impl SearchAggregator {
                    "most_used_syntax": self.used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
                 },
                 "attributes_to_search_on": {
-                   "total_number_of_use": self.attributes_to_search_on_total_number_of_use,
+                   "total_number_of_uses": self.attributes_to_search_on_total_number_of_uses,
                 },
                 "q": {
                    "max_terms_number": self.max_terms_number,
