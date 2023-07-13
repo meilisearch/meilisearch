@@ -261,17 +261,11 @@ impl QueryTermSubset {
 
         match &self.one_typo_subset {
             NTypoTermSubset::All => {
-                let Lazy::Init(OneTypoTerm { one_typo }) = &original.one_typo
-                else {
-                    panic!()
-                };
+                let Lazy::Init(OneTypoTerm { one_typo }) = &original.one_typo else { panic!() };
                 result.extend(one_typo.iter().copied().map(Word::Derived))
             }
             NTypoTermSubset::Subset { words, phrases: _ } => {
-                let Lazy::Init(OneTypoTerm { one_typo }) = &original.one_typo
-                else {
-                    panic!()
-                };
+                let Lazy::Init(OneTypoTerm { one_typo }) = &original.one_typo else { panic!() };
                 result.extend(one_typo.intersection(words).copied().map(Word::Derived));
             }
             NTypoTermSubset::Nothing => {}
