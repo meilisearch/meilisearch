@@ -731,8 +731,9 @@ impl SearchAggregator {
         }
 
         // attributes_to_search_on
-        self.attributes_to_search_on_total_number_of_uses +=
-            other.attributes_to_search_on_total_number_of_uses;
+        self.attributes_to_search_on_total_number_of_uses = self
+            .attributes_to_search_on_total_number_of_uses
+            .saturating_add(other.attributes_to_search_on_total_number_of_uses);
 
         // q
         self.max_terms_number = self.max_terms_number.max(other.max_terms_number);
