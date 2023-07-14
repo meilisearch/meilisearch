@@ -93,7 +93,7 @@ If you want to know more about the kind of data we collect and what we use it fo
 
 ## 📫 Get in touch!
 
-Meilisearch is a search engine created by [Meili](https://www.welcometothejungle.com/en/companies/meilisearch), a software development company based in France and with team members all over the world. Want to know more about us? [Check out our blog!](https://blog.meilisearch.com/)
+Meilisearch is a search engine created by [Meili](https://www.welcometothejungle.com/en/companies/meilisearch), a software development company based in France and with team members all over the world. Want to know more about us? [Check out our blog!](https://blog.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=contact)
 
 🗞 [Subscribe to our newsletter](https://meilisearch.us2.list-manage.com/subscribe?u=27870f7b71c908a8b359599fb&id=79582d828e) if you don't want to miss any updates! We promise we won't clutter your mailbox: we only send one edition every two months.
 
