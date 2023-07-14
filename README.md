@@ -36,7 +36,7 @@ Meilisearch helps you shape a delightful search experience in a snap, offering f
   </a>
 </p>
 
-🔥 [**Try it!**](https://where2watch.meilisearch.com/) 🔥
+🔥 [**Try it!**](https://where2watch.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demo-link) 🔥
 
 ## ✨ Features
 
