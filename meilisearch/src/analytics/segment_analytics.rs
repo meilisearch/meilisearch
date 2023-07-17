@@ -1154,19 +1154,25 @@ pub struct DocumentsDeletionAggregator {
 
 impl DocumentsDeletionAggregator {
     pub fn from_query(kind: DocumentDeletionKind, request: &HttpRequest) -> Self {
-        let mut ret = Self::default();
-        ret.timestamp = Some(OffsetDateTime::now_utc());
+        let (per_document_id, clear_all, per_batch, per_filter) = match kind {
+            DocumentDeletionKind::PerDocumentId => (true, false, false, false),
+            DocumentDeletionKind::ClearAll => (false, true, false, false),
+            DocumentDeletionKind::PerBatch => (false, false, true, false),
+            DocumentDeletionKind::PerFilter => (false, false, false, true),
+        };
 
-        ret.user_agents = extract_user_agents(request).into_iter().collect();
-        ret.total_received = 1;
-        match kind {
-            DocumentDeletionKind::PerDocumentId => ret.per_document_id = true,
-            DocumentDeletionKind::ClearAll => ret.clear_all = true,
-            DocumentDeletionKind::PerBatch => ret.per_batch = true,
-            DocumentDeletionKind::PerFilter => ret.per_filter = true,
+        let user_agents = extract_user_agents(request)
+            .into_iter()
+            .collect::<HashSet<String>>();
+        Self {
+            timestamp: Some(OffsetDateTime::now_utc()),
+            user_agents,
+            total_received: 1,
+            per_document_id,
+            clear_all,
+            per_batch,
+            per_filter,
         }
-
-        ret
     }
 
     /// Aggregate one [DocumentsAggregator] into another.
