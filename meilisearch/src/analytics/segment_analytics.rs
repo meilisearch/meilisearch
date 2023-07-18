@@ -1154,7 +1154,8 @@ pub struct DocumentsDeletionAggregator {
 
 impl DocumentsDeletionAggregator {
     pub fn from_query(kind: DocumentDeletionKind, request: &HttpRequest) -> Self {
-        let (per_document_id, clear_all, per_batch, per_filter) = match kind {
+        let (per_document_id, clear_all, per_batch, per_filter) = 
+            match kind {
             DocumentDeletionKind::PerDocumentId => (true, false, false, false),
             DocumentDeletionKind::ClearAll => (false, true, false, false),
             DocumentDeletionKind::PerBatch => (false, false, true, false),
