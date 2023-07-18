@@ -42,6 +42,7 @@ use roaring::RoaringBitmap;
 use sort::Sort;
 use space::Neighbor;
 
+use self::distinct::facet_string_values;
 use self::geo_sort::GeoSort;
 pub use self::geo_sort::Strategy as GeoSortStrategy;
 use self::graph_based_ranking_rule::Words;
