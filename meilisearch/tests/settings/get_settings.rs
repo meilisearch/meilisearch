@@ -16,6 +16,9 @@ static DEFAULT_SETTINGS_VALUES: Lazy<HashMap<&'static str, Value>> = Lazy::new(|
         json!(["words", "typo", "proximity", "attribute", "sort", "exactness"]),
     );
     map.insert("stop_words", json!([]));
+    map.insert("non_separator_tokens", json!([]));
+    map.insert("separator_tokens", json!([]));
+    map.insert("dictionary", json!([]));
     map.insert("synonyms", json!({}));
     map.insert(
         "faceting",
@@ -62,6 +65,9 @@ async fn get_settings() {
         json!(["words", "typo", "proximity", "attribute", "sort", "exactness"])
     );
     assert_eq!(settings["stopWords"], json!([]));
+    assert_eq!(settings["non_separator_tokens"], json!([]));
+    assert_eq!(settings["separator_tokens"], json!([]));
+    assert_eq!(settings["dictionary"], json!([]));
     assert_eq!(
         settings["faceting"],
         json!({
