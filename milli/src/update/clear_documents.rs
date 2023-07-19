@@ -15,6 +15,8 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
     }
 
     pub fn execute(self) -> Result<u64> {
+        puffin::profile_function!();
+
         self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
         let Index {
             env: _env,

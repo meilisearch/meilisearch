@@ -49,6 +49,66 @@ pub(crate) enum TypedChunk {
     ScriptLanguageDocids(HashMap<(Script, Language), RoaringBitmap>),
 }
 
+impl TypedChunk {
+    pub fn to_debug_string(&self) -> String {
+        match self {
+            TypedChunk::FieldIdDocidFacetStrings(grenad) => {
+                format!("FieldIdDocidFacetStrings {{ number_of_entries: {} }}", grenad.len())
+            }
+            TypedChunk::FieldIdDocidFacetNumbers(grenad) => {
+                format!("FieldIdDocidFacetNumbers {{ number_of_entries: {} }}", grenad.len())
+            }
+            TypedChunk::Documents(grenad) => {
+                format!("Documents {{ number_of_entries: {} }}", grenad.len())
+            }
+            TypedChunk::FieldIdWordcountDocids(grenad) => {
+                format!("FieldIdWordcountDocids {{ number_of_entries: {} }}", grenad.len())
+            }
+            TypedChunk::NewDocumentsIds(grenad) => {
+                format!("NewDocumentsIds {{ number_of_entries: {} }}", grenad.len())
+            }
+            TypedChunk::WordDocids { word_docids_reader, exact_word_docids_reader } => format!(
+                "WordDocids {{ word_docids_reader: {}, exact_word_docids_reader: {} }}",
+                word_docids_reader.len(),
+                exact_word_docids_reader.len()
+            ),
+            TypedChunk::WordPositionDocids(grenad) => {
+                format!("WordPositionDocids {{ number_of_entries: {} }}", grenad.len())
+            }
+            TypedChunk::WordFidDocids(grenad) => {
+                format!("WordFidDocids {{ number_of_entries: {} }}", grenad.len())
+            }
+            TypedChunk::WordPairProximityDocids(grenad) => {
+                format!("WordPairProximityDocids {{ number_of_entries: {} }}", grenad.len())
+            }
+            TypedChunk::FieldIdFacetStringDocids(grenad) => {
+                format!("FieldIdFacetStringDocids {{ number_of_entries: {} }}", grenad.len())
+            }
+            TypedChunk::FieldIdFacetNumberDocids(grenad) => {
+                format!("FieldIdFacetNumberDocids {{ number_of_entries: {} }}", grenad.len())
+            }
+            TypedChunk::FieldIdFacetExistsDocids(grenad) => {
+                format!("FieldIdFacetExistsDocids {{ number_of_entries: {} }}", grenad.len())
+            }
+            TypedChunk::FieldIdFacetIsNullDocids(grenad) => {
+                format!("FieldIdFacetIsNullDocids {{ number_of_entries: {} }}", grenad.len())
+            }
+            TypedChunk::FieldIdFacetIsEmptyDocids(grenad) => {
+                format!("FieldIdFacetIsEmptyDocids {{ number_of_entries: {} }}", grenad.len())
+            }
+            TypedChunk::GeoPoints(grenad) => {
+                format!("GeoPoints {{ number_of_entries: {} }}", grenad.len())
+            }
+            TypedChunk::VectorPoints(grenad) => {
+                format!("VectorPoints {{ number_of_entries: {} }}", grenad.len())
+            }
+            TypedChunk::ScriptLanguageDocids(grenad) => {
+                format!("ScriptLanguageDocids {{ number_of_entries: {} }}", grenad.len())
+            }
+        }
+    }
+}
+
 /// Write typed chunk in the corresponding LMDB database of the provided index.
 /// Return new documents seen.
 pub(crate) fn write_typed_chunk_into_index(
@@ -57,6 +117,8 @@ pub(crate) fn write_typed_chunk_into_index(
     wtxn: &mut RwTxn,
     index_is_empty: bool,
 ) -> Result<(RoaringBitmap, bool)> {
+    puffin::profile_function!(typed_chunk.to_debug_string());
+
     let mut is_merged_database = false;
     match typed_chunk {
         TypedChunk::Documents(obkv_documents_iter) => {
@@ -336,6 +398,8 @@ where
     FS: for<'a> Fn(&'a [u8], &'a mut Vec<u8>) -> Result<&'a [u8]>,
     FM: Fn(&[u8], &[u8], &mut Vec<u8>) -> Result<()>,
 {
+    puffin::profile_function!(format!("number of entries: {}", data.len()));
+
     let mut buffer = Vec::new();
     let database = database.remap_types::<ByteSlice, ByteSlice>();
 
@@ -378,6 +442,8 @@ where
     FS: for<'a> Fn(&'a [u8], &'a mut Vec<u8>) -> Result<&'a [u8]>,
     FM: Fn(&[u8], &[u8], &mut Vec<u8>) -> Result<()>,
 {
+    puffin::profile_function!(format!("number of entries: {}", data.len()));
+
     if !index_is_empty {
         return write_entries_into_database(
             data,

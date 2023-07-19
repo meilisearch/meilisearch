@@ -110,6 +110,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         Some(docid)
     }
     pub fn execute(self) -> Result<DocumentDeletionResult> {
+        puffin::profile_function!();
+
         let DetailedDocumentDeletionResult { deleted_documents, remaining_documents } =
             self.execute_inner()?;
 

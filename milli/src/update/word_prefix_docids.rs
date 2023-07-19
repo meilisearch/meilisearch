@@ -45,6 +45,8 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
         common_prefix_fst_words: &[&[String]],
         del_prefix_fst_words: &HashSet<Vec<u8>>,
     ) -> Result<()> {
+        puffin::profile_function!();
+
         // It is forbidden to keep a mutable reference into the database
         // and write into it at the same time, therefore we write into another file.
         let mut prefix_docids_sorter = create_sorter(

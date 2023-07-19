@@ -214,6 +214,7 @@ pub fn sorter_into_lmdb_database(
     sorter: Sorter<MergeFn>,
     merge: MergeFn,
 ) -> Result<()> {
+    puffin::profile_function!();
     debug!("Writing MTBL sorter...");
     let before = Instant::now();
 

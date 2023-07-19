@@ -27,6 +27,8 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     exact_attributes: &HashSet<FieldId>,
 ) -> Result<(grenad::Reader<File>, grenad::Reader<File>)> {
+    puffin::profile_function!();
+
     let max_memory = indexer.max_memory_by_thread();
 
     let mut word_docids_sorter = create_sorter(

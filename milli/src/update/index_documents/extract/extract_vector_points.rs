@@ -19,6 +19,8 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
     primary_key_id: FieldId,
     vectors_fid: FieldId,
 ) -> Result<grenad::Reader<File>> {
+    puffin::profile_function!();
+
     let mut writer = create_writer(
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,

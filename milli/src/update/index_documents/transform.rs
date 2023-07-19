@@ -558,6 +558,8 @@ impl<'a, 'i> Transform<'a, 'i> {
     where
         F: Fn(UpdateIndexingStep) + Sync,
     {
+        puffin::profile_function!();
+
         let primary_key = self
             .index
             .primary_key(wtxn)?
