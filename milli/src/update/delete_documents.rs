@@ -237,6 +237,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             word_prefix_fid_docids,
             facet_id_f64_docids: _,
             facet_id_string_docids: _,
+            facet_id_normalized_string_strings: _,
             facet_id_string_fst: _,
             field_id_docid_facet_f64s: _,
             field_id_docid_facet_strings: _,

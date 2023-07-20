@@ -339,11 +339,12 @@ impl<'a> SearchForFacetValues<'a> {
 
                         let mut stream = fst.search(automaton).into_stream();
                         let mut length = 0;
-                        while let Some(facet_value) = stream.next() {
+                        'outer: while let Some(facet_value) = stream.next() {
                             let value = std::str::from_utf8(facet_value)?;
-                            let key = FacetGroupKey { field_id: fid, level: 0, left_bound: value };
-                            let docids = match index.facet_id_string_docids.get(rtxn, &key)? {
-                                Some(FacetGroupValue { bitmap, .. }) => bitmap,
+                            let database = index.facet_id_normalized_string_strings;
+                            let key = (fid, value);
+                            let original_strings = match database.get(rtxn, &key)? {
+                                Some(original_strings) => original_strings,
                                 None => {
                                     error!(
                                         "the facet value is missing from the facet database: {key:?}"
@@ -351,16 +352,36 @@ impl<'a> SearchForFacetValues<'a> {
                                     continue;
                                 }
                             };
-                            let count = search_candidates.intersection_len(&docids);
-                            if count != 0 {
-                                let value = self
-                                    .one_original_value_of(fid, value, docids.min().unwrap())?
-                                    .unwrap_or_else(|| query.to_string());
-                                results.push(FacetValueHit { value, count });
-                                length += 1;
-                            }
-                            if length >= MAX_NUMBER_OF_FACETS {
-                                break;
+                            for original_string in original_strings {
+                                let key = FacetGroupKey {
+                                    field_id: fid,
+                                    level: 0,
+                                    left_bound: original_string.as_str(),
+                                };
+                                let docids = match index.facet_id_string_docids.get(rtxn, &key)? {
+                                    Some(FacetGroupValue { bitmap, .. }) => bitmap,
+                                    None => {
+                                        error!(
+                                            "the facet value is missing from the facet database: {key:?}"
+                                        );
+                                        continue;
+                                    }
+                                };
+                                let count = search_candidates.intersection_len(&docids);
+                                if count != 0 {
+                                    let value = self
+                                        .one_original_value_of(
+                                            fid,
+                                            &original_string,
+                                            docids.min().unwrap(),
+                                        )?
+                                        .unwrap_or_else(|| query.to_string());
+                                    results.push(FacetValueHit { value, count });
+                                    length += 1;
+                                }
+                                if length >= MAX_NUMBER_OF_FACETS {
+                                    break 'outer;
+                                }
                             }
                         }
                     }
