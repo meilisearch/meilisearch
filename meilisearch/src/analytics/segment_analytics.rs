@@ -611,208 +611,87 @@ pub struct SearchAggregator {
 
 impl SearchAggregator {
     pub fn from_query(query: &SearchQuery, request: &HttpRequest) -> Self {
-        let mut ret = Self::default();
-        ret.timestamp = Some(OffsetDateTime::now_utc());
-
-        ret.total_received = 1;
-        ret.user_agents = extract_user_agents(request).into_iter().collect();
-
-        if let Some(ref sort) = query.sort {
-            ret.sort_total_number_of_criteria = 1;
-            ret.sort_with_geo_point = sort.iter().any(|s| s.contains("_geoPoint("));
-            ret.sort_sum_of_criteria_terms = sort.len();
-        }
-
-        if let Some(ref filter) = query.filter {
-            static RE: Lazy<Regex> = Lazy::new(|| Regex::new("AND | OR").unwrap());
-            ret.filter_total_number_of_criteria = 1;
-
-            let syntax = match filter {
-                Value::String(_) => "string".to_string(),
-                Value::Array(values) => {
-                    if values.iter().map(|v| v.to_string()).any(|s| RE.is_match(&s)) {
-                        "mixed".to_string()
-                    } else {
-                        "array".to_string()
-                    }
-                }
-                _ => "none".to_string(),
-            };
-            // convert the string to a HashMap
-            ret.used_syntax.insert(syntax, 1);
-
-            let stringified_filters = filter.to_string();
-            ret.filter_with_geo_radius = stringified_filters.contains("_geoRadius(");
-            ret.filter_with_geo_bounding_box = stringified_filters.contains("_geoBoundingBox(");
-            ret.filter_sum_of_criteria_terms = RE.split(&stringified_filters).count();
-        }
-
-        if let Some(ref q) = query.q {
-            ret.max_terms_number = q.split_whitespace().count();
-        }
-
-        if let Some(ref vector) = query.vector {
-            ret.max_vector_size = vector.len();
-        }
-
-        if query.is_finite_pagination() {
-            let limit = query.hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
-            ret.max_limit = limit;
-            ret.max_offset = query.page.unwrap_or(1).saturating_sub(1) * limit;
-            ret.finite_pagination = 1;
-        } else {
-            ret.max_limit = query.limit;
-            ret.max_offset = query.offset;
-            ret.finite_pagination = 0;
-        }
-
-        ret.matching_strategy.insert(format!("{:?}", query.matching_strategy), 1);
-
-        ret.highlight_pre_tag = query.highlight_pre_tag != DEFAULT_HIGHLIGHT_PRE_TAG();
-        ret.highlight_post_tag = query.highlight_post_tag != DEFAULT_HIGHLIGHT_POST_TAG();
-        ret.crop_marker = query.crop_marker != DEFAULT_CROP_MARKER();
-        ret.crop_length = query.crop_length != DEFAULT_CROP_LENGTH();
-        ret.show_matches_position = query.show_matches_position;
-
-        ret.show_ranking_score = query.show_ranking_score;
-        ret.show_ranking_score_details = query.show_ranking_score_details;
+        let timestamp = Some(OffsetDateTime::now_utc());
+        let user_agents = extract_user_agents(request).into_iter().collect::<HashSet<String>>();
+        let mut ret = Self {
+            timestamp,
+            user_agents,
+            total_received: 1,
+            query_parameter_count: query.count_parameters(),
+            query_advanced_syntax_used: query.advanced_syntax_used,
+            query_filter_chains: !query.filter.is_empty(),
+            query_facets: query.facets.map_or(false, |facets| !facets.is_empty()),
+            query_query: query.query.as_ref().map(|search_query| search_query.to_string()),
+            query_searchable_attributes: query.searchable_attributes.clone(),
+            query_retrieve_attributes: query.retrieve_attributes.clone(),
+            query_sort_criteria: query.sort_criteria.clone(),
+            query_pagination: query.pagination.clone(),
+            query_filter: query.filter.clone(),
+        };
 
         ret
     }
 
-    pub fn succeed(&mut self, result: &SearchResult) {
+    pub fn succeed(&mut self, _result: &SearchResult) {
         self.total_succeeded = self.total_succeeded.saturating_add(1);
-        self.time_spent.push(result.processing_time_ms as usize);
     }
 
     /// Aggregate one [SearchAggregator] into another.
-    pub fn aggregate(&mut self, mut other: Self) {
+    pub fn aggregate(&mut self, other: Self) {
         if self.timestamp.is_none() {
             self.timestamp = other.timestamp;
         }
-
-        // context
-        for user_agent in other.user_agents.into_iter() {
-            self.user_agents.insert(user_agent);
-        }
-
-        // request
         self.total_received = self.total_received.saturating_add(other.total_received);
         self.total_succeeded = self.total_succeeded.saturating_add(other.total_succeeded);
-        self.time_spent.append(&mut other.time_spent);
+        self.user_agents.extend(other.user_agents);
 
-        // sort
-        self.sort_with_geo_point |= other.sort_with_geo_point;
-        self.sort_sum_of_criteria_terms =
-            self.sort_sum_of_criteria_terms.saturating_add(other.sort_sum_of_criteria_terms);
-        self.sort_total_number_of_criteria =
-            self.sort_total_number_of_criteria.saturating_add(other.sort_total_number_of_criteria);
+        self.query_parameter_count += other.query_parameter_count;
+        self.query_advanced_syntax_used |= other.query_advanced_syntax_used;
+        self.query_filter_chains |= other.query_filter_chains;
+        self.query_facets |= other.query_facets;
 
-        // filter
-        self.filter_with_geo_radius |= other.filter_with_geo_radius;
-        self.filter_with_geo_bounding_box |= other.filter_with_geo_bounding_box;
-        self.filter_sum_of_criteria_terms =
-            self.filter_sum_of_criteria_terms.saturating_add(other.filter_sum_of_criteria_terms);
-        self.filter_total_number_of_criteria = self
-            .filter_total_number_of_criteria
-            .saturating_add(other.filter_total_number_of_criteria);
-        for (key, value) in other.used_syntax.into_iter() {
-            let used_syntax = self.used_syntax.entry(key).or_insert(0);
-            *used_syntax = used_syntax.saturating_add(value);
+        if self.query_query.is_none() {
+            self.query_query = other.query_query;
         }
-        // q
-        self.max_terms_number = self.max_terms_number.max(other.max_terms_number);
-
-        // pagination
-        self.max_limit = self.max_limit.max(other.max_limit);
-        self.max_offset = self.max_offset.max(other.max_offset);
-        self.finite_pagination += other.finite_pagination;
-
-        // formatting
-        self.max_attributes_to_retrieve =
-            self.max_attributes_to_retrieve.max(other.max_attributes_to_retrieve);
-        self.max_attributes_to_highlight =
-            self.max_attributes_to_highlight.max(other.max_attributes_to_highlight);
-        self.highlight_pre_tag |= other.highlight_pre_tag;
-        self.highlight_post_tag |= other.highlight_post_tag;
-        self.max_attributes_to_crop = self.max_attributes_to_crop.max(other.max_attributes_to_crop);
-        self.crop_marker |= other.crop_marker;
-        self.show_matches_position |= other.show_matches_position;
-        self.crop_length |= other.crop_length;
-
-        // facets
-        self.facets_sum_of_terms =
-            self.facets_sum_of_terms.saturating_add(other.facets_sum_of_terms);
-        self.facets_total_number_of_facets =
-            self.facets_total_number_of_facets.saturating_add(other.facets_total_number_of_facets);
-
-        // matching strategy
-        for (key, value) in other.matching_strategy.into_iter() {
-            let matching_strategy = self.matching_strategy.entry(key).or_insert(0);
-            *matching_strategy = matching_strategy.saturating_add(value);
+        if self.query_searchable_attributes.is_none() {
+            self.query_searchable_attributes = other.query_searchable_attributes;
         }
-
-        // scoring
-        self.show_ranking_score |= other.show_ranking_score;
-        self.show_ranking_score_details |= other.show_ranking_score_details;
+        if self.query_retrieve_attributes.is_none() {
+            self.query_retrieve_attributes = other.query_retrieve_attributes;
+        }
+        if self.query_sort_criteria.is_none() {
+            self.query_sort_criteria = other.query_sort_criteria;
+        }
+        if self.query_pagination.is_none() {
+            self.query_pagination = other.query_pagination;
+        }
+        if self.query_filter.is_none() {
+            self.query_filter = other.query_filter;
+        }
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
         if self.total_received == 0 {
             None
         } else {
-            // the index of the 99th percentage of value
-            let percentile_99th = 0.99 * (self.total_succeeded as f64 - 1.) + 1.;
-            // we get all the values in a sorted manner
-            let time_spent = self.time_spent.into_sorted_vec();
-            // We are only interested by the slowest value of the 99th fastest results
-            let time_spent = time_spent.get(percentile_99th as usize);
-
             let properties = json!({
                 "user-agent": self.user_agents,
                 "requests": {
-                    "99th_response_time":  time_spent.map(|t| format!("{:.2}", t)),
                     "total_succeeded": self.total_succeeded,
-                    "total_failed": self.total_received.saturating_sub(self.total_succeeded), // just to be sure we never panics
+                    "total_failed": self.total_received.saturating_sub(self.total_succeeded),
                     "total_received": self.total_received,
                 },
-                "sort": {
-                    "with_geoPoint": self.sort_with_geo_point,
-                    "avg_criteria_number": format!("{:.2}", self.sort_sum_of_criteria_terms as f64 / self.sort_total_number_of_criteria as f64),
-                },
-                "filter": {
-                   "with_geoRadius": self.filter_with_geo_radius,
-                   "with_geoBoundingBox": self.filter_with_geo_bounding_box,
-                   "avg_criteria_number": format!("{:.2}", self.filter_sum_of_criteria_terms as f64 / self.filter_total_number_of_criteria as f64),
-                   "most_used_syntax": self.used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
-                },
-                "q": {
-                   "max_terms_number": self.max_terms_number,
-                },
-                "pagination": {
-                   "max_limit": self.max_limit,
-                   "max_offset": self.max_offset,
-                   "most_used_navigation": if self.finite_pagination > (self.total_received / 2) { "exhaustive" } else { "estimated" },
-                },
-                "formatting": {
-                    "max_attributes_to_retrieve": self.max_attributes_to_retrieve,
-                    "max_attributes_to_highlight": self.max_attributes_to_highlight,
-                    "highlight_pre_tag": self.highlight_pre_tag,
-                    "highlight_post_tag": self.highlight_post_tag,
-                    "max_attributes_to_crop": self.max_attributes_to_crop,
-                    "crop_marker": self.crop_marker,
-                    "show_matches_position": self.show_matches_position,
-                    "crop_length": self.crop_length,
-                },
-                "facets": {
-                    "avg_facets_number": format!("{:.2}", self.facets_sum_of_terms as f64 / self.facets_total_number_of_facets as f64),
-                },
-                "matching_strategy": {
-                    "most_used_strategy": self.matching_strategy.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
-                },
-                "scoring": {
-                    "show_ranking_score": self.show_ranking_score,
-                    "show_ranking_score_details": self.show_ranking_score_details,
+                "query_parameters": {
+                    "parameter_count": self.query_parameter_count,
+                    "advanced_syntax_used": self.query_advanced_syntax_used,
+                    "filter_chains": self.query_filter_chains,
+                    "has_facets": self.query_facets,
+                    "query": self.query_query,
+                    "searchable_attributes": self.query_searchable_attributes,
+                    "retrieve_attributes": self.query_retrieve_attributes,
+                    "sort_criteria": self.query_sort_criteria,
+                    "pagination": self.query_pagination,
+                    "filter": self.query_filter,
                 },
             });
 
@@ -848,84 +727,85 @@ pub struct MultiSearchAggregator {
 }
 
 impl MultiSearchAggregator {
-    pub fn from_queries(query: &[SearchQueryWithIndex], request: &HttpRequest) -> Self {
+    pub fn from_queries(
+        queries: Vec<SearchQuery>,
+        request: &HttpRequest,
+        index_uids: Option<&SearchQuery>,
+    ) -> Self {
         let timestamp = Some(OffsetDateTime::now_utc());
-
-        let user_agents = extract_user_agents(request).into_iter().collect();
-
-        let distinct_indexes: HashSet<_> =
-            query.iter().map(|query| query.index_uid.as_str()).collect();
-
-        Self {
+        let user_agents = extract_user_agents(request).into_iter().collect::<HashSet<String>>();
+        let mut ret = Self {
             timestamp,
-            total_received: 1,
-            total_succeeded: 0,
-            total_distinct_index_count: distinct_indexes.len(),
-            total_single_index: if distinct_indexes.len() == 1 { 1 } else { 0 },
-            total_search_count: query.len(),
             user_agents,
-        }
-    }
-
-    pub fn succeed(&mut self) {
-        self.total_succeeded = self.total_succeeded.saturating_add(1);
-    }
-
-    pub fn aggregate(&mut self, other: Self) {
-        // write the aggregate in a way that will cause a compilation error if a field is added.
-
-        // get ownership of self, replacing it by a default value.
-        let this = std::mem::take(self);
-
-        let timestamp = this.timestamp.or(other.timestamp);
-        let total_received = this.total_received.saturating_add(other.total_received);
-        let total_succeeded = this.total_succeeded.saturating_add(other.total_succeeded);
-        let total_distinct_index_count =
-            this.total_distinct_index_count.saturating_add(other.total_distinct_index_count);
-        let total_single_index = this.total_single_index.saturating_add(other.total_single_index);
-        let total_search_count = this.total_search_count.saturating_add(other.total_search_count);
-        let mut user_agents = this.user_agents;
-
-        for user_agent in other.user_agents.into_iter() {
-            user_agents.insert(user_agent);
-        }
-
-        // need all fields or compile error
-        let mut aggregated = Self {
-            timestamp,
-            total_received,
-            total_succeeded,
-            total_distinct_index_count,
-            total_single_index,
-            total_search_count,
-            user_agents,
-            // do not add _ or ..Default::default() here
+            total_received: queries.len(),
+            index_uids: index_uids.map(|q| q.uids.clone()),
+            facet_names: None,
+            has_facets: false,
+            advanced_syntax_used: false,
+            filter_chains: false,
         };
 
-        // replace the default self with the aggregated value
-        std::mem::swap(self, &mut aggregated);
+        for query in queries {
+            ret.advanced_syntax_used |= query.advanced_syntax_used;
+            ret.filter_chains |= !query.filter.is_empty();
+            ret.has_facets |= query.facets.map_or(false, |facets| !facets.is_empty());
+        }
+
+        ret
+    }
+
+    pub fn succeed(&mut self, result: &SearchResult) {
+        self.total_succeeded = self.total_succeeded.saturating_add(1);
+        self.time_spent.push(result.processing_time_ms as usize);
+    }
+
+    /// Aggregate one [MultiSearchAggregator] into another.
+    pub fn aggregate(&mut self, other: Self) {
+        if self.timestamp.is_none() {
+            self.timestamp = other.timestamp;
+        }
+        self.user_agents.extend(other.user_agents);
+
+        self.total_received = self.total_received.saturating_add(other.total_received);
+        self.total_succeeded = self.total_succeeded.saturating_add(other.total_succeeded);
+        self.time_spent.append(&mut other.time_spent);
+
+        self.advanced_syntax_used |= other.advanced_syntax_used;
+        self.filter_chains |= other.filter_chains;
+
+        if !self.has_facets {
+            self.has_facets = other.has_facets;
+            if let Some(facet_names) = other.facet_names {
+                self.facet_names = Some(facet_names);
+            }
+        }
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
         if self.total_received == 0 {
             None
         } else {
+            // the index of the 99th percentage of value
+            let percentile_99th = 0.99 * (self.total_succeeded as f64 - 1.) + 1.;
+            // we get all the values in a sorted manner
+            let time_spent = self.time_spent.into_sorted_vec();
+            // We are only interested by the slowest value of the 99th fastest results
+            let time_spent = time_spent.get(percentile_99th as usize);
+
             let properties = json!({
                 "user-agent": self.user_agents,
                 "requests": {
+                    "99th_response_time":  time_spent.map(|t| format!("{:.2}", t)),
                     "total_succeeded": self.total_succeeded,
-                    "total_failed": self.total_received.saturating_sub(self.total_succeeded), // just to be sure we never panics
+                    "total_failed": self.total_received.saturating_sub(self.total_succeeded),
                     "total_received": self.total_received,
                 },
-                "indexes": {
-                    "total_single_index": self.total_single_index,
-                    "total_distinct_index_count": self.total_distinct_index_count,
-                    "avg_distinct_index_count": (self.total_distinct_index_count as f64) / (self.total_received as f64), // not 0 else returned early
+                "query_parameters": {
+                    "index_uids": self.index_uids,
+                    "has_facets": self.has_facets,
+                    "advanced_syntax_used": self.advanced_syntax_used,
+                    "filter_chains": self.filter_chains,
                 },
-                "searches": {
-                    "total_search_count": self.total_search_count,
-                    "avg_search_count": (self.total_search_count as f64) / (self.total_received as f64),
-                }
             });
 
             Some(Track {
@@ -961,29 +841,33 @@ pub struct FacetSearchAggregator {
 impl FacetSearchAggregator {
     pub fn from_query(query: &FacetSearchQuery, request: &HttpRequest) -> Self {
         let FacetSearchQuery {
-            facet_query: _,
             facet_name,
             vector,
             q,
             filter,
             matching_strategy,
             attributes_to_search_on,
+            ..
         } = query;
 
-        let mut ret = Self::default();
-        ret.timestamp = Some(OffsetDateTime::now_utc());
+        let user_agents = extract_user_agents(request).into_iter().collect::<HashSet<String>>();
 
-        ret.total_received = 1;
-        ret.user_agents = extract_user_agents(request).into_iter().collect();
-        ret.facet_names = Some(facet_name.clone()).into_iter().collect();
+        let facet_names = Some(facet_name.clone()).into_iter().collect::<HashSet<String>>();
 
-        ret.additional_search_parameters_provided = q.is_some()
+        let additional_search_parameters_provided = q.is_some()
             || vector.is_some()
             || filter.is_some()
             || *matching_strategy != MatchingStrategy::default()
             || attributes_to_search_on.is_some();
 
-        ret
+        Self {
+            timestamp: Some(OffsetDateTime::now_utc()),
+            total_received: 1,
+            user_agents,
+            facet_names,
+            additional_search_parameters_provided,
+            ..Default::default()
+        }
     }
 
     pub fn succeed(&mut self, result: &FacetSearchResult) {
@@ -1074,24 +958,31 @@ impl DocumentsAggregator {
         index_creation: bool,
         request: &HttpRequest,
     ) -> Self {
-        let mut ret = Self::default();
-        ret.timestamp = Some(OffsetDateTime::now_utc());
+        let user_agents = extract_user_agents(request).into_iter().collect::<HashSet<String>>();
 
-        ret.updated = true;
-        ret.user_agents = extract_user_agents(request).into_iter().collect();
-        if let Some(primary_key) = documents_query.primary_key.clone() {
-            ret.primary_keys.insert(primary_key);
-        }
-        let content_type = request
+        let primary_keys = if let Some(primary_key) = &documents_query.primary_key {
+            vec![primary_key.clone()].into_iter().collect()
+        } else {
+            HashSet::new()
+        };
+
+        let content_types = vec![request
             .headers()
             .get(CONTENT_TYPE)
             .and_then(|s| s.to_str().ok())
             .unwrap_or("unknown")
-            .to_string();
-        ret.content_types.insert(content_type);
-        ret.index_creation = index_creation;
+            .to_string()]
+        .into_iter()
+        .collect::<HashSet<String>>();
 
-        ret
+        Self {
+            timestamp: Some(OffsetDateTime::now_utc()),
+            updated: true,
+            user_agents,
+            primary_keys,
+            content_types,
+            index_creation,
+        }
     }
 
     /// Aggregate one [DocumentsAggregator] into another.
@@ -1154,17 +1045,14 @@ pub struct DocumentsDeletionAggregator {
 
 impl DocumentsDeletionAggregator {
     pub fn from_query(kind: DocumentDeletionKind, request: &HttpRequest) -> Self {
-        let (per_document_id, clear_all, per_batch, per_filter) = 
-            match kind {
+        let (per_document_id, clear_all, per_batch, per_filter) = match kind {
             DocumentDeletionKind::PerDocumentId => (true, false, false, false),
             DocumentDeletionKind::ClearAll => (false, true, false, false),
             DocumentDeletionKind::PerBatch => (false, false, true, false),
             DocumentDeletionKind::PerFilter => (false, false, false, true),
         };
 
-        let user_agents = extract_user_agents(request)
-            .into_iter()
-            .collect::<HashSet<String>>();
+        let user_agents = extract_user_agents(request).into_iter().collect::<HashSet<String>>();
         Self {
             timestamp: Some(OffsetDateTime::now_utc()),
             user_agents,
@@ -1233,20 +1121,34 @@ pub struct TasksAggregator {
 
 impl TasksAggregator {
     pub fn from_query(query: &TasksFilterQuery, request: &HttpRequest) -> Self {
+        let user_agents = extract_user_agents(request).into_iter().collect::<HashSet<String>>();
+
+        let filtered_by_uid = query.uids.is_some();
+        let filtered_by_index_uid = query.index_uids.is_some();
+        let filtered_by_type = query.types.is_some();
+        let filtered_by_status = query.statuses.is_some();
+        let filtered_by_canceled_by = query.canceled_by.is_some();
+        let filtered_by_before_enqueued_at = query.before_enqueued_at.is_some();
+        let filtered_by_after_enqueued_at = query.after_enqueued_at.is_some();
+        let filtered_by_before_started_at = query.before_started_at.is_some();
+        let filtered_by_after_started_at = query.after_started_at.is_some();
+        let filtered_by_before_finished_at = query.before_finished_at.is_some();
+        let filtered_by_after_finished_at = query.after_finished_at.is_some();
+
         Self {
             timestamp: Some(OffsetDateTime::now_utc()),
-            user_agents: extract_user_agents(request).into_iter().collect(),
-            filtered_by_uid: query.uids.is_some(),
-            filtered_by_index_uid: query.index_uids.is_some(),
-            filtered_by_type: query.types.is_some(),
-            filtered_by_status: query.statuses.is_some(),
-            filtered_by_canceled_by: query.canceled_by.is_some(),
-            filtered_by_before_enqueued_at: query.before_enqueued_at.is_some(),
-            filtered_by_after_enqueued_at: query.after_enqueued_at.is_some(),
-            filtered_by_before_started_at: query.before_started_at.is_some(),
-            filtered_by_after_started_at: query.after_started_at.is_some(),
-            filtered_by_before_finished_at: query.before_finished_at.is_some(),
-            filtered_by_after_finished_at: query.after_finished_at.is_some(),
+            user_agents,
+            filtered_by_uid,
+            filtered_by_index_uid,
+            filtered_by_type,
+            filtered_by_status,
+            filtered_by_canceled_by,
+            filtered_by_before_enqueued_at,
+            filtered_by_after_enqueued_at,
+            filtered_by_before_started_at,
+            filtered_by_after_started_at,
+            filtered_by_before_finished_at,
+            filtered_by_after_finished_at,
             total_received: 1,
         }
     }
@@ -1307,12 +1209,9 @@ pub struct HealthAggregator {
 
 impl HealthAggregator {
     pub fn from_query(request: &HttpRequest) -> Self {
-        let mut ret = Self::default();
-        ret.timestamp = Some(OffsetDateTime::now_utc());
+        let user_agents = extract_user_agents(request).into_iter().collect::<HashSet<String>>();
 
-        ret.user_agents = extract_user_agents(request).into_iter().collect();
-        ret.total_received = 1;
-        ret
+        Self { timestamp: Some(OffsetDateTime::now_utc()), user_agents, total_received: 1 }
     }
 
     /// Aggregate one [DocumentsAggregator] into another.
