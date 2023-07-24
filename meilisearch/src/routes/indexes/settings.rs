@@ -310,6 +310,81 @@ make_setting_route!(
 );
 
 make_setting_route!(
+    "/non-separator-tokens",
+    put,
+    std::collections::BTreeSet<String>,
+    meilisearch_types::deserr::DeserrJsonError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsNonSeparatorTokens,
+    >,
+    non_separator_tokens,
+    "nonSeparatorTokens",
+    analytics,
+    |non_separator_tokens: &Option<std::collections::BTreeSet<String>>, req: &HttpRequest| {
+        use serde_json::json;
+
+        analytics.publish(
+            "nonSeparatorTokens Updated".to_string(),
+            json!({
+                "non_separator_tokens": {
+                    "total": non_separator_tokens.as_ref().map(|non_separator_tokens| non_separator_tokens.len()),
+                },
+            }),
+            Some(req),
+        );
+    }
+);
+
+make_setting_route!(
+    "/separator-tokens",
+    put,
+    std::collections::BTreeSet<String>,
+    meilisearch_types::deserr::DeserrJsonError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsSeparatorTokens,
+    >,
+    separator_tokens,
+    "separatorTokens",
+    analytics,
+    |separator_tokens: &Option<std::collections::BTreeSet<String>>, req: &HttpRequest| {
+        use serde_json::json;
+
+        analytics.publish(
+            "separatorTokens Updated".to_string(),
+            json!({
+                "separator_tokens": {
+                    "total": separator_tokens.as_ref().map(|separator_tokens| separator_tokens.len()),
+                },
+            }),
+            Some(req),
+        );
+    }
+);
+
+make_setting_route!(
+    "/dictionary",
+    put,
+    std::collections::BTreeSet<String>,
+    meilisearch_types::deserr::DeserrJsonError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsDictionary,
+    >,
+    dictionary,
+    "dictionary",
+    analytics,
+    |dictionary: &Option<std::collections::BTreeSet<String>>, req: &HttpRequest| {
+        use serde_json::json;
+
+        analytics.publish(
+            "dictionary Updated".to_string(),
+            json!({
+                "dictionary": {
+                    "total": dictionary.as_ref().map(|dictionary| dictionary.len()),
+                },
+            }),
+            Some(req),
+        );
+    }
+);
+
+make_setting_route!(
     "/synonyms",
     put,
     std::collections::BTreeMap<String, Vec<String>>,

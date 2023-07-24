@@ -1,3 +1,4 @@
+use meili_snap::{json_string, snapshot};
 use serde_json::json;
 
 use crate::common::Server;
@@ -9,22 +10,37 @@ async fn set_and_reset() {
 
     let (_response, _code) = index
         .update_settings(json!({
-            "non_separator_tokens": ["#", "&"],
-            "separator_tokens": ["&sep", "<br/>"],
+            "nonSeparatorTokens": ["#", "&"],
+            "separatorTokens": ["&sep", "<br/>"],
             "dictionary": ["J.R.R.", "J. R. R."],
         }))
         .await;
     index.wait_task(0).await;
 
     let (response, _) = index.settings().await;
-    assert_eq!(response["non_separator_tokens"], json!(["#", "&"]));
-    assert_eq!(response["separator_tokens"], json!(["&sep", "<br/>"]));
-    assert_eq!(response["dictionary"], json!(["J.R.R.", "J. R. R."]));
+    snapshot!(json_string!(response["nonSeparatorTokens"]), @r###"
+    [
+      "#",
+      "&"
+    ]
+    "###);
+    snapshot!(json_string!(response["separatorTokens"]), @r###"
+    [
+      "&sep",
+      "<br/>"
+    ]
+    "###);
+    snapshot!(json_string!(response["dictionary"]), @r###"
+    [
+      "J. R. R.",
+      "J.R.R."
+    ]
+    "###);
 
     index
         .update_settings(json!({
-            "non_separator_tokens": null,
-            "separator_tokens": null,
+            "nonSeparatorTokens": null,
+            "separatorTokens": null,
             "dictionary": null,
         }))
         .await;
@@ -32,7 +48,7 @@ async fn set_and_reset() {
     index.wait_task(1).await;
 
     let (response, _) = index.settings().await;
-    assert_eq!(response["non_separator_tokens"], json!(null));
-    assert_eq!(response["separator_tokens"], json!(null));
-    assert_eq!(response["dictionary"], json!(null));
+    snapshot!(json_string!(response["nonSeparatorTokens"]), @"[]");
+    snapshot!(json_string!(response["separatorTokens"]), @"[]");
+    snapshot!(json_string!(response["dictionary"]), @"[]");
 }
