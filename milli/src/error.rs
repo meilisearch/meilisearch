@@ -122,22 +122,28 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
         .field,
         match .valid_fields.is_empty() {
             true => "This index does not have configured sortable attributes.".to_string(),
-            false => format!("Available sortable attributes are: `{}`.",
-                    valid_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
+            false => format!("Available sortable attributes are: `{}{}`.",
+                    valid_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
+                    .hidden_fields.then_some(", <..hidden-attributes>").unwrap_or(""),
                 ),
         }
     )]
-    InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String> },
+    InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String>, hidden_fields: bool },
     #[error("Attribute `{}` is not facet-searchable. {}",
         .field,
         match .valid_fields.is_empty() {
             true => "This index does not have configured facet-searchable attributes. To make it facet-searchable add it to the `filterableAttributes` index settings.".to_string(),
-            false => format!("Available facet-searchable attributes are: `{}`. To make it facet-searchable add it to the `filterableAttributes` index settings.",
-                    valid_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
+            false => format!("Available facet-searchable attributes are: `{}{}`. To make it facet-searchable add it to the `filterableAttributes` index settings.",
+                    valid_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
+                    .hidden_fields.then_some(", <..hidden-attributes>").unwrap_or(""),
                 ),
         }
     )]
-    InvalidFacetSearchFacetName { field: String, valid_fields: BTreeSet<String> },
+    InvalidFacetSearchFacetName {
+        field: String,
+        valid_fields: BTreeSet<String>,
+        hidden_fields: bool,
+    },
     #[error("Attribute `{}` is not searchable. Available searchable attributes are: `{}{}`.",
         .field,
         .valid_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
@@ -340,8 +346,11 @@ fn conditionally_lookup_for_error_message() {
     ];
 
     for (list, suffix) in messages {
-        let err =
-            UserError::InvalidSortableAttribute { field: "name".to_string(), valid_fields: list };
+        let err = UserError::InvalidSortableAttribute {
+            field: "name".to_string(),
+            valid_fields: list,
+            hidden_fields: false,
+        };
 
         assert_eq!(err.to_string(), format!("{} {}", prefix, suffix));
     }
