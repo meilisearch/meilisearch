@@ -613,6 +613,31 @@ impl SearchAggregator {
     pub fn from_query(query: &SearchQuery, request: &HttpRequest) -> Self {
         let timestamp = Some(OffsetDateTime::now_utc());
         let user_agents = extract_user_agents(request).into_iter().collect::<HashSet<String>>();
+        
+        let SearchQuery {
+            q,
+            vector,
+            offset,
+            limit,
+            page,
+            hits_per_page,
+            attributes_to_retrieve,
+            attributes_to_crop,
+            crop_length,
+            attributes_to_highlight,
+            show_matches_position,
+            show_ranking_score,
+            show_ranking_score_details,
+            filter,
+            sort,
+            facets,
+            highlight_pre_tag,
+            highlight_post_tag,
+            crop_marker,
+            matching_strategy,
+            attributes_to_search_on,
+        } = query;
+
         let mut ret = Self {
             timestamp,
             user_agents,
