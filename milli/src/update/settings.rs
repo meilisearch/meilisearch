@@ -497,7 +497,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
                 // Does the new list differ from the previous one?
                 if current.map_or(true, |current| &current != non_separator_tokens) {
-                    self.index.put_non_separator_tokens(self.wtxn, &non_separator_tokens)?;
+                    self.index.put_non_separator_tokens(self.wtxn, non_separator_tokens)?;
                     Ok(true)
                 } else {
                     Ok(false)
@@ -515,7 +515,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
                 // Does the new list differ from the previous one?
                 if current.map_or(true, |current| &current != separator_tokens) {
-                    self.index.put_separator_tokens(self.wtxn, &separator_tokens)?;
+                    self.index.put_separator_tokens(self.wtxn, separator_tokens)?;
                     Ok(true)
                 } else {
                     Ok(false)
@@ -533,7 +533,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
                 // Does the new list differ from the previous one?
                 if current.map_or(true, |current| &current != dictionary) {
-                    self.index.put_dictionary(self.wtxn, &dictionary)?;
+                    self.index.put_dictionary(self.wtxn, dictionary)?;
                     Ok(true)
                 } else {
                     Ok(false)

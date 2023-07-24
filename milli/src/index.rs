@@ -1065,7 +1065,7 @@ impl Index {
         self.main.delete::<_, Str>(wtxn, main_key::NON_SEPARATOR_TOKENS_KEY)
     }
 
-    pub fn non_separator_tokens<'t>(&self, rtxn: &'t RoTxn) -> Result<Option<BTreeSet<String>>> {
+    pub fn non_separator_tokens(&self, rtxn: &RoTxn) -> Result<Option<BTreeSet<String>>> {
         Ok(self.main.get::<_, Str, SerdeBincode<BTreeSet<String>>>(
             rtxn,
             main_key::NON_SEPARATOR_TOKENS_KEY,
@@ -1086,7 +1086,7 @@ impl Index {
         self.main.delete::<_, Str>(wtxn, main_key::SEPARATOR_TOKENS_KEY)
     }
 
-    pub fn separator_tokens<'t>(&self, rtxn: &'t RoTxn) -> Result<Option<BTreeSet<String>>> {
+    pub fn separator_tokens(&self, rtxn: &RoTxn) -> Result<Option<BTreeSet<String>>> {
         Ok(self
             .main
             .get::<_, Str, SerdeBincode<BTreeSet<String>>>(rtxn, main_key::SEPARATOR_TOKENS_KEY)?)
@@ -1094,7 +1094,7 @@ impl Index {
 
     /* separators easing method */
 
-    pub fn allowed_separators<'t>(&self, rtxn: &'t RoTxn) -> Result<Option<BTreeSet<String>>> {
+    pub fn allowed_separators(&self, rtxn: &RoTxn) -> Result<Option<BTreeSet<String>>> {
         let default_separators =
             charabia::separators::DEFAULT_SEPARATORS.iter().map(|s| s.to_string());
         let mut separators: Option<BTreeSet<_>> = None;
@@ -1126,7 +1126,7 @@ impl Index {
         self.main.delete::<_, Str>(wtxn, main_key::DICTIONARY_KEY)
     }
 
-    pub fn dictionary<'t>(&self, rtxn: &'t RoTxn) -> Result<Option<BTreeSet<String>>> {
+    pub fn dictionary(&self, rtxn: &RoTxn) -> Result<Option<BTreeSet<String>>> {
         Ok(self
             .main
             .get::<_, Str, SerdeBincode<BTreeSet<String>>>(rtxn, main_key::DICTIONARY_KEY)?)
