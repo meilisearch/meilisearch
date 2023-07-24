@@ -1094,10 +1094,7 @@ impl Index {
 
     /* separators easing method */
 
-    pub(crate) fn allowed_separators<'t>(
-        &self,
-        rtxn: &'t RoTxn,
-    ) -> Result<Option<BTreeSet<String>>> {
+    pub fn allowed_separators<'t>(&self, rtxn: &'t RoTxn) -> Result<Option<BTreeSet<String>>> {
         let default_separators =
             charabia::separators::DEFAULT_SEPARATORS.iter().map(|s| s.to_string());
         let mut separators: Option<BTreeSet<_>> = None;

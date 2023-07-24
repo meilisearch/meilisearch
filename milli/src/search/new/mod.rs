@@ -479,6 +479,20 @@ pub fn execute_search(
             tokbuilder.stop_words(stop_words);
         }
 
+        let separators = ctx.index.allowed_separators(ctx.txn)?;
+        let separators: Option<Vec<_>> =
+            separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
+        if let Some(ref separators) = separators {
+            tokbuilder.separators(separators);
+        }
+
+        let dictionary = ctx.index.dictionary(ctx.txn)?;
+        let dictionary: Option<Vec<_>> =
+            dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
+        if let Some(ref dictionary) = dictionary {
+            tokbuilder.words_dict(dictionary);
+        }
+
         let script_lang_map = ctx.index.script_language(ctx.txn)?;
         if !script_lang_map.is_empty() {
             tokbuilder.allow_list(&script_lang_map);
