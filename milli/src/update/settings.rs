@@ -491,57 +491,78 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     }
 
     fn update_non_separator_tokens(&mut self) -> Result<bool> {
-        match self.non_separator_tokens {
+        let changes = match self.non_separator_tokens {
             Setting::Set(ref non_separator_tokens) => {
                 let current = self.index.non_separator_tokens(self.wtxn)?;
 
                 // Does the new list differ from the previous one?
                 if current.map_or(true, |current| &current != non_separator_tokens) {
                     self.index.put_non_separator_tokens(self.wtxn, non_separator_tokens)?;
-                    Ok(true)
+                    true
                 } else {
-                    Ok(false)
+                    false
                 }
             }
-            Setting::Reset => Ok(self.index.delete_non_separator_tokens(self.wtxn)?),
-            Setting::NotSet => Ok(false),
+            Setting::Reset => self.index.delete_non_separator_tokens(self.wtxn)?,
+            Setting::NotSet => false,
+        };
+
+        // the synonyms must be updated if non separator tokens have been updated.
+        if changes {
+            self.update_synonyms()?;
         }
+
+        Ok(changes)
     }
 
     fn update_separator_tokens(&mut self) -> Result<bool> {
-        match self.separator_tokens {
+        let changes = match self.separator_tokens {
             Setting::Set(ref separator_tokens) => {
                 let current = self.index.separator_tokens(self.wtxn)?;
 
                 // Does the new list differ from the previous one?
                 if current.map_or(true, |current| &current != separator_tokens) {
                     self.index.put_separator_tokens(self.wtxn, separator_tokens)?;
-                    Ok(true)
+                    true
                 } else {
-                    Ok(false)
+                    false
                 }
             }
-            Setting::Reset => Ok(self.index.delete_separator_tokens(self.wtxn)?),
-            Setting::NotSet => Ok(false),
+            Setting::Reset => self.index.delete_separator_tokens(self.wtxn)?,
+            Setting::NotSet => false,
+        };
+
+        // the synonyms must be updated if separator tokens have been updated.
+        if changes {
+            self.update_synonyms()?;
         }
+
+        Ok(changes)
     }
 
     fn update_dictionary(&mut self) -> Result<bool> {
-        match self.dictionary {
+        let changes = match self.dictionary {
             Setting::Set(ref dictionary) => {
                 let current = self.index.dictionary(self.wtxn)?;
 
                 // Does the new list differ from the previous one?
                 if current.map_or(true, |current| &current != dictionary) {
                     self.index.put_dictionary(self.wtxn, dictionary)?;
-                    Ok(true)
+                    true
                 } else {
-                    Ok(false)
+                    false
                 }
             }
-            Setting::Reset => Ok(self.index.delete_dictionary(self.wtxn)?),
-            Setting::NotSet => Ok(false),
+            Setting::Reset => self.index.delete_dictionary(self.wtxn)?,
+            Setting::NotSet => false,
+        };
+
+        // the synonyms must be updated if dictionary has been updated.
+        if changes {
+            self.update_synonyms()?;
         }
+
+        Ok(changes)
     }
 
     fn update_synonyms(&mut self) -> Result<bool> {
@@ -565,6 +586,21 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 if let Some(ref stop_words) = stop_words {
                     builder.stop_words(stop_words);
                 }
+
+                let separators = self.index.allowed_separators(self.wtxn)?;
+                let separators: Option<Vec<_>> =
+                    separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
+                if let Some(ref separators) = separators {
+                    builder.separators(separators);
+                }
+
+                let dictionary = self.index.dictionary(self.wtxn)?;
+                let dictionary: Option<Vec<_>> =
+                    dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
+                if let Some(ref dictionary) = dictionary {
+                    builder.words_dict(dictionary);
+                }
+
                 let tokenizer = builder.build();
 
                 let mut new_synonyms = HashMap::new();
