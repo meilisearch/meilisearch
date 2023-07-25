@@ -820,8 +820,8 @@ async fn experimental_feature_score_details() {
                       },
                       "attribute": {
                         "order": 3,
-                        "attribute_ranking_order_score": 1.0,
-                        "query_word_distance_score": 0.8095238095238095,
+                        "attributeRankingOrderScore": 1.0,
+                        "queryWordDistanceScore": 0.8095238095238095,
                         "score": 0.9365079365079364
                       },
                       "exactness": {

@@ -84,7 +84,7 @@ impl ScoreDetails {
                     // For now, fid is a virtual rule always followed by the "position" rule
                     let fid_details = serde_json::json!({
                         "order": order,
-                        "attribute_ranking_order_score": fid.local_score(),
+                        "attributeRankingOrderScore": fid.local_score(),
                     });
                     details_map.insert("attribute".into(), fid_details);
                     order += 1;
@@ -102,7 +102,7 @@ impl ScoreDetails {
                     };
 
                     attribute_details
-                        .insert("query_word_distance_score".into(), position.local_score().into());
+                        .insert("queryWordDistanceScore".into(), position.local_score().into());
                     let score = Rank::global_score([fid_details, *position].iter().copied());
                     attribute_details.insert("score".into(), score.into());
 
