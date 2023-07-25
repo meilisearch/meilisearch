@@ -199,6 +199,30 @@ macro_rules! snapshot {
     };
 }
 
+/// Create a string from the value by serializing it as Json, optionally
+/// redacting some parts of it.
+///
+/// The second argument to the macro can be an object expression for redaction.
+/// It's in the form { selector => replacement }. For more information about redactions
+/// refer to the redactions feature in the `insta` guide.
+#[macro_export]
+macro_rules! json_string {
+    ($value:expr, {$($k:expr => $v:expr),*$(,)?}) => {
+        {
+            let (_, snap) = meili_snap::insta::_prepare_snapshot_for_redaction!($value, {$($k => $v),*}, Json, File);
+            snap
+        }
+    };
+    ($value:expr) => {{
+        let value = meili_snap::insta::_macro_support::serialize_value(
+            &$value,
+            meili_snap::insta::_macro_support::SerializationFormat::Json,
+            meili_snap::insta::_macro_support::SnapshotLocation::File
+        );
+        value
+    }};
+}
+
 #[cfg(test)]
 mod tests {
     use crate as meili_snap;
@@ -249,28 +273,4 @@ mod tests {
             // snapshot_hash!("", name: "", @"d41d8cd98f00b204e9800998ecf8427e");
         }
     }
-}
-
-/// Create a string from the value by serializing it as Json, optionally
-/// redacting some parts of it.
-///
-/// The second argument to the macro can be an object expression for redaction.
-/// It's in the form { selector => replacement }. For more information about redactions
-/// refer to the redactions feature in the `insta` guide.
-#[macro_export]
-macro_rules! json_string {
-    ($value:expr, {$($k:expr => $v:expr),*$(,)?}) => {
-        {
-            let (_, snap) = meili_snap::insta::_prepare_snapshot_for_redaction!($value, {$($k => $v),*}, Json, File);
-            snap
-        }
-    };
-    ($value:expr) => {{
-        let value = meili_snap::insta::_macro_support::serialize_value(
-            &$value,
-            meili_snap::insta::_macro_support::SerializationFormat::Json,
-            meili_snap::insta::_macro_support::SnapshotLocation::File
-        );
-        value
-    }};
 }
