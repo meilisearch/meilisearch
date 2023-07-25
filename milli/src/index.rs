@@ -8,12 +8,11 @@ use charabia::{Language, Script};
 use heed::flags::Flags;
 use heed::types::*;
 use heed::{CompactionOption, Database, PolyDatabase, RoTxn, RwTxn};
-use rand_pcg::Pcg32;
 use roaring::RoaringBitmap;
 use rstar::RTree;
 use time::OffsetDateTime;
 
-use crate::distance::DotProduct;
+use crate::distance::NDotProductPoint;
 use crate::error::{InternalError, UserError};
 use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;
@@ -31,7 +30,7 @@ use crate::{
 };
 
 /// The HNSW data-structure that we serialize, fill and search in.
-pub type Hnsw = hnsw::Hnsw<DotProduct, Vec<f32>, Pcg32, 12, 24>;
+pub type Hnsw = instant_distance::Hnsw<NDotProductPoint>;
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
 pub const DEFAULT_MIN_WORD_LEN_TWO_TYPOS: u8 = 9;

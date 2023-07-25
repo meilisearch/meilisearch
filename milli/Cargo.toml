@@ -33,8 +33,8 @@ heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.6", default-f
     "lmdb",
     "sync-read-txn",
 ] }
-hnsw = { version = "0.11.0", features = ["serde1"] }
 indexmap = { version = "1.9.3", features = ["serde"] }
+instant-distance = { version = "0.6.1", features = ["with-serde"] }
 json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
 memmap2 = "0.5.10"
@@ -48,7 +48,6 @@ rstar = { version = "0.10.0", features = ["serde"] }
 serde = { version = "1.0.160", features = ["derive"] }
 serde_json = { version = "1.0.95", features = ["preserve_order"] }
 slice-group-by = "0.3.0"
-space = "0.17.0"
 smallstr = { version = "0.3.0", features = ["serde"] }
 smallvec = "1.10.0"
 smartstring = "1.0.1"
