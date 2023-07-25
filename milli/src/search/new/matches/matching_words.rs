@@ -86,14 +86,15 @@ impl MatchingWords {
                         continue;
                     };
                     let prefix_length = char_index + c.len_utf8();
-                    let char_len = token.original_lengths(prefix_length).0;
+                    let (char_len, byte_len) = token.original_lengths(prefix_length);
                     let ids = &located_words.positions;
-                    return Some(MatchType::Full { char_len, ids });
+                    return Some(MatchType::Full { char_len, byte_len, ids });
                 // else we exact match the token.
                 } else if token.lemma() == word {
                     let char_len = token.char_end - token.char_start;
+                    let byte_len = token.byte_end - token.byte_start;
                     let ids = &located_words.positions;
-                    return Some(MatchType::Full { char_len, ids });
+                    return Some(MatchType::Full { char_len, byte_len, ids });
                 }
             }
         }
@@ -130,7 +131,7 @@ impl<'a> Iterator for MatchesIter<'a, '_> {
                         word.map(|word| self.matching_words.word_interner.get(word).as_str())
                     })
                     .collect();
-                let partial = PartialMatch { matching_words: words, ids, char_len: 0 };
+                let partial = PartialMatch { matching_words: words, ids, char_len: 0, byte_len: 0 };
 
                 partial.match_token(self.token).or_else(|| self.next())
             }
@@ -149,7 +150,7 @@ pub type WordId = u16;
 /// In these cases we need to match consecutively several tokens to consider that the match is full.
 #[derive(Debug, PartialEq)]
 pub enum MatchType<'a> {
-    Full { char_len: usize, ids: &'a RangeInclusive<WordId> },
+    Full { char_len: usize, byte_len: usize, ids: &'a RangeInclusive<WordId> },
     Partial(PartialMatch<'a>),
 }
 
@@ -159,6 +160,7 @@ pub struct PartialMatch<'a> {
     matching_words: Vec<Option<&'a str>>,
     ids: &'a RangeInclusive<WordId>,
     char_len: usize,
+    byte_len: usize,
 }
 
 impl<'a> PartialMatch<'a> {
@@ -177,15 +179,16 @@ impl<'a> PartialMatch<'a> {
         };
 
         let char_len = token.char_end - token.char_start;
+        let byte_len = token.byte_end - token.byte_start;
         // if there are remaining words to match in the phrase and the current token is matching,
         // return a new Partial match allowing the highlighter to continue.
         if is_matching && matching_words.len() > 1 {
             matching_words.remove(0);
-            Some(MatchType::Partial(PartialMatch { matching_words, ids, char_len }))
+            Some(MatchType::Partial(PartialMatch { matching_words, ids, char_len, byte_len }))
         // if there is no remaining word to match in the phrase and the current token is matching,
         // return a Full match.
         } else if is_matching {
-            Some(MatchType::Full { char_len, ids })
+            Some(MatchType::Full { char_len, byte_len, ids })
         // if the current token doesn't match, return None to break the match sequence.
         } else {
             None
@@ -194,6 +197,10 @@ impl<'a> PartialMatch<'a> {
 
     pub fn char_len(&self) -> usize {
         self.char_len
+    }
+
+    pub fn byte_len(&self) -> usize {
+        self.byte_len
     }
 }
 
@@ -274,7 +281,7 @@ pub(crate) mod tests {
                     ..Default::default()
                 })
                 .next(),
-            Some(MatchType::Full { char_len: 5, ids: &(0..=0) })
+            Some(MatchType::Full { char_len: 5, byte_len: 5, ids: &(0..=0) })
         );
         assert_eq!(
             matching_words
@@ -298,7 +305,7 @@ pub(crate) mod tests {
                     ..Default::default()
                 })
                 .next(),
-            Some(MatchType::Full { char_len: 5, ids: &(2..=2) })
+            Some(MatchType::Full { char_len: 5, byte_len: 5, ids: &(2..=2) })
         );
         assert_eq!(
             matching_words
@@ -310,7 +317,7 @@ pub(crate) mod tests {
                     ..Default::default()
                 })
                 .next(),
-            Some(MatchType::Full { char_len: 5, ids: &(2..=2) })
+            Some(MatchType::Full { char_len: 5, byte_len: 5, ids: &(2..=2) })
         );
         assert_eq!(
             matching_words

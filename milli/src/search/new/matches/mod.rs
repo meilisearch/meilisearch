@@ -86,7 +86,8 @@ impl FormatOptions {
 
 #[derive(Clone, Debug)]
 pub struct Match {
-    match_len: usize,
+    char_len: usize,
+    byte_len: usize,
     // ids of the query words that matches.
     ids: Vec<WordId>,
     // position of the word in the whole text.
@@ -125,23 +126,30 @@ impl<'t> Matcher<'t, '_> {
             words_positions: &mut impl Iterator<Item = (usize, usize, &'a Token<'a>)>,
             matches: &mut Vec<Match>,
         ) -> bool {
-            let mut potential_matches = vec![(token_position, word_position, partial.char_len())];
+            let mut potential_matches =
+                vec![(token_position, word_position, partial.char_len(), partial.byte_len())];
 
             for (token_position, word_position, word) in words_positions {
                 partial = match partial.match_token(word) {
                     // token matches the partial match, but the match is not full,
                     // we temporarly save the current token then we try to match the next one.
                     Some(MatchType::Partial(partial)) => {
-                        potential_matches.push((token_position, word_position, partial.char_len()));
+                        potential_matches.push((
+                            token_position,
+                            word_position,
+                            partial.char_len(),
+                            partial.byte_len(),
+                        ));
                         partial
                     }
                     // partial match is now full, we keep this matches and we advance positions
-                    Some(MatchType::Full { char_len, ids }) => {
+                    Some(MatchType::Full { char_len, byte_len, ids }) => {
                         let ids: Vec<_> = ids.clone().collect();
                         // save previously matched tokens as matches.
                         let iter = potential_matches.into_iter().map(
-                            |(token_position, word_position, match_len)| Match {
-                                match_len,
+                            |(token_position, word_position, char_len, byte_len)| Match {
+                                char_len,
+                                byte_len,
                                 ids: ids.clone(),
                                 word_position,
                                 token_position,
@@ -151,7 +159,8 @@ impl<'t> Matcher<'t, '_> {
 
                         // save the token that closes the partial match as a match.
                         matches.push(Match {
-                            match_len: char_len,
+                            char_len,
+                            byte_len,
                             ids,
                             word_position,
                             token_position,
@@ -191,10 +200,11 @@ impl<'t> Matcher<'t, '_> {
                 match match_type {
                     // we match, we save the current token as a match,
                     // then we continue the rest of the tokens.
-                    MatchType::Full { char_len, ids } => {
+                    MatchType::Full { char_len, byte_len, ids } => {
                         let ids: Vec<_> = ids.clone().collect();
                         matches.push(Match {
-                            match_len: char_len,
+                            char_len,
+                            byte_len,
                             ids,
                             word_position,
                             token_position,
@@ -233,7 +243,7 @@ impl<'t> Matcher<'t, '_> {
                 .iter()
                 .map(|m| MatchBounds {
                     start: tokens[m.token_position].byte_start,
-                    length: m.match_len,
+                    length: m.byte_len,
                 })
                 .collect(),
         }
@@ -457,7 +467,7 @@ impl<'t> Matcher<'t, '_> {
                             let highlight_byte_index = self.text[token.byte_start..]
                                 .char_indices()
                                 .enumerate()
-                                .find(|(i, _)| *i == m.match_len)
+                                .find(|(i, _)| *i == m.char_len)
                                 .map_or(token.byte_end, |(_, (i, _))| i + token.byte_start);
                             formatted.push(self.highlight_prefix);
                             formatted.push(&self.text[token.byte_start..highlight_byte_index]);

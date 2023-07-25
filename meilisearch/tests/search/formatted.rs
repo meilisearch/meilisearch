@@ -1,4 +1,5 @@
 use insta::{allow_duplicates, assert_json_snapshot};
+use meili_snap::snapshot;
 use serde_json::json;
 
 use super::*;
@@ -32,7 +33,7 @@ async fn formatted_contain_wildcard() {
                   "cattos": [
                     {
                       "start": 0,
-                      "length": 5
+                      "length": 6
                     }
                   ]
                 }
@@ -79,7 +80,7 @@ async fn formatted_contain_wildcard() {
                       "cattos": [
                         {
                           "start": 0,
-                          "length": 5
+                          "length": 6
                         }
                       ]
                     }
@@ -549,21 +550,32 @@ async fn test_cjk_highlight() {
     index.wait_task(0).await;
 
     index
-        .search(json!({"q": "で", "attributesToHighlight": ["title"]}), |response, code| {
-            assert_eq!(code, 200, "{}", response);
-            assert_eq!(
-                response["hits"][0]["_formatted"]["title"],
-                json!("この度、クーポン<em>で</em>無料<em>で</em>頂きました。")
-            );
-        })
+        .search(
+            json!({"q": "で", "attributesToHighlight": ["title"], "showMatchesPosition": true }),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                snapshot!(
+                    response["hits"][0]["_formatted"]["title"],
+                    @r###""この度、クーポン<em>で</em>無料<em>で</em>頂きました。""###
+                );
+                snapshot!(
+                    response["hits"][0]["_matchesPosition"]["title"],
+                    @r###"[{"start":24,"length":3},{"start":33,"length":3}]"###
+                );
+            },
+        )
         .await;
 
     index
         .search(json!({"q": "大卫", "attributesToHighlight": ["title"]}), |response, code| {
-            assert_eq!(code, 200, "{}", response);
-            assert_eq!(
+            snapshot!(code, @"200 OK");
+            snapshot!(
                 response["hits"][0]["_formatted"]["title"],
-                json!("<em>大卫</em>到了扫罗那里")
+                @r###""<em>大卫</em>到了扫罗那里""###
+            );
+            snapshot!(
+                response["hits"][0]["_matchesPosition"]["title"],
+                @"null"
             );
         })
         .await;
