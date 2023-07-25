@@ -1,5 +1,8 @@
 use std::fmt;
+use std::ops::ControlFlow;
 
+use charabia::normalizer::NormalizerOption;
+use charabia::Normalize;
 use fst::automaton::{Automaton, Str};
 use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
@@ -14,8 +17,8 @@ use crate::error::UserError;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::{
-    execute_search, normalize_facet, AscDesc, DefaultSearchLogger, DocumentId, FieldId, Index,
-    Result, SearchContext, BEU16,
+    execute_search, AscDesc, DefaultSearchLogger, DocumentId, FieldId, Index, Result,
+    SearchContext, BEU16,
 };
 
 // Building these factories is not free.
@@ -301,29 +304,28 @@ impl<'a> SearchForFacetValues<'a> {
 
         match self.query.as_ref() {
             Some(query) => {
-                let query = normalize_facet(query);
-                let query = query.as_str();
+                let options = NormalizerOption { lossy: true, ..Default::default() };
+                let query = query.normalize(&options);
+                let query = query.as_ref();
+
                 let authorize_typos = self.search_query.index.authorize_typos(rtxn)?;
                 let field_authorizes_typos =
                     !self.search_query.index.exact_attributes_ids(rtxn)?.contains(&fid);
 
                 if authorize_typos && field_authorizes_typos {
-                    let mut results = vec![];
-
                     let exact_words_fst = self.search_query.index.exact_words(rtxn)?;
                     if exact_words_fst.map_or(false, |fst| fst.contains(query)) {
-                        let key = FacetGroupKey { field_id: fid, level: 0, left_bound: query };
-                        if let Some(FacetGroupValue { bitmap, .. }) =
-                            index.facet_id_string_docids.get(rtxn, &key)?
-                        {
-                            let count = search_candidates.intersection_len(&bitmap);
-                            if count != 0 {
-                                let value = self
-                                    .one_original_value_of(fid, query, bitmap.min().unwrap())?
-                                    .unwrap_or_else(|| query.to_string());
-                                results.push(FacetValueHit { value, count });
-                            }
+                        let mut results = vec![];
+                        if fst.contains(query) {
+                            self.fetch_original_facets_using_normalized(
+                                fid,
+                                query,
+                                query,
+                                &search_candidates,
+                                &mut results,
+                            )?;
                         }
+                        Ok(results)
                     } else {
                         let one_typo = self.search_query.index.min_word_len_one_typo(rtxn)?;
                         let two_typos = self.search_query.index.min_word_len_two_typos(rtxn)?;
@@ -338,60 +340,41 @@ impl<'a> SearchForFacetValues<'a> {
                         };
 
                         let mut stream = fst.search(automaton).into_stream();
-                        let mut length = 0;
+                        let mut results = vec![];
                         while let Some(facet_value) = stream.next() {
                             let value = std::str::from_utf8(facet_value)?;
-                            let key = FacetGroupKey { field_id: fid, level: 0, left_bound: value };
-                            let docids = match index.facet_id_string_docids.get(rtxn, &key)? {
-                                Some(FacetGroupValue { bitmap, .. }) => bitmap,
-                                None => {
-                                    error!(
-                                        "the facet value is missing from the facet database: {key:?}"
-                                    );
-                                    continue;
-                                }
-                            };
-                            let count = search_candidates.intersection_len(&docids);
-                            if count != 0 {
-                                let value = self
-                                    .one_original_value_of(fid, value, docids.min().unwrap())?
-                                    .unwrap_or_else(|| query.to_string());
-                                results.push(FacetValueHit { value, count });
-                                length += 1;
-                            }
-                            if length >= MAX_NUMBER_OF_FACETS {
+                            if self
+                                .fetch_original_facets_using_normalized(
+                                    fid,
+                                    value,
+                                    query,
+                                    &search_candidates,
+                                    &mut results,
+                                )?
+                                .is_break()
+                            {
                                 break;
                             }
                         }
-                    }
 
-                    Ok(results)
+                        Ok(results)
+                    }
                 } else {
                     let automaton = Str::new(query).starts_with();
                     let mut stream = fst.search(automaton).into_stream();
                     let mut results = vec![];
-                    let mut length = 0;
                     while let Some(facet_value) = stream.next() {
                         let value = std::str::from_utf8(facet_value)?;
-                        let key = FacetGroupKey { field_id: fid, level: 0, left_bound: value };
-                        let docids = match index.facet_id_string_docids.get(rtxn, &key)? {
-                            Some(FacetGroupValue { bitmap, .. }) => bitmap,
-                            None => {
-                                error!(
-                                    "the facet value is missing from the facet database: {key:?}"
-                                );
-                                continue;
-                            }
-                        };
-                        let count = search_candidates.intersection_len(&docids);
-                        if count != 0 {
-                            let value = self
-                                .one_original_value_of(fid, value, docids.min().unwrap())?
-                                .unwrap_or_else(|| query.to_string());
-                            results.push(FacetValueHit { value, count });
-                            length += 1;
-                        }
-                        if length >= MAX_NUMBER_OF_FACETS {
+                        if self
+                            .fetch_original_facets_using_normalized(
+                                fid,
+                                value,
+                                query,
+                                &search_candidates,
+                                &mut results,
+                            )?
+                            .is_break()
+                        {
                             break;
                         }
                     }
@@ -401,7 +384,6 @@ impl<'a> SearchForFacetValues<'a> {
             }
             None => {
                 let mut results = vec![];
-                let mut length = 0;
                 let prefix = FacetGroupKey { field_id: fid, level: 0, left_bound: "" };
                 for result in index.facet_id_string_docids.prefix_iter(rtxn, &prefix)? {
                     let (FacetGroupKey { left_bound, .. }, FacetGroupValue { bitmap, .. }) =
@@ -412,15 +394,58 @@ impl<'a> SearchForFacetValues<'a> {
                             .one_original_value_of(fid, left_bound, bitmap.min().unwrap())?
                             .unwrap_or_else(|| left_bound.to_string());
                         results.push(FacetValueHit { value, count });
-                        length += 1;
                     }
-                    if length >= MAX_NUMBER_OF_FACETS {
+                    if results.len() >= MAX_NUMBER_OF_FACETS {
                         break;
                     }
                 }
                 Ok(results)
             }
         }
+    }
+
+    fn fetch_original_facets_using_normalized(
+        &self,
+        fid: FieldId,
+        value: &str,
+        query: &str,
+        search_candidates: &RoaringBitmap,
+        results: &mut Vec<FacetValueHit>,
+    ) -> Result<ControlFlow<()>> {
+        let index = self.search_query.index;
+        let rtxn = self.search_query.rtxn;
+
+        let database = index.facet_id_normalized_string_strings;
+        let key = (fid, value);
+        let original_strings = match database.get(rtxn, &key)? {
+            Some(original_strings) => original_strings,
+            None => {
+                error!("the facet value is missing from the facet database: {key:?}");
+                return Ok(ControlFlow::Continue(()));
+            }
+        };
+        for original in original_strings {
+            let key = FacetGroupKey { field_id: fid, level: 0, left_bound: original.as_str() };
+            let docids = match index.facet_id_string_docids.get(rtxn, &key)? {
+                Some(FacetGroupValue { bitmap, .. }) => bitmap,
+                None => {
+                    error!("the facet value is missing from the facet database: {key:?}");
+                    return Ok(ControlFlow::Continue(()));
+                }
+            };
+            let count = search_candidates.intersection_len(&docids);
+            if count != 0 {
+                let value = self
+                    .one_original_value_of(fid, &original, docids.min().unwrap())?
+                    .unwrap_or_else(|| query.to_string());
+                results.push(FacetValueHit { value, count });
+            }
+            if results.len() >= MAX_NUMBER_OF_FACETS {
+                return Ok(ControlFlow::Break(()));
+            }
+        }
+
+        Ok(ControlFlow::Continue(()))
     }
 }
 

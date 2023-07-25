@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::io;
 use std::result::Result as StdResult;
 
@@ -41,6 +42,27 @@ pub fn merge_roaring_bitmaps<'a>(_key: &[u8], values: &[Cow<'a, [u8]>]) -> Resul
         let mut buffer = Vec::new();
         serialize_roaring_bitmap(&merged, &mut buffer)?;
         Ok(Cow::Owned(buffer))
+    }
+}
+
+pub fn merge_btreeset_string<'a>(_key: &[u8], values: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
+    if values.len() == 1 {
+        Ok(values[0].clone())
+    } else {
+        // TODO improve the perf by using a `#[borrow] Cow<str>`.
+        let strings: BTreeSet<String> = values
+            .iter()
+            .map(AsRef::as_ref)
+            .map(serde_json::from_slice::<BTreeSet<String>>)
+            .map(StdResult::unwrap)
+            .reduce(|mut current, new| {
+                for x in new {
+                    current.insert(x);
+                }
+                current
+            })
+            .unwrap();
+        Ok(Cow::Owned(serde_json::to_vec(&strings).unwrap()))
     }
 }
 

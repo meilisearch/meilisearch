@@ -76,9 +76,14 @@ pub const FACET_MAX_GROUP_SIZE: u8 = 8;
 pub const FACET_GROUP_SIZE: u8 = 4;
 pub const FACET_MIN_LEVEL_SIZE: u8 = 5;
 
+use std::collections::BTreeSet;
 use std::fs::File;
+use std::iter::FromIterator;
 
-use heed::types::DecodeIgnore;
+use charabia::normalizer::{Normalize, NormalizerOption};
+use grenad::{CompressionType, SortAlgorithm};
+use heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
+use heed::BytesEncode;
 use log::debug;
 use time::OffsetDateTime;
 
@@ -87,7 +92,9 @@ use super::FacetsUpdateBulk;
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec};
 use crate::heed_codec::ByteSliceRefCodec;
-use crate::{Index, Result, BEU16};
+use crate::update::index_documents::create_sorter;
+use crate::update::merge_btreeset_string;
+use crate::{BEU16StrCodec, Index, Result, BEU16};
 
 pub mod bulk;
 pub mod delete;
@@ -159,26 +166,69 @@ impl<'i> FacetsUpdate<'i> {
             incremental_update.execute(wtxn)?;
         }
 
+        // We clear the list of normalized-for-search facets
+        // and the previous FSTs to compute everything from scratch
+        self.index.facet_id_normalized_string_strings.clear(wtxn)?;
+        self.index.facet_id_string_fst.clear(wtxn)?;
+
+        // As we can't use the same write transaction to read and write in two different databases
+        // we must create a temporary sorter that we will write into LMDB afterward.
+        // As multiple unnormalized facet values can become the same normalized facet value
+        // we must merge them together.
+        let mut sorter = create_sorter(
+            SortAlgorithm::Unstable,
+            merge_btreeset_string,
+            CompressionType::None,
+            None,
+            None,
+            None,
+        );
+
+        // We iterate on the list of original, semi-normalized, facet values
+        // and normalize them for search, inserting them in LMDB in any given order.
+        let options = NormalizerOption { lossy: true, ..Default::default() };
+        let database = self.index.facet_id_string_docids.remap_data_type::<DecodeIgnore>();
+        for result in database.iter(wtxn)? {
+            let (facet_group_key, ()) = result?;
+            if let FacetGroupKey { field_id, level: 0, left_bound } = facet_group_key {
+                let normalized_facet = left_bound.normalize(&options);
+                let set = BTreeSet::from_iter(std::iter::once(left_bound));
+                let key = (field_id, normalized_facet.as_ref());
+                let key = BEU16StrCodec::bytes_encode(&key).ok_or(heed::Error::Encoding)?;
+                let val = SerdeJson::bytes_encode(&set).ok_or(heed::Error::Encoding)?;
+                sorter.insert(key, val)?;
+            }
+        }
+
+        // In this loop we don't need to take care of merging bitmaps
+        // as the grenad sorter already merged them for us.
+        let mut merger_iter = sorter.into_stream_merger_iter()?;
+        while let Some((key_bytes, btreeset_bytes)) = merger_iter.next()? {
+            self.index
+                .facet_id_normalized_string_strings
+                .remap_types::<ByteSlice, ByteSlice>()
+                .put(wtxn, key_bytes, btreeset_bytes)?;
+        }
+
         // We compute one FST by string facet
         let mut text_fsts = vec![];
         let mut current_fst: Option<(u16, fst::SetBuilder<Vec<u8>>)> = None;
-        let database = self.index.facet_id_string_docids.remap_data_type::<DecodeIgnore>();
+        let database =
+            self.index.facet_id_normalized_string_strings.remap_data_type::<DecodeIgnore>();
         for result in database.iter(wtxn)? {
-            let (facet_group_key, _) = result?;
-            if let FacetGroupKey { field_id, level: 0, left_bound } = facet_group_key {
-                current_fst = match current_fst.take() {
-                    Some((fid, fst_builder)) if fid != field_id => {
-                        let fst = fst_builder.into_set();
-                        text_fsts.push((fid, fst));
-                        Some((field_id, fst::SetBuilder::memory()))
-                    }
-                    Some((field_id, fst_builder)) => Some((field_id, fst_builder)),
-                    None => Some((field_id, fst::SetBuilder::memory())),
-                };
-
-                if let Some((_, fst_builder)) = current_fst.as_mut() {
-                    fst_builder.insert(left_bound)?;
+            let ((field_id, normalized_facet), _) = result?;
+            current_fst = match current_fst.take() {
+                Some((fid, fst_builder)) if fid != field_id => {
+                    let fst = fst_builder.into_set();
+                    text_fsts.push((fid, fst));
+                    Some((field_id, fst::SetBuilder::memory()))
                 }
+                Some((field_id, fst_builder)) => Some((field_id, fst_builder)),
+                None => Some((field_id, fst::SetBuilder::memory())),
+            };
+
+            if let Some((_, fst_builder)) = current_fst.as_mut() {
+                fst_builder.insert(normalized_facet)?;
             }
         }
 
@@ -186,9 +236,6 @@ impl<'i> FacetsUpdate<'i> {
             let fst = fst_builder.into_set();
             text_fsts.push((field_id, fst));
         }
-
-        // We remove all of the previous FSTs that were in this database
-        self.index.facet_id_string_fst.clear(wtxn)?;
 
         // We write those FSTs in LMDB now
         for (field_id, fst) in text_fsts {
