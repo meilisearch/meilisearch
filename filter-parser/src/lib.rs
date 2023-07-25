@@ -472,6 +472,77 @@ pub fn parse_filter(input: Span) -> IResult<FilterCondition> {
     terminated(|input| parse_expression(input, 0), eof)(input)
 }
 
+impl<'a> std::fmt::Display for FilterCondition<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FilterCondition::Not(filter) => {
+                write!(f, "NOT ({filter})")
+            }
+            FilterCondition::Condition { fid, op } => {
+                write!(f, "{fid} {op}")
+            }
+            FilterCondition::In { fid, els } => {
+                write!(f, "{fid} IN[")?;
+                for el in els {
+                    write!(f, "{el}, ")?;
+                }
+                write!(f, "]")
+            }
+            FilterCondition::Or(els) => {
+                write!(f, "OR[")?;
+                for el in els {
+                    write!(f, "{el}, ")?;
+                }
+                write!(f, "]")
+            }
+            FilterCondition::And(els) => {
+                write!(f, "AND[")?;
+                for el in els {
+                    write!(f, "{el}, ")?;
+                }
+                write!(f, "]")
+            }
+            FilterCondition::GeoLowerThan { point, radius } => {
+                write!(f, "_geoRadius({}, {}, {})", point[0], point[1], radius)
+            }
+            FilterCondition::GeoBoundingBox {
+                top_right_point: top_left_point,
+                bottom_left_point: bottom_right_point,
+            } => {
+                write!(
+                    f,
+                    "_geoBoundingBox([{}, {}], [{}, {}])",
+                    top_left_point[0],
+                    top_left_point[1],
+                    bottom_right_point[0],
+                    bottom_right_point[1]
+                )
+            }
+        }
+    }
+}
+impl<'a> std::fmt::Display for Condition<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Condition::GreaterThan(token) => write!(f, "> {token}"),
+            Condition::GreaterThanOrEqual(token) => write!(f, ">= {token}"),
+            Condition::Equal(token) => write!(f, "= {token}"),
+            Condition::NotEqual(token) => write!(f, "!= {token}"),
+            Condition::Null => write!(f, "IS NULL"),
+            Condition::Empty => write!(f, "IS EMPTY"),
+            Condition::Exists => write!(f, "EXISTS"),
+            Condition::LowerThan(token) => write!(f, "< {token}"),
+            Condition::LowerThanOrEqual(token) => write!(f, "<= {token}"),
+            Condition::Between { from, to } => write!(f, "{from} TO {to}"),
+        }
+    }
+}
+impl<'a> std::fmt::Display for Token<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{{}}}", self.value())
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
@@ -850,76 +921,5 @@ pub mod tests {
         let s = "test string that should not be parsed";
         let token: Token = s.into();
         assert_eq!(token.value(), s);
-    }
-}
-
-impl<'a> std::fmt::Display for FilterCondition<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FilterCondition::Not(filter) => {
-                write!(f, "NOT ({filter})")
-            }
-            FilterCondition::Condition { fid, op } => {
-                write!(f, "{fid} {op}")
-            }
-            FilterCondition::In { fid, els } => {
-                write!(f, "{fid} IN[")?;
-                for el in els {
-                    write!(f, "{el}, ")?;
-                }
-                write!(f, "]")
-            }
-            FilterCondition::Or(els) => {
-                write!(f, "OR[")?;
-                for el in els {
-                    write!(f, "{el}, ")?;
-                }
-                write!(f, "]")
-            }
-            FilterCondition::And(els) => {
-                write!(f, "AND[")?;
-                for el in els {
-                    write!(f, "{el}, ")?;
-                }
-                write!(f, "]")
-            }
-            FilterCondition::GeoLowerThan { point, radius } => {
-                write!(f, "_geoRadius({}, {}, {})", point[0], point[1], radius)
-            }
-            FilterCondition::GeoBoundingBox {
-                top_right_point: top_left_point,
-                bottom_left_point: bottom_right_point,
-            } => {
-                write!(
-                    f,
-                    "_geoBoundingBox([{}, {}], [{}, {}])",
-                    top_left_point[0],
-                    top_left_point[1],
-                    bottom_right_point[0],
-                    bottom_right_point[1]
-                )
-            }
-        }
-    }
-}
-impl<'a> std::fmt::Display for Condition<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Condition::GreaterThan(token) => write!(f, "> {token}"),
-            Condition::GreaterThanOrEqual(token) => write!(f, ">= {token}"),
-            Condition::Equal(token) => write!(f, "= {token}"),
-            Condition::NotEqual(token) => write!(f, "!= {token}"),
-            Condition::Null => write!(f, "IS NULL"),
-            Condition::Empty => write!(f, "IS EMPTY"),
-            Condition::Exists => write!(f, "EXISTS"),
-            Condition::LowerThan(token) => write!(f, "< {token}"),
-            Condition::LowerThanOrEqual(token) => write!(f, "<= {token}"),
-            Condition::Between { from, to } => write!(f, "{from} TO {to}"),
-        }
-    }
-}
-impl<'a> std::fmt::Display for Token<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{{{}}}", self.value())
     }
 }
