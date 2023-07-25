@@ -1,3 +1,4 @@
+use meili_snap::snapshot;
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 
@@ -70,14 +71,14 @@ async fn advanced_facet_search() {
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "adventre"})).await;
 
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(dbg!(response)["facetHits"].as_array().unwrap().len(), 0);
+    snapshot!(code, @"200 OK");
+    snapshot!(response["facetHits"].as_array().unwrap().len(), @"0");
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "àdventure"})).await;
 
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(response["facetHits"].as_array().unwrap().len(), 1);
+    snapshot!(code, @"200 OK");
+    snapshot!(response["facetHits"].as_array().unwrap().len(), @"1");
 }
 
 #[actix_rt::test]
@@ -94,14 +95,14 @@ async fn more_advanced_facet_search() {
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "adventre"})).await;
 
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(dbg!(response)["facetHits"].as_array().unwrap().len(), 0);
+    snapshot!(code, @"200 OK");
+    snapshot!(response["facetHits"].as_array().unwrap().len(), @"0");
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "adventure"})).await;
 
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(response["facetHits"].as_array().unwrap().len(), 1);
+    snapshot!(code, @"200 OK");
+    snapshot!(response["facetHits"].as_array().unwrap().len(), @"1");
 }
 
 #[actix_rt::test]
