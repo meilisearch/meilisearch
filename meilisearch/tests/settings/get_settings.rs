@@ -65,8 +65,8 @@ async fn get_settings() {
         json!(["words", "typo", "proximity", "attribute", "sort", "exactness"])
     );
     assert_eq!(settings["stopWords"], json!([]));
-    assert_eq!(settings["non_separator_tokens"], json!([]));
-    assert_eq!(settings["separator_tokens"], json!([]));
+    assert_eq!(settings["nonSeparatorTokens"], json!([]));
+    assert_eq!(settings["separatorTokens"], json!([]));
     assert_eq!(settings["dictionary"], json!([]));
     assert_eq!(
         settings["faceting"],
