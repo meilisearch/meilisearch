@@ -29,9 +29,8 @@ geoutils = "0.5.1"
 grenad = { version = "0.4.4", default-features = false, features = [
     "tempfile",
 ] }
-heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.6", default-features = false, features = [
-    "lmdb",
-    "sync-read-txn",
+heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.7", default-features = false, features = [
+    "lmdb", "read-txn-no-tls"
 ] }
 indexmap = { version = "1.9.3", features = ["serde"] }
 instant-distance = { version = "0.6.1", features = ["with-serde"] }
