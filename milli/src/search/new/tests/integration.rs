@@ -2,7 +2,7 @@ use std::io::Cursor;
 
 use big_s::S;
 use heed::EnvOpenOptions;
-use maplit::{hashmap, hashset};
+use maplit::{btreemap, hashset};
 
 use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use crate::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
@@ -33,7 +33,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         S("tag"),
         S("asc_desc_rank"),
     });
-    builder.set_synonyms(hashmap! {
+    builder.set_synonyms(btreemap! {
         S("hello") => vec![S("good morning")],
         S("world") => vec![S("earth")],
         S("america") => vec![S("the united states")],

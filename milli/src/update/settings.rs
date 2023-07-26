@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::result::Result as StdResult;
 
 use charabia::{Normalize, Tokenizer, TokenizerBuilder};
@@ -116,7 +116,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     separator_tokens: Setting<BTreeSet<String>>,
     dictionary: Setting<BTreeSet<String>>,
     distinct_field: Setting<String>,
-    synonyms: Setting<HashMap<String, Vec<String>>>,
+    synonyms: Setting<BTreeMap<String, Vec<String>>>,
     primary_key: Setting<String>,
     authorize_typos: Setting<bool>,
     min_word_len_two_typos: Setting<u8>,
@@ -256,7 +256,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.synonyms = Setting::Reset;
     }
 
-    pub fn set_synonyms(&mut self, synonyms: HashMap<String, Vec<String>>) {
+    pub fn set_synonyms(&mut self, synonyms: BTreeMap<String, Vec<String>>) {
         self.synonyms = if synonyms.is_empty() { Setting::Reset } else { Setting::Set(synonyms) }
     }
 
@@ -508,8 +508,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         };
 
         // the synonyms must be updated if non separator tokens have been updated.
-        if changes {
-            self.update_synonyms()?;
+        if changes && self.synonyms == Setting::NotSet {
+            self.synonyms = Setting::Set(self.index.user_defined_synonyms(self.wtxn)?);
         }
 
         Ok(changes)
@@ -533,8 +533,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         };
 
         // the synonyms must be updated if separator tokens have been updated.
-        if changes {
-            self.update_synonyms()?;
+        if changes && self.synonyms == Setting::NotSet {
+            self.synonyms = Setting::Set(self.index.user_defined_synonyms(self.wtxn)?);
         }
 
         Ok(changes)
@@ -558,8 +558,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         };
 
         // the synonyms must be updated if dictionary has been updated.
-        if changes {
-            self.update_synonyms()?;
+        if changes && self.synonyms == Setting::NotSet {
+            self.synonyms = Setting::Set(self.index.user_defined_synonyms(self.wtxn)?);
         }
 
         Ok(changes)
@@ -567,7 +567,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
     fn update_synonyms(&mut self) -> Result<bool> {
         match self.synonyms {
-            Setting::Set(ref synonyms) => {
+            Setting::Set(ref user_synonyms) => {
                 fn normalize(tokenizer: &Tokenizer, text: &str) -> Vec<String> {
                     tokenizer
                         .tokenize(text)
@@ -604,7 +604,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 let tokenizer = builder.build();
 
                 let mut new_synonyms = HashMap::new();
-                for (word, synonyms) in synonyms {
+                for (word, synonyms) in user_synonyms {
                     // Normalize both the word and associated synonyms.
                     let normalized_word = normalize(&tokenizer, word);
                     let normalized_synonyms =
@@ -625,7 +625,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 let old_synonyms = self.index.synonyms(self.wtxn)?;
 
                 if new_synonyms != old_synonyms {
-                    self.index.put_synonyms(self.wtxn, &new_synonyms)?;
+                    self.index.put_synonyms(self.wtxn, &new_synonyms, &user_synonyms)?;
                     Ok(true)
                 } else {
                     Ok(false)
@@ -912,7 +912,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 mod tests {
     use big_s::S;
     use heed::types::ByteSlice;
-    use maplit::{btreeset, hashmap, hashset};
+    use maplit::{btreemap, btreeset, hashset};
 
     use super::*;
     use crate::error::Error;
@@ -1378,7 +1378,7 @@ mod tests {
         // In the same transaction provide some synonyms
         index
             .update_settings_using_wtxn(&mut wtxn, |settings| {
-                settings.set_synonyms(hashmap! {
+                settings.set_synonyms(btreemap! {
                     "blini".to_string() => vec!["crepes".to_string()],
                     "super like".to_string() => vec!["love".to_string()],
                     "puppies".to_string() => vec!["dogs".to_string(), "doggos".to_string()]

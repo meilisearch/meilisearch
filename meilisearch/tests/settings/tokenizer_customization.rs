@@ -232,7 +232,7 @@ async fn advanced_synergies() {
 
     let (_response, _code) = index
         .update_settings(json!({
-            "dictionary": ["J.R.R.", "J. R. R.", "J.K.", "J. K."],
+            "dictionary": ["J.R.R.", "J. R. R."],
             "synonyms": {
                 "J.R.R.": ["jrr", "J. R. R."],
                 "J. R. R.": ["jrr", "J.R.R."],
@@ -346,6 +346,14 @@ async fn advanced_synergies() {
             "###);
         })
         .await;
+
+    // Only update dictionary, the synonyms should be recomputed.
+    let (_response, _code) = index
+        .update_settings(json!({
+            "dictionary": ["J.R.R.", "J. R. R.", "J.K.", "J. K."],
+        }))
+        .await;
+    index.wait_task(2).await;
 
     index
         .search(json!({"q": "jk", "attributesToHighlight": ["content"]}), |response, code| {

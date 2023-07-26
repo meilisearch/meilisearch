@@ -15,7 +15,7 @@ they store fewer sprximities than the regular word sprximity DB.
 
 */
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::index::tests::TempIndex;
 use crate::search::new::tests::collect_field_values;
@@ -336,7 +336,7 @@ fn test_proximity_split_word() {
 
     index
         .update_settings(|s| {
-            let mut syns = HashMap::new();
+            let mut syns = BTreeMap::new();
             syns.insert("xyz".to_owned(), vec!["sun flower".to_owned()]);
             s.set_synonyms(syns);
         })

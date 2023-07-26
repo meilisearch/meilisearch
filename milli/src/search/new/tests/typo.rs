@@ -18,7 +18,7 @@ if `words` doesn't exist before it.
 14. Synonyms cost nothing according to the typo ranking rule
 */
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::index::tests::TempIndex;
 use crate::search::new::tests::collect_field_values;
@@ -591,7 +591,7 @@ fn test_typo_synonyms() {
         .update_settings(|s| {
             s.set_criteria(vec![Criterion::Typo]);
 
-            let mut synonyms = HashMap::new();
+            let mut synonyms = BTreeMap::new();
             synonyms.insert("lackadaisical".to_owned(), vec!["lazy".to_owned()]);
             synonyms.insert("fast brownish".to_owned(), vec!["quick brown".to_owned()]);
 
