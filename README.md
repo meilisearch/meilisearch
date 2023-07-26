@@ -61,7 +61,7 @@ You may also want to check out [Meilisearch 101](https://www.meilisearch.com/doc
 
 ## ⚡ Supercharge your Meilisearch experience
 
-Say goodbye to server deployment and manual updates with [Meilisearch Cloud](https://www.meilisearch.com/pricing?utm_campaign=oss&utm_source=engine&utm_medium=meilisearch). No credit card required.
+Say goodbye to server deployment and manual updates with [Meilisearch Cloud](https://www.meilisearch.com/cloud?utm_campaign=oss&utm_source=github&utm_medium=meilisearch). No credit card required.
 
 ## 🧰 SDKs & integration tools
 
