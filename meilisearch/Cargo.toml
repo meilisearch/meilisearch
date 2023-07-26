@@ -141,5 +141,5 @@ thai = ["meilisearch-types/thai"]
 greek = ["meilisearch-types/greek"]
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.9/build.zip"
-sha1 = "9c713298788363e41087f2b40e7509d390033e30"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.10/build.zip"
+sha1 = "974cd7729138f629fee323c16b4e4f2cfdff266f"
