@@ -625,7 +625,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 let old_synonyms = self.index.synonyms(self.wtxn)?;
 
                 if new_synonyms != old_synonyms {
-                    self.index.put_synonyms(self.wtxn, &new_synonyms, &user_synonyms)?;
+                    self.index.put_synonyms(self.wtxn, &new_synonyms, user_synonyms)?;
                     Ok(true)
                 } else {
                     Ok(false)
