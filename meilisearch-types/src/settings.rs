@@ -509,13 +509,7 @@ pub fn settings(
 
     let distinct_field = index.distinct_field(rtxn)?.map(String::from);
 
-    // in milli each word in the synonyms map were split on their separator. Since we lost
-    // this information we are going to put space between words.
-    let synonyms = index
-        .synonyms(rtxn)?
-        .iter()
-        .map(|(key, values)| (key.join(" "), values.iter().map(|value| value.join(" ")).collect()))
-        .collect();
+    let synonyms = index.user_defined_synonyms(rtxn)?;
 
     let min_typo_word_len = MinWordSizeTyposSetting {
         one_typo: Setting::Set(index.min_word_len_one_typo(rtxn)?),
