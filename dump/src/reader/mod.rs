@@ -195,8 +195,53 @@ pub(crate) mod test {
     use meili_snap::insta;
 
     use super::*;
+    use crate::reader::v6::RuntimeTogglableFeatures;
 
-    // TODO: add `features` to tests
+    #[test]
+    fn import_dump_v6_experimental() {
+        let dump = File::open("tests/assets/v6-with-experimental.dump").unwrap();
+        let mut dump = DumpReader::open(dump).unwrap();
+
+        // top level infos
+        insta::assert_display_snapshot!(dump.date().unwrap(), @"2023-07-06 7:10:27.21958 +00:00:00");
+        insta::assert_debug_snapshot!(dump.instance_uid().unwrap(), @"None");
+
+        // tasks
+        let tasks = dump.tasks().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"d45cd8571703e58ae53c7bd7ce3f5c22");
+        assert_eq!(update_files.len(), 2);
+        assert!(update_files[0].is_none()); // the dump creation
+        assert!(update_files[1].is_none()); // the processed document addition
+
+        // keys
+        let keys = dump.keys().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        meili_snap::snapshot_hash!(meili_snap::json_string!(keys), @"13c2da155e9729c2344688cab29af71d");
+
+        // indexes
+        let mut indexes = dump.indexes().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        // the index are not ordered in any way by default
+        indexes.sort_by_key(|index| index.metadata().uid.to_string());
+
+        let mut test = indexes.pop().unwrap();
+        assert!(indexes.is_empty());
+
+        insta::assert_json_snapshot!(test.metadata(), @r###"
+        {
+          "uid": "test",
+          "primaryKey": "id",
+          "createdAt": "2023-07-06T07:07:41.364694Z",
+          "updatedAt": "2023-07-06T07:07:41.396114Z"
+        }
+        "###);
+
+        assert_eq!(test.documents().unwrap().count(), 1);
+
+        assert_eq!(
+            dump.features().unwrap().unwrap(),
+            RuntimeTogglableFeatures { vector_store: true, ..Default::default() }
+        );
+    }
 
     #[test]
     fn import_dump_v5() {
@@ -274,6 +319,8 @@ pub(crate) mod test {
         let documents = spells.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 10);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"235016433dd04262c7f2da01d1e808ce");
+
+        assert_eq!(dump.features().unwrap(), None);
     }
 
     #[test]

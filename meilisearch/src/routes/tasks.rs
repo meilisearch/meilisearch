@@ -325,7 +325,7 @@ async fn cancel_tasks(
 
     let query = params.into_query();
 
-    let tasks = index_scheduler.get_task_ids_from_authorized_indexes(
+    let (tasks, _) = index_scheduler.get_task_ids_from_authorized_indexes(
         &index_scheduler.read_txn()?,
         &query,
         index_scheduler.filters(),
@@ -370,7 +370,7 @@ async fn delete_tasks(
     );
     let query = params.into_query();
 
-    let tasks = index_scheduler.get_task_ids_from_authorized_indexes(
+    let (tasks, _) = index_scheduler.get_task_ids_from_authorized_indexes(
         &index_scheduler.read_txn()?,
         &query,
         index_scheduler.filters(),
@@ -387,6 +387,7 @@ async fn delete_tasks(
 #[derive(Debug, Serialize)]
 pub struct AllTasks {
     results: Vec<TaskView>,
+    total: u64,
     limit: u32,
     from: Option<u32>,
     next: Option<u32>,
@@ -406,23 +407,17 @@ async fn get_tasks(
     let limit = params.limit.0;
     let query = params.into_query();
 
-    let mut tasks_results: Vec<TaskView> = index_scheduler
-        .get_tasks_from_authorized_indexes(query, index_scheduler.filters())?
-        .into_iter()
-        .map(|t| TaskView::from_task(&t))
-        .collect();
+    let filters = index_scheduler.filters();
+    let (tasks, total) = index_scheduler.get_tasks_from_authorized_indexes(query, filters)?;
+    let mut results: Vec<_> = tasks.iter().map(TaskView::from_task).collect();
 
     // If we were able to fetch the number +1 tasks we asked
     // it means that there is more to come.
-    let next = if tasks_results.len() == limit as usize {
-        tasks_results.pop().map(|t| t.uid)
-    } else {
-        None
-    };
+    let next = if results.len() == limit as usize { results.pop().map(|t| t.uid) } else { None };
 
-    let from = tasks_results.first().map(|t| t.uid);
+    let from = results.first().map(|t| t.uid);
+    let tasks = AllTasks { results, limit: limit.saturating_sub(1), total, from, next };
 
-    let tasks = AllTasks { results: tasks_results, limit: limit.saturating_sub(1), from, next };
     Ok(HttpResponse::Ok().json(tasks))
 }
 
@@ -444,10 +439,10 @@ async fn get_task(
     analytics.publish("Tasks Seen".to_string(), json!({ "per_task_uid": true }), Some(&req));
 
     let query = index_scheduler::Query { uids: Some(vec![task_uid]), ..Query::default() };
+    let filters = index_scheduler.filters();
+    let (tasks, _) = index_scheduler.get_tasks_from_authorized_indexes(query, filters)?;
 
-    if let Some(task) =
-        index_scheduler.get_tasks_from_authorized_indexes(query, index_scheduler.filters())?.first()
-    {
+    if let Some(task) = tasks.first() {
         let task_view = TaskView::from_task(task);
         Ok(HttpResponse::Ok().json(task_view))
     } else {

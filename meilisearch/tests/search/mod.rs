@@ -4,6 +4,7 @@
 mod errors;
 mod facet_search;
 mod formatted;
+mod geo;
 mod multi;
 mod pagination;
 mod restrict_searchable;
@@ -750,5 +751,356 @@ async fn faceting_max_values_per_facet() {
                 assert_eq!(numbers.len(), 10_000);
             },
         )
+        .await;
+}
+
+#[actix_rt::test]
+async fn experimental_feature_score_details() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = DOCUMENTS.clone();
+
+    index.add_documents(json!(documents), None).await;
+    index.wait_task(0).await;
+
+    index
+        .search(
+            json!({
+                "q": "train dragon",
+                "showRankingScoreDetails": true,
+            }),
+            |response, code| {
+                meili_snap::snapshot!(code, @"400 Bad Request");
+                meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+                {
+                  "message": "Computing score details requires enabling the `score details` experimental feature. See https://github.com/meilisearch/product/discussions/674",
+                  "code": "feature_not_enabled",
+                  "type": "invalid_request",
+                  "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+                }
+                "###);
+            },
+        )
+        .await;
+
+    let (response, code) = server.set_features(json!({"scoreDetails": true})).await;
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(response["scoreDetails"], @"true");
+
+    index
+        .search(
+            json!({
+                "q": "train dragon",
+                "showRankingScoreDetails": true,
+            }),
+            |response, code| {
+                meili_snap::snapshot!(code, @"200 OK");
+                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "How to Train Your Dragon: The Hidden World",
+                    "id": "166428",
+                    "_rankingScoreDetails": {
+                      "words": {
+                        "order": 0,
+                        "matchingWords": 2,
+                        "maxMatchingWords": 2,
+                        "score": 1.0
+                      },
+                      "typo": {
+                        "order": 1,
+                        "typoCount": 0,
+                        "maxTypoCount": 2,
+                        "score": 1.0
+                      },
+                      "proximity": {
+                        "order": 2,
+                        "score": 0.875
+                      },
+                      "attribute": {
+                        "order": 3,
+                        "attributeRankingOrderScore": 1.0,
+                        "queryWordDistanceScore": 0.8095238095238095,
+                        "score": 0.9365079365079364
+                      },
+                      "exactness": {
+                        "order": 4,
+                        "matchType": "noExactMatch",
+                        "matchingWords": 2,
+                        "maxMatchingWords": 2,
+                        "score": 0.3333333333333333
+                      }
+                    }
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
+async fn experimental_feature_vector_store() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = DOCUMENTS.clone();
+
+    index.add_documents(json!(documents), None).await;
+    index.wait_task(0).await;
+
+    let (response, code) = index
+        .search_post(json!({
+            "vector": [1.0, 2.0, 3.0],
+        }))
+        .await;
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "message": "Passing `vector` as a query parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "###);
+
+    let (response, code) = server.set_features(json!({"vectorStore": true})).await;
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(response["vectorStore"], @"true");
+
+    let (response, code) = index
+        .search_post(json!({
+            "vector": [1.0, 2.0, 3.0],
+        }))
+        .await;
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @"[]");
+}
+
+#[cfg(feature = "default")]
+#[actix_rt::test]
+async fn camelcased_words() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    // related to https://github.com/meilisearch/meilisearch/issues/3818
+    let documents = json!([
+        { "id": 0, "title": "DeLonghi" },
+        { "id": 1, "title": "delonghi" },
+        { "id": 2, "title": "TestAB" },
+        { "id": 3, "title": "TestAb" },
+        { "id": 4, "title": "testab" },
+    ]);
+    index.add_documents(documents, None).await;
+    index.wait_task(0).await;
+
+    index
+        .search(json!({"q": "deLonghi"}), |response, code| {
+            meili_snap::snapshot!(code, @"200 OK");
+            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 0,
+                "title": "DeLonghi"
+              },
+              {
+                "id": 1,
+                "title": "delonghi"
+              }
+            ]
+            "###);
+        })
+        .await;
+
+    index
+        .search(json!({"q": "dellonghi"}), |response, code| {
+            meili_snap::snapshot!(code, @"200 OK");
+            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 0,
+                "title": "DeLonghi"
+              },
+              {
+                "id": 1,
+                "title": "delonghi"
+              }
+            ]
+            "###);
+        })
+        .await;
+
+    index
+        .search(json!({"q": "testa"}), |response, code| {
+            meili_snap::snapshot!(code, @"200 OK");
+            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 2,
+                "title": "TestAB"
+              },
+              {
+                "id": 3,
+                "title": "TestAb"
+              },
+              {
+                "id": 4,
+                "title": "testab"
+              }
+            ]
+            "###);
+        })
+        .await;
+
+    index
+        .search(json!({"q": "testab"}), |response, code| {
+            meili_snap::snapshot!(code, @"200 OK");
+            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 2,
+                "title": "TestAB"
+              },
+              {
+                "id": 3,
+                "title": "TestAb"
+              },
+              {
+                "id": 4,
+                "title": "testab"
+              }
+            ]
+            "###);
+        })
+        .await;
+
+    index
+        .search(json!({"q": "TestaB"}), |response, code| {
+            meili_snap::snapshot!(code, @"200 OK");
+            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 2,
+                "title": "TestAB"
+              },
+              {
+                "id": 3,
+                "title": "TestAb"
+              },
+              {
+                "id": 4,
+                "title": "testab"
+              }
+            ]
+            "###);
+        })
+        .await;
+
+    index
+        .search(json!({"q": "Testab"}), |response, code| {
+            meili_snap::snapshot!(code, @"200 OK");
+            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 2,
+                "title": "TestAB"
+              },
+              {
+                "id": 3,
+                "title": "TestAb"
+              },
+              {
+                "id": 4,
+                "title": "testab"
+              }
+            ]
+            "###);
+        })
+        .await;
+
+    index
+        .search(json!({"q": "TestAb"}), |response, code| {
+            meili_snap::snapshot!(code, @"200 OK");
+            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 2,
+                "title": "TestAB"
+              },
+              {
+                "id": 3,
+                "title": "TestAb"
+              },
+              {
+                "id": 4,
+                "title": "testab"
+              }
+            ]
+            "###);
+        })
+        .await;
+
+    // with Typos
+    index
+        .search(json!({"q": "dellonghi"}), |response, code| {
+            meili_snap::snapshot!(code, @"200 OK");
+            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 0,
+                "title": "DeLonghi"
+              },
+              {
+                "id": 1,
+                "title": "delonghi"
+              }
+            ]
+            "###);
+        })
+        .await;
+
+    index
+        .search(json!({"q": "TetsAB"}), |response, code| {
+            meili_snap::snapshot!(code, @"200 OK");
+            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 2,
+                "title": "TestAB"
+              },
+              {
+                "id": 3,
+                "title": "TestAb"
+              },
+              {
+                "id": 4,
+                "title": "testab"
+              }
+            ]
+            "###);
+        })
+        .await;
+
+    index
+        .search(json!({"q": "TetsAB"}), |response, code| {
+            meili_snap::snapshot!(code, @"200 OK");
+            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 2,
+                "title": "TestAB"
+              },
+              {
+                "id": 3,
+                "title": "TestAb"
+              },
+              {
+                "id": 4,
+                "title": "testab"
+              }
+            ]
+            "###);
+        })
         .await;
 }

@@ -120,10 +120,10 @@ fn test_ignore_stop_words() {
             ExactAttribute(
                 NoExactMatch,
             ),
-            Exactness(
-                Rank {
-                    rank: 2,
-                    max_rank: 2,
+            ExactWords(
+                ExactWords {
+                    matching_words: 1,
+                    max_matching_words: 1,
                 },
             ),
         ],
@@ -173,10 +173,10 @@ fn test_ignore_stop_words() {
             ExactAttribute(
                 NoExactMatch,
             ),
-            Exactness(
-                Rank {
-                    rank: 2,
-                    max_rank: 2,
+            ExactWords(
+                ExactWords {
+                    matching_words: 1,
+                    max_matching_words: 1,
                 },
             ),
         ],
@@ -226,10 +226,10 @@ fn test_ignore_stop_words() {
             ExactAttribute(
                 NoExactMatch,
             ),
-            Exactness(
-                Rank {
-                    rank: 2,
-                    max_rank: 2,
+            ExactWords(
+                ExactWords {
+                    matching_words: 1,
+                    max_matching_words: 1,
                 },
             ),
         ],
@@ -278,10 +278,10 @@ fn test_ignore_stop_words() {
             ExactAttribute(
                 NoExactMatch,
             ),
-            Exactness(
-                Rank {
-                    rank: 3,
-                    max_rank: 3,
+            ExactWords(
+                ExactWords {
+                    matching_words: 2,
+                    max_matching_words: 2,
                 },
             ),
         ],
@@ -337,10 +337,10 @@ fn test_stop_words_in_phrase() {
             ExactAttribute(
                 MatchesStart,
             ),
-            Exactness(
-                Rank {
-                    rank: 2,
-                    max_rank: 2,
+            ExactWords(
+                ExactWords {
+                    matching_words: 1,
+                    max_matching_words: 1,
                 },
             ),
         ],
@@ -378,10 +378,10 @@ fn test_stop_words_in_phrase() {
             ExactAttribute(
                 MatchesStart,
             ),
-            Exactness(
-                Rank {
-                    rank: 2,
-                    max_rank: 2,
+            ExactWords(
+                ExactWords {
+                    matching_words: 1,
+                    max_matching_words: 1,
                 },
             ),
         ],
@@ -430,10 +430,10 @@ fn test_stop_words_in_phrase() {
             ExactAttribute(
                 NoExactMatch,
             ),
-            Exactness(
-                Rank {
-                    rank: 4,
-                    max_rank: 4,
+            ExactWords(
+                ExactWords {
+                    matching_words: 3,
+                    max_matching_words: 3,
                 },
             ),
         ],

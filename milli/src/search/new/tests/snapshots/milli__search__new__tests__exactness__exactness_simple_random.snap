@@ -15,10 +15,10 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ExactAttribute(
                 NoExactMatch,
             ),
-            Exactness(
-                Rank {
-                    rank: 10,
-                    max_rank: 10,
+            ExactWords(
+                ExactWords {
+                    matching_words: 9,
+                    max_matching_words: 9,
                 },
             ),
         ],
@@ -35,10 +35,10 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ExactAttribute(
                 NoExactMatch,
             ),
-            Exactness(
-                Rank {
-                    rank: 4,
-                    max_rank: 4,
+            ExactWords(
+                ExactWords {
+                    matching_words: 3,
+                    max_matching_words: 3,
                 },
             ),
         ],
@@ -55,10 +55,10 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ExactAttribute(
                 NoExactMatch,
             ),
-            Exactness(
-                Rank {
-                    rank: 3,
-                    max_rank: 3,
+            ExactWords(
+                ExactWords {
+                    matching_words: 2,
+                    max_matching_words: 2,
                 },
             ),
         ],
@@ -75,10 +75,10 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ExactAttribute(
                 NoExactMatch,
             ),
-            Exactness(
-                Rank {
-                    rank: 3,
-                    max_rank: 3,
+            ExactWords(
+                ExactWords {
+                    matching_words: 2,
+                    max_matching_words: 2,
                 },
             ),
         ],
@@ -95,10 +95,10 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ExactAttribute(
                 NoExactMatch,
             ),
-            Exactness(
-                Rank {
-                    rank: 2,
-                    max_rank: 2,
+            ExactWords(
+                ExactWords {
+                    matching_words: 1,
+                    max_matching_words: 1,
                 },
             ),
         ],
@@ -115,10 +115,10 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ExactAttribute(
                 NoExactMatch,
             ),
-            Exactness(
-                Rank {
-                    rank: 2,
-                    max_rank: 2,
+            ExactWords(
+                ExactWords {
+                    matching_words: 1,
+                    max_matching_words: 1,
                 },
             ),
         ],

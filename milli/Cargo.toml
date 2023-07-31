@@ -17,11 +17,11 @@ bincode = "1.3.3"
 bstr = "1.4.0"
 bytemuck = { version = "1.13.1", features = ["extern_crate_alloc"] }
 byteorder = "1.4.3"
-charabia = { version = "0.8.1", default-features = false }
+charabia = { version = "0.8.2", default-features = false }
 concat-arrays = "0.1.2"
 crossbeam-channel = "0.5.8"
 deserr = "0.5.0"
-either = "1.8.1"
+either = { version = "1.8.1", features = ["serde"] }
 flatten-serde-json = { path = "../flatten-serde-json" }
 fst = "0.4.7"
 fxhash = "0.2.1"
@@ -29,12 +29,11 @@ geoutils = "0.5.1"
 grenad = { version = "0.4.4", default-features = false, features = [
     "tempfile",
 ] }
-heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.6", default-features = false, features = [
-    "lmdb",
-    "sync-read-txn",
+heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.7", default-features = false, features = [
+    "lmdb", "read-txn-no-tls"
 ] }
-hnsw = { version = "0.11.0", features = ["serde1"] }
 indexmap = { version = "1.9.3", features = ["serde"] }
+instant-distance = { version = "0.6.1", features = ["with-serde"] }
 json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
 memmap2 = "0.5.10"
@@ -48,7 +47,6 @@ rstar = { version = "0.10.0", features = ["serde"] }
 serde = { version = "1.0.160", features = ["derive"] }
 serde_json = { version = "1.0.95", features = ["preserve_order"] }
 slice-group-by = "0.3.0"
-space = "0.17.0"
 smallstr = { version = "0.3.0", features = ["serde"] }
 smallvec = "1.10.0"
 smartstring = "1.0.1"
@@ -81,7 +79,7 @@ md5 = "0.7.0"
 rand = { version = "0.8.5", features = ["small_rng"] }
 
 [features]
-all-tokenizations = ["charabia/default"]
+all-tokenizations = ["charabia/chinese", "charabia/hebrew", "charabia/japanese", "charabia/thai", "charabia/korean", "charabia/greek"]
 
 # Use POSIX semaphores instead of SysV semaphores in LMDB
 # For more information on this feature, see heed's Cargo.toml

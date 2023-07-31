@@ -50,6 +50,76 @@ async fn simple_search_on_title() {
 }
 
 #[actix_rt::test]
+async fn search_no_searchable_attribute_set() {
+    let server = Server::new().await;
+    let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
+
+    index
+        .search(
+            json!({"q": "Captain Marvel", "attributesToSearchOn": ["unknown"]}),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                snapshot!(response["hits"].as_array().unwrap().len(), @"0");
+            },
+        )
+        .await;
+
+    index.update_settings_searchable_attributes(json!(["*"])).await;
+    index.wait_task(1).await;
+
+    index
+        .search(
+            json!({"q": "Captain Marvel", "attributesToSearchOn": ["unknown"]}),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                snapshot!(response["hits"].as_array().unwrap().len(), @"0");
+            },
+        )
+        .await;
+
+    index.update_settings_searchable_attributes(json!(["*"])).await;
+    index.wait_task(2).await;
+
+    index
+        .search(
+            json!({"q": "Captain Marvel", "attributesToSearchOn": ["unknown", "title"]}),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                snapshot!(response["hits"].as_array().unwrap().len(), @"2");
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
+async fn search_on_all_attributes() {
+    let server = Server::new().await;
+    let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
+
+    index
+        .search(json!({"q": "Captain Marvel", "attributesToSearchOn": ["*"]}), |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(response["hits"].as_array().unwrap().len(), @"3");
+        })
+        .await;
+}
+
+#[actix_rt::test]
+async fn search_on_all_attributes_restricted_set() {
+    let server = Server::new().await;
+    let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
+    index.update_settings_searchable_attributes(json!(["title"])).await;
+    index.wait_task(1).await;
+
+    index
+        .search(json!({"q": "Captain Marvel", "attributesToSearchOn": ["*"]}), |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(response["hits"].as_array().unwrap().len(), @"2");
+        })
+        .await;
+}
+
+#[actix_rt::test]
 async fn simple_prefix_search_on_title() {
     let server = Server::new().await;
     let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
@@ -240,7 +310,7 @@ async fn exactness_ranking_rule_order() {
         },
         {
             "title": "Captain Marvel",
-            "desc": "CaptainMarvel",
+            "desc": "Captain the Marvel",
             "id": "2",
         }]),
     )

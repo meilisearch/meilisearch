@@ -4,10 +4,9 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use fst::IntoStreamer;
 use heed::types::{ByteSlice, DecodeIgnore, Str, UnalignedSlice};
 use heed::{BytesDecode, BytesEncode, Database, RwIter};
-use hnsw::Searcher;
+use instant_distance::PointId;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
-use space::KnnPoints;
 use time::OffsetDateTime;
 
 use super::facet::delete::FacetsDelete;
@@ -237,6 +236,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             word_prefix_fid_docids,
             facet_id_f64_docids: _,
             facet_id_string_docids: _,
+            facet_id_normalized_string_strings: _,
             facet_id_string_fst: _,
             field_id_docid_facet_f64s: _,
             field_id_docid_facet_strings: _,
@@ -436,24 +436,24 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
         // An ugly and slow way to remove the vectors from the HNSW
         // It basically reconstructs the HNSW from scratch without editing the current one.
-        let current_hnsw = self.index.vector_hnsw(self.wtxn)?.unwrap_or_default();
-        if !current_hnsw.is_empty() {
-            let mut new_hnsw = Hnsw::default();
-            let mut searcher = Searcher::new();
-            let mut new_vector_id_docids = Vec::new();
-
+        if let Some(current_hnsw) = self.index.vector_hnsw(self.wtxn)? {
+            let mut points = Vec::new();
+            let mut docids = Vec::new();
             for result in vector_id_docid.iter(self.wtxn)? {
                 let (vector_id, docid) = result?;
                 if !self.to_delete_docids.contains(docid.get()) {
-                    let vector = current_hnsw.get_point(vector_id.get() as usize).clone();
-                    let vector_id = new_hnsw.insert(vector, &mut searcher);
-                    new_vector_id_docids.push((vector_id as u32, docid));
+                    let pid = PointId::from(vector_id.get());
+                    let vector = current_hnsw[pid].clone();
+                    points.push(vector);
+                    docids.push(docid);
                 }
             }
 
+            let (new_hnsw, pids) = Hnsw::builder().build_hnsw(points);
+
             vector_id_docid.clear(self.wtxn)?;
-            for (vector_id, docid) in new_vector_id_docids {
-                vector_id_docid.put(self.wtxn, &BEU32::new(vector_id), &docid)?;
+            for (pid, docid) in pids.into_iter().zip(docids) {
+                vector_id_docid.put(self.wtxn, &BEU32::new(pid.into_inner()), &docid)?;
             }
             self.index.put_vector_hnsw(self.wtxn, &new_hnsw)?;
         }

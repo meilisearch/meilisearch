@@ -6,6 +6,7 @@ use heed::{RoPrefix, RoTxn};
 use roaring::RoaringBitmap;
 use rstar::RTree;
 
+use super::facet_string_values;
 use super::ranking_rules::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait};
 use crate::heed_codec::facet::{FieldDocIdFacetCodec, OrderedF64Codec};
 use crate::score_details::{self, ScoreDetails};
@@ -157,23 +158,7 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
             let mut documents = self
                 .geo_candidates
                 .iter()
-                .map(|id| -> Result<_> {
-                    Ok((
-                        id,
-                        [
-                            facet_number_values(id, lat, ctx.index, ctx.txn)?
-                                .next()
-                                .expect("A geo faceted document doesn't contain any lat")?
-                                .0
-                                 .2,
-                            facet_number_values(id, lng, ctx.index, ctx.txn)?
-                                .next()
-                                .expect("A geo faceted document doesn't contain any lng")?
-                                .0
-                                 .2,
-                        ],
-                    ))
-                })
+                .map(|id| -> Result<_> { Ok((id, geo_value(id, lat, lng, ctx.index, ctx.txn)?)) })
                 .collect::<Result<Vec<(u32, [f64; 2])>>>()?;
             // computing the distance between two points is expensive thus we cache the result
             documents
@@ -183,6 +168,37 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
 
         Ok(())
     }
+}
+
+/// Extracts the lat and long values from a single document.
+///
+/// If it is not able to find it in the facet number index it will extract it
+/// from the facet string index and parse it as f64 (as the geo extraction behaves).
+fn geo_value(
+    docid: u32,
+    field_lat: u16,
+    field_lng: u16,
+    index: &Index,
+    rtxn: &RoTxn,
+) -> Result<[f64; 2]> {
+    let extract_geo = |geo_field: u16| -> Result<f64> {
+        match facet_number_values(docid, geo_field, index, rtxn)?.next() {
+            Some(Ok(((_, _, geo), ()))) => Ok(geo),
+            Some(Err(e)) => Err(e.into()),
+            None => match facet_string_values(docid, geo_field, index, rtxn)?.next() {
+                Some(Ok((_, geo))) => {
+                    Ok(geo.parse::<f64>().expect("cannot parse geo field as f64"))
+                }
+                Some(Err(e)) => Err(e.into()),
+                None => panic!("A geo faceted document doesn't contain any lat or lng"),
+            },
+        }
+    };
+
+    let lat = extract_geo(field_lat)?;
+    let lng = extract_geo(field_lng)?;
+
+    Ok([lat, lng])
 }
 
 impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {

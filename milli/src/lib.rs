@@ -51,9 +51,10 @@ pub use self::error::{
 pub use self::external_documents_ids::ExternalDocumentsIds;
 pub use self::fields_ids_map::FieldsIdsMap;
 pub use self::heed_codec::{
-    BEU32StrCodec, BoRoaringBitmapCodec, BoRoaringBitmapLenCodec, CboRoaringBitmapCodec,
-    CboRoaringBitmapLenCodec, FieldIdWordCountCodec, ObkvCodec, RoaringBitmapCodec,
-    RoaringBitmapLenCodec, StrBEU32Codec, U8StrStrCodec, UncheckedU8StrStrCodec,
+    BEU16StrCodec, BEU32StrCodec, BoRoaringBitmapCodec, BoRoaringBitmapLenCodec,
+    CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, FieldIdWordCountCodec, ObkvCodec,
+    RoaringBitmapCodec, RoaringBitmapLenCodec, StrBEU32Codec, U8StrStrCodec,
+    UncheckedU8StrStrCodec,
 };
 pub use self::index::Index;
 pub use self::search::{
