@@ -15,10 +15,10 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ExactAttribute(
                 ExactMatch,
             ),
-            Exactness(
-                Rank {
-                    rank: 10,
-                    max_rank: 10,
+            ExactWords(
+                ExactWords {
+                    matching_words: 9,
+                    max_matching_words: 9,
                 },
             ),
             Proximity(
@@ -41,10 +41,10 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ExactAttribute(
                 NoExactMatch,
             ),
-            Exactness(
-                Rank {
-                    rank: 10,
-                    max_rank: 10,
+            ExactWords(
+                ExactWords {
+                    matching_words: 9,
+                    max_matching_words: 9,
                 },
             ),
             Proximity(
@@ -67,10 +67,10 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ExactAttribute(
                 NoExactMatch,
             ),
-            Exactness(
-                Rank {
-                    rank: 10,
-                    max_rank: 10,
+            ExactWords(
+                ExactWords {
+                    matching_words: 9,
+                    max_matching_words: 9,
                 },
             ),
             Proximity(
@@ -93,10 +93,10 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ExactAttribute(
                 MatchesStart,
             ),
-            Exactness(
-                Rank {
-                    rank: 5,
-                    max_rank: 5,
+            ExactWords(
+                ExactWords {
+                    matching_words: 4,
+                    max_matching_words: 4,
                 },
             ),
             Proximity(
@@ -119,10 +119,10 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ExactAttribute(
                 MatchesStart,
             ),
-            Exactness(
-                Rank {
-                    rank: 5,
-                    max_rank: 5,
+            ExactWords(
+                ExactWords {
+                    matching_words: 4,
+                    max_matching_words: 4,
                 },
             ),
             Proximity(
@@ -145,10 +145,10 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ExactAttribute(
                 MatchesStart,
             ),
-            Exactness(
-                Rank {
-                    rank: 5,
-                    max_rank: 5,
+            ExactWords(
+                ExactWords {
+                    matching_words: 4,
+                    max_matching_words: 4,
                 },
             ),
             Proximity(
@@ -171,10 +171,10 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ExactAttribute(
                 NoExactMatch,
             ),
-            Exactness(
-                Rank {
-                    rank: 5,
-                    max_rank: 5,
+            ExactWords(
+                ExactWords {
+                    matching_words: 4,
+                    max_matching_words: 4,
                 },
             ),
             Proximity(
@@ -197,10 +197,10 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ExactAttribute(
                 NoExactMatch,
             ),
-            Exactness(
-                Rank {
-                    rank: 5,
-                    max_rank: 5,
+            ExactWords(
+                ExactWords {
+                    matching_words: 4,
+                    max_matching_words: 4,
                 },
             ),
             Proximity(
@@ -223,10 +223,10 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ExactAttribute(
                 NoExactMatch,
             ),
-            Exactness(
-                Rank {
-                    rank: 5,
-                    max_rank: 5,
+            ExactWords(
+                ExactWords {
+                    matching_words: 4,
+                    max_matching_words: 4,
                 },
             ),
             Proximity(

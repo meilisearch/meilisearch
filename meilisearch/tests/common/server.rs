@@ -189,6 +189,14 @@ impl Server {
         let url = format!("/tasks/{}", update_id);
         self.service.get(url).await
     }
+
+    pub async fn get_features(&self) -> (Value, StatusCode) {
+        self.service.get("/experimental-features").await
+    }
+
+    pub async fn set_features(&self, value: Value) -> (Value, StatusCode) {
+        self.service.patch("/experimental-features", value).await
+    }
 }
 
 pub fn default_settings(dir: impl AsRef<Path>) -> Opt {

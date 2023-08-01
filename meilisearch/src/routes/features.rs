@@ -64,7 +64,20 @@ async fn patch_features(
         vector_store: new_features.0.vector_store.unwrap_or(old_features.vector_store),
     };
 
-    analytics.publish("Experimental features Updated".to_string(), json!(new_features), Some(&req));
+    // explicitly destructure for analytics rather than using the `Serialize` implementation, because
+    // the it renames to camelCase, which we don't want for analytics.
+    // **Do not** ignore fields with `..` or `_` here, because we want to add them in the future.
+    let meilisearch_types::features::RuntimeTogglableFeatures { score_details, vector_store } =
+        new_features;
+
+    analytics.publish(
+        "Experimental features Updated".to_string(),
+        json!({
+            "score_details": score_details,
+            "vector_store": vector_store,
+        }),
+        Some(&req),
+    );
     index_scheduler.put_runtime_features(new_features)?;
     Ok(HttpResponse::Ok().json(new_features))
 }

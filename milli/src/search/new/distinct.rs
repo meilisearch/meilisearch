@@ -100,7 +100,7 @@ fn facet_number_values<'a>(
 }
 
 /// Return an iterator over each string value in the given field of the given document.
-fn facet_string_values<'a>(
+pub fn facet_string_values<'a>(
     docid: u32,
     field_id: u16,
     index: &Index,

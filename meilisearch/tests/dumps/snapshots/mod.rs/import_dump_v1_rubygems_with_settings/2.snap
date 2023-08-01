@@ -20,6 +20,7 @@ source: meilisearch/tests/dumps/mod.rs
       "finishedAt": "2021-09-08T09:28:46.369971Z"
     }
   ],
+  "total": 92,
   "limit": 1,
   "from": 92,
   "next": 91

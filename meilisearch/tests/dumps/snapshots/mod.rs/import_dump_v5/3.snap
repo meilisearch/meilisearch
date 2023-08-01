@@ -19,6 +19,7 @@ source: meilisearch/tests/dumps/mod.rs
       "finishedAt": "[date]"
     }
   ],
+  "total": 5,
   "limit": 1,
   "from": 4,
   "next": 3

@@ -210,6 +210,7 @@ pub(crate) mod test {
     use big_s::S;
     use maplit::{btreemap, btreeset};
     use meilisearch_types::facet_values_sort::FacetValuesSort;
+    use meilisearch_types::features::RuntimeTogglableFeatures;
     use meilisearch_types::index_uid_pattern::IndexUidPattern;
     use meilisearch_types::keys::{Action, Key};
     use meilisearch_types::milli;
@@ -418,7 +419,10 @@ pub(crate) mod test {
         }
         keys.flush().unwrap();
 
-        // ========== TODO: create features here
+        // ========== experimental features
+        let features = create_test_features();
+
+        dump.create_experimental_features(features).unwrap();
 
         // create the dump
         let mut file = tempfile::tempfile().unwrap();
@@ -426,6 +430,10 @@ pub(crate) mod test {
         file.rewind().unwrap();
 
         file
+    }
+
+    fn create_test_features() -> RuntimeTogglableFeatures {
+        RuntimeTogglableFeatures { vector_store: true, ..Default::default() }
     }
 
     #[test]
@@ -472,5 +480,9 @@ pub(crate) mod test {
         for (key, expected) in dump.keys().unwrap().zip(create_test_api_keys()) {
             assert_eq!(key.unwrap(), expected);
         }
+
+        // ==== checking the features
+        let expected = create_test_features();
+        assert_eq!(dump.features().unwrap().unwrap(), expected);
     }
 }

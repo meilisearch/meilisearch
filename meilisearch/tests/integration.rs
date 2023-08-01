@@ -3,6 +3,7 @@ mod common;
 mod dashboard;
 mod documents;
 mod dumps;
+mod features;
 mod index;
 mod search;
 mod settings;

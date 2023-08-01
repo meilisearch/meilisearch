@@ -574,6 +574,10 @@ pub struct SearchAggregator {
     filter_total_number_of_criteria: usize,
     used_syntax: HashMap<String, usize>,
 
+    // attributes_to_search_on
+    // every time a search is done using attributes_to_search_on
+    attributes_to_search_on_total_number_of_uses: usize,
+
     // q
     // The maximum number of terms in a q request
     max_terms_number: usize,
@@ -645,6 +649,11 @@ impl SearchAggregator {
             ret.filter_with_geo_radius = stringified_filters.contains("_geoRadius(");
             ret.filter_with_geo_bounding_box = stringified_filters.contains("_geoBoundingBox(");
             ret.filter_sum_of_criteria_terms = RE.split(&stringified_filters).count();
+        }
+
+        // attributes_to_search_on
+        if let Some(_) = query.attributes_to_search_on {
+            ret.attributes_to_search_on_total_number_of_uses = 1;
         }
 
         if let Some(ref q) = query.q {
@@ -720,8 +729,17 @@ impl SearchAggregator {
             let used_syntax = self.used_syntax.entry(key).or_insert(0);
             *used_syntax = used_syntax.saturating_add(value);
         }
+
+        // attributes_to_search_on
+        self.attributes_to_search_on_total_number_of_uses = self
+            .attributes_to_search_on_total_number_of_uses
+            .saturating_add(other.attributes_to_search_on_total_number_of_uses);
+
         // q
         self.max_terms_number = self.max_terms_number.max(other.max_terms_number);
+
+        // vector
+        self.max_vector_size = self.max_vector_size.max(other.max_vector_size);
 
         // pagination
         self.max_limit = self.max_limit.max(other.max_limit);
@@ -761,17 +779,17 @@ impl SearchAggregator {
         if self.total_received == 0 {
             None
         } else {
-            // the index of the 99th percentage of value
-            let percentile_99th = 0.99 * (self.total_succeeded as f64 - 1.) + 1.;
             // we get all the values in a sorted manner
             let time_spent = self.time_spent.into_sorted_vec();
+            // the index of the 99th percentage of value
+            let percentile_99th = time_spent.len() * 99 / 100;
             // We are only interested by the slowest value of the 99th fastest results
-            let time_spent = time_spent.get(percentile_99th as usize);
+            let time_spent = time_spent.get(percentile_99th);
 
             let properties = json!({
                 "user-agent": self.user_agents,
                 "requests": {
-                    "99th_response_time":  time_spent.map(|t| format!("{:.2}", t)),
+                    "99th_response_time": time_spent.map(|t| format!("{:.2}", t)),
                     "total_succeeded": self.total_succeeded,
                     "total_failed": self.total_received.saturating_sub(self.total_succeeded), // just to be sure we never panics
                     "total_received": self.total_received,
@@ -786,8 +804,14 @@ impl SearchAggregator {
                    "avg_criteria_number": format!("{:.2}", self.filter_sum_of_criteria_terms as f64 / self.filter_total_number_of_criteria as f64),
                    "most_used_syntax": self.used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
                 },
+                "attributes_to_search_on": {
+                   "total_number_of_uses": self.attributes_to_search_on_total_number_of_uses,
+                },
                 "q": {
                    "max_terms_number": self.max_terms_number,
+                },
+                "vector": {
+                    "max_vector_size": self.max_vector_size,
                 },
                 "pagination": {
                    "max_limit": self.max_limit,
@@ -843,6 +867,10 @@ pub struct MultiSearchAggregator {
     // sum of the number of search queries in the requests, use with total_received to compute an average
     total_search_count: usize,
 
+    // scoring
+    show_ranking_score: bool,
+    show_ranking_score_details: bool,
+
     // context
     user_agents: HashSet<String>,
 }
@@ -856,6 +884,9 @@ impl MultiSearchAggregator {
         let distinct_indexes: HashSet<_> =
             query.iter().map(|query| query.index_uid.as_str()).collect();
 
+        let show_ranking_score = query.iter().any(|query| query.show_ranking_score);
+        let show_ranking_score_details = query.iter().any(|query| query.show_ranking_score_details);
+
         Self {
             timestamp,
             total_received: 1,
@@ -863,6 +894,8 @@ impl MultiSearchAggregator {
             total_distinct_index_count: distinct_indexes.len(),
             total_single_index: if distinct_indexes.len() == 1 { 1 } else { 0 },
             total_search_count: query.len(),
+            show_ranking_score,
+            show_ranking_score_details,
             user_agents,
         }
     }
@@ -884,6 +917,9 @@ impl MultiSearchAggregator {
             this.total_distinct_index_count.saturating_add(other.total_distinct_index_count);
         let total_single_index = this.total_single_index.saturating_add(other.total_single_index);
         let total_search_count = this.total_search_count.saturating_add(other.total_search_count);
+        let show_ranking_score = this.show_ranking_score || other.show_ranking_score;
+        let show_ranking_score_details =
+            this.show_ranking_score_details || other.show_ranking_score_details;
         let mut user_agents = this.user_agents;
 
         for user_agent in other.user_agents.into_iter() {
@@ -899,6 +935,8 @@ impl MultiSearchAggregator {
             total_single_index,
             total_search_count,
             user_agents,
+            show_ranking_score,
+            show_ranking_score_details,
             // do not add _ or ..Default::default() here
         };
 
@@ -925,6 +963,10 @@ impl MultiSearchAggregator {
                 "searches": {
                     "total_search_count": self.total_search_count,
                     "avg_search_count": (self.total_search_count as f64) / (self.total_received as f64),
+                },
+                "scoring": {
+                    "show_ranking_score": self.show_ranking_score,
+                    "show_ranking_score_details": self.show_ranking_score_details,
                 }
             });
 
@@ -1145,6 +1187,7 @@ pub struct DocumentsDeletionAggregator {
     #[serde(rename = "user-agent")]
     user_agents: HashSet<String>,
 
+    #[serde(rename = "requests.total_received")]
     total_received: usize,
     per_document_id: bool,
     clear_all: bool,
@@ -1295,6 +1338,7 @@ pub struct HealthAggregator {
     #[serde(rename = "user-agent")]
     user_agents: HashSet<String>,
 
+    #[serde(rename = "requests.total_received")]
     total_received: usize,
 }
 
@@ -1345,7 +1389,7 @@ pub struct DocumentsFetchAggregator {
     #[serde(rename = "user-agent")]
     user_agents: HashSet<String>,
 
-    #[serde(rename = "requests.max_limit")]
+    #[serde(rename = "requests.total_received")]
     total_received: usize,
 
     // a call on ../documents/:doc_id
