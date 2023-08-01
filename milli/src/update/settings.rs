@@ -303,6 +303,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         FP: Fn(UpdateIndexingStep) + Sync,
         FA: Fn() -> bool + Sync,
     {
+        puffin::profile_function!();
+
         let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
         // if the settings are set before any document update, we don't need to do anything, and
         // will set the primary key during the first document addition.

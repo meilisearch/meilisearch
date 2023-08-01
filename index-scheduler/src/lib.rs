@@ -1053,6 +1053,8 @@ impl IndexScheduler {
             self.breakpoint(Breakpoint::Start);
         }
 
+        puffin::GlobalProfiler::lock().new_frame();
+
         self.cleanup_task_queue()?;
 
         let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;

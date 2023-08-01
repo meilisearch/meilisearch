@@ -20,6 +20,8 @@ pub fn extract_facet_number_docids<R: io::Read + io::Seek>(
     docid_fid_facet_number: grenad::Reader<R>,
     indexer: GrenadParameters,
 ) -> Result<grenad::Reader<File>> {
+    puffin::profile_function!();
+
     let max_memory = indexer.max_memory_by_thread();
 
     let mut facet_number_docids_sorter = create_sorter(

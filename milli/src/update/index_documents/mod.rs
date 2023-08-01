@@ -137,6 +137,8 @@ where
         mut self,
         reader: DocumentsBatchReader<R>,
     ) -> Result<(Self, StdResult<u64, UserError>)> {
+        puffin::profile_function!();
+
         // Early return when there is no document to add
         if reader.is_empty() {
             return Ok((self, Ok(0)));
@@ -175,6 +177,8 @@ where
         mut self,
         to_delete: Vec<String>,
     ) -> Result<(Self, StdResult<u64, UserError>)> {
+        puffin::profile_function!();
+
         // Early return when there is no document to add
         if to_delete.is_empty() {
             return Ok((self, Ok(0)));
@@ -194,6 +198,8 @@ where
 
     #[logging_timer::time("IndexDocuments::{}")]
     pub fn execute(mut self) -> Result<DocumentAdditionResult> {
+        puffin::profile_function!();
+
         if self.added_documents == 0 {
             let number_of_documents = self.index.number_of_documents(self.wtxn)?;
             return Ok(DocumentAdditionResult { indexed_documents: 0, number_of_documents });
@@ -232,6 +238,8 @@ where
         FP: Fn(UpdateIndexingStep) + Sync,
         FA: Fn() -> bool + Sync,
     {
+        puffin::profile_function!();
+
         let TransformOutput {
             primary_key,
             fields_ids_map,
@@ -322,6 +330,7 @@ where
 
         // Run extraction pipeline in parallel.
         pool.install(|| {
+            puffin::profile_scope!("extract_and_send_grenad_chunks");
             // split obkv file into several chunks
             let original_chunk_iter =
                 grenad_obkv_into_chunks(original_documents, pool_params, documents_chunk_size);
@@ -477,6 +486,8 @@ where
         FP: Fn(UpdateIndexingStep) + Sync,
         FA: Fn() -> bool + Sync,
     {
+        puffin::profile_function!();
+
         // Merged databases are already been indexed, we start from this count;
         let mut databases_seen = MERGED_DATABASE_COUNT;
 
@@ -511,26 +522,36 @@ where
             return Err(Error::InternalError(InternalError::AbortedIndexation));
         }
 
-        let current_prefix_fst = self.index.words_prefixes_fst(self.wtxn)?;
+        let current_prefix_fst;
+        let common_prefix_fst_words_tmp;
+        let common_prefix_fst_words: Vec<_>;
+        let new_prefix_fst_words;
+        let del_prefix_fst_words;
 
-        // We retrieve the common words between the previous and new prefix word fst.
-        let common_prefix_fst_words = fst_stream_into_vec(
-            previous_words_prefixes_fst.op().add(&current_prefix_fst).intersection(),
-        );
-        let common_prefix_fst_words: Vec<_> = common_prefix_fst_words
-            .as_slice()
-            .linear_group_by_key(|x| x.chars().next().unwrap())
-            .collect();
+        {
+            puffin::profile_scope!("compute_prefix_diffs");
 
-        // We retrieve the newly added words between the previous and new prefix word fst.
-        let new_prefix_fst_words = fst_stream_into_vec(
-            current_prefix_fst.op().add(&previous_words_prefixes_fst).difference(),
-        );
+            current_prefix_fst = self.index.words_prefixes_fst(self.wtxn)?;
 
-        // We compute the set of prefixes that are no more part of the prefix fst.
-        let del_prefix_fst_words = fst_stream_into_hashset(
-            previous_words_prefixes_fst.op().add(&current_prefix_fst).difference(),
-        );
+            // We retrieve the common words between the previous and new prefix word fst.
+            common_prefix_fst_words_tmp = fst_stream_into_vec(
+                previous_words_prefixes_fst.op().add(&current_prefix_fst).intersection(),
+            );
+            common_prefix_fst_words = common_prefix_fst_words_tmp
+                .as_slice()
+                .linear_group_by_key(|x| x.chars().next().unwrap())
+                .collect();
+
+            // We retrieve the newly added words between the previous and new prefix word fst.
+            new_prefix_fst_words = fst_stream_into_vec(
+                current_prefix_fst.op().add(&previous_words_prefixes_fst).difference(),
+            );
+
+            // We compute the set of prefixes that are no more part of the prefix fst.
+            del_prefix_fst_words = fst_stream_into_hashset(
+                previous_words_prefixes_fst.op().add(&current_prefix_fst).difference(),
+            );
+        }
 
         databases_seen += 1;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
@@ -668,6 +689,8 @@ fn execute_word_prefix_docids(
     common_prefix_fst_words: &[&[String]],
     del_prefix_fst_words: &HashSet<Vec<u8>>,
 ) -> Result<()> {
+    puffin::profile_function!();
+
     let cursor = reader.into_cursor()?;
     let mut builder = WordPrefixDocids::new(txn, word_docids_db, word_prefix_docids_db);
     builder.chunk_compression_type = indexer_config.chunk_compression_type;

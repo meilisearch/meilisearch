@@ -58,7 +58,7 @@ lazy_static = "1.4.0"
 log = "0.4.17"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
-mimalloc = { version = "0.1.36", default-features = false }
+mimalloc = { version = "0.1.37", default-features = false }
 mime = "0.3.17"
 num_cpus = "1.15.0"
 obkv = "0.2.0"
@@ -69,6 +69,8 @@ permissive-json-pointer = { path = "../permissive-json-pointer" }
 pin-project-lite = "0.2.9"
 platform-dirs = "0.3.0"
 prometheus = { version = "0.13.3", features = ["process"] }
+puffin = "0.16.0"
+puffin_http = { version = "0.13.0", optional = true }
 rand = "0.8.5"
 rayon = "1.7.0"
 regex = "1.7.3"
@@ -133,7 +135,18 @@ zip = { version = "0.6.4", optional = true }
 [features]
 default = ["analytics", "meilisearch-types/all-tokenizations", "mini-dashboard"]
 analytics = ["segment"]
-mini-dashboard = ["actix-web-static-files", "static-files", "anyhow", "cargo_toml", "hex", "reqwest", "sha-1", "tempfile", "zip"]
+profile-with-puffin = ["dep:puffin_http"]
+mini-dashboard = [
+    "actix-web-static-files",
+    "static-files",
+    "anyhow",
+    "cargo_toml",
+    "hex",
+    "reqwest",
+    "sha-1",
+    "tempfile",
+    "zip",
+]
 chinese = ["meilisearch-types/chinese"]
 hebrew = ["meilisearch-types/hebrew"]
 japanese = ["meilisearch-types/japanese"]

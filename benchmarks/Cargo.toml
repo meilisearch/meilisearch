@@ -14,7 +14,7 @@ license.workspace = true
 anyhow = "1.0.70"
 csv = "1.2.1"
 milli = { path = "../milli" }
-mimalloc = { version = "0.1.36", default-features = false }
+mimalloc = { version = "0.1.37", default-features = false }
 serde_json = { version = "1.0.95", features = ["preserve_order"] }
 
 [dev-dependencies]

@@ -30,20 +30,20 @@ jobs:
         run: |
           apt-get update && apt-get install -y curl
           apt-get install build-essential -y
-      - name: Run test with Rust stable
+      - name: Setup test with Rust stable
         if: github.event_name != 'schedule'
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
-      - name: Run test with Rust nightly
+      - name: Setup test with Rust nightly
         if: github.event_name == 'schedule'
         uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
           override: true
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.4.0
+        uses: Swatinem/rust-cache@v2.5.0
       - name: Run cargo check without any default features
         uses: actions-rs/cargo@v1
         with:
@@ -65,7 +65,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.4.0
+        uses: Swatinem/rust-cache@v2.5.0
       - name: Run cargo check without any default features
         uses: actions-rs/cargo@v1
         with:
@@ -117,17 +117,17 @@ jobs:
         run: |
           apt-get update
           apt-get install --assume-yes build-essential curl
-      - uses: actions-rs/toolchain@v1 
-        with: 
-          toolchain: stable 
-          override: true 
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
       - name: Run cargo tree without default features and check lindera is not present
         run: |
           cargo tree -f '{p} {f}' -e normal --no-default-features | grep lindera -vqz
       - name: Run cargo tree with default features and check lindera is pressent
         run: |
           cargo tree -f '{p} {f}' -e normal | grep lindera -qz
-                
+
   # We run tests in debug also, to make sure that the debug_assertions are hit
   test-debug:
     name: Run tests in debug
@@ -146,7 +146,7 @@ jobs:
           toolchain: stable
           override: true
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.4.0
+        uses: Swatinem/rust-cache@v2.5.0
       - name: Run tests in debug
         uses: actions-rs/cargo@v1
         with:
@@ -165,7 +165,7 @@ jobs:
           override: true
           components: clippy
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.4.0
+        uses: Swatinem/rust-cache@v2.5.0
       - name: Run cargo clippy
         uses: actions-rs/cargo@v1
         with:
@@ -184,7 +184,7 @@ jobs:
           override: true
           components: rustfmt
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.4.0
+        uses: Swatinem/rust-cache@v2.5.0
       - name: Run cargo fmt
         # Since we never ran the `build.rs` script in the benchmark directory we are missing one auto-generated import file.
         # Since we want to trigger (and fail) this action as fast as possible, instead of building the benchmark crate

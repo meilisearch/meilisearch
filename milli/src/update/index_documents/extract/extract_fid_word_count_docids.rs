@@ -22,6 +22,8 @@ pub fn extract_fid_word_count_docids<R: io::Read + io::Seek>(
     docid_word_positions: grenad::Reader<R>,
     indexer: GrenadParameters,
 ) -> Result<grenad::Reader<File>> {
+    puffin::profile_function!();
+
     let max_memory = indexer.max_memory_by_thread();
 
     let mut fid_word_count_docids_sorter = create_sorter(
