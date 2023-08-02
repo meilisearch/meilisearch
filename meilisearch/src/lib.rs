@@ -39,6 +39,7 @@ use meilisearch_types::versioning::{check_version_file, create_version_file};
 use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
 pub use option::Opt;
 use option::ScheduleSnapshot;
+use zookeeper_client as zk;
 
 use crate::error::MeilisearchHttpError;
 
@@ -220,7 +221,8 @@ fn open_or_create_database_unchecked(
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
     // we don't want to create anything in the data.ms yet, thus we
     // wrap our two builders in a closure that'll be executed later.
-    let auth_controller = AuthController::new(&opt.db_path, &opt.master_key);
+    let zk_client = zk::Client::connect(&opt.cluster).await.unwrap();
+    let auth_controller = AuthController::new(&opt.db_path, &opt.master_key, zk_client.clone());
     let instance_features = opt.to_instance_features();
     let index_scheduler_builder = || -> anyhow::Result<_> {
         Ok(IndexScheduler::new(IndexSchedulerOptions {
