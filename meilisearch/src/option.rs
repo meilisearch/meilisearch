@@ -28,6 +28,7 @@ const MEILI_DB_PATH: &str = "MEILI_DB_PATH";
 const MEILI_HTTP_ADDR: &str = "MEILI_HTTP_ADDR";
 const MEILI_MASTER_KEY: &str = "MEILI_MASTER_KEY";
 const MEILI_ENV: &str = "MEILI_ENV";
+const MEILI_ZK_URL: &str = "MEILI_ZK_URL";
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
 const MEILI_NO_ANALYTICS: &str = "MEILI_NO_ANALYTICS";
 const MEILI_HTTP_PAYLOAD_SIZE_LIMIT: &str = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT";
@@ -153,6 +154,11 @@ pub struct Opt {
     #[clap(long, env = MEILI_ENV, default_value_t = default_env(), value_parser = POSSIBLE_ENV)]
     #[serde(default = "default_env")]
     pub env: String,
+
+    /// Sets the HTTP address and port used to communicate with the zookeeper cluster.
+    /// If ran locally, the default url is `http://localhost:2181/`.
+    #[clap(long, env = MEILI_ZK_URL)]
+    pub zk_url: Option<String>,
 
     /// Deactivates Meilisearch's built-in telemetry when provided.
     ///
@@ -368,6 +374,7 @@ impl Opt {
             http_addr,
             master_key,
             env,
+            zk_url,
             max_index_size: _,
             max_task_db_size: _,
             http_payload_size_limit,
@@ -401,6 +408,9 @@ impl Opt {
             export_to_env_if_not_present(MEILI_MASTER_KEY, master_key);
         }
         export_to_env_if_not_present(MEILI_ENV, env);
+        if let Some(zk_url) = zk_url {
+            export_to_env_if_not_present(MEILI_ZK_URL, zk_url);
+        }
         #[cfg(all(not(debug_assertions), feature = "analytics"))]
         {
             export_to_env_if_not_present(MEILI_NO_ANALYTICS, no_analytics.to_string());
@@ -713,6 +723,10 @@ pub fn default_http_addr() -> String {
 
 fn default_env() -> String {
     DEFAULT_ENV.to_string()
+}
+
+pub fn default_zk_url() -> String {
+    DEFAULT_HTTP_ADDR.to_string()
 }
 
 fn default_max_index_size() -> Byte {

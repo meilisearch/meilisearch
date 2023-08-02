@@ -137,14 +137,17 @@ enum OnFailure {
     KeepDb,
 }
 
-pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<AuthController>)> {
+pub fn setup_meilisearch(
+    opt: &Opt,
+    zk: Option<zk::Client>,
+) -> anyhow::Result<(Arc<IndexScheduler>, Arc<AuthController>)> {
     let empty_db = is_empty_db(&opt.db_path);
     let (index_scheduler, auth_controller) = if let Some(ref snapshot_path) = opt.import_snapshot {
         let snapshot_path_exists = snapshot_path.exists();
         // the db is empty and the snapshot exists, import it
         if empty_db && snapshot_path_exists {
             match compression::from_tar_gz(snapshot_path, &opt.db_path) {
-                Ok(()) => open_or_create_database_unchecked(opt, OnFailure::RemoveDb)?,
+                Ok(()) => open_or_create_database_unchecked(opt, OnFailure::RemoveDb, zk)?,
                 Err(e) => {
                     std::fs::remove_dir_all(&opt.db_path)?;
                     return Err(e);
@@ -161,14 +164,14 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
             bail!("snapshot doesn't exist at {}", snapshot_path.display())
         // the snapshot and the db exist, and we can ignore the snapshot because of the ignore_snapshot_if_db_exists flag
         } else {
-            open_or_create_database(opt, empty_db)?
+            open_or_create_database(opt, empty_db, zk)?
         }
     } else if let Some(ref path) = opt.import_dump {
         let src_path_exists = path.exists();
         // the db is empty and the dump exists, import it
         if empty_db && src_path_exists {
             let (mut index_scheduler, mut auth_controller) =
-                open_or_create_database_unchecked(opt, OnFailure::RemoveDb)?;
+                open_or_create_database_unchecked(opt, OnFailure::RemoveDb, zk)?;
             match import_dump(&opt.db_path, path, &mut index_scheduler, &mut auth_controller) {
                 Ok(()) => (index_scheduler, auth_controller),
                 Err(e) => {
@@ -188,10 +191,10 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
         // the dump and the db exist and we can ignore the dump because of the ignore_dump_if_db_exists flag
         // or, the dump is missing but we can ignore that because of the ignore_missing_dump flag
         } else {
-            open_or_create_database(opt, empty_db)?
+            open_or_create_database(opt, empty_db, zk)?
         }
     } else {
-        open_or_create_database(opt, empty_db)?
+        open_or_create_database(opt, empty_db, zk)?
     };
 
     // We create a loop in a thread that registers snapshotCreation tasks
@@ -218,11 +221,11 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
 fn open_or_create_database_unchecked(
     opt: &Opt,
     on_failure: OnFailure,
+    zk: Option<zk::Client>,
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
     // we don't want to create anything in the data.ms yet, thus we
     // wrap our two builders in a closure that'll be executed later.
-    let zk_client = zk::Client::connect(&opt.cluster).await.unwrap();
-    let auth_controller = AuthController::new(&opt.db_path, &opt.master_key, zk_client.clone());
+    let auth_controller = AuthController::new(&opt.db_path, &opt.master_key, zk);
     let instance_features = opt.to_instance_features();
     let index_scheduler_builder = || -> anyhow::Result<_> {
         Ok(IndexScheduler::new(IndexSchedulerOptions {
@@ -264,12 +267,13 @@ fn open_or_create_database_unchecked(
 fn open_or_create_database(
     opt: &Opt,
     empty_db: bool,
+    zk: Option<zk::Client>,
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
     if !empty_db {
         check_version_file(&opt.db_path)?;
     }
 
-    open_or_create_database_unchecked(opt, OnFailure::KeepDb)
+    open_or_create_database_unchecked(opt, OnFailure::KeepDb, zk)
 }
 
 fn import_dump(

@@ -12,6 +12,7 @@ use meilisearch::analytics::Analytics;
 use meilisearch::{analytics, create_app, prototype_name, setup_meilisearch, Opt};
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use zookeeper_client as zk;
 
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -63,7 +64,11 @@ async fn main() -> anyhow::Result<()> {
         _ => (),
     }
 
-    let (index_scheduler, auth_controller) = setup_meilisearch(&opt)?;
+    let zk = match opt.zk_url {
+        Some(ref url) => Some(zk::Client::connect(url).await.unwrap()),
+        None => None,
+    };
+    let (index_scheduler, auth_controller) = setup_meilisearch(&opt, zk)?;
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     let analytics = if !opt.no_analytics {

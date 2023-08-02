@@ -2670,6 +2670,7 @@ dependencies = [
  "walkdir",
  "yaup",
  "zip",
+ "zookeeper-client",
 ]
 
 [[package]]

@@ -16,22 +16,28 @@ pub use store::open_auth_store_env;
 use store::{generate_key_as_hexa, HeedAuthStore};
 use time::OffsetDateTime;
 use uuid::Uuid;
+use zookeeper_client as zk;
 
 #[derive(Clone)]
 pub struct AuthController {
     store: Arc<HeedAuthStore>,
     master_key: Option<String>,
+    zk: Option<zk::Client>,
 }
 
 impl AuthController {
-    pub fn new(db_path: impl AsRef<Path>, master_key: &Option<String>) -> Result<Self> {
+    pub fn new(
+        db_path: impl AsRef<Path>,
+        master_key: &Option<String>,
+        zk: Option<zk::Client>,
+    ) -> Result<Self> {
         let store = HeedAuthStore::new(db_path)?;
 
         if store.is_empty()? {
             generate_default_keys(&store)?;
         }
 
-        Ok(Self { store: Arc::new(store), master_key: master_key.clone() })
+        Ok(Self { store: Arc::new(store), master_key: master_key.clone(), zk })
     }
 
     /// Return `Ok(())` if the auth controller is able to access one of its database.

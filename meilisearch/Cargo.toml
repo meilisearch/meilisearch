@@ -105,6 +105,7 @@ walkdir = "2.3.3"
 yaup = "0.2.1"
 serde_urlencoded = "0.7.1"
 termcolor = "1.2.0"
+zookeeper-client = "0.4.0"
 
 [dev-dependencies]
 actix-rt = "2.8.0"
