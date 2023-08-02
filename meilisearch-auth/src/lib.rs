@@ -48,6 +48,27 @@ impl AuthController {
                     }
                 }
                 // TODO: If `auth` node already exist, we should synchronize the local data with zk.
+
+                // Zookeeper Event listener loop
+                let controller_clone = controller.clone();
+                let mut watcher = zk.watch("/auth", zk::AddWatchMode::PersistentRecursive).await?;
+                tokio::spawn(async move {
+                    loop {
+                        let zk::WatchedEvent { event_type, session_state, path } =
+                            dbg!(watcher.changed().await);
+
+                        match event_type {
+                            // a key is deleted from zk
+                            zk::EventType::NodeDeleted => {
+                                // TODO: ugly unwraps
+                                let key = path.strip_prefix("/auth/").unwrap();
+                                let uuid = Uuid::parse_str(&key).unwrap();
+                                dbg!(controller_clone.store.delete_api_key(uuid).unwrap());
+                            }
+                            _ => println!("Not yet implemented"),
+                        }
+                    }
+                });
             }
             None => {
                 if controller.store.is_empty()? {
