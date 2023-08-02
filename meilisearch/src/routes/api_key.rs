@@ -41,14 +41,10 @@ pub async fn create_api_key(
     _req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
     let v = body.into_inner();
-    let res = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
-        let key = auth_controller.create_key(v)?;
-        Ok(KeyView::from_key(key, &auth_controller))
-    })
-    .await
-    .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))??;
+    let key = auth_controller.create_key(v).await?;
+    let key = KeyView::from_key(key, &auth_controller);
 
-    Ok(HttpResponse::Created().json(res))
+    Ok(HttpResponse::Created().json(key))
 }
 
 #[derive(Deserr, Debug, Clone, Copy)]

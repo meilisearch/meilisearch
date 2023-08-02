@@ -2,6 +2,7 @@ use std::error::Error;
 
 use meilisearch_types::error::{Code, ErrorCode};
 use meilisearch_types::internal_error;
+use zookeeper_client as zk;
 
 pub type Result<T> = std::result::Result<T, AuthControllerError>;
 
@@ -19,6 +20,8 @@ internal_error!(
     AuthControllerError: meilisearch_types::milli::heed::Error,
     std::io::Error,
     serde_json::Error,
+    tokio::task::JoinError,
+    zk::Error,
     std::str::Utf8Error
 );
 

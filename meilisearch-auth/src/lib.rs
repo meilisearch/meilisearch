@@ -56,10 +56,24 @@ impl AuthController {
         self.store.used_size()
     }
 
-    pub fn create_key(&self, create_key: CreateApiKey) -> Result<Key> {
+    pub async fn create_key(&self, create_key: CreateApiKey) -> Result<Key> {
         match self.store.get_api_key(create_key.uid)? {
             Some(_) => Err(AuthControllerError::ApiKeyAlreadyExists(create_key.uid.to_string())),
-            None => self.store.put_api_key(create_key.to_key()),
+            None => {
+                let store = self.store.clone();
+                let key =
+                    tokio::task::spawn_blocking(move || store.put_api_key(create_key.to_key()))
+                        .await??;
+                if let Some(ref zk) = self.zk {
+                    zk.create(
+                        &format!("/auth/{}", key.uid),
+                        &serde_json::to_vec_pretty(&key)?,
+                        &zk::CreateOptions::new(zk::CreateMode::Persistent, zk::Acl::anyone_all()),
+                    )
+                    .await?;
+                }
+                Ok(key)
+            }
         }
     }
 
