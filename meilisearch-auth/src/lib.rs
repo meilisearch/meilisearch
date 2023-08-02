@@ -26,18 +26,37 @@ pub struct AuthController {
 }
 
 impl AuthController {
-    pub fn new(
+    pub async fn new(
         db_path: impl AsRef<Path>,
         master_key: &Option<String>,
         zk: Option<zk::Client>,
     ) -> Result<Self> {
         let store = HeedAuthStore::new(db_path)?;
+        let controller = Self { store: Arc::new(store), master_key: master_key.clone(), zk };
 
-        if store.is_empty()? {
-            generate_default_keys(&store)?;
+        match controller.zk {
+            // setup the auth zk environment, the `auth` node
+            Some(ref zk) => {
+                let options =
+                    zk::CreateOptions::new(zk::CreateMode::Persistent, zk::Acl::anyone_all());
+                // TODO: we should catch the potential unexpected errors here https://docs.rs/zookeeper-client/latest/zookeeper_client/struct.Client.html#method.create
+                // for the moment we consider that `create` only returns Error::NodeExists.
+                if zk.create("/auth", &[], &options).await.is_ok() {
+                    // TODO: if the store is not empty, should we push the locally stored keys in zk or should we erase the local keys?
+                    if controller.store.is_empty()? {
+                        generate_default_keys(&controller).await?;
+                    }
+                }
+                // TODO: If `auth` node already exist, we should synchronize the local data with zk.
+            }
+            None => {
+                if controller.store.is_empty()? {
+                    generate_default_keys(&controller).await?;
+                }
+            }
         }
 
-        Ok(Self { store: Arc::new(store), master_key: master_key.clone(), zk })
+        Ok(controller)
     }
 
     /// Return `Ok(())` if the auth controller is able to access one of its database.
@@ -59,22 +78,21 @@ impl AuthController {
     pub async fn create_key(&self, create_key: CreateApiKey) -> Result<Key> {
         match self.store.get_api_key(create_key.uid)? {
             Some(_) => Err(AuthControllerError::ApiKeyAlreadyExists(create_key.uid.to_string())),
-            None => {
-                let store = self.store.clone();
-                let key =
-                    tokio::task::spawn_blocking(move || store.put_api_key(create_key.to_key()))
-                        .await??;
-                if let Some(ref zk) = self.zk {
-                    zk.create(
-                        &format!("/auth/{}", key.uid),
-                        &serde_json::to_vec_pretty(&key)?,
-                        &zk::CreateOptions::new(zk::CreateMode::Persistent, zk::Acl::anyone_all()),
-                    )
-                    .await?;
-                }
-                Ok(key)
-            }
+            None => self.put_key(create_key.to_key()).await,
         }
+    }
+
+    pub async fn put_key(&self, key: Key) -> Result<Key> {
+        let store = self.store.clone();
+        // TODO: we may commit only after zk persisted the keys
+        let key = tokio::task::spawn_blocking(move || store.put_api_key(key)).await??;
+        if let Some(ref zk) = self.zk {
+            let options = zk::CreateOptions::new(zk::CreateMode::Persistent, zk::Acl::anyone_all());
+
+            zk.create(&format!("/auth/{}", key.uid), &serde_json::to_vec_pretty(&key)?, &options)
+                .await?;
+        }
+        Ok(key)
     }
 
     pub fn update_key(&self, uid: Uuid, patch: PatchApiKey) -> Result<Key> {
@@ -324,9 +342,9 @@ pub struct IndexSearchRules {
     pub filter: Option<serde_json::Value>,
 }
 
-fn generate_default_keys(store: &HeedAuthStore) -> Result<()> {
-    store.put_api_key(Key::default_admin())?;
-    store.put_api_key(Key::default_search())?;
+async fn generate_default_keys(controller: &AuthController) -> Result<()> {
+    controller.put_key(Key::default_admin()).await?;
+    controller.put_key(Key::default_search()).await?;
 
     Ok(())
 }

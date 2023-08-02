@@ -68,7 +68,7 @@ async fn main() -> anyhow::Result<()> {
         Some(ref url) => Some(zk::Client::connect(url).await.unwrap()),
         None => None,
     };
-    let (index_scheduler, auth_controller) = setup_meilisearch(&opt, zk)?;
+    let (index_scheduler, auth_controller) = setup_meilisearch(&opt, zk).await?;
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     let analytics = if !opt.no_analytics {
