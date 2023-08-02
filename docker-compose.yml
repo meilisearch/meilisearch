@@ -1,0 +1,37 @@
+version: "3.9"
+services:
+  zk1:
+    container_name: zk1
+    hostname: zk1
+    image: bitnami/zookeeper:3.7.1
+    ports:
+      - 21811:2181
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+      - ZOO_SERVER_ID=1
+      - ZOO_SERVERS=0.0.0.0:2888:3888,zk2:2888:3888,zk3:2888:3888
+  zk2:
+    container_name: zk2
+    hostname: zk2
+    image: bitnami/zookeeper:3.7.1
+    ports:
+      - 21812:2181
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+      - ZOO_SERVER_ID=2
+      - ZOO_SERVERS=zk1:2888:3888,0.0.0.0:2888:3888,zk3:2888:3888
+  zk3:
+    container_name: zk3
+    hostname: zk3
+    image: bitnami/zookeeper:3.7.1
+    ports:
+      - 21813:2181
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+      - ZOO_SERVER_ID=3
+      - ZOO_SERVERS=zk1:2888:3888,zk2:2888:3888,0.0.0.0:2888:3888
+  zoonavigator:
+    container_name: zoonavigator
+    image: elkozmon/zoonavigator
+    ports:
+      - 9000:9000
