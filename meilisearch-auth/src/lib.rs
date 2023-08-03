@@ -46,6 +46,8 @@ impl AuthController {
                     Ok(_) => generate_default_keys(&controller).await?,
                     // If the node exist we should clear our DB and download all the existing api-keys
                     Err(zk::Error::NodeExists) => {
+                        log::warn!("Auth directory already exists, we need to clear our keys + import the one in zookeeper");
+
                         let store = controller.store.clone();
                         tokio::task::spawn_blocking(move || store.delete_all_keys()).await??;
                         let children = zk
@@ -99,12 +101,14 @@ impl AuthController {
                                 // TODO: ugly unwraps
                                 let uuid = path.strip_prefix("/auth/").unwrap();
                                 let uuid = Uuid::parse_str(&uuid).unwrap();
+                                log::info!("The key {} has been deleted", uuid);
                                 dbg!(controller_clone.store.delete_api_key(uuid).unwrap());
                             }
                             zk::EventType::NodeCreated | zk::EventType::NodeDataChanged => {
                                 let (key, stat) = zk.get_data(&path).await.unwrap();
-                                dbg!(stat);
-                                let key = serde_json::from_slice(&key).unwrap();
+                                let key: Key = serde_json::from_slice(&key).unwrap();
+                                log::info!("The key {} has been deleted", key.uid);
+                                
                                 dbg!(controller_clone.store.put_api_key(key).unwrap());
                             }
                             zk::EventType::NodeChildrenChanged => panic!("Got the unexpected NodeChildrenChanged event, what is it used for?"),
