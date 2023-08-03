@@ -57,11 +57,16 @@ impl AuthController {
 
                         log::info!("Importing {} api-keys", children.len());
                         for path in children {
-                            if let Ok((key, _stat)) = zk.get_data(&path).await {
+                            log::info!("  Importing {}", path);
+                            match zk.get_data(&format!("/auth/{}", &path)).await {
+                                Ok((key, _stat)) => {
                                 let key = serde_json::from_slice(&key).unwrap();
                                 let store = controller.store.clone();
                                 tokio::task::spawn_blocking(move || store.put_api_key(key))
                                     .await??;
+
+                                },
+                                Err(e) => panic!("{e}")
                             }
                             // else the file was deleted while we were inserting the key. We ignore it.
                             // TODO: What happens if someone updates the files before we have the time
