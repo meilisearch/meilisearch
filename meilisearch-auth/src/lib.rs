@@ -52,20 +52,29 @@ impl AuthController {
                 // Zookeeper Event listener loop
                 let controller_clone = controller.clone();
                 let mut watcher = zk.watch("/auth", zk::AddWatchMode::PersistentRecursive).await?;
+                let czk = zk.clone();
                 tokio::spawn(async move {
+                    let zk = czk;
                     loop {
                         let zk::WatchedEvent { event_type, session_state, path } =
                             dbg!(watcher.changed().await);
 
                         match event_type {
+                            zk::EventType::Session => panic!("Session error {:?}", session_state),
                             // a key is deleted from zk
                             zk::EventType::NodeDeleted => {
                                 // TODO: ugly unwraps
-                                let key = path.strip_prefix("/auth/").unwrap();
-                                let uuid = Uuid::parse_str(&key).unwrap();
+                                let uuid = path.strip_prefix("/auth/").unwrap();
+                                let uuid = Uuid::parse_str(&uuid).unwrap();
                                 dbg!(controller_clone.store.delete_api_key(uuid).unwrap());
                             }
-                            _ => println!("Not yet implemented"),
+                            zk::EventType::NodeCreated | zk::EventType::NodeDataChanged => {
+                                let (key, stat) = zk.get_data(&path).await.unwrap();
+                                dbg!(stat);
+                                let key = serde_json::from_slice(&key).unwrap();
+                                dbg!(controller_clone.store.put_api_key(key).unwrap());
+                            }
+                            zk::EventType::NodeChildrenChanged => panic!("Got the unexpected NodeChildrenChanged event, what is it used for?"),
                         }
                     }
                 });
