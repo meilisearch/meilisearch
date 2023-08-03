@@ -14,6 +14,7 @@ license.workspace = true
 base64 = "0.21.0"
 enum-iterator = "1.4.0"
 hmac = "0.12.1"
+log = "0.4.19"
 maplit = "1.0.2"
 meilisearch-types = { path = "../meilisearch-types" }
 rand = "0.8.5"

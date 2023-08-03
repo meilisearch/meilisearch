@@ -2680,6 +2680,7 @@ dependencies = [
  "base64 0.21.2",
  "enum-iterator",
  "hmac",
+ "log",
  "maplit",
  "meilisearch-types",
  "rand",

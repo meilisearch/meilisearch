@@ -41,13 +41,46 @@ impl AuthController {
                     zk::CreateOptions::new(zk::CreateMode::Persistent, zk::Acl::anyone_all());
                 // TODO: we should catch the potential unexpected errors here https://docs.rs/zookeeper-client/latest/zookeeper_client/struct.Client.html#method.create
                 // for the moment we consider that `create` only returns Error::NodeExists.
-                if zk.create("/auth", &[], &options).await.is_ok() {
-                    // TODO: if the store is not empty, should we push the locally stored keys in zk or should we erase the local keys?
-                    if controller.store.is_empty()? {
-                        generate_default_keys(&controller).await?;
+                match zk.create("/auth", &[], &options).await {
+                    // If the store is empty, we must generate and push the default api-keys.
+                    Ok(_) => generate_default_keys(&controller).await?,
+                    // If the node exist we should clear our DB and download all the existing api-keys
+                    Err(zk::Error::NodeExists) => {
+                        let store = controller.store.clone();
+                        tokio::task::spawn_blocking(move || store.delete_all_keys()).await??;
+                        let children = zk
+                            .list_children("/auth")
+                            .await
+                            .expect("Internal, the auth directory was deleted during execution.");
+
+                        log::info!("Importing {} api-keys", children.len());
+                        for path in children {
+                            if let Ok((key, _stat)) = zk.get_data(&path).await {
+                                let key = serde_json::from_slice(&key).unwrap();
+                                let store = controller.store.clone();
+                                tokio::task::spawn_blocking(move || store.put_api_key(key))
+                                    .await??;
+                            }
+                            // else the file was deleted while we were inserting the key. We ignore it.
+                            // TODO: What happens if someone updates the files before we have the time
+                            //       to setup the watcher
+                        }
+                    }
+                    e @ Err(
+                        zk::Error::NoNode
+                        | zk::Error::NoChildrenForEphemerals
+                        | zk::Error::InvalidAcl,
+                    ) => unreachable!("{e:?}"),
+                    Err(e) => {
+                        panic!("{e}")
                     }
                 }
-                // TODO: If `auth` node already exist, we should synchronize the local data with zk.
+                // TODO: Race condition above:
+                //       What happens if two node join exactly at the same moment:
+                //       One will create the dir
+                //       The second one will delete its DB, load nothing and install a watcher
+                //       The first one will push its keys and should wake up and update the second one.
+                //     / BUT, if the second one delete its DB and the first one push its files before the second one install the watcher we're fucked
 
                 // Zookeeper Event listener loop
                 let controller_clone = controller.clone();
@@ -239,7 +272,7 @@ impl AuthController {
         self.store.delete_all_keys()
     }
 
-    /// Delete all the keys in the DB.
+    /// Insert a key in the DB without any check on its validity
     pub fn raw_insert_key(&mut self, key: Key) -> Result<()> {
         self.store.put_api_key(key)?;
         Ok(())
