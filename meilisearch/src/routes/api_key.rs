@@ -118,13 +118,8 @@ pub async fn delete_api_key(
     path: web::Path<AuthParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let key = path.into_inner().key;
-    tokio::task::spawn_blocking(move || {
-        let uid =
-            Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_encoded_key(&key))?;
-        auth_controller.delete_key(uid)
-    })
-    .await
-    .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))??;
+    let uid = Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_encoded_key(&key))?;
+    auth_controller.delete_key(uid).await?;
 
     Ok(HttpResponse::NoContent().finish())
 }

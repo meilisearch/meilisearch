@@ -175,8 +175,13 @@ impl AuthController {
         self.store.list_api_keys()
     }
 
-    pub fn delete_key(&self, uid: Uuid) -> Result<()> {
-        if self.store.delete_api_key(uid)? {
+    pub async fn delete_key(&self, uid: Uuid) -> Result<()> {
+        let store = self.store.clone();
+        let deleted = tokio::task::spawn_blocking(move || store.delete_api_key(uid)).await??;
+        if deleted {
+            if let Some(ref zk) = self.zk {
+                zk.delete(&format!("/auth/{}", uid), None).await?;
+            }
             Ok(())
         } else {
             Err(AuthControllerError::ApiKeyNotFound(uid.to_string()))
