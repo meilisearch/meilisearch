@@ -116,7 +116,7 @@ impl AuthController {
         Ok(key)
     }
 
-    pub fn update_key(&self, uid: Uuid, patch: PatchApiKey) -> Result<Key> {
+    pub async fn update_key(&self, uid: Uuid, patch: PatchApiKey) -> Result<Key> {
         let mut key = self.get_key(uid)?;
         match patch.description {
             Setting::NotSet => (),
@@ -127,7 +127,14 @@ impl AuthController {
             name => key.name = name.set(),
         };
         key.updated_at = OffsetDateTime::now_utc();
-        self.store.put_api_key(key)
+        let store = self.store.clone();
+        // TODO: we may commit only after zk persisted the keys
+        let key = tokio::task::spawn_blocking(move || store.put_api_key(key)).await??;
+        if let Some(ref zk) = self.zk {
+            zk.set_data(&format!("/auth/{}", key.uid), &serde_json::to_vec_pretty(&key)?, None)
+                .await?;
+        }
+        Ok(key)
     }
 
     pub fn get_key(&self, uid: Uuid) -> Result<Key> {

@@ -106,17 +106,11 @@ pub async fn patch_api_key(
 ) -> Result<HttpResponse, ResponseError> {
     let key = path.into_inner().key;
     let patch_api_key = body.into_inner();
-    let res = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
-        let uid =
-            Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_encoded_key(&key))?;
-        let key = auth_controller.update_key(uid, patch_api_key)?;
+    let uid = Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_encoded_key(&key))?;
+    let key = auth_controller.update_key(uid, patch_api_key).await?;
+    let key = KeyView::from_key(key, &auth_controller);
 
-        Ok(KeyView::from_key(key, &auth_controller))
-    })
-    .await
-    .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))??;
-
-    Ok(HttpResponse::Ok().json(res))
+    Ok(HttpResponse::Ok().json(key))
 }
 
 pub async fn delete_api_key(
