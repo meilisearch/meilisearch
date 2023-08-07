@@ -38,7 +38,7 @@ impl AuthController {
             // setup the auth zk environment, the `auth` node
             Some(ref zk) => {
                 let options =
-                    zk::CreateOptions::new(zk::CreateMode::Persistent, zk::Acl::anyone_all());
+                    zk::CreateMode::Persistent.with_acls(zk::Acls::anyone_all());
                 // TODO: we should catch the potential unexpected errors here https://docs.rs/zookeeper-client/latest/zookeeper_client/struct.Client.html#method.create
                 // for the moment we consider that `create` only returns Error::NodeExists.
                 match zk.create("/auth", &[], &options).await {
@@ -159,7 +159,7 @@ impl AuthController {
         // TODO: we may commit only after zk persisted the keys
         let key = tokio::task::spawn_blocking(move || store.put_api_key(key)).await??;
         if let Some(ref zk) = self.zk {
-            let options = zk::CreateOptions::new(zk::CreateMode::Persistent, zk::Acl::anyone_all());
+            let options = zk::CreateMode::Persistent.with_acls(zk::Acls::anyone_all());
 
             zk.create(&format!("/auth/{}", key.uid), &serde_json::to_vec_pretty(&key)?, &options)
                 .await?;

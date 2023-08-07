@@ -1265,7 +1265,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "time",
- "uuid 1.3.3",
+ "uuid 1.4.1",
 ]
 
 [[package]]
@@ -1464,7 +1464,7 @@ dependencies = [
  "faux",
  "tempfile",
  "thiserror",
- "uuid 1.3.3",
+ "uuid 1.4.1",
 ]
 
 [[package]]
@@ -1994,7 +1994,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "time",
- "uuid 1.3.3",
+ "uuid 1.4.1",
 ]
 
 [[package]]
@@ -2665,7 +2665,7 @@ dependencies = [
  "tokio-stream",
  "toml",
  "urlencoding",
- "uuid 1.3.3",
+ "uuid 1.4.1",
  "vergen",
  "walkdir",
  "yaup",
@@ -2691,7 +2691,7 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
- "uuid 1.3.3",
+ "uuid 1.4.1",
  "zookeeper-client",
 ]
 
@@ -2722,7 +2722,7 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
- "uuid 1.3.3",
+ "uuid 1.4.1",
 ]
 
 [[package]]
@@ -2802,7 +2802,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "time",
- "uuid 1.3.3",
+ "uuid 1.4.1",
 ]
 
 [[package]]
@@ -4420,9 +4420,9 @@ dependencies = [
 
 [[package]]
 name = "uuid"
-version = "1.3.3"
+version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "345444e32442451b267fc254ae85a209c64be56d2890e601a0c37ff0c3c5ecd2"
+checksum = "79daa5ed5740825c40b389c5e50312b9c86df53fccd33f281df655642b43869d"
 dependencies = [
  "getrandom",
  "serde",
@@ -4865,9 +4865,9 @@ dependencies = [
 
 [[package]]
 name = "zookeeper-client"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ade019937af9b1e2160582cb8d905bcff5d4b71da82444b7bf2ccc9c93f344f2"
+checksum = "4d69dd5ba1592db2f385d3ff8fee13ed3a50024d2cf65bf4b49ca8ba7cfb9070"
 dependencies = [
  "bytes",
  "compact_str",
@@ -4882,6 +4882,7 @@ dependencies = [
  "strum",
  "thiserror",
  "tokio",
+ "uuid 1.4.1",
 ]
 
 [[package]]
