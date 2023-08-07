@@ -61,7 +61,7 @@ pub async fn swap_indexes(
 
     let task = KindWithContent::IndexSwap { swaps };
 
-    let task = index_scheduler.register(task)?;
+    let task = index_scheduler.register(task).await?;
     let task: SummarizedTaskView = task.into();
     Ok(HttpResponse::Accepted().json(task))
 }

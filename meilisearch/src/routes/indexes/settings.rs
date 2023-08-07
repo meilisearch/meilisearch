@@ -55,10 +55,7 @@ macro_rules! make_setting_route {
                     is_deletion: true,
                     allow_index_creation,
                 };
-                let task: SummarizedTaskView =
-                    tokio::task::spawn_blocking(move || index_scheduler.register(task))
-                        .await??
-                        .into();
+                let task: SummarizedTaskView = index_scheduler.register(task).await?.into();
 
                 debug!("returns: {:?}", task);
                 Ok(HttpResponse::Accepted().json(task))
@@ -97,10 +94,7 @@ macro_rules! make_setting_route {
                     is_deletion: false,
                     allow_index_creation,
                 };
-                let task: SummarizedTaskView =
-                    tokio::task::spawn_blocking(move || index_scheduler.register(task))
-                        .await??
-                        .into();
+                let task: SummarizedTaskView = index_scheduler.register(task).await?.into();
 
                 debug!("returns: {:?}", task);
                 Ok(HttpResponse::Accepted().json(task))
@@ -586,8 +580,7 @@ pub async fn update_all(
         is_deletion: false,
         allow_index_creation,
     };
-    let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
+    let task: SummarizedTaskView = index_scheduler.register(task).await?.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
@@ -622,8 +615,7 @@ pub async fn delete_all(
         is_deletion: true,
         allow_index_creation,
     };
-    let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
+    let task: SummarizedTaskView = index_scheduler.register(task).await?.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))

@@ -110,7 +110,7 @@ impl AuthController {
                                 dbg!(controller_clone.store.delete_api_key(uuid).unwrap());
                             }
                             zk::EventType::NodeCreated | zk::EventType::NodeDataChanged => {
-                                let (key, stat) = zk.get_data(&path).await.unwrap();
+                                let (key, _stat) = zk.get_data(&path).await.unwrap();
                                 let key: Key = serde_json::from_slice(&key).unwrap();
                                 log::info!("The key {} has been deleted", key.uid);
                                 

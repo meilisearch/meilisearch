@@ -1994,7 +1994,9 @@ dependencies = [
  "tempfile",
  "thiserror",
  "time",
+ "tokio",
  "uuid 1.4.1",
+ "zookeeper-client",
 ]
 
 [[package]]

@@ -58,6 +58,7 @@ use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 use utils::{filter_out_references_to_newer_tasks, keep_tasks_within_datetimes, map_bound};
 use uuid::Uuid;
+use zookeeper_client as zk;
 
 use crate::index_mapper::IndexMapper;
 use crate::utils::{check_index_swap_validity, clamp_to_page_size};
@@ -258,6 +259,8 @@ pub struct IndexSchedulerOptions {
     pub max_number_of_tasks: usize,
     /// The experimental features enabled for this instance.
     pub instance_features: InstanceTogglableFeatures,
+    /// zookeeper client
+    pub zk: Option<zk::Client>,
 }
 
 /// Structure which holds meilisearch's indexes and schedules the tasks
@@ -326,6 +329,9 @@ pub struct IndexScheduler {
     /// The path to the version file of Meilisearch.
     pub(crate) version_file_path: PathBuf,
 
+    /// The URL to the ZooKeeper cluster
+    pub(crate) zk: Option<zk::Client>,
+
     // ================= test
     // The next entry is dedicated to the tests.
     /// Provide a way to set a breakpoint in multiple part of the scheduler.
@@ -367,6 +373,7 @@ impl IndexScheduler {
             snapshots_path: self.snapshots_path.clone(),
             dumps_path: self.dumps_path.clone(),
             auth_path: self.auth_path.clone(),
+            zk: self.zk.clone(),
             version_file_path: self.version_file_path.clone(),
             #[cfg(test)]
             test_breakpoint_sdr: self.test_breakpoint_sdr.clone(),
@@ -381,7 +388,7 @@ impl IndexScheduler {
 
 impl IndexScheduler {
     /// Create an index scheduler and start its run loop.
-    pub fn new(
+    pub async fn new(
         options: IndexSchedulerOptions,
         #[cfg(test)] test_breakpoint_sdr: crossbeam::channel::Sender<(Breakpoint, bool)>,
         #[cfg(test)] planned_failures: Vec<(usize, tests::FailureLocation)>,
@@ -463,7 +470,7 @@ impl IndexScheduler {
             snapshots_path: options.snapshots_path,
             auth_path: options.auth_path,
             version_file_path: options.version_file_path,
-
+            zk: options.zk,
             #[cfg(test)]
             test_breakpoint_sdr,
             #[cfg(test)]
@@ -473,7 +480,7 @@ impl IndexScheduler {
             features,
         };
 
-        this.run();
+        this.run().await;
         Ok(this)
     }
 
@@ -561,31 +568,63 @@ impl IndexScheduler {
     ///
     /// This function will execute in a different thread and must be called
     /// only once per index scheduler.
-    fn run(&self) {
+    async fn run(&self) {
         let run = self.private_clone();
-        std::thread::Builder::new()
-            .name(String::from("scheduler"))
-            .spawn(move || {
-                #[cfg(test)]
-                run.breakpoint(Breakpoint::Init);
+        tokio::task::spawn(async move {
+            #[cfg(test)]
+            run.breakpoint(Breakpoint::Init);
 
-                run.wake_up.wait();
+            let wake_up = run.wake_up.clone();
+            tokio::task::spawn_blocking(move || wake_up.wait()).await;
 
-                loop {
-                    match run.tick() {
-                        Ok(TickOutcome::TickAgain(_)) => (),
-                        Ok(TickOutcome::WaitForSignal) => run.wake_up.wait(),
-                        Err(e) => {
-                            log::error!("{}", e);
-                            // Wait one second when an irrecoverable error occurs.
-                            if !e.is_recoverable() {
-                                std::thread::sleep(Duration::from_secs(1));
-                            }
+            loop {
+                match run.tick().await {
+                    Ok(TickOutcome::TickAgain(_)) => (),
+                    Ok(TickOutcome::WaitForSignal) => {
+                        let wake_up = run.wake_up.clone();
+                        tokio::task::spawn_blocking(move || wake_up.wait()).await;
+                    }
+                    Err(e) => {
+                        log::error!("{}", e);
+                        // Wait one second when an irrecoverable error occurs.
+                        if !e.is_recoverable() {
+                            std::thread::sleep(Duration::from_secs(1));
                         }
                     }
                 }
-            })
-            .unwrap();
+            }
+        });
+
+        if let Some(ref zk) = &self.zk {
+            let options = zk::CreateMode::Persistent.with_acls(zk::Acls::anyone_all());
+            match zk.create("/tasks", &[], &options).await {
+                Ok(_) => (),
+                Err(zk::Error::NodeExists) => {
+                    todo!("Syncronize with the cluster")
+                }
+                Err(e) => panic!("{e}"),
+            }
+
+            // TODO: fix unwrap by returning a clear error.
+            let mut watcher =
+                zk.watch("/tasks", zk::AddWatchMode::PersistentRecursive).await.unwrap();
+            let czk = zk.clone();
+            tokio::spawn(async move {
+                let zk = czk;
+                loop {
+                    let zk::WatchedEvent { event_type, session_state, path } =
+                        dbg!(watcher.changed().await);
+                    match event_type {
+                        zk::EventType::Session => panic!("Session error {:?}", session_state),
+                        // A task as been added
+                        zk::EventType::NodeDataChanged => {
+                            // Add raw task content in local DB
+                        }
+                        _ => (),
+                    }
+                }
+            });
+        }
     }
 
     pub fn indexer_config(&self) -> &IndexerConfig {
@@ -920,74 +959,118 @@ impl IndexScheduler {
     /// Register a new task in the scheduler.
     ///
     /// If it fails and data was associated with the task, it tries to delete the associated data.
-    pub fn register(&self, kind: KindWithContent) -> Result<Task> {
-        let mut wtxn = self.env.write_txn()?;
+    pub async fn register(&self, kind: KindWithContent) -> Result<Task> {
+        let id = match self.zk {
+            Some(ref zk) => {
+                // reserve uniq ID on zookeeper. And give it to the spawn blocking.
+                let options =
+                    zk::CreateMode::PersistentSequential.with_acls(zk::Acls::anyone_all());
+                match zk.create("/tasks/task-", &[], &options).await {
+                    Ok((_stats, id)) => Some(id),
+                    Err(e) => panic!("{e}"),
+                }
+            }
+            None => None,
+        };
 
-        // if the task doesn't delete anything and 50% of the task queue is full, we must refuse to enqueue the incomming task
-        if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } if !tasks.is_empty())
-            && (self.env.non_free_pages_size()? * 100) / self.env.map_size()? as u64 > 50
-        {
-            return Err(Error::NoSpaceLeftInTaskQueue);
+        let this = self.private_clone();
+        let task = tokio::task::spawn_blocking(move || {
+            let mut wtxn = this.env.write_txn()?;
+
+            // if the task doesn't delete anything and 50% of the task queue is full, we must refuse to enqueue the incomming task
+            if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } if !tasks.is_empty())
+                && (this.env.non_free_pages_size()? * 100) / this.env.map_size()? as u64 > 50
+            {
+                return Err(Error::NoSpaceLeftInTaskQueue);
+            }
+
+            // get id generated by zookeeper or generate a local id.
+            let id = match id {
+                Some(id) => id.0 as u32,
+                None => this.next_task_id(&wtxn)?,
+            };
+
+            let mut task = Task {
+                uid: id,
+                enqueued_at: OffsetDateTime::now_utc(),
+                started_at: None,
+                finished_at: None,
+                error: None,
+                canceled_by: None,
+                details: kind.default_details(),
+                status: Status::Enqueued,
+                kind: kind.clone(),
+            };
+            // For deletion and cancelation tasks, we want to make extra sure that they
+            // don't attempt to delete/cancel tasks that are newer than themselves.
+            filter_out_references_to_newer_tasks(&mut task);
+            // If the register task is an index swap task, verify that it is well-formed
+            // (that it does not contain duplicate indexes).
+            check_index_swap_validity(&task)?;
+
+            this.register_raw_task(&mut wtxn, &task)?;
+
+            if let Err(e) = wtxn.commit() {
+                this.delete_persisted_task_data(&task)?;
+                return Err(e.into());
+            }
+
+            // If the registered task is a task cancelation
+            // we inform the processing tasks to stop (if necessary).
+            if let KindWithContent::TaskCancelation { tasks, .. } = kind {
+                let tasks_to_cancel = RoaringBitmap::from_iter(tasks);
+                if this
+                    .processing_tasks
+                    .read()
+                    .unwrap()
+                    .must_cancel_processing_tasks(&tasks_to_cancel)
+                {
+                    this.must_stop_processing.must_stop();
+                }
+            }
+
+            // notify the scheduler loop to execute a new tick
+            this.wake_up.signal();
+
+            Ok(task)
+        })
+        .await
+        .unwrap()?;
+
+        // TODO: send task to ZK in raw json.
+        if let Some(ref zk) = self.zk {
+            let id = id.unwrap();
+            // TODO: ugly unwrap
+            zk.set_data(
+                &format!("/tasks/task-{}", id),
+                &serde_json::to_vec_pretty(&task).unwrap(),
+                None,
+            )
+            .await
+            .unwrap();
         }
 
-        let mut task = Task {
-            uid: self.next_task_id(&wtxn)?,
-            enqueued_at: OffsetDateTime::now_utc(),
-            started_at: None,
-            finished_at: None,
-            error: None,
-            canceled_by: None,
-            details: kind.default_details(),
-            status: Status::Enqueued,
-            kind: kind.clone(),
-        };
-        // For deletion and cancelation tasks, we want to make extra sure that they
-        // don't attempt to delete/cancel tasks that are newer than themselves.
-        filter_out_references_to_newer_tasks(&mut task);
-        // If the register task is an index swap task, verify that it is well-formed
-        // (that it does not contain duplicate indexes).
-        check_index_swap_validity(&task)?;
+        Ok(task)
+    }
 
-        // Get rid of the mutability.
-        let task = task;
-
-        self.all_tasks.append(&mut wtxn, &BEU32::new(task.uid), &task)?;
+    pub fn register_raw_task(&self, wtxn: &mut RwTxn, task: &Task) -> Result<()> {
+        self.all_tasks.append(wtxn, &BEU32::new(task.uid), &task)?;
 
         for index in task.indexes() {
-            self.update_index(&mut wtxn, index, |bitmap| {
+            self.update_index(wtxn, index, |bitmap| {
                 bitmap.insert(task.uid);
             })?;
         }
 
-        self.update_status(&mut wtxn, Status::Enqueued, |bitmap| {
+        self.update_status(wtxn, Status::Enqueued, |bitmap| {
             bitmap.insert(task.uid);
         })?;
 
-        self.update_kind(&mut wtxn, task.kind.as_kind(), |bitmap| {
+        self.update_kind(wtxn, task.kind.as_kind(), |bitmap| {
             bitmap.insert(task.uid);
         })?;
 
-        utils::insert_task_datetime(&mut wtxn, self.enqueued_at, task.enqueued_at, task.uid)?;
-
-        if let Err(e) = wtxn.commit() {
-            self.delete_persisted_task_data(&task)?;
-            return Err(e.into());
-        }
-
-        // If the registered task is a task cancelation
-        // we inform the processing tasks to stop (if necessary).
-        if let KindWithContent::TaskCancelation { tasks, .. } = kind {
-            let tasks_to_cancel = RoaringBitmap::from_iter(tasks);
-            if self.processing_tasks.read().unwrap().must_cancel_processing_tasks(&tasks_to_cancel)
-            {
-                self.must_stop_processing.must_stop();
-            }
-        }
-
-        // notify the scheduler loop to execute a new tick
-        self.wake_up.signal();
-
-        Ok(task)
+        utils::insert_task_datetime(wtxn, self.enqueued_at, task.enqueued_at, task.uid)
     }
 
     /// Register a new task coming from a dump in the scheduler.
@@ -1046,7 +1129,7 @@ impl IndexScheduler {
     /// 6. Reset the in-memory list of processed tasks.
     ///
     /// Returns the number of processed tasks.
-    fn tick(&self) -> Result<TickOutcome> {
+    async fn tick(&self) -> Result<TickOutcome> {
         #[cfg(test)]
         {
             *self.run_loop_iteration.write().unwrap() += 1;
@@ -1055,7 +1138,7 @@ impl IndexScheduler {
 
         puffin::GlobalProfiler::lock().new_frame();
 
-        self.cleanup_task_queue()?;
+        self.cleanup_task_queue().await?;
 
         let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
         let batch =
@@ -1194,7 +1277,7 @@ impl IndexScheduler {
     }
 
     /// Register a task to cleanup the task queue if needed
-    fn cleanup_task_queue(&self) -> Result<()> {
+    async fn cleanup_task_queue(&self) -> Result<()> {
         let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
 
         let nb_tasks = self.all_task_ids(&rtxn)?.len();
@@ -1237,7 +1320,8 @@ impl IndexScheduler {
                 delete_before.format(&Rfc3339).map_err(|_| Error::CorruptedTaskQueue)?,
             ),
             tasks: to_delete,
-        })?;
+        })
+        .await?;
 
         Ok(())
     }
