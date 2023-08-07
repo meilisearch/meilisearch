@@ -37,23 +37,23 @@ services:
       - 9000:9000
 
 # Meilisearch instances
-  m1:
-    container_name: m1
-    hostname: m1
-    image: getmeili/meilisearch:prototype-zookeeper-ha-0
-    ports:
-      - 7700:7700
-    environment:
-      - MEILI_ZK_URL=zk1:2181
-      - MEILI_MASTER_KEY=masterkey
-    restart: always
-  m2:
-    container_name: m2
-    hostname: m2
-    image: getmeili/meilisearch:prototype-zookeeper-ha-0
-    ports:
-      - 7701:7700
-    environment:
-      - MEILI_ZK_URL=zk2:2181
-      - MEILI_MASTER_KEY=masterkey
-    restart: always
+  # m1:
+  #   container_name: m1
+  #   hostname: m1
+  #   image: getmeili/meilisearch:prototype-zookeeper-ha-0
+  #   ports:
+  #     - 7700:7700
+  #   environment:
+  #     - MEILI_ZK_URL=zk1:2181
+  #     - MEILI_MASTER_KEY=masterkey
+  #   restart: always
+  # m2:
+  #   container_name: m2
+  #   hostname: m2
+  #   image: getmeili/meilisearch:prototype-zookeeper-ha-0
+  #   ports:
+  #     - 7701:7700
+  #   environment:
+  #     - MEILI_ZK_URL=zk2:2181
+  #     - MEILI_MASTER_KEY=masterkey
+  #   restart: always
