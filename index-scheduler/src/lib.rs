@@ -575,14 +575,14 @@ impl IndexScheduler {
             run.breakpoint(Breakpoint::Init);
 
             let wake_up = run.wake_up.clone();
-            tokio::task::spawn_blocking(move || wake_up.wait()).await;
+            let _ = tokio::task::spawn_blocking(move || wake_up.wait()).await;
 
             loop {
                 match run.tick().await {
                     Ok(TickOutcome::TickAgain(_)) => (),
                     Ok(TickOutcome::WaitForSignal) => {
                         let wake_up = run.wake_up.clone();
-                        tokio::task::spawn_blocking(move || wake_up.wait()).await;
+                        let _ = tokio::task::spawn_blocking(move || wake_up.wait()).await;
                     }
                     Err(e) => {
                         log::error!("{}", e);

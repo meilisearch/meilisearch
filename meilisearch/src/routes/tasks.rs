@@ -18,7 +18,6 @@ use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 use time::macros::format_description;
 use time::{Date, Duration, OffsetDateTime, Time};
-use tokio::task;
 
 use super::SummarizedTaskView;
 use crate::analytics::Analytics;
