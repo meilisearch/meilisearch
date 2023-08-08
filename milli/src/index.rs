@@ -1718,11 +1718,11 @@ pub(crate) mod tests {
             .unwrap();
         index
             .add_documents(documents!([
-                { "id": 0, "_geo": { "lat": 0, "lng": 0 } },
-                { "id": 1, "_geo": { "lat": 0, "lng": -175 } },
-                { "id": 2, "_geo": { "lat": 0, "lng": 175 } },
+                { "id": 0, "_geo": { "lat": "0", "lng": "0" } },
+                { "id": 1, "_geo": { "lat": 0, "lng": "-175" } },
+                { "id": 2, "_geo": { "lat": "0", "lng": 175 } },
                 { "id": 3, "_geo": { "lat": 85, "lng": 0 } },
-                { "id": 4, "_geo": { "lat": -85, "lng": 0 } },
+                { "id": 4, "_geo": { "lat": "-85", "lng": "0" } },
             ]))
             .unwrap();
 
