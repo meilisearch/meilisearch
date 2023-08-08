@@ -10,7 +10,7 @@ pub enum ScoreDetails {
     Fid(Rank),
     Position(Rank),
     ExactAttribute(ExactAttribute),
-    Exactness(Rank),
+    ExactWords(ExactWords),
     Sort(Sort),
     GeoSort(GeoSort),
 }
@@ -28,7 +28,7 @@ impl ScoreDetails {
             ScoreDetails::Fid(details) => Some(*details),
             ScoreDetails::Position(details) => Some(*details),
             ScoreDetails::ExactAttribute(details) => Some(details.rank()),
-            ScoreDetails::Exactness(details) => Some(*details),
+            ScoreDetails::ExactWords(details) => Some(details.rank()),
             ScoreDetails::Sort(_) => None,
             ScoreDetails::GeoSort(_) => None,
         }
@@ -84,7 +84,7 @@ impl ScoreDetails {
                     // For now, fid is a virtual rule always followed by the "position" rule
                     let fid_details = serde_json::json!({
                         "order": order,
-                        "attribute_ranking_order_score": fid.local_score(),
+                        "attributeRankingOrderScore": fid.local_score(),
                     });
                     details_map.insert("attribute".into(), fid_details);
                     order += 1;
@@ -102,7 +102,7 @@ impl ScoreDetails {
                     };
 
                     attribute_details
-                        .insert("query_word_distance_score".into(), position.local_score().into());
+                        .insert("queryWordDistanceScore".into(), position.local_score().into());
                     let score = Rank::global_score([fid_details, *position].iter().copied());
                     attribute_details.insert("score".into(), score.into());
 
@@ -117,7 +117,7 @@ impl ScoreDetails {
                     details_map.insert("exactness".into(), exactness_details);
                     order += 1;
                 }
-                ScoreDetails::Exactness(details) => {
+                ScoreDetails::ExactWords(details) => {
                     // For now, exactness is a virtual rule always preceded by the "ExactAttribute" rule
                     let exactness_details = details_map
                         .get_mut("exactness")
@@ -129,9 +129,16 @@ impl ScoreDetails {
                         == &serde_json::json!(ExactAttribute::NoExactMatch)
                     {
                         let score = Rank::global_score(
-                            [ExactAttribute::NoExactMatch.rank(), *details].iter().copied(),
+                            [ExactAttribute::NoExactMatch.rank(), details.rank()].iter().copied(),
                         );
-                        *exactness_details.get_mut("score").expect("missing score") = score.into();
+                        // tiny detail, but we want the score to be the last displayed field,
+                        // so we're removing it here, adding the other fields, then adding the new score
+                        exactness_details.remove("score");
+                        exactness_details
+                            .insert("matchingWords".into(), details.matching_words.into());
+                        exactness_details
+                            .insert("maxMatchingWords".into(), details.max_matching_words.into());
+                        exactness_details.insert("score".into(), score.into());
                     }
                     // do not update the order since this was already done by exactAttribute
                 }
@@ -209,8 +216,34 @@ impl Words {
         Rank { rank: self.matching_words, max_rank: self.max_matching_words }
     }
 
-    pub(crate) fn from_rank(rank: Rank) -> Words {
-        Words { matching_words: rank.rank, max_matching_words: rank.max_rank }
+    pub(crate) fn from_rank(rank: Rank) -> Self {
+        Self { matching_words: rank.rank, max_matching_words: rank.max_rank }
+    }
+}
+
+/// Structure that is super similar to [`Words`], but whose semantics is a bit distinct.
+///
+/// In exactness, the number of matching words can actually be 0 with a non-zero score,
+/// if no words from the query appear exactly in the document.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ExactWords {
+    pub matching_words: u32,
+    pub max_matching_words: u32,
+}
+
+impl ExactWords {
+    pub fn rank(&self) -> Rank {
+        // 0 matching words means last rank (1)
+        Rank { rank: self.matching_words + 1, max_rank: self.max_matching_words + 1 }
+    }
+
+    pub(crate) fn from_rank(rank: Rank) -> Self {
+        // last rank (1) means that 0 words from the query appear exactly in the document.
+        // first rank (max_rank) means that (max_rank - 1) words from the query appear exactly in the document.
+        Self {
+            matching_words: rank.rank.saturating_sub(1),
+            max_matching_words: rank.max_rank.saturating_sub(1),
+        }
     }
 }
 
@@ -223,7 +256,7 @@ pub struct Typo {
 impl Typo {
     pub fn rank(&self) -> Rank {
         Rank {
-            rank: self.max_typo_count - self.typo_count + 1,
+            rank: (self.max_typo_count + 1).saturating_sub(self.typo_count),
             max_rank: (self.max_typo_count + 1),
         }
     }
@@ -236,7 +269,10 @@ impl Typo {
     // rank + typo = max_rank
     // typo = max_rank - rank
     pub fn from_rank(rank: Rank) -> Typo {
-        Typo { typo_count: rank.max_rank - rank.rank, max_typo_count: rank.max_rank - 1 }
+        Typo {
+            typo_count: rank.max_rank.saturating_sub(rank.rank),
+            max_typo_count: rank.max_rank.saturating_sub(1),
+        }
     }
 }
 

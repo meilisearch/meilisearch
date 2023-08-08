@@ -1,3 +1,4 @@
+mod beu16_str_codec;
 mod beu32_str_codec;
 mod byte_slice_ref;
 pub mod facet;
@@ -14,6 +15,7 @@ mod str_str_u8_codec;
 pub use byte_slice_ref::ByteSliceRefCodec;
 pub use str_ref::StrRefCodec;
 
+pub use self::beu16_str_codec::BEU16StrCodec;
 pub use self::beu32_str_codec::BEU32StrCodec;
 pub use self::field_id_word_count_codec::FieldIdWordCountCodec;
 pub use self::fst_set_codec::FstSetCodec;

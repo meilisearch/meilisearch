@@ -1,3 +1,4 @@
+use meili_snap::snapshot;
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 
@@ -54,6 +55,54 @@ async fn simple_facet_search() {
 
     assert_eq!(code, 200, "{}", response);
     assert_eq!(response["facetHits"].as_array().unwrap().len(), 1);
+}
+
+#[actix_rt::test]
+async fn advanced_facet_search() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = DOCUMENTS.clone();
+    index.update_settings_filterable_attributes(json!(["genres"])).await;
+    index.update_settings_typo_tolerance(json!({ "enabled": false })).await;
+    index.add_documents(documents, None).await;
+    index.wait_task(2).await;
+
+    let (response, code) =
+        index.facet_search(json!({"facetName": "genres", "facetQuery": "adventre"})).await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(response["facetHits"].as_array().unwrap().len(), @"0");
+
+    let (response, code) =
+        index.facet_search(json!({"facetName": "genres", "facetQuery": "àdventure"})).await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(response["facetHits"].as_array().unwrap().len(), @"1");
+}
+
+#[actix_rt::test]
+async fn more_advanced_facet_search() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = DOCUMENTS.clone();
+    index.update_settings_filterable_attributes(json!(["genres"])).await;
+    index.update_settings_typo_tolerance(json!({ "disableOnWords": ["adventre"] })).await;
+    index.add_documents(documents, None).await;
+    index.wait_task(2).await;
+
+    let (response, code) =
+        index.facet_search(json!({"facetName": "genres", "facetQuery": "adventre"})).await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(response["facetHits"].as_array().unwrap().len(), @"0");
+
+    let (response, code) =
+        index.facet_search(json!({"facetName": "genres", "facetQuery": "adventure"})).await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(response["facetHits"].as_array().unwrap().len(), @"1");
 }
 
 #[actix_rt::test]

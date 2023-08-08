@@ -5,6 +5,7 @@ use index_scheduler::IndexScheduler;
 use log::debug;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::facet_values_sort::FacetValuesSort;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::settings::{settings, RankingRuleView, Settings, Unchecked};
 use meilisearch_types::tasks::KindWithContent;
@@ -628,10 +629,16 @@ pub async fn update_all(
                     .as_ref()
                     .set()
                     .and_then(|s| s.max_values_per_facet.as_ref().set()),
-                "sort_facet_values_by": new_settings.faceting
+                "sort_facet_values_by_star_count": new_settings.faceting
                     .as_ref()
                     .set()
-                    .and_then(|s| s.sort_facet_values_by.as_ref().set()),
+                    .and_then(|s| {
+                        s.sort_facet_values_by.as_ref().set().map(|s| s.iter().any(|(k, v)| k == "*" && v == &FacetValuesSort::Count))
+                    }),
+                "sort_facet_values_by_total": new_settings.faceting
+                    .as_ref()
+                    .set()
+                    .and_then(|s| s.sort_facet_values_by.as_ref().set().map(|s| s.len())),
             },
             "pagination": {
                 "max_total_hits": new_settings.pagination

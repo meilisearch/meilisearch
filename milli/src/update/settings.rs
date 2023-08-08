@@ -466,13 +466,14 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 let current = self.index.stop_words(self.wtxn)?;
 
                 // Apply an unlossy normalization on stop_words
-                let stop_words = stop_words
+                let stop_words: BTreeSet<String> = stop_words
                     .iter()
-                    .map(|w| w.as_str().normalize(&Default::default()).into_owned());
+                    .map(|w| w.as_str().normalize(&Default::default()).into_owned())
+                    .collect();
 
                 // since we can't compare a BTreeSet with an FST we are going to convert the
                 // BTreeSet to an FST and then compare bytes per bytes the two FSTs.
-                let fst = fst::Set::from_iter(stop_words)?;
+                let fst = fst::Set::from_iter(stop_words.into_iter())?;
 
                 // Does the new FST differ from the previous one?
                 if current

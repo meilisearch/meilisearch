@@ -55,6 +55,7 @@ async fn swap_indexes() {
           "finishedAt": "[date]"
         }
       ],
+      "total": 2,
       "limit": 20,
       "from": 1,
       "next": null
@@ -128,6 +129,7 @@ async fn swap_indexes() {
           "finishedAt": "[date]"
         }
       ],
+      "total": 3,
       "limit": 20,
       "from": 2,
       "next": null
@@ -193,6 +195,7 @@ async fn swap_indexes() {
           "finishedAt": "[date]"
         }
       ],
+      "total": 5,
       "limit": 2,
       "from": 4,
       "next": 2
@@ -336,6 +339,7 @@ async fn swap_indexes() {
           "finishedAt": "[date]"
         }
       ],
+      "total": 6,
       "limit": 20,
       "from": 5,
       "next": null

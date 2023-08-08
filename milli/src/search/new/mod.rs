@@ -28,7 +28,7 @@ use db_cache::DatabaseCache;
 use exact_attribute::ExactAttribute;
 use graph_based_ranking_rule::{Exactness, Fid, Position, Proximity, Typo};
 use heed::RoTxn;
-use hnsw::Searcher;
+use instant_distance::Search;
 use interner::{DedupInterner, Interner};
 pub use logger::visual::VisualSearchLogger;
 pub use logger::{DefaultSearchLogger, SearchLogger};
@@ -40,18 +40,18 @@ use ranking_rules::{
 use resolve_query_graph::{compute_query_graph_docids, PhraseDocIdsCache};
 use roaring::RoaringBitmap;
 use sort::Sort;
-use space::Neighbor;
 
+use self::distinct::facet_string_values;
 use self::geo_sort::GeoSort;
 pub use self::geo_sort::Strategy as GeoSortStrategy;
 use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
+use crate::distance::NDotProductPoint;
 use crate::error::FieldIdMapMissingEntry;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::apply_distinct_rule;
 use crate::{
-    normalize_vector, AscDesc, DocumentId, Filter, Index, Member, Result, TermsMatchingStrategy,
-    UserError, BEU32,
+    AscDesc, DocumentId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError, BEU32,
 };
 
 /// A structure used throughout the execution of a search query.
@@ -85,7 +85,12 @@ impl<'ctx> SearchContext<'ctx> {
         let searchable_names = self.index.searchable_fields(self.txn)?;
 
         let mut restricted_fids = Vec::new();
+        let mut contains_wildcard = false;
         for field_name in searchable_attributes {
+            if field_name == "*" {
+                contains_wildcard = true;
+                continue;
+            }
             let searchable_contains_name =
                 searchable_names.as_ref().map(|sn| sn.iter().any(|name| name == field_name));
             let fid = match (fids_map.id(field_name), searchable_contains_name) {
@@ -99,8 +104,10 @@ impl<'ctx> SearchContext<'ctx> {
                     }
                     .into())
                 }
+                // The field is not searchable, but the searchableAttributes are set to * => ignore field
+                (None, None) => continue,
                 // The field is not searchable => User error
-                _otherwise => {
+                (_fid, Some(false)) => {
                     let mut valid_fields: BTreeSet<_> =
                         fids_map.names().map(String::from).collect();
 
@@ -132,7 +139,7 @@ impl<'ctx> SearchContext<'ctx> {
             restricted_fids.push(fid);
         }
 
-        self.restricted_fids = Some(restricted_fids);
+        self.restricted_fids = (!contains_wildcard).then_some(restricted_fids);
 
         Ok(())
     }
@@ -437,29 +444,31 @@ pub fn execute_search(
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
     if let Some(vector) = vector {
-        let mut searcher = Searcher::new();
-        let hnsw = ctx.index.vector_hnsw(ctx.txn)?.unwrap_or_default();
-        let ef = hnsw.len().min(100);
-        let mut dest = vec![Neighbor { index: 0, distance: 0 }; ef];
-        let vector = normalize_vector(vector.clone());
-        let neighbors = hnsw.nearest(&vector, ef, &mut searcher, &mut dest[..]);
+        let mut search = Search::default();
+        let docids = match ctx.index.vector_hnsw(ctx.txn)? {
+            Some(hnsw) => {
+                let vector = NDotProductPoint::new(vector.clone());
+                let neighbors = hnsw.search(&vector, &mut search);
 
-        let mut docids = Vec::new();
-        let mut uniq_docids = RoaringBitmap::new();
-        for Neighbor { index, distance: _ } in neighbors.iter() {
-            let index = BEU32::new(*index as u32);
-            let docid = ctx.index.vector_id_docid.get(ctx.txn, &index)?.unwrap().get();
-            if universe.contains(docid) && uniq_docids.insert(docid) {
-                docids.push(docid);
-                if docids.len() == (from + length) {
-                    break;
+                let mut docids = Vec::new();
+                let mut uniq_docids = RoaringBitmap::new();
+                for instant_distance::Item { distance: _, pid, point: _ } in neighbors {
+                    let index = BEU32::new(pid.into_inner());
+                    let docid = ctx.index.vector_id_docid.get(ctx.txn, &index)?.unwrap().get();
+                    if universe.contains(docid) && uniq_docids.insert(docid) {
+                        docids.push(docid);
+                        if docids.len() == (from + length) {
+                            break;
+                        }
+                    }
                 }
-            }
-        }
 
-        // return the nearest documents that are also part of the candidates
-        // along with a dummy list of scores that are useless in this context.
-        let docids: Vec<_> = docids.into_iter().skip(from).take(length).collect();
+                // return the nearest documents that are also part of the candidates
+                // along with a dummy list of scores that are useless in this context.
+                docids.into_iter().skip(from).take(length).collect()
+            }
+            None => Vec::new(),
+        };
 
         return Ok(PartialSearchResult {
             candidates: universe,

@@ -968,13 +968,62 @@ async fn sort_unset_ranking_rule() {
 async fn search_on_unknown_field() {
     let server = Server::new().await;
     let index = server.index("test");
+    index.update_settings_searchable_attributes(json!(["id", "title"])).await;
+    index.wait_task(0).await;
+
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    index.wait_task(1).await;
 
     index
         .search(
             json!({"q": "Captain Marvel", "attributesToSearchOn": ["unknown"]}),
+            |response, code| {
+                snapshot!(code, @"400 Bad Request");
+                snapshot!(json_string!(response), @r###"
+                {
+                  "message": "Attribute `unknown` is not searchable. Available searchable attributes are: `id, title`.",
+                  "code": "invalid_search_attributes_to_search_on",
+                  "type": "invalid_request",
+                  "link": "https://docs.meilisearch.com/errors#invalid_search_attributes_to_search_on"
+                }
+                "###);
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
+async fn search_on_unknown_field_plus_joker() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index.update_settings_searchable_attributes(json!(["id", "title"])).await;
+    index.wait_task(0).await;
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(1).await;
+
+    index
+        .search(
+            json!({"q": "Captain Marvel", "attributesToSearchOn": ["*", "unknown"]}),
+            |response, code| {
+                snapshot!(code, @"400 Bad Request");
+                snapshot!(json_string!(response), @r###"
+                {
+                  "message": "Attribute `unknown` is not searchable. Available searchable attributes are: `id, title`.",
+                  "code": "invalid_search_attributes_to_search_on",
+                  "type": "invalid_request",
+                  "link": "https://docs.meilisearch.com/errors#invalid_search_attributes_to_search_on"
+                }
+                "###);
+            },
+        )
+        .await;
+
+    index
+        .search(
+            json!({"q": "Captain Marvel", "attributesToSearchOn": ["unknown", "*"]}),
             |response, code| {
                 snapshot!(code, @"400 Bad Request");
                 snapshot!(json_string!(response), @r###"

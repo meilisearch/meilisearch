@@ -1,20 +1,36 @@
+use std::ops;
+
+use instant_distance::Point;
 use serde::{Deserialize, Serialize};
-use space::Metric;
 
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
-pub struct DotProduct;
+use crate::normalize_vector;
 
-impl Metric<Vec<f32>> for DotProduct {
-    type Unit = u32;
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct NDotProductPoint(Vec<f32>);
 
-    // Following <https://docs.rs/space/0.17.0/space/trait.Metric.html>.
-    //
-    // Here is a playground that validate the ordering of the bit representation of floats in range 0.0..=1.0:
-    // <https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=6c59e31a3cc5036b32edf51e8937b56e>
-    fn distance(&self, a: &Vec<f32>, b: &Vec<f32>) -> Self::Unit {
-        let dist = 1.0 - dot_product_similarity(a, b);
+impl NDotProductPoint {
+    pub fn new(point: Vec<f32>) -> Self {
+        NDotProductPoint(normalize_vector(point))
+    }
+
+    pub fn into_inner(self) -> Vec<f32> {
+        self.0
+    }
+}
+
+impl ops::Deref for NDotProductPoint {
+    type Target = [f32];
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_slice()
+    }
+}
+
+impl Point for NDotProductPoint {
+    fn distance(&self, other: &Self) -> f32 {
+        let dist = 1.0 - dot_product_similarity(&self.0, &other.0);
         debug_assert!(!dist.is_nan());
-        dist.to_bits()
+        dist
     }
 }
 

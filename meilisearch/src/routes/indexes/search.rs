@@ -35,7 +35,7 @@ pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchQ>)]
     q: Option<String>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchVector>)]
-    vector: Option<Vec<f32>>,
+    vector: Option<CS<f32>>,
     #[deserr(default = Param(DEFAULT_SEARCH_OFFSET()), error = DeserrQueryParamError<InvalidSearchOffset>)]
     offset: Param<usize>,
     #[deserr(default = Param(DEFAULT_SEARCH_LIMIT()), error = DeserrQueryParamError<InvalidSearchLimit>)]
@@ -88,7 +88,7 @@ impl From<SearchQueryGet> for SearchQuery {
 
         Self {
             q: other.q,
-            vector: other.vector,
+            vector: other.vector.map(CS::into_inner),
             offset: other.offset.0,
             limit: other.limit.0,
             page: other.page.as_deref().copied(),

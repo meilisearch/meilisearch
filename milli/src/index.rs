@@ -8,12 +8,11 @@ use charabia::{Language, Script};
 use heed::flags::Flags;
 use heed::types::*;
 use heed::{CompactionOption, Database, PolyDatabase, RoTxn, RwTxn};
-use rand_pcg::Pcg32;
 use roaring::RoaringBitmap;
 use rstar::RTree;
 use time::OffsetDateTime;
 
-use crate::distance::DotProduct;
+use crate::distance::NDotProductPoint;
 use crate::error::{InternalError, UserError};
 use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;
@@ -21,7 +20,9 @@ use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
     FieldIdCodec, OrderedF64Codec,
 };
-use crate::heed_codec::{FstSetCodec, ScriptLanguageCodec, StrBEU16Codec, StrRefCodec};
+use crate::heed_codec::{
+    BEU16StrCodec, FstSetCodec, ScriptLanguageCodec, StrBEU16Codec, StrRefCodec,
+};
 use crate::readable_slices::ReadableSlices;
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
@@ -31,7 +32,7 @@ use crate::{
 };
 
 /// The HNSW data-structure that we serialize, fill and search in.
-pub type Hnsw = hnsw::Hnsw<DotProduct, Vec<f32>, Pcg32, 12, 24>;
+pub type Hnsw = instant_distance::Hnsw<NDotProductPoint>;
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
 pub const DEFAULT_MIN_WORD_LEN_TWO_TYPOS: u8 = 9;
@@ -100,6 +101,7 @@ pub mod db_name {
     pub const FACET_ID_IS_NULL_DOCIDS: &str = "facet-id-is-null-docids";
     pub const FACET_ID_IS_EMPTY_DOCIDS: &str = "facet-id-is-empty-docids";
     pub const FACET_ID_STRING_DOCIDS: &str = "facet-id-string-docids";
+    pub const FACET_ID_NORMALIZED_STRING_STRINGS: &str = "facet-id-normalized-string-strings";
     pub const FACET_ID_STRING_FST: &str = "facet-id-string-fst";
     pub const FIELD_ID_DOCID_FACET_F64S: &str = "field-id-docid-facet-f64s";
     pub const FIELD_ID_DOCID_FACET_STRINGS: &str = "field-id-docid-facet-strings";
@@ -161,6 +163,8 @@ pub struct Index {
     pub facet_id_f64_docids: Database<FacetGroupKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>,
     /// Maps the facet field id and ranges of strings with the docids that corresponds to them.
     pub facet_id_string_docids: Database<FacetGroupKeyCodec<StrRefCodec>, FacetGroupValueCodec>,
+    /// Maps the facet field id of the normalized-for-search string facets with their original versions.
+    pub facet_id_normalized_string_strings: Database<BEU16StrCodec, SerdeJson<BTreeSet<String>>>,
     /// Maps the facet field id of the string facets with an FST containing all the facets values.
     pub facet_id_string_fst: Database<OwnedType<BEU16>, FstSetCodec>,
 
@@ -185,7 +189,7 @@ impl Index {
     ) -> Result<Index> {
         use db_name::*;
 
-        options.max_dbs(24);
+        options.max_dbs(25);
         unsafe { options.flag(Flags::MdbAlwaysFreePages) };
 
         let env = options.open(path)?;
@@ -215,6 +219,8 @@ impl Index {
         let facet_id_f64_docids = env.create_database(&mut wtxn, Some(FACET_ID_F64_DOCIDS))?;
         let facet_id_string_docids =
             env.create_database(&mut wtxn, Some(FACET_ID_STRING_DOCIDS))?;
+        let facet_id_normalized_string_strings =
+            env.create_database(&mut wtxn, Some(FACET_ID_NORMALIZED_STRING_STRINGS))?;
         let facet_id_string_fst = env.create_database(&mut wtxn, Some(FACET_ID_STRING_FST))?;
         let facet_id_exists_docids =
             env.create_database(&mut wtxn, Some(FACET_ID_EXISTS_DOCIDS))?;
@@ -250,6 +256,7 @@ impl Index {
             field_id_word_count_docids,
             facet_id_f64_docids,
             facet_id_string_docids,
+            facet_id_normalized_string_strings,
             facet_id_string_fst,
             facet_id_exists_docids,
             facet_id_is_null_docids,
