@@ -480,7 +480,7 @@ impl IndexScheduler {
         if let Some(task_id) = to_cancel.max() {
             // We retrieve the tasks that were processing before this tasks cancelation started.
             // We must *not* reset the processing tasks before calling this method.
-            let ProcessingTasks { started_at, processing } =
+            let ProcessingTasks { started_at, processing, .. } =
                 &*self.processing_tasks.read().unwrap();
             return Ok(Some(Batch::TaskCancelation {
                 task: self.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?,
