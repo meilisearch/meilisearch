@@ -596,7 +596,8 @@ impl IndexScheduler {
                 let (_stat, id) = zk.create("/election/node-", &[], &options).await.unwrap();
                 self_node_id = id;
                 let previous_path = {
-                    let list = zk.list_children("/election").await.unwrap();
+                    let mut list = zk.list_children("/election").await.unwrap();
+                    list.sort();
 
                     let self_node_path = format!("node-{}", self_node_id);
                     let previous_path =
@@ -629,7 +630,8 @@ impl IndexScheduler {
                                 zk::EventType::NodeDeleted => {
                                     let zk = zk.as_ref().unwrap();
                                     let previous_path = {
-                                        let list = zk.list_children("/election").await.unwrap();
+                                        let mut list = zk.list_children("/election").await.unwrap();
+                                        list.sort();
 
                                         let self_node_path = format!("node-{}", self_node_id);
                                         let previous_path =
