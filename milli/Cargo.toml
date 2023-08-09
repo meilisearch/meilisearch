@@ -32,7 +32,7 @@ grenad = { version = "0.4.4", default-features = false, features = [
 heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.7", default-features = false, features = [
     "lmdb", "read-txn-no-tls"
 ] }
-indexmap = { version = "1.9.3", features = ["serde"] }
+indexmap = { version = "2.0.0", features = ["serde"] }
 instant-distance = { version = "0.6.1", features = ["with-serde"] }
 json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
