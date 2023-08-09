@@ -366,6 +366,7 @@ fn send_and_extract_flattened_documents_data(
                     flattened_documents_chunk.clone(),
                     indexer,
                     faceted_fields,
+                    geo_fields_ids,
                 )?;
 
                 // send docid_fid_facet_numbers_chunk to DB writer
