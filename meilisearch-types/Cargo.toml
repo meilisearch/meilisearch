@@ -21,7 +21,7 @@ enum-iterator = "1.4.0"
 file-store = { path = "../file-store" }
 flate2 = "1.0.25"
 fst = "0.4.7"
-memmap2 = "0.5.10"
+memmap2 = "0.7.1"
 milli = { path = "../milli" }
 roaring = { version = "0.10.1", features = ["serde"] }
 serde = { version = "1.0.160", features = ["derive"] }
