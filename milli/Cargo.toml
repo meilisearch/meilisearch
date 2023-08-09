@@ -20,7 +20,7 @@ byteorder = "1.4.3"
 charabia = { version = "0.8.2", default-features = false }
 concat-arrays = "0.1.2"
 crossbeam-channel = "0.5.8"
-deserr = "0.5.0"
+deserr = { version = "0.6.0", features = ["actix-web"]}
 either = { version = "1.8.1", features = ["serde"] }
 flatten-serde-json = { path = "../flatten-serde-json" }
 fst = "0.4.7"

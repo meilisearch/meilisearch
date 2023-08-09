@@ -71,7 +71,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "zstd 0.12.4",
 ]
 
 [[package]]
@@ -1140,9 +1139,9 @@ dependencies = [
 
 [[package]]
 name = "deserr"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c71c14985c842bf1e520b1ebcd22daff6aeece32f510e11f063cecf9b308c04b"
+checksum = "61d55a63aabcb2f7893231e6b8ddf8acc00814d20a64463e52cf9b603ec326ee"
 dependencies = [
  "actix-http",
  "actix-utils",
@@ -1157,9 +1156,9 @@ dependencies = [
 
 [[package]]
 name = "deserr-internal"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cae1c51b191528c9e4e5d6cff671de94f61fcda1c206cc891251e0cf438c941a"
+checksum = "8c4d5c86e5d887d880c7a3572a8041bfb3011acc81df86318855ea2cae66f3ef"
 dependencies = [
  "convert_case 0.5.0",
  "proc-macro2",
@@ -4723,7 +4722,7 @@ dependencies = [
  "pbkdf2",
  "sha1",
  "time",
- "zstd 0.11.2+zstd.1.5.2",
+ "zstd",
 ]
 
 [[package]]
@@ -4732,16 +4731,7 @@ version = "0.11.2+zstd.1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20cc960326ece64f010d2d2107537f26dc589a6573a316bd5b1dba685fa5fde4"
 dependencies = [
- "zstd-safe 5.0.2+zstd.1.5.2",
-]
-
-[[package]]
-name = "zstd"
-version = "0.12.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a27595e173641171fc74a1232b7b1c7a7cb6e18222c11e9dfb9888fa424c53c"
-dependencies = [
- "zstd-safe 6.0.6",
+ "zstd-safe",
 ]
 
 [[package]]
@@ -4749,16 +4739,6 @@ name = "zstd-safe"
 version = "5.0.2+zstd.1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d2a5585e04f9eea4b2a3d1eca508c4dee9592a89ef6f450c11719da0726f4db"
-dependencies = [
- "libc",
- "zstd-sys",
-]
-
-[[package]]
-name = "zstd-safe"
-version = "6.0.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee98ffd0b48ee95e6c5168188e44a54550b1564d9d530ee21d5f0eaed1069581"
 dependencies = [
  "libc",
  "zstd-sys",
