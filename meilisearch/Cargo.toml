@@ -52,7 +52,7 @@ http = "0.2.9"
 index-scheduler = { path = "../index-scheduler" }
 indexmap = { version = "1.9.3", features = ["serde-1"] }
 is-terminal = "0.4.8"
-itertools = "0.10.5"
+itertools = "0.11.0"
 jsonwebtoken = "8.3.0"
 lazy_static = "1.4.0"
 log = "0.4.17"

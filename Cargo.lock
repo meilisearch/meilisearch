@@ -911,7 +911,7 @@ dependencies = [
  "clap",
  "criterion-plot",
  "is-terminal",
- "itertools",
+ "itertools 0.10.5",
  "num-traits",
  "once_cell",
  "oorandom",
@@ -932,7 +932,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1"
 dependencies = [
  "cast",
- "itertools",
+ "itertools 0.10.5",
 ]
 
 [[package]]
@@ -2048,6 +2048,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2543,7 +2552,7 @@ dependencies = [
  "indexmap 1.9.3",
  "insta",
  "is-terminal",
- "itertools",
+ "itertools 0.11.0",
  "jsonwebtoken",
  "lazy_static",
  "log",
@@ -2697,7 +2706,7 @@ dependencies = [
  "indexmap 1.9.3",
  "insta",
  "instant-distance",
- "itertools",
+ "itertools 0.11.0",
  "json-depth-checker",
  "levenshtein_automata",
  "log",
@@ -4337,7 +4346,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "477976a5c56fb7b014795df5a2ce08d2de8bcd4d5980844c5bd3978a7fd1c30b"
 dependencies = [
  "fnv",
- "itertools",
+ "itertools 0.10.5",
  "lazy_static",
 ]
 
