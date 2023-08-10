@@ -58,6 +58,7 @@ use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 use utils::{filter_out_references_to_newer_tasks, keep_tasks_within_datetimes, map_bound};
 use uuid::Uuid;
+use zookeeper_client as zk;
 
 use crate::index_mapper::IndexMapper;
 use crate::utils::{check_index_swap_validity, clamp_to_page_size};
@@ -152,23 +153,34 @@ struct ProcessingTasks {
     started_at: OffsetDateTime,
     /// The list of tasks ids that are currently running.
     processing: RoaringBitmap,
+    /// The list of tasks ids that were processed in the last batch
+    processed_previously: RoaringBitmap,
 }
 
 impl ProcessingTasks {
     /// Creates an empty `ProcessingAt` struct.
     fn new() -> ProcessingTasks {
-        ProcessingTasks { started_at: OffsetDateTime::now_utc(), processing: RoaringBitmap::new() }
+        ProcessingTasks {
+            started_at: OffsetDateTime::now_utc(),
+            processing: RoaringBitmap::new(),
+            processed_previously: RoaringBitmap::new(),
+        }
     }
 
     /// Stores the currently processing tasks, and the date time at which it started.
     fn start_processing_at(&mut self, started_at: OffsetDateTime, processing: RoaringBitmap) {
         self.started_at = started_at;
-        self.processing = processing;
+        self.processed_previously = std::mem::replace(&mut self.processing, processing);
     }
 
     /// Set the processing tasks to an empty list
     fn stop_processing(&mut self) {
-        self.processing = RoaringBitmap::new();
+        self.processed_previously = std::mem::take(&mut self.processing);
+    }
+
+    /// Returns the tasks that were processed in the previous tick.
+    fn processed_previously(&self) -> &RoaringBitmap {
+        &self.processed_previously
     }
 
     /// Returns `true` if there, at least, is one task that is currently processing that we must stop.
@@ -258,6 +270,8 @@ pub struct IndexSchedulerOptions {
     pub max_number_of_tasks: usize,
     /// The experimental features enabled for this instance.
     pub instance_features: InstanceTogglableFeatures,
+    /// zookeeper client
+    pub zk: Option<zk::Client>,
 }
 
 /// Structure which holds meilisearch's indexes and schedules the tasks
@@ -326,6 +340,9 @@ pub struct IndexScheduler {
     /// The path to the version file of Meilisearch.
     pub(crate) version_file_path: PathBuf,
 
+    /// The URL to the ZooKeeper cluster
+    pub(crate) zk: Option<zk::Client>,
+
     // ================= test
     // The next entry is dedicated to the tests.
     /// Provide a way to set a breakpoint in multiple part of the scheduler.
@@ -367,6 +384,7 @@ impl IndexScheduler {
             snapshots_path: self.snapshots_path.clone(),
             dumps_path: self.dumps_path.clone(),
             auth_path: self.auth_path.clone(),
+            zk: self.zk.clone(),
             version_file_path: self.version_file_path.clone(),
             #[cfg(test)]
             test_breakpoint_sdr: self.test_breakpoint_sdr.clone(),
@@ -381,7 +399,7 @@ impl IndexScheduler {
 
 impl IndexScheduler {
     /// Create an index scheduler and start its run loop.
-    pub fn new(
+    pub async fn new(
         options: IndexSchedulerOptions,
         #[cfg(test)] test_breakpoint_sdr: crossbeam::channel::Sender<(Breakpoint, bool)>,
         #[cfg(test)] planned_failures: Vec<(usize, tests::FailureLocation)>,
@@ -463,7 +481,7 @@ impl IndexScheduler {
             snapshots_path: options.snapshots_path,
             auth_path: options.auth_path,
             version_file_path: options.version_file_path,
-
+            zk: options.zk,
             #[cfg(test)]
             test_breakpoint_sdr,
             #[cfg(test)]
@@ -473,7 +491,20 @@ impl IndexScheduler {
             features,
         };
 
-        this.run();
+        // initialize the directories we need to process batches.
+        if let Some(ref zk) = this.zk {
+            let options = zk::CreateMode::Persistent.with_acls(zk::Acls::anyone_all());
+            match zk.create("/election", &[], &options).await {
+                Ok(_) | Err(zk::Error::NodeExists) => (),
+                Err(e) => panic!("{e}"),
+            }
+
+            match zk.create("/snapshots", &[], &options).await {
+                Ok(_) | Err(zk::Error::NodeExists) => (),
+                Err(e) => panic!("{e}"),
+            }
+        }
+        this.run().await;
         Ok(this)
     }
 
@@ -561,31 +592,336 @@ impl IndexScheduler {
     ///
     /// This function will execute in a different thread and must be called
     /// only once per index scheduler.
-    fn run(&self) {
+    async fn run(&self) {
         let run = self.private_clone();
-        std::thread::Builder::new()
-            .name(String::from("scheduler"))
-            .spawn(move || {
-                #[cfg(test)]
-                run.breakpoint(Breakpoint::Init);
+        let zk = self.zk.clone();
+        let mut self_node_id = zk::CreateSequence(0);
+        tokio::task::spawn(async move {
+            #[cfg(test)]
+            run.breakpoint(Breakpoint::Init);
 
-                run.wake_up.wait();
+            // Join the potential leaders list.
+            // The lowest in the list is the leader. And if we're not the leader
+            // we watch the node right before us to be notified if he dies.
+            // See https://zookeeper.apache.org/doc/current/recipes.html#sc_leaderElection
+            let mut watchers = if let Some(ref zk) = zk {
+                let options = zk::CreateMode::EphemeralSequential.with_acls(zk::Acls::anyone_all());
+                let (_stat, id) = zk.create("/election/node-", &[], &options).await.unwrap();
+                self_node_id = id;
+                let previous_path = {
+                    let mut list = zk.list_children("/election").await.unwrap();
+                    list.sort();
 
-                loop {
-                    match run.tick() {
-                        Ok(TickOutcome::TickAgain(_)) => (),
-                        Ok(TickOutcome::WaitForSignal) => run.wake_up.wait(),
-                        Err(e) => {
-                            log::error!("{}", e);
-                            // Wait one second when an irrecoverable error occurs.
-                            if !e.is_recoverable() {
-                                std::thread::sleep(Duration::from_secs(1));
+                    let self_node_path = format!("node-{}", self_node_id);
+                    let previous_path =
+                        list.into_iter().take_while(|path| path < &self_node_path).last();
+                    previous_path.map(|path| format!("/election/{}", path))
+                };
+
+                if let Some(previous_path) = previous_path {
+                    log::warn!("I am the follower {}", self_node_id);
+                    Some((
+                        zk.watch(&previous_path, zk::AddWatchMode::Persistent).await.unwrap(),
+                        zk.watch("/snapshots", zk::AddWatchMode::PersistentRecursive)
+                            .await
+                            .unwrap(),
+                    ))
+                } else {
+                    // if there was no node before ourselves, then we're the leader.
+                    log::warn!("I'm the leader");
+                    None
+                }
+            } else {
+                log::warn!("I don't have any ZK cluster");
+                None
+            };
+
+            loop {
+                match watchers.as_mut() {
+                    Some((leader_watcher, snapshot_watcher)) => {
+                        // We wait for a new batch processed by the leader OR a disconnection from the leader.
+                        tokio::select! {
+                            zk::WatchedEvent { event_type, session_state, .. } = leader_watcher.changed() => match event_type {
+                                zk::EventType::Session => panic!("Session error {:?}", session_state),
+                                zk::EventType::NodeDeleted => {
+                                    // The node behind us has been disconnected,
+                                    // am I the leader or is there someone before me.
+                                    let zk = zk.as_ref().unwrap();
+                                    let previous_path = {
+                                        let mut list = zk.list_children("/election").await.unwrap();
+                                        list.sort();
+
+                                        let self_node_path = format!("node-{}", self_node_id);
+                                        let previous_path =
+                                            list.into_iter().take_while(|path| path < &self_node_path).last();
+                                        previous_path.map(|path| format!("/election/{}", path))
+                                    };
+
+                                    let (leader_watcher, snapshot_watcher) = watchers.take().unwrap();
+                                    leader_watcher.remove().await.unwrap();
+                                    watchers = if let Some(previous_path) = previous_path {
+                                        log::warn!("I stay a follower {}", self_node_id);
+                                        Some((
+                                            zk.watch(&previous_path, zk::AddWatchMode::Persistent).await.unwrap(),
+                                            snapshot_watcher,
+                                        ))
+                                    } else {
+                                        log::warn!("I'm the new leader");
+                                        snapshot_watcher.remove().await.unwrap();
+                                        None
+                                    }
+                                }
+                                _ => (),
+                            },
+                            zk::WatchedEvent { event_type, session_state, path } = snapshot_watcher.changed() => match event_type {
+                                zk::EventType::Session => panic!("Session error {:?}", session_state),
+                                zk::EventType::NodeCreated => {
+                                    log::info!("The snapshot {} is in preparation", path);
+                                }
+                                zk::EventType::NodeDataChanged => {
+                                    log::info!("Importing snapshot {}", path);
+
+                                    let snapshot_id = path.strip_prefix("/snapshots/snapshot-").unwrap();
+                                    let snapshot_dir =
+                                        PathBuf::from(format!("~/zk-snapshots/{}", snapshot_id));
+
+                                    // TODO: everything
+
+                                    // 1. TODO: Ensure the snapshot version file is the same as our version.
+
+                                    // 2. Download and import the index-scheduler database
+                                    log::info!("Importing the index scheduler.");
+                                    let tasks =
+                                            snapshot_dir.join("tasks.mdb");
+
+                                    // 3. Snapshot every indexes
+                                    log::info!("Importing the indexes");
+                                    let dst = snapshot_dir.join("indexes");
+                                    let mut indexes = tokio::fs::read_dir(dst).await.unwrap();
+                                    while let Some(uuid) = indexes.next_entry().await.unwrap() {
+                                        // TODO: Import the index
+                                    }
+                                }
+                                _ => (),
+                            },
+                            else => break,
+                        }
+                    }
+                    None => {
+                        // we're either a leader or not running in a cluster,
+                        // either way we should wait until we receive a task.
+                        let wake_up = run.wake_up.clone();
+                        let _ = tokio::task::spawn_blocking(move || wake_up.wait()).await;
+
+                        match run.tick().await {
+                            Ok(TickOutcome::TickAgain(n)) => {
+                                // We must tick again.
+                                run.wake_up.signal();
+
+                                // if we're in a cluster that means we're the leader
+                                // and should share a snapshot of what we've done.
+                                if let Some(ref zk) = run.zk {
+                                    // if nothing was processed we have nothing to do.
+                                    if n == 0 {
+                                        continue;
+                                    }
+
+                                    let options = zk::CreateMode::EphemeralSequential
+                                        .with_acls(zk::Acls::anyone_all());
+                                    let (_stat, snapshot_id) = zk
+                                        .create("/snapshots/snapshot-", &[], &options)
+                                        .await
+                                        .unwrap();
+
+                                    tokio::fs::create_dir_all("~/zk-snapshots").await.unwrap();
+                                    let snapshot_dir =
+                                        PathBuf::from(format!("~/zk-snapshots/{snapshot_id}"));
+                                    tokio::fs::create_dir(&snapshot_dir).await.unwrap();
+
+                                    // 1. Snapshot the version file.
+                                    let dst =
+                                        snapshot_dir.join(meilisearch_types::VERSION_FILE_NAME);
+                                    tokio::fs::copy(&run.version_file_path, dst).await.unwrap();
+
+                                    // 2. Snapshot the index-scheduler LMDB env
+                                    let dst = snapshot_dir.join("tasks");
+                                    tokio::fs::create_dir_all(&dst).await.unwrap();
+
+                                    log::info!("Snapshotting the tasks");
+                                    let env = run.env.clone();
+                                    tokio::task::spawn_blocking(move || {
+                                        env.copy_to_path(
+                                            dst.join("tasks.mdb"),
+                                            heed::CompactionOption::Enabled,
+                                        )
+                                        .unwrap();
+                                    })
+                                    .await
+                                    .unwrap();
+
+                                    // 3. Snapshot every indexes
+                                    log::info!("Snapshotting the indexes");
+                                    let dst = snapshot_dir.join("indexes");
+                                    tokio::fs::create_dir_all(&dst).await.unwrap();
+
+                                    let this = run.private_clone();
+                                    let indexes = tokio::task::spawn_blocking(move || {
+                                        let rtxn = this.env.read_txn().unwrap();
+                                        this.index_mapper
+                                            .index_mapping
+                                            .iter(&rtxn)
+                                            .unwrap()
+                                            .map(|ret| ret.unwrap())
+                                            .map(|(name, uuid)| (name.to_string(), uuid))
+                                            .collect::<Vec<_>>()
+                                    })
+                                    .await
+                                    .unwrap();
+                                    for (name, uuid) in indexes {
+                                        log::info!("  Snapshotting index {name}");
+                                        let this = run.private_clone();
+                                        let dst = dst.clone();
+                                        tokio::task::spawn_blocking(move || {
+                                            let rtxn = this.env.read_txn().unwrap();
+                                            let index =
+                                                this.index_mapper.index(&rtxn, &name).unwrap();
+                                            index
+                                                .copy_to_path(
+                                                    dst.join(format!("{uuid}.mdb")),
+                                                    heed::CompactionOption::Enabled,
+                                                )
+                                                .unwrap();
+                                        })
+                                        .await
+                                        .unwrap();
+                                    }
+
+                                    // we must notify everyone that we dropped a new snapshot on the s3
+                                    let _stat = zk
+                                        .set_data(
+                                            &format!("/snapshots/snapshot-{}", snapshot_id),
+                                            &[],
+                                            None,
+                                        )
+                                        .await
+                                        .unwrap();
+                                    log::info!(
+                                        "Notified everyone about the new snapshot {snapshot_id}"
+                                    );
+
+                                    // We can now delete all the tasks that has been processed
+                                    let processed = run
+                                        .processing_tasks
+                                        .read()
+                                        .unwrap()
+                                        .processed_previously()
+                                        .clone(); // we don't want to hold the mutex
+                                    log::info!("Deleting {} processed tasks", processed.len());
+                                    for task in processed {
+                                        let _ = zk // we don't want to crash if we can't delete an update file.
+                                            .delete(
+                                                &format!(
+                                                    "/tasks/task-{}",
+                                                    zk::CreateSequence(task as i32)
+                                                ),
+                                                None,
+                                            )
+                                            .await;
+                                        // TODO: Delete the update files associated with the deleted tasks
+                                    }
+                                }
+                            }
+                            Ok(TickOutcome::WaitForSignal) => (),
+                            Err(e) => {
+                                log::error!("{}", e);
+                                // Wait one second when an irrecoverable error occurs.
+                                if !e.is_recoverable() {
+                                    std::thread::sleep(Duration::from_secs(1));
+                                }
                             }
                         }
                     }
                 }
-            })
-            .unwrap();
+            }
+        });
+
+        if let Some(ref zk) = &self.zk {
+            let options = zk::CreateMode::Persistent.with_acls(zk::Acls::anyone_all());
+            match zk.create("/tasks", &[], &options).await {
+                Ok(_) => (),
+                Err(zk::Error::NodeExists) => {
+                    log::warn!("Tasks directory already exists, we're going to import all the tasks on the zk without altering the tasks already on disk.");
+
+                    let children = zk
+                        .list_children("/tasks")
+                        .await
+                        .expect("Internal, the /tasks directory was deleted during execution.");
+
+                    log::info!("Importing {} tasks", children.len());
+                    for path in children {
+                        log::info!("  Importing {}", path);
+                        match zk.get_data(&format!("/tasks/{}", &path)).await {
+                            Ok((task, _stat)) => {
+                                if task.is_empty() {
+                                    log::info!("  Task {} was empty, skipping.", path);
+                                    continue;
+                                }
+                                let task = serde_json::from_slice(&task).unwrap();
+
+                                let this = self.private_clone();
+                                tokio::task::spawn_blocking(move || {
+                                    let mut wtxn = this.env.write_txn().unwrap();
+                                    this.register_raw_task(&mut wtxn, &task).unwrap();
+                                    wtxn.commit().unwrap();
+                                    // we received a new tasks, we must wake up
+                                    this.wake_up.signal();
+                                })
+                                .await
+                                .unwrap();
+                            }
+                            Err(e) => panic!("{e}"),
+                        }
+                        // else the file was deleted while we were inserting the key. We ignore it.
+                        // TODO: What happens if someone updates the files before we have the time
+                        //       to setup the watcher
+                    }
+                }
+                Err(e) => panic!("{e}"),
+            }
+
+            // TODO: fix unwrap by returning a clear error.
+            let mut watcher =
+                zk.watch("/tasks", zk::AddWatchMode::PersistentRecursive).await.unwrap();
+            let this = self.private_clone();
+            tokio::spawn(async move {
+                loop {
+                    let zk::WatchedEvent { event_type, session_state, path } =
+                        watcher.changed().await;
+                    match event_type {
+                        zk::EventType::Session => panic!("Session error {:?}", session_state),
+                        // A task as been added
+                        zk::EventType::NodeDataChanged => {
+                            // Add raw task content in local DB
+                            log::info!("Received a new task from the cluster at {}", path);
+                            let (data, _stat) =
+                                this.zk.as_ref().unwrap().get_data(&path).await.unwrap();
+                            let task = serde_json::from_slice(&data).unwrap();
+
+                            let this = this.private_clone();
+                            tokio::task::spawn_blocking(move || {
+                                let mut wtxn = this.env.write_txn().unwrap();
+                                this.register_raw_task(&mut wtxn, &task).unwrap();
+                                wtxn.commit().unwrap();
+                            })
+                            .await
+                            .unwrap();
+                        }
+                        _ => (),
+                    }
+                    this.wake_up.signal();
+                }
+            });
+        }
     }
 
     pub fn indexer_config(&self) -> &IndexerConfig {
@@ -929,74 +1265,118 @@ impl IndexScheduler {
     /// Register a new task in the scheduler.
     ///
     /// If it fails and data was associated with the task, it tries to delete the associated data.
-    pub fn register(&self, kind: KindWithContent) -> Result<Task> {
-        let mut wtxn = self.env.write_txn()?;
+    pub async fn register(&self, kind: KindWithContent) -> Result<Task> {
+        let id = match self.zk {
+            Some(ref zk) => {
+                // reserve uniq ID on zookeeper. And give it to the spawn blocking.
+                let options =
+                    zk::CreateMode::PersistentSequential.with_acls(zk::Acls::anyone_all());
+                match zk.create("/tasks/task-", &[], &options).await {
+                    Ok((_stats, id)) => Some(id),
+                    Err(e) => panic!("{e}"),
+                }
+            }
+            None => None,
+        };
 
-        // if the task doesn't delete anything and 50% of the task queue is full, we must refuse to enqueue the incomming task
-        if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } if !tasks.is_empty())
-            && (self.env.non_free_pages_size()? * 100) / self.env.map_size()? as u64 > 50
-        {
-            return Err(Error::NoSpaceLeftInTaskQueue);
+        let this = self.private_clone();
+        let task = tokio::task::spawn_blocking(move || {
+            let mut wtxn = this.env.write_txn()?;
+
+            // if the task doesn't delete anything and 50% of the task queue is full, we must refuse to enqueue the incomming task
+            if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } if !tasks.is_empty())
+                && (this.env.non_free_pages_size()? * 100) / this.env.map_size()? as u64 > 50
+            {
+                return Err(Error::NoSpaceLeftInTaskQueue);
+            }
+
+            // get id generated by zookeeper or generate a local id.
+            let id = match id {
+                Some(id) => id.0 as u32,
+                None => this.next_task_id(&wtxn)?,
+            };
+
+            let mut task = Task {
+                uid: id,
+                enqueued_at: OffsetDateTime::now_utc(),
+                started_at: None,
+                finished_at: None,
+                error: None,
+                canceled_by: None,
+                details: kind.default_details(),
+                status: Status::Enqueued,
+                kind: kind.clone(),
+            };
+            // For deletion and cancelation tasks, we want to make extra sure that they
+            // don't attempt to delete/cancel tasks that are newer than themselves.
+            filter_out_references_to_newer_tasks(&mut task);
+            // If the register task is an index swap task, verify that it is well-formed
+            // (that it does not contain duplicate indexes).
+            check_index_swap_validity(&task)?;
+
+            this.register_raw_task(&mut wtxn, &task)?;
+
+            if let Err(e) = wtxn.commit() {
+                this.delete_persisted_task_data(&task)?;
+                return Err(e.into());
+            }
+
+            // If the registered task is a task cancelation
+            // we inform the processing tasks to stop (if necessary).
+            if let KindWithContent::TaskCancelation { tasks, .. } = kind {
+                let tasks_to_cancel = RoaringBitmap::from_iter(tasks);
+                if this
+                    .processing_tasks
+                    .read()
+                    .unwrap()
+                    .must_cancel_processing_tasks(&tasks_to_cancel)
+                {
+                    this.must_stop_processing.must_stop();
+                }
+            }
+
+            // notify the scheduler loop to execute a new tick
+            this.wake_up.signal();
+
+            Ok(task)
+        })
+        .await
+        .unwrap()?;
+
+        // TODO: send task to ZK in raw json.
+        if let Some(ref zk) = self.zk {
+            let id = id.unwrap();
+            // TODO: ugly unwrap
+            zk.set_data(
+                &format!("/tasks/task-{}", id),
+                &serde_json::to_vec_pretty(&task).unwrap(),
+                None,
+            )
+            .await
+            .unwrap();
         }
 
-        let mut task = Task {
-            uid: self.next_task_id(&wtxn)?,
-            enqueued_at: OffsetDateTime::now_utc(),
-            started_at: None,
-            finished_at: None,
-            error: None,
-            canceled_by: None,
-            details: kind.default_details(),
-            status: Status::Enqueued,
-            kind: kind.clone(),
-        };
-        // For deletion and cancelation tasks, we want to make extra sure that they
-        // don't attempt to delete/cancel tasks that are newer than themselves.
-        filter_out_references_to_newer_tasks(&mut task);
-        // If the register task is an index swap task, verify that it is well-formed
-        // (that it does not contain duplicate indexes).
-        check_index_swap_validity(&task)?;
+        Ok(task)
+    }
 
-        // Get rid of the mutability.
-        let task = task;
-
-        self.all_tasks.append(&mut wtxn, &BEU32::new(task.uid), &task)?;
+    pub fn register_raw_task(&self, wtxn: &mut RwTxn, task: &Task) -> Result<()> {
+        self.all_tasks.put(wtxn, &BEU32::new(task.uid), &task)?;
 
         for index in task.indexes() {
-            self.update_index(&mut wtxn, index, |bitmap| {
+            self.update_index(wtxn, index, |bitmap| {
                 bitmap.insert(task.uid);
             })?;
         }
 
-        self.update_status(&mut wtxn, Status::Enqueued, |bitmap| {
+        self.update_status(wtxn, Status::Enqueued, |bitmap| {
             bitmap.insert(task.uid);
         })?;
 
-        self.update_kind(&mut wtxn, task.kind.as_kind(), |bitmap| {
+        self.update_kind(wtxn, task.kind.as_kind(), |bitmap| {
             bitmap.insert(task.uid);
         })?;
 
-        utils::insert_task_datetime(&mut wtxn, self.enqueued_at, task.enqueued_at, task.uid)?;
-
-        if let Err(e) = wtxn.commit() {
-            self.delete_persisted_task_data(&task)?;
-            return Err(e.into());
-        }
-
-        // If the registered task is a task cancelation
-        // we inform the processing tasks to stop (if necessary).
-        if let KindWithContent::TaskCancelation { tasks, .. } = kind {
-            let tasks_to_cancel = RoaringBitmap::from_iter(tasks);
-            if self.processing_tasks.read().unwrap().must_cancel_processing_tasks(&tasks_to_cancel)
-            {
-                self.must_stop_processing.must_stop();
-            }
-        }
-
-        // notify the scheduler loop to execute a new tick
-        self.wake_up.signal();
-
-        Ok(task)
+        utils::insert_task_datetime(wtxn, self.enqueued_at, task.enqueued_at, task.uid)
     }
 
     /// Register a new task coming from a dump in the scheduler.
@@ -1055,7 +1435,7 @@ impl IndexScheduler {
     /// 6. Reset the in-memory list of processed tasks.
     ///
     /// Returns the number of processed tasks.
-    fn tick(&self) -> Result<TickOutcome> {
+    async fn tick(&self) -> Result<TickOutcome> {
         #[cfg(test)]
         {
             *self.run_loop_iteration.write().unwrap() += 1;
@@ -1064,7 +1444,7 @@ impl IndexScheduler {
 
         puffin::GlobalProfiler::lock().new_frame();
 
-        self.cleanup_task_queue()?;
+        self.cleanup_task_queue().await?;
 
         let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
         let batch =
@@ -1203,7 +1583,7 @@ impl IndexScheduler {
     }
 
     /// Register a task to cleanup the task queue if needed
-    fn cleanup_task_queue(&self) -> Result<()> {
+    async fn cleanup_task_queue(&self) -> Result<()> {
         let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
 
         let nb_tasks = self.all_task_ids(&rtxn)?.len();
@@ -1246,7 +1626,8 @@ impl IndexScheduler {
                 delete_before.format(&Rfc3339).map_err(|_| Error::CorruptedTaskQueue)?,
             ),
             tasks: to_delete,
-        })?;
+        })
+        .await?;
 
         Ok(())
     }

@@ -29,8 +29,7 @@ pub async fn create_dump(
         keys: auth_controller.list_keys()?,
         instance_uid: analytics.instance_uid().cloned(),
     };
-    let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
+    let task: SummarizedTaskView = index_scheduler.register(task).await?.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))

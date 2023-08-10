@@ -16,22 +16,119 @@ pub use store::open_auth_store_env;
 use store::{generate_key_as_hexa, HeedAuthStore};
 use time::OffsetDateTime;
 use uuid::Uuid;
+use zookeeper_client as zk;
 
 #[derive(Clone)]
 pub struct AuthController {
     store: Arc<HeedAuthStore>,
     master_key: Option<String>,
+    zk: Option<zk::Client>,
 }
 
 impl AuthController {
-    pub fn new(db_path: impl AsRef<Path>, master_key: &Option<String>) -> Result<Self> {
+    pub async fn new(
+        db_path: impl AsRef<Path>,
+        master_key: &Option<String>,
+        zk: Option<zk::Client>,
+    ) -> Result<Self> {
         let store = HeedAuthStore::new(db_path)?;
+        let controller = Self { store: Arc::new(store), master_key: master_key.clone(), zk };
 
-        if store.is_empty()? {
-            generate_default_keys(&store)?;
+        match controller.zk {
+            // setup the auth zk environment, the `auth` node
+            Some(ref zk) => {
+                let options =
+                    zk::CreateMode::Persistent.with_acls(zk::Acls::anyone_all());
+                // TODO: we should catch the potential unexpected errors here https://docs.rs/zookeeper-client/latest/zookeeper_client/struct.Client.html#method.create
+                // for the moment we consider that `create` only returns Error::NodeExists.
+                match zk.create("/auth", &[], &options).await {
+                    // If the store is empty, we must generate and push the default api-keys.
+                    Ok(_) => generate_default_keys(&controller).await?,
+                    // If the node exist we should clear our DB and download all the existing api-keys
+                    Err(zk::Error::NodeExists) => {
+                        log::warn!("Auth directory already exists, we need to clear our keys + import the one in zookeeper");
+
+                        let store = controller.store.clone();
+                        tokio::task::spawn_blocking(move || store.delete_all_keys()).await??;
+                        let children = zk
+                            .list_children("/auth")
+                            .await
+                            .expect("Internal, the auth directory was deleted during execution.");
+
+                        log::info!("Importing {} api-keys", children.len());
+                        for path in children {
+                            log::info!("  Importing {}", path);
+                            match zk.get_data(&format!("/auth/{}", &path)).await {
+                                Ok((key, _stat)) => {
+                                let key = serde_json::from_slice(&key).unwrap();
+                                let store = controller.store.clone();
+                                tokio::task::spawn_blocking(move || store.put_api_key(key))
+                                    .await??;
+
+                                },
+                                Err(e) => panic!("{e}")
+                            }
+                            // else the file was deleted while we were inserting the key. We ignore it.
+                            // TODO: What happens if someone updates the files before we have the time
+                            //       to setup the watcher
+                        }
+                    }
+                    e @ Err(
+                        zk::Error::NoNode
+                        | zk::Error::NoChildrenForEphemerals
+                        | zk::Error::InvalidAcl,
+                    ) => unreachable!("{e:?}"),
+                    Err(e) => {
+                        panic!("{e}")
+                    }
+                }
+                // TODO: Race condition above:
+                //       What happens if two node join exactly at the same moment:
+                //       One will create the dir
+                //       The second one will delete its DB, load nothing and install a watcher
+                //       The first one will push its keys and should wake up and update the second one.
+                //     / BUT, if the second one delete its DB and the first one push its files before the second one install the watcher we're fucked
+
+                // Zookeeper Event listener loop
+                let controller_clone = controller.clone();
+                let mut watcher = zk.watch("/auth", zk::AddWatchMode::PersistentRecursive).await?;
+                let czk = zk.clone();
+                tokio::spawn(async move {
+                    let zk = czk;
+                    loop {
+                        let zk::WatchedEvent { event_type, session_state, path } =
+                            dbg!(watcher.changed().await);
+
+                        match event_type {
+                            zk::EventType::Session => panic!("Session error {:?}", session_state),
+                            // a key is deleted from zk
+                            zk::EventType::NodeDeleted => {
+                                // TODO: ugly unwraps
+                                let uuid = path.strip_prefix("/auth/").unwrap();
+                                let uuid = Uuid::parse_str(&uuid).unwrap();
+                                log::info!("The key {} has been deleted", uuid);
+                                dbg!(controller_clone.store.delete_api_key(uuid).unwrap());
+                            }
+                            zk::EventType::NodeCreated | zk::EventType::NodeDataChanged => {
+                                let (key, _stat) = zk.get_data(&path).await.unwrap();
+                                let key: Key = serde_json::from_slice(&key).unwrap();
+                                log::info!("The key {} has been deleted", key.uid);
+                                
+                                dbg!(controller_clone.store.put_api_key(key).unwrap());
+                            }
+                            zk::EventType::NodeChildrenChanged => panic!("Got the unexpected NodeChildrenChanged event, what is it used for?"),
+                        }
+                    }
+                });
+            }
+            None => {
+                if controller.store.is_empty()? {
+                    generate_default_keys(&controller).await?;
+                }
+            }
         }
 
-        Ok(Self { store: Arc::new(store), master_key: master_key.clone() })
+        Ok(controller)
     }
 
     /// Return `Ok(())` if the auth controller is able to access one of its database.
@@ -50,14 +147,27 @@ impl AuthController {
         self.store.used_size()
     }
 
-    pub fn create_key(&self, create_key: CreateApiKey) -> Result<Key> {
+    pub async fn create_key(&self, create_key: CreateApiKey) -> Result<Key> {
         match self.store.get_api_key(create_key.uid)? {
             Some(_) => Err(AuthControllerError::ApiKeyAlreadyExists(create_key.uid.to_string())),
-            None => self.store.put_api_key(create_key.to_key()),
+            None => self.put_key(create_key.to_key()).await,
         }
     }
 
-    pub fn update_key(&self, uid: Uuid, patch: PatchApiKey) -> Result<Key> {
+    pub async fn put_key(&self, key: Key) -> Result<Key> {
+        let store = self.store.clone();
+        // TODO: we may commit only after zk persisted the keys
+        let key = tokio::task::spawn_blocking(move || store.put_api_key(key)).await??;
+        if let Some(ref zk) = self.zk {
+            let options = zk::CreateMode::Persistent.with_acls(zk::Acls::anyone_all());
+
+            zk.create(&format!("/auth/{}", key.uid), &serde_json::to_vec_pretty(&key)?, &options)
+                .await?;
+        }
+        Ok(key)
+    }
+
+    pub async fn update_key(&self, uid: Uuid, patch: PatchApiKey) -> Result<Key> {
         let mut key = self.get_key(uid)?;
         match patch.description {
             Setting::NotSet => (),
@@ -68,7 +178,14 @@ impl AuthController {
             name => key.name = name.set(),
         };
         key.updated_at = OffsetDateTime::now_utc();
-        self.store.put_api_key(key)
+        let store = self.store.clone();
+        // TODO: we may commit only after zk persisted the keys
+        let key = tokio::task::spawn_blocking(move || store.put_api_key(key)).await??;
+        if let Some(ref zk) = self.zk {
+            zk.set_data(&format!("/auth/{}", key.uid), &serde_json::to_vec_pretty(&key)?, None)
+                .await?;
+        }
+        Ok(key)
     }
 
     pub fn get_key(&self, uid: Uuid) -> Result<Key> {
@@ -109,8 +226,13 @@ impl AuthController {
         self.store.list_api_keys()
     }
 
-    pub fn delete_key(&self, uid: Uuid) -> Result<()> {
-        if self.store.delete_api_key(uid)? {
+    pub async fn delete_key(&self, uid: Uuid) -> Result<()> {
+        let store = self.store.clone();
+        let deleted = tokio::task::spawn_blocking(move || store.delete_api_key(uid)).await??;
+        if deleted {
+            if let Some(ref zk) = self.zk {
+                zk.delete(&format!("/auth/{}", uid), None).await?;
+            }
             Ok(())
         } else {
             Err(AuthControllerError::ApiKeyNotFound(uid.to_string()))
@@ -159,7 +281,7 @@ impl AuthController {
         self.store.delete_all_keys()
     }
 
-    /// Delete all the keys in the DB.
+    /// Insert a key in the DB without any check on its validity
     pub fn raw_insert_key(&mut self, key: Key) -> Result<()> {
         self.store.put_api_key(key)?;
         Ok(())
@@ -304,9 +426,9 @@ pub struct IndexSearchRules {
     pub filter: Option<serde_json::Value>,
 }
 
-fn generate_default_keys(store: &HeedAuthStore) -> Result<()> {
-    store.put_api_key(Key::default_admin())?;
-    store.put_api_key(Key::default_search())?;
+async fn generate_default_keys(controller: &AuthController) -> Result<()> {
+    controller.put_key(Key::default_admin()).await?;
+    controller.put_key(Key::default_search()).await?;
 
     Ok(())
 }

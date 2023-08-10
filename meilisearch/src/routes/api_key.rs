@@ -41,14 +41,10 @@ pub async fn create_api_key(
     _req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
     let v = body.into_inner();
-    let res = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
-        let key = auth_controller.create_key(v)?;
-        Ok(KeyView::from_key(key, &auth_controller))
-    })
-    .await
-    .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))??;
+    let key = auth_controller.create_key(v).await?;
+    let key = KeyView::from_key(key, &auth_controller);
 
-    Ok(HttpResponse::Created().json(res))
+    Ok(HttpResponse::Created().json(key))
 }
 
 #[derive(Deserr, Debug, Clone, Copy)]
@@ -110,17 +106,11 @@ pub async fn patch_api_key(
 ) -> Result<HttpResponse, ResponseError> {
     let key = path.into_inner().key;
     let patch_api_key = body.into_inner();
-    let res = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
-        let uid =
-            Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_encoded_key(&key))?;
-        let key = auth_controller.update_key(uid, patch_api_key)?;
+    let uid = Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_encoded_key(&key))?;
+    let key = auth_controller.update_key(uid, patch_api_key).await?;
+    let key = KeyView::from_key(key, &auth_controller);
 
-        Ok(KeyView::from_key(key, &auth_controller))
-    })
-    .await
-    .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))??;
-
-    Ok(HttpResponse::Ok().json(res))
+    Ok(HttpResponse::Ok().json(key))
 }
 
 pub async fn delete_api_key(
@@ -128,13 +118,8 @@ pub async fn delete_api_key(
     path: web::Path<AuthParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let key = path.into_inner().key;
-    tokio::task::spawn_blocking(move || {
-        let uid =
-            Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_encoded_key(&key))?;
-        auth_controller.delete_key(uid)
-    })
-    .await
-    .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))??;
+    let uid = Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_encoded_key(&key))?;
+    auth_controller.delete_key(uid).await?;
 
     Ok(HttpResponse::NoContent().finish())
 }
