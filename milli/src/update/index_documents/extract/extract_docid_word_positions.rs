@@ -55,11 +55,9 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         tokenizer_builder.stop_words(stop_words);
     }
     if let Some(dictionary) = dictionary {
-        // let dictionary: Vec<_> = dictionary.iter().map(String::as_str).collect();
         tokenizer_builder.words_dict(dictionary.as_slice());
     }
     if let Some(separators) = allowed_separators {
-        // let separators: Vec<_> = separators.iter().map(String::as_str).collect();
         tokenizer_builder.separators(separators.as_slice());
     }
     let tokenizer = tokenizer_builder.build();
