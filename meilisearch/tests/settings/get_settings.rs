@@ -16,6 +16,9 @@ static DEFAULT_SETTINGS_VALUES: Lazy<HashMap<&'static str, Value>> = Lazy::new(|
         json!(["words", "typo", "proximity", "attribute", "sort", "exactness"]),
     );
     map.insert("stop_words", json!([]));
+    map.insert("non_separator_tokens", json!([]));
+    map.insert("separator_tokens", json!([]));
+    map.insert("dictionary", json!([]));
     map.insert("synonyms", json!({}));
     map.insert(
         "faceting",
@@ -51,7 +54,7 @@ async fn get_settings() {
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     let settings = response.as_object().unwrap();
-    assert_eq!(settings.keys().len(), 11);
+    assert_eq!(settings.keys().len(), 14);
     assert_eq!(settings["displayedAttributes"], json!(["*"]));
     assert_eq!(settings["searchableAttributes"], json!(["*"]));
     assert_eq!(settings["filterableAttributes"], json!([]));
@@ -62,6 +65,9 @@ async fn get_settings() {
         json!(["words", "typo", "proximity", "attribute", "sort", "exactness"])
     );
     assert_eq!(settings["stopWords"], json!([]));
+    assert_eq!(settings["nonSeparatorTokens"], json!([]));
+    assert_eq!(settings["separatorTokens"], json!([]));
+    assert_eq!(settings["dictionary"], json!([]));
     assert_eq!(
         settings["faceting"],
         json!({
@@ -272,6 +278,9 @@ test_setting_routes!(
     searchable_attributes put,
     distinct_attribute put,
     stop_words put,
+    separator_tokens put,
+    non_separator_tokens put,
+    dictionary put,
     ranking_rules put,
     synonyms put,
     pagination patch,

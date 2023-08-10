@@ -491,6 +491,20 @@ pub fn perform_search(
         tokenizer_builder.allow_list(&script_lang_map);
     }
 
+    let separators = index.allowed_separators(&rtxn)?;
+    let separators: Option<Vec<_>> =
+        separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
+    if let Some(ref separators) = separators {
+        tokenizer_builder.separators(separators);
+    }
+
+    let dictionary = index.dictionary(&rtxn)?;
+    let dictionary: Option<Vec<_>> =
+        dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
+    if let Some(ref dictionary) = dictionary {
+        tokenizer_builder.words_dict(dictionary);
+    }
+
     let mut formatter_builder = MatcherBuilder::new(matching_words, tokenizer_builder.build());
     formatter_builder.crop_marker(query.crop_marker);
     formatter_builder.highlight_prefix(query.highlight_pre_tag);

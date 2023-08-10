@@ -171,6 +171,15 @@ pub struct Settings<T> {
     #[deserr(default, error = DeserrJsonError<InvalidSettingsStopWords>)]
     pub stop_words: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsNonSeparatorTokens>)]
+    pub non_separator_tokens: Setting<BTreeSet<String>>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsSeparatorTokens>)]
+    pub separator_tokens: Setting<BTreeSet<String>>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsDictionary>)]
+    pub dictionary: Setting<BTreeSet<String>>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsSynonyms>)]
     pub synonyms: Setting<BTreeMap<String, Vec<String>>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
@@ -201,6 +210,9 @@ impl Settings<Checked> {
             ranking_rules: Setting::Reset,
             stop_words: Setting::Reset,
             synonyms: Setting::Reset,
+            non_separator_tokens: Setting::Reset,
+            separator_tokens: Setting::Reset,
+            dictionary: Setting::Reset,
             distinct_attribute: Setting::Reset,
             typo_tolerance: Setting::Reset,
             faceting: Setting::Reset,
@@ -217,6 +229,9 @@ impl Settings<Checked> {
             sortable_attributes,
             ranking_rules,
             stop_words,
+            non_separator_tokens,
+            separator_tokens,
+            dictionary,
             synonyms,
             distinct_attribute,
             typo_tolerance,
@@ -232,6 +247,9 @@ impl Settings<Checked> {
             sortable_attributes,
             ranking_rules,
             stop_words,
+            non_separator_tokens,
+            separator_tokens,
+            dictionary,
             synonyms,
             distinct_attribute,
             typo_tolerance,
@@ -274,6 +292,9 @@ impl Settings<Unchecked> {
             ranking_rules: self.ranking_rules,
             stop_words: self.stop_words,
             synonyms: self.synonyms,
+            non_separator_tokens: self.non_separator_tokens,
+            separator_tokens: self.separator_tokens,
+            dictionary: self.dictionary,
             distinct_attribute: self.distinct_attribute,
             typo_tolerance: self.typo_tolerance,
             faceting: self.faceting,
@@ -332,6 +353,28 @@ pub fn apply_settings_to_builder(
     match settings.stop_words {
         Setting::Set(ref stop_words) => builder.set_stop_words(stop_words.clone()),
         Setting::Reset => builder.reset_stop_words(),
+        Setting::NotSet => (),
+    }
+
+    match settings.non_separator_tokens {
+        Setting::Set(ref non_separator_tokens) => {
+            builder.set_non_separator_tokens(non_separator_tokens.clone())
+        }
+        Setting::Reset => builder.reset_non_separator_tokens(),
+        Setting::NotSet => (),
+    }
+
+    match settings.separator_tokens {
+        Setting::Set(ref separator_tokens) => {
+            builder.set_separator_tokens(separator_tokens.clone())
+        }
+        Setting::Reset => builder.reset_separator_tokens(),
+        Setting::NotSet => (),
+    }
+
+    match settings.dictionary {
+        Setting::Set(ref dictionary) => builder.set_dictionary(dictionary.clone()),
+        Setting::Reset => builder.reset_dictionary(),
         Setting::NotSet => (),
     }
 
@@ -459,15 +502,14 @@ pub fn settings(
         })
         .transpose()?
         .unwrap_or_default();
+
+    let non_separator_tokens = index.non_separator_tokens(rtxn)?.unwrap_or_default();
+    let separator_tokens = index.separator_tokens(rtxn)?.unwrap_or_default();
+    let dictionary = index.dictionary(rtxn)?.unwrap_or_default();
+
     let distinct_field = index.distinct_field(rtxn)?.map(String::from);
 
-    // in milli each word in the synonyms map were split on their separator. Since we lost
-    // this information we are going to put space between words.
-    let synonyms = index
-        .synonyms(rtxn)?
-        .iter()
-        .map(|(key, values)| (key.join(" "), values.iter().map(|value| value.join(" ")).collect()))
-        .collect();
+    let synonyms = index.user_defined_synonyms(rtxn)?;
 
     let min_typo_word_len = MinWordSizeTyposSetting {
         one_typo: Setting::Set(index.min_word_len_one_typo(rtxn)?),
@@ -520,6 +562,9 @@ pub fn settings(
         sortable_attributes: Setting::Set(sortable_attributes),
         ranking_rules: Setting::Set(criteria.iter().map(|c| c.clone().into()).collect()),
         stop_words: Setting::Set(stop_words),
+        non_separator_tokens: Setting::Set(non_separator_tokens),
+        separator_tokens: Setting::Set(separator_tokens),
+        dictionary: Setting::Set(dictionary),
         distinct_attribute: match distinct_field {
             Some(field) => Setting::Set(field),
             None => Setting::Reset,
@@ -642,6 +687,9 @@ pub(crate) mod test {
             sortable_attributes: Setting::NotSet,
             ranking_rules: Setting::NotSet,
             stop_words: Setting::NotSet,
+            non_separator_tokens: Setting::NotSet,
+            separator_tokens: Setting::NotSet,
+            dictionary: Setting::NotSet,
             synonyms: Setting::NotSet,
             distinct_attribute: Setting::NotSet,
             typo_tolerance: Setting::NotSet,
@@ -663,6 +711,9 @@ pub(crate) mod test {
             sortable_attributes: Setting::NotSet,
             ranking_rules: Setting::NotSet,
             stop_words: Setting::NotSet,
+            non_separator_tokens: Setting::NotSet,
+            separator_tokens: Setting::NotSet,
+            dictionary: Setting::NotSet,
             synonyms: Setting::NotSet,
             distinct_attribute: Setting::NotSet,
             typo_tolerance: Setting::NotSet,

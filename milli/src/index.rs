@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
 use std::mem::size_of;
 use std::path::Path;
@@ -61,8 +61,12 @@ pub mod main_key {
     pub const USER_DEFINED_SEARCHABLE_FIELDS_KEY: &str = "user-defined-searchable-fields";
     pub const SOFT_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "soft-external-documents-ids";
     pub const STOP_WORDS_KEY: &str = "stop-words";
+    pub const NON_SEPARATOR_TOKENS_KEY: &str = "non-separator-tokens";
+    pub const SEPARATOR_TOKENS_KEY: &str = "separator-tokens";
+    pub const DICTIONARY_KEY: &str = "dictionary";
     pub const STRING_FACETED_DOCUMENTS_IDS_PREFIX: &str = "string-faceted-documents-ids";
     pub const SYNONYMS_KEY: &str = "synonyms";
+    pub const USER_DEFINED_SYNONYMS_KEY: &str = "user-defined-synonyms";
     pub const WORDS_FST_KEY: &str = "words-fst";
     pub const WORDS_PREFIXES_FST_KEY: &str = "words-prefixes-fst";
     pub const CREATED_AT_KEY: &str = "created-at";
@@ -1055,18 +1059,116 @@ impl Index {
         }
     }
 
+    /* non separator tokens */
+
+    pub(crate) fn put_non_separator_tokens(
+        &self,
+        wtxn: &mut RwTxn,
+        set: &BTreeSet<String>,
+    ) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeBincode<_>>(wtxn, main_key::NON_SEPARATOR_TOKENS_KEY, set)
+    }
+
+    pub(crate) fn delete_non_separator_tokens(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, main_key::NON_SEPARATOR_TOKENS_KEY)
+    }
+
+    pub fn non_separator_tokens(&self, rtxn: &RoTxn) -> Result<Option<BTreeSet<String>>> {
+        Ok(self.main.get::<_, Str, SerdeBincode<BTreeSet<String>>>(
+            rtxn,
+            main_key::NON_SEPARATOR_TOKENS_KEY,
+        )?)
+    }
+
+    /* separator tokens */
+
+    pub(crate) fn put_separator_tokens(
+        &self,
+        wtxn: &mut RwTxn,
+        set: &BTreeSet<String>,
+    ) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeBincode<_>>(wtxn, main_key::SEPARATOR_TOKENS_KEY, set)
+    }
+
+    pub(crate) fn delete_separator_tokens(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, main_key::SEPARATOR_TOKENS_KEY)
+    }
+
+    pub fn separator_tokens(&self, rtxn: &RoTxn) -> Result<Option<BTreeSet<String>>> {
+        Ok(self
+            .main
+            .get::<_, Str, SerdeBincode<BTreeSet<String>>>(rtxn, main_key::SEPARATOR_TOKENS_KEY)?)
+    }
+
+    /* separators easing method */
+
+    pub fn allowed_separators(&self, rtxn: &RoTxn) -> Result<Option<BTreeSet<String>>> {
+        let default_separators =
+            charabia::separators::DEFAULT_SEPARATORS.iter().map(|s| s.to_string());
+        let mut separators: Option<BTreeSet<_>> = None;
+        if let Some(mut separator_tokens) = self.separator_tokens(rtxn)? {
+            separator_tokens.extend(default_separators.clone());
+            separators = Some(separator_tokens);
+        }
+
+        if let Some(non_separator_tokens) = self.non_separator_tokens(rtxn)? {
+            separators = separators
+                .or_else(|| Some(default_separators.collect()))
+                .map(|separators| &separators - &non_separator_tokens);
+        }
+
+        Ok(separators)
+    }
+
+    /* dictionary */
+
+    pub(crate) fn put_dictionary(
+        &self,
+        wtxn: &mut RwTxn,
+        set: &BTreeSet<String>,
+    ) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeBincode<_>>(wtxn, main_key::DICTIONARY_KEY, set)
+    }
+
+    pub(crate) fn delete_dictionary(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, main_key::DICTIONARY_KEY)
+    }
+
+    pub fn dictionary(&self, rtxn: &RoTxn) -> Result<Option<BTreeSet<String>>> {
+        Ok(self
+            .main
+            .get::<_, Str, SerdeBincode<BTreeSet<String>>>(rtxn, main_key::DICTIONARY_KEY)?)
+    }
+
     /* synonyms */
 
     pub(crate) fn put_synonyms(
         &self,
         wtxn: &mut RwTxn,
         synonyms: &HashMap<Vec<String>, Vec<Vec<String>>>,
+        user_defined_synonyms: &BTreeMap<String, Vec<String>>,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeBincode<_>>(wtxn, main_key::SYNONYMS_KEY, synonyms)
+        self.main.put::<_, Str, SerdeBincode<_>>(wtxn, main_key::SYNONYMS_KEY, synonyms)?;
+        self.main.put::<_, Str, SerdeBincode<_>>(
+            wtxn,
+            main_key::USER_DEFINED_SYNONYMS_KEY,
+            user_defined_synonyms,
+        )
     }
 
     pub(crate) fn delete_synonyms(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, main_key::SYNONYMS_KEY)
+        self.main.delete::<_, Str>(wtxn, main_key::SYNONYMS_KEY)?;
+        self.main.delete::<_, Str>(wtxn, main_key::USER_DEFINED_SYNONYMS_KEY)
+    }
+
+    pub fn user_defined_synonyms(
+        &self,
+        rtxn: &RoTxn,
+    ) -> heed::Result<BTreeMap<String, Vec<String>>> {
+        Ok(self
+            .main
+            .get::<_, Str, SerdeBincode<_>>(rtxn, main_key::USER_DEFINED_SYNONYMS_KEY)?
+            .unwrap_or_default())
     }
 
     pub fn synonyms(&self, rtxn: &RoTxn) -> heed::Result<HashMap<Vec<String>, Vec<Vec<String>>>> {

@@ -340,6 +340,9 @@ impl<T> From<v5::Settings<T>> for v6::Settings<v6::Unchecked> {
                 }
             },
             stop_words: settings.stop_words.into(),
+            non_separator_tokens: v6::Setting::NotSet,
+            separator_tokens: v6::Setting::NotSet,
+            dictionary: v6::Setting::NotSet,
             synonyms: settings.synonyms.into(),
             distinct_attribute: settings.distinct_attribute.into(),
             typo_tolerance: match settings.typo_tolerance {

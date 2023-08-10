@@ -28,6 +28,8 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     searchable_fields: &Option<HashSet<FieldId>>,
     stop_words: Option<&fst::Set<&[u8]>>,
+    allowed_separators: Option<&[&str]>,
+    dictionary: Option<&[&str]>,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<(RoaringBitmap, grenad::Reader<File>, ScriptLanguageDocidsMap)> {
     puffin::profile_function!();
@@ -51,6 +53,12 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     let mut tokenizer_builder = TokenizerBuilder::new();
     if let Some(stop_words) = stop_words {
         tokenizer_builder.stop_words(stop_words);
+    }
+    if let Some(dictionary) = dictionary {
+        tokenizer_builder.words_dict(dictionary);
+    }
+    if let Some(separators) = allowed_separators {
+        tokenizer_builder.separators(separators);
     }
     let tokenizer = tokenizer_builder.build();
 

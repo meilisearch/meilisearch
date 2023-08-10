@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::result::Result as StdResult;
 
 use charabia::{Normalize, Tokenizer, TokenizerBuilder};
@@ -112,8 +112,11 @@ pub struct Settings<'a, 't, 'u, 'i> {
     sortable_fields: Setting<HashSet<String>>,
     criteria: Setting<Vec<Criterion>>,
     stop_words: Setting<BTreeSet<String>>,
+    non_separator_tokens: Setting<BTreeSet<String>>,
+    separator_tokens: Setting<BTreeSet<String>>,
+    dictionary: Setting<BTreeSet<String>>,
     distinct_field: Setting<String>,
-    synonyms: Setting<HashMap<String, Vec<String>>>,
+    synonyms: Setting<BTreeMap<String, Vec<String>>>,
     primary_key: Setting<String>,
     authorize_typos: Setting<bool>,
     min_word_len_two_typos: Setting<u8>,
@@ -141,6 +144,9 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             sortable_fields: Setting::NotSet,
             criteria: Setting::NotSet,
             stop_words: Setting::NotSet,
+            non_separator_tokens: Setting::NotSet,
+            separator_tokens: Setting::NotSet,
+            dictionary: Setting::NotSet,
             distinct_field: Setting::NotSet,
             synonyms: Setting::NotSet,
             primary_key: Setting::NotSet,
@@ -205,6 +211,39 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             if stop_words.is_empty() { Setting::Reset } else { Setting::Set(stop_words) }
     }
 
+    pub fn reset_non_separator_tokens(&mut self) {
+        self.non_separator_tokens = Setting::Reset;
+    }
+
+    pub fn set_non_separator_tokens(&mut self, non_separator_tokens: BTreeSet<String>) {
+        self.non_separator_tokens = if non_separator_tokens.is_empty() {
+            Setting::Reset
+        } else {
+            Setting::Set(non_separator_tokens)
+        }
+    }
+
+    pub fn reset_separator_tokens(&mut self) {
+        self.separator_tokens = Setting::Reset;
+    }
+
+    pub fn set_separator_tokens(&mut self, separator_tokens: BTreeSet<String>) {
+        self.separator_tokens = if separator_tokens.is_empty() {
+            Setting::Reset
+        } else {
+            Setting::Set(separator_tokens)
+        }
+    }
+
+    pub fn reset_dictionary(&mut self) {
+        self.dictionary = Setting::Reset;
+    }
+
+    pub fn set_dictionary(&mut self, dictionary: BTreeSet<String>) {
+        self.dictionary =
+            if dictionary.is_empty() { Setting::Reset } else { Setting::Set(dictionary) }
+    }
+
     pub fn reset_distinct_field(&mut self) {
         self.distinct_field = Setting::Reset;
     }
@@ -217,7 +256,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.synonyms = Setting::Reset;
     }
 
-    pub fn set_synonyms(&mut self, synonyms: HashMap<String, Vec<String>>) {
+    pub fn set_synonyms(&mut self, synonyms: BTreeMap<String, Vec<String>>) {
         self.synonyms = if synonyms.is_empty() { Setting::Reset } else { Setting::Set(synonyms) }
     }
 
@@ -452,9 +491,84 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         }
     }
 
+    fn update_non_separator_tokens(&mut self) -> Result<bool> {
+        let changes = match self.non_separator_tokens {
+            Setting::Set(ref non_separator_tokens) => {
+                let current = self.index.non_separator_tokens(self.wtxn)?;
+
+                // Does the new list differ from the previous one?
+                if current.map_or(true, |current| &current != non_separator_tokens) {
+                    self.index.put_non_separator_tokens(self.wtxn, non_separator_tokens)?;
+                    true
+                } else {
+                    false
+                }
+            }
+            Setting::Reset => self.index.delete_non_separator_tokens(self.wtxn)?,
+            Setting::NotSet => false,
+        };
+
+        // the synonyms must be updated if non separator tokens have been updated.
+        if changes && self.synonyms == Setting::NotSet {
+            self.synonyms = Setting::Set(self.index.user_defined_synonyms(self.wtxn)?);
+        }
+
+        Ok(changes)
+    }
+
+    fn update_separator_tokens(&mut self) -> Result<bool> {
+        let changes = match self.separator_tokens {
+            Setting::Set(ref separator_tokens) => {
+                let current = self.index.separator_tokens(self.wtxn)?;
+
+                // Does the new list differ from the previous one?
+                if current.map_or(true, |current| &current != separator_tokens) {
+                    self.index.put_separator_tokens(self.wtxn, separator_tokens)?;
+                    true
+                } else {
+                    false
+                }
+            }
+            Setting::Reset => self.index.delete_separator_tokens(self.wtxn)?,
+            Setting::NotSet => false,
+        };
+
+        // the synonyms must be updated if separator tokens have been updated.
+        if changes && self.synonyms == Setting::NotSet {
+            self.synonyms = Setting::Set(self.index.user_defined_synonyms(self.wtxn)?);
+        }
+
+        Ok(changes)
+    }
+
+    fn update_dictionary(&mut self) -> Result<bool> {
+        let changes = match self.dictionary {
+            Setting::Set(ref dictionary) => {
+                let current = self.index.dictionary(self.wtxn)?;
+
+                // Does the new list differ from the previous one?
+                if current.map_or(true, |current| &current != dictionary) {
+                    self.index.put_dictionary(self.wtxn, dictionary)?;
+                    true
+                } else {
+                    false
+                }
+            }
+            Setting::Reset => self.index.delete_dictionary(self.wtxn)?,
+            Setting::NotSet => false,
+        };
+
+        // the synonyms must be updated if dictionary has been updated.
+        if changes && self.synonyms == Setting::NotSet {
+            self.synonyms = Setting::Set(self.index.user_defined_synonyms(self.wtxn)?);
+        }
+
+        Ok(changes)
+    }
+
     fn update_synonyms(&mut self) -> Result<bool> {
         match self.synonyms {
-            Setting::Set(ref synonyms) => {
+            Setting::Set(ref user_synonyms) => {
                 fn normalize(tokenizer: &Tokenizer, text: &str) -> Vec<String> {
                     tokenizer
                         .tokenize(text)
@@ -473,10 +587,25 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 if let Some(ref stop_words) = stop_words {
                     builder.stop_words(stop_words);
                 }
+
+                let separators = self.index.allowed_separators(self.wtxn)?;
+                let separators: Option<Vec<_>> =
+                    separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
+                if let Some(ref separators) = separators {
+                    builder.separators(separators);
+                }
+
+                let dictionary = self.index.dictionary(self.wtxn)?;
+                let dictionary: Option<Vec<_>> =
+                    dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
+                if let Some(ref dictionary) = dictionary {
+                    builder.words_dict(dictionary);
+                }
+
                 let tokenizer = builder.build();
 
                 let mut new_synonyms = HashMap::new();
-                for (word, synonyms) in synonyms {
+                for (word, synonyms) in user_synonyms {
                     // Normalize both the word and associated synonyms.
                     let normalized_word = normalize(&tokenizer, word);
                     let normalized_synonyms =
@@ -497,7 +626,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 let old_synonyms = self.index.synonyms(self.wtxn)?;
 
                 if new_synonyms != old_synonyms {
-                    self.index.put_synonyms(self.wtxn, &new_synonyms)?;
+                    self.index.put_synonyms(self.wtxn, &new_synonyms, user_synonyms)?;
                     Ok(true)
                 } else {
                     Ok(false)
@@ -757,11 +886,17 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         let faceted_updated = old_faceted_fields != new_faceted_fields;
 
         let stop_words_updated = self.update_stop_words()?;
+        let non_separator_tokens_updated = self.update_non_separator_tokens()?;
+        let separator_tokens_updated = self.update_separator_tokens()?;
+        let dictionary_updated = self.update_dictionary()?;
         let synonyms_updated = self.update_synonyms()?;
         let searchable_updated = self.update_searchable()?;
         let exact_attributes_updated = self.update_exact_attributes()?;
 
         if stop_words_updated
+            || non_separator_tokens_updated
+            || separator_tokens_updated
+            || dictionary_updated
             || faceted_updated
             || synonyms_updated
             || searchable_updated
@@ -778,7 +913,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 mod tests {
     use big_s::S;
     use heed::types::ByteSlice;
-    use maplit::{btreeset, hashmap, hashset};
+    use maplit::{btreemap, btreeset, hashset};
 
     use super::*;
     use crate::error::Error;
@@ -1244,7 +1379,7 @@ mod tests {
         // In the same transaction provide some synonyms
         index
             .update_settings_using_wtxn(&mut wtxn, |settings| {
-                settings.set_synonyms(hashmap! {
+                settings.set_synonyms(btreemap! {
                     "blini".to_string() => vec!["crepes".to_string()],
                     "super like".to_string() => vec!["love".to_string()],
                     "puppies".to_string() => vec!["dogs".to_string(), "doggos".to_string()]
@@ -1540,6 +1675,9 @@ mod tests {
                     sortable_fields,
                     criteria,
                     stop_words,
+                    non_separator_tokens,
+                    separator_tokens,
+                    dictionary,
                     distinct_field,
                     synonyms,
                     primary_key,
@@ -1558,6 +1696,9 @@ mod tests {
                 assert!(matches!(sortable_fields, Setting::NotSet));
                 assert!(matches!(criteria, Setting::NotSet));
                 assert!(matches!(stop_words, Setting::NotSet));
+                assert!(matches!(non_separator_tokens, Setting::NotSet));
+                assert!(matches!(separator_tokens, Setting::NotSet));
+                assert!(matches!(dictionary, Setting::NotSet));
                 assert!(matches!(distinct_field, Setting::NotSet));
                 assert!(matches!(synonyms, Setting::NotSet));
                 assert!(matches!(primary_key, Setting::NotSet));

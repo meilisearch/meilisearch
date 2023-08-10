@@ -316,6 +316,12 @@ where
         let vectors_field_id = self.index.fields_ids_map(self.wtxn)?.id("_vectors");
 
         let stop_words = self.index.stop_words(self.wtxn)?;
+        let separators = self.index.allowed_separators(self.wtxn)?;
+        let separators: Option<Vec<_>> =
+            separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
+        let dictionary = self.index.dictionary(self.wtxn)?;
+        let dictionary: Option<Vec<_>> =
+            dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
         let exact_attributes = self.index.exact_attributes_ids(self.wtxn)?;
 
         let pool_params = GrenadParameters {
@@ -353,6 +359,8 @@ where
                     geo_fields_ids,
                     vectors_field_id,
                     stop_words,
+                    separators.as_deref(),
+                    dictionary.as_deref(),
                     max_positions_per_attributes,
                     exact_attributes,
                 )
