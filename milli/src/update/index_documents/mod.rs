@@ -359,8 +359,8 @@ where
                     geo_fields_ids,
                     vectors_field_id,
                     stop_words,
-                    separators.as_ref().map(Vec::as_slice),
-                    dictionary.as_ref().map(Vec::as_slice),
+                    separators.as_deref(),
+                    dictionary.as_deref(),
                     max_positions_per_attributes,
                     exact_attributes,
                 )

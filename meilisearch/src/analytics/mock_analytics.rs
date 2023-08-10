@@ -20,7 +20,7 @@ pub struct SearchAggregator;
 #[allow(dead_code)]
 impl SearchAggregator {
     pub fn from_query(_: &dyn Any, _: &dyn Any) -> Self {
-        Self::default()
+        Self
     }
 
     pub fn succeed(&mut self, _: &dyn Any) {}
@@ -32,7 +32,7 @@ pub struct MultiSearchAggregator;
 #[allow(dead_code)]
 impl MultiSearchAggregator {
     pub fn from_queries(_: &dyn Any, _: &dyn Any) -> Self {
-        Self::default()
+        Self
     }
 
     pub fn succeed(&mut self) {}
@@ -44,7 +44,7 @@ pub struct FacetSearchAggregator;
 #[allow(dead_code)]
 impl FacetSearchAggregator {
     pub fn from_query(_: &dyn Any, _: &dyn Any) -> Self {
-        Self::default()
+        Self
     }
 
     pub fn succeed(&mut self, _: &dyn Any) {}
