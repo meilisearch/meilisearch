@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::fmt::{self, Debug, Display};
 use std::fs::File;
 use std::io::{self, Seek, Write};
@@ -42,7 +41,7 @@ impl Display for DocumentFormatError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Io(e) => write!(f, "{e}"),
-            Self::MalformedPayload(me, b) => match me.borrow() {
+            Self::MalformedPayload(me, b) => match me {
                 Error::Json(se) => {
                     let mut message = match se.classify() {
                         Category::Data => {
