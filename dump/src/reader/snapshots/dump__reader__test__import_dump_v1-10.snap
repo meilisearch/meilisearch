@@ -1,0 +1,24 @@
+---
+source: dump/src/reader/mod.rs
+expression: spells.settings().unwrap()
+---
+{
+  "displayedAttributes": [
+    "*"
+  ],
+  "searchableAttributes": [
+    "*"
+  ],
+  "filterableAttributes": [],
+  "sortableAttributes": [],
+  "rankingRules": [
+    "typo",
+    "words",
+    "proximity",
+    "attribute",
+    "exactness"
+  ],
+  "stopWords": [],
+  "synonyms": {},
+  "distinctAttribute": null
+}

@@ -1,0 +1,38 @@
+---
+source: dump/src/reader/mod.rs
+expression: products.settings().unwrap()
+---
+{
+  "displayedAttributes": [
+    "*"
+  ],
+  "searchableAttributes": [
+    "*"
+  ],
+  "filterableAttributes": [],
+  "sortableAttributes": [],
+  "rankingRules": [
+    "typo",
+    "words",
+    "proximity",
+    "attribute",
+    "exactness"
+  ],
+  "stopWords": [],
+  "synonyms": {
+    "android": [
+      "phone",
+      "smartphone"
+    ],
+    "iphone": [
+      "phone",
+      "smartphone"
+    ],
+    "phone": [
+      "android",
+      "iphone",
+      "smartphone"
+    ]
+  },
+  "distinctAttribute": null
+}

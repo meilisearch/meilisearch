@@ -94,7 +94,7 @@ use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValu
 use crate::heed_codec::ByteSliceRefCodec;
 use crate::update::index_documents::create_sorter;
 use crate::update::merge_btreeset_string;
-use crate::{BEU16StrCodec, Index, Result, BEU16};
+use crate::{BEU16StrCodec, Index, Result, BEU16, MAX_FACET_VALUE_LENGTH};
 
 pub mod bulk;
 pub mod delete;
@@ -191,7 +191,16 @@ impl<'i> FacetsUpdate<'i> {
         for result in database.iter(wtxn)? {
             let (facet_group_key, ()) = result?;
             if let FacetGroupKey { field_id, level: 0, left_bound } = facet_group_key {
-                let normalized_facet = left_bound.normalize(&options);
+                let mut normalized_facet = left_bound.normalize(&options);
+                let normalized_truncated_facet: String;
+                if normalized_facet.len() > MAX_FACET_VALUE_LENGTH {
+                    normalized_truncated_facet = normalized_facet
+                        .char_indices()
+                        .take_while(|(idx, _)| *idx < MAX_FACET_VALUE_LENGTH)
+                        .map(|(_, c)| c)
+                        .collect();
+                    normalized_facet = normalized_truncated_facet.into();
+                }
                 let set = BTreeSet::from_iter(std::iter::once(left_bound));
                 let key = (field_id, normalized_facet.as_ref());
                 let key = BEU16StrCodec::bytes_encode(&key).ok_or(heed::Error::Encoding)?;
