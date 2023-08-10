@@ -49,8 +49,8 @@ pub(crate) fn data_from_obkv_documents(
     geo_fields_ids: Option<(FieldId, FieldId)>,
     vectors_field_id: Option<FieldId>,
     stop_words: Option<fst::Set<&[u8]>>,
-    allowed_separators: Option<Vec<&str>>,
-    dictionary: Option<Vec<&str>>,
+    allowed_separators: Option<&[&str]>,
+    dictionary: Option<&[&str]>,
     max_positions_per_attributes: Option<u32>,
     exact_attributes: HashSet<FieldId>,
 ) -> Result<()> {
@@ -293,8 +293,8 @@ fn send_and_extract_flattened_documents_data(
     geo_fields_ids: Option<(FieldId, FieldId)>,
     vectors_field_id: Option<FieldId>,
     stop_words: &Option<fst::Set<&[u8]>>,
-    allowed_separators: &Option<Vec<&str>>,
-    dictionary: &Option<Vec<&str>>,
+    allowed_separators: &Option<&[&str]>,
+    dictionary: &Option<&[&str]>,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<(
     grenad::Reader<CursorClonableMmap>,
@@ -350,8 +350,8 @@ fn send_and_extract_flattened_documents_data(
                         indexer,
                         searchable_fields,
                         stop_words.as_ref(),
-                        allowed_separators.as_ref(),
-                        dictionary.as_ref(),
+                        *allowed_separators,
+                        *dictionary,
                         max_positions_per_attributes,
                     )?;
 
