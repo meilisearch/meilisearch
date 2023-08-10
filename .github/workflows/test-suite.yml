@@ -161,7 +161,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.69.0
+          toolchain: 1.71.1
           override: true
           components: clippy
       - name: Cache dependencies

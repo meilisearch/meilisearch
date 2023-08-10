@@ -39,7 +39,7 @@ byte-unit = { version = "4.0.19", default-features = false, features = [
 bytes = "1.4.0"
 clap = { version = "4.2.1", features = ["derive", "env"] }
 crossbeam-channel = "0.5.8"
-deserr = "0.5.0"
+deserr = { version = "0.6.0", features = ["actix-web"]}
 dump = { path = "../dump" }
 either = "1.8.1"
 env_logger = "0.10.0"
@@ -50,9 +50,9 @@ futures = "0.3.28"
 futures-util = "0.3.28"
 http = "0.2.9"
 index-scheduler = { path = "../index-scheduler" }
-indexmap = { version = "1.9.3", features = ["serde-1"] }
+indexmap = { version = "2.0.0", features = ["serde"] }
 is-terminal = "0.4.8"
-itertools = "0.10.5"
+itertools = "0.11.0"
 jsonwebtoken = "8.3.0"
 lazy_static = "1.4.0"
 log = "0.4.17"
@@ -87,7 +87,7 @@ sha2 = "0.10.6"
 siphasher = "0.3.10"
 slice-group-by = "0.3.0"
 static-files = { version = "0.2.3", optional = true }
-sysinfo = "0.28.4"
+sysinfo = "0.29.7"
 tar = "0.4.38"
 tempfile = "3.5.0"
 thiserror = "1.0.40"
