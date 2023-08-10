@@ -621,47 +621,49 @@ impl SearchAggregator {
         ret.total_received = 1;
         ret.user_agents = extract_user_agents(request).into_iter().collect();
 
-        if let Some(ref sort) = query.sort {
-            ret.sort_total_number_of_criteria = 1;
-            ret.sort_with_geo_point = sort.iter().any(|s| s.contains("_geoPoint("));
-            ret.sort_sum_of_criteria_terms = sort.len();
-        }
+        match query {
+            SearchQuery {
+                sort: Some(ref sort),
+                filter: Some(ref filter),
+                attributes_to_search_on: Some(_),
+                q: Some(ref q),
+                vector: Some(ref vector),
+                ..
+            } => {
+                ret.set_sort_attributes(sort);
+                ret.set_filter_attributes(filter);
+                ret.set_attributes_to_search_on_count();
+                ret.set_max_terms_number(q);
+                ret.set_vector_size(vector);
+            },
 
-        if let Some(ref filter) = query.filter {
-            static RE: Lazy<Regex> = Lazy::new(|| Regex::new("AND | OR").unwrap());
-            ret.filter_total_number_of_criteria = 1;
+            SearchQuery {
+                filter: Some(ref filter),
+                attributes_to_search_on: Some(_),
+                q: Some(ref q),
+                vector: Some(ref vector),
+                ..
+            } => {
+                ret.set_filter_attributes(filter);
+                ret.set_attributes_to_search_on_count();
+                ret.set_max_terms_number(q);
+                ret.set_vector_size(vector);
+            },
 
-            let syntax = match filter {
-                Value::String(_) => "string".to_string(),
-                Value::Array(values) => {
-                    if values.iter().map(|v| v.to_string()).any(|s| RE.is_match(&s)) {
-                        "mixed".to_string()
-                    } else {
-                        "array".to_string()
-                    }
-                }
-                _ => "none".to_string(),
-            };
-            // convert the string to a HashMap
-            ret.used_syntax.insert(syntax, 1);
+            SearchQuery {
+                sort: Some(ref sort),
+                attributes_to_search_on: Some(_),
+                q: Some(ref q),
+                vector: Some(ref vector),
+                ..
+            } => {
+                ret.set_sort_attributes(sort);
+                ret.set_attributes_to_search_on_count();
+                ret.set_max_terms_number(q);
+                ret.set_vector_size(vector);
+            },
 
-            let stringified_filters = filter.to_string();
-            ret.filter_with_geo_radius = stringified_filters.contains("_geoRadius(");
-            ret.filter_with_geo_bounding_box = stringified_filters.contains("_geoBoundingBox(");
-            ret.filter_sum_of_criteria_terms = RE.split(&stringified_filters).count();
-        }
-
-        // attributes_to_search_on
-        if let Some(_) = query.attributes_to_search_on {
-            ret.attributes_to_search_on_total_number_of_uses = 1;
-        }
-
-        if let Some(ref q) = query.q {
-            ret.max_terms_number = q.split_whitespace().count();
-        }
-
-        if let Some(ref vector) = query.vector {
-            ret.max_vector_size = vector.len();
+            _ => { }
         }
 
         if query.is_finite_pagination() {
@@ -687,6 +689,48 @@ impl SearchAggregator {
         ret.show_ranking_score_details = query.show_ranking_score_details;
 
         ret
+    }
+
+    fn set_sort_attributes(&mut self, query_sort: &Vec<String>) {
+        self.sort_total_number_of_criteria = 1;
+        self.sort_with_geo_point = query_sort.iter().any(|s| s.contains("_geoPoint("));
+        self.sort_sum_of_criteria_terms = query_sort.len();
+    }
+
+    fn set_filter_attributes(&mut self, query_filter: &Value) {
+        static RE: Lazy<Regex> = Lazy::new(|| Regex::new("AND | OR").unwrap());
+        self.filter_total_number_of_criteria = 1;
+
+        let syntax = match query_filter {
+            Value::String(_) => "string".to_string(),
+            Value::Array(values) => {
+                if values.iter().map(|v| v.to_string()).any(|s| RE.is_match(&s)) {
+                    "mixed".to_string()
+                } else {
+                    "array".to_string()
+                }
+            }
+            _ => "none".to_string(),
+        };
+        // convert the string to a HashMap
+        self.used_syntax.insert(syntax, 1);
+
+        let stringified_filters = filter.to_string();
+        self.filter_with_geo_radius = stringified_filters.contains("_geoRadius(");
+        self.filter_with_geo_bounding_box = stringified_filters.contains("_geoBoundingBox(");
+        self.filter_sum_of_criteria_terms = RE.split(&stringified_filters).count();
+    }
+
+    fn set_attributes_to_search_on_count(&mut self) {
+        ret.attributes_to_search_on_total_number_of_uses = 1;
+    }
+
+    fn set_max_terms_number(&mut self, q: &String) {
+        ret.max_terms_number = q.split_whitespace().count();
+    }
+
+    fn set_vector_size(&mut self, vector: &Vec<f32>) {
+        ret.max_vector_size = vector.len();
     }
 
     pub fn succeed(&mut self, result: &SearchResult) {
