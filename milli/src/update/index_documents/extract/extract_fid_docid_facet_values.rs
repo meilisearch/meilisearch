@@ -28,11 +28,13 @@ pub struct ExtractedFacetValues {
 ///
 /// Returns the generated grenad reader containing the docid the fid and the orginal value as key
 /// and the normalized value as value extracted from the given chunk of documents.
+/// We need the fid of the geofields to correctly parse them as numbers if they were sent as strings initially.
 #[logging_timer::time]
 pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
     faceted_fields: &HashSet<FieldId>,
+    geo_fields_ids: Option<(FieldId, FieldId)>,
 ) -> Result<ExtractedFacetValues> {
     puffin::profile_function!();
 
@@ -84,7 +86,10 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
 
                 let value = from_slice(field_bytes).map_err(InternalError::SerdeJson)?;
 
-                match extract_facet_values(&value) {
+                match extract_facet_values(
+                    &value,
+                    geo_fields_ids.map_or(false, |(lat, lng)| field_id == lat || field_id == lng),
+                ) {
                     FilterableValues::Null => {
                         facet_is_null_docids.entry(field_id).or_default().insert(document);
                     }
@@ -177,12 +182,13 @@ enum FilterableValues {
     Values { numbers: Vec<f64>, strings: Vec<(String, String)> },
 }
 
-fn extract_facet_values(value: &Value) -> FilterableValues {
+fn extract_facet_values(value: &Value, geo_field: bool) -> FilterableValues {
     fn inner_extract_facet_values(
         value: &Value,
         can_recurse: bool,
         output_numbers: &mut Vec<f64>,
         output_strings: &mut Vec<(String, String)>,
+        geo_field: bool,
     ) {
         match value {
             Value::Null => (),
@@ -193,13 +199,30 @@ fn extract_facet_values(value: &Value) -> FilterableValues {
                 }
             }
             Value::String(original) => {
+                // if we're working on a geofield it MUST be something we can parse or else there was an internal error
+                // in the enrich pipeline. But since the enrich pipeline worked, we want to avoid crashing at all costs.
+                if geo_field {
+                    if let Ok(float) = original.parse() {
+                        output_numbers.push(float);
+                    } else {
+                        log::warn!(
+                            "Internal error, could not parse a geofield that has been validated. Please open an issue."
+                        )
+                    }
+                }
                 let normalized = crate::normalize_facet(original);
                 output_strings.push((normalized, original.clone()));
             }
             Value::Array(values) => {
                 if can_recurse {
                     for value in values {
-                        inner_extract_facet_values(value, false, output_numbers, output_strings);
+                        inner_extract_facet_values(
+                            value,
+                            false,
+                            output_numbers,
+                            output_strings,
+                            geo_field,
+                        );
                     }
                 }
             }
@@ -215,7 +238,7 @@ fn extract_facet_values(value: &Value) -> FilterableValues {
         otherwise => {
             let mut numbers = Vec::new();
             let mut strings = Vec::new();
-            inner_extract_facet_values(otherwise, true, &mut numbers, &mut strings);
+            inner_extract_facet_values(otherwise, true, &mut numbers, &mut strings, geo_field);
             FilterableValues::Values { numbers, strings }
         }
     }

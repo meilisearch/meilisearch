@@ -790,10 +790,19 @@ impl IndexScheduler {
 
         let mut res = BTreeMap::new();
 
+        let processing_tasks = { self.processing_tasks.read().unwrap().processing.len() };
+
         res.insert(
             "statuses".to_string(),
             enum_iterator::all::<Status>()
-                .map(|s| Ok((s.to_string(), self.get_status(&rtxn, s)?.len())))
+                .map(|s| {
+                    let tasks = self.get_status(&rtxn, s)?.len();
+                    match s {
+                        Status::Enqueued => Ok((s.to_string(), tasks - processing_tasks)),
+                        Status::Processing => Ok((s.to_string(), processing_tasks)),
+                        s => Ok((s.to_string(), tasks)),
+                    }
+                })
                 .collect::<Result<BTreeMap<String, u64>>>()?,
         );
         res.insert(
@@ -4130,5 +4139,155 @@ mod tests {
         let tasks = index_scheduler.get_existing_tasks(&rtxn, tasks).unwrap();
         snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]", ".**.original_filter" => "[filter]", ".**.query" => "[query]" }), name: "everything_has_been_processed");
         drop(rtxn);
+    }
+
+    #[test]
+    fn basic_get_stats() {
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        let kind = index_creation_task("catto", "mouse");
+        let _task = index_scheduler.register(kind).unwrap();
+        let kind = index_creation_task("doggo", "sheep");
+        let _task = index_scheduler.register(kind).unwrap();
+        let kind = index_creation_task("whalo", "fish");
+        let _task = index_scheduler.register(kind).unwrap();
+
+        snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r###"
+        {
+          "indexes": {
+            "catto": 1,
+            "doggo": 1,
+            "whalo": 1
+          },
+          "statuses": {
+            "canceled": 0,
+            "enqueued": 3,
+            "failed": 0,
+            "processing": 0,
+            "succeeded": 0
+          },
+          "types": {
+            "documentAdditionOrUpdate": 0,
+            "documentDeletion": 0,
+            "dumpCreation": 0,
+            "indexCreation": 3,
+            "indexDeletion": 0,
+            "indexSwap": 0,
+            "indexUpdate": 0,
+            "settingsUpdate": 0,
+            "snapshotCreation": 0,
+            "taskCancelation": 0,
+            "taskDeletion": 0
+          }
+        }
+        "###);
+
+        handle.advance_till([Start, BatchCreated]);
+        snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r###"
+        {
+          "indexes": {
+            "catto": 1,
+            "doggo": 1,
+            "whalo": 1
+          },
+          "statuses": {
+            "canceled": 0,
+            "enqueued": 2,
+            "failed": 0,
+            "processing": 1,
+            "succeeded": 0
+          },
+          "types": {
+            "documentAdditionOrUpdate": 0,
+            "documentDeletion": 0,
+            "dumpCreation": 0,
+            "indexCreation": 3,
+            "indexDeletion": 0,
+            "indexSwap": 0,
+            "indexUpdate": 0,
+            "settingsUpdate": 0,
+            "snapshotCreation": 0,
+            "taskCancelation": 0,
+            "taskDeletion": 0
+          }
+        }
+        "###);
+
+        handle.advance_till([
+            InsideProcessBatch,
+            InsideProcessBatch,
+            ProcessBatchSucceeded,
+            AfterProcessing,
+            Start,
+            BatchCreated,
+        ]);
+        snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r###"
+        {
+          "indexes": {
+            "catto": 1,
+            "doggo": 1,
+            "whalo": 1
+          },
+          "statuses": {
+            "canceled": 0,
+            "enqueued": 1,
+            "failed": 0,
+            "processing": 1,
+            "succeeded": 1
+          },
+          "types": {
+            "documentAdditionOrUpdate": 0,
+            "documentDeletion": 0,
+            "dumpCreation": 0,
+            "indexCreation": 3,
+            "indexDeletion": 0,
+            "indexSwap": 0,
+            "indexUpdate": 0,
+            "settingsUpdate": 0,
+            "snapshotCreation": 0,
+            "taskCancelation": 0,
+            "taskDeletion": 0
+          }
+        }
+        "###);
+
+        // now we make one more batch, the started_at field of the new tasks will be past `second_start_time`
+        handle.advance_till([
+            InsideProcessBatch,
+            InsideProcessBatch,
+            ProcessBatchSucceeded,
+            AfterProcessing,
+            Start,
+            BatchCreated,
+        ]);
+        snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r###"
+        {
+          "indexes": {
+            "catto": 1,
+            "doggo": 1,
+            "whalo": 1
+          },
+          "statuses": {
+            "canceled": 0,
+            "enqueued": 0,
+            "failed": 0,
+            "processing": 1,
+            "succeeded": 2
+          },
+          "types": {
+            "documentAdditionOrUpdate": 0,
+            "documentDeletion": 0,
+            "dumpCreation": 0,
+            "indexCreation": 3,
+            "indexDeletion": 0,
+            "indexSwap": 0,
+            "indexUpdate": 0,
+            "settingsUpdate": 0,
+            "snapshotCreation": 0,
+            "taskCancelation": 0,
+            "taskDeletion": 0
+          }
+        }
+        "###);
     }
 }

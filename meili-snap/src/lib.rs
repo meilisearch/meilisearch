@@ -167,7 +167,9 @@ macro_rules! snapshot {
         let (settings, snap_name, _) = $crate::default_snapshot_settings_for_test(test_name, Some(&snap_name));
         settings.bind(|| {
             let snap = format!("{}", $value);
-            meili_snap::insta::assert_snapshot!(format!("{}", snap_name), snap);
+            insta::allow_duplicates! {
+                meili_snap::insta::assert_snapshot!(format!("{}", snap_name), snap);
+            }
         });
     };
     ($value:expr, @$inline:literal) => {
@@ -176,7 +178,9 @@ macro_rules! snapshot {
         let (settings, _, _) = $crate::default_snapshot_settings_for_test("", Some("_dummy_argument"));
         settings.bind(|| {
             let snap = format!("{}", $value);
-            meili_snap::insta::assert_snapshot!(snap, @$inline);
+            insta::allow_duplicates! {
+                meili_snap::insta::assert_snapshot!(snap, @$inline);
+            }
         });
     };
     ($value:expr) => {
@@ -194,7 +198,9 @@ macro_rules! snapshot {
         let (settings, snap_name, _) = $crate::default_snapshot_settings_for_test(test_name, None);
         settings.bind(|| {
             let snap = format!("{}", $value);
-            meili_snap::insta::assert_snapshot!(format!("{}", snap_name), snap);
+            insta::allow_duplicates! {
+                meili_snap::insta::assert_snapshot!(format!("{}", snap_name), snap);
+            }
         });
     };
 }

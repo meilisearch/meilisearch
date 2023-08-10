@@ -97,7 +97,7 @@ const MAX_LMDB_KEY_LENGTH: usize = 500;
 ///
 /// This number is determined by the keys of the different facet databases
 /// and adding a margin of safety.
-pub const MAX_FACET_VALUE_LENGTH: usize = MAX_LMDB_KEY_LENGTH - 20;
+pub const MAX_FACET_VALUE_LENGTH: usize = MAX_LMDB_KEY_LENGTH - 32;
 
 /// The maximum length a word can be
 pub const MAX_WORD_LENGTH: usize = MAX_LMDB_KEY_LENGTH / 2;

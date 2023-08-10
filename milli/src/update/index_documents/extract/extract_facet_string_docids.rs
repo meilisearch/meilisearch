@@ -46,7 +46,7 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
         if normalised_value.len() > MAX_FACET_VALUE_LENGTH {
             normalised_truncated_value = normalised_value
                 .char_indices()
-                .take_while(|(idx, _)| idx + 4 < MAX_FACET_VALUE_LENGTH)
+                .take_while(|(idx, _)| *idx < MAX_FACET_VALUE_LENGTH)
                 .map(|(_, c)| c)
                 .collect();
             normalised_value = normalised_truncated_value.as_str();
