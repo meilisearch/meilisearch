@@ -37,7 +37,7 @@ jobs:
           toolchain: stable
           override: true
       - name: Setup test with Rust nightly
-        if: github.event_name == 'schedule'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
@@ -78,12 +78,12 @@ jobs:
           args: --locked --release --all
 
   test-all-features:
-    name: Tests all features on cron schedule only
+    name: Tests all features
     runs-on: ubuntu-latest
     container:
       # Use ubuntu-18.04 to compile with glibc 2.27, which are the production expectations
       image: ubuntu:18.04
-    if: github.event_name == 'schedule'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v3
       - name: Install needed dependencies
@@ -110,7 +110,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ubuntu:18.04
-    if: github.event_name == 'schedule'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v3
       - name: Install needed dependencies
