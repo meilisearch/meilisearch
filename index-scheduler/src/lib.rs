@@ -777,6 +777,8 @@ impl IndexScheduler {
                                     let mut wtxn = this.env.write_txn().unwrap();
                                     this.register_raw_task(&mut wtxn, &task).unwrap();
                                     wtxn.commit().unwrap();
+                                    // we received a new tasks, we must wake up
+                                    this.wake_up.signal();
                                 })
                                 .await
                                 .unwrap();
