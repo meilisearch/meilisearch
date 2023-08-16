@@ -683,24 +683,46 @@ impl IndexScheduler {
 
                                     let snapshot_id = path.strip_prefix("/snapshots/snapshot-").unwrap();
                                     let snapshot_dir =
-                                        PathBuf::from(format!("~/zk-snapshots/{}", snapshot_id));
-
-                                    // TODO: everything
+                                        PathBuf::from(format!("{}/zk-snapshots/{}", env!("HOME"), snapshot_id));
 
                                     // 1. TODO: Ensure the snapshot version file is the same as our version.
 
-                                    // 2. Download and import the index-scheduler database
-                                    log::info!("Importing the index scheduler.");
-                                    let tasks =
+                                    // 2. Download all the databases
+                                    let tasks_file = tempfile::NamedTempFile::new_in(run.env.path()).unwrap();
+
+                                    log::info!("Downloading the index scheduler database.");
+                                    let tasks_snapshot =
                                             snapshot_dir.join("tasks.mdb");
+                                    std::fs::copy(tasks_snapshot, tasks_file).unwrap();
+
+
+                                    log::info!("Downloading the indexes databases");
+                                    let indexes_files = tempfile::TempDir::new_in(&run.index_mapper.base_path).unwrap();
+                                    let mut indexes = Vec::new();
+
+                                    let dst = snapshot_dir.join("indexes");
+                                    let mut indexes_snapshot = tokio::fs::read_dir(&dst).await.unwrap();
+                                    while let Some(file) = indexes_snapshot.next_entry().await.unwrap() {
+                                        let uuid = file.file_name().as_os_str().to_str().unwrap().to_string();
+                                        log::info!("\tDownloading the index {}", uuid.to_string());
+                                        std::fs::copy(dst.join(&uuid), indexes_files.path().join(&uuid)).unwrap();
+                                        indexes.push(uuid);
+                                    }
+
+                                    // 3. Lock the index-mapper and close all the env
+                                    // TODO: continue here
+
+
+
+                                    // run.env.close();
+
+                                    // 4. Move all the databases
+
+                                    // 5. Unlock the index-mapper
+
+                                    // 2. Download and import the index-scheduler database
 
                                     // 3. Snapshot every indexes
-                                    log::info!("Importing the indexes");
-                                    let dst = snapshot_dir.join("indexes");
-                                    let mut indexes = tokio::fs::read_dir(dst).await.unwrap();
-                                    while let Some(uuid) = indexes.next_entry().await.unwrap() {
-                                        // TODO: Import the index
-                                    }
                                 }
                                 _ => (),
                             },
@@ -733,9 +755,10 @@ impl IndexScheduler {
                                         .await
                                         .unwrap();
 
-                                    tokio::fs::create_dir_all("~/zk-snapshots").await.unwrap();
+                                    let zk_snapshots = format!("{}/zk-snapshots", env!("HOME"));
+                                    tokio::fs::create_dir_all(&zk_snapshots).await.unwrap();
                                     let snapshot_dir =
-                                        PathBuf::from(format!("~/zk-snapshots/{snapshot_id}"));
+                                        PathBuf::from(format!("{zk_snapshots}/{snapshot_id}"));
                                     tokio::fs::create_dir(&snapshot_dir).await.unwrap();
 
                                     // 1. Snapshot the version file.

@@ -61,7 +61,7 @@ pub struct IndexMapper {
     pub(crate) index_stats: Database<UuidCodec, SerdeJson<IndexStats>>,
 
     /// Path to the folder where the LMDB environments of each index are.
-    base_path: PathBuf,
+    pub(crate) base_path: PathBuf,
     /// The map size an index is opened with on the first time.
     index_base_map_size: usize,
     /// The quantity by which the map size of an index is incremented upon reopening, in bytes.
