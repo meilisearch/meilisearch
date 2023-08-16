@@ -293,15 +293,15 @@ pub fn normalize_facet(original: &str) -> String {
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 #[serde(transparent)]
 pub struct VectorOrArrayOfVectors {
-    #[serde(with = "either::serde_untagged")]
-    inner: either::Either<Vec<f32>, Vec<Vec<f32>>>,
+    #[serde(with = "either::serde_untagged_optional")]
+    inner: Option<either::Either<Vec<f32>, Vec<Vec<f32>>>>,
 }
 
 impl VectorOrArrayOfVectors {
-    pub fn into_array_of_vectors(self) -> Vec<Vec<f32>> {
-        match self.inner {
-            either::Either::Left(vector) => vec![vector],
-            either::Either::Right(vectors) => vectors,
+    pub fn into_array_of_vectors(self) -> Option<Vec<Vec<f32>>> {
+        match self.inner? {
+            either::Either::Left(vector) => Some(vec![vector]),
+            either::Either::Right(vectors) => Some(vectors),
         }
     }
 }

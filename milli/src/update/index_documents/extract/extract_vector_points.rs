@@ -33,7 +33,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
         // lazily get it when needed
         let document_id = || -> Value {
             let document_id = obkv.get(primary_key_id).unwrap();
-            serde_json::from_slice(document_id).unwrap()
+            from_slice(document_id).unwrap()
         };
 
         // first we retrieve the _vectors field
@@ -50,12 +50,14 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                 }
             };
 
-            for (i, vector) in vectors.into_iter().enumerate().take(u16::MAX as usize) {
-                let index = u16::try_from(i).unwrap();
-                let mut key = docid_bytes.to_vec();
-                key.extend_from_slice(&index.to_be_bytes());
-                let bytes = cast_slice(&vector);
-                writer.insert(key, bytes)?;
+            if let Some(vectors) = vectors {
+                for (i, vector) in vectors.into_iter().enumerate().take(u16::MAX as usize) {
+                    let index = u16::try_from(i).unwrap();
+                    let mut key = docid_bytes.to_vec();
+                    key.extend_from_slice(&index.to_be_bytes());
+                    let bytes = cast_slice(&vector);
+                    writer.insert(key, bytes)?;
+                }
             }
         }
         // else => the `_vectors` object was `null`, there is nothing to do
