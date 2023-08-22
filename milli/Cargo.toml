@@ -17,7 +17,7 @@ bincode = "1.3.3"
 bstr = "1.4.0"
 bytemuck = { version = "1.13.1", features = ["extern_crate_alloc"] }
 byteorder = "1.4.3"
-charabia = { version = "0.8.2", default-features = false }
+charabia = { version = "0.8.3", default-features = false }
 concat-arrays = "0.1.2"
 crossbeam-channel = "0.5.8"
 deserr = "0.5.0"
