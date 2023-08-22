@@ -655,6 +655,26 @@ impl Index {
         }
     }
 
+    /* remove hidden fields */
+    pub fn remove_hidden_fields(
+        &self,
+        rtxn: &RoTxn,
+        fields: impl IntoIterator<Item = impl AsRef<str>>,
+    ) -> Result<(BTreeSet<String>, bool)> {
+        let mut valid_fields =
+            fields.into_iter().map(|f| f.as_ref().to_string()).collect::<BTreeSet<String>>();
+
+        let fields_len = valid_fields.len();
+
+        if let Some(dn) = self.displayed_fields(rtxn)? {
+            let displayable_names = dn.iter().map(|s| s.to_string()).collect();
+            valid_fields = &valid_fields & &displayable_names;
+        }
+
+        let hidden_fields = fields_len > valid_fields.len();
+        Ok((valid_fields, hidden_fields))
+    }
+
     /* searchable fields */
 
     /// Write the user defined searchable fields and generate the real searchable fields from the specified fields ids map.
