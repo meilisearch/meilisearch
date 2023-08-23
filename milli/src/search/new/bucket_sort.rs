@@ -91,6 +91,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     /// Update the universes accordingly and inform the logger.
     macro_rules! back {
         () => {
+            // FIXME: temporarily disabled assert: see <https://github.com/meilisearch/meilisearch/pull/4013>
             // assert!(
             //     ranking_rule_universes[cur_ranking_rule_index].is_empty(),
             //     "The ranking rule {} did not sort its bucket exhaustively",
