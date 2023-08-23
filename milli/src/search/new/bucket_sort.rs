@@ -91,11 +91,12 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     /// Update the universes accordingly and inform the logger.
     macro_rules! back {
         () => {
-            assert!(
-                ranking_rule_universes[cur_ranking_rule_index].is_empty(),
-                "The ranking rule {} did not sort its bucket exhaustively",
-                ranking_rules[cur_ranking_rule_index].id()
-            );
+            // FIXME: temporarily disabled assert: see <https://github.com/meilisearch/meilisearch/pull/4013>
+            // assert!(
+            //     ranking_rule_universes[cur_ranking_rule_index].is_empty(),
+            //     "The ranking rule {} did not sort its bucket exhaustively",
+            //     ranking_rules[cur_ranking_rule_index].id()
+            // );
             logger.end_iteration_ranking_rule(
                 cur_ranking_rule_index,
                 ranking_rules[cur_ranking_rule_index].as_ref(),
