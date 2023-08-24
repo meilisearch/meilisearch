@@ -53,5 +53,6 @@ jobs:
         uses: mislav/bump-homebrew-formula-action@v2
         with:
           formula-name: meilisearch
+          formula-path: Formula/m/meilisearch.rb
         env:
           COMMITTER_TOKEN: ${{ secrets.HOMEBREW_COMMITTER_TOKEN }}
