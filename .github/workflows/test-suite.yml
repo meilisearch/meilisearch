@@ -123,8 +123,8 @@ jobs:
           override: true
       - name: Run cargo tree without default features and check lindera is not present
         run: |
-          if ! cargo tree -f '{p} {f}' -e normal --no-default-features | grep -vqz lindera; then
-            echo "lindera not found"
+          if cargo tree -f '{p} {f}' -e normal --no-default-features | grep -vqz lindera; then
+            echo "lindera found"
           fi
       - name: Run cargo tree with default features and check lindera is pressent
         run: |
