@@ -20,7 +20,7 @@ mod sort;
 #[cfg(test)]
 mod tests;
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::HashSet;
 
 use bucket_sort::{bucket_sort, BucketSortOutput};
 use charabia::TokenizerBuilder;
@@ -108,24 +108,11 @@ impl<'ctx> SearchContext<'ctx> {
                 (None, None) => continue,
                 // The field is not searchable => User error
                 (_fid, Some(false)) => {
-                    let mut valid_fields: BTreeSet<_> =
-                        fids_map.names().map(String::from).collect();
+                    let (valid_fields, hidden_fields) = match searchable_names {
+                        Some(sn) => self.index.remove_hidden_fields(self.txn, sn)?,
+                        None => self.index.remove_hidden_fields(self.txn, fids_map.names())?,
+                    };
 
-                    // Filter by the searchable names
-                    if let Some(sn) = searchable_names {
-                        let searchable_names = sn.iter().map(|s| s.to_string()).collect();
-                        valid_fields = &valid_fields & &searchable_names;
-                    }
-
-                    let searchable_count = valid_fields.len();
-
-                    // Remove hidden fields
-                    if let Some(dn) = self.index.displayed_fields(self.txn)? {
-                        let displayable_names = dn.iter().map(|s| s.to_string()).collect();
-                        valid_fields = &valid_fields & &displayable_names;
-                    }
-
-                    let hidden_fields = searchable_count > valid_fields.len();
                     let field = field_name.to_string();
                     return Err(UserError::InvalidSearchableAttribute {
                         field,
@@ -604,16 +591,24 @@ fn check_sort_criteria(ctx: &SearchContext, sort_criteria: Option<&Vec<AscDesc>>
     for asc_desc in sort_criteria {
         match asc_desc.member() {
             Member::Field(ref field) if !crate::is_faceted(field, &sortable_fields) => {
+                let (valid_fields, hidden_fields) =
+                    ctx.index.remove_hidden_fields(ctx.txn, sortable_fields)?;
+
                 return Err(UserError::InvalidSortableAttribute {
                     field: field.to_string(),
-                    valid_fields: sortable_fields.into_iter().collect(),
-                })?
+                    valid_fields,
+                    hidden_fields,
+                })?;
             }
             Member::Geo(_) if !sortable_fields.contains("_geo") => {
+                let (valid_fields, hidden_fields) =
+                    ctx.index.remove_hidden_fields(ctx.txn, sortable_fields)?;
+
                 return Err(UserError::InvalidSortableAttribute {
                     field: "_geo".to_string(),
-                    valid_fields: sortable_fields.into_iter().collect(),
-                })?
+                    valid_fields,
+                    hidden_fields,
+                })?;
             }
             _ => (),
         }
