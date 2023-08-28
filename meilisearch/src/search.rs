@@ -680,6 +680,7 @@ fn compute_semantic_score(query: &[f32], vectors: Value) -> milli::Result<Option
         .map_err(InternalError::SerdeJson)?;
     Ok(vectors
         .into_iter()
+        .flatten()
         .map(|v| OrderedFloat(dot_product_similarity(query, &v)))
         .max()
         .map(OrderedFloat::into_inner))
