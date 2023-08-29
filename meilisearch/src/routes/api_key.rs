@@ -41,7 +41,7 @@ pub async fn create_api_key(
     _req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
     let v = body.into_inner();
-    let key = auth_controller.create_key(v).await?;
+    let key = auth_controller.create_key(v)?;
     let key = KeyView::from_key(key, &auth_controller);
 
     Ok(HttpResponse::Created().json(key))
@@ -107,7 +107,7 @@ pub async fn patch_api_key(
     let key = path.into_inner().key;
     let patch_api_key = body.into_inner();
     let uid = Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_encoded_key(&key))?;
-    let key = auth_controller.update_key(uid, patch_api_key).await?;
+    let key = auth_controller.update_key(uid, patch_api_key)?;
     let key = KeyView::from_key(key, &auth_controller);
 
     Ok(HttpResponse::Ok().json(key))
@@ -119,7 +119,7 @@ pub async fn delete_api_key(
 ) -> Result<HttpResponse, ResponseError> {
     let key = path.into_inner().key;
     let uid = Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_encoded_key(&key))?;
-    auth_controller.delete_key(uid).await?;
+    auth_controller.delete_key(uid)?;
 
     Ok(HttpResponse::NoContent().finish())
 }

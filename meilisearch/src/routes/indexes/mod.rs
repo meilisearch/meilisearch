@@ -135,7 +135,7 @@ pub async fn create_index(
         );
 
         let task = KindWithContent::IndexCreation { index_uid: uid.to_string(), primary_key };
-        let task: SummarizedTaskView = index_scheduler.register(task).await?.into();
+        let task: SummarizedTaskView = index_scheduler.register(task)?.into();
 
         Ok(HttpResponse::Accepted().json(task))
     } else {
@@ -202,7 +202,7 @@ pub async fn update_index(
         primary_key: body.primary_key,
     };
 
-    let task: SummarizedTaskView = index_scheduler.register(task).await?.into();
+    let task: SummarizedTaskView = index_scheduler.register(task)?.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
@@ -214,7 +214,7 @@ pub async fn delete_index(
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let task = KindWithContent::IndexDeletion { index_uid: index_uid.into_inner() };
-    let task: SummarizedTaskView = index_scheduler.register(task).await?.into();
+    let task: SummarizedTaskView = index_scheduler.register(task)?.into();
 
     Ok(HttpResponse::Accepted().json(task))
 }

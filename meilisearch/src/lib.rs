@@ -39,7 +39,7 @@ use meilisearch_types::versioning::{check_version_file, create_version_file};
 use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
 pub use option::Opt;
 use option::ScheduleSnapshot;
-use zookeeper_client as zk;
+use zookeeper::ZooKeeper;
 
 use crate::error::MeilisearchHttpError;
 
@@ -139,7 +139,7 @@ enum OnFailure {
 
 pub async fn setup_meilisearch(
     opt: &Opt,
-    zk: Option<zk::Client>,
+    zookeeper: Option<Arc<ZooKeeper>>,
 ) -> anyhow::Result<(Arc<IndexScheduler>, Arc<AuthController>)> {
     let empty_db = is_empty_db(&opt.db_path);
     let (index_scheduler, auth_controller) = if let Some(ref snapshot_path) = opt.import_snapshot {
@@ -147,7 +147,7 @@ pub async fn setup_meilisearch(
         // the db is empty and the snapshot exists, import it
         if empty_db && snapshot_path_exists {
             match compression::from_tar_gz(snapshot_path, &opt.db_path) {
-                Ok(()) => open_or_create_database_unchecked(opt, OnFailure::RemoveDb, zk).await?,
+                Ok(()) => open_or_create_database_unchecked(opt, OnFailure::RemoveDb, zookeeper)?,
                 Err(e) => {
                     std::fs::remove_dir_all(&opt.db_path)?;
                     return Err(e);
@@ -164,14 +164,14 @@ pub async fn setup_meilisearch(
             bail!("snapshot doesn't exist at {}", snapshot_path.display())
         // the snapshot and the db exist, and we can ignore the snapshot because of the ignore_snapshot_if_db_exists flag
         } else {
-            open_or_create_database(opt, empty_db, zk).await?
+            open_or_create_database(opt, empty_db, zookeeper)?
         }
     } else if let Some(ref path) = opt.import_dump {
         let src_path_exists = path.exists();
         // the db is empty and the dump exists, import it
         if empty_db && src_path_exists {
             let (mut index_scheduler, mut auth_controller) =
-                open_or_create_database_unchecked(opt, OnFailure::RemoveDb, zk).await?;
+                open_or_create_database_unchecked(opt, OnFailure::RemoveDb, zookeeper)?;
             match import_dump(&opt.db_path, path, &mut index_scheduler, &mut auth_controller) {
                 Ok(()) => (index_scheduler, auth_controller),
                 Err(e) => {
@@ -191,10 +191,10 @@ pub async fn setup_meilisearch(
         // the dump and the db exist and we can ignore the dump because of the ignore_dump_if_db_exists flag
         // or, the dump is missing but we can ignore that because of the ignore_missing_dump flag
         } else {
-            open_or_create_database(opt, empty_db, zk).await?
+            open_or_create_database(opt, empty_db, zookeeper)?
         }
     } else {
-        open_or_create_database(opt, empty_db, zk).await?
+        open_or_create_database(opt, empty_db, zookeeper)?
     };
 
     // We create a loop in a thread that registers snapshotCreation tasks
@@ -203,30 +203,26 @@ pub async fn setup_meilisearch(
     if let ScheduleSnapshot::Enabled(snapshot_delay) = opt.schedule_snapshot {
         let snapshot_delay = Duration::from_secs(snapshot_delay);
         let index_scheduler = index_scheduler.clone();
-        tokio::task::spawn(async move {
-            loop {
-                thread::sleep(snapshot_delay);
-                if let Err(e) = index_scheduler.register(KindWithContent::SnapshotCreation).await {
-                    error!("Error while registering snapshot: {}", e);
-                }
+        thread::spawn(move || loop {
+            thread::sleep(snapshot_delay);
+            if let Err(e) = index_scheduler.register(KindWithContent::SnapshotCreation) {
+                error!("Error while registering snapshot: {}", e);
             }
-        })
-        .await
-        .unwrap();
+        });
     }
 
     Ok((index_scheduler, auth_controller))
 }
 
 /// Try to start the IndexScheduler and AuthController without checking the VERSION file or anything.
-async fn open_or_create_database_unchecked(
+fn open_or_create_database_unchecked(
     opt: &Opt,
     on_failure: OnFailure,
-    zk: Option<zk::Client>,
+    zookeeper: Option<Arc<ZooKeeper>>,
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
     // we don't want to create anything in the data.ms yet, thus we
     // wrap our two builders in a closure that'll be executed later.
-    let auth_controller = AuthController::new(&opt.db_path, &opt.master_key, zk.clone());
+    let auth_controller = AuthController::new(&opt.db_path, &opt.master_key, zookeeper.clone());
     let instance_features = opt.to_instance_features();
     let index_scheduler = IndexScheduler::new(IndexSchedulerOptions {
         version_file_path: opt.db_path.join(VERSION_FILE_NAME),
@@ -245,14 +241,13 @@ async fn open_or_create_database_unchecked(
         index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().get_bytes() as usize,
         index_count: DEFAULT_INDEX_COUNT,
         instance_features,
-        zk: zk.clone(),
+        zookeeper: zookeeper.clone(),
     })
-    .await
     .map_err(anyhow::Error::from);
 
     match (
         index_scheduler,
-        auth_controller.await.map_err(anyhow::Error::from),
+        auth_controller.map_err(anyhow::Error::from),
         create_version_file(&opt.db_path).map_err(anyhow::Error::from),
     ) {
         (Ok(i), Ok(a), Ok(())) => Ok((i, a)),
@@ -266,16 +261,16 @@ async fn open_or_create_database_unchecked(
 }
 
 /// Ensure you're in a valid state and open the IndexScheduler + AuthController for you.
-async fn open_or_create_database(
+fn open_or_create_database(
     opt: &Opt,
     empty_db: bool,
-    zk: Option<zk::Client>,
+    zookeeper: Option<Arc<ZooKeeper>>,
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
     if !empty_db {
         check_version_file(&opt.db_path)?;
     }
 
-    open_or_create_database_unchecked(opt, OnFailure::KeepDb, zk).await
+    open_or_create_database_unchecked(opt, OnFailure::KeepDb, zookeeper)
 }
 
 fn import_dump(

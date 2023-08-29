@@ -16,57 +16,59 @@ pub use store::open_auth_store_env;
 use store::{generate_key_as_hexa, HeedAuthStore};
 use time::OffsetDateTime;
 use uuid::Uuid;
-use zookeeper_client as zk;
+use zookeeper::{
+    Acl, AddWatchMode, CreateMode, WatchedEvent, WatchedEventType, ZkError, ZooKeeper,
+};
 
 #[derive(Clone)]
 pub struct AuthController {
     store: Arc<HeedAuthStore>,
     master_key: Option<String>,
-    zk: Option<zk::Client>,
+    zookeeper: Option<Arc<ZooKeeper>>,
 }
 
 impl AuthController {
-    pub async fn new(
+    pub fn new(
         db_path: impl AsRef<Path>,
         master_key: &Option<String>,
-        zk: Option<zk::Client>,
+        zookeeper: Option<Arc<ZooKeeper>>,
     ) -> Result<Self> {
         let store = HeedAuthStore::new(db_path)?;
-        let controller = Self { store: Arc::new(store), master_key: master_key.clone(), zk };
+        let controller = Self { store: Arc::new(store), master_key: master_key.clone(), zookeeper };
 
-        match controller.zk {
+        match controller.zookeeper {
             // setup the auth zk environment, the `auth` node
-            Some(ref zk) => {
-                let options =
-                    zk::CreateMode::Persistent.with_acls(zk::Acls::anyone_all());
+            Some(ref zookeeper) => {
                 // TODO: we should catch the potential unexpected errors here https://docs.rs/zookeeper-client/latest/zookeeper_client/struct.Client.html#method.create
                 // for the moment we consider that `create` only returns Error::NodeExists.
-                match zk.create("/auth", &[], &options).await {
+                match zookeeper.create(
+                    "/auth",
+                    vec![],
+                    Acl::open_unsafe().clone(),
+                    CreateMode::Persistent,
+                ) {
                     // If the store is empty, we must generate and push the default api-keys.
-                    Ok(_) => generate_default_keys(&controller).await?,
+                    Ok(_) => generate_default_keys(&controller)?,
                     // If the node exist we should clear our DB and download all the existing api-keys
-                    Err(zk::Error::NodeExists) => {
+                    Err(ZkError::NodeExists) => {
                         log::warn!("Auth directory already exists, we need to clear our keys + import the one in zookeeper");
 
                         let store = controller.store.clone();
-                        tokio::task::spawn_blocking(move || store.delete_all_keys()).await??;
-                        let children = zk
-                            .list_children("/auth")
-                            .await
+                        store.delete_all_keys()?;
+                        let children = zookeeper
+                            .get_children("/auth", false)
                             .expect("Internal, the auth directory was deleted during execution.");
 
                         log::info!("Importing {} api-keys", children.len());
                         for path in children {
                             log::info!("  Importing {}", path);
-                            match zk.get_data(&format!("/auth/{}", &path)).await {
+                            match zookeeper.get_data(&format!("/auth/{}", &path), false) {
                                 Ok((key, _stat)) => {
-                                let key = serde_json::from_slice(&key).unwrap();
-                                let store = controller.store.clone();
-                                tokio::task::spawn_blocking(move || store.put_api_key(key))
-                                    .await??;
-
-                                },
-                                Err(e) => panic!("{e}")
+                                    let key = serde_json::from_slice(&key).unwrap();
+                                    let store = controller.store.clone();
+                                    store.put_api_key(key)?;
+                                }
+                                Err(e) => panic!("{e}"),
                             }
                             // else the file was deleted while we were inserting the key. We ignore it.
                             // TODO: What happens if someone updates the files before we have the time
@@ -74,13 +76,9 @@ impl AuthController {
                         }
                     }
                     e @ Err(
-                        zk::Error::NoNode
-                        | zk::Error::NoChildrenForEphemerals
-                        | zk::Error::InvalidAcl,
+                        ZkError::NoNode | ZkError::NoChildrenForEphemerals | ZkError::InvalidACL,
                     ) => unreachable!("{e:?}"),
-                    Err(e) => {
-                        panic!("{e}")
-                    }
+                    Err(e) => panic!("{e}"),
                 }
                 // TODO: Race condition above:
                 //       What happens if two node join exactly at the same moment:
@@ -91,39 +89,34 @@ impl AuthController {
 
                 // Zookeeper Event listener loop
                 let controller_clone = controller.clone();
-                let mut watcher = zk.watch("/auth", zk::AddWatchMode::PersistentRecursive).await?;
-                let czk = zk.clone();
-                tokio::spawn(async move {
-                    let zk = czk;
-                    loop {
-                        let zk::WatchedEvent { event_type, session_state, path } =
-                            dbg!(watcher.changed().await);
+                let zkk = zookeeper.clone();
+                zookeeper.add_watch("/auth", AddWatchMode::PersistentRecursive, move |event| {
+                    let WatchedEvent { event_type, path, keeper_state: _ } = dbg!(event);
 
-                        match event_type {
-                            zk::EventType::Session => panic!("Session error {:?}", session_state),
-                            // a key is deleted from zk
-                            zk::EventType::NodeDeleted => {
-                                // TODO: ugly unwraps
-                                let uuid = path.strip_prefix("/auth/").unwrap();
-                                let uuid = Uuid::parse_str(&uuid).unwrap();
-                                log::info!("The key {} has been deleted", uuid);
-                                dbg!(controller_clone.store.delete_api_key(uuid).unwrap());
-                            }
-                            zk::EventType::NodeCreated | zk::EventType::NodeDataChanged => {
-                                let (key, _stat) = zk.get_data(&path).await.unwrap();
-                                let key: Key = serde_json::from_slice(&key).unwrap();
-                                log::info!("The key {} has been deleted", key.uid);
-                                
-                                dbg!(controller_clone.store.put_api_key(key).unwrap());
-                            }
-                            zk::EventType::NodeChildrenChanged => panic!("Got the unexpected NodeChildrenChanged event, what is it used for?"),
+                    match event_type {
+                        WatchedEventType::NodeDeleted => {
+                            // TODO: ugly unwraps
+                            let path = path.unwrap();
+                            let uuid = path.strip_prefix("/auth/").unwrap();
+                            let uuid = Uuid::parse_str(&uuid).unwrap();
+                            log::info!("The key {} has been deleted", uuid);
+                            dbg!(controller_clone.store.delete_api_key(uuid).unwrap());
                         }
+                        WatchedEventType::NodeCreated | WatchedEventType::NodeDataChanged => {
+                            let path = path.unwrap();
+                            let (key, _stat) = zkk.get_data(&path, false).unwrap();
+                            let key: Key = serde_json::from_slice(&key).unwrap();
+                            log::info!("The key {} has been deleted", key.uid);
+
+                            dbg!(controller_clone.store.put_api_key(key).unwrap());
+                        }
+                        otherwise => panic!("Got the unexpected `{otherwise:?}` event!"),
                     }
-                });
+                })?;
             }
             None => {
                 if controller.store.is_empty()? {
-                    generate_default_keys(&controller).await?;
+                    generate_default_keys(&controller)?;
                 }
             }
         }
@@ -147,27 +140,29 @@ impl AuthController {
         self.store.used_size()
     }
 
-    pub async fn create_key(&self, create_key: CreateApiKey) -> Result<Key> {
+    pub fn create_key(&self, create_key: CreateApiKey) -> Result<Key> {
         match self.store.get_api_key(create_key.uid)? {
             Some(_) => Err(AuthControllerError::ApiKeyAlreadyExists(create_key.uid.to_string())),
-            None => self.put_key(create_key.to_key()).await,
+            None => self.put_key(create_key.to_key()),
         }
     }
 
-    pub async fn put_key(&self, key: Key) -> Result<Key> {
+    pub fn put_key(&self, key: Key) -> Result<Key> {
         let store = self.store.clone();
         // TODO: we may commit only after zk persisted the keys
-        let key = tokio::task::spawn_blocking(move || store.put_api_key(key)).await??;
-        if let Some(ref zk) = self.zk {
-            let options = zk::CreateMode::Persistent.with_acls(zk::Acls::anyone_all());
-
-            zk.create(&format!("/auth/{}", key.uid), &serde_json::to_vec_pretty(&key)?, &options)
-                .await?;
+        let key = store.put_api_key(key)?;
+        if let Some(zookeeper) = &self.zookeeper {
+            zookeeper.create(
+                &format!("/auth/{}", key.uid),
+                serde_json::to_vec_pretty(&key)?,
+                Acl::open_unsafe().clone(),
+                CreateMode::Persistent,
+            )?;
         }
         Ok(key)
     }
 
-    pub async fn update_key(&self, uid: Uuid, patch: PatchApiKey) -> Result<Key> {
+    pub fn update_key(&self, uid: Uuid, patch: PatchApiKey) -> Result<Key> {
         let mut key = self.get_key(uid)?;
         match patch.description {
             Setting::NotSet => (),
@@ -180,10 +175,13 @@ impl AuthController {
         key.updated_at = OffsetDateTime::now_utc();
         let store = self.store.clone();
         // TODO: we may commit only after zk persisted the keys
-        let key = tokio::task::spawn_blocking(move || store.put_api_key(key)).await??;
-        if let Some(ref zk) = self.zk {
-            zk.set_data(&format!("/auth/{}", key.uid), &serde_json::to_vec_pretty(&key)?, None)
-                .await?;
+        let key = store.put_api_key(key)?;
+        if let Some(zookeeper) = &self.zookeeper {
+            zookeeper.set_data(
+                &format!("/auth/{}", key.uid),
+                serde_json::to_vec_pretty(&key)?,
+                None,
+            )?;
         }
         Ok(key)
     }
@@ -226,12 +224,12 @@ impl AuthController {
         self.store.list_api_keys()
     }
 
-    pub async fn delete_key(&self, uid: Uuid) -> Result<()> {
+    pub fn delete_key(&self, uid: Uuid) -> Result<()> {
         let store = self.store.clone();
-        let deleted = tokio::task::spawn_blocking(move || store.delete_api_key(uid)).await??;
+        let deleted = store.delete_api_key(uid)?;
         if deleted {
-            if let Some(ref zk) = self.zk {
-                zk.delete(&format!("/auth/{}", uid), None).await?;
+            if let Some(zookeeper) = &self.zookeeper {
+                zookeeper.delete(&format!("/auth/{}", uid), None)?;
             }
             Ok(())
         } else {
@@ -426,10 +424,9 @@ pub struct IndexSearchRules {
     pub filter: Option<serde_json::Value>,
 }
 
-async fn generate_default_keys(controller: &AuthController) -> Result<()> {
-    controller.put_key(Key::default_admin()).await?;
-    controller.put_key(Key::default_search()).await?;
-
+fn generate_default_keys(controller: &AuthController) -> Result<()> {
+    controller.put_key(Key::default_admin())?;
+    controller.put_key(Key::default_search())?;
     Ok(())
 }
 

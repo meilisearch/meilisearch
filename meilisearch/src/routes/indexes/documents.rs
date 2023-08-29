@@ -129,7 +129,7 @@ pub async fn delete_document(
         index_uid: index_uid.to_string(),
         documents_ids: vec![document_id],
     };
-    let task: SummarizedTaskView = index_scheduler.register(task).await?.into();
+    let task: SummarizedTaskView = index_scheduler.register(task)?.into();
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
 }
@@ -444,7 +444,7 @@ async fn document_addition(
     };
 
     let scheduler = index_scheduler.clone();
-    let task = match scheduler.register(task).await {
+    let task = match scheduler.register(task) {
         Ok(task) => task,
         Err(e) => {
             index_scheduler.delete_update_file(uuid)?;
@@ -475,7 +475,7 @@ pub async fn delete_documents_batch(
 
     let task =
         KindWithContent::DocumentDeletion { index_uid: index_uid.to_string(), documents_ids: ids };
-    let task: SummarizedTaskView = index_scheduler.register(task).await?.into();
+    let task: SummarizedTaskView = index_scheduler.register(task)?.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
@@ -510,7 +510,7 @@ pub async fn delete_documents_by_filter(
     .map_err(|err| ResponseError::from_msg(err.message, Code::InvalidDocumentFilter))?;
     let task = KindWithContent::DocumentDeletionByFilter { index_uid, filter_expr: filter };
 
-    let task: SummarizedTaskView = index_scheduler.register(task).await?.into();
+    let task: SummarizedTaskView = index_scheduler.register(task)?.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
@@ -526,7 +526,7 @@ pub async fn clear_all_documents(
     analytics.delete_documents(DocumentDeletionKind::ClearAll, &req);
 
     let task = KindWithContent::DocumentClear { index_uid: index_uid.to_string() };
-    let task: SummarizedTaskView = index_scheduler.register(task).await?.into();
+    let task: SummarizedTaskView = index_scheduler.register(task)?.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))

@@ -332,7 +332,7 @@ async fn cancel_tasks(
     let task_cancelation =
         KindWithContent::TaskCancelation { query: format!("?{}", req.query_string()), tasks };
 
-    let task = index_scheduler.register(task_cancelation).await?;
+    let task = index_scheduler.register(task_cancelation)?;
     let task: SummarizedTaskView = task.into();
 
     Ok(HttpResponse::Ok().json(task))
@@ -377,7 +377,7 @@ async fn delete_tasks(
     let task_deletion =
         KindWithContent::TaskDeletion { query: format!("?{}", req.query_string()), tasks };
 
-    let task = index_scheduler.register(task_deletion).await?;
+    let task = index_scheduler.register(task_deletion)?;
     let task: SummarizedTaskView = task.into();
 
     Ok(HttpResponse::Ok().json(task))
