@@ -38,6 +38,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         test_breakpoint_sdr: _,
         planned_failures: _,
         run_loop_iteration: _,
+        zookeeper: _,
     } = scheduler;
 
     let rtxn = env.read_txn().unwrap();

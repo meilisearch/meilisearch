@@ -608,13 +608,12 @@ impl IndexScheduler {
     /// only once per index scheduler.
     fn run(&self) {
         #[cfg(test)]
-        run.breakpoint(Breakpoint::Init);
+        self.breakpoint(Breakpoint::Init);
 
         let latch = match self.zookeeper.clone() {
             Some(zookeeper) => {
                 let id = Uuid::new_v4().to_string();
                 let latch = LeaderLatch::new(zookeeper.clone(), id, "/election".to_string());
-                latch.start().unwrap();
 
                 let this = self.private_clone();
                 zookeeper
@@ -1941,6 +1940,7 @@ mod tests {
                 autobatching_enabled: true,
                 max_number_of_tasks: 1_000_000,
                 instance_features: Default::default(),
+                zookeeper: None,
             };
             configuration(&mut options);
 
