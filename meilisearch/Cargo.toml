@@ -83,6 +83,16 @@ rustls-pemfile = "1.0.2"
 segment = { version = "0.2.2", optional = true }
 serde = { version = "1.0.160", features = ["derive"] }
 serde_json = { version = "1.0.95", features = ["preserve_order"] }
+sentry = { version = "0.31.6", default-features = false, features = [
+    "backtrace",
+    "contexts",
+    "debug-images",
+    "panic",
+    "reqwest",
+    "rustls",
+] }
+sentry-actix = "0.31.6"
+serde_urlencoded = "0.7.1"
 sha2 = "0.10.6"
 siphasher = "0.3.10"
 slice-group-by = "0.3.0"
@@ -90,6 +100,7 @@ static-files = { version = "0.2.3", optional = true }
 sysinfo = "0.29.7"
 tar = "0.4.38"
 tempfile = "3.5.0"
+termcolor = "1.2.0"
 thiserror = "1.0.40"
 time = { version = "0.3.20", features = [
     "serde-well-known",
@@ -103,8 +114,6 @@ toml = "0.7.3"
 uuid = { version = "1.3.1", features = ["serde", "v4"] }
 walkdir = "2.3.3"
 yaup = "0.2.1"
-serde_urlencoded = "0.7.1"
-termcolor = "1.2.0"
 
 [dev-dependencies]
 actix-rt = "2.8.0"
@@ -136,17 +145,7 @@ zip = { version = "0.6.4", optional = true }
 default = ["analytics", "meilisearch-types/all-tokenizations", "mini-dashboard"]
 analytics = ["segment"]
 profile-with-puffin = ["dep:puffin_http"]
-mini-dashboard = [
-    "actix-web-static-files",
-    "static-files",
-    "anyhow",
-    "cargo_toml",
-    "hex",
-    "reqwest",
-    "sha-1",
-    "tempfile",
-    "zip",
-]
+mini-dashboard = ["actix-web-static-files", "static-files", "anyhow", "cargo_toml", "hex", "reqwest", "sha-1", "tempfile", "zip"]
 chinese = ["meilisearch-types/chinese"]
 hebrew = ["meilisearch-types/hebrew"]
 japanese = ["meilisearch-types/japanese"]

@@ -30,6 +30,13 @@ fn setup(opt: &Opt) -> anyhow::Result<()> {
 async fn main() -> anyhow::Result<()> {
     let (opt, config_read_from) = Opt::try_build()?;
 
+    let _sentry = sentry::init(sentry::ClientOptions {
+        release: sentry::release_name!(),
+        session_mode: sentry::SessionMode::Request,
+        auto_session_tracking: true,
+        ..Default::default()
+    });
+
     #[cfg(feature = "profile-with-puffin")]
     let _server = puffin_http::Server::new(&format!("0.0.0.0:{}", puffin_http::DEFAULT_PORT))?;
     puffin::set_scopes_on(cfg!(feature = "profile-with-puffin"));

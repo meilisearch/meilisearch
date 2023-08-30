@@ -101,7 +101,7 @@ pub fn create_app(
         InitError = (),
     >,
 > {
-    let app = actix_web::App::new()
+    actix_web::App::new()
         .configure(|s| {
             configure_data(
                 s,
@@ -112,23 +112,23 @@ pub fn create_app(
             )
         })
         .configure(routes::configure)
-        .configure(|s| dashboard(s, enable_dashboard));
-
-    let app = app.wrap(actix_web::middleware::Condition::new(
-        opt.experimental_enable_metrics,
-        middleware::RouteMetrics,
-    ));
-    app.wrap(
-        Cors::default()
-            .send_wildcard()
-            .allow_any_header()
-            .allow_any_origin()
-            .allow_any_method()
-            .max_age(86_400), // 24h
-    )
-    .wrap(actix_web::middleware::Logger::default())
-    .wrap(actix_web::middleware::Compress::default())
-    .wrap(actix_web::middleware::NormalizePath::new(actix_web::middleware::TrailingSlash::Trim))
+        .configure(|s| dashboard(s, enable_dashboard))
+        .wrap(sentry_actix::Sentry::new())
+        .wrap(actix_web::middleware::Condition::new(
+            opt.experimental_enable_metrics,
+            middleware::RouteMetrics,
+        ))
+        .wrap(
+            Cors::default()
+                .send_wildcard()
+                .allow_any_header()
+                .allow_any_origin()
+                .allow_any_method()
+                .max_age(86_400), // 24h
+        )
+        .wrap(actix_web::middleware::Logger::default())
+        .wrap(actix_web::middleware::Compress::default())
+        .wrap(actix_web::middleware::NormalizePath::new(actix_web::middleware::TrailingSlash::Trim))
 }
 
 enum OnFailure {
