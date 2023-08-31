@@ -428,6 +428,11 @@ impl IndexMapper {
         Ok(())
     }
 
+    /// Returns the indexes that were opened by the `IndexMapper`.
+    pub fn clear(&mut self) -> Vec<Index> {
+        self.index_map.write().unwrap().clear()
+    }
+
     /// The stats of an index.
     ///
     /// If available in the cache, they are directly returned.

@@ -295,6 +295,11 @@ impl IndexMap {
             "Attempt to finish deletion of an index that was being closed"
         );
     }
+
+    /// Returns the indexes that were opened by the `IndexMap`.
+    pub fn clear(&mut self) -> Vec<Index> {
+        self.available.clear().into_iter().map(|(_, (_, index))| index).collect()
+    }
 }
 
 /// Create or open an index in the specified path.

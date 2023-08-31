@@ -1,5 +1,6 @@
 //! Thread-safe `Vec`-backend LRU cache using [`std::sync::atomic::AtomicU64`] for synchronization.
 
+use std::mem;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Thread-safe `Vec`-backend LRU cache
@@ -189,6 +190,11 @@ where
             }
         }
         None
+    }
+
+    /// Returns the generation associated to the key and values of the `LruMap`.
+    pub fn clear(&mut self) -> Vec<(AtomicU64, (K, V))> {
+        mem::take(&mut self.0.data)
     }
 }
 
