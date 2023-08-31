@@ -324,11 +324,8 @@ async fn cancel_tasks(
 
     let query = params.into_query();
 
-    let (tasks, _) = index_scheduler.get_task_ids_from_authorized_indexes(
-        &index_scheduler.read_txn()?,
-        &query,
-        index_scheduler.filters(),
-    )?;
+    let (tasks, _) =
+        index_scheduler.get_task_ids_from_authorized_indexes(&query, index_scheduler.filters())?;
     let task_cancelation =
         KindWithContent::TaskCancelation { query: format!("?{}", req.query_string()), tasks };
 
@@ -369,11 +366,8 @@ async fn delete_tasks(
     );
     let query = params.into_query();
 
-    let (tasks, _) = index_scheduler.get_task_ids_from_authorized_indexes(
-        &index_scheduler.read_txn()?,
-        &query,
-        index_scheduler.filters(),
-    )?;
+    let (tasks, _) =
+        index_scheduler.get_task_ids_from_authorized_indexes(&query, index_scheduler.filters())?;
     let task_deletion =
         KindWithContent::TaskDeletion { query: format!("?{}", req.query_string()), tasks };
 

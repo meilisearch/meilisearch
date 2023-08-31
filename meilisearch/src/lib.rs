@@ -280,6 +280,7 @@ fn import_dump(
     auth: &mut AuthController,
 ) -> Result<(), anyhow::Error> {
     let reader = File::open(dump_path)?;
+    let index_scheduler = index_scheduler.inner();
     let mut dump_reader = dump::DumpReader::open(reader)?;
 
     if let Some(date) = dump_reader.date() {

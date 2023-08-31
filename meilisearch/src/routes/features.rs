@@ -78,6 +78,6 @@ async fn patch_features(
         }),
         Some(&req),
     );
-    index_scheduler.put_runtime_features(new_features)?;
+    index_scheduler.inner().put_runtime_features(new_features)?;
     Ok(HttpResponse::Ok().json(new_features))
 }

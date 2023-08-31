@@ -10,9 +10,9 @@ use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status
 use roaring::{MultiOps, RoaringBitmap};
 use time::OffsetDateTime;
 
-use crate::{Error, IndexScheduler, Result, Task, TaskId, BEI128};
+use crate::{Error, IndexSchedulerInner, Result, Task, TaskId, BEI128};
 
-impl IndexScheduler {
+impl IndexSchedulerInner {
     pub(crate) fn all_task_ids(&self, rtxn: &RoTxn) -> Result<RoaringBitmap> {
         enum_iterator::all().map(|s| self.get_status(rtxn, s)).union()
     }

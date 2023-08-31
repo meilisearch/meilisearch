@@ -43,7 +43,7 @@ use uuid::Uuid;
 
 use crate::autobatcher::{self, BatchKind};
 use crate::utils::{self, swap_index_uid_in_task};
-use crate::{Error, IndexScheduler, ProcessingTasks, Result, TaskId};
+use crate::{Error, IndexSchedulerInner, ProcessingTasks, Result, TaskId};
 
 /// Represents a combination of tasks that can all be processed at the same time.
 ///
@@ -213,7 +213,7 @@ impl IndexOperation {
     }
 }
 
-impl IndexScheduler {
+impl IndexSchedulerInner {
     /// Convert an [`BatchKind`](crate::autobatcher::BatchKind) into a [`Batch`].
     ///
     /// ## Arguments
@@ -480,8 +480,7 @@ impl IndexScheduler {
         if let Some(task_id) = to_cancel.max() {
             // We retrieve the tasks that were processing before this tasks cancelation started.
             // We must *not* reset the processing tasks before calling this method.
-            let ProcessingTasks { started_at, processing, .. } =
-                &*self.processing_tasks.read().unwrap();
+            let ProcessingTasks { started_at, processing, .. } = &*self.processing_tasks.read();
             return Ok(Some(Batch::TaskCancelation {
                 task: self.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?,
                 previous_started_at: *started_at,
@@ -1392,7 +1391,7 @@ impl IndexScheduler {
     fn delete_matched_tasks(&self, wtxn: &mut RwTxn, matched_tasks: &RoaringBitmap) -> Result<u64> {
         // 1. Remove from this list the tasks that we are not allowed to delete
         let enqueued_tasks = self.get_status(wtxn, Status::Enqueued)?;
-        let processing_tasks = &self.processing_tasks.read().unwrap().processing.clone();
+        let processing_tasks = &self.processing_tasks.read().processing.clone();
 
         let all_task_ids = self.all_task_ids(wtxn)?;
         let mut to_delete_tasks = all_task_ids & matched_tasks;
