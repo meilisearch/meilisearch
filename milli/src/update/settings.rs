@@ -573,7 +573,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                     tokenizer
                         .tokenize(text)
                         .filter_map(|token| {
-                            if token.is_word() {
+                            if token.is_word() && !token.lemma().is_empty() {
                                 Some(token.lemma().to_string())
                             } else {
                                 None
@@ -1443,7 +1443,7 @@ mod tests {
         index
             .update_settings_using_wtxn(&mut wtxn, |settings| {
                 settings.set_synonyms(btreemap! {
-                    "japanese".to_string() => vec!["ญี่ปุ่น", "ยี่ปุ่น"],
+                    "japanese".to_string() => vec![S("ญี่ปุ่น"), S("ยี่ปุ่น")],
                 });
             })
             .unwrap();
