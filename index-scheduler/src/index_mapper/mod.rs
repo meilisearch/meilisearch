@@ -135,7 +135,7 @@ impl IndexMapper {
         index_growth_amount: usize,
         index_count: usize,
         enable_mdb_writemap: bool,
-        indexer_config: IndexerConfig,
+        indexer_config: Arc<IndexerConfig>,
     ) -> Result<Self> {
         let mut wtxn = env.write_txn()?;
         let index_mapping = env.create_database(&mut wtxn, Some(INDEX_MAPPING))?;
@@ -150,7 +150,7 @@ impl IndexMapper {
             index_base_map_size,
             index_growth_amount,
             enable_mdb_writemap,
-            indexer_config: Arc::new(indexer_config),
+            indexer_config,
         })
     }
 

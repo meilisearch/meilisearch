@@ -265,7 +265,7 @@ pub struct IndexSchedulerOptions {
     /// The number of indexes that can be concurrently opened in memory.
     pub index_count: usize,
     /// Configuration used during indexing for each meilisearch index.
-    pub indexer_config: IndexerConfig,
+    pub indexer_config: Arc<IndexerConfig>,
     /// Set to `true` iff the index scheduler is allowed to automatically
     /// batch tasks together, to process multiple tasks at once.
     pub autobatching_enabled: bool,
@@ -290,7 +290,7 @@ pub struct IndexScheduler {
 impl IndexScheduler {
     /// Create an index scheduler and start its run loop.
     pub fn new(
-        options: IndexSchedulerOptions,
+        options: Arc<IndexSchedulerOptions>,
         #[cfg(test)] test_breakpoint_sdr: crossbeam::channel::Sender<(Breakpoint, bool)>,
         #[cfg(test)] planned_failures: Vec<(usize, tests::FailureLocation)>,
     ) -> Result<Self> {
@@ -898,6 +898,9 @@ pub struct IndexSchedulerInner {
     /// The LMDB environment which the DBs are associated with.
     pub(crate) env: Env,
 
+    /// The options to open an IndexScheduler.
+    pub(crate) options: Arc<IndexSchedulerOptions>,
+
     /// A boolean that can be set to true to stop the currently processing tasks.
     pub(crate) must_stop_processing: MustStopProcessing,
 
@@ -982,7 +985,7 @@ pub struct IndexSchedulerInner {
 
 impl IndexSchedulerInner {
     fn new(
-        options: IndexSchedulerOptions,
+        options: Arc<IndexSchedulerOptions>,
         #[cfg(test)] test_breakpoint_sdr: crossbeam::channel::Sender<(Breakpoint, bool)>,
         #[cfg(test)] planned_failures: Vec<(usize, tests::FailureLocation)>,
     ) -> Result<Self> {
@@ -1015,7 +1018,7 @@ impl IndexSchedulerInner {
         let env = heed::EnvOpenOptions::new()
             .max_dbs(11)
             .map_size(budget.task_db_size)
-            .open(options.tasks_path)?;
+            .open(&options.tasks_path)?;
 
         let features = features::FeatureData::new(&env, options.instance_features)?;
 
@@ -1047,23 +1050,24 @@ impl IndexSchedulerInner {
             finished_at,
             index_mapper: IndexMapper::new(
                 &env,
-                options.indexes_path,
+                options.indexes_path.clone(),
                 budget.map_size,
                 options.index_growth_amount,
                 budget.index_count,
                 options.enable_mdb_writemap,
-                options.indexer_config,
+                options.indexer_config.clone(),
             )?,
             env,
             // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
             wake_up: Arc::new(SignalEvent::auto(true)),
             autobatching_enabled: options.autobatching_enabled,
             max_number_of_tasks: options.max_number_of_tasks,
-            dumps_path: options.dumps_path,
-            snapshots_path: options.snapshots_path,
-            auth_path: options.auth_path,
-            version_file_path: options.version_file_path,
-            zookeeper: options.zookeeper,
+            dumps_path: options.dumps_path.clone(),
+            snapshots_path: options.snapshots_path.clone(),
+            auth_path: options.auth_path.clone(),
+            version_file_path: options.version_file_path.clone(),
+            zookeeper: options.zookeeper.clone(),
+            options,
             #[cfg(test)]
             test_breakpoint_sdr,
             #[cfg(test)]

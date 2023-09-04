@@ -557,7 +557,7 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
         Ok(Self {
             log_every_n: Some(DEFAULT_LOG_EVERY_N),
             max_memory: other.max_indexing_memory.map(|b| b.get_bytes() as usize),
-            thread_pool: Some(thread_pool),
+            thread_pool: Some(Arc::new(thread_pool)),
             max_positions_per_attributes: None,
             skip_index_budget: other.skip_index_budget,
             ..Default::default()

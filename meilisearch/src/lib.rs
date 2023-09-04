@@ -224,7 +224,7 @@ fn open_or_create_database_unchecked(
     // wrap our two builders in a closure that'll be executed later.
     let auth_controller = AuthController::new(&opt.db_path, &opt.master_key, zookeeper.clone());
     let instance_features = opt.to_instance_features();
-    let index_scheduler = IndexScheduler::new(IndexSchedulerOptions {
+    let index_scheduler = IndexScheduler::new(Arc::new(IndexSchedulerOptions {
         version_file_path: opt.db_path.join(VERSION_FILE_NAME),
         auth_path: opt.db_path.join("auth"),
         tasks_path: opt.db_path.join("tasks"),
@@ -235,14 +235,14 @@ fn open_or_create_database_unchecked(
         task_db_size: opt.max_task_db_size.get_bytes() as usize,
         index_base_map_size: opt.max_index_size.get_bytes() as usize,
         enable_mdb_writemap: opt.experimental_reduce_indexing_memory_usage,
-        indexer_config: (&opt.indexer_options).try_into()?,
+        indexer_config: (&opt.indexer_options).try_into().map(Arc::new)?,
         autobatching_enabled: true,
         max_number_of_tasks: 1_000_000,
         index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().get_bytes() as usize,
         index_count: DEFAULT_INDEX_COUNT,
         instance_features,
         zookeeper: zookeeper.clone(),
-    })
+    }))
     .map_err(anyhow::Error::from);
 
     match (
