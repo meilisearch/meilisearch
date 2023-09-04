@@ -331,11 +331,12 @@ pub fn clamp_to_page_size(size: usize) -> usize {
 }
 
 #[cfg(test)]
-impl IndexScheduler {
+impl crate::IndexScheduler {
     /// Asserts that the index scheduler's content is internally consistent.
     pub fn assert_internally_consistent(&self) {
-        let rtxn = self.env.read_txn().unwrap();
-        for task in self.all_tasks.iter(&rtxn).unwrap() {
+        let this = self.inner();
+        let rtxn = this.env.read_txn().unwrap();
+        for task in this.all_tasks.iter(&rtxn).unwrap() {
             let (task_id, task) = task.unwrap();
             let task_id = task_id.get();
 
@@ -354,21 +355,21 @@ impl IndexScheduler {
             } = task;
             assert_eq!(uid, task.uid);
             if let Some(task_index_uid) = &task_index_uid {
-                assert!(self
+                assert!(this
                     .index_tasks
                     .get(&rtxn, task_index_uid.as_str())
                     .unwrap()
                     .unwrap()
                     .contains(task.uid));
             }
-            let db_enqueued_at = self
+            let db_enqueued_at = this
                 .enqueued_at
                 .get(&rtxn, &BEI128::new(enqueued_at.unix_timestamp_nanos()))
                 .unwrap()
                 .unwrap();
             assert!(db_enqueued_at.contains(task_id));
             if let Some(started_at) = started_at {
-                let db_started_at = self
+                let db_started_at = this
                     .started_at
                     .get(&rtxn, &BEI128::new(started_at.unix_timestamp_nanos()))
                     .unwrap()
@@ -376,7 +377,7 @@ impl IndexScheduler {
                 assert!(db_started_at.contains(task_id));
             }
             if let Some(finished_at) = finished_at {
-                let db_finished_at = self
+                let db_finished_at = this
                     .finished_at
                     .get(&rtxn, &BEI128::new(finished_at.unix_timestamp_nanos()))
                     .unwrap()
@@ -384,9 +385,9 @@ impl IndexScheduler {
                 assert!(db_finished_at.contains(task_id));
             }
             if let Some(canceled_by) = canceled_by {
-                let db_canceled_tasks = self.get_status(&rtxn, Status::Canceled).unwrap();
+                let db_canceled_tasks = this.get_status(&rtxn, Status::Canceled).unwrap();
                 assert!(db_canceled_tasks.contains(uid));
-                let db_canceling_task = self.get_task(&rtxn, canceled_by).unwrap().unwrap();
+                let db_canceling_task = this.get_task(&rtxn, canceled_by).unwrap().unwrap();
                 assert_eq!(db_canceling_task.status, Status::Succeeded);
                 match db_canceling_task.kind {
                     KindWithContent::TaskCancelation { query: _, tasks } => {
@@ -427,7 +428,7 @@ impl IndexScheduler {
                     Details::IndexInfo { primary_key: pk1 } => match &kind {
                         KindWithContent::IndexCreation { index_uid, primary_key: pk2 }
                         | KindWithContent::IndexUpdate { index_uid, primary_key: pk2 } => {
-                            self.index_tasks
+                            this.index_tasks
                                 .get(&rtxn, index_uid.as_str())
                                 .unwrap()
                                 .unwrap()
@@ -535,23 +536,23 @@ impl IndexScheduler {
                 }
             }
 
-            assert!(self.get_status(&rtxn, status).unwrap().contains(uid));
-            assert!(self.get_kind(&rtxn, kind.as_kind()).unwrap().contains(uid));
+            assert!(this.get_status(&rtxn, status).unwrap().contains(uid));
+            assert!(this.get_kind(&rtxn, kind.as_kind()).unwrap().contains(uid));
 
             if let KindWithContent::DocumentAdditionOrUpdate { content_file, .. } = kind {
                 match status {
                     Status::Enqueued | Status::Processing => {
-                        assert!(self
+                        assert!(this
                             .file_store
                             .all_uuids()
                             .unwrap()
                             .any(|uuid| uuid.as_ref().unwrap() == &content_file),
                             "Could not find uuid `{content_file}` in the file_store. Available uuids are {:?}.",
-                            self.file_store.all_uuids().unwrap().collect::<std::result::Result<Vec<_>, file_store::Error>>().unwrap(),
+                            this.file_store.all_uuids().unwrap().collect::<std::result::Result<Vec<_>, file_store::Error>>().unwrap(),
                         );
                     }
                     Status::Succeeded | Status::Failed | Status::Canceled => {
-                        assert!(self
+                        assert!(this
                             .file_store
                             .all_uuids()
                             .unwrap()

@@ -340,7 +340,8 @@ mod tests {
     impl IndexMapper {
         fn test() -> (Self, Env, IndexSchedulerHandle) {
             let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
-            (index_scheduler.index_mapper, index_scheduler.env, handle)
+            let index_scheduler = index_scheduler.inner();
+            (index_scheduler.index_mapper.clone(), index_scheduler.env.clone(), handle)
         }
     }
 

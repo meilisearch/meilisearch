@@ -355,7 +355,7 @@ impl IndexScheduler {
     /// only once per index scheduler.
     fn run(&self) {
         #[cfg(test)]
-        self.breakpoint(Breakpoint::Init);
+        self.inner().breakpoint(Breakpoint::Init);
 
         let latch = match self.zookeeper {
             Some(ref zookeeper) => {
@@ -891,30 +891,6 @@ impl IndexScheduler {
     pub fn features(&self) -> Result<RoFeatures> {
         self.inner().features()
     }
-
-    /// Blocks the thread until the test handle asks to progress to/through this breakpoint.
-    ///
-    /// Two messages are sent through the channel for each breakpoint.
-    /// The first message is `(b, false)` and the second message is `(b, true)`.
-    ///
-    /// Since the channel has a capacity of zero, the `send` and `recv` calls wait for each other.
-    /// So when the index scheduler calls `test_breakpoint_sdr.send(b, false)`, it blocks
-    /// the thread until the test catches up by calling `test_breakpoint_rcv.recv()` enough.
-    /// From the test side, we call `recv()` repeatedly until we find the message `(breakpoint, false)`.
-    /// As soon as we find it, the index scheduler is unblocked but then wait again on the call to
-    /// `test_breakpoint_sdr.send(b, true)`. This message will only be able to send once the
-    /// test asks to progress to the next `(b2, false)`.
-    #[cfg(test)]
-    fn breakpoint(&self, b: Breakpoint) {
-        // We send two messages. The first one will sync with the call
-        // to `handle.wait_until(b)`. The second one will block until the
-        // the next call to `handle.wait_until(..)`.
-        self.test_breakpoint_sdr.send((b, false)).unwrap();
-        // This one will only be able to be sent if the test handle stays alive.
-        // If it fails, then it means that we have exited the test.
-        // By crashing with `unwrap`, we kill the run loop.
-        self.test_breakpoint_sdr.send((b, true)).unwrap();
-    }
 }
 
 /// This is the internal structure that keeps the indexes alive.
@@ -1187,7 +1163,7 @@ impl IndexSchedulerInner {
     fn tick(&self) -> Result<TickOutcome> {
         #[cfg(test)]
         {
-            *self.run_loop_iteration.write().unwrap() += 1;
+            *self.run_loop_iteration.write() += 1;
             self.breakpoint(Breakpoint::Start);
         }
 
@@ -1728,6 +1704,30 @@ impl IndexSchedulerInner {
         let index = self.index_mapper.create_index(wtxn, name, date)?;
         Ok(index)
     }
+
+    /// Blocks the thread until the test handle asks to progress to/through this breakpoint.
+    ///
+    /// Two messages are sent through the channel for each breakpoint.
+    /// The first message is `(b, false)` and the second message is `(b, true)`.
+    ///
+    /// Since the channel has a capacity of zero, the `send` and `recv` calls wait for each other.
+    /// So when the index scheduler calls `test_breakpoint_sdr.send(b, false)`, it blocks
+    /// the thread until the test catches up by calling `test_breakpoint_rcv.recv()` enough.
+    /// From the test side, we call `recv()` repeatedly until we find the message `(breakpoint, false)`.
+    /// As soon as we find it, the index scheduler is unblocked but then wait again on the call to
+    /// `test_breakpoint_sdr.send(b, true)`. This message will only be able to send once the
+    /// test asks to progress to the next `(b2, false)`.
+    #[cfg(test)]
+    fn breakpoint(&self, b: Breakpoint) {
+        // We send two messages. The first one will sync with the call
+        // to `handle.wait_until(b)`. The second one will block until the
+        // the next call to `handle.wait_until(..)`.
+        self.test_breakpoint_sdr.send((b, false)).unwrap();
+        // This one will only be able to be sent if the test handle stays alive.
+        // If it fails, then it means that we have exited the test.
+        // By crashing with `unwrap`, we kill the run loop.
+        self.test_breakpoint_sdr.send((b, true)).unwrap();
+    }
 }
 
 pub struct Dump<'a> {
@@ -2043,12 +2043,13 @@ mod tests {
 
             (index_scheduler, index_scheduler_handle)
         }
+    }
 
+    impl IndexSchedulerInner {
         /// Return a [`PlannedFailure`](Error::PlannedFailure) error if a failure is planned
         /// for the given location and current run loop iteration.
         pub fn maybe_fail(&self, location: FailureLocation) -> Result<()> {
-            if self.planned_failures.contains(&(*self.run_loop_iteration.read().unwrap(), location))
-            {
+            if self.planned_failures.contains(&(*self.run_loop_iteration.read(), location)) {
                 match location {
                     FailureLocation::PanicInsideProcessBatch => {
                         panic!("simulated panic")
@@ -3235,46 +3236,45 @@ mod tests {
         handle.advance_n_successful_batches(3);
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "processed_all_tasks");
 
-        let rtxn = index_scheduler.env.read_txn().unwrap();
         let query = Query { limit: Some(0), ..Default::default() };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[]");
 
         let query = Query { limit: Some(1), ..Default::default() };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[2,]");
 
         let query = Query { limit: Some(2), ..Default::default() };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[1,2,]");
 
         let query = Query { from: Some(1), ..Default::default() };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[0,1,]");
 
         let query = Query { from: Some(2), ..Default::default() };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[0,1,2,]");
 
         let query = Query { from: Some(1), limit: Some(1), ..Default::default() };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[1,]");
 
         let query = Query { from: Some(1), limit: Some(2), ..Default::default() };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[0,1,]");
     }
@@ -3297,17 +3297,15 @@ mod tests {
 
         handle.advance_till([Start, BatchCreated]);
 
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-
         let query = Query { statuses: Some(vec![Status::Processing]), ..Default::default() };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[0,]"); // only the processing tasks in the first tick
 
         let query = Query { statuses: Some(vec![Status::Enqueued]), ..Default::default() };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[1,2,]"); // only the enqueued tasks in the first tick
 
@@ -3316,7 +3314,7 @@ mod tests {
             ..Default::default()
         };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[0,1,2,]"); // both enqueued and processing tasks in the first tick
 
@@ -3326,7 +3324,7 @@ mod tests {
             ..Default::default()
         };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         // both enqueued and processing tasks in the first tick, but limited to those with a started_at
         // that comes after the start of the test, which should excludes the enqueued tasks
@@ -3338,7 +3336,7 @@ mod tests {
             ..Default::default()
         };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         // both enqueued and processing tasks in the first tick, but limited to those with a started_at
         // that comes before the start of the test, which should excludes all of them
@@ -3351,7 +3349,7 @@ mod tests {
             ..Default::default()
         };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         // both enqueued and processing tasks in the first tick, but limited to those with a started_at
         // that comes after the start of the test and before one minute after the start of the test,
@@ -3367,8 +3365,6 @@ mod tests {
             BatchCreated,
         ]);
 
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-
         let second_start_time = OffsetDateTime::now_utc();
 
         let query = Query {
@@ -3378,7 +3374,7 @@ mod tests {
             ..Default::default()
         };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         // both succeeded and processing tasks in the first tick, but limited to those with a started_at
         // that comes after the start of the test and before one minute after the start of the test,
@@ -3391,7 +3387,7 @@ mod tests {
             ..Default::default()
         };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         // both succeeded and processing tasks in the first tick, but limited to those with a started_at
         // that comes before the start of the test, which should exclude all tasks
@@ -3404,7 +3400,7 @@ mod tests {
             ..Default::default()
         };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         // both succeeded and processing tasks in the first tick, but limited to those with a started_at
         // that comes after the start of the second part of the test and before one minute after the
@@ -3421,10 +3417,8 @@ mod tests {
             BatchCreated,
         ]);
 
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         // we run the same query to verify that, and indeed find that the last task is matched
         snapshot!(snapshot_bitmap(&tasks), @"[2,]");
@@ -3436,19 +3430,18 @@ mod tests {
             ..Default::default()
         };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         // enqueued, succeeded, or processing tasks started after the second part of the test, should
         // again only return the last task
         snapshot!(snapshot_bitmap(&tasks), @"[2,]");
 
         handle.advance_till([ProcessBatchFailed, AfterProcessing]);
-        let rtxn = index_scheduler.read_txn().unwrap();
 
         // now the last task should have failed
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "end");
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         // so running the last query should return nothing
         snapshot!(snapshot_bitmap(&tasks), @"[]");
@@ -3460,7 +3453,7 @@ mod tests {
             ..Default::default()
         };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         // but the same query on failed tasks should return the last task
         snapshot!(snapshot_bitmap(&tasks), @"[2,]");
@@ -3472,7 +3465,7 @@ mod tests {
             ..Default::default()
         };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         // but the same query on failed tasks should return the last task
         snapshot!(snapshot_bitmap(&tasks), @"[2,]");
@@ -3485,7 +3478,7 @@ mod tests {
             ..Default::default()
         };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         // same query but with an invalid uid
         snapshot!(snapshot_bitmap(&tasks), @"[]");
@@ -3498,7 +3491,7 @@ mod tests {
             ..Default::default()
         };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         // same query but with a valid uid
         snapshot!(snapshot_bitmap(&tasks), @"[2,]");
@@ -3526,11 +3519,9 @@ mod tests {
 
         handle.advance_till([Start, BatchCreated]);
 
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-
         let query = Query { index_uids: Some(vec!["catto".to_owned()]), ..Default::default() };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         // only the first task associated with catto is returned, the indexSwap tasks are excluded!
         snapshot!(snapshot_bitmap(&tasks), @"[0,]");
@@ -3538,7 +3529,6 @@ mod tests {
         let query = Query { index_uids: Some(vec!["catto".to_owned()]), ..Default::default() };
         let (tasks, _) = index_scheduler
             .get_task_ids_from_authorized_indexes(
-                &rtxn,
                 &query,
                 &AuthFilter::with_allowed_indexes(
                     vec![IndexUidPattern::new_unchecked("doggo")].into_iter().collect(),
@@ -3552,7 +3542,6 @@ mod tests {
         let query = Query::default();
         let (tasks, _) = index_scheduler
             .get_task_ids_from_authorized_indexes(
-                &rtxn,
                 &query,
                 &AuthFilter::with_allowed_indexes(
                     vec![IndexUidPattern::new_unchecked("doggo")].into_iter().collect(),
@@ -3566,7 +3555,6 @@ mod tests {
         let query = Query::default();
         let (tasks, _) = index_scheduler
             .get_task_ids_from_authorized_indexes(
-                &rtxn,
                 &query,
                 &AuthFilter::with_allowed_indexes(
                     vec![
@@ -3584,7 +3572,7 @@ mod tests {
 
         let query = Query::default();
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         // we asked for all the tasks with all index authorized -> all tasks returned
         snapshot!(snapshot_bitmap(&tasks), @"[0,1,2,3,]");
@@ -3614,10 +3602,9 @@ mod tests {
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
 
-        let rtxn = index_scheduler.read_txn().unwrap();
         let query = Query { canceled_by: Some(vec![task_cancelation.uid]), ..Query::default() };
         let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
+            .get_task_ids_from_authorized_indexes(&query, &AuthFilter::default())
             .unwrap();
         // 0 is not returned because it was not canceled, 3 is not returned because it is the uid of the
         // taskCancelation itself
@@ -3626,7 +3613,6 @@ mod tests {
         let query = Query { canceled_by: Some(vec![task_cancelation.uid]), ..Query::default() };
         let (tasks, _) = index_scheduler
             .get_task_ids_from_authorized_indexes(
-                &rtxn,
                 &query,
                 &AuthFilter::with_allowed_indexes(
                     vec![IndexUidPattern::new_unchecked("doggo")].into_iter().collect(),
@@ -3650,7 +3636,7 @@ mod tests {
         handle.advance_one_failed_batch();
 
         // Still in the first iteration
-        assert_eq!(*index_scheduler.run_loop_iteration.read().unwrap(), 1);
+        assert_eq!(*index_scheduler.inner().run_loop_iteration.read(), 1);
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "index_creation_failed");
     }
 
@@ -4442,7 +4428,7 @@ mod tests {
         handle.advance_till([Start, BatchCreated, ProcessBatchFailed, AfterProcessing]);
 
         // Still in the first iteration
-        assert_eq!(*index_scheduler.run_loop_iteration.read().unwrap(), 1);
+        assert_eq!(*index_scheduler.inner().run_loop_iteration.read(), 1);
         // No matter what happens in process_batch, the index_scheduler should be internally consistent
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "index_creation_failed");
     }
@@ -4530,6 +4516,7 @@ mod tests {
             .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
             .unwrap();
 
+        let index_scheduler = index_scheduler.inner();
         let rtxn = index_scheduler.env.read_txn().unwrap();
         let tasks = index_scheduler.get_task_ids(&rtxn, &Query { ..Default::default() }).unwrap();
         let tasks = index_scheduler.get_existing_tasks(&rtxn, tasks).unwrap();

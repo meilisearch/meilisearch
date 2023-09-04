@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
+use std::ops::Deref;
 
 use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, RoTxn};
@@ -8,12 +9,13 @@ use meilisearch_types::tasks::{Details, Task};
 use roaring::RoaringBitmap;
 
 use crate::index_mapper::IndexMapper;
-use crate::{IndexScheduler, Kind, Status, BEI128};
+use crate::{IndexScheduler, IndexSchedulerInner, Kind, Status, BEI128};
 
 pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     scheduler.assert_internally_consistent();
 
-    let IndexScheduler {
+    let inner = scheduler.inner();
+    let IndexSchedulerInner {
         autobatching_enabled,
         must_stop_processing: _,
         processing_tasks,
@@ -39,13 +41,13 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         planned_failures: _,
         run_loop_iteration: _,
         zookeeper: _,
-    } = scheduler;
+    } = inner.deref();
 
     let rtxn = env.read_txn().unwrap();
 
     let mut snap = String::new();
 
-    let processing_tasks = processing_tasks.read().unwrap().processing.clone();
+    let processing_tasks = processing_tasks.read().processing.clone();
     snap.push_str(&format!("### Autobatching Enabled = {autobatching_enabled}\n"));
     snap.push_str("### Processing Tasks:\n");
     snap.push_str(&snapshot_bitmap(&processing_tasks));
