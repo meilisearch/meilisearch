@@ -419,12 +419,11 @@ impl IndexScheduler {
 
                                     log::info!("Downloading the index scheduler database.");
                                     let tasks_snapshot = snapshot_dir.join("tasks.mdb");
-                                    std::fs::copy(&tasks_snapshot, tasks_file).unwrap();
+                                    std::fs::copy(&tasks_snapshot, &tasks_file).unwrap();
 
                                     log::info!("Downloading the indexes databases");
                                     let indexes_files =
-                                        tempfile::TempDir::new_in(&inner.index_mapper.base_path)
-                                            .unwrap();
+                                        tempfile::TempDir::new_in(&base_path).unwrap();
 
                                     let mut indexes = Vec::new();
                                     let src = snapshot_dir.join("indexes");
@@ -437,9 +436,17 @@ impl IndexScheduler {
                                             .unwrap()
                                             .to_string();
                                         log::info!("\tDownloading the index {}", uuid.to_string());
+                                        std::fs::create_dir_all(
+                                            indexes_files.path().join(&uuid).with_extension(""),
+                                        )
+                                        .unwrap();
                                         std::fs::copy(
-                                            src.join(&uuid),
-                                            indexes_files.path().join(&uuid),
+                                            src.join(&uuid).with_extension("mdb"),
+                                            indexes_files
+                                                .path()
+                                                .join(&uuid)
+                                                .with_extension("")
+                                                .join("data.mdb"),
                                         )
                                         .unwrap();
                                         indexes.push(uuid);
@@ -460,24 +467,29 @@ impl IndexScheduler {
                                     pfcs.into_iter().for_each(|pfc| pfc.wait());
 
                                     // Let's replace all the folders/files.
-                                    std::fs::rename(&tasks_snapshot, base_path.join("tasks"))
+                                    std::fs::rename(
+                                        &tasks_file,
+                                        base_path.join("tasks").join("data.mdb"),
+                                    )
+                                    .unwrap();
+                                    let dst_indexes = base_path.join("indexes");
+                                    std::fs::remove_dir_all(&dst_indexes).unwrap();
+                                    std::fs::create_dir_all(&dst_indexes).unwrap();
+                                    std::fs::rename(indexes_files.into_path(), dst_indexes)
                                         .unwrap();
-                                    std::fs::rename(indexes_files, base_path.join("indexes"))
-                                        .unwrap();
 
-                                    // let inner = IndexSchedulerInner::new();
+                                    let mut inner = IndexSchedulerInner::new(
+                                        raw_inner.options,
+                                        #[cfg(test)]
+                                        raw_inner.test_breakpoint_sdr,
+                                        #[cfg(test)]
+                                        raw_inner.planned_failures,
+                                    )
+                                    .unwrap();
 
-                                    *lock = Some(todo!());
-
-                                    // run.env.close();
-
-                                    // 4. Move all the databases
-
-                                    // 5. Unlock the index-mapper
-
-                                    // 2. Download and import the index-scheduler database
-
-                                    // 3. Snapshot every indexes
+                                    // We replace the newly created wake-up signal with the old one
+                                    inner.wake_up = raw_inner.wake_up;
+                                    *lock = Some(inner);
                                 }
                                 otherwise => panic!("{otherwise:?}"),
                             }
