@@ -419,18 +419,10 @@ impl<'t> Matcher<'t, '_> {
             match &self.matches {
                 Some((tokens, matches)) => {
                     // If the text has to be cropped,
-                    // compute the best interval to crop around.
-                    let matches = match format_options.crop {
-                        Some(crop_size) if crop_size > 0 => {
-                            self.find_best_match_interval(matches, crop_size)
-                        }
-                        _ => matches,
-                    };
-
-                    // If the text has to be cropped,
                     // crop around the best interval.
                     let (byte_start, byte_end) = match format_options.crop {
                         Some(crop_size) if crop_size > 0 => {
+                            let matches = self.find_best_match_interval(matches, crop_size);
                             self.crop_bounds(tokens, matches, crop_size)
                         }
                         _ => (0, self.text.len()),
@@ -449,6 +441,11 @@ impl<'t> Matcher<'t, '_> {
                         // insert highlight markers around matches.
                         for m in matches {
                             let token = &tokens[m.token_position];
+
+                            // skip matches out of the crop window.
+                            if token.byte_start < byte_start || token.byte_end > byte_end {
+                                continue;
+                            }
 
                             if byte_index < token.byte_start {
                                 formatted.push(&self.text[byte_index..token.byte_start]);
@@ -797,6 +794,24 @@ mod tests {
         insta::assert_snapshot!(
             matcher.format(format_options),
             @"…void void void void void <em>split</em> <em>the</em> <em>world</em> void void"
+        );
+    }
+
+    #[test]
+    fn format_highlight_crop_phrase_only() {
+        //! testing: https://github.com/meilisearch/meilisearch/issues/3975
+        let temp_index = temp_index_with_documents();
+        let rtxn = temp_index.read_txn().unwrap();
+        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "\"the world\"");
+
+        let format_options = FormatOptions { highlight: true, crop: Some(10) };
+
+        let text = "The groundbreaking invention had the power to split the world between those who embraced progress and those who resisted change!";
+        let mut matcher = builder.build(text);
+        // should return 10 words with a marker at the start as well the end, and the highlighted matches.
+        insta::assert_snapshot!(
+            matcher.format(format_options),
+            @"…had the power to split <em>the</em> <em>world</em> between those who…"
         );
     }
 
