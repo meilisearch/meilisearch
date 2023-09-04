@@ -1423,6 +1423,43 @@ mod tests {
     }
 
     #[test]
+    fn thai_synonyms() {
+        let mut index = TempIndex::new();
+        index.index_documents_config.autogenerate_docids = true;
+
+        let mut wtxn = index.write_txn().unwrap();
+        // Send 3 documents with ids from 1 to 3.
+        index
+            .add_documents_using_wtxn(
+                &mut wtxn,
+                documents!([
+                    { "name": "ยี่ปุ่น" },
+                    { "name": "ญี่ปุ่น" },
+                ]),
+            )
+            .unwrap();
+
+        // In the same transaction provide some synonyms
+        index
+            .update_settings_using_wtxn(&mut wtxn, |settings| {
+                settings.set_synonyms(btreemap! {
+                    "japanese".to_string() => vec!["ญี่ปุ่น", "ยี่ปุ่น"],
+                });
+            })
+            .unwrap();
+        wtxn.commit().unwrap();
+
+        // Ensure synonyms are effectively stored
+        let rtxn = index.read_txn().unwrap();
+        let synonyms = index.synonyms(&rtxn).unwrap();
+        assert!(!synonyms.is_empty()); // at this point the index should return something
+
+        // Check that we can use synonyms
+        let result = index.search(&rtxn).query("japanese").execute().unwrap();
+        assert_eq!(result.documents_ids.len(), 2);
+    }
+
+    #[test]
     fn setting_searchable_recomputes_other_settings() {
         let index = TempIndex::new();
 
