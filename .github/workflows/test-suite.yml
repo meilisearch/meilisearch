@@ -125,6 +125,7 @@ jobs:
         run: |
           if cargo tree -f '{p} {f}' -e normal --no-default-features | grep -vqz lindera; then
             echo "lindera has been found in the sources and it shouldn't"
+            exit 1
           fi
       - name: Run cargo tree with default features and check lindera is pressent
         run: |
