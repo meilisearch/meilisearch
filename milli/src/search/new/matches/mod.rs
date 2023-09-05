@@ -798,20 +798,28 @@ mod tests {
     }
 
     #[test]
-    fn format_highlight_crop_phrase_only() {
+    fn format_highlight_crop_phrase_query() {
         //! testing: https://github.com/meilisearch/meilisearch/issues/3975
         let temp_index = temp_index_with_documents();
         let rtxn = temp_index.read_txn().unwrap();
-        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "\"the world\"");
 
         let format_options = FormatOptions { highlight: true, crop: Some(10) };
-
         let text = "The groundbreaking invention had the power to split the world between those who embraced progress and those who resisted change!";
+
+        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "\"the world\"");
         let mut matcher = builder.build(text);
         // should return 10 words with a marker at the start as well the end, and the highlighted matches.
         insta::assert_snapshot!(
             matcher.format(format_options),
             @"…had the power to split <em>the</em> <em>world</em> between those who…"
+        );
+
+        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "those \"and those\"");
+        let mut matcher = builder.build(text);
+        // should highlight both "and" and "those".
+        insta::assert_snapshot!(
+            matcher.format(format_options),
+            @"…between those who embraced progress <em>and</em> <em>those</em> who resisted change…"
         );
     }
 
