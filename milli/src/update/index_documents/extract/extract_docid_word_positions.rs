@@ -226,9 +226,9 @@ fn process_tokens<'a>(
 ) -> impl Iterator<Item = (usize, Token<'a>)> {
     tokens
         .skip_while(|token| token.is_separator())
-        .scan((0, None), |(offset, prev_kind), token| {
+        .scan((0, None), |(offset, prev_kind), mut token| {
             match token.kind {
-                TokenKind::Word | TokenKind::StopWord | TokenKind::Unknown => {
+                TokenKind::Word | TokenKind::StopWord if !token.lemma().is_empty() => {
                     *offset += match *prev_kind {
                         Some(TokenKind::Separator(SeparatorKind::Hard)) => 8,
                         Some(_) => 1,
@@ -244,7 +244,7 @@ fn process_tokens<'a>(
                 {
                     *prev_kind = Some(token.kind);
                 }
-                _ => (),
+                _ => token.kind = TokenKind::Unknown,
             }
             Some((*offset, token))
         })

@@ -573,7 +573,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                     tokenizer
                         .tokenize(text)
                         .filter_map(|token| {
-                            if token.is_word() {
+                            if token.is_word() && !token.lemma().is_empty() {
                                 Some(token.lemma().to_string())
                             } else {
                                 None
@@ -1420,6 +1420,43 @@ mod tests {
         assert!(result.documents_ids.is_empty());
         let result = index.search(&rtxn).query("puppies").execute().unwrap();
         assert!(result.documents_ids.is_empty());
+    }
+
+    #[test]
+    fn thai_synonyms() {
+        let mut index = TempIndex::new();
+        index.index_documents_config.autogenerate_docids = true;
+
+        let mut wtxn = index.write_txn().unwrap();
+        // Send 3 documents with ids from 1 to 3.
+        index
+            .add_documents_using_wtxn(
+                &mut wtxn,
+                documents!([
+                    { "name": "ยี่ปุ่น" },
+                    { "name": "ญี่ปุ่น" },
+                ]),
+            )
+            .unwrap();
+
+        // In the same transaction provide some synonyms
+        index
+            .update_settings_using_wtxn(&mut wtxn, |settings| {
+                settings.set_synonyms(btreemap! {
+                    "japanese".to_string() => vec![S("ญี่ปุ่น"), S("ยี่ปุ่น")],
+                });
+            })
+            .unwrap();
+        wtxn.commit().unwrap();
+
+        // Ensure synonyms are effectively stored
+        let rtxn = index.read_txn().unwrap();
+        let synonyms = index.synonyms(&rtxn).unwrap();
+        assert!(!synonyms.is_empty()); // at this point the index should return something
+
+        // Check that we can use synonyms
+        let result = index.search(&rtxn).query("japanese").execute().unwrap();
+        assert_eq!(result.documents_ids.len(), 2);
     }
 
     #[test]
