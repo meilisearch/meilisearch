@@ -29,6 +29,7 @@ const MEILI_HTTP_ADDR: &str = "MEILI_HTTP_ADDR";
 const MEILI_MASTER_KEY: &str = "MEILI_MASTER_KEY";
 const MEILI_ENV: &str = "MEILI_ENV";
 const MEILI_ZK_URL: &str = "MEILI_ZK_URL";
+const MEILI_S3_URL: &str = "MEILI_S3_URL";
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
 const MEILI_NO_ANALYTICS: &str = "MEILI_NO_ANALYTICS";
 const MEILI_HTTP_PAYLOAD_SIZE_LIMIT: &str = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT";
@@ -159,6 +160,10 @@ pub struct Opt {
     /// If ran locally, the default url is `http://localhost:2181/`.
     #[clap(long, env = MEILI_ZK_URL)]
     pub zk_url: Option<String>,
+
+    /// Sets the HTTP address and port used to communicate with the S3 bucket.
+    #[clap(long, env = MEILI_S3_URL)]
+    pub s3_url: Option<String>,
 
     /// Deactivates Meilisearch's built-in telemetry when provided.
     ///
@@ -375,6 +380,7 @@ impl Opt {
             master_key,
             env,
             zk_url,
+            s3_url,
             max_index_size: _,
             max_task_db_size: _,
             http_payload_size_limit,
@@ -410,6 +416,9 @@ impl Opt {
         export_to_env_if_not_present(MEILI_ENV, env);
         if let Some(zk_url) = zk_url {
             export_to_env_if_not_present(MEILI_ZK_URL, zk_url);
+        }
+        if let Some(s3_url) = s3_url {
+            export_to_env_if_not_present(MEILI_S3_URL, s3_url);
         }
         #[cfg(all(not(debug_assertions), feature = "analytics"))]
         {

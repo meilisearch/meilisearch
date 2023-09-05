@@ -80,6 +80,7 @@ reqwest = { version = "0.11.16", features = [
 ], default-features = false }
 rustls = "0.20.8"
 rustls-pemfile = "1.0.2"
+rust-s3 = { version = "0.33.0", default-features = false, features = ["sync-rustls-tls"] }
 segment = { version = "0.2.2", optional = true }
 serde = { version = "1.0.160", features = ["derive"] }
 serde_json = { version = "1.0.95", features = ["preserve_order"] }

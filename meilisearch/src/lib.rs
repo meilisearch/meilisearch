@@ -39,6 +39,8 @@ use meilisearch_types::versioning::{check_version_file, create_version_file};
 use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
 pub use option::Opt;
 use option::ScheduleSnapshot;
+use s3::creds::Credentials;
+use s3::{Bucket, Region};
 use zookeeper::ZooKeeper;
 
 use crate::error::MeilisearchHttpError;
@@ -242,6 +244,15 @@ fn open_or_create_database_unchecked(
         index_count: DEFAULT_INDEX_COUNT,
         instance_features,
         zookeeper: zookeeper.clone(),
+        s3: opt.s3_url.as_ref().map(|url| {
+            Bucket::new(
+                "test-rust-s3",
+                Region::Custom { region: "eu-central-1".to_owned(), endpoint: url.clone() },
+                Credentials::default().unwrap(),
+            )
+            .unwrap()
+            .with_path_style()
+        }),
     }))
     .map_err(anyhow::Error::from);
 
