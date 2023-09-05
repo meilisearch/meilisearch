@@ -608,13 +608,18 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 for (word, synonyms) in user_synonyms {
                     // Normalize both the word and associated synonyms.
                     let normalized_word = normalize(&tokenizer, word);
-                    let normalized_synonyms =
-                        synonyms.iter().map(|synonym| normalize(&tokenizer, synonym));
+                    let normalized_synonyms: Vec<_> = synonyms
+                        .iter()
+                        .map(|synonym| normalize(&tokenizer, synonym))
+                        .filter(|synonym| !synonym.is_empty())
+                        .collect();
 
                     // Store the normalized synonyms under the normalized word,
                     // merging the possible duplicate words.
-                    let entry = new_synonyms.entry(normalized_word).or_insert_with(Vec::new);
-                    entry.extend(normalized_synonyms);
+                    if !normalized_word.is_empty() && !normalized_synonyms.is_empty() {
+                        let entry = new_synonyms.entry(normalized_word).or_insert_with(Vec::new);
+                        entry.extend(normalized_synonyms.into_iter());
+                    }
                 }
 
                 // Make sure that we don't have duplicate synonyms.
