@@ -171,7 +171,24 @@ pub fn parse_value(input: Span) -> IResult<Token> {
         })
     })?;
 
-    Ok((input, value))
+    match unescaper::unescape(value.value()) {
+        Ok(content) => {
+            if content.len() != value.value().len() {
+                Ok((input, Token::new(value.original_span(), Some(content))))
+            } else {
+                Ok((input, value))
+            }
+        }
+        Err(unescaper::Error::IncompleteStr(_)) => Err(nom::Err::Incomplete(nom::Needed::Unknown)),
+        Err(unescaper::Error::ParseIntError { .. }) => Err(nom::Err::Error(Error::new_from_kind(
+            value.original_span(),
+            ErrorKind::InvalidEscapedNumber,
+        ))),
+        Err(unescaper::Error::InvalidChar { .. }) => Err(nom::Err::Error(Error::new_from_kind(
+            value.original_span(),
+            ErrorKind::MalformedValue,
+        ))),
+    }
 }
 
 fn is_value_component(c: char) -> bool {
