@@ -318,17 +318,17 @@ pub mod test {
             ("\"cha'nnel\"", "cha'nnel", false),
             ("I'm tamo", "I", false),
             // escaped thing but not quote
-            (r#""\\""#, r#"\\"#, false),
-            (r#""\\\\\\""#, r#"\\\\\\"#, false),
-            (r#""aa\\aa""#, r#"aa\\aa"#, false),
+            (r#""\\""#, r#"\"#, true),
+            (r#""\\\\\\""#, r#"\\\"#, true),
+            (r#""aa\\aa""#, r#"aa\aa"#, true),
             // with double quote
             (r#""Hello \"world\"""#, r#"Hello "world""#, true),
-            (r#""Hello \\\"world\\\"""#, r#"Hello \\"world\\""#, true),
+            (r#""Hello \\\"world\\\"""#, r#"Hello \"world\""#, true),
             (r#""I'm \"super\" tamo""#, r#"I'm "super" tamo"#, true),
             (r#""\"\"""#, r#""""#, true),
             // with simple quote
             (r#"'Hello \'world\''"#, r#"Hello 'world'"#, true),
-            (r#"'Hello \\\'world\\\''"#, r#"Hello \\'world\\'"#, true),
+            (r#"'Hello \\\'world\\\''"#, r#"Hello \'world\'"#, true),
             (r#"'I\'m "super" tamo'"#, r#"I'm "super" tamo"#, true),
             (r#"'\'\''"#, r#"''"#, true),
         ];
@@ -350,7 +350,14 @@ pub mod test {
                 "Filter `{}` was not supposed to be escaped",
                 input
             );
-            assert_eq!(token.value(), expected, "Filter `{}` failed.", input);
+            assert_eq!(
+                token.value(),
+                expected,
+                "Filter `{}` failed by giving `{}` instead of `{}`.",
+                input,
+                token.value(),
+                expected
+            );
         }
     }
 
