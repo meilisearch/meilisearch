@@ -800,7 +800,12 @@ mod tests {
     #[test]
     fn format_highlight_crop_phrase_query() {
         //! testing: https://github.com/meilisearch/meilisearch/issues/3975
-        let temp_index = temp_index_with_documents();
+        let temp_index = TempIndex::new();
+        temp_index
+            .add_documents(documents!([
+                { "id": 1, "text": "The groundbreaking invention had the power to split the world between those who embraced progress and those who resisted change!" }
+            ]))
+            .unwrap();
         let rtxn = temp_index.read_txn().unwrap();
 
         let format_options = FormatOptions { highlight: true, crop: Some(10) };
@@ -816,10 +821,10 @@ mod tests {
 
         let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "those \"and those\"");
         let mut matcher = builder.build(text);
-        // should highlight both "and" and "those".
+        // should highlight "those" and the phrase "and those".
         insta::assert_snapshot!(
             matcher.format(format_options),
-            @"…between those who embraced progress <em>and</em> <em>those</em> who resisted change…"
+            @"…world between <em>those</em> who embraced progress <em>and</em> <em>those</em> who resisted…"
         );
     }
 
