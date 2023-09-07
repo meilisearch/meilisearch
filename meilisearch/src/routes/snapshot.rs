@@ -10,7 +10,7 @@ use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::SummarizedTaskView;
+use crate::routes::{get_task_id, SummarizedTaskView};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(SeqHandler(create_snapshot))));
@@ -24,8 +24,9 @@ pub async fn create_snapshot(
     analytics.publish("Snapshot Created".to_string(), json!({}), Some(&req));
 
     let task = KindWithContent::SnapshotCreation;
+    let uid = get_task_id(&req)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
 
     debug!(returns = ?task, "Create snapshot");
     Ok(HttpResponse::Accepted().json(task))
