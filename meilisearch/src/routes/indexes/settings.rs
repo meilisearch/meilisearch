@@ -14,7 +14,7 @@ use serde_json::json;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
-use crate::routes::SummarizedTaskView;
+use crate::routes::{get_task_id, SummarizedTaskView};
 
 #[macro_export]
 macro_rules! make_setting_route {
@@ -33,7 +33,7 @@ macro_rules! make_setting_route {
             use $crate::extractors::authentication::policies::*;
             use $crate::extractors::authentication::GuardedData;
             use $crate::extractors::sequential_extractor::SeqHandler;
-            use $crate::routes::SummarizedTaskView;
+            use $crate::routes::{get_task_id, SummarizedTaskView};
 
             pub async fn delete(
                 index_scheduler: GuardedData<
@@ -41,6 +41,7 @@ macro_rules! make_setting_route {
                     Data<IndexScheduler>,
                 >,
                 index_uid: web::Path<String>,
+                req: HttpRequest,
             ) -> Result<HttpResponse, ResponseError> {
                 let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
@@ -55,8 +56,9 @@ macro_rules! make_setting_route {
                     is_deletion: true,
                     allow_index_creation,
                 };
+                let uid = get_task_id(&req)?;
                 let task: SummarizedTaskView =
-                    tokio::task::spawn_blocking(move || index_scheduler.register(task))
+                    tokio::task::spawn_blocking(move || index_scheduler.register(task, uid))
                         .await??
                         .into();
 
@@ -97,8 +99,9 @@ macro_rules! make_setting_route {
                     is_deletion: false,
                     allow_index_creation,
                 };
+                let uid = get_task_id(&req)?;
                 let task: SummarizedTaskView =
-                    tokio::task::spawn_blocking(move || index_scheduler.register(task))
+                    tokio::task::spawn_blocking(move || index_scheduler.register(task, uid))
                         .await??
                         .into();
 
@@ -664,8 +667,9 @@ pub async fn update_all(
         is_deletion: false,
         allow_index_creation,
     };
+    let uid = get_task_id(&req)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
@@ -687,6 +691,7 @@ pub async fn get_all(
 pub async fn delete_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
+    req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
@@ -700,8 +705,9 @@ pub async fn delete_all(
         is_deletion: true,
         allow_index_creation,
     };
+    let uid = get_task_id(&req)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))

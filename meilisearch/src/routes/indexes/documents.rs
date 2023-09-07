@@ -7,7 +7,7 @@ use bstr::ByteSlice;
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::Deserr;
 use futures::StreamExt;
-use index_scheduler::IndexScheduler;
+use index_scheduler::{IndexScheduler, TaskId};
 use log::debug;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
@@ -36,7 +36,7 @@ use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::payload::Payload;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::{PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
+use crate::routes::{get_task_id, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
 use crate::search::parse_filter;
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
@@ -129,8 +129,9 @@ pub async fn delete_document(
         index_uid: index_uid.to_string(),
         documents_ids: vec![document_id],
     };
+    let uid = get_task_id(&req)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
 }
@@ -277,6 +278,7 @@ pub async fn replace_documents(
     analytics.add_documents(&params, index_scheduler.index(&index_uid).is_err(), &req);
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
+    let uid = get_task_id(&req)?;
     let task = document_addition(
         extract_mime_type(&req)?,
         index_scheduler,
@@ -285,6 +287,7 @@ pub async fn replace_documents(
         params.csv_delimiter,
         body,
         IndexDocumentsMethod::ReplaceDocuments,
+        uid,
         allow_index_creation,
     )
     .await?;
@@ -308,6 +311,7 @@ pub async fn update_documents(
     analytics.update_documents(&params, index_scheduler.index(&index_uid).is_err(), &req);
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
+    let uid = get_task_id(&req)?;
     let task = document_addition(
         extract_mime_type(&req)?,
         index_scheduler,
@@ -316,6 +320,7 @@ pub async fn update_documents(
         params.csv_delimiter,
         body,
         IndexDocumentsMethod::UpdateDocuments,
+        uid,
         allow_index_creation,
     )
     .await?;
@@ -332,6 +337,7 @@ async fn document_addition(
     csv_delimiter: Option<u8>,
     mut body: Payload,
     method: IndexDocumentsMethod,
+    task_id: Option<TaskId>,
     allow_index_creation: bool,
 ) -> Result<SummarizedTaskView, MeilisearchHttpError> {
     let format = match (
@@ -445,7 +451,7 @@ async fn document_addition(
     };
 
     let scheduler = index_scheduler.clone();
-    let task = match tokio::task::spawn_blocking(move || scheduler.register(task)).await? {
+    let task = match tokio::task::spawn_blocking(move || scheduler.register(task, task_id)).await? {
         Ok(task) => task,
         Err(e) => {
             index_scheduler.delete_update_file(uuid)?;
@@ -476,8 +482,9 @@ pub async fn delete_documents_batch(
 
     let task =
         KindWithContent::DocumentDeletion { index_uid: index_uid.to_string(), documents_ids: ids };
+    let uid = get_task_id(&req)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
@@ -512,8 +519,9 @@ pub async fn delete_documents_by_filter(
     .map_err(|err| ResponseError::from_msg(err.message, Code::InvalidDocumentFilter))?;
     let task = KindWithContent::DocumentDeletionByFilter { index_uid, filter_expr: filter };
 
+    let uid = get_task_id(&req)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
@@ -529,8 +537,9 @@ pub async fn clear_all_documents(
     analytics.delete_documents(DocumentDeletionKind::ClearAll, &req);
 
     let task = KindWithContent::DocumentClear { index_uid: index_uid.to_string() };
+    let uid = get_task_id(&req)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))

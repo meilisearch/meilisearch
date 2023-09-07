@@ -10,7 +10,7 @@ use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use serde_json::json;
 
-use super::SummarizedTaskView;
+use super::{get_task_id, SummarizedTaskView};
 use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
@@ -61,7 +61,8 @@ pub async fn swap_indexes(
 
     let task = KindWithContent::IndexSwap { swaps };
 
-    let task = index_scheduler.register(task)?;
-    let task: SummarizedTaskView = task.into();
+    let uid = get_task_id(&req)?;
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
     Ok(HttpResponse::Accepted().json(task))
 }

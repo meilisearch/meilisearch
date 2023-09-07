@@ -48,6 +48,8 @@ impl From<DateField> for Code {
 pub enum Error {
     #[error("{1}")]
     WithCustomErrorCode(Code, Box<Self>),
+    #[error("Received bad task id: {received} should be >= to {expected}.")]
+    BadTaskId { received: TaskId, expected: TaskId },
     #[error("Index `{0}` not found.")]
     IndexNotFound(String),
     #[error("Index `{0}` already exists.")]
@@ -159,6 +161,7 @@ impl Error {
         match self {
             Error::IndexNotFound(_)
             | Error::WithCustomErrorCode(_, _)
+            | Error::BadTaskId { .. }
             | Error::IndexAlreadyExists(_)
             | Error::SwapDuplicateIndexFound(_)
             | Error::SwapDuplicateIndexesFound(_)
@@ -202,6 +205,7 @@ impl ErrorCode for Error {
     fn error_code(&self) -> Code {
         match self {
             Error::WithCustomErrorCode(code, _) => *code,
+            Error::BadTaskId { .. } => Code::BadRequest,
             Error::IndexNotFound(_) => Code::IndexNotFound,
             Error::IndexAlreadyExists(_) => Code::IndexAlreadyExists,
             Error::SwapDuplicateIndexesFound(_) => Code::InvalidSwapDuplicateIndexFound,
