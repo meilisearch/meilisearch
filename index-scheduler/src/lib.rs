@@ -30,7 +30,7 @@ mod utils;
 mod uuid_codec;
 
 pub type Result<T> = std::result::Result<T, Error>;
-pub type TaskId = u32;
+pub type TaskId = u64;
 
 use std::collections::{BTreeMap, HashMap};
 use std::ops::{Bound, RangeBounds};
@@ -49,10 +49,11 @@ use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFea
 use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn};
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
+use meilisearch_types::milli::heed_codec::{CboRoaringTreemapCodec, RoaringTreemapCodec};
 use meilisearch_types::milli::update::IndexerConfig;
-use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
+use meilisearch_types::milli::{self, Index, BEU64};
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
-use roaring::RoaringBitmap;
+use roaring::RoaringTreemap;
 use synchronoise::SignalEvent;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
@@ -72,9 +73,9 @@ pub(crate) type BEI128 =
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Query {
     /// The maximum number of tasks to be matched
-    pub limit: Option<u32>,
+    pub limit: Option<TaskId>,
     /// The minimum [task id](`meilisearch_types::tasks::Task::uid`) to be matched
-    pub from: Option<u32>,
+    pub from: Option<TaskId>,
     /// The allowed [statuses](`meilisearch_types::tasks::Task::status`) of the matched tasls
     pub statuses: Option<Vec<Status>>,
     /// The allowed [kinds](meilisearch_types::tasks::Kind) of the matched tasks.
@@ -151,28 +152,28 @@ struct ProcessingTasks {
     /// The date and time at which the indexation started.
     started_at: OffsetDateTime,
     /// The list of tasks ids that are currently running.
-    processing: RoaringBitmap,
+    processing: RoaringTreemap,
 }
 
 impl ProcessingTasks {
     /// Creates an empty `ProcessingAt` struct.
     fn new() -> ProcessingTasks {
-        ProcessingTasks { started_at: OffsetDateTime::now_utc(), processing: RoaringBitmap::new() }
+        ProcessingTasks { started_at: OffsetDateTime::now_utc(), processing: RoaringTreemap::new() }
     }
 
     /// Stores the currently processing tasks, and the date time at which it started.
-    fn start_processing_at(&mut self, started_at: OffsetDateTime, processing: RoaringBitmap) {
+    fn start_processing_at(&mut self, started_at: OffsetDateTime, processing: RoaringTreemap) {
         self.started_at = started_at;
         self.processing = processing;
     }
 
     /// Set the processing tasks to an empty list
     fn stop_processing(&mut self) {
-        self.processing = RoaringBitmap::new();
+        self.processing = RoaringTreemap::new();
     }
 
     /// Returns `true` if there, at least, is one task that is currently processing that we must stop.
-    fn must_cancel_processing_tasks(&self, canceled_tasks: &RoaringBitmap) -> bool {
+    fn must_cancel_processing_tasks(&self, canceled_tasks: &RoaringTreemap) -> bool {
         !self.processing.is_disjoint(canceled_tasks)
     }
 }
@@ -276,27 +277,27 @@ pub struct IndexScheduler {
     pub(crate) file_store: FileStore,
 
     // The main database, it contains all the tasks accessible by their Id.
-    pub(crate) all_tasks: Database<OwnedType<BEU32>, SerdeJson<Task>>,
+    pub(crate) all_tasks: Database<OwnedType<BEU64>, SerdeJson<Task>>,
 
     /// All the tasks ids grouped by their status.
     // TODO we should not be able to serialize a `Status::Processing` in this database.
-    pub(crate) status: Database<SerdeBincode<Status>, RoaringBitmapCodec>,
+    pub(crate) status: Database<SerdeBincode<Status>, RoaringTreemapCodec>,
     /// All the tasks ids grouped by their kind.
-    pub(crate) kind: Database<SerdeBincode<Kind>, RoaringBitmapCodec>,
+    pub(crate) kind: Database<SerdeBincode<Kind>, RoaringTreemapCodec>,
     /// Store the tasks associated to an index.
-    pub(crate) index_tasks: Database<Str, RoaringBitmapCodec>,
+    pub(crate) index_tasks: Database<Str, RoaringTreemapCodec>,
 
     /// Store the tasks that were canceled by a task uid
-    pub(crate) canceled_by: Database<OwnedType<BEU32>, RoaringBitmapCodec>,
+    pub(crate) canceled_by: Database<OwnedType<BEU64>, RoaringTreemapCodec>,
 
     /// Store the task ids of tasks which were enqueued at a specific date
-    pub(crate) enqueued_at: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
+    pub(crate) enqueued_at: Database<OwnedType<BEI128>, CboRoaringTreemapCodec>,
 
     /// Store the task ids of finished tasks which started being processed at a specific date
-    pub(crate) started_at: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
+    pub(crate) started_at: Database<OwnedType<BEI128>, CboRoaringTreemapCodec>,
 
     /// Store the task ids of tasks which finished at a specific date
-    pub(crate) finished_at: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
+    pub(crate) finished_at: Database<OwnedType<BEI128>, CboRoaringTreemapCodec>,
 
     /// In charge of creating, opening, storing and returning indexes.
     pub(crate) index_mapper: IndexMapper,
@@ -645,7 +646,7 @@ impl IndexScheduler {
     }
 
     /// Return the task ids matched by the given query from the index scheduler's point of view.
-    pub(crate) fn get_task_ids(&self, rtxn: &RoTxn, query: &Query) -> Result<RoaringBitmap> {
+    pub(crate) fn get_task_ids(&self, rtxn: &RoTxn, query: &Query) -> Result<RoaringTreemap> {
         let ProcessingTasks {
             started_at: started_at_processing, processing: processing_tasks, ..
         } = self.processing_tasks.read().unwrap().clone();
@@ -657,7 +658,7 @@ impl IndexScheduler {
         }
 
         if let Some(status) = &query.statuses {
-            let mut status_tasks = RoaringBitmap::new();
+            let mut status_tasks = RoaringTreemap::new();
             for status in status {
                 match status {
                     // special case for Processing tasks
@@ -674,15 +675,15 @@ impl IndexScheduler {
         }
 
         if let Some(uids) = &query.uids {
-            let uids = RoaringBitmap::from_iter(uids);
+            let uids = RoaringTreemap::from_iter(uids);
             tasks &= &uids;
         }
 
         if let Some(canceled_by) = &query.canceled_by {
-            let mut all_canceled_tasks = RoaringBitmap::new();
+            let mut all_canceled_tasks = RoaringTreemap::new();
             for cancel_task_uid in canceled_by {
                 if let Some(canceled_by_uid) =
-                    self.canceled_by.get(rtxn, &BEU32::new(*cancel_task_uid))?
+                    self.canceled_by.get(rtxn, &BEU64::new(*cancel_task_uid))?
                 {
                     all_canceled_tasks |= canceled_by_uid;
                 }
@@ -691,14 +692,14 @@ impl IndexScheduler {
             // if the canceled_by has been specified but no task
             // matches then we prefer matching zero than all tasks.
             if all_canceled_tasks.is_empty() {
-                return Ok(RoaringBitmap::new());
+                return Ok(RoaringTreemap::new());
             } else {
                 tasks &= all_canceled_tasks;
             }
         }
 
         if let Some(kind) = &query.types {
-            let mut kind_tasks = RoaringBitmap::new();
+            let mut kind_tasks = RoaringTreemap::new();
             for kind in kind {
                 kind_tasks |= self.get_kind(rtxn, *kind)?;
             }
@@ -706,7 +707,7 @@ impl IndexScheduler {
         }
 
         if let Some(index) = &query.index_uids {
-            let mut index_tasks = RoaringBitmap::new();
+            let mut index_tasks = RoaringTreemap::new();
             for index in index {
                 index_tasks |= self.index_tasks(rtxn, index)?;
             }
@@ -851,7 +852,7 @@ impl IndexScheduler {
         rtxn: &RoTxn,
         query: &Query,
         filters: &meilisearch_auth::AuthFilter,
-    ) -> Result<(RoaringBitmap, u64)> {
+    ) -> Result<(RoaringTreemap, u64)> {
         // compute all tasks matching the filter by ignoring the limits, to find the number of tasks matching
         // the filter.
         // As this causes us to compute the filter twice it is slightly inefficient, but doing it this way spares
@@ -902,7 +903,7 @@ impl IndexScheduler {
         let (tasks, total) = self.get_task_ids_from_authorized_indexes(&rtxn, &query, filters)?;
         let tasks = self.get_existing_tasks(
             &rtxn,
-            tasks.into_iter().rev().take(query.limit.unwrap_or(u32::MAX) as usize),
+            tasks.into_iter().rev().take(query.limit.unwrap_or(TaskId::MAX) as usize),
         )?;
 
         let ProcessingTasks { started_at, processing, .. } =
@@ -968,7 +969,7 @@ impl IndexScheduler {
         // Get rid of the mutability.
         let task = task;
 
-        self.all_tasks.append(&mut wtxn, &BEU32::new(task.uid), &task)?;
+        self.all_tasks.append(&mut wtxn, &BEU64::new(task.uid), &task)?;
 
         for index in task.indexes() {
             self.update_index(&mut wtxn, index, |bitmap| {
@@ -994,7 +995,7 @@ impl IndexScheduler {
         // If the registered task is a task cancelation
         // we inform the processing tasks to stop (if necessary).
         if let KindWithContent::TaskCancelation { tasks, .. } = kind {
-            let tasks_to_cancel = RoaringBitmap::from_iter(tasks);
+            let tasks_to_cancel = RoaringTreemap::from_iter(tasks);
             if self.processing_tasks.read().unwrap().must_cancel_processing_tasks(&tasks_to_cancel)
             {
                 self.must_stop_processing.must_stop();
@@ -1087,7 +1088,7 @@ impl IndexScheduler {
         let mut ids = batch.ids();
         ids.sort_unstable();
         let processed_tasks = ids.len();
-        let processing_tasks = RoaringBitmap::from_sorted_iter(ids.iter().copied()).unwrap();
+        let processing_tasks = RoaringTreemap::from_sorted_iter(ids.iter().copied()).unwrap();
         let started_at = OffsetDateTime::now_utc();
 
         // We reset the must_stop flag to be sure that we don't stop processing tasks
@@ -1224,7 +1225,7 @@ impl IndexScheduler {
             | self.status.get(&rtxn, &Status::Failed)?.unwrap_or_default()
             | self.status.get(&rtxn, &Status::Canceled)?.unwrap_or_default();
 
-        let to_delete = RoaringBitmap::from_iter(finished.into_iter().rev().take(100_000));
+        let to_delete = RoaringTreemap::from_iter(finished.into_iter().rev().take(100_000));
 
         // /!\ the len must be at least 2 or else we might enter an infinite loop where we only delete
         //     the deletion tasks we enqueued ourselves.
@@ -1317,9 +1318,9 @@ pub struct Dump<'a> {
     index_scheduler: &'a IndexScheduler,
     wtxn: RwTxn<'a, 'a>,
 
-    indexes: HashMap<String, RoaringBitmap>,
-    statuses: HashMap<Status, RoaringBitmap>,
-    kinds: HashMap<Kind, RoaringBitmap>,
+    indexes: HashMap<String, RoaringTreemap>,
+    statuses: HashMap<Status, RoaringTreemap>,
+    kinds: HashMap<Kind, RoaringTreemap>,
 }
 
 impl<'a> Dump<'a> {
@@ -1430,7 +1431,7 @@ impl<'a> Dump<'a> {
             },
         };
 
-        self.index_scheduler.all_tasks.put(&mut self.wtxn, &BEU32::new(task.uid), &task)?;
+        self.index_scheduler.all_tasks.put(&mut self.wtxn, &BEU64::new(task.uid), &task)?;
 
         for index in task.indexes() {
             match self.indexes.get_mut(index) {
@@ -1438,7 +1439,7 @@ impl<'a> Dump<'a> {
                     bitmap.insert(task.uid);
                 }
                 None => {
-                    let mut bitmap = RoaringBitmap::new();
+                    let mut bitmap = RoaringTreemap::new();
                     bitmap.insert(task.uid);
                     self.indexes.insert(index.to_string(), bitmap);
                 }
@@ -1472,8 +1473,8 @@ impl<'a> Dump<'a> {
             }
         }
 
-        self.statuses.entry(task.status).or_insert(RoaringBitmap::new()).insert(task.uid);
-        self.kinds.entry(task.kind.as_kind()).or_insert(RoaringBitmap::new()).insert(task.uid);
+        self.statuses.entry(task.status).or_insert(RoaringTreemap::new()).insert(task.uid);
+        self.kinds.entry(task.kind.as_kind()).or_insert(RoaringTreemap::new()).insert(task.uid);
 
         Ok(task)
     }
@@ -1553,7 +1554,7 @@ mod tests {
     use Breakpoint::*;
 
     use super::*;
-    use crate::insta_snapshot::{snapshot_bitmap, snapshot_index_scheduler};
+    use crate::insta_snapshot::{snapshot_index_scheduler, snapshot_treemap};
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum FailureLocation {
@@ -1848,7 +1849,7 @@ mod tests {
             let task = index_scheduler.register(kind, None).unwrap();
             index_scheduler.assert_internally_consistent();
 
-            assert_eq!(task.uid, idx as u32);
+            assert_eq!(task.uid, idx as TaskId);
             assert_eq!(task.status, Status::Enqueued);
             assert_eq!(task.kind.as_kind(), k);
         }
@@ -1992,7 +1993,7 @@ mod tests {
             .register(
                 KindWithContent::TaskDeletion {
                     query: "test_query".to_owned(),
-                    tasks: RoaringBitmap::from_iter([0, 1]),
+                    tasks: RoaringTreemap::from_iter([0, 1]),
                 },
                 None,
             )
@@ -2043,7 +2044,7 @@ mod tests {
             .register(
                 KindWithContent::TaskDeletion {
                     query: "test_query".to_owned(),
-                    tasks: RoaringBitmap::from_iter([0]),
+                    tasks: RoaringTreemap::from_iter([0]),
                 },
                 None,
             )
@@ -2084,7 +2085,7 @@ mod tests {
                 .register(
                     KindWithContent::TaskDeletion {
                         query: "test_query".to_owned(),
-                        tasks: RoaringBitmap::from_iter([0]),
+                        tasks: RoaringTreemap::from_iter([0]),
                     },
                     None,
                 )
@@ -2486,7 +2487,7 @@ mod tests {
             replace_document_import_task("catto", None, 0, documents_count0),
             KindWithContent::TaskCancelation {
                 query: "test_query".to_owned(),
-                tasks: RoaringBitmap::from_iter([0]),
+                tasks: RoaringTreemap::from_iter([0]),
             },
         ];
         for task in to_enqueue {
@@ -2518,7 +2519,7 @@ mod tests {
             .register(
                 KindWithContent::TaskCancelation {
                     query: "test_query".to_owned(),
-                    tasks: RoaringBitmap::from_iter([0]),
+                    tasks: RoaringTreemap::from_iter([0]),
                 },
                 None,
             )
@@ -2547,7 +2548,7 @@ mod tests {
             .register(
                 KindWithContent::TaskCancelation {
                     query: "test_query".to_owned(),
-                    tasks: RoaringBitmap::from_iter([0]),
+                    tasks: RoaringTreemap::from_iter([0]),
                 },
                 None,
             )
@@ -2591,7 +2592,7 @@ mod tests {
             .register(
                 KindWithContent::TaskCancelation {
                     query: "test_query".to_owned(),
-                    tasks: RoaringBitmap::from_iter([0, 1, 2]),
+                    tasks: RoaringTreemap::from_iter([0, 1, 2]),
                 },
                 None,
             )
@@ -2903,43 +2904,43 @@ mod tests {
         let (tasks, _) = index_scheduler
             .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
             .unwrap();
-        snapshot!(snapshot_bitmap(&tasks), @"[]");
+        snapshot!(snapshot_treemap(&tasks), @"[]");
 
         let query = Query { limit: Some(1), ..Default::default() };
         let (tasks, _) = index_scheduler
             .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
             .unwrap();
-        snapshot!(snapshot_bitmap(&tasks), @"[2,]");
+        snapshot!(snapshot_treemap(&tasks), @"[2,]");
 
         let query = Query { limit: Some(2), ..Default::default() };
         let (tasks, _) = index_scheduler
             .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
             .unwrap();
-        snapshot!(snapshot_bitmap(&tasks), @"[1,2,]");
+        snapshot!(snapshot_treemap(&tasks), @"[1,2,]");
 
         let query = Query { from: Some(1), ..Default::default() };
         let (tasks, _) = index_scheduler
             .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
             .unwrap();
-        snapshot!(snapshot_bitmap(&tasks), @"[0,1,]");
+        snapshot!(snapshot_treemap(&tasks), @"[0,1,]");
 
         let query = Query { from: Some(2), ..Default::default() };
         let (tasks, _) = index_scheduler
             .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
             .unwrap();
-        snapshot!(snapshot_bitmap(&tasks), @"[0,1,2,]");
+        snapshot!(snapshot_treemap(&tasks), @"[0,1,2,]");
 
         let query = Query { from: Some(1), limit: Some(1), ..Default::default() };
         let (tasks, _) = index_scheduler
             .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
             .unwrap();
-        snapshot!(snapshot_bitmap(&tasks), @"[1,]");
+        snapshot!(snapshot_treemap(&tasks), @"[1,]");
 
         let query = Query { from: Some(1), limit: Some(2), ..Default::default() };
         let (tasks, _) = index_scheduler
             .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
             .unwrap();
-        snapshot!(snapshot_bitmap(&tasks), @"[0,1,]");
+        snapshot!(snapshot_treemap(&tasks), @"[0,1,]");
     }
 
     #[test]
@@ -2966,13 +2967,13 @@ mod tests {
         let (tasks, _) = index_scheduler
             .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
             .unwrap();
-        snapshot!(snapshot_bitmap(&tasks), @"[0,]"); // only the processing tasks in the first tick
+        snapshot!(snapshot_treemap(&tasks), @"[0,]"); // only the processing tasks in the first tick
 
         let query = Query { statuses: Some(vec![Status::Enqueued]), ..Default::default() };
         let (tasks, _) = index_scheduler
             .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
             .unwrap();
-        snapshot!(snapshot_bitmap(&tasks), @"[1,2,]"); // only the enqueued tasks in the first tick
+        snapshot!(snapshot_treemap(&tasks), @"[1,2,]"); // only the enqueued tasks in the first tick
 
         let query = Query {
             statuses: Some(vec![Status::Enqueued, Status::Processing]),
@@ -2981,7 +2982,7 @@ mod tests {
         let (tasks, _) = index_scheduler
             .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
             .unwrap();
-        snapshot!(snapshot_bitmap(&tasks), @"[0,1,2,]"); // both enqueued and processing tasks in the first tick
+        snapshot!(snapshot_treemap(&tasks), @"[0,1,2,]"); // both enqueued and processing tasks in the first tick
 
         let query = Query {
             statuses: Some(vec![Status::Enqueued, Status::Processing]),
@@ -2993,7 +2994,7 @@ mod tests {
             .unwrap();
         // both enqueued and processing tasks in the first tick, but limited to those with a started_at
         // that comes after the start of the test, which should excludes the enqueued tasks
-        snapshot!(snapshot_bitmap(&tasks), @"[0,]");
+        snapshot!(snapshot_treemap(&tasks), @"[0,]");
 
         let query = Query {
             statuses: Some(vec![Status::Enqueued, Status::Processing]),
@@ -3005,7 +3006,7 @@ mod tests {
             .unwrap();
         // both enqueued and processing tasks in the first tick, but limited to those with a started_at
         // that comes before the start of the test, which should excludes all of them
-        snapshot!(snapshot_bitmap(&tasks), @"[]");
+        snapshot!(snapshot_treemap(&tasks), @"[]");
 
         let query = Query {
             statuses: Some(vec![Status::Enqueued, Status::Processing]),
@@ -3019,7 +3020,7 @@ mod tests {
         // both enqueued and processing tasks in the first tick, but limited to those with a started_at
         // that comes after the start of the test and before one minute after the start of the test,
         // which should exclude the enqueued tasks and include the only processing task
-        snapshot!(snapshot_bitmap(&tasks), @"[0,]");
+        snapshot!(snapshot_treemap(&tasks), @"[0,]");
 
         handle.advance_till([
             InsideProcessBatch,
@@ -3046,7 +3047,7 @@ mod tests {
         // both succeeded and processing tasks in the first tick, but limited to those with a started_at
         // that comes after the start of the test and before one minute after the start of the test,
         // which should include all tasks
-        snapshot!(snapshot_bitmap(&tasks), @"[0,1,]");
+        snapshot!(snapshot_treemap(&tasks), @"[0,1,]");
 
         let query = Query {
             statuses: Some(vec![Status::Succeeded, Status::Processing]),
@@ -3058,7 +3059,7 @@ mod tests {
             .unwrap();
         // both succeeded and processing tasks in the first tick, but limited to those with a started_at
         // that comes before the start of the test, which should exclude all tasks
-        snapshot!(snapshot_bitmap(&tasks), @"[]");
+        snapshot!(snapshot_treemap(&tasks), @"[]");
 
         let query = Query {
             statuses: Some(vec![Status::Enqueued, Status::Succeeded, Status::Processing]),
@@ -3072,7 +3073,7 @@ mod tests {
         // both succeeded and processing tasks in the first tick, but limited to those with a started_at
         // that comes after the start of the second part of the test and before one minute after the
         // second start of the test, which should exclude all tasks
-        snapshot!(snapshot_bitmap(&tasks), @"[]");
+        snapshot!(snapshot_treemap(&tasks), @"[]");
 
         // now we make one more batch, the started_at field of the new tasks will be past `second_start_time`
         handle.advance_till([
@@ -3090,7 +3091,7 @@ mod tests {
             .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
             .unwrap();
         // we run the same query to verify that, and indeed find that the last task is matched
-        snapshot!(snapshot_bitmap(&tasks), @"[2,]");
+        snapshot!(snapshot_treemap(&tasks), @"[2,]");
 
         let query = Query {
             statuses: Some(vec![Status::Enqueued, Status::Succeeded, Status::Processing]),
@@ -3103,7 +3104,7 @@ mod tests {
             .unwrap();
         // enqueued, succeeded, or processing tasks started after the second part of the test, should
         // again only return the last task
-        snapshot!(snapshot_bitmap(&tasks), @"[2,]");
+        snapshot!(snapshot_treemap(&tasks), @"[2,]");
 
         handle.advance_till([ProcessBatchFailed, AfterProcessing]);
         let rtxn = index_scheduler.read_txn().unwrap();
@@ -3114,7 +3115,7 @@ mod tests {
             .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
             .unwrap();
         // so running the last query should return nothing
-        snapshot!(snapshot_bitmap(&tasks), @"[]");
+        snapshot!(snapshot_treemap(&tasks), @"[]");
 
         let query = Query {
             statuses: Some(vec![Status::Failed]),
@@ -3126,7 +3127,7 @@ mod tests {
             .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
             .unwrap();
         // but the same query on failed tasks should return the last task
-        snapshot!(snapshot_bitmap(&tasks), @"[2,]");
+        snapshot!(snapshot_treemap(&tasks), @"[2,]");
 
         let query = Query {
             statuses: Some(vec![Status::Failed]),
@@ -3138,7 +3139,7 @@ mod tests {
             .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
             .unwrap();
         // but the same query on failed tasks should return the last task
-        snapshot!(snapshot_bitmap(&tasks), @"[2,]");
+        snapshot!(snapshot_treemap(&tasks), @"[2,]");
 
         let query = Query {
             statuses: Some(vec![Status::Failed]),
@@ -3151,7 +3152,7 @@ mod tests {
             .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
             .unwrap();
         // same query but with an invalid uid
-        snapshot!(snapshot_bitmap(&tasks), @"[]");
+        snapshot!(snapshot_treemap(&tasks), @"[]");
 
         let query = Query {
             statuses: Some(vec![Status::Failed]),
@@ -3164,7 +3165,7 @@ mod tests {
             .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
             .unwrap();
         // same query but with a valid uid
-        snapshot!(snapshot_bitmap(&tasks), @"[2,]");
+        snapshot!(snapshot_treemap(&tasks), @"[2,]");
     }
 
     #[test]
@@ -3196,7 +3197,7 @@ mod tests {
             .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
             .unwrap();
         // only the first task associated with catto is returned, the indexSwap tasks are excluded!
-        snapshot!(snapshot_bitmap(&tasks), @"[0,]");
+        snapshot!(snapshot_treemap(&tasks), @"[0,]");
 
         let query = Query { index_uids: Some(vec!["catto".to_owned()]), ..Default::default() };
         let (tasks, _) = index_scheduler
@@ -3210,7 +3211,7 @@ mod tests {
             .unwrap();
         // we have asked for only the tasks associated with catto, but are only authorized to retrieve the tasks
         // associated with doggo -> empty result
-        snapshot!(snapshot_bitmap(&tasks), @"[]");
+        snapshot!(snapshot_treemap(&tasks), @"[]");
 
         let query = Query::default();
         let (tasks, _) = index_scheduler
@@ -3224,7 +3225,7 @@ mod tests {
             .unwrap();
         // we asked for all the tasks, but we are only authorized to retrieve the doggo tasks
         // -> only the index creation of doggo should be returned
-        snapshot!(snapshot_bitmap(&tasks), @"[1,]");
+        snapshot!(snapshot_treemap(&tasks), @"[1,]");
 
         let query = Query::default();
         let (tasks, _) = index_scheduler
@@ -3243,14 +3244,14 @@ mod tests {
             .unwrap();
         // we asked for all the tasks, but we are only authorized to retrieve the doggo and catto tasks
         // -> all tasks except the swap of catto with whalo are returned
-        snapshot!(snapshot_bitmap(&tasks), @"[0,1,]");
+        snapshot!(snapshot_treemap(&tasks), @"[0,1,]");
 
         let query = Query::default();
         let (tasks, _) = index_scheduler
             .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
             .unwrap();
         // we asked for all the tasks with all index authorized -> all tasks returned
-        snapshot!(snapshot_bitmap(&tasks), @"[0,1,2,3,]");
+        snapshot!(snapshot_treemap(&tasks), @"[0,1,2,3,]");
     }
 
     #[test]
@@ -3284,7 +3285,7 @@ mod tests {
             .unwrap();
         // 0 is not returned because it was not canceled, 3 is not returned because it is the uid of the
         // taskCancelation itself
-        snapshot!(snapshot_bitmap(&tasks), @"[1,2,]");
+        snapshot!(snapshot_treemap(&tasks), @"[1,2,]");
 
         let query = Query { canceled_by: Some(vec![task_cancelation.uid]), ..Query::default() };
         let (tasks, _) = index_scheduler
@@ -3297,7 +3298,7 @@ mod tests {
             )
             .unwrap();
         // Return only 1 because the user is not authorized to see task 2
-        snapshot!(snapshot_bitmap(&tasks), @"[1,]");
+        snapshot!(snapshot_treemap(&tasks), @"[1,]");
     }
 
     #[test]
@@ -4200,7 +4201,7 @@ mod tests {
         // Even the task deletion that doesn't delete anything shouldn't be accepted
         let result = index_scheduler
             .register(
-                KindWithContent::TaskDeletion { query: S("test"), tasks: RoaringBitmap::new() },
+                KindWithContent::TaskDeletion { query: S("test"), tasks: RoaringTreemap::new() },
                 None,
             )
             .unwrap_err();

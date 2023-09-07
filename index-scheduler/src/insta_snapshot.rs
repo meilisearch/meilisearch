@@ -3,9 +3,10 @@ use std::fmt::Write;
 
 use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, RoTxn};
-use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
+use meilisearch_types::milli::heed_codec::{CboRoaringTreemapCodec, RoaringTreemapCodec};
+use meilisearch_types::milli::BEU64;
 use meilisearch_types::tasks::{Details, Task};
-use roaring::RoaringBitmap;
+use roaring::RoaringTreemap;
 
 use crate::index_mapper::IndexMapper;
 use crate::{IndexScheduler, Kind, Status, BEI128};
@@ -47,7 +48,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     let processing_tasks = processing_tasks.read().unwrap().processing.clone();
     snap.push_str(&format!("### Autobatching Enabled = {autobatching_enabled}\n"));
     snap.push_str("### Processing Tasks:\n");
-    snap.push_str(&snapshot_bitmap(&processing_tasks));
+    snap.push_str(&snapshot_treemap(&processing_tasks));
     snap.push_str("\n----------------------------------------------------------------------\n");
 
     snap.push_str("### All Tasks:\n");
@@ -103,7 +104,7 @@ pub fn snapshot_file_store(file_store: &file_store::FileStore) -> String {
     snap
 }
 
-pub fn snapshot_bitmap(r: &RoaringBitmap) -> String {
+pub fn snapshot_treemap(r: &RoaringTreemap) -> String {
     let mut snap = String::new();
     snap.push('[');
     for x in r {
@@ -113,7 +114,7 @@ pub fn snapshot_bitmap(r: &RoaringBitmap) -> String {
     snap
 }
 
-pub fn snapshot_all_tasks(rtxn: &RoTxn, db: Database<OwnedType<BEU32>, SerdeJson<Task>>) -> String {
+pub fn snapshot_all_tasks(rtxn: &RoTxn, db: Database<OwnedType<BEU64>, SerdeJson<Task>>) -> String {
     let mut snap = String::new();
     let iter = db.iter(rtxn).unwrap();
     for next in iter {
@@ -125,13 +126,13 @@ pub fn snapshot_all_tasks(rtxn: &RoTxn, db: Database<OwnedType<BEU32>, SerdeJson
 
 pub fn snapshot_date_db(
     rtxn: &RoTxn,
-    db: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
+    db: Database<OwnedType<BEI128>, CboRoaringTreemapCodec>,
 ) -> String {
     let mut snap = String::new();
     let iter = db.iter(rtxn).unwrap();
     for next in iter {
         let (_timestamp, task_ids) = next.unwrap();
-        snap.push_str(&format!("[timestamp] {}\n", snapshot_bitmap(&task_ids)));
+        snap.push_str(&format!("[timestamp] {}\n", snapshot_treemap(&task_ids)));
     }
     snap
 }
@@ -216,45 +217,48 @@ fn snapshot_details(d: &Details) -> String {
 
 pub fn snapshot_status(
     rtxn: &RoTxn,
-    db: Database<SerdeBincode<Status>, RoaringBitmapCodec>,
+    db: Database<SerdeBincode<Status>, RoaringTreemapCodec>,
 ) -> String {
     let mut snap = String::new();
     let iter = db.iter(rtxn).unwrap();
     for next in iter {
         let (status, task_ids) = next.unwrap();
-        writeln!(snap, "{status} {}", snapshot_bitmap(&task_ids)).unwrap();
+        writeln!(snap, "{status} {}", snapshot_treemap(&task_ids)).unwrap();
     }
     snap
 }
-pub fn snapshot_kind(rtxn: &RoTxn, db: Database<SerdeBincode<Kind>, RoaringBitmapCodec>) -> String {
-    let mut snap = String::new();
-    let iter = db.iter(rtxn).unwrap();
-    for next in iter {
-        let (kind, task_ids) = next.unwrap();
-        let kind = serde_json::to_string(&kind).unwrap();
-        writeln!(snap, "{kind} {}", snapshot_bitmap(&task_ids)).unwrap();
-    }
-    snap
-}
-
-pub fn snapshot_index_tasks(rtxn: &RoTxn, db: Database<Str, RoaringBitmapCodec>) -> String {
-    let mut snap = String::new();
-    let iter = db.iter(rtxn).unwrap();
-    for next in iter {
-        let (index, task_ids) = next.unwrap();
-        writeln!(snap, "{index} {}", snapshot_bitmap(&task_ids)).unwrap();
-    }
-    snap
-}
-pub fn snapshot_canceled_by(
+pub fn snapshot_kind(
     rtxn: &RoTxn,
-    db: Database<OwnedType<BEU32>, RoaringBitmapCodec>,
+    db: Database<SerdeBincode<Kind>, RoaringTreemapCodec>,
 ) -> String {
     let mut snap = String::new();
     let iter = db.iter(rtxn).unwrap();
     for next in iter {
         let (kind, task_ids) = next.unwrap();
-        writeln!(snap, "{kind} {}", snapshot_bitmap(&task_ids)).unwrap();
+        let kind = serde_json::to_string(&kind).unwrap();
+        writeln!(snap, "{kind} {}", snapshot_treemap(&task_ids)).unwrap();
+    }
+    snap
+}
+
+pub fn snapshot_index_tasks(rtxn: &RoTxn, db: Database<Str, RoaringTreemapCodec>) -> String {
+    let mut snap = String::new();
+    let iter = db.iter(rtxn).unwrap();
+    for next in iter {
+        let (index, task_ids) = next.unwrap();
+        writeln!(snap, "{index} {}", snapshot_treemap(&task_ids)).unwrap();
+    }
+    snap
+}
+pub fn snapshot_canceled_by(
+    rtxn: &RoTxn,
+    db: Database<OwnedType<BEU64>, RoaringTreemapCodec>,
+) -> String {
+    let mut snap = String::new();
+    let iter = db.iter(rtxn).unwrap();
+    for next in iter {
+        let (kind, task_ids) = next.unwrap();
+        writeln!(snap, "{kind} {}", snapshot_treemap(&task_ids)).unwrap();
     }
     snap
 }

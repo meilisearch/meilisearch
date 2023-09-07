@@ -5,15 +5,16 @@ use std::ops::Bound;
 
 use meilisearch_types::heed::types::{DecodeIgnore, OwnedType};
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
-use meilisearch_types::milli::{CboRoaringBitmapCodec, BEU32};
+use meilisearch_types::milli::heed_codec::CboRoaringTreemapCodec;
+use meilisearch_types::milli::BEU64;
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status};
-use roaring::{MultiOps, RoaringBitmap};
+use roaring::{MultiOps, RoaringTreemap};
 use time::OffsetDateTime;
 
 use crate::{Error, IndexScheduler, Result, Task, TaskId, BEI128};
 
 impl IndexScheduler {
-    pub(crate) fn all_task_ids(&self, rtxn: &RoTxn) -> Result<RoaringBitmap> {
+    pub(crate) fn all_task_ids(&self, rtxn: &RoTxn) -> Result<RoaringTreemap> {
         enum_iterator::all().map(|s| self.get_status(rtxn, s)).union()
     }
 
@@ -26,7 +27,7 @@ impl IndexScheduler {
     }
 
     pub(crate) fn get_task(&self, rtxn: &RoTxn, task_id: TaskId) -> Result<Option<Task>> {
-        Ok(self.all_tasks.get(rtxn, &BEU32::new(task_id))?)
+        Ok(self.all_tasks.get(rtxn, &BEU64::new(task_id))?)
     }
 
     /// Convert an iterator to a `Vec` of tasks. The tasks MUST exist or a
@@ -88,12 +89,12 @@ impl IndexScheduler {
             }
         }
 
-        self.all_tasks.put(wtxn, &BEU32::new(task.uid), task)?;
+        self.all_tasks.put(wtxn, &BEU64::new(task.uid), task)?;
         Ok(())
     }
 
     /// Returns the whole set of tasks that belongs to this index.
-    pub(crate) fn index_tasks(&self, rtxn: &RoTxn, index: &str) -> Result<RoaringBitmap> {
+    pub(crate) fn index_tasks(&self, rtxn: &RoTxn, index: &str) -> Result<RoaringTreemap> {
         Ok(self.index_tasks.get(rtxn, index)?.unwrap_or_default())
     }
 
@@ -101,7 +102,7 @@ impl IndexScheduler {
         &self,
         wtxn: &mut RwTxn,
         index: &str,
-        f: impl Fn(&mut RoaringBitmap),
+        f: impl Fn(&mut RoaringTreemap),
     ) -> Result<()> {
         let mut tasks = self.index_tasks(wtxn, index)?;
         f(&mut tasks);
@@ -114,7 +115,7 @@ impl IndexScheduler {
         Ok(())
     }
 
-    pub(crate) fn get_status(&self, rtxn: &RoTxn, status: Status) -> Result<RoaringBitmap> {
+    pub(crate) fn get_status(&self, rtxn: &RoTxn, status: Status) -> Result<RoaringTreemap> {
         Ok(self.status.get(rtxn, &status)?.unwrap_or_default())
     }
 
@@ -122,7 +123,7 @@ impl IndexScheduler {
         &self,
         wtxn: &mut RwTxn,
         status: Status,
-        bitmap: &RoaringBitmap,
+        bitmap: &RoaringTreemap,
     ) -> Result<()> {
         Ok(self.status.put(wtxn, &status, bitmap)?)
     }
@@ -131,7 +132,7 @@ impl IndexScheduler {
         &self,
         wtxn: &mut RwTxn,
         status: Status,
-        f: impl Fn(&mut RoaringBitmap),
+        f: impl Fn(&mut RoaringTreemap),
     ) -> Result<()> {
         let mut tasks = self.get_status(wtxn, status)?;
         f(&mut tasks);
@@ -140,7 +141,7 @@ impl IndexScheduler {
         Ok(())
     }
 
-    pub(crate) fn get_kind(&self, rtxn: &RoTxn, kind: Kind) -> Result<RoaringBitmap> {
+    pub(crate) fn get_kind(&self, rtxn: &RoTxn, kind: Kind) -> Result<RoaringTreemap> {
         Ok(self.kind.get(rtxn, &kind)?.unwrap_or_default())
     }
 
@@ -148,7 +149,7 @@ impl IndexScheduler {
         &self,
         wtxn: &mut RwTxn,
         kind: Kind,
-        bitmap: &RoaringBitmap,
+        bitmap: &RoaringTreemap,
     ) -> Result<()> {
         Ok(self.kind.put(wtxn, &kind, bitmap)?)
     }
@@ -157,7 +158,7 @@ impl IndexScheduler {
         &self,
         wtxn: &mut RwTxn,
         kind: Kind,
-        f: impl Fn(&mut RoaringBitmap),
+        f: impl Fn(&mut RoaringTreemap),
     ) -> Result<()> {
         let mut tasks = self.get_kind(wtxn, kind)?;
         f(&mut tasks);
@@ -169,20 +170,20 @@ impl IndexScheduler {
 
 pub(crate) fn insert_task_datetime(
     wtxn: &mut RwTxn,
-    database: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
+    database: Database<OwnedType<BEI128>, CboRoaringTreemapCodec>,
     time: OffsetDateTime,
     task_id: TaskId,
 ) -> Result<()> {
     let timestamp = BEI128::new(time.unix_timestamp_nanos());
     let mut task_ids = database.get(wtxn, &timestamp)?.unwrap_or_default();
     task_ids.insert(task_id);
-    database.put(wtxn, &timestamp, &RoaringBitmap::from_iter(task_ids))?;
+    database.put(wtxn, &timestamp, &RoaringTreemap::from_iter(task_ids))?;
     Ok(())
 }
 
 pub(crate) fn remove_task_datetime(
     wtxn: &mut RwTxn,
-    database: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
+    database: Database<OwnedType<BEI128>, CboRoaringTreemapCodec>,
     time: OffsetDateTime,
     task_id: TaskId,
 ) -> Result<()> {
@@ -192,7 +193,7 @@ pub(crate) fn remove_task_datetime(
         if existing.is_empty() {
             database.delete(wtxn, &timestamp)?;
         } else {
-            database.put(wtxn, &timestamp, &RoaringBitmap::from_iter(existing))?;
+            database.put(wtxn, &timestamp, &RoaringTreemap::from_iter(existing))?;
         }
     }
 
@@ -201,8 +202,8 @@ pub(crate) fn remove_task_datetime(
 
 pub(crate) fn keep_tasks_within_datetimes(
     rtxn: &RoTxn,
-    tasks: &mut RoaringBitmap,
-    database: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
+    tasks: &mut RoaringTreemap,
+    database: Database<OwnedType<BEI128>, CboRoaringTreemapCodec>,
     after: Option<OffsetDateTime>,
     before: Option<OffsetDateTime>,
 ) -> Result<()> {
@@ -212,7 +213,7 @@ pub(crate) fn keep_tasks_within_datetimes(
         (Some(after), None) => (Bound::Excluded(*after), Bound::Unbounded),
         (Some(after), Some(before)) => (Bound::Excluded(*after), Bound::Excluded(*before)),
     };
-    let mut collected_task_ids = RoaringBitmap::new();
+    let mut collected_task_ids = RoaringTreemap::new();
     let start = map_bound(start, |b| BEI128::new(b.unix_timestamp_nanos()));
     let end = map_bound(end, |b| BEI128::new(b.unix_timestamp_nanos()));
     let iter = database.range(rtxn, &(start, end))?;

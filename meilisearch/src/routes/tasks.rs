@@ -26,7 +26,7 @@ use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 
-const DEFAULT_LIMIT: u32 = 20;
+const DEFAULT_LIMIT: u64 = 20;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -175,14 +175,14 @@ impl From<Details> for DetailsView {
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct TasksFilterQuery {
     #[deserr(default = Param(DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidTaskLimit>)]
-    pub limit: Param<u32>,
+    pub limit: Param<TaskId>,
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskFrom>)]
     pub from: Option<Param<TaskId>>,
 
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskUids>)]
-    pub uids: OptionStarOrList<u32>,
+    pub uids: OptionStarOrList<TaskId>,
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskCanceledBy>)]
-    pub canceled_by: OptionStarOrList<u32>,
+    pub canceled_by: OptionStarOrList<TaskId>,
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskTypes>)]
     pub types: OptionStarOrList<Kind>,
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskStatuses>)]
@@ -249,9 +249,9 @@ impl TaskDeletionOrCancelationQuery {
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct TaskDeletionOrCancelationQuery {
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskUids>)]
-    pub uids: OptionStarOrList<u32>,
+    pub uids: OptionStarOrList<TaskId>,
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskCanceledBy>)]
-    pub canceled_by: OptionStarOrList<u32>,
+    pub canceled_by: OptionStarOrList<TaskId>,
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskTypes>)]
     pub types: OptionStarOrList<Kind>,
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskStatuses>)]
@@ -391,9 +391,9 @@ async fn delete_tasks(
 pub struct AllTasks {
     results: Vec<TaskView>,
     total: u64,
-    limit: u32,
-    from: Option<u32>,
-    next: Option<u32>,
+    limit: TaskId,
+    from: Option<TaskId>,
+    next: Option<TaskId>,
 }
 
 async fn get_tasks(

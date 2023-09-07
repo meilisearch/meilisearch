@@ -104,6 +104,7 @@ macro_rules! impl_from_query_param_wrap_original_value_in_error {
 }
 impl_from_query_param_wrap_original_value_in_error!(usize, DeserrParseIntError);
 impl_from_query_param_wrap_original_value_in_error!(u32, DeserrParseIntError);
+impl_from_query_param_wrap_original_value_in_error!(u64, DeserrParseIntError);
 impl_from_query_param_wrap_original_value_in_error!(bool, DeserrParseBoolError);
 
 impl FromQueryParameter for String {

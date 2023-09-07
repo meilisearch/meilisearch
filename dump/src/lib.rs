@@ -7,7 +7,7 @@ use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::settings::Unchecked;
 use meilisearch_types::tasks::{Details, IndexSwap, KindWithContent, Status, Task, TaskId};
 use meilisearch_types::InstanceUid;
-use roaring::RoaringBitmap;
+use roaring::RoaringTreemap;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
@@ -121,11 +121,11 @@ pub enum KindDump {
     },
     TaskCancelation {
         query: String,
-        tasks: RoaringBitmap,
+        tasks: RoaringTreemap,
     },
     TasksDeletion {
         query: String,
-        tasks: RoaringBitmap,
+        tasks: RoaringTreemap,
     },
     DumpCreation {
         keys: Vec<Key>,

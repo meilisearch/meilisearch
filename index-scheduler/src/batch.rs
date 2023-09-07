@@ -32,11 +32,11 @@ use meilisearch_types::milli::update::{
     DeleteDocuments, DocumentDeletionResult, IndexDocumentsConfig, IndexDocumentsMethod,
     Settings as MilliSettings,
 };
-use meilisearch_types::milli::{self, Filter, BEU32};
+use meilisearch_types::milli::{self, Filter, BEU64};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::{compression, Index, VERSION_FILE_NAME};
-use roaring::RoaringBitmap;
+use roaring::RoaringTreemap;
 use time::macros::format_description;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -58,7 +58,7 @@ pub(crate) enum Batch {
         /// The date and time at which the previously processing tasks started.
         previous_started_at: OffsetDateTime,
         /// The list of tasks that were processing when this task cancelation appeared.
-        previous_processing_tasks: RoaringBitmap,
+        previous_processing_tasks: RoaringTreemap,
     },
     TaskDeletion(Task),
     SnapshotCreation(Vec<Task>),
@@ -1065,7 +1065,13 @@ impl IndexScheduler {
     }
 
     /// Swap the index `lhs` with the index `rhs`.
-    fn apply_index_swap(&self, wtxn: &mut RwTxn, task_id: u32, lhs: &str, rhs: &str) -> Result<()> {
+    fn apply_index_swap(
+        &self,
+        wtxn: &mut RwTxn,
+        task_id: TaskId,
+        lhs: &str,
+        rhs: &str,
+    ) -> Result<()> {
         // 1. Verify that both lhs and rhs are existing indexes
         let index_lhs_exists = self.index_mapper.index_exists(wtxn, lhs)?;
         if !index_lhs_exists {
@@ -1086,7 +1092,7 @@ impl IndexScheduler {
         for task_id in &index_lhs_task_ids | &index_rhs_task_ids {
             let mut task = self.get_task(wtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
             swap_index_uid_in_task(&mut task, (lhs, rhs));
-            self.all_tasks.put(wtxn, &BEU32::new(task_id), &task)?;
+            self.all_tasks.put(wtxn, &BEU64::new(task_id), &task)?;
         }
 
         // 4. remove the task from indexuid = before_name
@@ -1389,7 +1395,11 @@ impl IndexScheduler {
     /// Delete each given task from all the databases (if it is deleteable).
     ///
     /// Return the number of tasks that were actually deleted.
-    fn delete_matched_tasks(&self, wtxn: &mut RwTxn, matched_tasks: &RoaringBitmap) -> Result<u64> {
+    fn delete_matched_tasks(
+        &self,
+        wtxn: &mut RwTxn,
+        matched_tasks: &RoaringTreemap,
+    ) -> Result<u64> {
         // 1. Remove from this list the tasks that we are not allowed to delete
         let enqueued_tasks = self.get_status(wtxn, Status::Enqueued)?;
         let processing_tasks = &self.processing_tasks.read().unwrap().processing.clone();
@@ -1404,7 +1414,7 @@ impl IndexScheduler {
         let mut affected_indexes = HashSet::new();
         let mut affected_statuses = HashSet::new();
         let mut affected_kinds = HashSet::new();
-        let mut affected_canceled_by = RoaringBitmap::new();
+        let mut affected_canceled_by = RoaringTreemap::new();
 
         for task_id in to_delete_tasks.iter() {
             let task = self.get_task(wtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
@@ -1441,10 +1451,10 @@ impl IndexScheduler {
         }
 
         for task in to_delete_tasks.iter() {
-            self.all_tasks.delete(wtxn, &BEU32::new(task))?;
+            self.all_tasks.delete(wtxn, &BEU64::new(task))?;
         }
         for canceled_by in affected_canceled_by {
-            let canceled_by = BEU32::new(canceled_by);
+            let canceled_by = BEU64::new(canceled_by);
             if let Some(mut tasks) = self.canceled_by.get(wtxn, &canceled_by)? {
                 tasks -= &to_delete_tasks;
                 if tasks.is_empty() {
@@ -1465,9 +1475,9 @@ impl IndexScheduler {
         &self,
         wtxn: &mut RwTxn,
         cancel_task_id: TaskId,
-        matched_tasks: &RoaringBitmap,
+        matched_tasks: &RoaringTreemap,
         previous_started_at: OffsetDateTime,
-        previous_processing_tasks: &RoaringBitmap,
+        previous_processing_tasks: &RoaringTreemap,
     ) -> Result<Vec<Uuid>> {
         let now = OffsetDateTime::now_utc();
 
@@ -1492,7 +1502,7 @@ impl IndexScheduler {
             task.details = task.details.map(|d| d.to_failed());
             self.update_task(wtxn, &task)?;
         }
-        self.canceled_by.put(wtxn, &BEU32::new(cancel_task_id), &tasks_to_cancel)?;
+        self.canceled_by.put(wtxn, &BEU64::new(cancel_task_id), &tasks_to_cancel)?;
 
         Ok(content_files_to_delete)
     }

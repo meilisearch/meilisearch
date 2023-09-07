@@ -61,6 +61,18 @@ source: index-scheduler/src/lib.rs
       "taskDeletion": {
         "query": "[query]",
         "tasks": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
           58,
           48,
           0,

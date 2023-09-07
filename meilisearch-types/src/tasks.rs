@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use enum_iterator::Sequence;
 use milli::update::IndexDocumentsMethod;
-use roaring::RoaringBitmap;
+use roaring::RoaringTreemap;
 use serde::{Deserialize, Serialize, Serializer};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
@@ -15,7 +15,7 @@ use crate::keys::Key;
 use crate::settings::{Settings, Unchecked};
 use crate::InstanceUid;
 
-pub type TaskId = u32;
+pub type TaskId = u64;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -127,11 +127,11 @@ pub enum KindWithContent {
     },
     TaskCancelation {
         query: String,
-        tasks: RoaringBitmap,
+        tasks: RoaringTreemap,
     },
     TaskDeletion {
         query: String,
-        tasks: RoaringBitmap,
+        tasks: RoaringTreemap,
     },
     DumpCreation {
         keys: Vec<Key>,
