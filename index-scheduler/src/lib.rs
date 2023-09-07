@@ -422,9 +422,11 @@ impl IndexScheduler {
                                         tempfile::NamedTempFile::new_in(inner.env.path()).unwrap();
 
                                     log::info!("Downloading the index scheduler database.");
-                                    let tasks_snapshot = format!("{snapshot_dir}/tasks.mdb");
-                                    s3.get_object_to_writer(tasks_snapshot, &mut tasks_file)
+                                    let tasks_snapshot = format!("{snapshot_dir}.tasks.mdb");
+                                    let status = s3
+                                        .get_object_to_writer(tasks_snapshot, &mut tasks_file)
                                         .unwrap();
+                                    assert!(matches!(status, 200 | 202));
 
                                     log::info!("Downloading the indexes databases");
                                     let indexes_files =
