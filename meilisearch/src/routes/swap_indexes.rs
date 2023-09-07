@@ -60,8 +60,7 @@ pub async fn swap_indexes(
     }
 
     let task = KindWithContent::IndexSwap { swaps };
-
-    let task = index_scheduler.register(task)?;
-    let task: SummarizedTaskView = task.into();
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
     Ok(HttpResponse::Accepted().json(task))
 }
