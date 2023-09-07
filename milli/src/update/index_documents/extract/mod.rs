@@ -55,7 +55,13 @@ pub(crate) fn data_from_obkv_documents(
     original_obkv_chunks
         .par_bridge()
         .map(|original_documents_chunk| {
-            send_original_documents_data(original_documents_chunk, lmdb_writer_sx.clone())
+            send_original_documents_data(
+                original_documents_chunk,
+                indexer,
+                lmdb_writer_sx.clone(),
+                vectors_field_id,
+                primary_key_id,
+            )
         })
         .collect::<Result<()>>()?;
 
@@ -72,7 +78,6 @@ pub(crate) fn data_from_obkv_documents(
                     &faceted_fields,
                     primary_key_id,
                     geo_fields_ids,
-                    vectors_field_id,
                     &stop_words,
                     max_positions_per_attributes,
                 )
@@ -257,10 +262,32 @@ fn spawn_extraction_task<FE, FS, M>(
 /// - documents
 fn send_original_documents_data(
     original_documents_chunk: Result<grenad::Reader<File>>,
+    indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
+    vectors_field_id: Option<FieldId>,
+    primary_key_id: FieldId,
 ) -> Result<()> {
     let original_documents_chunk =
         original_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
+
+    if let Some(vectors_field_id) = vectors_field_id {
+        let documents_chunk_cloned = original_documents_chunk.clone();
+        let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
+        rayon::spawn(move || {
+            let result = extract_vector_points(
+                documents_chunk_cloned,
+                indexer,
+                primary_key_id,
+                vectors_field_id,
+            );
+            let _ = match result {
+                Ok(vector_points) => {
+                    lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints(vector_points)))
+                }
+                Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
+            };
+        });
+    }
 
     // TODO: create a custom internal error
     lmdb_writer_sx.send(Ok(TypedChunk::Documents(original_documents_chunk))).unwrap();
@@ -283,7 +310,6 @@ fn send_and_extract_flattened_documents_data(
     faceted_fields: &HashSet<FieldId>,
     primary_key_id: FieldId,
     geo_fields_ids: Option<(FieldId, FieldId)>,
-    vectors_field_id: Option<FieldId>,
     stop_words: &Option<fst::Set<&[u8]>>,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<(
@@ -307,25 +333,6 @@ fn send_and_extract_flattened_documents_data(
                 extract_geo_points(documents_chunk_cloned, indexer, primary_key_id, geo_fields_ids);
             let _ = match result {
                 Ok(geo_points) => lmdb_writer_sx_cloned.send(Ok(TypedChunk::GeoPoints(geo_points))),
-                Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
-            };
-        });
-    }
-
-    if let Some(vectors_field_id) = vectors_field_id {
-        let documents_chunk_cloned = flattened_documents_chunk.clone();
-        let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
-        rayon::spawn(move || {
-            let result = extract_vector_points(
-                documents_chunk_cloned,
-                indexer,
-                primary_key_id,
-                vectors_field_id,
-            );
-            let _ = match result {
-                Ok(vector_points) => {
-                    lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints(vector_points)))
-                }
                 Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
             };
         });
