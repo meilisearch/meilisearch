@@ -4,7 +4,7 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
-use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::tasks::{Kind, Status, Task, TaskId};
 use serde::{Deserialize, Serialize};
@@ -43,6 +43,34 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/swap-indexes").configure(swap_indexes::configure))
         .service(web::scope("/metrics").configure(metrics::configure))
         .service(web::scope("/experimental-features").configure(features::configure));
+}
+
+pub fn get_task_id(req: &HttpRequest) -> Result<Option<TaskId>, ResponseError> {
+    let task_id = req
+        .headers()
+        .get("TaskId")
+        .map(|header| {
+            header.to_str().map_err(|e| {
+                ResponseError::from_msg(
+                    format!("TaskId is not a valid utf-8 string: {e}"),
+                    Code::BadRequest,
+                )
+            })
+        })
+        .transpose()?
+        .map(|s| {
+            s.parse::<TaskId>().map_err(|e| {
+                ResponseError::from_msg(
+                    format!(
+                        "Could not parse the TaskId as a {}: {e}",
+                        std::any::type_name::<TaskId>(),
+                    ),
+                    Code::BadRequest,
+                )
+            })
+        })
+        .transpose()?;
+    Ok(task_id)
 }
 
 #[derive(Debug, Serialize)]
