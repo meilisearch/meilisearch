@@ -257,6 +257,12 @@ pub enum Action {
     #[serde(rename = "dumps.create")]
     #[deserr(rename = "dumps.create")]
     DumpsCreate,
+    #[serde(rename = "snapshots.*")]
+    #[deserr(rename = "snapshots.*")]
+    SnapshotsAll,
+    #[serde(rename = "snapshots.create")]
+    #[deserr(rename = "snapshots.create")]
+    SnapshotsCreate,
     #[serde(rename = "version")]
     #[deserr(rename = "version")]
     Version,
@@ -309,6 +315,7 @@ impl Action {
             METRICS_GET => Some(Self::MetricsGet),
             DUMPS_ALL => Some(Self::DumpsAll),
             DUMPS_CREATE => Some(Self::DumpsCreate),
+            SNAPSHOTS_CREATE => Some(Self::SnapshotsCreate),
             VERSION => Some(Self::Version),
             KEYS_CREATE => Some(Self::KeysAdd),
             KEYS_GET => Some(Self::KeysGet),
@@ -353,6 +360,7 @@ pub mod actions {
     pub const METRICS_GET: u8 = MetricsGet.repr();
     pub const DUMPS_ALL: u8 = DumpsAll.repr();
     pub const DUMPS_CREATE: u8 = DumpsCreate.repr();
+    pub const SNAPSHOTS_CREATE: u8 = SnapshotsCreate.repr();
     pub const VERSION: u8 = Version.repr();
     pub const KEYS_CREATE: u8 = KeysAdd.repr();
     pub const KEYS_GET: u8 = KeysGet.repr();

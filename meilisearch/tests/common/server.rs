@@ -156,6 +156,10 @@ impl Server {
         self.service.post("/dumps", json!(null)).await
     }
 
+    pub async fn create_snapshot(&self) -> (Value, StatusCode) {
+        self.service.post("/snapshots", json!(null)).await
+    }
+
     pub async fn index_swap(&self, value: Value) -> (Value, StatusCode) {
         self.service.post("/swap-indexes", value).await
     }
