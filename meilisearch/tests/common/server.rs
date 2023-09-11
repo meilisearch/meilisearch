@@ -11,13 +11,14 @@ use clap::Parser;
 use meilisearch::option::{IndexerOpts, MaxMemory, Opt};
 use meilisearch::{analytics, create_app, setup_meilisearch};
 use once_cell::sync::Lazy;
-use serde_json::{json, Value};
 use tempfile::TempDir;
 use tokio::time::sleep;
 
 use super::index::Index;
 use super::service::Service;
 use crate::common::encoder::Encoder;
+use crate::common::Value;
+use crate::json;
 
 pub struct Server {
     pub service: Service,

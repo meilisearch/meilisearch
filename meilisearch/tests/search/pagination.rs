@@ -1,6 +1,5 @@
-use serde_json::json;
-
 use crate::common::Server;
+use crate::json;
 use crate::search::DOCUMENTS;
 
 #[actix_rt::test]

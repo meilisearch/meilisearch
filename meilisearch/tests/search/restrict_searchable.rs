@@ -1,9 +1,9 @@
 use meili_snap::{json_string, snapshot};
 use once_cell::sync::Lazy;
-use serde_json::{json, Value};
 
 use crate::common::index::Index;
-use crate::common::Server;
+use crate::common::{Server, Value};
+use crate::json;
 
 async fn index_with_documents<'a>(server: &'a Server, documents: &Value) -> Index<'a> {
     let index = server.index("test");

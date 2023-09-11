@@ -7,6 +7,7 @@ use meilisearch::Opt;
 
 use crate::common::server::default_settings;
 use crate::common::{GetAllDocumentsOptions, Server};
+use crate::json;
 
 macro_rules! verify_snapshot {
     (
@@ -45,7 +46,7 @@ async fn perform_snapshot() {
 
     let index = server.index("test");
     index
-        .update_settings(serde_json::json! ({
+        .update_settings(json! ({
         "searchableAttributes": [],
         }))
         .await;
@@ -104,7 +105,7 @@ async fn perform_on_demand_snapshot() {
 
     let index = server.index("catto");
     index
-        .update_settings(serde_json::json! ({
+        .update_settings(json! ({
         "searchableAttributes": [],
         }))
         .await;
@@ -128,23 +129,15 @@ async fn perform_on_demand_snapshot() {
       "enqueuedAt": "[date]"
     }
     "###);
-    let task = index.wait_task(3).await;
+    let task = index.wait_task(4).await;
     snapshot!(json_string!(task, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
-      "uid": 3,
-      "indexUid": "doggo",
-      "status": "failed",
-      "type": "indexCreation",
+      "uid": 4,
+      "indexUid": null,
+      "status": "succeeded",
+      "type": "snapshotCreation",
       "canceledBy": null,
-      "details": {
-        "primaryKey": "bone"
-      },
-      "error": {
-        "message": "Index `doggo` already exists.",
-        "code": "index_already_exists",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_already_exists"
-      },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",

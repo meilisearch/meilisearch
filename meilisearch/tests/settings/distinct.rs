@@ -1,6 +1,5 @@
-use serde_json::json;
-
 use crate::common::Server;
+use crate::json;
 
 #[actix_rt::test]
 async fn set_and_reset_distinct_attribute() {

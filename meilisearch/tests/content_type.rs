@@ -3,9 +3,8 @@
 mod common;
 
 use actix_web::test;
-use serde_json::{json, Value};
 
-use crate::common::Server;
+use crate::common::{Server, Value};
 
 enum HttpVerb {
     Put,

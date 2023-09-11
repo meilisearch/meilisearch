@@ -2,10 +2,10 @@ mod data;
 
 use meili_snap::{json_string, snapshot};
 use meilisearch::Opt;
-use serde_json::json;
 
 use self::data::GetDump;
 use crate::common::{default_settings, GetAllDocumentsOptions, Server};
+use crate::json;
 
 // all the following test are ignored on windows. See #2364
 #[actix_rt::test]

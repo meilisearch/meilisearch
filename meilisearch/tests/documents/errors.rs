@@ -1,8 +1,8 @@
 use meili_snap::*;
-use serde_json::json;
 use urlencoding::encode;
 
 use crate::common::Server;
+use crate::json;
 
 #[actix_rt::test]
 async fn get_all_documents_bad_offset() {

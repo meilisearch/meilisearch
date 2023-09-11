@@ -1,16 +1,16 @@
 use std::collections::HashMap;
 
 use once_cell::sync::Lazy;
-use serde_json::{json, Value};
 
-use crate::common::Server;
+use crate::common::{Server, Value};
+use crate::json;
 
 static DEFAULT_SETTINGS_VALUES: Lazy<HashMap<&'static str, Value>> = Lazy::new(|| {
     let mut map = HashMap::new();
     map.insert("displayed_attributes", json!(["*"]));
     map.insert("searchable_attributes", json!(["*"]));
     map.insert("filterable_attributes", json!([]));
-    map.insert("distinct_attribute", json!(Value::Null));
+    map.insert("distinct_attribute", json!(null));
     map.insert(
         "ranking_rules",
         json!(["words", "typo", "proximity", "attribute", "sort", "exactness"]),
@@ -229,7 +229,7 @@ macro_rules! test_setting_routes {
                         .chars()
                         .map(|c| if c == '_' { '-' } else { c })
                         .collect::<String>());
-                    let (response, code) = server.service.$write_method(url, serde_json::Value::Null).await;
+                    let (response, code) = server.service.$write_method(url, serde_json::Value::Null.into()).await;
                     assert_eq!(code, 202, "{}", response);
                     server.index("").wait_task(0).await;
                     let (response, code) = server.index("test").get().await;

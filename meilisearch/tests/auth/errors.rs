@@ -1,8 +1,8 @@
 use meili_snap::*;
-use serde_json::json;
 use uuid::Uuid;
 
 use crate::common::Server;
+use crate::json;
 
 #[actix_rt::test]
 async fn create_api_key_bad_description() {

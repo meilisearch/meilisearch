@@ -1,6 +1,5 @@
-use serde_json::json;
-
 use crate::common::Server;
+use crate::json;
 
 /// Feature name to test against.
 /// This will have to be changed by a different one when that feature is stabilized.

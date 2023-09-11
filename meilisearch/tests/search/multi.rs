@@ -1,8 +1,8 @@
 use meili_snap::{json_string, snapshot};
-use serde_json::json;
 
 use super::{DOCUMENTS, NESTED_DOCUMENTS};
 use crate::common::Server;
+use crate::json;
 
 #[actix_rt::test]
 async fn search_empty_list() {

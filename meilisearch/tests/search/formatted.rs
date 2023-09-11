@@ -1,8 +1,8 @@
 use insta::{allow_duplicates, assert_json_snapshot};
-use serde_json::json;
 
 use super::*;
 use crate::common::Server;
+use crate::json;
 
 #[actix_rt::test]
 async fn formatted_contain_wildcard() {
