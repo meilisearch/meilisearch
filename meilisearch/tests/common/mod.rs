@@ -25,10 +25,9 @@ impl Value {
     }
 }
 
-impl Into<Value> for serde_json::Value {
-    fn into(self) -> Value {
-        serde_json::json!(null);
-        Value(self)
+impl From<serde_json::Value> for Value {
+    fn from(value: serde_json::Value) -> Self {
+        Value(value)
     }
 }
 
