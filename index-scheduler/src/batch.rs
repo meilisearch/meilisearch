@@ -1497,7 +1497,7 @@ fn delete_document_by_filter<'a>(
 ) -> Result<u64> {
     let filter = Filter::from_json(filter)?;
     Ok(if let Some(filter) = filter {
-        let candidates = filter.evaluate(&wtxn, &index).map_err(|err| match err {
+        let candidates = filter.evaluate(wtxn, index).map_err(|err| match err {
             milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
                 Error::from(err).with_custom_error_code(Code::InvalidDocumentFilter)
             }
@@ -1505,10 +1505,7 @@ fn delete_document_by_filter<'a>(
         })?;
         let mut delete_operation = DeleteDocuments::new(wtxn, index)?;
         delete_operation.delete_documents(&candidates);
-
-        let deleted_documents =
-            delete_operation.execute().map(|result| result.deleted_documents)?;
-        deleted_documents
+        delete_operation.execute().map(|result| result.deleted_documents)?
     } else {
         0
     })
