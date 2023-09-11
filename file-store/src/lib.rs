@@ -22,20 +22,6 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-impl Deref for File {
-    type Target = NamedTempFile;
-
-    fn deref(&self) -> &Self::Target {
-        &self.file
-    }
-}
-
-impl DerefMut for File {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.file
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct FileStore {
     path: PathBuf,
@@ -143,6 +129,20 @@ impl File {
     pub fn persist(self) -> Result<()> {
         self.file.persist(&self.path)?;
         Ok(())
+    }
+}
+
+impl Deref for File {
+    type Target = NamedTempFile;
+
+    fn deref(&self) -> &Self::Target {
+        &self.file
+    }
+}
+
+impl DerefMut for File {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.file
     }
 }
 

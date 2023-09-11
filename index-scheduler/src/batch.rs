@@ -198,6 +198,35 @@ impl Batch {
             | IndexDocumentDeletionByFilter { index_uid, .. } => Some(index_uid),
         }
     }
+
+    /// Return the content fields uuids associated with this batch.
+    pub fn content_uuids(&self) -> Vec<Uuid> {
+        match self {
+            Batch::TaskCancelation { .. }
+            | Batch::TaskDeletion(_)
+            | Batch::Dump(_)
+            | Batch::IndexCreation { .. }
+            | Batch::IndexDocumentDeletionByFilter { .. }
+            | Batch::IndexUpdate { .. }
+            | Batch::SnapshotCreation(_)
+            | Batch::IndexDeletion { .. }
+            | Batch::IndexSwap { .. } => vec![],
+            Batch::IndexOperation { op, .. } => match op {
+                IndexOperation::DocumentOperation { operations, .. } => operations
+                    .iter()
+                    .flat_map(|op| match op {
+                        DocumentOperation::Add(uuid) => Some(*uuid),
+                        DocumentOperation::Delete(_) => None,
+                    })
+                    .collect(),
+                IndexOperation::DocumentDeletion { .. }
+                | IndexOperation::Settings { .. }
+                | IndexOperation::DocumentClear { .. }
+                | IndexOperation::SettingsAndDocumentOperation { .. }
+                | IndexOperation::DocumentClearAndSetting { .. } => vec![],
+            },
+        }
+    }
 }
 
 impl IndexOperation {

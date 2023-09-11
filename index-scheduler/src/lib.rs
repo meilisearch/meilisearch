@@ -35,7 +35,6 @@ pub type TaskId = u32;
 use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::ops::{Bound, RangeBounds};
-use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
@@ -59,7 +58,7 @@ use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
 use roaring::RoaringBitmap;
 use s3::Bucket;
 use synchronoise::SignalEvent;
-use tempfile::{NamedTempFile, TempDir};
+use tempfile::TempDir;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 use utils::{filter_out_references_to_newer_tasks, keep_tasks_within_datetimes, map_bound};
@@ -281,7 +280,7 @@ pub struct IndexSchedulerOptions {
     /// zookeeper client
     pub zookeeper: Option<Arc<ZooKeeper>>,
     /// S3 bucket
-    pub s3: Option<Bucket>,
+    pub s3: Option<Arc<Bucket>>,
 }
 
 /// Structure which holds meilisearch's indexes and schedules the tasks
@@ -290,6 +289,7 @@ pub struct IndexSchedulerOptions {
 pub struct IndexScheduler {
     inner: Arc<RwLock<Option<IndexSchedulerInner>>>,
     zookeeper: Option<Arc<ZooKeeper>>,
+    pub s3: Option<Arc<Bucket>>,
     wake_up: Arc<SignalEvent>,
 }
 
@@ -300,6 +300,7 @@ impl IndexScheduler {
         #[cfg(test)] test_breakpoint_sdr: crossbeam::channel::Sender<(Breakpoint, bool)>,
         #[cfg(test)] planned_failures: Vec<(usize, tests::FailureLocation)>,
     ) -> Result<Self> {
+        let s3 = options.s3.clone();
         let inner = IndexSchedulerInner::new(
             options,
             #[cfg(test)]
@@ -334,6 +335,7 @@ impl IndexScheduler {
 
         let this = IndexScheduler {
             zookeeper: inner.zookeeper.clone(),
+            s3,
             wake_up: inner.wake_up.clone(),
             inner: Arc::new(RwLock::new(Some(inner))),
         };
@@ -1242,6 +1244,16 @@ impl IndexSchedulerInner {
                 Some(batch) => batch,
                 None => return Ok(TickOutcome::WaitForSignal),
             };
+
+        if let Some(s3) = &self.options.s3 {
+            for uuid in batch.content_uuids() {
+                // TODO use a real UUIDv4
+                let (_, file) = self.file_store.new_update_with_uuid(uuid.as_u128())?;
+                s3.get_object_to_writer(&format!("/update-files/{}", uuid), &mut &*file).unwrap();
+                file.persist()?;
+            }
+        }
+
         let index_uid = batch.index_uid().map(ToOwned::to_owned);
         drop(rtxn);
 

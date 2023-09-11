@@ -1,4 +1,4 @@
-use std::io::ErrorKind;
+use std::io::{BufReader, ErrorKind};
 
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
@@ -400,6 +400,7 @@ async fn document_addition(
     }
 
     let read_file = buffer.into_inner().into_std().await;
+    let s3 = index_scheduler.s3.clone();
     let documents_count = tokio::task::spawn_blocking(move || {
         let documents_count = match format {
             PayloadType::Json => read_json(&read_file, update_file.as_file_mut())?,
@@ -408,8 +409,15 @@ async fn document_addition(
             }
             PayloadType::Ndjson => read_ndjson(&read_file, update_file.as_file_mut())?,
         };
+
+        if let Some(s3) = s3 {
+            let mut reader = BufReader::new(&*update_file);
+            s3.put_object_stream(&mut reader, format!("/update-files/{}", uuid)).unwrap();
+        }
+
         // we NEED to persist the file here because we moved the `udpate_file` in another task.
         update_file.persist()?;
+
         Ok(documents_count)
     })
     .await;

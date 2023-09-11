@@ -245,13 +245,15 @@ fn open_or_create_database_unchecked(
         instance_features,
         zookeeper: zookeeper.clone(),
         s3: opt.s3_url.as_ref().map(|url| {
-            Bucket::new(
-                "test-rust-s3",
-                Region::Custom { region: "eu-central-1".to_owned(), endpoint: url.clone() },
-                Credentials::default().unwrap(),
+            Arc::new(
+                Bucket::new(
+                    "test-rust-s3",
+                    Region::Custom { region: "eu-central-1".to_owned(), endpoint: url.clone() },
+                    Credentials::default().unwrap(),
+                )
+                .unwrap()
+                .with_path_style(),
             )
-            .unwrap()
-            .with_path_style()
         }),
     }))
     .map_err(anyhow::Error::from);
