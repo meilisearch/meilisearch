@@ -545,6 +545,8 @@ impl<'a> std::fmt::Display for Token<'a> {
 
 #[cfg(test)]
 pub mod tests {
+    use FilterCondition as Fc;
+
     use super::*;
 
     /// Create a raw [Token]. You must specify the string that appear BEFORE your element followed by your element
@@ -556,14 +558,22 @@ pub mod tests {
         unsafe { Span::new_from_raw_offset(offset, lines as u32, value, "") }.into()
     }
 
+    fn p(s: &str) -> impl std::fmt::Display + '_ {
+        Fc::parse(s).unwrap().unwrap()
+    }
+
+    #[test]
+    fn parse_escaped() {
+        insta::assert_display_snapshot!(p(r#"title = 'foo\\'"#), @r#"{title} = {foo\}"#);
+        insta::assert_display_snapshot!(p(r#"title = 'foo\\\\'"#), @r#"{title} = {foo\\}"#);
+        insta::assert_display_snapshot!(p(r#"title = 'foo\\\\\\'"#), @r#"{title} = {foo\\\}"#);
+        insta::assert_display_snapshot!(p(r#"title = 'foo\\\\\\\\'"#), @r#"{title} = {foo\\\\}"#);
+        // but it also works with other sequencies
+        insta::assert_display_snapshot!(p(r#"title = 'foo\x20\n\t\"\'"'"#), @"{title} = {foo \n\t\"\'\"}");
+    }
+
     #[test]
     fn parse() {
-        use FilterCondition as Fc;
-
-        fn p(s: &str) -> impl std::fmt::Display + '_ {
-            Fc::parse(s).unwrap().unwrap()
-        }
-
         // Test equal
         insta::assert_display_snapshot!(p("channel = Ponce"), @"{channel} = {Ponce}");
         insta::assert_display_snapshot!(p("subscribers = 12"), @"{subscribers} = {12}");

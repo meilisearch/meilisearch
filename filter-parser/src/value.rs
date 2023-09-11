@@ -171,7 +171,24 @@ pub fn parse_value(input: Span) -> IResult<Token> {
         })
     })?;
 
-    Ok((input, value))
+    match unescaper::unescape(value.value()) {
+        Ok(content) => {
+            if content.len() != value.value().len() {
+                Ok((input, Token::new(value.original_span(), Some(content))))
+            } else {
+                Ok((input, value))
+            }
+        }
+        Err(unescaper::Error::IncompleteStr(_)) => Err(nom::Err::Incomplete(nom::Needed::Unknown)),
+        Err(unescaper::Error::ParseIntError { .. }) => Err(nom::Err::Error(Error::new_from_kind(
+            value.original_span(),
+            ErrorKind::InvalidEscapedNumber,
+        ))),
+        Err(unescaper::Error::InvalidChar { .. }) => Err(nom::Err::Error(Error::new_from_kind(
+            value.original_span(),
+            ErrorKind::MalformedValue,
+        ))),
+    }
 }
 
 fn is_value_component(c: char) -> bool {
@@ -318,17 +335,17 @@ pub mod test {
             ("\"cha'nnel\"", "cha'nnel", false),
             ("I'm tamo", "I", false),
             // escaped thing but not quote
-            (r#""\\""#, r#"\\"#, false),
-            (r#""\\\\\\""#, r#"\\\\\\"#, false),
-            (r#""aa\\aa""#, r#"aa\\aa"#, false),
+            (r#""\\""#, r#"\"#, true),
+            (r#""\\\\\\""#, r#"\\\"#, true),
+            (r#""aa\\aa""#, r#"aa\aa"#, true),
             // with double quote
             (r#""Hello \"world\"""#, r#"Hello "world""#, true),
-            (r#""Hello \\\"world\\\"""#, r#"Hello \\"world\\""#, true),
+            (r#""Hello \\\"world\\\"""#, r#"Hello \"world\""#, true),
             (r#""I'm \"super\" tamo""#, r#"I'm "super" tamo"#, true),
             (r#""\"\"""#, r#""""#, true),
             // with simple quote
             (r#"'Hello \'world\''"#, r#"Hello 'world'"#, true),
-            (r#"'Hello \\\'world\\\''"#, r#"Hello \\'world\\'"#, true),
+            (r#"'Hello \\\'world\\\''"#, r#"Hello \'world\'"#, true),
             (r#"'I\'m "super" tamo'"#, r#"I'm "super" tamo"#, true),
             (r#"'\'\''"#, r#"''"#, true),
         ];
@@ -350,7 +367,14 @@ pub mod test {
                 "Filter `{}` was not supposed to be escaped",
                 input
             );
-            assert_eq!(token.value(), expected, "Filter `{}` failed.", input);
+            assert_eq!(
+                token.value(),
+                expected,
+                "Filter `{}` failed by giving `{}` instead of `{}`.",
+                input,
+                token.value(),
+                expected
+            );
         }
     }
 
