@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::time::Duration;
 
 use actix_rt::time::sleep;
@@ -153,6 +154,12 @@ async fn perform_on_demand_snapshot() {
     "###);
 
     let temp = tempfile::tempdir().unwrap();
+
+    let snapshots: Vec<String> = std::fs::read_dir(&snapshot_dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().path().file_name().unwrap().to_str().unwrap().to_string())
+        .collect();
+    meili_snap::snapshot!(format!("{snapshots:?}"), @r###"["db.snapshot"]"###);
 
     let snapshot_path = snapshot_dir.path().to_owned().join("db.snapshot");
     #[cfg_attr(windows, allow(unused))]
