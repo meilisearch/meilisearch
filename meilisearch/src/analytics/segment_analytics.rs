@@ -1282,14 +1282,17 @@ impl DocumentsAggregator {
         index_creation: bool,
         request: &HttpRequest,
     ) -> Self {
+        let UpdateDocumentsQuery { primary_key, csv_delimiter: _ } = documents_query;
+
         let mut ret = Self::default();
         ret.timestamp = Some(OffsetDateTime::now_utc());
 
         ret.updated = true;
         ret.user_agents = extract_user_agents(request).into_iter().collect();
-        if let Some(primary_key) = documents_query.primary_key.clone() {
+        if let Some(primary_key) = primary_key.clone() {
             ret.primary_keys.insert(primary_key);
         }
+
         let content_type = request
             .headers()
             .get(CONTENT_TYPE)
@@ -1304,37 +1307,43 @@ impl DocumentsAggregator {
 
     /// Aggregate one [DocumentsAggregator] into another.
     pub fn aggregate(&mut self, other: Self) {
+        let Self { timestamp, user_agents, primary_keys, content_types, index_creation, updated } =
+            other;
+
         if self.timestamp.is_none() {
-            self.timestamp = other.timestamp;
+            self.timestamp = timestamp;
         }
 
-        self.updated |= other.updated;
+        self.updated |= updated;
         // we can't create a union because there is no `into_union` method
-        for user_agent in other.user_agents {
+        for user_agent in user_agents {
             self.user_agents.insert(user_agent);
         }
-        for primary_key in other.primary_keys {
+        for primary_key in primary_keys {
             self.primary_keys.insert(primary_key);
         }
-        for content_type in other.content_types {
+        for content_type in content_types {
             self.content_types.insert(content_type);
         }
-        self.index_creation |= other.index_creation;
+        self.index_creation |= index_creation;
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
-        if !self.updated {
+        let Self { timestamp, user_agents, primary_keys, content_types, index_creation, updated } =
+            self;
+
+        if !updated {
             None
         } else {
             let properties = json!({
-                "user-agent": self.user_agents,
-                "payload_type": self.content_types,
-                "primary_key": self.primary_keys,
-                "index_creation": self.index_creation,
+                "user-agent": user_agents,
+                "payload_type": content_types,
+                "primary_key": primary_keys,
+                "index_creation": index_creation,
             });
 
             Some(Track {
-                timestamp: self.timestamp,
+                timestamp: timestamp,
                 user: user.clone(),
                 event: event_name.to_string(),
                 properties,
