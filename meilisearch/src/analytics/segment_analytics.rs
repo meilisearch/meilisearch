@@ -878,7 +878,7 @@ impl SearchAggregator {
             show_ranking_score_details,
         } = self;
 
-        if self.total_received == 0 {
+        if total_received == 0 {
             None
         } else {
             // we get all the values in a sorted manner
@@ -983,8 +983,38 @@ impl MultiSearchAggregator {
 
         let user_agents = extract_user_agents(request).into_iter().collect();
 
-        let distinct_indexes: HashSet<_> =
-            query.iter().map(|query| query.index_uid.as_str()).collect();
+        let distinct_indexes: HashSet<_> = query
+            .iter()
+            .map(|query| {
+                // make sure we get a compilation error if a field gets added to / removed from SearchQueryWithIndex
+                let SearchQueryWithIndex {
+                    index_uid,
+                    q: _,
+                    vector: _,
+                    offset: _,
+                    limit: _,
+                    page: _,
+                    hits_per_page: _,
+                    attributes_to_retrieve: _,
+                    attributes_to_crop: _,
+                    crop_length: _,
+                    attributes_to_highlight: _,
+                    show_ranking_score: _,
+                    show_ranking_score_details: _,
+                    show_matches_position: _,
+                    filter: _,
+                    sort: _,
+                    facets: _,
+                    highlight_pre_tag: _,
+                    highlight_post_tag: _,
+                    crop_marker: _,
+                    matching_strategy: _,
+                    attributes_to_search_on: _,
+                } = query;
+
+                index_uid.as_str()
+            })
+            .collect();
 
         let show_ranking_score = query.iter().any(|query| query.show_ranking_score);
         let show_ranking_score_details = query.iter().any(|query| query.show_ranking_score_details);
@@ -1006,6 +1036,7 @@ impl MultiSearchAggregator {
         self.total_succeeded = self.total_succeeded.saturating_add(1);
     }
 
+    /// Aggregate one [MultiSearchAggregator] into another.
     pub fn aggregate(&mut self, other: Self) {
         // write the aggregate in a way that will cause a compilation error if a field is added.
 
@@ -1047,33 +1078,45 @@ impl MultiSearchAggregator {
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
-        if self.total_received == 0 {
+        let Self {
+            timestamp,
+            total_received,
+            total_succeeded,
+            total_distinct_index_count,
+            total_single_index,
+            total_search_count,
+            user_agents,
+            show_ranking_score,
+            show_ranking_score_details,
+        } = self;
+
+        if total_received == 0 {
             None
         } else {
             let properties = json!({
-                "user-agent": self.user_agents,
+                "user-agent": user_agents,
                 "requests": {
-                    "total_succeeded": self.total_succeeded,
-                    "total_failed": self.total_received.saturating_sub(self.total_succeeded), // just to be sure we never panics
-                    "total_received": self.total_received,
+                    "total_succeeded": total_succeeded,
+                    "total_failed": total_received.saturating_sub(total_succeeded), // just to be sure we never panics
+                    "total_received": total_received,
                 },
                 "indexes": {
-                    "total_single_index": self.total_single_index,
-                    "total_distinct_index_count": self.total_distinct_index_count,
-                    "avg_distinct_index_count": (self.total_distinct_index_count as f64) / (self.total_received as f64), // not 0 else returned early
+                    "total_single_index": total_single_index,
+                    "total_distinct_index_count": total_distinct_index_count,
+                    "avg_distinct_index_count": (total_distinct_index_count as f64) / (total_received as f64), // not 0 else returned early
                 },
                 "searches": {
-                    "total_search_count": self.total_search_count,
-                    "avg_search_count": (self.total_search_count as f64) / (self.total_received as f64),
+                    "total_search_count": total_search_count,
+                    "avg_search_count": (total_search_count as f64) / (total_received as f64),
                 },
                 "scoring": {
-                    "show_ranking_score": self.show_ranking_score,
-                    "show_ranking_score_details": self.show_ranking_score_details,
+                    "show_ranking_score": show_ranking_score,
+                    "show_ranking_score_details": show_ranking_score_details,
                 }
             });
 
             Some(Track {
-                timestamp: self.timestamp,
+                timestamp: timestamp,
                 user: user.clone(),
                 event: event_name.to_string(),
                 properties,
