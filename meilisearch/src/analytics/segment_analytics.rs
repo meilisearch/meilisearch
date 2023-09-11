@@ -1174,63 +1174,84 @@ impl FacetSearchAggregator {
     }
 
     pub fn succeed(&mut self, result: &FacetSearchResult) {
+        let FacetSearchResult { facet_hits: _, facet_query: _, processing_time_ms } = result;
         self.total_succeeded = self.total_succeeded.saturating_add(1);
-        self.time_spent.push(result.processing_time_ms as usize);
+        self.time_spent.push(*processing_time_ms as usize);
     }
 
-    /// Aggregate one [SearchAggregator] into another.
+    /// Aggregate one [FacetSearchAggregator] into another.
     pub fn aggregate(&mut self, mut other: Self) {
+        let Self {
+            timestamp,
+            user_agents,
+            total_received,
+            total_succeeded,
+            ref mut time_spent,
+            facet_names,
+            additional_search_parameters_provided,
+        } = other;
+
         if self.timestamp.is_none() {
-            self.timestamp = other.timestamp;
+            self.timestamp = timestamp;
         }
 
         // context
-        for user_agent in other.user_agents.into_iter() {
+        for user_agent in user_agents.into_iter() {
             self.user_agents.insert(user_agent);
         }
 
         // request
-        self.total_received = self.total_received.saturating_add(other.total_received);
-        self.total_succeeded = self.total_succeeded.saturating_add(other.total_succeeded);
-        self.time_spent.append(&mut other.time_spent);
+        self.total_received = self.total_received.saturating_add(total_received);
+        self.total_succeeded = self.total_succeeded.saturating_add(total_succeeded);
+        self.time_spent.append(time_spent);
 
         // facet_names
-        for facet_name in other.facet_names.into_iter() {
+        for facet_name in facet_names.into_iter() {
             self.facet_names.insert(facet_name);
         }
 
         // additional_search_parameters_provided
-        self.additional_search_parameters_provided = self.additional_search_parameters_provided
-            | other.additional_search_parameters_provided;
+        self.additional_search_parameters_provided =
+            self.additional_search_parameters_provided | additional_search_parameters_provided;
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
-        if self.total_received == 0 {
+        let Self {
+            timestamp,
+            user_agents,
+            total_received,
+            total_succeeded,
+            time_spent,
+            facet_names,
+            additional_search_parameters_provided,
+        } = self;
+
+        if total_received == 0 {
             None
         } else {
             // the index of the 99th percentage of value
-            let percentile_99th = 0.99 * (self.total_succeeded as f64 - 1.) + 1.;
+            let percentile_99th = 0.99 * (total_succeeded as f64 - 1.) + 1.;
             // we get all the values in a sorted manner
-            let time_spent = self.time_spent.into_sorted_vec();
+            let time_spent = time_spent.into_sorted_vec();
             // We are only interested by the slowest value of the 99th fastest results
             let time_spent = time_spent.get(percentile_99th as usize);
 
             let properties = json!({
-                "user-agent": self.user_agents,
+                "user-agent": user_agents,
                 "requests": {
                     "99th_response_time":  time_spent.map(|t| format!("{:.2}", t)),
-                    "total_succeeded": self.total_succeeded,
-                    "total_failed": self.total_received.saturating_sub(self.total_succeeded), // just to be sure we never panics
-                    "total_received": self.total_received,
+                    "total_succeeded": total_succeeded,
+                    "total_failed": total_received.saturating_sub(total_succeeded), // just to be sure we never panics
+                    "total_received": total_received,
                 },
                 "facets": {
-                    "total_distinct_facet_count": self.facet_names.len(),
-                    "additional_search_parameters_provided": self.additional_search_parameters_provided,
+                    "total_distinct_facet_count": facet_names.len(),
+                    "additional_search_parameters_provided": additional_search_parameters_provided,
                 },
             });
 
             Some(Track {
-                timestamp: self.timestamp,
+                timestamp: timestamp,
                 user: user.clone(),
                 event: event_name.to_string(),
                 properties,
