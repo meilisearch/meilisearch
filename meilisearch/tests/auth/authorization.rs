@@ -54,6 +54,7 @@ pub static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'
             ("GET",     "/indexes/products/stats") =>                          hashset!{"stats.get", "stats.*", "*"},
             ("GET",     "/stats") =>                                           hashset!{"stats.get", "stats.*", "*"},
             ("POST",    "/dumps") =>                                           hashset!{"dumps.create", "dumps.*", "*"},
+            ("POST",    "/snapshots") =>                                       hashset!{"snapshots.create", "snapshots.*", "*"},
             ("GET",     "/version") =>                                         hashset!{"version", "*"},
             ("GET",     "/metrics") =>                                         hashset!{"metrics.get", "metrics.*", "*"},
             ("PATCH",   "/keys/mykey/") =>                                     hashset!{"keys.update", "*"},

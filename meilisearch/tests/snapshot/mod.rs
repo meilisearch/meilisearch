@@ -179,9 +179,9 @@ async fn perform_on_demand_snapshot() {
         // The original instance contains the snapshotCreation task, while the snapshotted-instance does not. For this reason we need to compare the task queue **after** the task 4
         server.tasks_filter("?from=2"),
 
-        server.index("test").get_all_documents(GetAllDocumentsOptions::default()),
-        server.index("test").settings(),
-        server.index("test1").get_all_documents(GetAllDocumentsOptions::default()),
-        server.index("test1").settings(),
+        server.index("catto").get_all_documents(GetAllDocumentsOptions::default()),
+        server.index("catto").settings(),
+        server.index("doggo").get_all_documents(GetAllDocumentsOptions::default()),
+        server.index("doggo").settings(),
     );
 }
