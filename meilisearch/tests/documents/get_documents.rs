@@ -1,11 +1,11 @@
 use actix_web::test;
 use http::header::ACCEPT_ENCODING;
 use meili_snap::*;
-use serde_json::{json, Value};
 use urlencoding::encode as urlencode;
 
 use crate::common::encoder::Encoder;
-use crate::common::{GetAllDocumentsOptions, GetDocumentOptions, Server};
+use crate::common::{GetAllDocumentsOptions, GetDocumentOptions, Server, Value};
+use crate::json;
 
 // TODO: partial test since we are testing error, amd error is not yet fully implemented in
 // transplant
@@ -40,7 +40,7 @@ async fn get_document() {
     let server = Server::new().await;
     let index = server.index("test");
     index.create(None).await;
-    let documents = serde_json::json!([
+    let documents = json!([
         {
             "id": 0,
             "nested": { "content": "foobar" },
@@ -53,7 +53,7 @@ async fn get_document() {
     assert_eq!(code, 200);
     assert_eq!(
         response,
-        serde_json::json!({
+        json!({
             "id": 0,
             "nested": { "content": "foobar" },
         })
@@ -64,7 +64,7 @@ async fn get_document() {
     assert_eq!(code, 200);
     assert_eq!(
         response,
-        serde_json::json!({
+        json!({
             "id": 0,
         })
     );
@@ -75,7 +75,7 @@ async fn get_document() {
     assert_eq!(code, 200);
     assert_eq!(
         response,
-        serde_json::json!({
+        json!({
             "nested": { "content": "foobar" },
         })
     );
@@ -122,7 +122,7 @@ async fn get_all_documents_no_options() {
     assert_eq!(code, 200);
     let arr = response["results"].as_array().unwrap();
     assert_eq!(arr.len(), 20);
-    let first = serde_json::json!({
+    let first = json!({
         "id":0,
         "isActive":false,
         "balance":"$2,668.55",

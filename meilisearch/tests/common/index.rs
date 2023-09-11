@@ -3,12 +3,13 @@ use std::panic::{catch_unwind, resume_unwind, UnwindSafe};
 use std::time::Duration;
 
 use actix_web::http::StatusCode;
-use serde_json::{json, Value};
 use tokio::time::sleep;
 use urlencoding::encode as urlencode;
 
 use super::encoder::Encoder;
 use super::service::Service;
+use super::Value;
+use crate::json;
 
 pub struct Index<'a> {
     pub uid: String,
@@ -242,7 +243,9 @@ impl Index<'_> {
 
     pub async fn delete_batch(&self, ids: Vec<u64>) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/documents/delete-batch", urlencode(self.uid.as_ref()));
-        self.service.post_encoded(url, serde_json::to_value(&ids).unwrap(), self.encoder).await
+        self.service
+            .post_encoded(url, serde_json::to_value(&ids).unwrap().into(), self.encoder)
+            .await
     }
 
     pub async fn delete_batch_raw(&self, body: Value) -> (Value, StatusCode) {

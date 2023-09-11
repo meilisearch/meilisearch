@@ -1,11 +1,11 @@
 use actix_web::test;
 use meili_snap::{json_string, snapshot};
-use serde_json::{json, Value};
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
 use crate::common::encoder::Encoder;
-use crate::common::{GetAllDocumentsOptions, Server};
+use crate::common::{GetAllDocumentsOptions, Server, Value};
+use crate::json;
 
 /// This is the basic usage of our API and every other tests uses the content-type application/json
 #[actix_rt::test]

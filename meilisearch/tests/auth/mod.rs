@@ -7,9 +7,9 @@ mod tenant_token;
 mod tenant_token_multi_search;
 
 use actix_web::http::StatusCode;
-use serde_json::{json, Value};
 
-use crate::common::Server;
+use crate::common::{Server, Value};
+use crate::json;
 
 impl Server {
     pub fn use_api_key(&mut self, api_key: impl AsRef<str>) {

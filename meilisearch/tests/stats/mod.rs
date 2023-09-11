@@ -1,8 +1,8 @@
-use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
 use crate::common::Server;
+use crate::json;
 
 #[actix_rt::test]
 async fn get_settings_unexisting_index() {

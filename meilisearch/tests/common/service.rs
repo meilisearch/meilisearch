@@ -7,9 +7,9 @@ use actix_web::test::TestRequest;
 use index_scheduler::IndexScheduler;
 use meilisearch::{analytics, create_app, Opt};
 use meilisearch_auth::AuthController;
-use serde_json::Value;
 
 use crate::common::encoder::Encoder;
+use crate::common::Value;
 
 pub struct Service {
     pub index_scheduler: Arc<IndexScheduler>,

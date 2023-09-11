@@ -1,11 +1,11 @@
 mod errors;
 
 use meili_snap::insta::assert_json_snapshot;
-use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
 use crate::common::Server;
+use crate::json;
 
 #[actix_rt::test]
 async fn error_get_unexisting_task_status() {
@@ -33,7 +33,7 @@ async fn get_task_status() {
     index.create(None).await;
     index
         .add_documents(
-            serde_json::json!([{
+            json!([{
                 "id": 1,
                 "content": "foobar",
             }]),

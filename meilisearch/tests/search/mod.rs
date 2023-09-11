@@ -10,9 +10,9 @@ mod pagination;
 mod restrict_searchable;
 
 use once_cell::sync::Lazy;
-use serde_json::{json, Value};
 
-use crate::common::Server;
+use crate::common::{Server, Value};
+use crate::json;
 
 pub(self) static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     json!([

@@ -1,8 +1,8 @@
 use meili_snap::*;
-use serde_json::json;
 
 use super::DOCUMENTS;
 use crate::common::Server;
+use crate::json;
 
 #[actix_rt::test]
 async fn search_unexisting_index() {

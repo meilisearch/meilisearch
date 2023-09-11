@@ -1,7 +1,7 @@
 use meili_snap::*;
-use serde_json::json;
 
 use crate::common::Server;
+use crate::json;
 
 #[actix_rt::test]
 async fn swap_indexes_bad_format() {

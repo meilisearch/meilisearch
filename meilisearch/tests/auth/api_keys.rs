@@ -1,8 +1,7 @@
 use std::{thread, time};
 
-use serde_json::{json, Value};
-
-use crate::common::Server;
+use crate::common::{Server, Value};
+use crate::json;
 
 #[actix_rt::test]
 async fn add_valid_api_key() {
@@ -162,7 +161,7 @@ async fn add_valid_api_key_null_description() {
     server.use_api_key("MASTER_KEY");
 
     let content = json!({
-        "description": Value::Null,
+        "description": json!(null),
         "indexes": ["products"],
         "actions": ["documents.add"],
         "expiresAt": "2050-11-13T00:00:00"
@@ -365,7 +364,7 @@ async fn error_add_api_key_invalid_index_uids() {
     server.use_api_key("MASTER_KEY");
 
     let content = json!({
-        "description": Value::Null,
+        "description": json!(null),
         "indexes": ["invalid index # / \\name with spaces"],
         "actions": [
             "documents.add"
@@ -422,7 +421,7 @@ async fn error_add_api_key_invalid_parameters_actions() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "Unknown value `doc.add` at `.actions[0]`: expected one of `*`, `search`, `documents.*`, `documents.add`, `documents.get`, `documents.delete`, `indexes.*`, `indexes.create`, `indexes.get`, `indexes.update`, `indexes.delete`, `indexes.swap`, `tasks.*`, `tasks.cancel`, `tasks.delete`, `tasks.get`, `settings.*`, `settings.get`, `settings.update`, `stats.*`, `stats.get`, `metrics.*`, `metrics.get`, `dumps.*`, `dumps.create`, `version`, `keys.create`, `keys.get`, `keys.update`, `keys.delete`, `experimental.get`, `experimental.update`",
+      "message": "Unknown value `doc.add` at `.actions[0]`: expected one of `*`, `search`, `documents.*`, `documents.add`, `documents.get`, `documents.delete`, `indexes.*`, `indexes.create`, `indexes.get`, `indexes.update`, `indexes.delete`, `indexes.swap`, `tasks.*`, `tasks.cancel`, `tasks.delete`, `tasks.get`, `settings.*`, `settings.get`, `settings.update`, `stats.*`, `stats.get`, `metrics.*`, `metrics.get`, `dumps.*`, `dumps.create`, `snapshots.*`, `snapshots.create`, `version`, `keys.create`, `keys.get`, `keys.update`, `keys.delete`, `experimental.get`, `experimental.update`",
       "code": "invalid_api_key_actions",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_api_key_actions"
@@ -507,7 +506,7 @@ async fn error_add_api_key_invalid_parameters_uid() {
 async fn error_add_api_key_parameters_uid_already_exist() {
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");
-    let content = json!({
+    let content: Value = json!({
         "uid": "4bc0887a-0e41-4f3b-935d-0c451dcee9c8",
         "indexes": ["products"],
         "actions": ["search"],
@@ -1146,7 +1145,7 @@ async fn patch_api_key_description() {
     meili_snap::snapshot!(code, @"200 OK");
 
     // Remove the description
-    let content = json!({ "description": serde_json::Value::Null });
+    let content = json!({ "description": null });
 
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"

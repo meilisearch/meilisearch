@@ -129,6 +129,9 @@ impl HeedAuthStore {
                 Action::DumpsAll => {
                     actions.insert(Action::DumpsCreate);
                 }
+                Action::SnapshotsAll => {
+                    actions.insert(Action::SnapshotsCreate);
+                }
                 Action::TasksAll => {
                     actions.extend([Action::TasksGet, Action::TasksDelete, Action::TasksCancel]);
                 }

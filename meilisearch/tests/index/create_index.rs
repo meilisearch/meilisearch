@@ -2,10 +2,10 @@ use actix_web::http::header::ContentType;
 use actix_web::test;
 use http::header::ACCEPT_ENCODING;
 use meili_snap::{json_string, snapshot};
-use serde_json::{json, Value};
 
 use crate::common::encoder::Encoder;
-use crate::common::Server;
+use crate::common::{Server, Value};
+use crate::json;
 
 #[actix_rt::test]
 async fn create_index_no_primary_key() {
@@ -21,7 +21,7 @@ async fn create_index_no_primary_key() {
 
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["type"], "indexCreation");
-    assert_eq!(response["details"]["primaryKey"], Value::Null);
+    assert_eq!(response["details"]["primaryKey"], json!(null));
 }
 
 #[actix_rt::test]
@@ -38,7 +38,7 @@ async fn create_index_with_gzip_encoded_request() {
 
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["type"], "indexCreation");
-    assert_eq!(response["details"]["primaryKey"], Value::Null);
+    assert_eq!(response["details"]["primaryKey"], json!(null));
 }
 
 #[actix_rt::test]
@@ -86,7 +86,7 @@ async fn create_index_with_zlib_encoded_request() {
 
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["type"], "indexCreation");
-    assert_eq!(response["details"]["primaryKey"], Value::Null);
+    assert_eq!(response["details"]["primaryKey"], json!(null));
 }
 
 #[actix_rt::test]
@@ -103,7 +103,7 @@ async fn create_index_with_brotli_encoded_request() {
 
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["type"], "indexCreation");
-    assert_eq!(response["details"]["primaryKey"], Value::Null);
+    assert_eq!(response["details"]["primaryKey"], json!(null));
 }
 
 #[actix_rt::test]
@@ -136,7 +136,7 @@ async fn create_index_with_invalid_primary_key() {
 
     let (response, code) = index.get().await;
     assert_eq!(code, 200);
-    assert_eq!(response["primaryKey"], Value::Null);
+    assert_eq!(response["primaryKey"], json!(null));
 }
 
 #[actix_rt::test]

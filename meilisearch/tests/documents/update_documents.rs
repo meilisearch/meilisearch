@@ -1,7 +1,8 @@
-use serde_json::json;
+use meili_snap::snapshot;
 
 use crate::common::encoder::Encoder;
 use crate::common::{GetAllDocumentsOptions, Server};
+use crate::json;
 
 #[actix_rt::test]
 async fn error_document_update_create_index_bad_uid() {
@@ -84,7 +85,13 @@ async fn update_document() {
 
     let (response, code) = index.get_document(1, None).await;
     assert_eq!(code, 200);
-    assert_eq!(response.to_string(), r##"{"doc_id":1,"content":"foo","other":"bar"}"##);
+    snapshot!(response, @r###"
+    {
+      "doc_id": 1,
+      "content": "foo",
+      "other": "bar"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -122,7 +129,13 @@ async fn update_document_gzip_encoded() {
 
     let (response, code) = index.get_document(1, None).await;
     assert_eq!(code, 200);
-    assert_eq!(response.to_string(), r##"{"doc_id":1,"content":"foo","other":"bar"}"##);
+    snapshot!(response, @r###"
+    {
+      "doc_id": 1,
+      "content": "foo",
+      "other": "bar"
+    }
+    "###);
 }
 
 #[actix_rt::test]

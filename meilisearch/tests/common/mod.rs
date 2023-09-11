@@ -3,8 +3,82 @@ pub mod index;
 pub mod server;
 pub mod service;
 
+use std::fmt::{self, Display};
+
 pub use index::{GetAllDocumentsOptions, GetDocumentOptions};
+use meili_snap::json_string;
+use serde::{Deserialize, Serialize};
 pub use server::{default_settings, Server};
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Value(pub serde_json::Value);
+
+impl Value {
+    pub fn uid(&self) -> u64 {
+        if let Some(uid) = self["uid"].as_u64() {
+            uid
+        } else if let Some(uid) = self["taskUid"].as_u64() {
+            uid
+        } else {
+            panic!("Didn't find any task id in: {self}");
+        }
+    }
+}
+
+impl From<serde_json::Value> for Value {
+    fn from(value: serde_json::Value) -> Self {
+        Value(value)
+    }
+}
+
+impl std::ops::Deref for Value {
+    type Target = serde_json::Value;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl PartialEq<serde_json::Value> for Value {
+    fn eq(&self, other: &serde_json::Value) -> bool {
+        &self.0 == other
+    }
+}
+
+impl PartialEq<Value> for serde_json::Value {
+    fn eq(&self, other: &Value) -> bool {
+        self == &other.0
+    }
+}
+
+impl PartialEq<&str> for Value {
+    fn eq(&self, other: &&str) -> bool {
+        self.0.eq(other)
+    }
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            json_string!(self, { ".enqueuedAt" => "[date]", ".processedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" })
+        )
+    }
+}
+
+impl From<Vec<Value>> for Value {
+    fn from(value: Vec<Value>) -> Self {
+        Self(value.into_iter().map(|value| value.0).collect::<serde_json::Value>())
+    }
+}
+
+#[macro_export]
+macro_rules! json {
+    ($($json:tt)+) => {
+        $crate::common::Value(serde_json::json!($($json)+))
+    };
+}
 
 /// Performs a search test on both post and get routes
 #[macro_export]

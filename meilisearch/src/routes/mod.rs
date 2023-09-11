@@ -24,6 +24,7 @@ pub mod features;
 pub mod indexes;
 mod metrics;
 mod multi_search;
+mod snapshot;
 mod swap_indexes;
 pub mod tasks;
 
@@ -32,6 +33,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::resource("/health").route(web::get().to(get_health)))
         .service(web::scope("/keys").configure(api_key::configure))
         .service(web::scope("/dumps").configure(dump::configure))
+        .service(web::scope("/snapshots").configure(snapshot::configure))
         .service(web::resource("/stats").route(web::get().to(get_stats)))
         .service(web::resource("/version").route(web::get().to(get_version)))
         .service(web::scope("/indexes").configure(indexes::configure))

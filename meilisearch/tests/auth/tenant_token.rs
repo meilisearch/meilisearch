@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use ::time::format_description::well_known::Rfc3339;
 use maplit::hashmap;
 use once_cell::sync::Lazy;
-use serde_json::{json, Value};
 use time::{Duration, OffsetDateTime};
 
 use super::authorization::{ALL_ACTIONS, AUTHORIZATIONS};
-use crate::common::Server;
+use crate::common::{Server, Value};
+use crate::json;
 
 fn generate_tenant_token(
     parent_uid: impl AsRef<str>,
@@ -233,31 +233,31 @@ async fn search_authorized_simple_token() {
         },
         hashmap! {
             "searchRules" => json!({"*": {}}),
-            "exp" => Value::Null
+            "exp" => json!(null)
         },
         hashmap! {
-            "searchRules" => json!({"*": Value::Null}),
-            "exp" => Value::Null
+            "searchRules" => json!({"*": null}),
+            "exp" => json!(null)
         },
         hashmap! {
             "searchRules" => json!(["*"]),
-            "exp" => Value::Null
+            "exp" => json!(null)
         },
         hashmap! {
             "searchRules" => json!({"sales": {}}),
-            "exp" => Value::Null
+            "exp" => json!(null)
         },
         hashmap! {
-            "searchRules" => json!({"sales": Value::Null}),
-            "exp" => Value::Null
+            "searchRules" => json!({"sales": null}),
+            "exp" => json!(null)
         },
         hashmap! {
             "searchRules" => json!(["sales"]),
-            "exp" => Value::Null
+            "exp" => json!(null)
         },
         hashmap! {
             "searchRules" => json!(["sa*"]),
-            "exp" => Value::Null
+            "exp" => json!(null)
         },
     ];
 
@@ -386,7 +386,7 @@ async fn error_search_token_forbidden_parent_key() {
             "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
-            "searchRules" => json!({"*": Value::Null}),
+            "searchRules" => json!({"*": null}),
             "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
@@ -398,7 +398,7 @@ async fn error_search_token_forbidden_parent_key() {
             "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
-            "searchRules" => json!({"sales": Value::Null}),
+            "searchRules" => json!({"sales": null}),
             "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
@@ -428,15 +428,15 @@ async fn error_search_forbidden_token() {
         },
         hashmap! {
             "searchRules" => json!({"products": {}}),
-            "exp" => Value::Null
+            "exp" => json!(null)
         },
         hashmap! {
-            "searchRules" => json!({"products": Value::Null}),
-            "exp" => Value::Null
+            "searchRules" => json!({"products": null}),
+            "exp" => json!(null)
         },
         hashmap! {
             "searchRules" => json!(["products"]),
-            "exp" => Value::Null
+            "exp" => json!(null)
         },
         // expired token
         hashmap! {
@@ -444,7 +444,7 @@ async fn error_search_forbidden_token() {
             "exp" => json!((OffsetDateTime::now_utc() - Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
-            "searchRules" => json!({"*": Value::Null}),
+            "searchRules" => json!({"*": null}),
             "exp" => json!((OffsetDateTime::now_utc() - Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
@@ -456,7 +456,7 @@ async fn error_search_forbidden_token() {
             "exp" => json!((OffsetDateTime::now_utc() - Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
-            "searchRules" => json!({"sales": Value::Null}),
+            "searchRules" => json!({"sales": null}),
             "exp" => json!((OffsetDateTime::now_utc() - Duration::hours(1)).unix_timestamp())
         },
         hashmap! {

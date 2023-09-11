@@ -1,6 +1,5 @@
-use serde_json::json;
-
 use crate::common::Server;
+use crate::json;
 
 #[actix_rt::test]
 async fn create_and_delete_index() {
