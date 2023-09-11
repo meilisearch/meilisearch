@@ -129,7 +129,7 @@ async fn perform_on_demand_snapshot() {
       "enqueuedAt": "[date]"
     }
     "###);
-    let task = index.wait_task(4).await;
+    let task = index.wait_task(task.uid()).await;
     snapshot!(json_string!(task, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
       "uid": 4,
