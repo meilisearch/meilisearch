@@ -1570,17 +1570,19 @@ impl HealthAggregator {
         ret
     }
 
-    /// Aggregate one [DocumentsAggregator] into another.
+    /// Aggregate one [HealthAggregator] into another.
     pub fn aggregate(&mut self, other: Self) {
+        let Self { timestamp, user_agents, total_received } = other;
+
         if self.timestamp.is_none() {
-            self.timestamp = other.timestamp;
+            self.timestamp = timestamp;
         }
 
         // we can't create a union because there is no `into_union` method
-        for user_agent in other.user_agents {
+        for user_agent in user_agents {
             self.user_agents.insert(user_agent);
         }
-        self.total_received = self.total_received.saturating_add(other.total_received);
+        self.total_received = self.total_received.saturating_add(total_received);
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
