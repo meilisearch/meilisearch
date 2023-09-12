@@ -721,12 +721,22 @@ impl IndexScheduler {
                                 let processed =
                                     inner.processing_tasks.read().processed_previously().clone();
                                 log::info!("Deleting {} processed tasks", processed.len());
-                                for task in processed {
-                                    let node = format!("/tasks/task-{:0>10?}", task as i32);
+                                for task_id in processed {
+                                    let node = format!("/tasks/task-{:0>10?}", task_id as i32);
                                     let _ = zookeeper // we don't want to crash if we can't delete an update file.
                                         .delete(&node, None)
                                         .unwrap();
+                                    s3.delete_object(format!("tasks.{:0>10?}", task_id as u32))
+                                        .unwrap();
                                     // TODO: Delete the update files associated with the deleted tasks
+                                    if let Some(content_uuid) = inner
+                                        .get_task(&rtxn, task_id)
+                                        .unwrap()
+                                        .and_then(|t| t.content_uuid())
+                                    {
+                                        s3.delete_object(format!("/update-files/{content_uuid}"))
+                                            .unwrap();
+                                    }
                                 }
                             }
                         }
