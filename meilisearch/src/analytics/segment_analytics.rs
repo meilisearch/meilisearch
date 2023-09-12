@@ -1389,19 +1389,29 @@ impl DocumentsDeletionAggregator {
 
     /// Aggregate one [DocumentsAggregator] into another.
     pub fn aggregate(&mut self, other: Self) {
+        let Self {
+            timestamp,
+            user_agents,
+            total_received,
+            per_document_id,
+            clear_all,
+            per_batch,
+            per_filter,
+        } = other;
+
         if self.timestamp.is_none() {
-            self.timestamp = other.timestamp;
+            self.timestamp = timestamp;
         }
 
         // we can't create a union because there is no `into_union` method
-        for user_agent in other.user_agents {
+        for user_agent in user_agents {
             self.user_agents.insert(user_agent);
         }
-        self.total_received = self.total_received.saturating_add(other.total_received);
-        self.per_document_id |= other.per_document_id;
-        self.clear_all |= other.clear_all;
-        self.per_batch |= other.per_batch;
-        self.per_filter |= other.per_filter;
+        self.total_received = self.total_received.saturating_add(total_received);
+        self.per_document_id |= per_document_id;
+        self.clear_all |= clear_all;
+        self.per_batch |= per_batch;
+        self.per_filter |= per_filter;
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
@@ -1444,49 +1454,82 @@ pub struct TasksAggregator {
 
 impl TasksAggregator {
     pub fn from_query(query: &TasksFilterQuery, request: &HttpRequest) -> Self {
+        let TasksFilterQuery {
+            limit: _,
+            from: _,
+            uids,
+            index_uids,
+            types,
+            statuses,
+            canceled_by,
+            before_enqueued_at,
+            after_enqueued_at,
+            before_started_at,
+            after_started_at,
+            before_finished_at,
+            after_finished_at,
+        } = query;
+
         Self {
             timestamp: Some(OffsetDateTime::now_utc()),
             user_agents: extract_user_agents(request).into_iter().collect(),
-            filtered_by_uid: query.uids.is_some(),
-            filtered_by_index_uid: query.index_uids.is_some(),
-            filtered_by_type: query.types.is_some(),
-            filtered_by_status: query.statuses.is_some(),
-            filtered_by_canceled_by: query.canceled_by.is_some(),
-            filtered_by_before_enqueued_at: query.before_enqueued_at.is_some(),
-            filtered_by_after_enqueued_at: query.after_enqueued_at.is_some(),
-            filtered_by_before_started_at: query.before_started_at.is_some(),
-            filtered_by_after_started_at: query.after_started_at.is_some(),
-            filtered_by_before_finished_at: query.before_finished_at.is_some(),
-            filtered_by_after_finished_at: query.after_finished_at.is_some(),
+            filtered_by_uid: uids.is_some(),
+            filtered_by_index_uid: index_uids.is_some(),
+            filtered_by_type: types.is_some(),
+            filtered_by_status: statuses.is_some(),
+            filtered_by_canceled_by: canceled_by.is_some(),
+            filtered_by_before_enqueued_at: before_enqueued_at.is_some(),
+            filtered_by_after_enqueued_at: after_enqueued_at.is_some(),
+            filtered_by_before_started_at: before_started_at.is_some(),
+            filtered_by_after_started_at: after_started_at.is_some(),
+            filtered_by_before_finished_at: before_finished_at.is_some(),
+            filtered_by_after_finished_at: after_finished_at.is_some(),
             total_received: 1,
         }
     }
 
-    /// Aggregate one [DocumentsAggregator] into another.
+    /// Aggregate one [TasksAggregator] into another.
     pub fn aggregate(&mut self, other: Self) {
+        let Self {
+            timestamp,
+            user_agents,
+            total_received,
+            filtered_by_uid,
+            filtered_by_index_uid,
+            filtered_by_type,
+            filtered_by_status,
+            filtered_by_canceled_by,
+            filtered_by_before_enqueued_at,
+            filtered_by_after_enqueued_at,
+            filtered_by_before_started_at,
+            filtered_by_after_started_at,
+            filtered_by_before_finished_at,
+            filtered_by_after_finished_at,
+        } = other;
+
         if self.timestamp.is_none() {
-            self.timestamp = other.timestamp;
+            self.timestamp = timestamp;
         }
 
         // we can't create a union because there is no `into_union` method
-        for user_agent in other.user_agents {
+        for user_agent in user_agents {
             self.user_agents.insert(user_agent);
         }
 
-        self.filtered_by_uid |= other.filtered_by_uid;
-        self.filtered_by_index_uid |= other.filtered_by_index_uid;
-        self.filtered_by_type |= other.filtered_by_type;
-        self.filtered_by_status |= other.filtered_by_status;
-        self.filtered_by_canceled_by |= other.filtered_by_canceled_by;
-        self.filtered_by_before_enqueued_at |= other.filtered_by_before_enqueued_at;
-        self.filtered_by_after_enqueued_at |= other.filtered_by_after_enqueued_at;
-        self.filtered_by_before_started_at |= other.filtered_by_before_started_at;
-        self.filtered_by_after_started_at |= other.filtered_by_after_started_at;
-        self.filtered_by_before_finished_at |= other.filtered_by_before_finished_at;
-        self.filtered_by_after_finished_at |= other.filtered_by_after_finished_at;
-        self.filtered_by_after_finished_at |= other.filtered_by_after_finished_at;
+        self.filtered_by_uid |= filtered_by_uid;
+        self.filtered_by_index_uid |= filtered_by_index_uid;
+        self.filtered_by_type |= filtered_by_type;
+        self.filtered_by_status |= filtered_by_status;
+        self.filtered_by_canceled_by |= filtered_by_canceled_by;
+        self.filtered_by_before_enqueued_at |= filtered_by_before_enqueued_at;
+        self.filtered_by_after_enqueued_at |= filtered_by_after_enqueued_at;
+        self.filtered_by_before_started_at |= filtered_by_before_started_at;
+        self.filtered_by_after_started_at |= filtered_by_after_started_at;
+        self.filtered_by_before_finished_at |= filtered_by_before_finished_at;
+        self.filtered_by_after_finished_at |= filtered_by_after_finished_at;
+        self.filtered_by_after_finished_at |= filtered_by_after_finished_at;
 
-        self.total_received = self.total_received.saturating_add(other.total_received);
+        self.total_received = self.total_received.saturating_add(total_received);
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
