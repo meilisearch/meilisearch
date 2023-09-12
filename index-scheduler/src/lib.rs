@@ -900,8 +900,8 @@ fn load_snapshot(this: &IndexScheduler, path: &str) -> anyhow::Result<()> {
     let src = format!("{path}/indexes");
     let uuids = s3.list(src.clone(), None)?.into_iter().flat_map(|lbr| {
         lbr.contents.into_iter().map(|o| {
-            let mut iter = o.key.rsplit('.');
-            iter.nth(1).unwrap().to_string()
+            let (_, name) = o.key.rsplit_once('/').unwrap();
+            name.to_string()
         })
     });
     for uuid in uuids {
