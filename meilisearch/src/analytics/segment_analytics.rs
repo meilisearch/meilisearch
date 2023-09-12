@@ -1643,19 +1643,29 @@ impl DocumentsFetchAggregator {
 
     /// Aggregate one [DocumentsFetchAggregator] into another.
     pub fn aggregate(&mut self, other: Self) {
+        let Self {
+            timestamp,
+            user_agents,
+            total_received,
+            per_document_id,
+            per_filter,
+            max_limit,
+            max_offset,
+        } = other;
+
         if self.timestamp.is_none() {
-            self.timestamp = other.timestamp;
+            self.timestamp = timestamp;
         }
-        for user_agent in other.user_agents {
+        for user_agent in user_agents {
             self.user_agents.insert(user_agent);
         }
 
-        self.total_received = self.total_received.saturating_add(other.total_received);
-        self.per_document_id |= other.per_document_id;
-        self.per_filter |= other.per_filter;
+        self.total_received = self.total_received.saturating_add(total_received);
+        self.per_document_id |= per_document_id;
+        self.per_filter |= per_filter;
 
-        self.max_limit = self.max_limit.max(other.max_limit);
-        self.max_offset = self.max_offset.max(other.max_offset);
+        self.max_limit = self.max_limit.max(max_limit);
+        self.max_offset = self.max_offset.max(max_offset);
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
