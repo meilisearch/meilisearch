@@ -17,7 +17,7 @@ members = [
 ]
 
 [workspace.package]
-version = "1.2.0"
+version = "1.2.1"
 authors = ["Quentin de Quelen <quentin@dequelen.me>", "Clément Renault <clement@meilisearch.com>"]
 description = "Meilisearch HTTP server"
 homepage = "https://meilisearch.com"

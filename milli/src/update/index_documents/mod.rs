@@ -2045,10 +2045,11 @@ mod tests {
             "branch_id_number": 0
         }]};
 
-        let Err(Error::UserError(UserError::MultiplePrimaryKeyCandidatesFound {
-            candidates
-        })) =
-            index.add_documents(doc_multiple_ids) else { panic!("Expected Error::UserError(MultiplePrimaryKeyCandidatesFound)") };
+        let Err(Error::UserError(UserError::MultiplePrimaryKeyCandidatesFound { candidates })) =
+            index.add_documents(doc_multiple_ids)
+        else {
+            panic!("Expected Error::UserError(MultiplePrimaryKeyCandidatesFound)")
+        };
 
         assert_eq!(candidates, vec![S("id"), S("project_id"), S("public_uid"),]);
 

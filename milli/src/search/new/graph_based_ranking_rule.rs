@@ -193,9 +193,10 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
             .all_costs
             .get(state.graph.query_graph.root_node)
             .iter()
-            .find(|c| **c >= state.cur_cost) else {
-                self.state = None;
-                return Ok(None);
+            .find(|c| **c >= state.cur_cost)
+        else {
+            self.state = None;
+            return Ok(None);
         };
         state.cur_cost = cost + 1;
 

@@ -80,7 +80,9 @@ impl MatchingWords {
                 let word = self.word_interner.get(*word);
                 // if the word is a prefix we match using starts_with.
                 if located_words.is_prefix && token.lemma().starts_with(word) {
-                    let Some((char_index, c)) = word.char_indices().take(located_words.original_char_count).last() else {
+                    let Some((char_index, c)) =
+                        word.char_indices().take(located_words.original_char_count).last()
+                    else {
                         continue;
                     };
                     let prefix_length = char_index + c.len_utf8();

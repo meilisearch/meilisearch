@@ -147,9 +147,7 @@ impl Key {
 fn parse_expiration_date(
     string: Option<String>,
 ) -> std::result::Result<Option<OffsetDateTime>, ParseOffsetDateTimeError> {
-    let Some(string) = string else {
-        return Ok(None)
-    };
+    let Some(string) = string else { return Ok(None) };
     let datetime = if let Ok(datetime) = OffsetDateTime::parse(&string, &Rfc3339) {
         datetime
     } else if let Ok(primitive_datetime) = PrimitiveDateTime::parse(

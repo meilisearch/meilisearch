@@ -223,7 +223,9 @@ impl IndexMap {
         enable_mdb_writemap: bool,
         map_size_growth: usize,
     ) {
-        let Some(index) = self.available.remove(uuid) else { return; };
+        let Some(index) = self.available.remove(uuid) else {
+            return;
+        };
         self.close(*uuid, index, enable_mdb_writemap, map_size_growth);
     }
 
