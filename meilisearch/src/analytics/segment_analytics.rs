@@ -313,6 +313,7 @@ impl From<Opt> for Infos {
             #[cfg(all(not(debug_assertions), feature = "analytics"))]
                 no_analytics: _,
             zk_url: _,
+            s3_url: _,
         } = options;
 
         let schedule_snapshot = match schedule_snapshot {

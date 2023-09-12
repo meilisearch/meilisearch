@@ -1,4 +1,4 @@
-use std::io::{BufReader, ErrorKind};
+use std::io::{BufReader, ErrorKind, Seek, SeekFrom};
 
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
@@ -395,7 +395,7 @@ async fn document_addition(
         return Err(MeilisearchHttpError::MissingPayload(format));
     }
 
-    if let Err(e) = buffer.seek(std::io::SeekFrom::Start(0)).await {
+    if let Err(e) = buffer.seek(SeekFrom::Start(0)).await {
         return Err(MeilisearchHttpError::Payload(ReceivePayload(Box::new(e))));
     }
 
@@ -411,8 +411,12 @@ async fn document_addition(
         };
 
         if let Some(s3) = s3 {
+            update_file.seek(SeekFrom::Start(0)).unwrap();
             let mut reader = BufReader::new(&*update_file);
-            s3.put_object_stream(&mut reader, format!("/update-files/{}", uuid)).unwrap();
+            match s3.put_object_stream(&mut reader, format!("/update-files/{}", uuid)) {
+                Ok(_) | Err(s3::error::S3Error::Http(_, _)) => (),
+                Err(e) => panic!("Error {}", e),
+            }
         }
 
         // we NEED to persist the file here because we moved the `udpate_file` in another task.
