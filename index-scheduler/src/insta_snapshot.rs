@@ -41,6 +41,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         planned_failures: _,
         run_loop_iteration: _,
         zookeeper: _,
+        options: _,
     } = inner.deref();
 
     let rtxn = env.read_txn().unwrap();

@@ -468,7 +468,12 @@ impl IndexScheduler {
                                         let s3 = inner.options.s3.as_ref().unwrap();
                                         let task =
                                             s3.get_object(format!("/tasks/{id:0>10}")).unwrap();
-
+                                        assert_eq!(
+                                            task.status_code(),
+                                            200,
+                                            "could not reach the s3: {:?}",
+                                            task.as_str()
+                                        );
                                         let task = serde_json::from_slice(task.as_slice()).unwrap();
                                         inner.register_raw_task(&mut wtxn, &task).unwrap();
                                         // we received a new tasks, we must wake up
@@ -507,6 +512,12 @@ impl IndexScheduler {
                                         .unwrap();
                                     let s3 = inner.options.s3.as_ref().unwrap();
                                     let task = s3.get_object(format!("tasks/{id:0>10}")).unwrap();
+                                    assert_eq!(
+                                        task.status_code(),
+                                        200,
+                                        "could not reach the s3: {:?}",
+                                        task.as_str()
+                                    );
                                     let task = serde_json::from_slice(task.as_slice()).unwrap();
                                     inner.register_raw_task(&mut wtxn, &task).unwrap();
                                     wtxn.commit().unwrap();

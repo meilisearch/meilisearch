@@ -30,6 +30,11 @@ const MEILI_MASTER_KEY: &str = "MEILI_MASTER_KEY";
 const MEILI_ENV: &str = "MEILI_ENV";
 const MEILI_ZK_URL: &str = "MEILI_ZK_URL";
 const MEILI_S3_URL: &str = "MEILI_S3_URL";
+const MEILI_S3_BUCKET: &str = "MEILI_S3_BUCKET";
+const MEILI_S3_ACCESS_KEY: &str = "MEILI_S3_ACCESS_KEY";
+const MEILI_S3_SECRET_KEY: &str = "MEILI_S3_SECRET_KEY";
+const MEILI_S3_SECURITY_TOKEN: &str = "MEILI_S3_SECURITY_TOKEN";
+const MEILI_S3_REGION: &str = "MEILI_S3_REGION";
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
 const MEILI_NO_ANALYTICS: &str = "MEILI_NO_ANALYTICS";
 const MEILI_HTTP_PAYLOAD_SIZE_LIMIT: &str = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT";
@@ -58,6 +63,7 @@ const DEFAULT_CONFIG_FILE_PATH: &str = "./config.toml";
 const DEFAULT_DB_PATH: &str = "./data.ms";
 const DEFAULT_HTTP_ADDR: &str = "localhost:7700";
 const DEFAULT_ENV: &str = "development";
+const DEFAULT_S3_REGION: &str = "eu-central-1";
 const DEFAULT_HTTP_PAYLOAD_SIZE_LIMIT: &str = "100 MB";
 const DEFAULT_SNAPSHOT_DIR: &str = "snapshots/";
 const DEFAULT_SNAPSHOT_INTERVAL_SEC: u64 = 86400;
@@ -161,9 +167,30 @@ pub struct Opt {
     #[clap(long, env = MEILI_ZK_URL)]
     pub zk_url: Option<String>,
 
-    /// Sets the HTTP address and port used to communicate with the S3 bucket.
+    /// Sets the address and port used to communicate with the S3 bucket.
     #[clap(long, env = MEILI_S3_URL)]
     pub s3_url: Option<String>,
+
+    /// Sets the region used to communicate with the s3 bucket.
+    #[clap(long, env = MEILI_S3_REGION, default_value_t = default_s3_region())]
+    #[serde(default = "default_s3_region")]
+    pub s3_region: String,
+
+    /// Sets the S3 bucket name to use.
+    #[clap(long, env = MEILI_S3_BUCKET)]
+    pub s3_bucket: Option<String>,
+
+    /// Set the S3 access key. If used you must also set the secret key.
+    #[clap(long, env = MEILI_S3_ACCESS_KEY)]
+    pub s3_access_key: Option<String>,
+
+    /// Set the S3 secret key. If used you must also set the access key.
+    #[clap(long, env = MEILI_S3_SECRET_KEY)]
+    pub s3_secret_key: Option<String>,
+
+    /// Security token, can't be used with access key and secret key.
+    #[clap(long, env = MEILI_S3_SECURITY_TOKEN)]
+    pub s3_security_token: Option<String>,
 
     /// Deactivates Meilisearch's built-in telemetry when provided.
     ///
@@ -381,6 +408,11 @@ impl Opt {
             env,
             zk_url,
             s3_url,
+            s3_region,
+            s3_bucket,
+            s3_access_key,
+            s3_secret_key,
+            s3_security_token,
             max_index_size: _,
             max_task_db_size: _,
             http_payload_size_limit,
@@ -419,6 +451,19 @@ impl Opt {
         }
         if let Some(s3_url) = s3_url {
             export_to_env_if_not_present(MEILI_S3_URL, s3_url);
+        }
+        export_to_env_if_not_present(MEILI_S3_REGION, s3_region);
+        if let Some(s3_bucket) = s3_bucket {
+            export_to_env_if_not_present(MEILI_S3_BUCKET, s3_bucket);
+        }
+        if let Some(s3_access_key) = s3_access_key {
+            export_to_env_if_not_present(MEILI_S3_ACCESS_KEY, s3_access_key);
+        }
+        if let Some(s3_secret_key) = s3_secret_key {
+            export_to_env_if_not_present(MEILI_S3_SECRET_KEY, s3_secret_key);
+        }
+        if let Some(s3_security_token) = s3_security_token {
+            export_to_env_if_not_present(MEILI_S3_SECURITY_TOKEN, s3_security_token);
         }
         #[cfg(all(not(debug_assertions), feature = "analytics"))]
         {
@@ -734,8 +779,8 @@ fn default_env() -> String {
     DEFAULT_ENV.to_string()
 }
 
-pub fn default_zk_url() -> String {
-    DEFAULT_HTTP_ADDR.to_string()
+fn default_s3_region() -> String {
+    DEFAULT_S3_REGION.to_string()
 }
 
 fn default_max_index_size() -> Byte {

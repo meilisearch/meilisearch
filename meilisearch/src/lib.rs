@@ -247,9 +247,15 @@ fn open_or_create_database_unchecked(
         s3: opt.s3_url.as_ref().map(|url| {
             Arc::new(
                 Bucket::new(
-                    "test-rust-s3",
-                    Region::Custom { region: "eu-central-1".to_owned(), endpoint: url.clone() },
-                    Credentials::default().unwrap(),
+                    opt.s3_bucket.as_deref().unwrap(),
+                    Region::Custom { region: opt.s3_region.clone(), endpoint: url.clone() },
+                    Credentials {
+                        access_key: opt.s3_access_key.clone(),
+                        secret_key: opt.s3_secret_key.clone(),
+                        security_token: opt.s3_security_token.clone(),
+                        session_token: None,
+                        expiration: None,
+                    },
                 )
                 .unwrap()
                 .with_path_style(),
