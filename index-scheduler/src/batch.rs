@@ -534,7 +534,9 @@ impl IndexScheduler {
         let index_tasks = self.index_tasks(rtxn, index_name)? & enqueued;
 
         // If autobatching is disabled we only take one task at a time.
-        let tasks_limit = if self.autobatching_enabled { usize::MAX } else { 1 };
+        // Otherwise, we take only a maximum of tasks to create batches.
+        let tasks_limit =
+            if self.autobatching_enabled { self.maximum_number_of_batched_tasks } else { 1 };
 
         let enqueued = index_tasks
             .into_iter()

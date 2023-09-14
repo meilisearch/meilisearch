@@ -253,6 +253,9 @@ pub struct IndexSchedulerOptions {
     /// Set to `true` iff the index scheduler is allowed to automatically
     /// batch tasks together, to process multiple tasks at once.
     pub autobatching_enabled: bool,
+    /// If the autobatcher is allowed to automatically batch tasks
+    /// it will only batch this defined number of tasks at once.
+    pub maximum_number_of_batched_tasks: usize,
     /// The maximum number of tasks stored in the task queue before starting
     /// to auto schedule task deletions.
     pub max_number_of_tasks: usize,
@@ -310,6 +313,9 @@ pub struct IndexScheduler {
     /// Whether auto-batching is enabled or not.
     pub(crate) autobatching_enabled: bool,
 
+    /// The maximum number of tasks that will be batched together.
+    pub(crate) maximum_number_of_batched_tasks: usize,
+
     /// The max number of tasks allowed before the scheduler starts to delete
     /// the finished tasks automatically.
     pub(crate) max_number_of_tasks: usize,
@@ -363,6 +369,7 @@ impl IndexScheduler {
             index_mapper: self.index_mapper.clone(),
             wake_up: self.wake_up.clone(),
             autobatching_enabled: self.autobatching_enabled,
+            maximum_number_of_batched_tasks: self.maximum_number_of_batched_tasks,
             max_number_of_tasks: self.max_number_of_tasks,
             snapshots_path: self.snapshots_path.clone(),
             dumps_path: self.dumps_path.clone(),
@@ -458,6 +465,7 @@ impl IndexScheduler {
             // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
             wake_up: Arc::new(SignalEvent::auto(true)),
             autobatching_enabled: options.autobatching_enabled,
+            maximum_number_of_batched_tasks: options.maximum_number_of_batched_tasks,
             max_number_of_tasks: options.max_number_of_tasks,
             dumps_path: options.dumps_path,
             snapshots_path: options.snapshots_path,
