@@ -302,7 +302,7 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_reduce_indexing_memory_usage: bool,
 
-    /// Experimental RAM reduction during indexing, do not use in production, see: <https://github.com/meilisearch/product/discussions/652>
+    /// Experimental limit to the number of tasks per batch
     #[clap(long, env = MEILI_EXPERIMENTAL_LIMIT_BATCHED_TASKS, default_value_t = default_limit_batched_tasks())]
     #[serde(default = "default_limit_batched_tasks")]
     pub experimental_limit_batched_tasks: usize,
