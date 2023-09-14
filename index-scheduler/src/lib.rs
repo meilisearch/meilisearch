@@ -1589,6 +1589,7 @@ mod tests {
                 index_count: 5,
                 indexer_config,
                 autobatching_enabled: true,
+                maximum_number_of_batched_tasks: usize::MAX,
                 max_number_of_tasks: 1_000_000,
                 instance_features: Default::default(),
             };

@@ -285,6 +285,7 @@ impl From<Opt> for Infos {
             db_path,
             experimental_enable_metrics,
             experimental_reduce_indexing_memory_usage,
+            experimental_limit_batched_tasks: _,
             http_addr,
             master_key: _,
             env,
