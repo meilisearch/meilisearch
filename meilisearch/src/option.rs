@@ -301,6 +301,11 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_reduce_indexing_memory_usage: bool,
 
+    /// Experimental limit to the number of tasks per batch
+    #[clap(long, env = MEILI_EXPERIMENTAL_LIMIT_BATCHED_TASKS, default_value_t = default_limit_batched_tasks())]
+    #[serde(default = "default_limit_batched_tasks")]
+    pub experimental_limit_batched_tasks: usize,
+
     #[serde(flatten)]
     #[clap(flatten)]
     pub indexer_options: IndexerOpts,
