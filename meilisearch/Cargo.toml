@@ -133,7 +133,7 @@ vergen = { version = "7.5.1", default-features = false, features = ["git"] }
 zip = { version = "0.6.4", optional = true }
 
 [features]
-default = ["analytics", "meilisearch-types/all-tokenizations", "mini-dashboard"]
+default = ["analytics", "meilisearch-types/all-tokenizations", "mini-dashboard", "profile-with-puffin"]
 analytics = ["segment"]
 profile-with-puffin = ["dep:puffin_http"]
 mini-dashboard = [
