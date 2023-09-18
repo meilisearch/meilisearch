@@ -115,6 +115,32 @@ impl MergeableReader for Vec<(grenad::Reader<BufReader<File>>, grenad::Reader<Bu
     }
 }
 
+impl MergeableReader
+    for Vec<(
+        grenad::Reader<BufReader<File>>,
+        grenad::Reader<BufReader<File>>,
+        grenad::Reader<BufReader<File>>,
+    )>
+{
+    type Output = (
+        grenad::Reader<BufReader<File>>,
+        grenad::Reader<BufReader<File>>,
+        grenad::Reader<BufReader<File>>,
+    );
+
+    fn merge(self, merge_fn: MergeFn, params: &GrenadParameters) -> Result<Self::Output> {
+        let mut m1 = MergerBuilder::new(merge_fn);
+        let mut m2 = MergerBuilder::new(merge_fn);
+        let mut m3 = MergerBuilder::new(merge_fn);
+        for (r1, r2, r3) in self.into_iter() {
+            m1.push(r1)?;
+            m2.push(r2)?;
+            m3.push(r3)?;
+        }
+        Ok((m1.finish(params)?, m2.finish(params)?, m3.finish(params)?))
+    }
+}
+
 struct MergerBuilder<R>(grenad::MergerBuilder<R, MergeFn>);
 
 impl<R: io::Read + io::Seek> MergerBuilder<R> {

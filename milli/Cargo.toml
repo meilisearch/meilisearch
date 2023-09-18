@@ -79,6 +79,7 @@ big_s = "1.0.2"
 insta = "1.29.0"
 maplit = "1.0.2"
 md5 = "0.7.0"
+meili-snap = { path = "../meili-snap" }
 rand = { version = "0.8.5", features = ["small_rng"] }
 
 [features]

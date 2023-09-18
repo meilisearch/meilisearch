@@ -406,13 +406,23 @@ where
             }
 
             let typed_chunk = match result? {
-                TypedChunk::WordDocids { word_docids_reader, exact_word_docids_reader } => {
+                TypedChunk::WordDocids {
+                    word_docids_reader,
+                    exact_word_docids_reader,
+                    word_fid_docids_reader,
+                } => {
                     let cloneable_chunk = unsafe { as_cloneable_grenad(&word_docids_reader)? };
                     word_docids = Some(cloneable_chunk);
                     let cloneable_chunk =
                         unsafe { as_cloneable_grenad(&exact_word_docids_reader)? };
                     exact_word_docids = Some(cloneable_chunk);
-                    TypedChunk::WordDocids { word_docids_reader, exact_word_docids_reader }
+                    let cloneable_chunk = unsafe { as_cloneable_grenad(&word_fid_docids_reader)? };
+                    word_fid_docids = Some(cloneable_chunk);
+                    TypedChunk::WordDocids {
+                        word_docids_reader,
+                        exact_word_docids_reader,
+                        word_fid_docids_reader,
+                    }
                 }
                 TypedChunk::WordPairProximityDocids(chunk) => {
                     let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };

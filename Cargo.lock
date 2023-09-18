@@ -2703,6 +2703,7 @@ dependencies = [
  "logging_timer",
  "maplit",
  "md5",
+ "meili-snap",
  "memmap2",
  "mimalloc",
  "obkv",

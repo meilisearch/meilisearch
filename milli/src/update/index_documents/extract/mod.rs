@@ -176,16 +176,23 @@ pub(crate) fn data_from_obkv_documents(
     spawn_extraction_task::<
         _,
         _,
-        Vec<(grenad::Reader<BufReader<File>>, grenad::Reader<BufReader<File>>)>,
+        Vec<(
+            grenad::Reader<BufReader<File>>,
+            grenad::Reader<BufReader<File>>,
+            grenad::Reader<BufReader<File>>,
+        )>,
     >(
         docid_word_positions_chunks.clone(),
         indexer,
         lmdb_writer_sx.clone(),
         move |doc_word_pos, indexer| extract_word_docids(doc_word_pos, indexer, &exact_attributes),
         merge_roaring_bitmaps,
-        |(word_docids_reader, exact_word_docids_reader)| TypedChunk::WordDocids {
-            word_docids_reader,
-            exact_word_docids_reader,
+        |(word_docids_reader, exact_word_docids_reader, word_fid_docids_reader)| {
+            TypedChunk::WordDocids {
+                word_docids_reader,
+                exact_word_docids_reader,
+                word_fid_docids_reader,
+            }
         },
         "word-docids",
     );
@@ -199,15 +206,15 @@ pub(crate) fn data_from_obkv_documents(
         TypedChunk::WordPositionDocids,
         "word-position-docids",
     );
-    spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
-        docid_word_positions_chunks,
-        indexer,
-        lmdb_writer_sx.clone(),
-        extract_word_fid_docids,
-        merge_cbo_roaring_bitmaps,
-        TypedChunk::WordFidDocids,
-        "word-fid-docids",
-    );
+    // spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
+    //     docid_word_positions_chunks,
+    //     indexer,
+    //     lmdb_writer_sx.clone(),
+    //     extract_word_fid_docids,
+    //     merge_cbo_roaring_bitmaps,
+    //     TypedChunk::WordFidDocids,
+    //     "word-fid-docids",
+    // );
 
     spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
         docid_fid_facet_strings_chunks,
