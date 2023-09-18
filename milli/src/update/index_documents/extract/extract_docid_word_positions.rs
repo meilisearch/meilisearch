@@ -4,11 +4,11 @@ use std::fs::File;
 use std::{io, mem, str};
 
 use charabia::{Language, Script, SeparatorKind, Token, TokenKind, Tokenizer, TokenizerBuilder};
-use obkv::KvReader;
+use obkv::{KvReader, KvWriterU16};
 use roaring::RoaringBitmap;
 use serde_json::Value;
 
-use super::helpers::{concat_u32s_array, create_sorter, sorter_into_reader, GrenadParameters};
+use super::helpers::{create_sorter, keep_latest_obkv, sorter_into_reader, GrenadParameters};
 use crate::error::{InternalError, SerializationError};
 use crate::update::index_documents::MergeFn;
 use crate::{
@@ -42,7 +42,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     let mut script_language_docids = HashMap::new();
     let mut docid_word_positions_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
-        concat_u32s_array,
+        keep_latest_obkv,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -155,6 +155,7 @@ fn extract_tokens_from_document(
                 let tokens = process_tokens(tokenizer.tokenize(field))
                     .take_while(|(p, _)| (*p as u32) < max_positions_per_attributes);
 
+                let mut writer = KvWriterU16::memory();
                 for (index, token) in tokens {
                     // if a language has been detected for the token, we update the counter.
                     if let Some(language) = token.language {
@@ -168,17 +169,17 @@ fn extract_tokens_from_document(
                     }
                     let token = token.lemma().trim();
                     if !token.is_empty() && token.len() <= MAX_WORD_LENGTH {
-                        buffers.key_buffer.truncate(mem::size_of::<u32>());
-                        buffers.key_buffer.extend_from_slice(token.as_bytes());
-
                         let position: u16 = index
                             .try_into()
                             .map_err(|_| SerializationError::InvalidNumberSerialization)?;
-                        let position = absolute_from_relative_position(field_id, position);
-                        docid_word_positions_sorter
-                            .insert(&buffers.key_buffer, position.to_ne_bytes())?;
+                        writer.insert(position, token.as_bytes())?;
                     }
                 }
+
+                let positions = writer.into_inner()?;
+                buffers.key_buffer.truncate(mem::size_of::<u32>());
+                buffers.key_buffer.extend_from_slice(&field_id.to_be_bytes());
+                docid_word_positions_sorter.insert(&buffers.key_buffer, positions)?;
             }
         }
     }

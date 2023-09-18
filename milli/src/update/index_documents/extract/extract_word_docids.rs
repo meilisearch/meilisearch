@@ -1,18 +1,19 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::fs::File;
 use std::io;
 use std::iter::FromIterator;
 
+use obkv::KvReaderU16;
 use roaring::RoaringBitmap;
 
 use super::helpers::{
-    create_sorter, merge_roaring_bitmaps, serialize_roaring_bitmap, sorter_into_reader,
-    try_split_array_at, GrenadParameters,
+    create_sorter, merge_cbo_roaring_bitmaps, merge_roaring_bitmaps, serialize_roaring_bitmap,
+    sorter_into_reader, try_split_array_at, GrenadParameters,
 };
 use crate::error::SerializationError;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
-use crate::update::index_documents::helpers::read_u32_ne_bytes;
-use crate::{relative_from_absolute_position, FieldId, Result};
+use crate::update::MergeFn;
+use crate::{DocumentId, FieldId, Result};
 
 /// Extracts the word and the documents ids where this word appear.
 ///
@@ -26,7 +27,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     docid_word_positions: grenad::Reader<R>,
     indexer: GrenadParameters,
     exact_attributes: &HashSet<FieldId>,
-) -> Result<(grenad::Reader<File>, grenad::Reader<File>)> {
+) -> Result<(grenad::Reader<File>, grenad::Reader<File>, grenad::Reader<File>)> {
     puffin::profile_function!();
 
     let max_memory = indexer.max_memory_by_thread();
@@ -37,7 +38,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
-        max_memory.map(|x| x / 2),
+        max_memory.map(|x| x / 3),
     );
 
     let mut exact_word_docids_sorter = create_sorter(
@@ -46,45 +47,116 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
-        max_memory.map(|x| x / 2),
+        max_memory.map(|x| x / 3),
     );
 
+    let mut word_fid_docids_sorter = create_sorter(
+        grenad::SortAlgorithm::Unstable,
+        merge_roaring_bitmaps,
+        indexer.chunk_compression_type,
+        indexer.chunk_compression_level,
+        indexer.max_nb_chunks,
+        max_memory.map(|x| x / 3),
+    );
+
+    let mut current_document_id = None;
+    let mut fid = 0;
+    let mut key_buffer = Vec::new();
     let mut value_buffer = Vec::new();
+    let mut words = BTreeSet::new();
+    let mut exact_words = BTreeSet::new();
     let mut cursor = docid_word_positions.into_cursor()?;
-    while let Some((key, positions)) = cursor.move_on_next()? {
-        let (document_id_bytes, word_bytes) = try_split_array_at(key)
+    while let Some((key, value)) = cursor.move_on_next()? {
+        let (document_id_bytes, fid_bytes) = try_split_array_at(key)
+            .ok_or(SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
+        let (fid_bytes, _) = try_split_array_at(key)
             .ok_or(SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
         let document_id = u32::from_be_bytes(document_id_bytes);
+        fid = u16::from_be_bytes(fid_bytes);
 
-        let bitmap = RoaringBitmap::from_iter(Some(document_id));
-        serialize_roaring_bitmap(&bitmap, &mut value_buffer)?;
+        // drain the btreemaps when we change document.
+        if current_document_id.map_or(false, |id| id != document_id) {
+            words_into_sorters(
+                document_id,
+                fid,
+                &mut key_buffer,
+                &mut value_buffer,
+                &mut exact_words,
+                &mut words,
+                &mut exact_word_docids_sorter,
+                &mut word_docids_sorter,
+                &mut word_fid_docids_sorter,
+            )?;
+        }
 
-        // If there are no exact attributes, we do not need to iterate over positions.
-        if exact_attributes.is_empty() {
-            word_docids_sorter.insert(word_bytes, &value_buffer)?;
+        current_document_id = Some(document_id);
+
+        // every words contained in an attribute set to exact must be pushed in the exact_words list.
+        if exact_attributes.contains(&fid) {
+            for (_pos, word) in KvReaderU16::new(&value).iter() {
+                exact_words.insert(word.to_vec());
+            }
         } else {
-            let mut added_to_exact = false;
-            let mut added_to_word_docids = false;
-            for position in read_u32_ne_bytes(positions) {
-                // as soon as we know that this word had been to both readers, we don't need to
-                // iterate over the positions.
-                if added_to_exact && added_to_word_docids {
-                    break;
-                }
-                let (fid, _) = relative_from_absolute_position(position);
-                if exact_attributes.contains(&fid) && !added_to_exact {
-                    exact_word_docids_sorter.insert(word_bytes, &value_buffer)?;
-                    added_to_exact = true;
-                } else if !added_to_word_docids {
-                    word_docids_sorter.insert(word_bytes, &value_buffer)?;
-                    added_to_word_docids = true;
-                }
+            for (_pos, word) in KvReaderU16::new(&value).iter() {
+                words.insert(word.to_vec());
             }
         }
+    }
+
+    // We must make sure that don't lose the current document field id
+    if let Some(document_id) = current_document_id {
+        words_into_sorters(
+            document_id,
+            fid,
+            &mut key_buffer,
+            &mut value_buffer,
+            &mut exact_words,
+            &mut words,
+            &mut exact_word_docids_sorter,
+            &mut word_docids_sorter,
+            &mut word_fid_docids_sorter,
+        )?;
     }
 
     Ok((
         sorter_into_reader(word_docids_sorter, indexer)?,
         sorter_into_reader(exact_word_docids_sorter, indexer)?,
+        sorter_into_reader(word_fid_docids_sorter, indexer)?,
     ))
+}
+
+fn words_into_sorters(
+    document_id: DocumentId,
+    fid: FieldId,
+    key_buffer: &mut Vec<u8>,
+    value_buffer: &mut Vec<u8>,
+    exact_words: &mut BTreeSet<Vec<u8>>,
+    words: &mut BTreeSet<Vec<u8>>,
+    exact_word_docids_sorter: &mut grenad::Sorter<MergeFn>,
+    word_docids_sorter: &mut grenad::Sorter<MergeFn>,
+    word_fid_docids_sorter: &mut grenad::Sorter<MergeFn>,
+) -> Result<()> {
+    puffin::profile_function!();
+    let bitmap = RoaringBitmap::from_iter(Some(document_id));
+    serialize_roaring_bitmap(&bitmap, value_buffer)?;
+    for word_bytes in exact_words.iter() {
+        exact_word_docids_sorter.insert(word_bytes, &mut *value_buffer)?;
+    }
+
+    for word_bytes in words.iter() {
+        word_docids_sorter.insert(word_bytes, &value_buffer)?;
+    }
+
+    for word_bytes in (&*words | &*exact_words).iter() {
+        key_buffer.clear();
+        key_buffer.extend_from_slice(&word_bytes);
+        key_buffer.push(0);
+        key_buffer.extend_from_slice(&fid.to_be_bytes());
+        word_fid_docids_sorter.insert(word_bytes, &value_buffer)?;
+    }
+
+    exact_words.clear();
+    words.clear();
+
+    Ok(())
 }

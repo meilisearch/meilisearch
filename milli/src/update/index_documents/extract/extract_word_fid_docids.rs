@@ -17,6 +17,8 @@ pub fn extract_word_fid_docids<R: io::Read + io::Seek>(
 ) -> Result<grenad::Reader<File>> {
     puffin::profile_function!();
 
+    todo!("remove me");
+
     let max_memory = indexer.max_memory_by_thread();
 
     let mut word_fid_docids_sorter = create_sorter(

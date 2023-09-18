@@ -1,11 +1,13 @@
 use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::HashMap;
 use std::fs::File;
-use std::{cmp, io, mem, str, vec};
+use std::{cmp, io};
+
+use obkv::KvReaderU16;
 
 use super::helpers::{
-    create_sorter, merge_cbo_roaring_bitmaps, read_u32_ne_bytes, sorter_into_reader,
-    try_split_array_at, GrenadParameters, MergeFn,
+    create_sorter, merge_cbo_roaring_bitmaps, sorter_into_reader, try_split_array_at,
+    GrenadParameters, MergeFn,
 };
 use crate::error::SerializationError;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
@@ -34,44 +36,59 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
         max_memory.map(|m| m / 2),
     );
 
-    // This map is assumed to not consume a lot of memory.
-    let mut document_word_positions_heap = BinaryHeap::new();
+    let mut word_positions: Vec<(String, u16)> = Vec::with_capacity(MAX_DISTANCE as usize);
+    let mut word_pair_proximity = HashMap::new();
     let mut current_document_id = None;
 
     let mut cursor = docid_word_positions.into_cursor()?;
     while let Some((key, value)) = cursor.move_on_next()? {
-        let (document_id_bytes, word_bytes) = try_split_array_at(key)
+        let (document_id_bytes, _fid_bytes) = try_split_array_at(key)
             .ok_or(SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
         let document_id = u32::from_be_bytes(document_id_bytes);
-        let word = str::from_utf8(word_bytes)?;
 
-        let curr_document_id = *current_document_id.get_or_insert(document_id);
-        if curr_document_id != document_id {
-            let document_word_positions_heap = mem::take(&mut document_word_positions_heap);
-            document_word_positions_into_sorter(
-                curr_document_id,
-                document_word_positions_heap,
-                &mut word_pair_proximity_docids_sorter,
-            )?;
-            current_document_id = Some(document_id);
-        }
+        for (position, word) in KvReaderU16::new(&value).iter() {
+            // if we change document, we fill the sorter
+            if current_document_id.map_or(false, |id| id != document_id) {
+                while !word_positions.is_empty() {
+                    word_positions_into_word_pair_proximity(
+                        &mut word_positions,
+                        &mut word_pair_proximity,
+                    )?;
+                }
 
-        let word = word.to_string();
-        let mut positions: Vec<_> = read_u32_ne_bytes(value).collect();
-        positions.sort_unstable();
-        let mut iter = positions.into_iter();
-        if let Some(position) = iter.next() {
-            document_word_positions_heap.push(PeekedWordPosition { word, position, iter });
+                document_word_positions_into_sorter(
+                    document_id,
+                    &word_pair_proximity,
+                    &mut word_pair_proximity_docids_sorter,
+                )?;
+                word_pair_proximity.clear();
+                word_positions.clear();
+            }
+
+            // drain the proximity window until the head word is considered close to the word we are inserting.
+            while word_positions.get(0).map_or(false, |(_w, p)| {
+                positions_proximity(*p as u32, position as u32) > MAX_DISTANCE
+            }) {
+                word_positions_into_word_pair_proximity(
+                    &mut word_positions,
+                    &mut word_pair_proximity,
+                )?;
+            }
+
+            // insert the new word.
+            let word = std::str::from_utf8(word)?;
+            word_positions.push((word.to_string(), position));
         }
     }
 
     if let Some(document_id) = current_document_id {
-        // We must make sure that don't lose the current document field id
-        // word count map if we break because we reached the end of the chunk.
-        let document_word_positions_heap = mem::take(&mut document_word_positions_heap);
+        while !word_positions.is_empty() {
+            word_positions_into_word_pair_proximity(&mut word_positions, &mut word_pair_proximity)?;
+        }
+
         document_word_positions_into_sorter(
             document_id,
-            document_word_positions_heap,
+            &word_pair_proximity,
             &mut word_pair_proximity_docids_sorter,
         )?;
     }
@@ -85,64 +102,13 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
 /// close to each other.
 fn document_word_positions_into_sorter(
     document_id: DocumentId,
-    mut word_positions_heap: BinaryHeap<PeekedWordPosition<vec::IntoIter<u32>>>,
+    word_pair_proximity: &HashMap<(String, String), u8>,
     word_pair_proximity_docids_sorter: &mut grenad::Sorter<MergeFn>,
 ) -> Result<()> {
-    let mut word_pair_proximity = HashMap::new();
-    let mut ordered_peeked_word_positions = Vec::new();
-    while !word_positions_heap.is_empty() {
-        while let Some(peeked_word_position) = word_positions_heap.pop() {
-            ordered_peeked_word_positions.push(peeked_word_position);
-            if ordered_peeked_word_positions.len() == 7 {
-                break;
-            }
-        }
-
-        if let Some((head, tail)) = ordered_peeked_word_positions.split_first() {
-            for PeekedWordPosition { word, position, .. } in tail {
-                let prox = positions_proximity(head.position, *position);
-                if prox > 0 && prox < MAX_DISTANCE {
-                    word_pair_proximity
-                        .entry((head.word.clone(), word.clone()))
-                        .and_modify(|p| {
-                            *p = cmp::min(*p, prox);
-                        })
-                        .or_insert(prox);
-                }
-            }
-
-            // Push the tail in the heap.
-            let tail_iter = ordered_peeked_word_positions.drain(1..);
-            word_positions_heap.extend(tail_iter);
-
-            // Advance the head and push it in the heap.
-            if let Some(mut head) = ordered_peeked_word_positions.pop() {
-                if let Some(next_position) = head.iter.next() {
-                    let prox = positions_proximity(head.position, next_position);
-
-                    if prox > 0 && prox < MAX_DISTANCE {
-                        word_pair_proximity
-                            .entry((head.word.clone(), head.word.clone()))
-                            .and_modify(|p| {
-                                *p = cmp::min(*p, prox);
-                            })
-                            .or_insert(prox);
-                    }
-
-                    word_positions_heap.push(PeekedWordPosition {
-                        word: head.word,
-                        position: next_position,
-                        iter: head.iter,
-                    });
-                }
-            }
-        }
-    }
-
     let mut key_buffer = Vec::new();
     for ((w1, w2), prox) in word_pair_proximity {
         key_buffer.clear();
-        key_buffer.push(prox as u8);
+        key_buffer.push(*prox as u8);
         key_buffer.extend_from_slice(w1.as_bytes());
         key_buffer.push(0);
         key_buffer.extend_from_slice(w2.as_bytes());
@@ -150,6 +116,23 @@ fn document_word_positions_into_sorter(
         word_pair_proximity_docids_sorter.insert(&key_buffer, document_id.to_ne_bytes())?;
     }
 
+    Ok(())
+}
+
+fn word_positions_into_word_pair_proximity(
+    word_positions: &mut Vec<(String, u16)>,
+    word_pair_proximity: &mut HashMap<(String, String), u8>,
+) -> Result<()> {
+    let (head_word, head_position) = word_positions.remove(0);
+    for (word, position) in word_positions.iter() {
+        let prox = positions_proximity(head_position as u32, *position as u32) as u8;
+        word_pair_proximity
+            .entry((head_word.clone(), word.clone()))
+            .and_modify(|p| {
+                *p = cmp::min(*p, prox);
+            })
+            .or_insert(prox);
+    }
     Ok(())
 }
 

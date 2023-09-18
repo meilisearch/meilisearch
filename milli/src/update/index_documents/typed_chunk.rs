@@ -32,6 +32,7 @@ pub(crate) enum TypedChunk {
     WordDocids {
         word_docids_reader: grenad::Reader<File>,
         exact_word_docids_reader: grenad::Reader<File>,
+        word_fid_docids_reader: grenad::Reader<File>,
     },
     WordPositionDocids(grenad::Reader<File>),
     WordFidDocids(grenad::Reader<File>),
@@ -64,10 +65,15 @@ impl TypedChunk {
             TypedChunk::NewDocumentsIds(grenad) => {
                 format!("NewDocumentsIds {{ number_of_entries: {} }}", grenad.len())
             }
-            TypedChunk::WordDocids { word_docids_reader, exact_word_docids_reader } => format!(
-                "WordDocids {{ word_docids_reader: {}, exact_word_docids_reader: {} }}",
+            TypedChunk::WordDocids {
+                word_docids_reader,
+                exact_word_docids_reader,
+                word_fid_docids_reader,
+            } => format!(
+                "WordDocids {{ word_docids_reader: {}, exact_word_docids_reader: {}, word_fid_docids_reader: {} }}",
                 word_docids_reader.len(),
-                exact_word_docids_reader.len()
+                exact_word_docids_reader.len(),
+                word_fid_docids_reader.len()
             ),
             TypedChunk::WordPositionDocids(grenad) => {
                 format!("WordPositionDocids {{ number_of_entries: {} }}", grenad.len())
@@ -138,7 +144,11 @@ pub(crate) fn write_typed_chunk_into_index(
         TypedChunk::NewDocumentsIds(documents_ids) => {
             return Ok((documents_ids, is_merged_database))
         }
-        TypedChunk::WordDocids { word_docids_reader, exact_word_docids_reader } => {
+        TypedChunk::WordDocids {
+            word_docids_reader,
+            exact_word_docids_reader,
+            word_fid_docids_reader,
+        } => {
             let word_docids_iter = unsafe { as_cloneable_grenad(&word_docids_reader) }?;
             append_entries_into_database(
                 word_docids_iter.clone(),
@@ -157,6 +167,16 @@ pub(crate) fn write_typed_chunk_into_index(
                 index_is_empty,
                 |value, _buffer| Ok(value),
                 merge_roaring_bitmaps,
+            )?;
+
+            let word_fid_docids_iter = unsafe { as_cloneable_grenad(&word_fid_docids_reader) }?;
+            append_entries_into_database(
+                word_fid_docids_iter,
+                &index.word_fid_docids,
+                wtxn,
+                index_is_empty,
+                |value, _buffer| Ok(value),
+                merge_cbo_roaring_bitmaps,
             )?;
 
             // create fst from word docids
