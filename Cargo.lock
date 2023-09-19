@@ -1440,7 +1440,6 @@ dependencies = [
  "insta",
  "nom",
  "nom_locate",
- "unescaper",
 ]
 
 [[package]]
@@ -4147,15 +4146,6 @@ name = "ucd-trie"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e79c4d996edb816c91e4308506774452e55e95c3c9de07b6729e17e15a5ef81"
-
-[[package]]
-name = "unescaper"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a96a44ae11e25afb520af4534fd7b0bd8cd613e35a78def813b8cf41631fa3c8"
-dependencies = [
- "thiserror",
-]
 
 [[package]]
 name = "unicase"
