@@ -69,7 +69,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     while let Some((key, value)) = cursor.move_on_next()? {
         let (document_id_bytes, fid_bytes) = try_split_array_at(key)
             .ok_or(SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
-        let (fid_bytes, _) = try_split_array_at(key)
+        let (fid_bytes, _) = try_split_array_at(fid_bytes)
             .ok_or(SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
         let document_id = u32::from_be_bytes(document_id_bytes);
         fid = u16::from_be_bytes(fid_bytes);

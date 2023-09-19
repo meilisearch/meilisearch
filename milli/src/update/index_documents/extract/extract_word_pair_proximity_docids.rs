@@ -46,25 +46,25 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
             .ok_or(SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
         let document_id = u32::from_be_bytes(document_id_bytes);
 
-        for (position, word) in KvReaderU16::new(&value).iter() {
-            // if we change document, we fill the sorter
-            if current_document_id.map_or(false, |id| id != document_id) {
-                while !word_positions.is_empty() {
-                    word_positions_into_word_pair_proximity(
-                        &mut word_positions,
-                        &mut word_pair_proximity,
-                    )?;
-                }
-
-                document_word_positions_into_sorter(
-                    document_id,
-                    &word_pair_proximity,
-                    &mut word_pair_proximity_docids_sorter,
+        // if we change document, we fill the sorter
+        if current_document_id.map_or(false, |id| id != document_id) {
+            while !word_positions.is_empty() {
+                word_positions_into_word_pair_proximity(
+                    &mut word_positions,
+                    &mut word_pair_proximity,
                 )?;
-                word_pair_proximity.clear();
-                word_positions.clear();
             }
 
+            document_word_positions_into_sorter(
+                document_id,
+                &word_pair_proximity,
+                &mut word_pair_proximity_docids_sorter,
+            )?;
+            word_pair_proximity.clear();
+            word_positions.clear();
+        }
+
+        for (position, word) in KvReaderU16::new(&value).iter() {
             // drain the proximity window until the head word is considered close to the word we are inserting.
             while word_positions.get(0).map_or(false, |(_w, p)| {
                 positions_proximity(*p as u32, position as u32) > MAX_DISTANCE
