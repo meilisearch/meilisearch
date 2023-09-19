@@ -152,7 +152,7 @@ fn words_into_sorters(
         key_buffer.extend_from_slice(&word_bytes);
         key_buffer.push(0);
         key_buffer.extend_from_slice(&fid.to_be_bytes());
-        word_fid_docids_sorter.insert(word_bytes, &value_buffer)?;
+        word_fid_docids_sorter.insert(&key_buffer, &value_buffer)?;
     }
 
     exact_words.clear();
