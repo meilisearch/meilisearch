@@ -475,6 +475,7 @@ where
     R: io::Read + io::Seek,
     FS: for<'a> Fn(&'a [u8], &'a mut Vec<u8>) -> Result<&'a [u8]>,
     FM: Fn(&[u8], &[u8], &mut Vec<u8>) -> Result<()>,
+    K: for<'a> heed::BytesDecode<'a>,
 {
     puffin::profile_function!(format!("number of entries: {}", data.len()));
 
@@ -495,6 +496,12 @@ where
     let mut cursor = data.into_cursor()?;
     while let Some((key, value)) = cursor.move_on_next()? {
         if valid_lmdb_key(key) {
+            debug_assert!(
+                K::bytes_decode(&key).is_some(),
+                "Couldn't decode key with the database decoder, key length: {} - key bytes: {:x?}",
+                key.len(),
+                &key
+            );
             buffer.clear();
             let value = serialize_value(value, &mut buffer)?;
             unsafe { database.append(key, value)? };
