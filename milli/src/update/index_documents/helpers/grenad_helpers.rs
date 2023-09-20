@@ -54,6 +54,8 @@ pub fn sorter_into_reader(
     sorter: grenad::Sorter<MergeFn>,
     indexer: GrenadParameters,
 ) -> Result<grenad::Reader<File>> {
+    puffin::profile_function!();
+
     let mut writer = create_writer(
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
