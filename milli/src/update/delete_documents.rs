@@ -108,15 +108,17 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         self.delete_document(docid);
         Some(docid)
     }
-    pub fn execute(self) -> Result<DocumentDeletionResult> {
-        puffin::profile_function!();
 
+    pub fn execute(self) -> Result<DocumentDeletionResult> {
         let DetailedDocumentDeletionResult { deleted_documents, remaining_documents } =
             self.execute_inner()?;
 
         Ok(DocumentDeletionResult { deleted_documents, remaining_documents })
     }
+
     pub(crate) fn execute_inner(mut self) -> Result<DetailedDocumentDeletionResult> {
+        puffin::profile_function!();
+
         self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
         // We retrieve the current documents ids that are in the database.
@@ -476,6 +478,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         C: for<'a> BytesDecode<'a, DItem = RoaringBitmap>
             + for<'a> BytesEncode<'a, EItem = RoaringBitmap>,
     {
+        puffin::profile_function!();
+
         while let Some(result) = iter.next() {
             let (bytes, mut docids) = result?;
             let previous_len = docids.len();
@@ -498,6 +502,8 @@ fn remove_from_word_prefix_docids(
     db: &Database<Str, RoaringBitmapCodec>,
     to_remove: &RoaringBitmap,
 ) -> Result<fst::Set<Vec<u8>>> {
+    puffin::profile_function!();
+
     let mut prefixes_to_delete = fst::SetBuilder::memory();
 
     // We iterate over the word prefix docids database and remove the deleted documents ids
@@ -528,6 +534,8 @@ fn remove_from_word_docids(
     words_to_keep: &mut BTreeSet<String>,
     words_to_remove: &mut BTreeSet<String>,
 ) -> Result<()> {
+    puffin::profile_function!();
+
     // We create an iterator to be able to get the content and delete the word docids.
     // It's faster to acquire a cursor to get and delete or put, as we avoid traversing
     // the LMDB B-Tree two times but only once.
@@ -559,6 +567,8 @@ fn remove_docids_from_field_id_docid_facet_value(
     field_id: FieldId,
     to_remove: &RoaringBitmap,
 ) -> heed::Result<HashSet<Vec<u8>>> {
+    puffin::profile_function!();
+
     let db = match facet_type {
         FacetType::String => {
             index.field_id_docid_facet_strings.remap_types::<ByteSlice, DecodeIgnore>()
@@ -594,6 +604,8 @@ fn remove_docids_from_facet_id_docids<'a, C>(
 where
     C: heed::BytesDecode<'a> + heed::BytesEncode<'a>,
 {
+    puffin::profile_function!();
+
     let mut iter = db.remap_key_type::<ByteSlice>().iter_mut(wtxn)?;
     while let Some(result) = iter.next() {
         let (bytes, mut docids) = result?;
