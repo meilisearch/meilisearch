@@ -209,7 +209,7 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
         db_path: dir.as_ref().join("db"),
         dump_dir: dir.as_ref().join("dumps"),
         env: "development".to_owned(),
-        #[cfg(all(not(debug_assertions), feature = "analytics"))]
+        #[cfg(feature = "analytics")]
         no_analytics: true,
         max_index_size: Byte::from_unit(100.0, ByteUnit::MiB).unwrap(),
         max_task_db_size: Byte::from_unit(1.0, ByteUnit::GiB).unwrap(),

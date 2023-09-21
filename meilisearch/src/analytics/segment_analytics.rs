@@ -310,7 +310,7 @@ impl From<Opt> for Infos {
             log_level,
             indexer_options,
             config_file_path,
-            #[cfg(all(not(debug_assertions), feature = "analytics"))]
+            #[cfg(feature = "analytics")]
                 no_analytics: _,
         } = options;
 
