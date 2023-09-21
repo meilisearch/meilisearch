@@ -48,7 +48,7 @@ fn write_user_id(db_path: &Path, user_id: &InstanceUid) {
     if let Some((meilisearch_config_path, user_id_path)) =
         MEILISEARCH_CONFIG_PATH.as_ref().zip(config_user_id_path(db_path))
     {
-        let _ = fs::create_dir_all(&meilisearch_config_path);
+        let _ = fs::create_dir_all(meilisearch_config_path);
         let _ = fs::write(user_id_path, user_id.to_string());
     }
 }
@@ -60,8 +60,7 @@ pub fn extract_user_agents(request: &HttpRequest) -> Vec<String> {
         .headers()
         .get(ANALYTICS_HEADER)
         .or_else(|| request.headers().get(USER_AGENT))
-        .map(|header| header.to_str().ok())
-        .flatten()
+        .and_then(|header| header.to_str().ok())
         .unwrap_or("unknown")
         .split(';')
         .map(str::trim)
@@ -91,6 +90,7 @@ pub struct SegmentAnalytics {
 }
 
 impl SegmentAnalytics {
+    #[allow(clippy::new_ret_no_self)]
     pub async fn new(
         opt: &Opt,
         index_scheduler: Arc<IndexScheduler>,
@@ -98,7 +98,7 @@ impl SegmentAnalytics {
     ) -> Arc<dyn Analytics> {
         let instance_uid = super::find_user_id(&opt.db_path);
         let first_time_run = instance_uid.is_none();
-        let instance_uid = instance_uid.unwrap_or_else(|| Uuid::new_v4());
+        let instance_uid = instance_uid.unwrap_or_else(Uuid::new_v4);
         write_user_id(&opt.db_path, &instance_uid);
 
         let client = reqwest::Client::builder().connect_timeout(Duration::from_secs(10)).build();
@@ -167,7 +167,7 @@ impl super::Analytics for SegmentAnalytics {
     }
 
     fn publish(&self, event_name: String, mut send: Value, request: Option<&HttpRequest>) {
-        let user_agent = request.map(|req| extract_user_agents(req));
+        let user_agent = request.map(extract_user_agents);
 
         send["user-agent"] = json!(user_agent);
         let event = Track {
@@ -176,7 +176,7 @@ impl super::Analytics for SegmentAnalytics {
             properties: send,
             ..Default::default()
         };
-        let _ = self.sender.try_send(AnalyticsMsg::BatchMessage(event.into()));
+        let _ = self.sender.try_send(AnalyticsMsg::BatchMessage(event));
     }
 
     fn get_search(&self, aggregate: SearchAggregator) {
@@ -379,10 +379,8 @@ impl Segment {
         static SYSTEM: Lazy<Value> = Lazy::new(|| {
             let mut sys = System::new_all();
             sys.refresh_all();
-            let kernel_version = sys
-                .kernel_version()
-                .map(|k| k.split_once("-").map(|(k, _)| k.to_string()))
-                .flatten();
+            let kernel_version =
+                sys.kernel_version().and_then(|k| k.split_once('-').map(|(k, _)| k.to_string()));
             json!({
                     "distribution": sys.name(),
                     "kernel_version": kernel_version,
@@ -492,54 +490,54 @@ impl Segment {
         } = self;
 
         if let Some(get_search) =
-            take(get_search_aggregator).into_event(&user, "Documents Searched GET")
+            take(get_search_aggregator).into_event(user, "Documents Searched GET")
         {
             let _ = self.batcher.push(get_search).await;
         }
         if let Some(post_search) =
-            take(post_search_aggregator).into_event(&user, "Documents Searched POST")
+            take(post_search_aggregator).into_event(user, "Documents Searched POST")
         {
             let _ = self.batcher.push(post_search).await;
         }
         if let Some(post_multi_search) = take(post_multi_search_aggregator)
-            .into_event(&user, "Documents Searched by Multi-Search POST")
+            .into_event(user, "Documents Searched by Multi-Search POST")
         {
             let _ = self.batcher.push(post_multi_search).await;
         }
         if let Some(post_facet_search) =
-            take(post_facet_search_aggregator).into_event(&user, "Facet Searched POST")
+            take(post_facet_search_aggregator).into_event(user, "Facet Searched POST")
         {
             let _ = self.batcher.push(post_facet_search).await;
         }
         if let Some(add_documents) =
-            take(add_documents_aggregator).into_event(&user, "Documents Added")
+            take(add_documents_aggregator).into_event(user, "Documents Added")
         {
             let _ = self.batcher.push(add_documents).await;
         }
         if let Some(delete_documents) =
-            take(delete_documents_aggregator).into_event(&user, "Documents Deleted")
+            take(delete_documents_aggregator).into_event(user, "Documents Deleted")
         {
             let _ = self.batcher.push(delete_documents).await;
         }
         if let Some(update_documents) =
-            take(update_documents_aggregator).into_event(&user, "Documents Updated")
+            take(update_documents_aggregator).into_event(user, "Documents Updated")
         {
             let _ = self.batcher.push(update_documents).await;
         }
         if let Some(get_fetch_documents) =
-            take(get_fetch_documents_aggregator).into_event(&user, "Documents Fetched GET")
+            take(get_fetch_documents_aggregator).into_event(user, "Documents Fetched GET")
         {
             let _ = self.batcher.push(get_fetch_documents).await;
         }
         if let Some(post_fetch_documents) =
-            take(post_fetch_documents_aggregator).into_event(&user, "Documents Fetched POST")
+            take(post_fetch_documents_aggregator).into_event(user, "Documents Fetched POST")
         {
             let _ = self.batcher.push(post_fetch_documents).await;
         }
-        if let Some(get_tasks) = take(get_tasks_aggregator).into_event(&user, "Tasks Seen") {
+        if let Some(get_tasks) = take(get_tasks_aggregator).into_event(user, "Tasks Seen") {
             let _ = self.batcher.push(get_tasks).await;
         }
-        if let Some(health) = take(health_aggregator).into_event(&user, "Health Seen") {
+        if let Some(health) = take(health_aggregator).into_event(user, "Health Seen") {
             let _ = self.batcher.push(health).await;
         }
         let _ = self.batcher.flush().await;
@@ -614,6 +612,7 @@ pub struct SearchAggregator {
 }
 
 impl SearchAggregator {
+    #[allow(clippy::field_reassign_with_default)]
     pub fn from_query(query: &SearchQuery, request: &HttpRequest) -> Self {
         let SearchQuery {
             q,
@@ -676,7 +675,7 @@ impl SearchAggregator {
         }
 
         // attributes_to_search_on
-        if let Some(_) = attributes_to_search_on {
+        if attributes_to_search_on.is_some() {
             ret.attributes_to_search_on_total_number_of_uses = 1;
         }
 
@@ -943,7 +942,7 @@ impl SearchAggregator {
             });
 
             Some(Track {
-                timestamp: timestamp,
+                timestamp,
                 user: user.clone(),
                 event: event_name.to_string(),
                 properties,
@@ -1116,7 +1115,7 @@ impl MultiSearchAggregator {
             });
 
             Some(Track {
-                timestamp: timestamp,
+                timestamp,
                 user: user.clone(),
                 event: event_name.to_string(),
                 properties,
@@ -1146,6 +1145,7 @@ pub struct FacetSearchAggregator {
 }
 
 impl FacetSearchAggregator {
+    #[allow(clippy::field_reassign_with_default)]
     pub fn from_query(query: &FacetSearchQuery, request: &HttpRequest) -> Self {
         let FacetSearchQuery {
             facet_query: _,
@@ -1211,8 +1211,7 @@ impl FacetSearchAggregator {
         }
 
         // additional_search_parameters_provided
-        self.additional_search_parameters_provided =
-            self.additional_search_parameters_provided | additional_search_parameters_provided;
+        self.additional_search_parameters_provided |= additional_search_parameters_provided;
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
@@ -1251,7 +1250,7 @@ impl FacetSearchAggregator {
             });
 
             Some(Track {
-                timestamp: timestamp,
+                timestamp,
                 user: user.clone(),
                 event: event_name.to_string(),
                 properties,
@@ -1284,25 +1283,28 @@ impl DocumentsAggregator {
     ) -> Self {
         let UpdateDocumentsQuery { primary_key, csv_delimiter: _ } = documents_query;
 
-        let mut ret = Self::default();
-        ret.timestamp = Some(OffsetDateTime::now_utc());
-
-        ret.updated = true;
-        ret.user_agents = extract_user_agents(request).into_iter().collect();
+        let mut primary_keys = HashSet::new();
         if let Some(primary_key) = primary_key.clone() {
-            ret.primary_keys.insert(primary_key);
+            primary_keys.insert(primary_key);
         }
 
+        let mut content_types = HashSet::new();
         let content_type = request
             .headers()
             .get(CONTENT_TYPE)
             .and_then(|s| s.to_str().ok())
             .unwrap_or("unknown")
             .to_string();
-        ret.content_types.insert(content_type);
-        ret.index_creation = index_creation;
+        content_types.insert(content_type);
 
-        ret
+        Self {
+            timestamp: Some(OffsetDateTime::now_utc()),
+            updated: true,
+            user_agents: extract_user_agents(request).into_iter().collect(),
+            content_types,
+            primary_keys,
+            index_creation,
+        }
     }
 
     /// Aggregate one [DocumentsAggregator] into another.
@@ -1343,7 +1345,7 @@ impl DocumentsAggregator {
             });
 
             Some(Track {
-                timestamp: timestamp,
+                timestamp,
                 user: user.clone(),
                 event: event_name.to_string(),
                 properties,
@@ -1372,19 +1374,15 @@ pub struct DocumentsDeletionAggregator {
 
 impl DocumentsDeletionAggregator {
     pub fn from_query(kind: DocumentDeletionKind, request: &HttpRequest) -> Self {
-        let mut ret = Self::default();
-        ret.timestamp = Some(OffsetDateTime::now_utc());
-
-        ret.user_agents = extract_user_agents(request).into_iter().collect();
-        ret.total_received = 1;
-        match kind {
-            DocumentDeletionKind::PerDocumentId => ret.per_document_id = true,
-            DocumentDeletionKind::ClearAll => ret.clear_all = true,
-            DocumentDeletionKind::PerBatch => ret.per_batch = true,
-            DocumentDeletionKind::PerFilter => ret.per_filter = true,
+        Self {
+            timestamp: Some(OffsetDateTime::now_utc()),
+            user_agents: extract_user_agents(request).into_iter().collect(),
+            total_received: 1,
+            per_document_id: matches!(kind, DocumentDeletionKind::PerDocumentId),
+            clear_all: matches!(kind, DocumentDeletionKind::ClearAll),
+            per_batch: matches!(kind, DocumentDeletionKind::PerBatch),
+            per_filter: matches!(kind, DocumentDeletionKind::PerFilter),
         }
-
-        ret
     }
 
     /// Aggregate one [DocumentsAggregator] into another.
@@ -1562,12 +1560,11 @@ pub struct HealthAggregator {
 
 impl HealthAggregator {
     pub fn from_query(request: &HttpRequest) -> Self {
-        let mut ret = Self::default();
-        ret.timestamp = Some(OffsetDateTime::now_utc());
-
-        ret.user_agents = extract_user_agents(request).into_iter().collect();
-        ret.total_received = 1;
-        ret
+        Self {
+            timestamp: Some(OffsetDateTime::now_utc()),
+            user_agents: extract_user_agents(request).into_iter().collect(),
+            total_received: 1,
+        }
     }
 
     /// Aggregate one [HealthAggregator] into another.
