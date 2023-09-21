@@ -314,6 +314,11 @@ impl From<Opt> for Infos {
                 no_analytics: _,
             zk_url: _,
             s3_url: _,
+            s3_region: _,
+            s3_bucket: _,
+            s3_access_key: _,
+            s3_secret_key: _,
+            s3_security_token: _,
         } = options;
 
         let schedule_snapshot = match schedule_snapshot {
