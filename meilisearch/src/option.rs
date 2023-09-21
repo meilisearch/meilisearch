@@ -28,7 +28,7 @@ const MEILI_DB_PATH: &str = "MEILI_DB_PATH";
 const MEILI_HTTP_ADDR: &str = "MEILI_HTTP_ADDR";
 const MEILI_MASTER_KEY: &str = "MEILI_MASTER_KEY";
 const MEILI_ENV: &str = "MEILI_ENV";
-#[cfg(all(not(debug_assertions), feature = "analytics"))]
+#[cfg(feature = "analytics")]
 const MEILI_NO_ANALYTICS: &str = "MEILI_NO_ANALYTICS";
 const MEILI_HTTP_PAYLOAD_SIZE_LIMIT: &str = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT";
 const MEILI_SSL_CERT_PATH: &str = "MEILI_SSL_CERT_PATH";
@@ -159,7 +159,7 @@ pub struct Opt {
     /// Meilisearch automatically collects data from all instances that do not opt out using this flag.
     /// All gathered data is used solely for the purpose of improving Meilisearch, and can be deleted
     /// at any time.
-    #[cfg(all(not(debug_assertions), feature = "analytics"))]
+    #[cfg(feature = "analytics")]
     #[serde(default)] // we can't send true
     #[clap(long, env = MEILI_NO_ANALYTICS)]
     pub no_analytics: bool,
@@ -390,7 +390,7 @@ impl Opt {
             ignore_missing_dump: _,
             ignore_dump_if_db_exists: _,
             config_file_path: _,
-            #[cfg(all(not(debug_assertions), feature = "analytics"))]
+            #[cfg(feature = "analytics")]
             no_analytics,
             experimental_enable_metrics: enable_metrics_route,
             experimental_reduce_indexing_memory_usage: reduce_indexing_memory_usage,
@@ -401,7 +401,7 @@ impl Opt {
             export_to_env_if_not_present(MEILI_MASTER_KEY, master_key);
         }
         export_to_env_if_not_present(MEILI_ENV, env);
-        #[cfg(all(not(debug_assertions), feature = "analytics"))]
+        #[cfg(feature = "analytics")]
         {
             export_to_env_if_not_present(MEILI_NO_ANALYTICS, no_analytics.to_string());
         }

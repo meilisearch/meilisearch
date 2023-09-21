@@ -1,6 +1,5 @@
 mod mock_analytics;
-// if we are in release mode and the feature analytics was enabled
-#[cfg(all(not(debug_assertions), feature = "analytics"))]
+#[cfg(feature = "analytics")]
 mod segment_analytics;
 
 use std::fs;
@@ -17,26 +16,25 @@ use serde_json::Value;
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
 use crate::routes::tasks::TasksFilterQuery;
 
-// if we are in debug mode OR the analytics feature is disabled
+// if the analytics feature is disabled
 // the `SegmentAnalytics` point to the mock instead of the real analytics
-#[cfg(any(debug_assertions, not(feature = "analytics")))]
+#[cfg(not(feature = "analytics"))]
 pub type SegmentAnalytics = mock_analytics::MockAnalytics;
-#[cfg(any(debug_assertions, not(feature = "analytics")))]
+#[cfg(not(feature = "analytics"))]
 pub type SearchAggregator = mock_analytics::SearchAggregator;
-#[cfg(any(debug_assertions, not(feature = "analytics")))]
+#[cfg(not(feature = "analytics"))]
 pub type MultiSearchAggregator = mock_analytics::MultiSearchAggregator;
-#[cfg(any(debug_assertions, not(feature = "analytics")))]
+#[cfg(not(feature = "analytics"))]
 pub type FacetSearchAggregator = mock_analytics::FacetSearchAggregator;
 
-// if we are in release mode and the feature analytics was enabled
-// we use the real analytics
-#[cfg(all(not(debug_assertions), feature = "analytics"))]
+// if the feature analytics is enabled we use the real analytics
+#[cfg(feature = "analytics")]
 pub type SegmentAnalytics = segment_analytics::SegmentAnalytics;
-#[cfg(all(not(debug_assertions), feature = "analytics"))]
+#[cfg(feature = "analytics")]
 pub type SearchAggregator = segment_analytics::SearchAggregator;
-#[cfg(all(not(debug_assertions), feature = "analytics"))]
+#[cfg(feature = "analytics")]
 pub type MultiSearchAggregator = segment_analytics::MultiSearchAggregator;
-#[cfg(all(not(debug_assertions), feature = "analytics"))]
+#[cfg(feature = "analytics")]
 pub type FacetSearchAggregator = segment_analytics::FacetSearchAggregator;
 
 /// The Meilisearch config dir:
