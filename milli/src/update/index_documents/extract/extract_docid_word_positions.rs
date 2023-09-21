@@ -155,7 +155,8 @@ fn extract_tokens_from_document(
                 let tokens = process_tokens(tokenizer.tokenize(field))
                     .take_while(|(p, _)| (*p as u32) < max_positions_per_attributes);
 
-                let mut writer = KvWriterU16::memory();
+                buffers.obkv_buffer.clear();
+                let mut writer = KvWriterU16::new(&mut buffers.obkv_buffer);
                 for (index, token) in tokens {
                     // if a language has been detected for the token, we update the counter.
                     if let Some(language) = token.language {
@@ -293,4 +294,6 @@ struct Buffers {
     key_buffer: Vec<u8>,
     // the field buffer for each fields desserialization, and must be cleared between each field.
     field_buffer: String,
+    // buffer used to store the value data containing an obkv.
+    obkv_buffer: Vec<u8>,
 }
