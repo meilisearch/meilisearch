@@ -51,6 +51,7 @@ const MEILI_LOG_LEVEL: &str = "MEILI_LOG_LEVEL";
 const MEILI_EXPERIMENTAL_ENABLE_METRICS: &str = "MEILI_EXPERIMENTAL_ENABLE_METRICS";
 const MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE: &str =
     "MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE";
+const MEILI_EXPERIMENTAL_PROFILE_WITH_PUFFIN: &str = "MEILI_EXPERIMENTAL_PROFILE_WITH_PUFFIN";
 
 const DEFAULT_CONFIG_FILE_PATH: &str = "./config.toml";
 const DEFAULT_DB_PATH: &str = "./data.ms";
@@ -301,6 +302,11 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_reduce_indexing_memory_usage: bool,
 
+    /// Experimental flag to export puffin reports, see: <https://github.com/meilisearch/product/discussions/xxx>
+    #[clap(long, env = MEILI_EXPERIMENTAL_PROFILE_WITH_PUFFIN)]
+    #[serde(default)]
+    pub experimental_profile_with_puffin: bool,
+
     #[serde(flatten)]
     #[clap(flatten)]
     pub indexer_options: IndexerOpts,
@@ -394,6 +400,7 @@ impl Opt {
             no_analytics,
             experimental_enable_metrics: enable_metrics_route,
             experimental_reduce_indexing_memory_usage: reduce_indexing_memory_usage,
+            experimental_profile_with_puffin,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
         export_to_env_if_not_present(MEILI_HTTP_ADDR, http_addr);
@@ -438,6 +445,10 @@ impl Opt {
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE,
             reduce_indexing_memory_usage.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_PROFILE_WITH_PUFFIN,
+            experimental_profile_with_puffin.to_string(),
         );
         indexer_options.export_to_env();
     }
