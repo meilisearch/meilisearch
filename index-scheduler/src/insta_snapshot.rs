@@ -30,6 +30,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         index_mapper,
         features: _,
         max_number_of_tasks: _,
+        puffin_frame: _,
         wake_up: _,
         dumps_path: _,
         snapshots_path: _,
