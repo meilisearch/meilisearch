@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::{cmp, io};
 
@@ -36,7 +36,8 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
         max_memory.map(|m| m / 2),
     );
 
-    let mut word_positions: Vec<(String, u16)> = Vec::with_capacity(MAX_DISTANCE as usize);
+    let mut word_positions: VecDeque<(String, u16)> =
+        VecDeque::with_capacity(MAX_DISTANCE as usize);
     let mut word_pair_proximity = HashMap::new();
     let mut current_document_id = None;
 
@@ -79,7 +80,7 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
 
             // insert the new word.
             let word = std::str::from_utf8(word)?;
-            word_positions.push((word.to_string(), position));
+            word_positions.push_back((word.to_string(), position));
         }
     }
 
@@ -122,10 +123,10 @@ fn document_word_positions_into_sorter(
 }
 
 fn word_positions_into_word_pair_proximity(
-    word_positions: &mut Vec<(String, u16)>,
+    word_positions: &mut VecDeque<(String, u16)>,
     word_pair_proximity: &mut HashMap<(String, String), u8>,
 ) -> Result<()> {
-    let (head_word, head_position) = word_positions.remove(0);
+    let (head_word, head_position) = word_positions.pop_front().unwrap();
     for (word, position) in word_positions.iter() {
         let prox = positions_proximity(head_position as u32, *position as u32) as u8;
         word_pair_proximity
@@ -136,30 +137,4 @@ fn word_positions_into_word_pair_proximity(
             .or_insert(prox);
     }
     Ok(())
-}
-
-struct PeekedWordPosition<I> {
-    word: String,
-    position: u32,
-    iter: I,
-}
-
-impl<I> Ord for PeekedWordPosition<I> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.position.cmp(&other.position).reverse()
-    }
-}
-
-impl<I> PartialOrd for PeekedWordPosition<I> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<I> Eq for PeekedWordPosition<I> {}
-
-impl<I> PartialEq for PeekedWordPosition<I> {
-    fn eq(&self, other: &Self) -> bool {
-        self.position == other.position
-    }
 }
