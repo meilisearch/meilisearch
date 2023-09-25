@@ -49,7 +49,7 @@ impl RoFeatures {
             Err(FeatureNotEnabledError {
                 disabled_action: "Getting metrics",
                 feature: "metrics",
-                issue_link: "https://github.com/meilisearch/meilisearch/discussions/3518",
+                issue_link: "https://github.com/meilisearch/product/discussions/625",
             }
             .into())
         }
