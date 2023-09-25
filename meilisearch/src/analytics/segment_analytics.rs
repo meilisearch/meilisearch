@@ -285,7 +285,6 @@ impl From<Opt> for Infos {
             db_path,
             experimental_enable_metrics,
             experimental_reduce_indexing_memory_usage,
-            experimental_profile_with_puffin: _,
             http_addr,
             master_key: _,
             env,

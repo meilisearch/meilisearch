@@ -258,8 +258,6 @@ pub struct IndexSchedulerOptions {
     /// The maximum number of tasks stored in the task queue before starting
     /// to auto schedule task deletions.
     pub max_number_of_tasks: usize,
-    /// Weither we need to export indexation puffin reports.
-    pub profile_with_puffin: bool,
     /// The experimental features enabled for this instance.
     pub instance_features: InstanceTogglableFeatures,
 }
@@ -318,8 +316,8 @@ pub struct IndexScheduler {
     /// the finished tasks automatically.
     pub(crate) max_number_of_tasks: usize,
 
-    /// Wether we must output indexation  profiling files to disk.
-    pub(crate) puffin_frame: Option<Arc<puffin::GlobalFrameView>>,
+    /// A frame to output the indexation profiling files to disk.
+    pub(crate) puffin_frame: Arc<puffin::GlobalFrameView>,
 
     /// The path used to create the dumps.
     pub(crate) dumps_path: PathBuf,
@@ -465,9 +463,7 @@ impl IndexScheduler {
             env,
             // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
             wake_up: Arc::new(SignalEvent::auto(true)),
-            puffin_frame: options
-                .profile_with_puffin
-                .then(|| Arc::new(puffin::GlobalFrameView::default())),
+            puffin_frame: Arc::new(puffin::GlobalFrameView::default()),
             autobatching_enabled: options.autobatching_enabled,
             max_number_of_tasks: options.max_number_of_tasks,
             dumps_path: options.dumps_path,
@@ -1087,16 +1083,15 @@ impl IndexScheduler {
                     // Let's write the previous frame to disk but only if
                     // the user wanted to profile with puffin.
                     if puffin_enabled {
-                        if let Some(global_frame_view) = &self.puffin_frame {
-                            let mut frame_view = global_frame_view.lock();
-                            if !frame_view.is_empty() {
-                                let now = OffsetDateTime::now_utc();
-                                let mut file = File::create(format!("{}.puffin", now))?;
-                                frame_view.save_to_writer(&mut file)?;
-                                file.sync_all()?;
-                                // We erase everything on this frame as it is not more useful.
-                                *frame_view = FrameView::default();
-                            }
+                        let mut frame_view = self.puffin_frame.lock();
+                        if !frame_view.is_empty() {
+                            let now = OffsetDateTime::now_utc();
+                            let mut file = File::create(format!("{}.puffin", now))?;
+                            frame_view.save_to_writer(&mut file)?;
+                            file.sync_all()?;
+                            // We erase this frame view as it is no more useful. We want to
+                            // measure the new frames now that we exported the previous ones.
+                            *frame_view = FrameView::default();
                         }
                     }
 
