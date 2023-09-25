@@ -35,7 +35,7 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
     );
 
     let mut word_positions: HashSet<(u16, Vec<u8>)> = HashSet::new();
-    let mut current_document_id = None;
+    let mut current_document_id: Option<u32> = None;
     let mut key_buffer = Vec::new();
     let mut cursor = docid_word_positions.into_cursor()?;
     while let Some((key, value)) = cursor.move_on_next()? {
@@ -49,7 +49,8 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
                 key_buffer.extend_from_slice(word_bytes);
                 key_buffer.push(0);
                 key_buffer.extend_from_slice(&position.to_be_bytes());
-                word_position_docids_sorter.insert(&key_buffer, document_id.to_ne_bytes())?;
+                word_position_docids_sorter
+                    .insert(&key_buffer, current_document_id.unwrap().to_ne_bytes())?;
             }
             word_positions.clear();
         }

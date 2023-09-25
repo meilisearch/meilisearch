@@ -168,7 +168,7 @@ impl<'ctx> SearchContext<'ctx> {
                     merge_cbo_roaring_bitmaps,
                 )
             }
-            None => DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
+            None => DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
                 self.txn,
                 word,
                 self.word_interner.get(word).as_str(),
@@ -182,7 +182,7 @@ impl<'ctx> SearchContext<'ctx> {
         &mut self,
         word: Interned<String>,
     ) -> Result<Option<RoaringBitmap>> {
-        DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
+        DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
             self.txn,
             word,
             self.word_interner.get(word).as_str(),
@@ -230,7 +230,7 @@ impl<'ctx> SearchContext<'ctx> {
                     merge_cbo_roaring_bitmaps,
                 )
             }
-            None => DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
+            None => DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
                 self.txn,
                 prefix,
                 self.word_interner.get(prefix).as_str(),
@@ -244,7 +244,7 @@ impl<'ctx> SearchContext<'ctx> {
         &mut self,
         prefix: Interned<String>,
     ) -> Result<Option<RoaringBitmap>> {
-        DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
+        DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
             self.txn,
             prefix,
             self.word_interner.get(prefix).as_str(),

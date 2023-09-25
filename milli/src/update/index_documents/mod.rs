@@ -38,7 +38,7 @@ use crate::update::{
     self, DeletionStrategy, IndexerConfig, PrefixWordPairsProximityDocids, UpdateIndexingStep,
     WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
-use crate::{Index, Result, RoaringBitmapCodec};
+use crate::{CboRoaringBitmapCodec, Index, Result, RoaringBitmapCodec};
 
 static MERGED_DATABASE_COUNT: usize = 7;
 static PREFIX_DATABASE_COUNT: usize = 5;
@@ -700,8 +700,8 @@ where
 fn execute_word_prefix_docids(
     txn: &mut heed::RwTxn,
     reader: grenad::Reader<Cursor<ClonableMmap>>,
-    word_docids_db: Database<Str, RoaringBitmapCodec>,
-    word_prefix_docids_db: Database<Str, RoaringBitmapCodec>,
+    word_docids_db: Database<Str, CboRoaringBitmapCodec>,
+    word_prefix_docids_db: Database<Str, CboRoaringBitmapCodec>,
     indexer_config: &IndexerConfig,
     new_prefix_fst_words: &[String],
     common_prefix_fst_words: &[&[String]],

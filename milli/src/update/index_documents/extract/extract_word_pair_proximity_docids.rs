@@ -56,13 +56,15 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
             }
 
             document_word_positions_into_sorter(
-                document_id,
+                current_document_id.unwrap(),
                 &word_pair_proximity,
                 &mut word_pair_proximity_docids_sorter,
             )?;
             word_pair_proximity.clear();
             word_positions.clear();
         }
+
+        current_document_id = Some(document_id);
 
         for (position, word) in KvReaderU16::new(&value).iter() {
             // drain the proximity window until the head word is considered close to the word we are inserting.

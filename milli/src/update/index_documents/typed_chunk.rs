@@ -156,7 +156,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 wtxn,
                 index_is_empty,
                 |value, _buffer| Ok(value),
-                merge_roaring_bitmaps,
+                merge_cbo_roaring_bitmaps,
             )?;
 
             let exact_word_docids_iter = unsafe { as_cloneable_grenad(&exact_word_docids_reader) }?;
@@ -166,7 +166,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 wtxn,
                 index_is_empty,
                 |value, _buffer| Ok(value),
-                merge_roaring_bitmaps,
+                merge_cbo_roaring_bitmaps,
             )?;
 
             let word_fid_docids_iter = unsafe { as_cloneable_grenad(&word_fid_docids_reader) }?;

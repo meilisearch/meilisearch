@@ -106,6 +106,12 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
                 if let Some(stop_words) = stop_words {
                     tokenizer_builder.stop_words(stop_words);
                 }
+                if let Some(dictionary) = dictionary {
+                    tokenizer_builder.words_dict(dictionary);
+                }
+                if let Some(separators) = allowed_separators {
+                    tokenizer_builder.separators(separators);
+                }
                 tokenizer_builder.allow_list(&script_language);
                 let tokenizer = tokenizer_builder.build();
 

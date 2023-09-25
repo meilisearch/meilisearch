@@ -495,7 +495,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
 fn remove_from_word_prefix_docids(
     txn: &mut heed::RwTxn,
-    db: &Database<Str, RoaringBitmapCodec>,
+    db: &Database<Str, CboRoaringBitmapCodec>,
     to_remove: &RoaringBitmap,
 ) -> Result<fst::Set<Vec<u8>>> {
     let mut prefixes_to_delete = fst::SetBuilder::memory();
@@ -523,7 +523,7 @@ fn remove_from_word_prefix_docids(
 
 fn remove_from_word_docids(
     txn: &mut heed::RwTxn,
-    db: &heed::Database<Str, RoaringBitmapCodec>,
+    db: &heed::Database<Str, CboRoaringBitmapCodec>,
     to_remove: &RoaringBitmap,
     words_to_keep: &mut BTreeSet<String>,
     words_to_remove: &mut BTreeSet<String>,

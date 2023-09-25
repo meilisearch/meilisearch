@@ -8,7 +8,7 @@ use obkv::KvReaderU16;
 use roaring::RoaringBitmap;
 
 use super::helpers::{
-    create_sorter, create_writer, merge_roaring_bitmaps, serialize_roaring_bitmap,
+    create_sorter, create_writer, merge_cbo_roaring_bitmaps, serialize_roaring_bitmap,
     sorter_into_reader, try_split_array_at, writer_into_reader, GrenadParameters,
 };
 use crate::error::SerializationError;
@@ -36,15 +36,12 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
 
     let mut word_fid_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,
-        merge_roaring_bitmaps,
+        merge_cbo_roaring_bitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
         max_memory.map(|x| x / 3),
     );
-
-    let mut current_document_id = None;
-    let mut fid = 0;
     let mut key_buffer = Vec::new();
     let mut value_buffer = Vec::new();
     let mut words = BTreeSet::new();
@@ -55,28 +52,12 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         let (fid_bytes, _) = try_split_array_at(fid_bytes)
             .ok_or(SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
         let document_id = u32::from_be_bytes(document_id_bytes);
-        fid = u16::from_be_bytes(fid_bytes);
+        let fid = u16::from_be_bytes(fid_bytes);
 
-        // drain the btreemaps when we change document.
-        if current_document_id.map_or(false, |id| id != document_id) {
-            words_into_sorter(
-                document_id,
-                fid,
-                &mut key_buffer,
-                &mut value_buffer,
-                &mut words,
-                &mut word_fid_docids_sorter,
-            )?;
-        }
-
-        current_document_id = Some(document_id);
         for (_pos, word) in KvReaderU16::new(&value).iter() {
             words.insert(word.to_vec());
         }
-    }
 
-    // We must make sure that don't lose the current document field id
-    if let Some(document_id) = current_document_id {
         words_into_sorter(
             document_id,
             fid,
@@ -85,11 +66,13 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
             &mut words,
             &mut word_fid_docids_sorter,
         )?;
+
+        words.clear();
     }
 
     let mut word_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,
-        merge_roaring_bitmaps,
+        merge_cbo_roaring_bitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -98,7 +81,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
 
     let mut exact_word_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,
-        merge_roaring_bitmaps,
+        merge_cbo_roaring_bitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -142,15 +125,13 @@ fn words_into_sorter(
     word_fid_docids_sorter: &mut grenad::Sorter<MergeFn>,
 ) -> Result<()> {
     puffin::profile_function!();
-    let bitmap = RoaringBitmap::from_iter(Some(document_id));
-    serialize_roaring_bitmap(&bitmap, value_buffer)?;
 
     for word_bytes in words.iter() {
         key_buffer.clear();
         key_buffer.extend_from_slice(&word_bytes);
         key_buffer.push(0);
         key_buffer.extend_from_slice(&fid.to_be_bytes());
-        word_fid_docids_sorter.insert(&key_buffer, &value_buffer)?;
+        word_fid_docids_sorter.insert(&key_buffer, document_id.to_ne_bytes())?;
     }
 
     words.clear();

@@ -5,15 +5,15 @@ use heed::types::{ByteSlice, Str};
 use heed::Database;
 
 use crate::update::index_documents::{
-    create_sorter, merge_roaring_bitmaps, sorter_into_lmdb_database, valid_lmdb_key,
+    create_sorter, merge_cbo_roaring_bitmaps, sorter_into_lmdb_database, valid_lmdb_key,
     CursorClonableMmap, MergeFn,
 };
-use crate::{Result, RoaringBitmapCodec};
+use crate::{CboRoaringBitmapCodec, Result, RoaringBitmapCodec};
 
 pub struct WordPrefixDocids<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
-    word_docids: Database<Str, RoaringBitmapCodec>,
-    word_prefix_docids: Database<Str, RoaringBitmapCodec>,
+    word_docids: Database<Str, CboRoaringBitmapCodec>,
+    word_prefix_docids: Database<Str, CboRoaringBitmapCodec>,
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) max_nb_chunks: Option<usize>,
@@ -23,8 +23,8 @@ pub struct WordPrefixDocids<'t, 'u, 'i> {
 impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
     pub fn new(
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
-        word_docids: Database<Str, RoaringBitmapCodec>,
-        word_prefix_docids: Database<Str, RoaringBitmapCodec>,
+        word_docids: Database<Str, CboRoaringBitmapCodec>,
+        word_prefix_docids: Database<Str, CboRoaringBitmapCodec>,
     ) -> WordPrefixDocids<'t, 'u, 'i> {
         WordPrefixDocids {
             wtxn,
@@ -51,7 +51,7 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
         // and write into it at the same time, therefore we write into another file.
         let mut prefix_docids_sorter = create_sorter(
             grenad::SortAlgorithm::Unstable,
-            merge_roaring_bitmaps,
+            merge_cbo_roaring_bitmaps,
             self.chunk_compression_type,
             self.chunk_compression_level,
             self.max_nb_chunks,
@@ -115,7 +115,7 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
             self.wtxn,
             *self.word_prefix_docids.as_polymorph(),
             prefix_docids_sorter,
-            merge_roaring_bitmaps,
+            merge_cbo_roaring_bitmaps,
         )?;
 
         Ok(())

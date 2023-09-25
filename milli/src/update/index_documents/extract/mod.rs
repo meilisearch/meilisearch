@@ -181,7 +181,7 @@ pub(crate) fn data_from_obkv_documents(
         indexer,
         lmdb_writer_sx.clone(),
         move |doc_word_pos, indexer| extract_word_docids(doc_word_pos, indexer, &exact_attributes),
-        merge_roaring_bitmaps,
+        merge_cbo_roaring_bitmaps,
         |(word_docids_reader, exact_word_docids_reader, word_fid_docids_reader)| {
             TypedChunk::WordDocids {
                 word_docids_reader,

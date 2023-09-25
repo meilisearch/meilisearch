@@ -119,16 +119,16 @@ pub struct Index {
     pub(crate) main: PolyDatabase,
 
     /// A word and all the documents ids containing the word.
-    pub word_docids: Database<Str, RoaringBitmapCodec>,
+    pub word_docids: Database<Str, CboRoaringBitmapCodec>,
 
     /// A word and all the documents ids containing the word, from attributes for which typos are not allowed.
-    pub exact_word_docids: Database<Str, RoaringBitmapCodec>,
+    pub exact_word_docids: Database<Str, CboRoaringBitmapCodec>,
 
     /// A prefix of word and all the documents ids containing this prefix.
-    pub word_prefix_docids: Database<Str, RoaringBitmapCodec>,
+    pub word_prefix_docids: Database<Str, CboRoaringBitmapCodec>,
 
     /// A prefix of word and all the documents ids containing this prefix, from attributes for which typos are not allowed.
-    pub exact_word_prefix_docids: Database<Str, RoaringBitmapCodec>,
+    pub exact_word_prefix_docids: Database<Str, CboRoaringBitmapCodec>,
 
     /// Maps the proximity between a pair of words with all the docids where this relation appears.
     pub word_pair_proximity_docids: Database<U8StrStrCodec, CboRoaringBitmapCodec>,
