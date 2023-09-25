@@ -53,6 +53,7 @@ use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
+use puffin::FrameView;
 use roaring::RoaringBitmap;
 use synchronoise::SignalEvent;
 use time::format_description::well_known::Rfc3339;
@@ -1072,6 +1073,8 @@ impl IndexScheduler {
             self.breakpoint(Breakpoint::Start);
         }
 
+        let puffin_enabled = self.features()?.check_puffin().is_ok();
+        puffin::set_scopes_on(puffin_enabled);
         puffin::GlobalProfiler::lock().new_frame();
 
         self.cleanup_task_queue()?;
@@ -1081,15 +1084,19 @@ impl IndexScheduler {
             match self.create_next_batch(&rtxn).map_err(|e| Error::CreateBatch(Box::new(e)))? {
                 Some(batch) => batch,
                 None => {
-                    // Let's write the previous save to disk but only if
+                    // Let's write the previous frame to disk but only if
                     // the user wanted to profile with puffin.
-                    if let Some(global_frame_view) = &self.puffin_frame {
-                        let frame_view = global_frame_view.lock();
-                        if !frame_view.is_empty() {
-                            let mut file =
-                                File::create(format!("{}.puffin", OffsetDateTime::now_utc()))?;
-                            frame_view.save_to_writer(&mut file)?;
-                            file.sync_all()?;
+                    if puffin_enabled {
+                        if let Some(global_frame_view) = &self.puffin_frame {
+                            let mut frame_view = global_frame_view.lock();
+                            if !frame_view.is_empty() {
+                                let now = OffsetDateTime::now_utc();
+                                let mut file = File::create(format!("{}.puffin", now))?;
+                                frame_view.save_to_writer(&mut file)?;
+                                file.sync_all()?;
+                                // We erase everything on this frame as it is not more useful.
+                                *frame_view = FrameView::default();
+                            }
                         }
                     }
 
