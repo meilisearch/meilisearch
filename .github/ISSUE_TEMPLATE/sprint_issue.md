@@ -17,7 +17,7 @@ Related spec: WIP
 
 ## Usage
 
-<!---Link to the public part of the PRD, or to the product discussion for experimental features-->
+<!---Link to the public part of the PRD, or to the related product discussion for experimental features-->
 
 ## TODO
 
