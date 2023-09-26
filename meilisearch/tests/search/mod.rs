@@ -1104,3 +1104,59 @@ async fn camelcased_words() {
         })
         .await;
 }
+
+#[actix_rt::test]
+async fn simple_search_with_strange_synonyms() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    index.update_settings(json!({ "synonyms": {"&": ["to"], "to": ["&"]} })).await;
+    let r = index.wait_task(0).await;
+    meili_snap::snapshot!(r["status"], @r###""succeeded""###);
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(1).await;
+
+    index
+        .search(json!({"q": "How to train"}), |response, code| {
+            meili_snap::snapshot!(code, @"200 OK");
+            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            [
+              {
+                "title": "How to Train Your Dragon: The Hidden World",
+                "id": "166428"
+              }
+            ]
+            "###);
+        })
+        .await;
+
+    index
+        .search(json!({"q": "How & train"}), |response, code| {
+            meili_snap::snapshot!(code, @"200 OK");
+            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            [
+              {
+                "title": "How to Train Your Dragon: The Hidden World",
+                "id": "166428"
+              }
+            ]
+            "###);
+        })
+        .await;
+
+    index
+        .search(json!({"q": "to"}), |response, code| {
+            meili_snap::snapshot!(code, @"200 OK");
+            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            [
+              {
+                "title": "How to Train Your Dragon: The Hidden World",
+                "id": "166428"
+              }
+            ]
+            "###);
+        })
+        .await;
+}

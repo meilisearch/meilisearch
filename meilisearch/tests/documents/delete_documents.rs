@@ -154,6 +154,19 @@ async fn delete_document_by_filter() {
         )
         .await;
     index.wait_task(1).await;
+
+    let (stats, _) = index.stats().await;
+    snapshot!(json_string!(stats), @r###"
+    {
+      "numberOfDocuments": 4,
+      "isIndexing": false,
+      "fieldDistribution": {
+        "color": 3,
+        "id": 4
+      }
+    }
+    "###);
+
     let (response, code) =
         index.delete_document_by_filter(json!({ "filter": "color = blue"})).await;
     snapshot!(code, @"202 Accepted");
@@ -185,6 +198,18 @@ async fn delete_document_by_filter() {
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
+    }
+    "###);
+
+    let (stats, _) = index.stats().await;
+    snapshot!(json_string!(stats), @r###"
+    {
+      "numberOfDocuments": 2,
+      "isIndexing": false,
+      "fieldDistribution": {
+        "color": 1,
+        "id": 2
+      }
     }
     "###);
 
@@ -238,6 +263,18 @@ async fn delete_document_by_filter() {
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
+    }
+    "###);
+
+    let (stats, _) = index.stats().await;
+    snapshot!(json_string!(stats), @r###"
+    {
+      "numberOfDocuments": 1,
+      "isIndexing": false,
+      "fieldDistribution": {
+        "color": 1,
+        "id": 1
+      }
     }
     "###);
 

@@ -2550,6 +2550,25 @@ mod tests {
         db_snap!(index, word_position_docids, 3, @"74f556b91d161d997a89468b4da1cb8f");
     }
 
+    /// Index multiple different number of vectors in documents.
+    /// Vectors must be of the same length.
+    #[test]
+    fn test_multiple_vectors() {
+        let index = TempIndex::new();
+
+        index.add_documents(documents!([{"id": 0, "_vectors": [[0, 1, 2], [3, 4, 5]] }])).unwrap();
+        index.add_documents(documents!([{"id": 1, "_vectors": [6, 7, 8] }])).unwrap();
+        index
+            .add_documents(
+                documents!([{"id": 2, "_vectors": [[9, 10, 11], [12, 13, 14], [15, 16, 17]] }]),
+            )
+            .unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let res = index.search(&rtxn).vector([0.0, 1.0, 2.0]).execute().unwrap();
+        assert_eq!(res.documents_ids.len(), 3);
+    }
+
     #[test]
     fn reproduce_the_bug() {
         /*

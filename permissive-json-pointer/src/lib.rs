@@ -186,12 +186,16 @@ fn create_value(value: &Document, mut selectors: HashSet<&str>) -> Document {
                     let array = create_array(array, &sub_selectors);
                     if !array.is_empty() {
                         new_value.insert(key.to_string(), array.into());
+                    } else {
+                        new_value.insert(key.to_string(), Value::Array(vec![]));
                     }
                 }
                 Value::Object(object) => {
                     let object = create_value(object, sub_selectors);
                     if !object.is_empty() {
                         new_value.insert(key.to_string(), object.into());
+                    } else {
+                        new_value.insert(key.to_string(), Value::Object(Map::new()));
                     }
                 }
                 _ => (),
@@ -211,6 +215,8 @@ fn create_array(array: &[Value], selectors: &HashSet<&str>) -> Vec<Value> {
                 let array = create_array(array, selectors);
                 if !array.is_empty() {
                     res.push(array.into());
+                } else {
+                    res.push(Value::Array(vec![]));
                 }
             }
             Value::Object(object) => {
@@ -633,6 +639,24 @@ mod tests {
                         }
                     }
                 ]
+            })
+        );
+    }
+
+    #[test]
+    fn empty_array_object_return_empty() {
+        let value: Value = json!({
+            "array": [],
+            "object": {},
+        });
+        let value: &Document = value.as_object().unwrap();
+
+        let res: Value = select_values(value, vec!["array.name", "object.name"]).into();
+        assert_eq!(
+            res,
+            json!({
+                "array": [],
+                "object": {},
             })
         );
     }

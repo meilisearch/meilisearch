@@ -573,7 +573,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                     tokenizer
                         .tokenize(text)
                         .filter_map(|token| {
-                            if token.is_word() {
+                            if token.is_word() && !token.lemma().is_empty() {
                                 Some(token.lemma().to_string())
                             } else {
                                 None
@@ -608,13 +608,18 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 for (word, synonyms) in user_synonyms {
                     // Normalize both the word and associated synonyms.
                     let normalized_word = normalize(&tokenizer, word);
-                    let normalized_synonyms =
-                        synonyms.iter().map(|synonym| normalize(&tokenizer, synonym));
+                    let normalized_synonyms: Vec<_> = synonyms
+                        .iter()
+                        .map(|synonym| normalize(&tokenizer, synonym))
+                        .filter(|synonym| !synonym.is_empty())
+                        .collect();
 
                     // Store the normalized synonyms under the normalized word,
                     // merging the possible duplicate words.
-                    let entry = new_synonyms.entry(normalized_word).or_insert_with(Vec::new);
-                    entry.extend(normalized_synonyms);
+                    if !normalized_word.is_empty() && !normalized_synonyms.is_empty() {
+                        let entry = new_synonyms.entry(normalized_word).or_insert_with(Vec::new);
+                        entry.extend(normalized_synonyms.into_iter());
+                    }
                 }
 
                 // Make sure that we don't have duplicate synonyms.
@@ -1420,6 +1425,43 @@ mod tests {
         assert!(result.documents_ids.is_empty());
         let result = index.search(&rtxn).query("puppies").execute().unwrap();
         assert!(result.documents_ids.is_empty());
+    }
+
+    #[test]
+    fn thai_synonyms() {
+        let mut index = TempIndex::new();
+        index.index_documents_config.autogenerate_docids = true;
+
+        let mut wtxn = index.write_txn().unwrap();
+        // Send 3 documents with ids from 1 to 3.
+        index
+            .add_documents_using_wtxn(
+                &mut wtxn,
+                documents!([
+                    { "name": "ยี่ปุ่น" },
+                    { "name": "ญี่ปุ่น" },
+                ]),
+            )
+            .unwrap();
+
+        // In the same transaction provide some synonyms
+        index
+            .update_settings_using_wtxn(&mut wtxn, |settings| {
+                settings.set_synonyms(btreemap! {
+                    "japanese".to_string() => vec![S("ญี่ปุ่น"), S("ยี่ปุ่น")],
+                });
+            })
+            .unwrap();
+        wtxn.commit().unwrap();
+
+        // Ensure synonyms are effectively stored
+        let rtxn = index.read_txn().unwrap();
+        let synonyms = index.synonyms(&rtxn).unwrap();
+        assert!(!synonyms.is_empty()); // at this point the index should return something
+
+        // Check that we can use synonyms
+        let result = index.search(&rtxn).query("japanese").execute().unwrap();
+        assert_eq!(result.documents_ids.len(), 2);
     }
 
     #[test]
