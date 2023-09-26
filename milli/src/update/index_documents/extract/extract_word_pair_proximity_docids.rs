@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::{cmp, io};
@@ -11,7 +10,7 @@ use super::helpers::{
 };
 use crate::error::SerializationError;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
-use crate::proximity::{positions_proximity, MAX_DISTANCE};
+use crate::proximity::{index_proximity, MAX_DISTANCE};
 use crate::{DocumentId, Result};
 
 /// Extracts the best proximity between pairs of words and the documents ids where this pair appear.
@@ -70,7 +69,7 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
         for (position, word) in KvReaderU16::new(&value).iter() {
             // drain the proximity window until the head word is considered close to the word we are inserting.
             while word_positions.get(0).map_or(false, |(_w, p)| {
-                positions_proximity(*p as u32, position as u32) > MAX_DISTANCE
+                index_proximity(*p as u32, position as u32) >= MAX_DISTANCE
             }) {
                 word_positions_into_word_pair_proximity(
                     &mut word_positions,
@@ -108,6 +107,7 @@ fn document_word_positions_into_sorter(
     word_pair_proximity: &HashMap<(String, String), u8>,
     word_pair_proximity_docids_sorter: &mut grenad::Sorter<MergeFn>,
 ) -> Result<()> {
+    puffin::profile_function!();
     let mut key_buffer = Vec::new();
     for ((w1, w2), prox) in word_pair_proximity {
         key_buffer.clear();
@@ -126,9 +126,10 @@ fn word_positions_into_word_pair_proximity(
     word_positions: &mut VecDeque<(String, u16)>,
     word_pair_proximity: &mut HashMap<(String, String), u8>,
 ) -> Result<()> {
+    puffin::profile_function!();
     let (head_word, head_position) = word_positions.pop_front().unwrap();
     for (word, position) in word_positions.iter() {
-        let prox = positions_proximity(head_position as u32, *position as u32) as u8;
+        let prox = index_proximity(head_position as u32, *position as u32) as u8;
         word_pair_proximity
             .entry((head_word.clone(), word.clone()))
             .and_modify(|p| {
