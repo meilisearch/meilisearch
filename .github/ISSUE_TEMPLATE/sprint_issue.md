@@ -7,19 +7,17 @@ assignees: ''
 
 ---
 
-Related product team resources: [roadmap card]() (_internal only_) and [PRD]() (_internal only_)
+Related product team resources: [PRD]() (_internal only_)
 Related product discussion:
 Related spec: WIP
 
 ## Motivation
 
-<!---Copy/paste the information in the roadmap resources or briefly detail the product motivation. Ask product team if any hesitation.-->
+<!---Copy/paste the information in PRD or briefly detail the product motivation. Ask product team if any hesitation.-->
 
 ## Usage
 
-<!---Write a quick description of the usage if the usage has already been defined-->
-
-Refer to the final spec to know the details and the final decisions about the usage.
+<!---Link to the public part of the PRD, or to the product discussion for experimental features-->
 
 ## TODO
 
