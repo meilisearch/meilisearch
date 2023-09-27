@@ -1178,6 +1178,7 @@ dependencies = [
  "clap",
  "heed",
  "milli",
+ "roaring",
 ]
 
 [[package]]

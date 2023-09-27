@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use clap::Parser;
 use heed::flags::Flags;
 use heed::types::{OwnedType, SerdeJson, Str, Unit};
-use heed::{Database, PolyDatabase};
+use heed::{Database, EnvOpenOptions, PolyDatabase};
 use milli::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
     FieldIdCodec, OrderedF64Codec,
@@ -15,6 +15,8 @@ use milli::{
     BEU16StrCodec, CboRoaringBitmapCodec, FieldIdWordCountCodec, ObkvCodec, RoaringBitmapCodec,
     U8StrStrCodec, BEU16, BEU32,
 };
+
+mod compare;
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -32,10 +34,14 @@ pub struct Args {
 fn main() -> anyhow::Result<()> {
     let Args { lhs_database, rhs_database } = Args::parse();
 
+    let lhs_database = Index::open(EnvOpenOptions::new(), lhs_database)?;
+    let rhs_database = Index::open(EnvOpenOptions::new(), rhs_database)?;
+    compare::compare(lhs_database, rhs_database)?;
+
     Ok(())
 }
 
-struct Index {
+pub struct Index {
     pub env: heed::Env,
     pub main: PolyDatabase,
     pub word_docids: Database<Str, RoaringBitmapCodec>,
@@ -65,10 +71,7 @@ struct Index {
 }
 
 impl Index {
-    pub fn open<P: AsRef<Path>>(
-        mut options: heed::EnvOpenOptions,
-        path: P,
-    ) -> anyhow::Result<Index> {
+    pub fn open<P: AsRef<Path>>(mut options: EnvOpenOptions, path: P) -> anyhow::Result<Index> {
         options.max_dbs(25);
         unsafe { options.flag(Flags::MdbAlwaysFreePages) };
 

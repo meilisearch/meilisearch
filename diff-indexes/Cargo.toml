@@ -15,3 +15,4 @@ heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.7", default-f
     "lmdb", "read-txn-no-tls"
 ] }
 milli = { path = "../milli" }
+roaring = "0.10.2"
