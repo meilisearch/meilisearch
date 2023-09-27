@@ -17,10 +17,9 @@ tasks individally, but should be much faster since we are only performing
 one indexing operation.
 */
 
-use core::fmt;
-use std::borrow::Cow;
 use std::collections::{BTreeSet, HashSet};
 use std::ffi::OsStr;
+use std::fmt;
 use std::fs::{self, File};
 use std::io::BufWriter;
 
@@ -206,20 +205,20 @@ impl fmt::Display for Batch {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let index_uid = self.index_uid();
         let tasks = self.ids();
-        let task = match self {
-            Batch::TaskCancelation { .. } => Cow::Borrowed("TaskCancelation"),
-            Batch::TaskDeletion(_) => Cow::Borrowed("TaskDeletion"),
-            Batch::SnapshotCreation(_) => Cow::Borrowed("SnapshotCreation"),
-            Batch::Dump(_) => Cow::Borrowed("Dump"),
-            Batch::IndexOperation { op, .. } => Cow::Owned(op.to_string()),
-            Batch::IndexCreation { .. } => Cow::Borrowed("IndexCreation"),
-            Batch::IndexUpdate { .. } => Cow::Borrowed("IndexUpdate"),
-            Batch::IndexDeletion { .. } => Cow::Borrowed("IndexDeletion"),
-            Batch::IndexSwap { .. } => Cow::Borrowed("IndexSwap"),
+        match self {
+            Batch::TaskCancelation { .. } => f.write_str("TaskCancelation")?,
+            Batch::TaskDeletion(_) => f.write_str("TaskDeletion")?,
+            Batch::SnapshotCreation(_) => f.write_str("SnapshotCreation")?,
+            Batch::Dump(_) => f.write_str("Dump")?,
+            Batch::IndexOperation { op, .. } => write!(f, "{op}")?,
+            Batch::IndexCreation { .. } => f.write_str("IndexCreation")?,
+            Batch::IndexUpdate { .. } => f.write_str("IndexUpdate")?,
+            Batch::IndexDeletion { .. } => f.write_str("IndexDeletion")?,
+            Batch::IndexSwap { .. } => f.write_str("IndexSwap")?,
         };
         match index_uid {
-            Some(name) => f.write_fmt(format_args!("{task} on {name:?} from tasks: {tasks:?}")),
-            None => f.write_fmt(format_args!("{task} from tasks: {tasks:?}")),
+            Some(name) => f.write_fmt(format_args!(" on {name:?} from tasks: {tasks:?}")),
+            None => f.write_fmt(format_args!(" from tasks: {tasks:?}")),
         }
     }
 }
