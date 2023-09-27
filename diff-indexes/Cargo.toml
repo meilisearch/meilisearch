@@ -1,0 +1,17 @@
+[package]
+name = "diff-indexes"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+homepage.workspace = true
+readme.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = "1.0.75"
+clap = { version = "4.4.5", features = ["derive"] }
+heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.7", default-features = false, features = [
+    "lmdb", "read-txn-no-tls"
+] }
+milli = { path = "../milli" }
