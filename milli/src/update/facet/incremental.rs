@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fs::File;
+use std::io::BufReader;
 
 use heed::types::{ByteSlice, DecodeIgnore};
 use heed::{BytesDecode, Error, RoTxn, RwTxn};
@@ -34,14 +35,14 @@ pub struct FacetsUpdateIncremental<'i> {
     index: &'i Index,
     inner: FacetsUpdateIncrementalInner,
     facet_type: FacetType,
-    new_data: grenad::Reader<File>,
+    new_data: grenad::Reader<BufReader<File>>,
 }
 
 impl<'i> FacetsUpdateIncremental<'i> {
     pub fn new(
         index: &'i Index,
         facet_type: FacetType,
-        new_data: grenad::Reader<File>,
+        new_data: grenad::Reader<BufReader<File>>,
         group_size: u8,
         min_level_size: u8,
         max_group_size: u8,

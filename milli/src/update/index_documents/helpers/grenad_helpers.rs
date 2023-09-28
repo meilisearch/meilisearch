@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::fs::File;
-use std::io::{self, Seek};
+use std::io::{self, BufReader, BufWriter, Seek};
 use std::time::Instant;
 
 use grenad::{CompressionType, Sorter};
@@ -17,13 +17,13 @@ pub fn create_writer<R: io::Write>(
     typ: grenad::CompressionType,
     level: Option<u32>,
     file: R,
-) -> grenad::Writer<R> {
+) -> grenad::Writer<BufWriter<R>> {
     let mut builder = grenad::Writer::builder();
     builder.compression_type(typ);
     if let Some(level) = level {
         builder.compression_level(level);
     }
-    builder.build(file)
+    builder.build(BufWriter::new(file))
 }
 
 pub fn create_sorter(
@@ -53,7 +53,7 @@ pub fn create_sorter(
 pub fn sorter_into_reader(
     sorter: grenad::Sorter<MergeFn>,
     indexer: GrenadParameters,
-) -> Result<grenad::Reader<File>> {
+) -> Result<grenad::Reader<BufReader<File>>> {
     let mut writer = create_writer(
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
@@ -64,16 +64,21 @@ pub fn sorter_into_reader(
     writer_into_reader(writer)
 }
 
-pub fn writer_into_reader(writer: grenad::Writer<File>) -> Result<grenad::Reader<File>> {
-    let mut file = writer.into_inner()?;
+pub fn writer_into_reader(
+    writer: grenad::Writer<BufWriter<File>>,
+) -> Result<grenad::Reader<BufReader<File>>> {
+    let mut file = writer
+        .into_inner()?
+        .into_inner()
+        .map_err(|err| InternalError::BufIntoInnerError(err.to_string()))?;
     file.rewind()?;
-    grenad::Reader::new(file).map_err(Into::into)
+    grenad::Reader::new(BufReader::new(file)).map_err(Into::into)
 }
 
 pub unsafe fn as_cloneable_grenad(
-    reader: &grenad::Reader<File>,
+    reader: &grenad::Reader<BufReader<File>>,
 ) -> Result<grenad::Reader<CursorClonableMmap>> {
-    let file = reader.get_ref();
+    let file = reader.get_ref().get_ref();
     let mmap = memmap2::Mmap::map(file)?;
     let cursor = io::Cursor::new(ClonableMmap::from(mmap));
     let reader = grenad::Reader::new(cursor)?;
@@ -89,8 +94,8 @@ where
     fn merge(self, merge_fn: MergeFn, indexer: &GrenadParameters) -> Result<Self::Output>;
 }
 
-impl MergeableReader for Vec<grenad::Reader<File>> {
-    type Output = grenad::Reader<File>;
+impl MergeableReader for Vec<grenad::Reader<BufReader<File>>> {
+    type Output = grenad::Reader<BufReader<File>>;
 
     fn merge(self, merge_fn: MergeFn, params: &GrenadParameters) -> Result<Self::Output> {
         let mut merger = MergerBuilder::new(merge_fn);
@@ -99,8 +104,8 @@ impl MergeableReader for Vec<grenad::Reader<File>> {
     }
 }
 
-impl MergeableReader for Vec<(grenad::Reader<File>, grenad::Reader<File>)> {
-    type Output = (grenad::Reader<File>, grenad::Reader<File>);
+impl MergeableReader for Vec<(grenad::Reader<BufReader<File>>, grenad::Reader<BufReader<File>>)> {
+    type Output = (grenad::Reader<BufReader<File>>, grenad::Reader<BufReader<File>>);
 
     fn merge(self, merge_fn: MergeFn, params: &GrenadParameters) -> Result<Self::Output> {
         let mut m1 = MergerBuilder::new(merge_fn);
@@ -125,7 +130,7 @@ impl<R: io::Read + io::Seek> MergerBuilder<R> {
         Ok(())
     }
 
-    fn finish(self, params: &GrenadParameters) -> Result<grenad::Reader<File>> {
+    fn finish(self, params: &GrenadParameters) -> Result<grenad::Reader<BufReader<File>>> {
         let merger = self.0.build();
         let mut writer = create_writer(
             params.chunk_compression_type,
@@ -176,7 +181,7 @@ pub fn grenad_obkv_into_chunks<R: io::Read + io::Seek>(
     reader: grenad::Reader<R>,
     indexer: GrenadParameters,
     documents_chunk_size: usize,
-) -> Result<impl Iterator<Item = Result<grenad::Reader<File>>>> {
+) -> Result<impl Iterator<Item = Result<grenad::Reader<BufReader<File>>>>> {
     let mut continue_reading = true;
     let mut cursor = reader.into_cursor()?;
 

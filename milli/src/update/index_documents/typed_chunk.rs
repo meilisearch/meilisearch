@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fs::File;
-use std::io;
+use std::io::{self, BufReader};
 
 use bytemuck::allocation::pod_collect_to_vec;
 use charabia::{Language, Script};
@@ -27,22 +27,22 @@ pub(crate) enum TypedChunk {
     FieldIdDocidFacetStrings(grenad::Reader<CursorClonableMmap>),
     FieldIdDocidFacetNumbers(grenad::Reader<CursorClonableMmap>),
     Documents(grenad::Reader<CursorClonableMmap>),
-    FieldIdWordcountDocids(grenad::Reader<File>),
+    FieldIdWordcountDocids(grenad::Reader<BufReader<File>>),
     NewDocumentsIds(RoaringBitmap),
     WordDocids {
-        word_docids_reader: grenad::Reader<File>,
-        exact_word_docids_reader: grenad::Reader<File>,
+        word_docids_reader: grenad::Reader<BufReader<File>>,
+        exact_word_docids_reader: grenad::Reader<BufReader<File>>,
     },
-    WordPositionDocids(grenad::Reader<File>),
-    WordFidDocids(grenad::Reader<File>),
-    WordPairProximityDocids(grenad::Reader<File>),
-    FieldIdFacetStringDocids(grenad::Reader<File>),
-    FieldIdFacetNumberDocids(grenad::Reader<File>),
-    FieldIdFacetExistsDocids(grenad::Reader<File>),
-    FieldIdFacetIsNullDocids(grenad::Reader<File>),
-    FieldIdFacetIsEmptyDocids(grenad::Reader<File>),
-    GeoPoints(grenad::Reader<File>),
-    VectorPoints(grenad::Reader<File>),
+    WordPositionDocids(grenad::Reader<BufReader<File>>),
+    WordFidDocids(grenad::Reader<BufReader<File>>),
+    WordPairProximityDocids(grenad::Reader<BufReader<File>>),
+    FieldIdFacetStringDocids(grenad::Reader<BufReader<File>>),
+    FieldIdFacetNumberDocids(grenad::Reader<BufReader<File>>),
+    FieldIdFacetExistsDocids(grenad::Reader<BufReader<File>>),
+    FieldIdFacetIsNullDocids(grenad::Reader<BufReader<File>>),
+    FieldIdFacetIsEmptyDocids(grenad::Reader<BufReader<File>>),
+    GeoPoints(grenad::Reader<BufReader<File>>),
+    VectorPoints(grenad::Reader<BufReader<File>>),
     ScriptLanguageDocids(HashMap<(Script, Language), RoaringBitmap>),
 }
 

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::fs::File;
-use std::io;
+use std::io::{self, BufReader};
 use std::iter::FromIterator;
 
 use roaring::RoaringBitmap;
@@ -26,7 +26,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     docid_word_positions: grenad::Reader<R>,
     indexer: GrenadParameters,
     exact_attributes: &HashSet<FieldId>,
-) -> Result<(grenad::Reader<File>, grenad::Reader<File>)> {
+) -> Result<(grenad::Reader<BufReader<File>>, grenad::Reader<BufReader<File>>)> {
     puffin::profile_function!();
 
     let max_memory = indexer.max_memory_by_thread();

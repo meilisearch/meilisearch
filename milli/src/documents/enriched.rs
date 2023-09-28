@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::io::BufReader;
 use std::{io, str};
 
 use obkv::KvReader;
@@ -19,14 +20,14 @@ use crate::FieldId;
 pub struct EnrichedDocumentsBatchReader<R> {
     documents: DocumentsBatchReader<R>,
     primary_key: String,
-    external_ids: grenad::ReaderCursor<File>,
+    external_ids: grenad::ReaderCursor<BufReader<File>>,
 }
 
 impl<R: io::Read + io::Seek> EnrichedDocumentsBatchReader<R> {
     pub fn new(
         documents: DocumentsBatchReader<R>,
         primary_key: String,
-        external_ids: grenad::Reader<File>,
+        external_ids: grenad::Reader<BufReader<File>>,
     ) -> Result<Self, Error> {
         if documents.documents_count() as u64 == external_ids.len() {
             Ok(EnrichedDocumentsBatchReader {
@@ -75,7 +76,7 @@ pub struct EnrichedDocument<'a> {
 pub struct EnrichedDocumentsBatchCursor<R> {
     documents: DocumentsBatchCursor<R>,
     primary_key: String,
-    external_ids: grenad::ReaderCursor<File>,
+    external_ids: grenad::ReaderCursor<BufReader<File>>,
 }
 
 impl<R> EnrichedDocumentsBatchCursor<R> {

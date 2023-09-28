@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 use std::fs::File;
+use std::io::BufReader;
 use std::{cmp, io, mem, str, vec};
 
 use super::helpers::{
@@ -20,7 +21,7 @@ use crate::{DocumentId, Result};
 pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
     docid_word_positions: grenad::Reader<R>,
     indexer: GrenadParameters,
-) -> Result<grenad::Reader<File>> {
+) -> Result<grenad::Reader<BufReader<File>>> {
     puffin::profile_function!();
 
     let max_memory = indexer.max_memory_by_thread();
