@@ -30,6 +30,7 @@ use extractors::payload::PayloadConfig;
 use http::header::CONTENT_TYPE;
 use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use log::error;
+use strois::Client;
 use meilisearch_auth::AuthController;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod};
@@ -39,8 +40,6 @@ use meilisearch_types::versioning::{check_version_file, create_version_file};
 use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
 pub use option::Opt;
 use option::ScheduleSnapshot;
-use s3::creds::Credentials;
-use s3::{Bucket, Region};
 use zookeeper::ZooKeeper;
 
 use crate::error::MeilisearchHttpError;
@@ -246,19 +245,16 @@ fn open_or_create_database_unchecked(
         zookeeper: zookeeper.clone(),
         s3: opt.s3_url.as_ref().map(|url| {
             Arc::new(
-                Bucket::new(
-                    opt.s3_bucket.as_deref().unwrap(),
-                    Region::Custom { region: opt.s3_region.clone(), endpoint: url.clone() },
-                    Credentials {
-                        access_key: opt.s3_access_key.clone(),
-                        secret_key: opt.s3_secret_key.clone(),
-                        security_token: opt.s3_security_token.clone(),
-                        session_token: None,
-                        expiration: None,
-                    },
-                )
-                .unwrap()
-                .with_path_style(),
+                Client::builder(url)
+                    .unwrap()
+                    .key(opt.s3_access_key.as_ref().expect("Need s3 key to work").clone())
+                    .secret(opt.s3_secret_key.as_ref().expect("Need s3 secret to work").clone())
+                    .maybe_token(opt.s3_security_token.clone())
+                    .build()
+                    .bucket(opt.s3_bucket.as_ref().expect("Need an s3 bucket to work"))
+                    .unwrap()
+                    .get_or_create()
+                    .unwrap(),
             )
         }),
     }))

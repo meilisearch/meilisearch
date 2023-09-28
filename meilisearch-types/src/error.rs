@@ -175,6 +175,7 @@ macro_rules! make_error_codes {
 
 // An exhaustive list of all the error codes used by meilisearch.
 make_error_codes! {
+S3Error                               , System               , INTERNAL_SERVER_ERROR;
 ApiKeyAlreadyExists                   , InvalidRequest       , CONFLICT ;
 ApiKeyNotFound                        , InvalidRequest       , NOT_FOUND ;
 BadParameter                          , InvalidRequest       , BAD_REQUEST;

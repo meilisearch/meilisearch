@@ -33,6 +33,8 @@ pub enum MeilisearchHttpError {
         .0.iter().map(|uid| format!("\"{uid}\"")).collect::<Vec<_>>().join(", "), .0.len()
     )]
     SwapIndexPayloadWrongLength(Vec<IndexUid>),
+    #[error("S3 Error: {0}")]
+    S3Error(#[from] strois::Error),
     #[error(transparent)]
     IndexUid(#[from] IndexUidFormatError),
     #[error(transparent)]
@@ -65,6 +67,7 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::InvalidExpression(_, _) => Code::InvalidSearchFilter,
             MeilisearchHttpError::PayloadTooLarge(_) => Code::PayloadTooLarge,
             MeilisearchHttpError::SwapIndexPayloadWrongLength(_) => Code::InvalidSwapIndexes,
+            MeilisearchHttpError::S3Error(_) => Code::S3Error,
             MeilisearchHttpError::IndexUid(e) => e.error_code(),
             MeilisearchHttpError::SerdeJson(_) => Code::Internal,
             MeilisearchHttpError::HeedError(_) => Code::Internal,
