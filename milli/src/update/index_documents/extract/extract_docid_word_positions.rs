@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::fs::File;
+use std::io::BufReader;
 use std::{io, mem, str};
 
 use charabia::{Language, Script, SeparatorKind, Token, TokenKind, Tokenizer, TokenizerBuilder};
@@ -31,7 +32,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     allowed_separators: Option<&[&str]>,
     dictionary: Option<&[&str]>,
     max_positions_per_attributes: Option<u32>,
-) -> Result<(RoaringBitmap, grenad::Reader<File>, ScriptLanguageDocidsMap)> {
+) -> Result<(RoaringBitmap, grenad::Reader<BufReader<File>>, ScriptLanguageDocidsMap)> {
     puffin::profile_function!();
 
     let max_positions_per_attributes = max_positions_per_attributes

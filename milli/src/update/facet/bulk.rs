@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::fs::File;
+use std::io::BufReader;
 
 use grenad::CompressionType;
 use heed::types::ByteSlice;
@@ -30,7 +31,7 @@ pub struct FacetsUpdateBulk<'i> {
     facet_type: FacetType,
     field_ids: Vec<FieldId>,
     // None if level 0 does not need to be updated
-    new_data: Option<grenad::Reader<File>>,
+    new_data: Option<grenad::Reader<BufReader<File>>>,
 }
 
 impl<'i> FacetsUpdateBulk<'i> {
@@ -38,7 +39,7 @@ impl<'i> FacetsUpdateBulk<'i> {
         index: &'i Index,
         field_ids: Vec<FieldId>,
         facet_type: FacetType,
-        new_data: grenad::Reader<File>,
+        new_data: grenad::Reader<BufReader<File>>,
         group_size: u8,
         min_level_size: u8,
     ) -> FacetsUpdateBulk<'i> {
@@ -187,7 +188,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
         &self,
         field_id: FieldId,
         txn: &RoTxn,
-    ) -> Result<(Vec<grenad::Reader<File>>, RoaringBitmap)> {
+    ) -> Result<(Vec<grenad::Reader<BufReader<File>>>, RoaringBitmap)> {
         let mut all_docids = RoaringBitmap::new();
         let subwriters = self.compute_higher_levels(txn, field_id, 32, &mut |bitmaps, _| {
             for bitmap in bitmaps {
@@ -259,7 +260,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
         field_id: u16,
         level: u8,
         handle_group: &mut dyn FnMut(&[RoaringBitmap], &'t [u8]) -> Result<()>,
-    ) -> Result<Vec<grenad::Reader<File>>> {
+    ) -> Result<Vec<grenad::Reader<BufReader<File>>>> {
         if level == 0 {
             self.read_level_0(rtxn, field_id, handle_group)?;
             // Level 0 is already in the database

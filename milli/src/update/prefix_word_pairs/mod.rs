@@ -1,12 +1,12 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
-use std::io::BufReader;
+use std::io::{BufReader, BufWriter};
 
 use grenad::CompressionType;
 use heed::types::ByteSlice;
 
 use super::index_documents::{merge_cbo_roaring_bitmaps, CursorClonableMmap};
-use crate::{Index, Result};
+use crate::{Index, InternalError, Result};
 
 mod prefix_word;
 mod word_prefix;
@@ -119,9 +119,12 @@ pub fn insert_into_database(
 pub fn write_into_lmdb_database_without_merging(
     wtxn: &mut heed::RwTxn,
     database: heed::PolyDatabase,
-    writer: grenad::Writer<std::fs::File>,
+    writer: grenad::Writer<BufWriter<std::fs::File>>,
 ) -> Result<()> {
-    let file = writer.into_inner()?;
+    let file = writer
+        .into_inner()?
+        .into_inner()
+        .map_err(|err| InternalError::BufIntoInnerError(err.to_string()))?;
     let reader = grenad::Reader::new(BufReader::new(file))?;
     if database.is_empty(wtxn)? {
         let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;

@@ -12,6 +12,7 @@ mod extract_word_position_docids;
 
 use std::collections::HashSet;
 use std::fs::File;
+use std::io::BufReader;
 
 use crossbeam_channel::Sender;
 use log::debug;
@@ -39,8 +40,8 @@ use crate::{FieldId, Result};
 /// Send data in grenad file over provided Sender.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn data_from_obkv_documents(
-    original_obkv_chunks: impl Iterator<Item = Result<grenad::Reader<File>>> + Send,
-    flattened_obkv_chunks: impl Iterator<Item = Result<grenad::Reader<File>>> + Send,
+    original_obkv_chunks: impl Iterator<Item = Result<grenad::Reader<BufReader<File>>>> + Send,
+    flattened_obkv_chunks: impl Iterator<Item = Result<grenad::Reader<BufReader<File>>>> + Send,
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     searchable_fields: Option<HashSet<FieldId>>,
@@ -152,7 +153,7 @@ pub(crate) fn data_from_obkv_documents(
         });
     }
 
-    spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
+    spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
         docid_word_positions_chunks.clone(),
         indexer,
         lmdb_writer_sx.clone(),
@@ -162,7 +163,7 @@ pub(crate) fn data_from_obkv_documents(
         "word-pair-proximity-docids",
     );
 
-    spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
+    spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
         docid_word_positions_chunks.clone(),
         indexer,
         lmdb_writer_sx.clone(),
@@ -172,7 +173,11 @@ pub(crate) fn data_from_obkv_documents(
         "field-id-wordcount-docids",
     );
 
-    spawn_extraction_task::<_, _, Vec<(grenad::Reader<File>, grenad::Reader<File>)>>(
+    spawn_extraction_task::<
+        _,
+        _,
+        Vec<(grenad::Reader<BufReader<File>>, grenad::Reader<BufReader<File>>)>,
+    >(
         docid_word_positions_chunks.clone(),
         indexer,
         lmdb_writer_sx.clone(),
@@ -185,7 +190,7 @@ pub(crate) fn data_from_obkv_documents(
         "word-docids",
     );
 
-    spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
+    spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
         docid_word_positions_chunks.clone(),
         indexer,
         lmdb_writer_sx.clone(),
@@ -194,7 +199,7 @@ pub(crate) fn data_from_obkv_documents(
         TypedChunk::WordPositionDocids,
         "word-position-docids",
     );
-    spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
+    spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
         docid_word_positions_chunks,
         indexer,
         lmdb_writer_sx.clone(),
@@ -204,7 +209,7 @@ pub(crate) fn data_from_obkv_documents(
         "word-fid-docids",
     );
 
-    spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
+    spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
         docid_fid_facet_strings_chunks,
         indexer,
         lmdb_writer_sx.clone(),
@@ -214,7 +219,7 @@ pub(crate) fn data_from_obkv_documents(
         "field-id-facet-string-docids",
     );
 
-    spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
+    spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
         docid_fid_facet_numbers_chunks,
         indexer,
         lmdb_writer_sx,
@@ -269,7 +274,7 @@ fn spawn_extraction_task<FE, FS, M>(
 /// Extract chunked data and send it into lmdb_writer_sx sender:
 /// - documents
 fn send_original_documents_data(
-    original_documents_chunk: Result<grenad::Reader<File>>,
+    original_documents_chunk: Result<grenad::Reader<BufReader<File>>>,
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     vectors_field_id: Option<FieldId>,
@@ -311,7 +316,7 @@ fn send_original_documents_data(
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::type_complexity)]
 fn send_and_extract_flattened_documents_data(
-    flattened_documents_chunk: Result<grenad::Reader<File>>,
+    flattened_documents_chunk: Result<grenad::Reader<BufReader<File>>>,
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     searchable_fields: &Option<HashSet<FieldId>>,
@@ -328,7 +333,10 @@ fn send_and_extract_flattened_documents_data(
         grenad::Reader<CursorClonableMmap>,
         (
             grenad::Reader<CursorClonableMmap>,
-            (grenad::Reader<File>, (grenad::Reader<File>, grenad::Reader<File>)),
+            (
+                grenad::Reader<BufReader<File>>,
+                (grenad::Reader<BufReader<File>>, grenad::Reader<BufReader<File>>),
+            ),
         ),
     ),
 )> {

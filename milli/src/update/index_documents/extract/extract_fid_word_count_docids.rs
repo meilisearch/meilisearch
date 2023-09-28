@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io;
+use std::io::{self, BufReader};
 
 use grenad::Sorter;
 
@@ -21,7 +21,7 @@ use crate::{relative_from_absolute_position, DocumentId, FieldId, Result};
 pub fn extract_fid_word_count_docids<R: io::Read + io::Seek>(
     docid_word_positions: grenad::Reader<R>,
     indexer: GrenadParameters,
-) -> Result<grenad::Reader<File>> {
+) -> Result<grenad::Reader<BufReader<File>>> {
     puffin::profile_function!();
 
     let max_memory = indexer.max_memory_by_thread();
