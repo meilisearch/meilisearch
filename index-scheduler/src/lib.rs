@@ -579,15 +579,50 @@ impl IndexScheduler {
                 run.wake_up.wait();
 
                 loop {
+                    let puffin_enabled = match run.features() {
+                        Ok(features) => features.check_puffin().is_ok(),
+                        Err(e) => {
+                            log::error!("{e}");
+                            continue;
+                        }
+                    };
+                    puffin::set_scopes_on(puffin_enabled);
+                    puffin::GlobalProfiler::lock().new_frame();
+
                     match run.tick() {
                         Ok(TickOutcome::TickAgain(_)) => (),
                         Ok(TickOutcome::WaitForSignal) => run.wake_up.wait(),
                         Err(e) => {
-                            log::error!("{}", e);
+                            log::error!("{e}");
                             // Wait one second when an irrecoverable error occurs.
                             if !e.is_recoverable() {
                                 std::thread::sleep(Duration::from_secs(1));
                             }
+                        }
+                    }
+
+                    // Let's write the previous frame to disk but only if
+                    // the user wanted to profile with puffin.
+                    if puffin_enabled {
+                        let mut frame_view = run.puffin_frame.lock();
+                        if !frame_view.is_empty() {
+                            let now = OffsetDateTime::now_utc();
+                            let mut file = match File::create(format!("{}.puffin", now)) {
+                                Ok(file) => file,
+                                Err(e) => {
+                                    log::error!("{e}");
+                                    continue;
+                                }
+                            };
+                            if let Err(e) = frame_view.save_to_writer(&mut file) {
+                                log::error!("{e}");
+                            }
+                            if let Err(e) = file.sync_all() {
+                                log::error!("{e}");
+                            }
+                            // We erase this frame view as it is no more useful. We want to
+                            // measure the new frames now that we exported the previous ones.
+                            *frame_view = FrameView::default();
                         }
                     }
                 }
@@ -1069,34 +1104,13 @@ impl IndexScheduler {
             self.breakpoint(Breakpoint::Start);
         }
 
-        let puffin_enabled = self.features()?.check_puffin().is_ok();
-        puffin::set_scopes_on(puffin_enabled);
-        puffin::GlobalProfiler::lock().new_frame();
-
         self.cleanup_task_queue()?;
 
         let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
         let batch =
             match self.create_next_batch(&rtxn).map_err(|e| Error::CreateBatch(Box::new(e)))? {
                 Some(batch) => batch,
-                None => {
-                    // Let's write the previous frame to disk but only if
-                    // the user wanted to profile with puffin.
-                    if puffin_enabled {
-                        let mut frame_view = self.puffin_frame.lock();
-                        if !frame_view.is_empty() {
-                            let now = OffsetDateTime::now_utc();
-                            let mut file = File::create(format!("{}.puffin", now))?;
-                            frame_view.save_to_writer(&mut file)?;
-                            file.sync_all()?;
-                            // We erase this frame view as it is no more useful. We want to
-                            // measure the new frames now that we exported the previous ones.
-                            *frame_view = FrameView::default();
-                        }
-                    }
-
-                    return Ok(TickOutcome::WaitForSignal);
-                }
+                None => return Ok(TickOutcome::WaitForSignal),
             };
         let index_uid = batch.index_uid().map(ToOwned::to_owned);
         drop(rtxn);
