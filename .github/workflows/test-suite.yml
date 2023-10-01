@@ -25,7 +25,7 @@ jobs:
       # Use ubuntu-18.04 to compile with glibc 2.27, which are the production expectations
       image: ubuntu:18.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install needed dependencies
         run: |
           apt-get update && apt-get install -y curl
@@ -63,7 +63,7 @@ jobs:
       matrix:
         os: [macos-12, windows-2022]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.6.2
       - name: Run cargo check without any default features
@@ -85,7 +85,7 @@ jobs:
       image: ubuntu:18.04
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install needed dependencies
         run: |
           apt-get update
@@ -112,7 +112,7 @@ jobs:
       image: ubuntu:18.04
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install needed dependencies
         run: |
           apt-get update
@@ -139,7 +139,7 @@ jobs:
       # Use ubuntu-18.04 to compile with glibc 2.27, which are the production expectations
       image: ubuntu:18.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install needed dependencies
         run: |
           apt-get update && apt-get install -y curl
@@ -160,7 +160,7 @@ jobs:
     name: Run Clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
@@ -179,7 +179,7 @@ jobs:
     name: Run Rustfmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal

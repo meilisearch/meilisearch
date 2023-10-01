@@ -15,7 +15,7 @@ jobs:
     runs-on: benchmarks
     timeout-minutes: 4320 # 72h
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal

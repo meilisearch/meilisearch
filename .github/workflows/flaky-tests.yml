@@ -11,7 +11,7 @@ jobs:
       # Use ubuntu-18.04 to compile with glibc 2.27, which are the production expectations
       image: ubuntu:18.04
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Install needed dependencies
       run: |
         apt-get update && apt-get install -y curl
