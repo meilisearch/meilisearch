@@ -152,15 +152,15 @@ pub(crate) fn data_from_obkv_documents(
         });
     }
 
-    spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
-        docid_word_positions_chunks.clone(),
-        indexer,
-        lmdb_writer_sx.clone(),
-        extract_word_pair_proximity_docids,
-        merge_cbo_roaring_bitmaps,
-        TypedChunk::WordPairProximityDocids,
-        "word-pair-proximity-docids",
-    );
+    // spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
+    //     docid_word_positions_chunks.clone(),
+    //     indexer,
+    //     lmdb_writer_sx.clone(),
+    //     extract_word_pair_proximity_docids,
+    //     merge_cbo_roaring_bitmaps,
+    //     TypedChunk::WordPairProximityDocids,
+    //     "word-pair-proximity-docids",
+    // );
 
     spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
         docid_word_positions_chunks.clone(),
