@@ -12,7 +12,8 @@ use super::Word;
 use crate::heed_codec::{BytesDecodeOwned, StrBEU16Codec};
 use crate::update::{merge_cbo_roaring_bitmaps, MergeFn};
 use crate::{
-    CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, Result, RoaringBitmapCodec, SearchContext,
+    CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, Result, RoaringBitmapCodec,
+    RoaringBitmapLenCodec, SearchContext,
 };
 
 /// A cache storing pointers to values in the LMDB databases.
@@ -259,6 +260,7 @@ impl<'ctx> SearchContext<'ctx> {
         word2: Interned<String>,
         proximity: u8,
     ) -> Result<Option<RoaringBitmap>> {
+        unreachable!();
         DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
             self.txn,
             (proximity, word1, word2),
@@ -278,6 +280,7 @@ impl<'ctx> SearchContext<'ctx> {
         word2: Interned<String>,
         proximity: u8,
     ) -> Result<Option<u64>> {
+        unreachable!();
         DatabaseCache::get_value::<_, _, CboRoaringBitmapLenCodec>(
             self.txn,
             (proximity, word1, word2),
@@ -291,12 +294,23 @@ impl<'ctx> SearchContext<'ctx> {
         )
     }
 
+    pub fn get_db_word_docids_len(&mut self, word: Interned<String>) -> Result<Option<u64>> {
+        DatabaseCache::get_value::<_, _, RoaringBitmapLenCodec>(
+            self.txn,
+            word,
+            self.word_interner.get(word).as_str(),
+            &mut self.db_cache.word_docids,
+            self.index.word_docids.remap_data_type::<ByteSlice>(),
+        )
+    }
+
     pub fn get_db_word_prefix_pair_proximity_docids(
         &mut self,
         word1: Interned<String>,
         prefix2: Interned<String>,
         proximity: u8,
     ) -> Result<Option<RoaringBitmap>> {
+        unreachable!();
         DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
             self.txn,
             (proximity, word1, prefix2),
@@ -315,6 +329,7 @@ impl<'ctx> SearchContext<'ctx> {
         right: Interned<String>,
         proximity: u8,
     ) -> Result<Option<RoaringBitmap>> {
+        unreachable!();
         DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
             self.txn,
             (proximity, left_prefix, right),

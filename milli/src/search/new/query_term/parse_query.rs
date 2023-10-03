@@ -82,41 +82,41 @@ pub fn located_query_terms_from_tokens(
                     position = position.wrapping_add(7);
                 }
 
-                phrase = 'phrase: {
-                    let phrase = phrase.take();
+                // phrase = 'phrase: {
+                //     let phrase = phrase.take();
 
-                    // If we have a hard separator inside a phrase, we immediately start a new phrase
-                    let phrase = if separator_kind == SeparatorKind::Hard {
-                        if let Some(phrase) = phrase {
-                            if let Some(located_query_term) = phrase.build(ctx) {
-                                located_terms.push(located_query_term)
-                            }
-                            Some(PhraseBuilder::empty())
-                        } else {
-                            None
-                        }
-                    } else {
-                        phrase
-                    };
+                //     // If we have a hard separator inside a phrase, we immediately start a new phrase
+                //     let phrase = if separator_kind == SeparatorKind::Hard {
+                //         if let Some(phrase) = phrase {
+                //             if let Some(located_query_term) = phrase.build(ctx) {
+                //                 located_terms.push(located_query_term)
+                //             }
+                //             Some(PhraseBuilder::empty())
+                //         } else {
+                //             None
+                //         }
+                //     } else {
+                //         phrase
+                //     };
 
-                    // We close and start a new phrase depending on the number of double quotes
-                    let mut quote_count = token.lemma().chars().filter(|&s| s == '"').count();
-                    if quote_count == 0 {
-                        break 'phrase phrase;
-                    }
+                //     // We close and start a new phrase depending on the number of double quotes
+                //     let mut quote_count = token.lemma().chars().filter(|&s| s == '"').count();
+                //     if quote_count == 0 {
+                //         break 'phrase phrase;
+                //     }
 
-                    // Consume the closing quote and the phrase
-                    if let Some(phrase) = phrase {
-                        // Per the check above, quote_count > 0
-                        quote_count -= 1;
-                        if let Some(located_query_term) = phrase.build(ctx) {
-                            located_terms.push(located_query_term)
-                        }
-                    }
+                //     // Consume the closing quote and the phrase
+                //     if let Some(phrase) = phrase {
+                //         // Per the check above, quote_count > 0
+                //         quote_count -= 1;
+                //         if let Some(located_query_term) = phrase.build(ctx) {
+                //             located_terms.push(located_query_term)
+                //         }
+                //     }
 
-                    // Start new phrase if the token ends with an opening quote
-                    (quote_count % 2 == 1).then_some(PhraseBuilder::empty())
-                };
+                //     // Start new phrase if the token ends with an opening quote
+                //     (quote_count % 2 == 1).then_some(PhraseBuilder::empty())
+                // };
             }
             _ => (),
         }

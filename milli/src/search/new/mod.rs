@@ -295,11 +295,11 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 ranking_rules.push(Box::new(Typo::new(None)));
             }
             crate::Criterion::Proximity => {
-                if proximity {
-                    continue;
-                }
-                proximity = true;
-                ranking_rules.push(Box::new(Proximity::new(None)));
+                // if proximity {
+                continue;
+                // }
+                // proximity = true;
+                // ranking_rules.push(Box::new(Proximity::new(None)));
             }
             crate::Criterion::Attribute => {
                 if attribute {

@@ -265,11 +265,11 @@ pub fn partially_initialized_term_from_word(
 }
 
 fn find_split_words(ctx: &mut SearchContext, word: &str) -> Result<Option<Interned<Phrase>>> {
-    if let Some((l, r)) = split_best_frequency(ctx, word)? {
-        Ok(Some(ctx.phrase_interner.insert(Phrase { words: vec![Some(l), Some(r)] })))
-    } else {
-        Ok(None)
-    }
+    // if let Some((l, r)) = split_best_frequency(ctx, word)? {
+    //     Ok(Some(ctx.phrase_interner.insert(Phrase { words: vec![Some(l), Some(r)] })))
+    // } else {
+    Ok(None)
+    // }
 }
 
 impl Interned<QueryTerm> {
@@ -416,11 +416,20 @@ fn split_best_frequency(
         let left = ctx.word_interner.insert(left.to_owned());
         let right = ctx.word_interner.insert(right.to_owned());
 
-        if let Some(frequency) = ctx.get_db_word_pair_proximity_docids_len(left, right, 1)? {
+        if let (Some(l_freq), Some(r_freq)) =
+            (ctx.get_db_word_docids_len(left)?, ctx.get_db_word_docids_len(right)?)
+        {
+            let frequency = l_freq.min(r_freq);
             if best.map_or(true, |(old, _, _)| frequency > old) {
                 best = Some((frequency, left, right));
             }
         }
+
+        // if let Some(frequency) = ctx.get_db_word_pair_proximity_docids_len(left, right, 1)? {
+        //     if best.map_or(true, |(old, _, _)| frequency > old) {
+        //         best = Some((frequency, left, right));
+        //     }
+        // }
     }
 
     Ok(best.map(|(_, left, right)| (left, right)))
