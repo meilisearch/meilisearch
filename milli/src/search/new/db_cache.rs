@@ -192,6 +192,7 @@ impl<'ctx> SearchContext<'ctx> {
     }
 
     pub fn word_prefix_docids(&mut self, prefix: Word) -> Result<Option<RoaringBitmap>> {
+        unreachable!();
         match prefix {
             Word::Original(prefix) => {
                 let exact = self.get_db_exact_word_prefix_docids(prefix)?;
@@ -216,6 +217,7 @@ impl<'ctx> SearchContext<'ctx> {
         &mut self,
         prefix: Interned<String>,
     ) -> Result<Option<RoaringBitmap>> {
+        unreachable!();
         match &self.restricted_fids {
             Some(restricted_fids) => {
                 let interned = self.word_interner.get(prefix).as_str();
@@ -244,6 +246,7 @@ impl<'ctx> SearchContext<'ctx> {
         &mut self,
         prefix: Interned<String>,
     ) -> Result<Option<RoaringBitmap>> {
+        unreachable!();
         DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
             self.txn,
             prefix,
@@ -297,6 +300,7 @@ impl<'ctx> SearchContext<'ctx> {
         prefix2: Interned<String>,
         proximity: u8,
     ) -> Result<Option<RoaringBitmap>> {
+        unreachable!();
         DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
             self.txn,
             (proximity, word1, prefix2),
@@ -315,6 +319,7 @@ impl<'ctx> SearchContext<'ctx> {
         right: Interned<String>,
         proximity: u8,
     ) -> Result<Option<RoaringBitmap>> {
+        unreachable!();
         DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
             self.txn,
             (proximity, left_prefix, right),
@@ -352,6 +357,7 @@ impl<'ctx> SearchContext<'ctx> {
         word_prefix: Interned<String>,
         fid: u16,
     ) -> Result<Option<RoaringBitmap>> {
+        unreachable!();
         // if the requested fid isn't in the restricted list, return None.
         if self.restricted_fids.as_ref().map_or(false, |fids| !fids.contains(&fid)) {
             return Ok(None);
@@ -393,6 +399,7 @@ impl<'ctx> SearchContext<'ctx> {
     }
 
     pub fn get_db_word_prefix_fids(&mut self, word_prefix: Interned<String>) -> Result<Vec<u16>> {
+        unreachable!();
         let fids = match self.db_cache.word_prefix_fids.entry(word_prefix) {
             Entry::Occupied(fids) => fids.get().clone(),
             Entry::Vacant(entry) => {
@@ -439,6 +446,7 @@ impl<'ctx> SearchContext<'ctx> {
         word_prefix: Interned<String>,
         position: u16,
     ) -> Result<Option<RoaringBitmap>> {
+        unreachable!();
         DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
             self.txn,
             (word_prefix, position),
@@ -480,6 +488,7 @@ impl<'ctx> SearchContext<'ctx> {
         &mut self,
         word_prefix: Interned<String>,
     ) -> Result<Vec<u16>> {
+        unreachable!();
         let positions = match self.db_cache.word_prefix_positions.entry(word_prefix) {
             Entry::Occupied(positions) => positions.get().clone(),
             Entry::Vacant(entry) => {
