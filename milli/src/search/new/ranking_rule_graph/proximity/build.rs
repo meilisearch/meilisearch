@@ -1,6 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use super::ProximityCondition;
+use crate::proximity::MAX_DISTANCE;
 use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::SearchContext;
@@ -35,7 +36,7 @@ pub fn build_edges(
     }
 
     let mut conditions = vec![];
-    for cost in right_ngram_max..(7 + right_ngram_max) {
+    for cost in right_ngram_max..(((MAX_DISTANCE as usize) - 1) + right_ngram_max) {
         conditions.push((
             cost as u32,
             conditions_interner.insert(ProximityCondition::Uninit {
@@ -47,7 +48,7 @@ pub fn build_edges(
     }
 
     conditions.push((
-        (7 + right_ngram_max) as u32,
+        ((MAX_DISTANCE - 1) + (right_ngram_max as u32)),
         conditions_interner.insert(ProximityCondition::Term { term: right_term.clone() }),
     ));
 

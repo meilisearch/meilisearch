@@ -2,7 +2,7 @@ use std::cmp;
 
 use crate::{relative_from_absolute_position, Position};
 
-pub const MAX_DISTANCE: u32 = 8;
+pub const MAX_DISTANCE: u32 = 4;
 
 pub fn index_proximity(lhs: u32, rhs: u32) -> u32 {
     if lhs <= rhs {
