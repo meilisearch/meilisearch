@@ -70,7 +70,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         with:
           images: getmeili/meilisearch
           # Prevent `latest` to be updated for each new tag pushed.
