@@ -1,4 +1,4 @@
-name: Run and display benchmarks in a PR
+name: Benchmarks (PR)
 on:
   issue_comment:
     types: [created, edited]
