@@ -1,18 +1,15 @@
-name: Benchmarks (manual)
-
+name: Benchmarks (PR)
 on:
-  workflow_dispatch:
-    inputs:
-      dataset_name:
-        description: 'The name of the dataset used to benchmark (search_songs, search_wiki, search_geo or indexing)'
-        required: false
-        default: 'search_songs'
+  issue_comment:
+    types: [created, edited]
 
 env:
-  BENCH_NAME: ${{ github.event.inputs.dataset_name }}
+  BENCH_NAME: search_geo
+  GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
 
 jobs:
-  benchmarks:
+  run-benchmarks-on-comment:
+    if: contains(github.event.comment.body, '@meilisearch run benchmarks')
     name: Run and upload benchmarks
     runs-on: benchmarks
     timeout-minutes: 4320 # 72h
@@ -68,10 +65,12 @@ jobs:
           source: ${{ steps.file.outputs.basename }}.json
           out_dir: critcmp_results
 
-      # Helper
-      - name: 'README: compare with another benchmark'
+      # Compute the diff of the benchmarks and send a message on the GitHub PR
+      - name: Compute and send a message in the PR
         run: |
-          echo "${{ steps.file.outputs.basename }}.json has just been pushed."
-          echo 'How to compare this benchmark with another one?'
-          echo '  - Check the available files with: ./benchmarks/scripts/list.sh'
-          echo "  - Run the following command: ./benchmaks/scripts/compare.sh <file-to-compare-with> ${{ steps.file.outputs.basename }}.json"
+          export base=git rev-parse $(git cherry main | head -n 1 | cut -c 3-)~ | cut -c -8
+          echo 'Here are your benchmarks diff 👊' >> body.txt
+          echo '```' >> body.txt
+          ./benchmaks/scipts/compare.sh $base ${{ steps.file.outputs.basename }}.json >> body.txt
+          echo '```' >> body.txt
+          gh pr comment ${GITHUB_REF#refs/heads/} --body-file body.txt
