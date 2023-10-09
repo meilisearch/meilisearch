@@ -25,6 +25,7 @@ jobs:
         with:
           command: benchmark
           reaction-type: "eyes"
+          repo-token: ${{ env.GH_TOKEN }}
 
       # Set variables
       - name: Set current branch name
