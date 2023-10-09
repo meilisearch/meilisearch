@@ -46,18 +46,27 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         if let Some(distinct_fid) = distinct_fid {
             let mut excluded = RoaringBitmap::new();
             let mut results = vec![];
+            let mut skip = 0;
             for docid in universe.iter() {
-                if results.len() >= from + length {
+                if results.len() >= length {
                     break;
                 }
                 if excluded.contains(docid) {
                     continue;
                 }
+
                 distinct_single_docid(ctx.index, ctx.txn, distinct_fid, docid, &mut excluded)?;
+                skip += 1;
+                if skip <= from {
+                    continue;
+                }
+
                 results.push(docid);
             }
+
             let mut all_candidates = universe - excluded;
             all_candidates.extend(results.iter().copied());
+
             return Ok(BucketSortOutput {
                 scores: vec![Default::default(); results.len()],
                 docids: results,
