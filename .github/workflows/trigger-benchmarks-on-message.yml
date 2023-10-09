@@ -1,15 +1,13 @@
 name: Benchmarks (PR)
-on:
-  issue_comment:
-    types: [created, edited]
+on: issue_comment
+permissions:
+  issues: write
 
 env:
-  BENCH_NAME: search_geo
   GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
 
 jobs:
   run-benchmarks-on-comment:
-    if: contains(github.event.comment.body, '@meilisearch run benchmarks')
     name: Run and upload benchmarks
     runs-on: benchmarks
     timeout-minutes: 4320 # 72h
@@ -20,6 +18,13 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
+
+      - name: Check for Command
+        id: command
+        uses: xt0rted/slash-command-action@v2
+        with:
+          command: benchmark
+          reaction-type: "eyes"
 
       # Set variables
       - name: Set current branch name
@@ -36,14 +41,14 @@ jobs:
         id: commit_sha
       - name: Set file basename with format "dataset_branch_commitSHA"
         shell: bash
-        run: echo "basename=$(echo ${BENCH_NAME}_${{ steps.normalized_current_branch.outputs.name }}_${{ steps.commit_sha.outputs.short }})" >> $GITHUB_OUTPUT
+        run: echo "basename=$(echo ${{ steps.command.outputs.command-arguments }}_${{ steps.normalized_current_branch.outputs.name }}_${{ steps.commit_sha.outputs.short }})" >> $GITHUB_OUTPUT
         id: file
 
       # Run benchmarks
-      - name: Run benchmarks - Dataset ${BENCH_NAME} - Branch ${{ steps.current_branch.outputs.name }} - Commit ${{ steps.commit_sha.outputs.short }}
+      - name: Run benchmarks - Dataset ${{ steps.command.outputs.command-arguments }} - Branch ${{ steps.current_branch.outputs.name }} - Commit ${{ steps.commit_sha.outputs.short }}
         run: |
           cd benchmarks
-          cargo bench --bench ${BENCH_NAME} -- --save-baseline ${{ steps.file.outputs.basename }}
+          cargo bench --bench ${{ steps.command.outputs.command-arguments }} -- --save-baseline ${{ steps.file.outputs.basename }}
 
       # Generate critcmp files
       - name: Install critcmp
