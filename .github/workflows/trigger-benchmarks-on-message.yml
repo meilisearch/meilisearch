@@ -74,9 +74,9 @@ jobs:
       # Compute the diff of the benchmarks and send a message on the GitHub PR
       - name: Compute and send a message in the PR
         run: |
-          export base=$(git rev-parse $(git cherry main | head -n 1 | cut -c 3-)~ | cut -c -8)
+          export base=$(git log --pretty=%p -n 1)
           echo 'Here are your benchmarks diff 👊' >> body.txt
           echo '```' >> body.txt
-          ./benchmaks/scripts/compare.sh $base ${{ steps.file.outputs.basename }}.json >> body.txt
+          ./benchmarks/scripts/compare.sh $base ${{ steps.file.outputs.basename }}.json >> body.txt
           echo '```' >> body.txt
           gh pr comment ${GITHUB_REF#refs/heads/} --body-file body.txt
