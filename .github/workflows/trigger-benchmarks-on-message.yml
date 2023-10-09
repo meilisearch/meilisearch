@@ -73,6 +73,8 @@ jobs:
 
       # Compute the diff of the benchmarks and send a message on the GitHub PR
       - name: Compute and send a message in the PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
         run: |
           export base=$(git log --pretty=%p -n 1)
           echo 'Here are your benchmarks diff 👊' >> body.txt
