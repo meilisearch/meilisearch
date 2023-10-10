@@ -16,9 +16,7 @@ use crate::facet::FacetType;
 use crate::heed_codec::facet::FieldDocIdFacetCodec;
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::index::Hnsw;
-use crate::{
-    ExternalDocumentsIds, FieldId, FieldIdMapMissingEntry, Index, Result, RoaringBitmapCodec, BEU32,
-};
+use crate::{ExternalDocumentsIds, FieldId, FieldIdMapMissingEntry, Index, Result, BEU32};
 
 pub struct DeleteDocuments<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,

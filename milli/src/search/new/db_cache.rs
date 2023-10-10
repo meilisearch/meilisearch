@@ -11,9 +11,7 @@ use super::interner::Interned;
 use super::Word;
 use crate::heed_codec::{BytesDecodeOwned, StrBEU16Codec};
 use crate::update::{merge_cbo_roaring_bitmaps, MergeFn};
-use crate::{
-    CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, Result, RoaringBitmapCodec, SearchContext,
-};
+use crate::{CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, Result, SearchContext};
 
 /// A cache storing pointers to values in the LMDB databases.
 ///
