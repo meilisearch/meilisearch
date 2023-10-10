@@ -184,7 +184,7 @@ pub fn index_word_prefix_database(
     word_prefix_pair_proximity_docids: heed::Database<U8StrStrCodec, CboRoaringBitmapCodec>,
     max_proximity: u8,
     max_prefix_length: usize,
-    new_word_pair_proximity_docids: grenad::Reader<CursorClonableMmap>,
+    new_word_pair_proximity_docids: Vec<grenad::Reader<CursorClonableMmap>>,
     new_prefix_fst_words: &[String],
     common_prefix_fst_words: &[&[String]],
     del_prefix_fst_words: &HashSet<Vec<u8>>,
@@ -207,32 +207,34 @@ pub fn index_word_prefix_database(
     // word pairs to look for new (proximity, word1, common_prefix) elements
     // to insert in the DB
     if !prefixes.is_empty() {
-        let mut cursor = new_word_pair_proximity_docids.into_cursor()?;
-        // This is the core of the algorithm
-        execute_on_word_pairs_and_prefixes(
-            // the first two arguments tell how to iterate over the new word pairs
-            &mut cursor,
-            |cursor| {
-                if let Some((key, value)) = cursor.move_on_next()? {
-                    let (proximity, word1, word2) =
-                        UncheckedU8StrStrCodec::bytes_decode(key).ok_or(heed::Error::Decoding)?;
-                    Ok(Some(((proximity, word1, word2), value)))
-                } else {
-                    Ok(None)
-                }
-            },
-            &prefixes,
-            max_proximity,
-            // and this argument tells what to do with each new key (proximity, word1, prefix) and value (roaring bitmap)
-            |key, value| {
-                insert_into_database(
-                    wtxn,
-                    *word_prefix_pair_proximity_docids.as_polymorph(),
-                    key,
-                    value,
-                )
-            },
-        )?;
+        for reader in new_word_pair_proximity_docids {
+            let mut cursor = reader.into_cursor()?;
+            // This is the core of the algorithm
+            execute_on_word_pairs_and_prefixes(
+                // the first two arguments tell how to iterate over the new word pairs
+                &mut cursor,
+                |cursor| {
+                    if let Some((key, value)) = cursor.move_on_next()? {
+                        let (proximity, word1, word2) = UncheckedU8StrStrCodec::bytes_decode(key)
+                            .ok_or(heed::Error::Decoding)?;
+                        Ok(Some(((proximity, word1, word2), value)))
+                    } else {
+                        Ok(None)
+                    }
+                },
+                &prefixes,
+                max_proximity,
+                // and this argument tells what to do with each new key (proximity, word1, prefix) and value (roaring bitmap)
+                |key, value| {
+                    insert_into_database(
+                        wtxn,
+                        *word_prefix_pair_proximity_docids.as_polymorph(),
+                        key,
+                        value,
+                    )
+                },
+            )?;
+        }
     }
 
     // Now we do the same thing with the new prefixes and all word pairs in the DB

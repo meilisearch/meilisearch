@@ -20,7 +20,7 @@ pub fn index_prefix_word_database(
     prefix_word_pair_proximity_docids: heed::Database<U8StrStrCodec, CboRoaringBitmapCodec>,
     max_proximity: u8,
     max_prefix_length: usize,
-    new_word_pair_proximity_docids: grenad::Reader<CursorClonableMmap>,
+    new_word_pair_proximity_docids: Vec<grenad::Reader<CursorClonableMmap>>,
     new_prefix_fst_words: &[String],
     common_prefix_fst_words: &[&[String]],
     del_prefix_fst_words: &HashSet<Vec<u8>>,

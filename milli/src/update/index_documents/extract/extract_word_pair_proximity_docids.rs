@@ -1,12 +1,14 @@
 use std::collections::{HashMap, VecDeque};
+use std::convert::TryInto;
 use std::fs::File;
 use std::{cmp, io};
 
 use obkv::KvReaderU16;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::helpers::{
-    create_sorter, create_writer, merge_cbo_roaring_bitmaps, sorter_into_reader,
-    try_split_array_at, writer_into_reader, GrenadParameters, MergeFn,
+    create_sorter, merge_cbo_roaring_bitmaps, sorter_into_reader, try_split_array_at,
+    GrenadParameters, MergeFn, WPP_GRENAD_COUNT,
 };
 use crate::error::SerializationError;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
@@ -21,12 +23,12 @@ use crate::{DocumentId, Result};
 pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
     docid_word_positions: grenad::Reader<R>,
     indexer: GrenadParameters,
-) -> Result<grenad::Reader<File>> {
+) -> Result<[grenad::Reader<File>; WPP_GRENAD_COUNT]> {
     puffin::profile_function!();
 
     let max_memory = indexer.max_memory_by_thread();
 
-    let mut word_pair_proximity_docids_sorters: Vec<_> = (1..MAX_DISTANCE)
+    let mut word_pair_proximity_docids_sorters: Vec<_> = (0..WPP_GRENAD_COUNT)
         .into_iter()
         .map(|_| {
             create_sorter(
@@ -101,19 +103,19 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
             &mut word_pair_proximity_docids_sorters,
         )?;
     }
+
     {
         puffin::profile_scope!("sorter_into_reader");
-        let mut writer = create_writer(
-            indexer.chunk_compression_type,
-            indexer.chunk_compression_level,
-            tempfile::tempfile()?,
-        );
-
-        for sorter in word_pair_proximity_docids_sorters {
-            sorter.write_into_stream_writer(&mut writer)?;
+        let results: Vec<_> = word_pair_proximity_docids_sorters
+            .into_par_iter()
+            .map(|s| sorter_into_reader(s, indexer))
+            .collect();
+        let mut writers = Vec::with_capacity(results.len());
+        for result in results {
+            writers.push(result?);
         }
-
-        writer_into_reader(writer)
+        let head = writers.try_into().ok().unwrap();
+        Ok(head)
     }
 }
 

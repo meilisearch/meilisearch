@@ -45,7 +45,7 @@ impl<'t, 'u, 'i> PrefixWordPairsProximityDocids<'t, 'u, 'i> {
     #[logging_timer::time("WordPrefixPairProximityDocids::{}")]
     pub fn execute<'a>(
         self,
-        new_word_pair_proximity_docids: grenad::Reader<CursorClonableMmap>,
+        new_word_pair_proximity_docids: Vec<grenad::Reader<CursorClonableMmap>>,
         new_prefix_fst_words: &'a [String],
         common_prefix_fst_words: &[&'a [String]],
         del_prefix_fst_words: &HashSet<Vec<u8>>,

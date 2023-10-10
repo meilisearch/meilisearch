@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::convert::TryInto;
 use std::fs::File;
 use std::io::{self, Seek};
 use std::time::Instant;
@@ -6,10 +7,14 @@ use std::time::Instant;
 use grenad::{CompressionType, Sorter};
 use heed::types::ByteSlice;
 use log::debug;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::{ClonableMmap, MergeFn};
 use crate::error::InternalError;
+use crate::proximity::MAX_DISTANCE;
 use crate::Result;
+
+pub const WPP_GRENAD_COUNT: usize = MAX_DISTANCE as usize - 1;
 
 pub type CursorClonableMmap = io::Cursor<ClonableMmap>;
 
@@ -127,6 +132,31 @@ impl MergeableReader for Vec<(grenad::Reader<File>, grenad::Reader<File>, grenad
             m3.push(r3)?;
         }
         Ok((m1.finish(params)?, m2.finish(params)?, m3.finish(params)?))
+    }
+}
+
+impl MergeableReader for Vec<[grenad::Reader<File>; WPP_GRENAD_COUNT]> {
+    type Output = [grenad::Reader<File>; WPP_GRENAD_COUNT];
+
+    fn merge(self, merge_fn: MergeFn, params: &GrenadParameters) -> Result<Self::Output> {
+        let mut mergers: Vec<_> =
+            (0..WPP_GRENAD_COUNT).into_iter().map(|_| MergerBuilder::new(merge_fn)).collect();
+
+        for array in self {
+            let mut i = 0;
+            for reader in array {
+                mergers[i].push(reader)?;
+                i += 1;
+            }
+        }
+
+        let results: Vec<_> = mergers.into_par_iter().map(|m| m.finish(params)).collect();
+        let mut readers = Vec::with_capacity(results.len());
+        for result in results {
+            readers.push(result?);
+        }
+        let head = readers.try_into().ok().unwrap();
+        Ok(head)
     }
 }
 

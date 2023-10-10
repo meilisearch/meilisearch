@@ -28,7 +28,7 @@ use self::extract_word_pair_proximity_docids::extract_word_pair_proximity_docids
 use self::extract_word_position_docids::extract_word_position_docids;
 use super::helpers::{
     as_cloneable_grenad, merge_cbo_roaring_bitmaps, CursorClonableMmap, GrenadParameters, MergeFn,
-    MergeableReader,
+    MergeableReader, WPP_GRENAD_COUNT,
 };
 use super::{helpers, TypedChunk};
 use crate::{FieldId, Result};
@@ -150,7 +150,7 @@ pub(crate) fn data_from_obkv_documents(
         });
     }
 
-    spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
+    spawn_extraction_task::<_, _, Vec<[grenad::Reader<File>; WPP_GRENAD_COUNT]>>(
         docid_word_positions_chunks.clone(),
         indexer,
         lmdb_writer_sx.clone(),

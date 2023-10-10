@@ -10,7 +10,7 @@ use fst::{IntoStreamer, Streamer};
 pub use grenad_helpers::{
     as_cloneable_grenad, create_sorter, create_writer, grenad_obkv_into_chunks,
     merge_ignore_values, sorter_into_lmdb_database, sorter_into_reader, writer_into_reader,
-    GrenadParameters, MergeableReader,
+    GrenadParameters, MergeableReader, WPP_GRENAD_COUNT,
 };
 pub use merge_functions::{
     concat_u32s_array, keep_first, keep_latest_obkv, merge_btreeset_string,

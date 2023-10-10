@@ -425,7 +425,10 @@ where
                     }
                 }
                 TypedChunk::WordPairProximityDocids(chunk) => {
-                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
+                    let mut cloneable_chunk = Vec::with_capacity(chunk.len());
+                    for c in chunk.iter() {
+                        cloneable_chunk.push(unsafe { as_cloneable_grenad(c)? });
+                    }
                     word_pair_proximity_docids = Some(cloneable_chunk);
                     TypedChunk::WordPairProximityDocids(chunk)
                 }
@@ -491,7 +494,7 @@ where
         self,
         word_docids: Option<grenad::Reader<CursorClonableMmap>>,
         exact_word_docids: Option<grenad::Reader<CursorClonableMmap>>,
-        word_pair_proximity_docids: Option<grenad::Reader<CursorClonableMmap>>,
+        word_pair_proximity_docids: Option<Vec<grenad::Reader<CursorClonableMmap>>>,
         word_position_docids: Option<grenad::Reader<CursorClonableMmap>>,
         word_fid_docids: Option<grenad::Reader<CursorClonableMmap>>,
     ) -> Result<()>

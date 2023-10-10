@@ -13,6 +13,7 @@ use roaring::RoaringBitmap;
 
 use super::helpers::{
     self, merge_ignore_values, serialize_roaring_bitmap, valid_lmdb_key, CursorClonableMmap,
+    WPP_GRENAD_COUNT,
 };
 use super::{ClonableMmap, MergeFn};
 use crate::distance::NDotProductPoint;
@@ -35,7 +36,7 @@ pub(crate) enum TypedChunk {
         word_fid_docids_reader: grenad::Reader<File>,
     },
     WordPositionDocids(grenad::Reader<File>),
-    WordPairProximityDocids(grenad::Reader<File>),
+    WordPairProximityDocids([grenad::Reader<File>; WPP_GRENAD_COUNT]),
     FieldIdFacetStringDocids(grenad::Reader<File>),
     FieldIdFacetNumberDocids(grenad::Reader<File>),
     FieldIdFacetExistsDocids(grenad::Reader<File>),
@@ -241,15 +242,17 @@ pub(crate) fn write_typed_chunk_into_index(
             )?;
             is_merged_database = true;
         }
-        TypedChunk::WordPairProximityDocids(word_pair_proximity_docids_iter) => {
-            append_entries_into_database(
-                word_pair_proximity_docids_iter,
-                &index.word_pair_proximity_docids,
-                wtxn,
-                index_is_empty,
-                |value, _buffer| Ok(value),
-                merge_cbo_roaring_bitmaps,
-            )?;
+        TypedChunk::WordPairProximityDocids(word_pair_proximity_docids_array) => {
+            for word_pair_proximity_docids_iter in word_pair_proximity_docids_array {
+                append_entries_into_database(
+                    word_pair_proximity_docids_iter,
+                    &index.word_pair_proximity_docids,
+                    wtxn,
+                    index_is_empty,
+                    |value, _buffer| Ok(value),
+                    merge_cbo_roaring_bitmaps,
+                )?;
+            }
             is_merged_database = true;
         }
         TypedChunk::FieldIdDocidFacetNumbers(fid_docid_facet_number) => {
