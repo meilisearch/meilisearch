@@ -47,8 +47,6 @@ pub enum InternalError {
     IndexingMergingKeys { process: &'static str },
     #[error("{}", HeedError::InvalidDatabaseTyping)]
     InvalidDatabaseTyping,
-    #[error("Could not access the inner of a buf-reader/writer: {0}")]
-    BufIntoInnerError(String),
     #[error(transparent)]
     RayonThreadPool(#[from] ThreadPoolBuildError),
     #[error(transparent)]

@@ -67,10 +67,7 @@ pub fn sorter_into_reader(
 pub fn writer_into_reader(
     writer: grenad::Writer<BufWriter<File>>,
 ) -> Result<grenad::Reader<BufReader<File>>> {
-    let mut file = writer
-        .into_inner()?
-        .into_inner()
-        .map_err(|err| InternalError::BufIntoInnerError(err.to_string()))?;
+    let mut file = writer.into_inner()?.into_inner().map_err(|err| err.into_error())?;
     file.rewind()?;
     grenad::Reader::new(BufReader::new(file)).map_err(Into::into)
 }

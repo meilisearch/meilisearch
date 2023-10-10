@@ -6,7 +6,7 @@ use grenad::CompressionType;
 use heed::types::ByteSlice;
 
 use super::index_documents::{merge_cbo_roaring_bitmaps, CursorClonableMmap};
-use crate::{Index, InternalError, Result};
+use crate::{Index, Result};
 
 mod prefix_word;
 mod word_prefix;
@@ -121,10 +121,7 @@ pub fn write_into_lmdb_database_without_merging(
     database: heed::PolyDatabase,
     writer: grenad::Writer<BufWriter<std::fs::File>>,
 ) -> Result<()> {
-    let file = writer
-        .into_inner()?
-        .into_inner()
-        .map_err(|err| InternalError::BufIntoInnerError(err.to_string()))?;
+    let file = writer.into_inner()?.into_inner().map_err(|err| err.into_error())?;
     let reader = grenad::Reader::new(BufReader::new(file))?;
     if database.is_empty(wtxn)? {
         let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
