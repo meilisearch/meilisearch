@@ -46,7 +46,6 @@ use dump::{KindDump, TaskDump, UpdateFile};
 pub use error::Error;
 pub use features::RoFeatures;
 use file_store::FileStore;
-use strois::Bucket;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
 use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
@@ -57,6 +56,7 @@ use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmap
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
 use roaring::RoaringBitmap;
+use strois::Bucket;
 use synchronoise::SignalEvent;
 use tempfile::TempDir;
 use time::format_description::well_known::Rfc3339;
@@ -577,12 +577,7 @@ impl IndexScheduler {
                                     "{snapshot_dir}/{}",
                                     meilisearch_types::VERSION_FILE_NAME
                                 );
-                                let mut version_file_path =
-                                    File::open(&inner.version_file_path).unwrap();
-                                s3.put_object_multipart(dst, &mut version_file_path, S3_PART_SIZE)
-                                    .unwrap();
-                                version_file_path.sync_data().unwrap();
-                                drop(version_file_path);
+                                s3.put_object_file(dst, &inner.version_file_path).unwrap();
 
                                 // 2. Snapshot the index-scheduler LMDB env
                                 log::info!("Snapshotting the tasks");
@@ -599,7 +594,6 @@ impl IndexScheduler {
                                 s3.put_object_multipart(
                                     format!("{snapshot_dir}/tasks.mdb"),
                                     &mut file,
-                                    S3_PART_SIZE,
                                 )
                                 .unwrap();
                                 temp.close().unwrap();
@@ -620,12 +614,8 @@ impl IndexScheduler {
                                             heed::CompactionOption::Enabled,
                                         )
                                         .unwrap();
-                                    s3.put_object_multipart(
-                                        format!("{dst}/{uuid}.mdb"),
-                                        &mut file,
-                                        S3_PART_SIZE,
-                                    )
-                                    .unwrap();
+                                    s3.put_object_multipart(format!("{dst}/{uuid}.mdb"), &mut file)
+                                        .unwrap();
                                     temp.close().unwrap();
                                 }
 

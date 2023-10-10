@@ -413,11 +413,7 @@ async fn document_addition(
         if let Some(s3) = s3 {
             update_file.seek(SeekFrom::Start(0)).unwrap();
             let mut reader = BufReader::new(&*update_file);
-            s3.put_object_multipart(
-                format!("update-files/{}", uuid),
-                &mut reader,
-                50 * 1024 * 1024,
-            )?;
+            s3.put_object_multipart(format!("update-files/{}", uuid), &mut reader)?;
         }
 
         // we NEED to persist the file here because we moved the `udpate_file` in another task.
