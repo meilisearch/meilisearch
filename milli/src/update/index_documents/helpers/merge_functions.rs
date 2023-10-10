@@ -11,6 +11,7 @@ use crate::Result;
 
 pub type MergeFn = for<'a> fn(&[u8], &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>>;
 
+#[allow(unused)]
 pub fn concat_u32s_array<'a>(_key: &[u8], values: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
     if values.len() == 1 {
         Ok(values[0].clone())

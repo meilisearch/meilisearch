@@ -11,9 +11,7 @@ use serde_json::Value;
 use super::helpers::{create_sorter, keep_latest_obkv, sorter_into_reader, GrenadParameters};
 use crate::error::{InternalError, SerializationError};
 use crate::update::index_documents::MergeFn;
-use crate::{
-    absolute_from_relative_position, FieldId, Result, MAX_POSITION_PER_ATTRIBUTE, MAX_WORD_LENGTH,
-};
+use crate::{FieldId, Result, MAX_POSITION_PER_ATTRIBUTE, MAX_WORD_LENGTH};
 
 pub type ScriptLanguageDocidsMap = HashMap<(Script, Language), RoaringBitmap>;
 

@@ -38,7 +38,7 @@ use crate::update::{
     self, DeletionStrategy, IndexerConfig, PrefixWordPairsProximityDocids, UpdateIndexingStep,
     WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
-use crate::{CboRoaringBitmapCodec, Index, Result, RoaringBitmapCodec};
+use crate::{CboRoaringBitmapCodec, Index, Result};
 
 static MERGED_DATABASE_COUNT: usize = 7;
 static PREFIX_DATABASE_COUNT: usize = 5;
@@ -433,11 +433,6 @@ where
                     let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
                     word_position_docids = Some(cloneable_chunk);
                     TypedChunk::WordPositionDocids(chunk)
-                }
-                TypedChunk::WordFidDocids(chunk) => {
-                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
-                    word_fid_docids = Some(cloneable_chunk);
-                    TypedChunk::WordFidDocids(chunk)
                 }
                 otherwise => otherwise,
             };

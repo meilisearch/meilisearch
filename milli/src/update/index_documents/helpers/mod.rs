@@ -44,6 +44,7 @@ where
     Some((head, tail))
 }
 
+#[allow(unused)]
 pub fn read_u32_ne_bytes(bytes: &[u8]) -> impl Iterator<Item = u32> + '_ {
     bytes.chunks_exact(4).flat_map(TryInto::try_into).map(u32::from_ne_bytes)
 }

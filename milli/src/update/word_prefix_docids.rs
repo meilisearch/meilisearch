@@ -8,7 +8,7 @@ use crate::update::index_documents::{
     create_sorter, merge_cbo_roaring_bitmaps, sorter_into_lmdb_database, valid_lmdb_key,
     CursorClonableMmap, MergeFn,
 };
-use crate::{CboRoaringBitmapCodec, Result, RoaringBitmapCodec};
+use crate::{CboRoaringBitmapCodec, Result};
 
 pub struct WordPrefixDocids<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,

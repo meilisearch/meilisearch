@@ -1,15 +1,13 @@
 use std::collections::{BTreeSet, HashSet};
 use std::fs::File;
 use std::io;
-use std::iter::FromIterator;
 
 use heed::BytesDecode;
 use obkv::KvReaderU16;
-use roaring::RoaringBitmap;
 
 use super::helpers::{
-    create_sorter, create_writer, merge_cbo_roaring_bitmaps, serialize_roaring_bitmap,
-    sorter_into_reader, try_split_array_at, writer_into_reader, GrenadParameters,
+    create_sorter, create_writer, merge_cbo_roaring_bitmaps, sorter_into_reader,
+    try_split_array_at, writer_into_reader, GrenadParameters,
 };
 use crate::error::SerializationError;
 use crate::heed_codec::StrBEU16Codec;
@@ -43,7 +41,6 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         max_memory.map(|x| x / 3),
     );
     let mut key_buffer = Vec::new();
-    let mut value_buffer = Vec::new();
     let mut words = BTreeSet::new();
     let mut cursor = docid_word_positions.into_cursor()?;
     while let Some((key, value)) = cursor.move_on_next()? {
@@ -62,7 +59,6 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
             document_id,
             fid,
             &mut key_buffer,
-            &mut value_buffer,
             &mut words,
             &mut word_fid_docids_sorter,
         )?;
@@ -120,7 +116,6 @@ fn words_into_sorter(
     document_id: DocumentId,
     fid: FieldId,
     key_buffer: &mut Vec<u8>,
-    value_buffer: &mut Vec<u8>,
     words: &mut BTreeSet<Vec<u8>>,
     word_fid_docids_sorter: &mut grenad::Sorter<MergeFn>,
 ) -> Result<()> {

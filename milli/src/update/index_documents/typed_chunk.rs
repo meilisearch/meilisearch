@@ -35,7 +35,6 @@ pub(crate) enum TypedChunk {
         word_fid_docids_reader: grenad::Reader<File>,
     },
     WordPositionDocids(grenad::Reader<File>),
-    WordFidDocids(grenad::Reader<File>),
     WordPairProximityDocids(grenad::Reader<File>),
     FieldIdFacetStringDocids(grenad::Reader<File>),
     FieldIdFacetNumberDocids(grenad::Reader<File>),
@@ -77,9 +76,6 @@ impl TypedChunk {
             ),
             TypedChunk::WordPositionDocids(grenad) => {
                 format!("WordPositionDocids {{ number_of_entries: {} }}", grenad.len())
-            }
-            TypedChunk::WordFidDocids(grenad) => {
-                format!("WordFidDocids {{ number_of_entries: {} }}", grenad.len())
             }
             TypedChunk::WordPairProximityDocids(grenad) => {
                 format!("WordPairProximityDocids {{ number_of_entries: {} }}", grenad.len())
@@ -195,17 +191,6 @@ pub(crate) fn write_typed_chunk_into_index(
             append_entries_into_database(
                 word_position_docids_iter,
                 &index.word_position_docids,
-                wtxn,
-                index_is_empty,
-                |value, _buffer| Ok(value),
-                merge_cbo_roaring_bitmaps,
-            )?;
-            is_merged_database = true;
-        }
-        TypedChunk::WordFidDocids(word_fid_docids_iter) => {
-            append_entries_into_database(
-                word_fid_docids_iter,
-                &index.word_fid_docids,
                 wtxn,
                 index_is_empty,
                 |value, _buffer| Ok(value),
