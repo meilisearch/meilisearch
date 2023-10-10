@@ -475,13 +475,14 @@ where
         let all_documents_ids = index_documents_ids | new_documents_ids;
         self.index.put_documents_ids(self.wtxn, &all_documents_ids)?;
 
-        self.execute_prefix_databases(
-            word_docids,
-            exact_word_docids,
-            word_pair_proximity_docids,
-            word_position_docids,
-            word_fid_docids,
-        )?;
+        // TODO: reactivate prefix DB with diff-indexing
+        // self.execute_prefix_databases(
+        //     word_docids,
+        //     exact_word_docids,
+        //     word_pair_proximity_docids,
+        //     word_position_docids,
+        //     word_fid_docids,
+        // )?;
 
         Ok(all_documents_ids.len())
     }
