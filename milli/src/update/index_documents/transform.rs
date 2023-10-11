@@ -659,8 +659,10 @@ impl<'a, 'i> Transform<'a, 'i> {
             new_documents_ids: self.new_documents_ids,
             replaced_documents_ids: self.replaced_documents_ids,
             documents_count: self.documents_count,
-            original_documents,
-            flattened_documents,
+            original_documents: original_documents.into_inner().map_err(|err| err.into_error())?,
+            flattened_documents: flattened_documents
+                .into_inner()
+                .map_err(|err| err.into_error())?,
         })
     }
 
@@ -779,8 +781,10 @@ impl<'a, 'i> Transform<'a, 'i> {
             new_documents_ids: documents_ids,
             replaced_documents_ids: RoaringBitmap::default(),
             documents_count,
-            original_documents,
-            flattened_documents,
+            original_documents: original_documents.into_inner().map_err(|err| err.into_error())?,
+            flattened_documents: flattened_documents
+                .into_inner()
+                .map_err(|err| err.into_error())?,
         };
 
         let new_facets = output.compute_real_facets(wtxn, self.index)?;

@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashSet};
 use std::convert::TryInto;
 use std::fs::File;
-use std::io;
+use std::io::{self, BufReader};
 use std::mem::size_of;
 
 use heed::zerocopy::AsBytes;
@@ -17,11 +17,11 @@ use crate::{CboRoaringBitmapCodec, DocumentId, FieldId, Result, BEU32, MAX_FACET
 
 /// The extracted facet values stored in grenad files by type.
 pub struct ExtractedFacetValues {
-    pub docid_fid_facet_numbers_chunk: grenad::Reader<File>,
-    pub docid_fid_facet_strings_chunk: grenad::Reader<File>,
-    pub fid_facet_is_null_docids_chunk: grenad::Reader<File>,
-    pub fid_facet_is_empty_docids_chunk: grenad::Reader<File>,
-    pub fid_facet_exists_docids_chunk: grenad::Reader<File>,
+    pub docid_fid_facet_numbers_chunk: grenad::Reader<BufReader<File>>,
+    pub docid_fid_facet_strings_chunk: grenad::Reader<BufReader<File>>,
+    pub fid_facet_is_null_docids_chunk: grenad::Reader<BufReader<File>>,
+    pub fid_facet_is_empty_docids_chunk: grenad::Reader<BufReader<File>>,
+    pub fid_facet_exists_docids_chunk: grenad::Reader<BufReader<File>>,
 }
 
 /// Extracts the facet values of each faceted field of each document.

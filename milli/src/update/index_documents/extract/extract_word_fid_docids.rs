@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io;
+use std::io::{self, BufReader};
 
 use super::helpers::{
     create_sorter, merge_cbo_roaring_bitmaps, read_u32_ne_bytes, sorter_into_reader,
@@ -14,7 +14,7 @@ use crate::{relative_from_absolute_position, DocumentId, Result};
 pub fn extract_word_fid_docids<R: io::Read + io::Seek>(
     docid_word_positions: grenad::Reader<R>,
     indexer: GrenadParameters,
-) -> Result<grenad::Reader<File>> {
+) -> Result<grenad::Reader<BufReader<File>>> {
     puffin::profile_function!();
 
     let max_memory = indexer.max_memory_by_thread();

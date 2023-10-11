@@ -78,6 +78,7 @@ pub const FACET_MIN_LEVEL_SIZE: u8 = 5;
 
 use std::collections::BTreeSet;
 use std::fs::File;
+use std::io::BufReader;
 use std::iter::FromIterator;
 
 use charabia::normalizer::{Normalize, NormalizerOption};
@@ -108,13 +109,17 @@ pub struct FacetsUpdate<'i> {
     index: &'i Index,
     database: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     facet_type: FacetType,
-    new_data: grenad::Reader<File>,
+    new_data: grenad::Reader<BufReader<File>>,
     group_size: u8,
     max_group_size: u8,
     min_level_size: u8,
 }
 impl<'i> FacetsUpdate<'i> {
-    pub fn new(index: &'i Index, facet_type: FacetType, new_data: grenad::Reader<File>) -> Self {
+    pub fn new(
+        index: &'i Index,
+        facet_type: FacetType,
+        new_data: grenad::Reader<BufReader<File>>,
+    ) -> Self {
         let database = match facet_type {
             FacetType::String => index
                 .facet_id_string_docids

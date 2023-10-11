@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io;
+use std::io::{self, BufReader};
 
 use concat_arrays::concat_arrays;
 use serde_json::Value;
@@ -18,7 +18,7 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     primary_key_id: FieldId,
     (lat_fid, lng_fid): (FieldId, FieldId),
-) -> Result<grenad::Reader<File>> {
+) -> Result<grenad::Reader<BufReader<File>>> {
     puffin::profile_function!();
 
     let mut writer = create_writer(

@@ -1,4 +1,4 @@
-use std::io::{Read, Seek};
+use std::io::{BufWriter, Read, Seek};
 use std::result::Result as StdResult;
 use std::{fmt, iter};
 
@@ -35,7 +35,7 @@ pub fn enrich_documents_batch<R: Read + Seek>(
 
     let (mut cursor, mut documents_batch_index) = reader.into_cursor_and_fields_index();
 
-    let mut external_ids = tempfile::tempfile().map(grenad::Writer::new)?;
+    let mut external_ids = tempfile::tempfile().map(BufWriter::new).map(grenad::Writer::new)?;
     let mut uuid_buffer = [0; uuid::fmt::Hyphenated::LENGTH];
 
     // The primary key *field id* that has already been set for this index or the one
