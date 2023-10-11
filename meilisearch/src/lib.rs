@@ -253,8 +253,6 @@ fn open_or_create_database_unchecked(
                     .region(&opt.s3_region)
                     .with_url_path_style(true)
                     .bucket(opt.s3_bucket.as_ref().expect("Need an s3 bucket to work"))
-                    .unwrap()
-                    .get_or_create()
                     .unwrap(),
             )
         }),
