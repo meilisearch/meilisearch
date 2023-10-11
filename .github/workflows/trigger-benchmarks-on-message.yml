@@ -1,7 +1,5 @@
 name: Benchmarks (PR)
-on:
-  issue_comment:
-    types: [created, edited]
+on: issue_comment
 permissions:
   issues: write
 
