@@ -8,6 +8,7 @@ env:
 
 jobs:
   run-benchmarks-on-comment:
+    if: startsWith(github.event.comment.body, '/benchmark')
     name: Run and upload benchmarks
     runs-on: benchmarks
     timeout-minutes: 4320 # 72h
