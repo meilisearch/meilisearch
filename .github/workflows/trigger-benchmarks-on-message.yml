@@ -12,7 +12,6 @@ jobs:
     runs-on: benchmarks
     timeout-minutes: 4320 # 72h
     steps:
-      - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
@@ -40,11 +39,11 @@ jobs:
       # Set variables
       - name: Set current branch name
         shell: bash
-        run: echo "name=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_OUTPUT
+        run: echo "name=$(git rev-parse --abbrev-ref HEAD)" >> $GITHUB_OUTPUT
         id: current_branch
       - name: Set normalized current branch name # Replace `/` by `_` in branch name to avoid issues when pushing to S3
         shell: bash
-        run: echo "name=$(echo ${GITHUB_REF#refs/heads/} | tr '/' '_')" >> $GITHUB_OUTPUT
+        run: echo "name=$(git rev-parse --abbrev-ref HEAD | tr '/' '_')" >> $GITHUB_OUTPUT
         id: normalized_current_branch
       - name: Set shorter commit SHA
         shell: bash
@@ -91,4 +90,4 @@ jobs:
           echo '```' >> body.txt
           ./benchmarks/scripts/compare.sh $base ${{ steps.file.outputs.basename }}.json >> body.txt
           echo '```' >> body.txt
-          gh pr comment ${GITHUB_REF#refs/heads/} --body-file body.txt
+          gh pr comment ${{ steps.current_branch.outputs.name }} --body-file body.txt
