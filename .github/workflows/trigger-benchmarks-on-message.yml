@@ -86,9 +86,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
         run: |
-          export base=$(git log --pretty=%p -n 1)
+          export base_ref=$(git log --pretty=%p -n 1)
+          export base_filename=$(echo ${{ steps.command.outputs.command-arguments }}_main_${base_ref}.json)
           echo 'Here are your benchmarks diff 👊' >> body.txt
           echo '```' >> body.txt
-          ./benchmarks/scripts/compare.sh $base ${{ steps.file.outputs.basename }}.json >> body.txt
+          ./benchmarks/scripts/compare.sh $base_filename ${{ steps.file.outputs.basename }}.json >> body.txt
           echo '```' >> body.txt
           gh pr comment ${{ steps.current_branch.outputs.name }} --body-file body.txt
