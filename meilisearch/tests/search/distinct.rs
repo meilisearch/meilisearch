@@ -1,8 +1,8 @@
 use meili_snap::snapshot;
 use once_cell::sync::Lazy;
-use serde_json::{json, Value};
 
-use crate::common::Server;
+use crate::common::{Server, Value};
+use crate::json;
 
 pub(self) static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     json!([
@@ -33,7 +33,7 @@ async fn distinct_search_with_offset_no_ranking() {
     index.update_distinct_attribute(json!(DOCUMENT_DISTINCT_KEY)).await;
     index.wait_task(1).await;
 
-    fn get_hits(response: Value) -> Vec<i64> {
+    fn get_hits(Value(response): Value) -> Vec<i64> {
         let hits_array = response["hits"].as_array().unwrap();
         hits_array.iter().map(|h| h[DOCUMENT_DISTINCT_KEY].as_i64().unwrap()).collect::<Vec<_>>()
     }
