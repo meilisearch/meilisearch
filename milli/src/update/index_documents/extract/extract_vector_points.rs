@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 use std::fs::File;
-use std::io;
+use std::io::{self, BufReader};
 
 use bytemuck::cast_slice;
 use serde_json::{from_slice, Value};
@@ -18,7 +18,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     primary_key_id: FieldId,
     vectors_fid: FieldId,
-) -> Result<grenad::Reader<File>> {
+) -> Result<grenad::Reader<BufReader<File>>> {
     puffin::profile_function!();
 
     let mut writer = create_writer(

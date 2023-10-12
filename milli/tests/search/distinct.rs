@@ -8,7 +8,7 @@ use Criterion::*;
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
 
 macro_rules! test_distinct {
-    ($func:ident, $distinct:ident, $exhaustive:ident, $limit:expr, $criteria:expr, $n_res:expr) => {
+    ($func:ident, $distinct:ident, $exhaustive:ident, $limit:expr, $offset:expr, $criteria:expr, $n_res:expr) => {
         #[test]
         fn $func() {
             let criteria = $criteria;
@@ -27,6 +27,7 @@ macro_rules! test_distinct {
             let mut search = Search::new(&rtxn, &index);
             search.query(search::TEST_QUERY);
             search.limit($limit);
+            search.offset($offset);
             search.exhaustive_number_hits($exhaustive);
 
             search.terms_matching_strategy(TermsMatchingStrategy::default());
@@ -47,6 +48,7 @@ macro_rules! test_distinct {
                             Some(d.id)
                         }
                     })
+                    .skip($offset)
                     .take($limit)
                     .collect();
 
@@ -61,6 +63,7 @@ test_distinct!(
     tag,
     true,
     1,
+    0,
     vec![Words, Typo, Proximity, Attribute, Exactness],
     3
 );
@@ -69,6 +72,7 @@ test_distinct!(
     asc_desc_rank,
     true,
     1,
+    0,
     vec![Words, Typo, Proximity, Attribute, Exactness],
     7
 );
@@ -76,6 +80,7 @@ test_distinct!(
     exhaustive_distinct_number_weird_order_criteria,
     asc_desc_rank,
     true,
+    0,
     0,
     vec![Desc(S("attribute_rank")), Desc(S("exactness_rank")), Exactness, Typo],
     7
@@ -86,6 +91,7 @@ test_distinct!(
     tag,
     false,
     EXTERNAL_DOCUMENTS_IDS.len(),
+    0,
     vec![Words, Typo, Proximity, Attribute, Exactness],
     3
 );
@@ -94,6 +100,7 @@ test_distinct!(
     asc_desc_rank,
     false,
     EXTERNAL_DOCUMENTS_IDS.len(),
+    0,
     vec![Words, Typo, Proximity, Attribute, Exactness],
     7
 );
@@ -102,6 +109,7 @@ test_distinct!(
     tag,
     false,
     EXTERNAL_DOCUMENTS_IDS.len(),
+    0,
     vec![Words],
     3
 );
@@ -110,6 +118,7 @@ test_distinct!(
     asc_desc_rank,
     false,
     EXTERNAL_DOCUMENTS_IDS.len(),
+    0,
     vec![Words],
     7
 );
@@ -118,6 +127,7 @@ test_distinct!(
     tag,
     false,
     EXTERNAL_DOCUMENTS_IDS.len(),
+    0,
     vec![Words, Typo],
     3
 );
@@ -126,6 +136,7 @@ test_distinct!(
     asc_desc_rank,
     false,
     EXTERNAL_DOCUMENTS_IDS.len(),
+    0,
     vec![Words, Typo],
     7
 );
@@ -134,6 +145,7 @@ test_distinct!(
     tag,
     false,
     EXTERNAL_DOCUMENTS_IDS.len(),
+    0,
     vec![Words, Proximity],
     3
 );
@@ -142,6 +154,7 @@ test_distinct!(
     asc_desc_rank,
     false,
     EXTERNAL_DOCUMENTS_IDS.len(),
+    0,
     vec![Words, Proximity],
     7
 );
@@ -150,6 +163,7 @@ test_distinct!(
     tag,
     false,
     EXTERNAL_DOCUMENTS_IDS.len(),
+    0,
     vec![Words, Attribute],
     3
 );
@@ -158,6 +172,7 @@ test_distinct!(
     asc_desc_rank,
     false,
     EXTERNAL_DOCUMENTS_IDS.len(),
+    0,
     vec![Words, Attribute],
     7
 );
@@ -166,6 +181,7 @@ test_distinct!(
     tag,
     false,
     EXTERNAL_DOCUMENTS_IDS.len(),
+    0,
     vec![Words, Exactness],
     3
 );
@@ -174,6 +190,47 @@ test_distinct!(
     asc_desc_rank,
     false,
     EXTERNAL_DOCUMENTS_IDS.len(),
+    0,
     vec![Words, Exactness],
     7
+);
+test_distinct!(
+    // testing: https://github.com/meilisearch/meilisearch/issues/4078
+    distinct_string_limit_and_offset,
+    tag,
+    false,
+    EXTERNAL_DOCUMENTS_IDS.len(),
+    1,
+    vec![],
+    2
+);
+test_distinct!(
+    // testing: https://github.com/meilisearch/meilisearch/issues/4078
+    exhaustive_distinct_string_limit_and_offset,
+    tag,
+    true,
+    1,
+    2,
+    vec![],
+    1
+);
+test_distinct!(
+    // testing: https://github.com/meilisearch/meilisearch/issues/4078
+    distinct_number_limit_and_offset,
+    asc_desc_rank,
+    false,
+    EXTERNAL_DOCUMENTS_IDS.len(),
+    2,
+    vec![],
+    5
+);
+test_distinct!(
+    // testing: https://github.com/meilisearch/meilisearch/issues/4078
+    exhaustive_distinct_number_limit_and_offset,
+    asc_desc_rank,
+    true,
+    2,
+    4,
+    vec![],
+    3
 );

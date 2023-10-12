@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io;
+use std::io::{self, BufReader};
 
 use heed::BytesEncode;
 
@@ -17,7 +17,7 @@ use crate::{FieldId, Result, MAX_FACET_VALUE_LENGTH};
 pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
     docid_fid_facet_string: grenad::Reader<R>,
     indexer: GrenadParameters,
-) -> Result<grenad::Reader<File>> {
+) -> Result<grenad::Reader<BufReader<File>>> {
     puffin::profile_function!();
 
     let max_memory = indexer.max_memory_by_thread();

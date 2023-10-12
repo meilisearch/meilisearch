@@ -1,6 +1,7 @@
 // This modules contains all the test concerning search. Each particular feature of the search
 // should be tested in its own module to isolate tests and keep the tests readable.
 
+mod distinct;
 mod errors;
 mod facet_search;
 mod formatted;
