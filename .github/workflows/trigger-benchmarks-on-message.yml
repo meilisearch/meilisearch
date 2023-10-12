@@ -88,7 +88,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
         run: |
           set -x
-          export base_ref=$(git merge-base origin/main ${{ steps.comment-branch.outputs.head_ref }})
+          export base_ref=$(git merge-base origin/main ${{ steps.comment-branch.outputs.head_ref }} | head -c8)
           export base_filename=$(echo ${{ steps.command.outputs.command-arguments }}_main_${base_ref}.json)
           echo 'Here are your benchmarks diff 👊' >> body.txt
           echo '```' >> body.txt
