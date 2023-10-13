@@ -44,6 +44,8 @@ pub struct RuntimeTogglableFeatures {
     pub score_details: Option<bool>,
     #[deserr(default)]
     pub vector_store: Option<bool>,
+    #[deserr(default)]
+    pub metrics: Option<bool>,
 }
 
 async fn patch_features(
@@ -62,19 +64,24 @@ async fn patch_features(
     let new_features = meilisearch_types::features::RuntimeTogglableFeatures {
         score_details: new_features.0.score_details.unwrap_or(old_features.score_details),
         vector_store: new_features.0.vector_store.unwrap_or(old_features.vector_store),
+        metrics: new_features.0.metrics.unwrap_or(old_features.metrics),
     };
 
     // explicitly destructure for analytics rather than using the `Serialize` implementation, because
     // the it renames to camelCase, which we don't want for analytics.
     // **Do not** ignore fields with `..` or `_` here, because we want to add them in the future.
-    let meilisearch_types::features::RuntimeTogglableFeatures { score_details, vector_store } =
-        new_features;
+    let meilisearch_types::features::RuntimeTogglableFeatures {
+        score_details,
+        vector_store,
+        metrics,
+    } = new_features;
 
     analytics.publish(
         "Experimental features Updated".to_string(),
         json!({
             "score_details": score_details,
             "vector_store": vector_store,
+            "metrics": metrics,
         }),
         Some(&req),
     );

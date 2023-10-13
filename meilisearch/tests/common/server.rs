@@ -202,6 +202,10 @@ impl Server {
     pub async fn set_features(&self, value: Value) -> (Value, StatusCode) {
         self.service.patch("/experimental-features", value).await
     }
+
+    pub async fn get_metrics(&self) -> (Value, StatusCode) {
+        self.service.get("/metrics").await
+    }
 }
 
 pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
@@ -221,7 +225,7 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
             skip_index_budget: true,
             ..Parser::parse_from(None as Option<&str>)
         },
-        experimental_enable_metrics: true,
+        experimental_enable_metrics: false,
         ..Parser::parse_from(None as Option<&str>)
     }
 }

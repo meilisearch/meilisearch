@@ -10,19 +10,17 @@ const EXPERIMENTAL_FEATURES: &str = "experimental-features";
 #[derive(Clone)]
 pub(crate) struct FeatureData {
     runtime: Database<Str, SerdeJson<RuntimeTogglableFeatures>>,
-    instance: InstanceTogglableFeatures,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct RoFeatures {
     runtime: RuntimeTogglableFeatures,
-    instance: InstanceTogglableFeatures,
 }
 
 impl RoFeatures {
     fn new(txn: RoTxn<'_>, data: &FeatureData) -> Result<Self> {
         let runtime = data.runtime_features(txn)?;
-        Ok(Self { runtime, instance: data.instance })
+        Ok(Self { runtime })
     }
 
     pub fn runtime_features(&self) -> RuntimeTogglableFeatures {
@@ -43,7 +41,7 @@ impl RoFeatures {
     }
 
     pub fn check_metrics(&self) -> Result<()> {
-        if self.instance.metrics {
+        if self.runtime.metrics {
             Ok(())
         } else {
             Err(FeatureNotEnabledError {
@@ -73,9 +71,12 @@ impl FeatureData {
     pub fn new(env: &Env, instance_features: InstanceTogglableFeatures) -> Result<Self> {
         let mut wtxn = env.write_txn()?;
         let runtime_features = env.create_database(&mut wtxn, Some(EXPERIMENTAL_FEATURES))?;
+        let default_features =
+            RuntimeTogglableFeatures { metrics: instance_features.metrics, ..Default::default() };
+        runtime_features.put(&mut wtxn, EXPERIMENTAL_FEATURES, &default_features)?;
         wtxn.commit()?;
 
-        Ok(Self { runtime: runtime_features, instance: instance_features })
+        Ok(Self { runtime: runtime_features })
     }
 
     pub fn put_runtime_features(
