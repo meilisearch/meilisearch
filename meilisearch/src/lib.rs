@@ -39,7 +39,7 @@ use meilisearch_types::versioning::{check_version_file, create_version_file};
 use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
 pub use option::Opt;
 use option::ScheduleSnapshot;
-use strois::Client;
+use strois::Bucket;
 use zookeeper::ZooKeeper;
 
 use crate::error::MeilisearchHttpError;
@@ -245,12 +245,13 @@ fn open_or_create_database_unchecked(
         zookeeper: zookeeper.clone(),
         s3: opt.s3_url.as_ref().map(|url| {
             Arc::new(
-                Client::builder(url)
+                Bucket::builder(url)
                     .unwrap()
                     .key(opt.s3_access_key.as_ref().expect("Need s3 key to work").clone())
                     .secret(opt.s3_secret_key.as_ref().expect("Need s3 secret to work").clone())
                     .maybe_token(opt.s3_security_token.clone())
                     .region(&opt.s3_region)
+                    .with_url_path_style(true)
                     .bucket(opt.s3_bucket.as_ref().expect("Need an s3 bucket to work"))
                     .unwrap()
                     .get_or_create()
