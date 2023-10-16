@@ -803,7 +803,7 @@ impl<'a, 'i> Transform<'a, 'i> {
 
             let buffer = obkv_writer.into_inner()?;
             document_sorter_buffer.clear();
-            into_del_add_obkv(KvReaderU16::new(buffer), true, true, &mut document_sorter_buffer)?;
+            into_del_add_obkv(KvReaderU16::new(buffer), false, true, &mut document_sorter_buffer)?;
             original_writer.insert(docid.to_be_bytes(), &document_sorter_buffer)?;
 
             // Once we have the document. We're going to flatten it
@@ -840,7 +840,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                 writer.insert(fid, &value)?;
             }
             document_sorter_buffer.clear();
-            into_del_add_obkv(KvReaderU16::new(&buffer), true, true, &mut document_sorter_buffer)?;
+            into_del_add_obkv(KvReaderU16::new(&buffer), false, true, &mut document_sorter_buffer)?;
             flattened_writer.insert(docid.to_be_bytes(), &document_sorter_buffer)?;
         }
 

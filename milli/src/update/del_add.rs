@@ -58,3 +58,43 @@ pub fn into_del_add_obkv<K: obkv::Key + PartialOrd>(
 
     writer.finish()
 }
+
+/// Creates a Kv<K, Kv<DelAdd, value>> from two Kv<K, value>
+///
+/// putting each deletion obkv's keys under an DelAdd::Deletion
+/// and putting each addition obkv's keys under an DelAdd::Addition
+pub fn del_add_from_two_obkvs<K: obkv::Key + PartialOrd + Ord>(
+    deletion: obkv::KvReader<K>,
+    addition: obkv::KvReader<K>,
+    buffer: &mut Vec<u8>,
+) -> Result<(), std::io::Error> {
+    use itertools::merge_join_by;
+    use itertools::EitherOrBoth::{Both, Left, Right};
+
+    let mut writer = obkv::KvWriter::new(buffer);
+    let mut value_buffer = Vec::new();
+
+    for eob in merge_join_by(deletion.iter(), addition.iter(), |(b, _), (u, _)| b.cmp(u)) {
+        value_buffer.clear();
+        match eob {
+            Left((k, v)) => {
+                let mut value_writer = KvWriterDelAdd::new(&mut value_buffer);
+                value_writer.insert(DelAdd::Deletion, v).unwrap();
+                writer.insert(k, value_writer.into_inner()?).unwrap();
+            }
+            Right((k, v)) => {
+                let mut value_writer = KvWriterDelAdd::new(&mut value_buffer);
+                value_writer.insert(DelAdd::Addition, v).unwrap();
+                writer.insert(k, value_writer.into_inner()?).unwrap();
+            }
+            Both((k, deletion), (_, addition)) => {
+                let mut value_writer = KvWriterDelAdd::new(&mut value_buffer);
+                value_writer.insert(DelAdd::Deletion, deletion).unwrap();
+                value_writer.insert(DelAdd::Addition, addition).unwrap();
+                writer.insert(k, value_writer.into_inner()?).unwrap();
+            }
+        }
+    }
+
+    writer.finish()
+}
