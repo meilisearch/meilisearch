@@ -114,10 +114,7 @@ pub fn create_app(
         .configure(routes::configure)
         .configure(|s| dashboard(s, enable_dashboard));
 
-    let app = app.wrap(actix_web::middleware::Condition::new(
-        opt.experimental_enable_metrics,
-        middleware::RouteMetrics,
-    ));
+    let app = app.wrap(middleware::RouteMetrics);
     app.wrap(
         Cors::default()
             .send_wildcard()
