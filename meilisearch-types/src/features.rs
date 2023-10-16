@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub struct RuntimeTogglableFeatures {
     pub score_details: bool,
     pub vector_store: bool,
+    pub export_puffin_reports: bool,
 }
 
 #[derive(Default, Debug, Clone, Copy)]

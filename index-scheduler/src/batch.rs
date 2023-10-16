@@ -19,6 +19,7 @@ one indexing operation.
 
 use std::collections::{BTreeSet, HashSet};
 use std::ffi::OsStr;
+use std::fmt;
 use std::fs::{self, File};
 use std::io::BufWriter;
 
@@ -199,6 +200,29 @@ impl Batch {
     }
 }
 
+impl fmt::Display for Batch {
+    /// A text used when we debug the profiling reports.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let index_uid = self.index_uid();
+        let tasks = self.ids();
+        match self {
+            Batch::TaskCancelation { .. } => f.write_str("TaskCancelation")?,
+            Batch::TaskDeletion(_) => f.write_str("TaskDeletion")?,
+            Batch::SnapshotCreation(_) => f.write_str("SnapshotCreation")?,
+            Batch::Dump(_) => f.write_str("Dump")?,
+            Batch::IndexOperation { op, .. } => write!(f, "{op}")?,
+            Batch::IndexCreation { .. } => f.write_str("IndexCreation")?,
+            Batch::IndexUpdate { .. } => f.write_str("IndexUpdate")?,
+            Batch::IndexDeletion { .. } => f.write_str("IndexDeletion")?,
+            Batch::IndexSwap { .. } => f.write_str("IndexSwap")?,
+        };
+        match index_uid {
+            Some(name) => f.write_fmt(format_args!(" on {name:?} from tasks: {tasks:?}")),
+            None => f.write_fmt(format_args!(" from tasks: {tasks:?}")),
+        }
+    }
+}
+
 impl IndexOperation {
     pub fn index_uid(&self) -> &str {
         match self {
@@ -209,6 +233,30 @@ impl IndexOperation {
             | IndexOperation::Settings { index_uid, .. }
             | IndexOperation::DocumentClearAndSetting { index_uid, .. }
             | IndexOperation::SettingsAndDocumentOperation { index_uid, .. } => index_uid,
+        }
+    }
+}
+
+impl fmt::Display for IndexOperation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IndexOperation::DocumentOperation { .. } => {
+                f.write_str("IndexOperation::DocumentOperation")
+            }
+            IndexOperation::DocumentDeletion { .. } => {
+                f.write_str("IndexOperation::DocumentDeletion")
+            }
+            IndexOperation::IndexDocumentDeletionByFilter { .. } => {
+                f.write_str("IndexOperation::IndexDocumentDeletionByFilter")
+            }
+            IndexOperation::DocumentClear { .. } => f.write_str("IndexOperation::DocumentClear"),
+            IndexOperation::Settings { .. } => f.write_str("IndexOperation::Settings"),
+            IndexOperation::DocumentClearAndSetting { .. } => {
+                f.write_str("IndexOperation::DocumentClearAndSetting")
+            }
+            IndexOperation::SettingsAndDocumentOperation { .. } => {
+                f.write_str("IndexOperation::SettingsAndDocumentOperation")
+            }
         }
     }
 }
@@ -581,7 +629,7 @@ impl IndexScheduler {
             self.breakpoint(crate::Breakpoint::InsideProcessBatch);
         }
 
-        puffin::profile_function!(format!("{:?}", batch));
+        puffin::profile_function!(batch.to_string());
 
         match batch {
             Batch::TaskCancelation { mut task, previous_started_at, previous_processing_tasks } => {

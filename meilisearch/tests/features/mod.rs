@@ -16,7 +16,8 @@ async fn experimental_features() {
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
       "scoreDetails": false,
-      "vectorStore": false
+      "vectorStore": false,
+      "exportPuffinReports": false
     }
     "###);
 
@@ -26,7 +27,8 @@ async fn experimental_features() {
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
       "scoreDetails": false,
-      "vectorStore": true
+      "vectorStore": true,
+      "exportPuffinReports": false
     }
     "###);
 
@@ -36,7 +38,8 @@ async fn experimental_features() {
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
       "scoreDetails": false,
-      "vectorStore": true
+      "vectorStore": true,
+      "exportPuffinReports": false
     }
     "###);
 
@@ -47,7 +50,8 @@ async fn experimental_features() {
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
       "scoreDetails": false,
-      "vectorStore": true
+      "vectorStore": true,
+      "exportPuffinReports": false
     }
     "###);
 
@@ -58,7 +62,8 @@ async fn experimental_features() {
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
       "scoreDetails": false,
-      "vectorStore": true
+      "vectorStore": true,
+      "exportPuffinReports": false
     }
     "###);
 }
@@ -73,7 +78,7 @@ async fn errors() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Unknown field `NotAFeature`: expected one of `scoreDetails`, `vectorStore`",
+      "message": "Unknown field `NotAFeature`: expected one of `scoreDetails`, `vectorStore`, `exportPuffinReports`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
