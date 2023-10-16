@@ -20,7 +20,8 @@ async fn experimental_features() {
     {
       "scoreDetails": false,
       "vectorStore": false,
-      "metrics": false
+      "metrics": false,
+      "exportPuffinReports": false
     }
     "###);
 
@@ -31,7 +32,8 @@ async fn experimental_features() {
     {
       "scoreDetails": false,
       "vectorStore": true,
-      "metrics": false
+      "metrics": false,
+      "exportPuffinReports": false
     }
     "###);
 
@@ -42,7 +44,8 @@ async fn experimental_features() {
     {
       "scoreDetails": false,
       "vectorStore": true,
-      "metrics": false
+      "metrics": false,
+      "exportPuffinReports": false
     }
     "###);
 
@@ -54,7 +57,8 @@ async fn experimental_features() {
     {
       "scoreDetails": false,
       "vectorStore": true,
-      "metrics": false
+      "metrics": false,
+      "exportPuffinReports": false
     }
     "###);
 
@@ -66,7 +70,8 @@ async fn experimental_features() {
     {
       "scoreDetails": false,
       "vectorStore": true,
-      "metrics": false
+      "metrics": false,
+      "exportPuffinReports": false
     }
     "###);
 }
@@ -85,7 +90,8 @@ async fn experimental_feature_metrics() {
     {
       "scoreDetails": false,
       "vectorStore": false,
-      "metrics": true
+      "metrics": true,
+      "exportPuffinReports": false
     }
     "###);
 
@@ -105,7 +111,7 @@ async fn experimental_feature_metrics() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Getting metrics requires enabling the `metrics` experimental feature. See https://github.com/meilisearch/meilisearch/discussions/3518",
+      "message": "Getting metrics requires enabling the `metrics` experimental feature. See https://github.com/meilisearch/product/discussions/625",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
@@ -132,7 +138,7 @@ async fn errors() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Unknown field `NotAFeature`: expected one of `scoreDetails`, `vectorStore`, `metrics`",
+      "message": "Unknown field `NotAFeature`: expected one of `scoreDetails`, `vectorStore`, `metrics`, `exportPuffinReports`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"

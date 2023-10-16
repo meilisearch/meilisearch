@@ -30,10 +30,6 @@ fn setup(opt: &Opt) -> anyhow::Result<()> {
 async fn main() -> anyhow::Result<()> {
     let (opt, config_read_from) = Opt::try_build()?;
 
-    #[cfg(feature = "profile-with-puffin")]
-    let _server = puffin_http::Server::new(&format!("0.0.0.0:{}", puffin_http::DEFAULT_PORT))?;
-    puffin::set_scopes_on(cfg!(feature = "profile-with-puffin"));
-
     anyhow::ensure!(
         !(cfg!(windows) && opt.experimental_reduce_indexing_memory_usage),
         "The `experimental-reduce-indexing-memory-usage` flag is not supported on Windows"

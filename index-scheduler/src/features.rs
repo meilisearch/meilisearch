@@ -47,7 +47,7 @@ impl RoFeatures {
             Err(FeatureNotEnabledError {
                 disabled_action: "Getting metrics",
                 feature: "metrics",
-                issue_link: "https://github.com/meilisearch/meilisearch/discussions/3518",
+                issue_link: "https://github.com/meilisearch/product/discussions/625",
             }
             .into())
         }
@@ -61,6 +61,19 @@ impl RoFeatures {
                 disabled_action: "Passing `vector` as a query parameter",
                 feature: "vector store",
                 issue_link: "https://github.com/meilisearch/product/discussions/677",
+            }
+            .into())
+        }
+    }
+
+    pub fn check_puffin(&self) -> Result<()> {
+        if self.runtime.export_puffin_reports {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action: "Outputting Puffin reports to disk",
+                feature: "export puffin reports",
+                issue_link: "https://github.com/meilisearch/product/discussions/693",
             }
             .into())
         }

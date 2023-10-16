@@ -2564,7 +2564,6 @@ dependencies = [
  "platform-dirs",
  "prometheus",
  "puffin",
- "puffin_http",
  "rand",
  "rayon",
  "regex",
@@ -3234,18 +3233,6 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "serde",
-]
-
-[[package]]
-name = "puffin_http"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13bffc600c35913d282ae1e96a6ffcdf36dc7a7cdb9310e0ba15914d258c8193"
-dependencies = [
- "anyhow",
- "crossbeam-channel",
- "log",
- "puffin",
 ]
 
 [[package]]
