@@ -117,8 +117,9 @@ pub fn merge_two_del_add_obkvs(
                 let update_reader = KvReaderDelAdd::new(update);
 
                 // keep newest deletion.
-                if let Some(deletion) =
-                    update_reader.get(DelAdd::Deletion).or(base_reader.get(DelAdd::Deletion))
+                if let Some(deletion) = update_reader
+                    .get(DelAdd::Deletion)
+                    .or_else(|| base_reader.get(DelAdd::Deletion))
                 {
                     value_writer.insert(DelAdd::Deletion, deletion).unwrap();
                 }
@@ -127,6 +128,7 @@ pub fn merge_two_del_add_obkvs(
                 let base_addition =
                     merge_additions.then(|| base_reader.get(DelAdd::Addition)).flatten();
                 // keep newest addition.
+                // TODO use or_else
                 if let Some(addition) = update_reader.get(DelAdd::Addition).or(base_addition) {
                     value_writer.insert(DelAdd::Addition, addition).unwrap();
                 }

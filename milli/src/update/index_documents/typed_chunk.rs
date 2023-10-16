@@ -43,7 +43,9 @@ pub(crate) enum TypedChunk {
     FieldIdFacetIsEmptyDocids(grenad::Reader<BufReader<File>>),
     GeoPoints(grenad::Reader<BufReader<File>>),
     VectorPoints(grenad::Reader<BufReader<File>>),
-    ScriptLanguageDocids(HashMap<(Script, Language), RoaringBitmap>),
+    ScriptLanguageDocids(
+        (HashMap<(Script, Language), RoaringBitmap>, HashMap<(Script, Language), RoaringBitmap>),
+    ),
 }
 
 impl TypedChunk {
@@ -101,8 +103,8 @@ impl TypedChunk {
             TypedChunk::VectorPoints(grenad) => {
                 format!("VectorPoints {{ number_of_entries: {} }}", grenad.len())
             }
-            TypedChunk::ScriptLanguageDocids(grenad) => {
-                format!("ScriptLanguageDocids {{ number_of_entries: {} }}", grenad.len())
+            TypedChunk::ScriptLanguageDocids((_, addition)) => {
+                format!("ScriptLanguageDocids {{ number_of_entries: {} }}", addition.len())
             }
         }
     }
@@ -344,19 +346,21 @@ pub(crate) fn write_typed_chunk_into_index(
             log::debug!("There are {} entries in the HNSW so far", hnsw_length);
             index.put_vector_hnsw(wtxn, &new_hnsw)?;
         }
-        TypedChunk::ScriptLanguageDocids(hash_pair) => {
-            let mut buffer = Vec::new();
-            for (key, value) in hash_pair {
-                buffer.clear();
-                let final_value = match index.script_language_docids.get(wtxn, &key)? {
-                    Some(db_values) => {
-                        let mut db_value_buffer = Vec::new();
-                        serialize_roaring_bitmap(&db_values, &mut db_value_buffer)?;
-                        let mut new_value_buffer = Vec::new();
-                        serialize_roaring_bitmap(&value, &mut new_value_buffer)?;
-                        merge_roaring_bitmaps(&new_value_buffer, &db_value_buffer, &mut buffer)?;
-                        RoaringBitmap::deserialize_from(&buffer[..])?
+        TypedChunk::ScriptLanguageDocids((deletion, addition)) => {
+            for (key, value) in deletion {
+                if let Some(mut db_values) = index.script_language_docids.get(wtxn, &key)? {
+                    db_values -= value;
+                    if db_values.is_empty() {
+                        index.script_language_docids.delete(wtxn, &key)?;
+                    } else {
+                        index.script_language_docids.put(wtxn, &key, &db_values)?;
                     }
+                }
+            }
+
+            for (key, value) in addition {
+                let final_value = match index.script_language_docids.get(wtxn, &key)? {
+                    Some(mut db_values) => db_values | value,
                     None => value,
                 };
                 index.script_language_docids.put(wtxn, &key, &final_value)?;
