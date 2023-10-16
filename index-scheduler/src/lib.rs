@@ -45,7 +45,9 @@ pub use error::Error;
 pub use features::RoFeatures;
 use file_store::FileStore;
 use meilisearch_types::error::ResponseError;
-use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
+use meilisearch_types::features::{
+    InstanceTogglableFeatures, RuntimeTogglableFeatures, RuntimeToggledFeatures,
+};
 use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn};
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
@@ -1264,9 +1266,20 @@ impl IndexScheduler {
         self.features.features(rtxn)
     }
 
-    pub fn put_runtime_features(&self, features: RuntimeTogglableFeatures) -> Result<()> {
+    pub fn metrics_enabled(&self) -> Result<bool> {
+        self.features.is_metrics_enabled()
+    }
+
+    pub fn put_runtime_features(&self, new_features: RuntimeTogglableFeatures) -> Result<()> {
+        let old_features = self.features()?.runtime_features();
+        if old_features.metrics != new_features.metrics {
+            self.features.put_runtime_toggled_features(RuntimeToggledFeatures {
+                metrics: (true, new_features.metrics), // (is_toggled, new_value)
+            })?;
+        }
+
         let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
-        self.features.put_runtime_features(wtxn, features)?;
+        self.features.put_runtime_features(wtxn, new_features)?;
         Ok(())
     }
 
