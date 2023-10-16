@@ -6,7 +6,8 @@ use meilisearch_types::features::{
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn};
 
-use crate::error::{Error::RuntimeFeatureToggleError, FeatureNotEnabledError};
+use crate::error::Error::RuntimeFeatureToggleError;
+use crate::error::FeatureNotEnabledError;
 use crate::Result;
 
 const EXPERIMENTAL_FEATURES: &str = "experimental-features";
