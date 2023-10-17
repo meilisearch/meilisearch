@@ -325,10 +325,14 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
         indexer.chunk_compression_level,
         tempfile::tempfile()?,
     );
-    // TODO generate an Obkv<DelAdd, Bitmap>
-    for (fid, bitmap) in facet_exists_docids.into_iter() {
-        let bitmap_bytes = CboRoaringBitmapCodec::bytes_encode(&bitmap).unwrap();
-        facet_exists_docids_writer.insert(fid.to_be_bytes(), &bitmap_bytes)?;
+    for (fid, (del_bitmap, add_bitmap)) in facet_exists_docids.into_iter() {
+        let mut obkv = KvWriterDelAdd::memory();
+        let del_bitmap_bytes = CboRoaringBitmapCodec::bytes_encode(&del_bitmap).unwrap();
+        let add_bitmap_bytes = CboRoaringBitmapCodec::bytes_encode(&add_bitmap).unwrap();
+        obkv.insert(DelAdd::Deletion, del_bitmap_bytes)?;
+        obkv.insert(DelAdd::Addition, add_bitmap_bytes)?;
+        let bytes = obkv.into_inner()?;
+        facet_exists_docids_writer.insert(fid.to_be_bytes(), &bytes)?;
     }
     let facet_exists_docids_reader = writer_into_reader(facet_exists_docids_writer)?;
 
@@ -337,22 +341,30 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
         indexer.chunk_compression_level,
         tempfile::tempfile()?,
     );
-    // TODO generate an Obkv<DelAdd, Bitmap>
-    for (fid, bitmap) in facet_is_null_docids.into_iter() {
-        let bitmap_bytes = CboRoaringBitmapCodec::bytes_encode(&bitmap).unwrap();
-        facet_is_null_docids_writer.insert(fid.to_be_bytes(), &bitmap_bytes)?;
+    for (fid, (del_bitmap, add_bitmap)) in facet_is_null_docids.into_iter() {
+        let mut obkv = KvWriterDelAdd::memory();
+        let del_bitmap_bytes = CboRoaringBitmapCodec::bytes_encode(&del_bitmap).unwrap();
+        let add_bitmap_bytes = CboRoaringBitmapCodec::bytes_encode(&add_bitmap).unwrap();
+        obkv.insert(DelAdd::Deletion, del_bitmap_bytes)?;
+        obkv.insert(DelAdd::Addition, add_bitmap_bytes)?;
+        let bytes = obkv.into_inner()?;
+        facet_is_null_docids_writer.insert(fid.to_be_bytes(), &bytes)?;
     }
     let facet_is_null_docids_reader = writer_into_reader(facet_is_null_docids_writer)?;
 
-    // TODO generate an Obkv<DelAdd, Bitmap>
     let mut facet_is_empty_docids_writer = create_writer(
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         tempfile::tempfile()?,
     );
-    for (fid, bitmap) in facet_is_empty_docids.into_iter() {
-        let bitmap_bytes = CboRoaringBitmapCodec::bytes_encode(&bitmap).unwrap();
-        facet_is_empty_docids_writer.insert(fid.to_be_bytes(), &bitmap_bytes)?;
+    for (fid, (del_bitmap, add_bitmap)) in facet_is_empty_docids.into_iter() {
+        let mut obkv = KvWriterDelAdd::memory();
+        let del_bitmap_bytes = CboRoaringBitmapCodec::bytes_encode(&del_bitmap).unwrap();
+        let add_bitmap_bytes = CboRoaringBitmapCodec::bytes_encode(&add_bitmap).unwrap();
+        obkv.insert(DelAdd::Deletion, del_bitmap_bytes)?;
+        obkv.insert(DelAdd::Addition, add_bitmap_bytes)?;
+        let bytes = obkv.into_inner()?;
+        facet_is_empty_docids_writer.insert(fid.to_be_bytes(), &bytes)?;
     }
     let facet_is_empty_docids_reader = writer_into_reader(facet_is_empty_docids_writer)?;
 
