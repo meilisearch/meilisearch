@@ -15,6 +15,7 @@ use crate::{FieldId, Result, MAX_FACET_VALUE_LENGTH};
 /// documents ids from the given chunk of docid facet string positions.
 #[logging_timer::time]
 pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
+    // TODO Reader<Key, Obkv<DelAdd, OriginalString>>
     docid_fid_facet_string: grenad::Reader<R>,
     indexer: GrenadParameters,
 ) -> Result<grenad::Reader<File>> {
@@ -24,6 +25,7 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
 
     let mut facet_string_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
+        // TODO We must modify the merger to do unions of Del and Add separately
         merge_cbo_roaring_bitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
@@ -33,6 +35,7 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
 
     let mut cursor = docid_fid_facet_string.into_cursor()?;
     while let Some((key, _original_value_bytes)) = cursor.move_on_next()? {
+        // TODO the value is a Obkv<DelAdd, OriginalString> and must be taken into account
         let (field_id_bytes, bytes) = try_split_array_at(key).unwrap();
         let field_id = FieldId::from_be_bytes(field_id_bytes);
 
@@ -54,6 +57,7 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
         let key = FacetGroupKey { field_id, level: 0, left_bound: normalised_value };
         let key_bytes = FacetGroupKeyCodec::<StrRefCodec>::bytes_encode(&key).unwrap();
         // document id is encoded in native-endian because of the CBO roaring bitmap codec
+        // TODO Reader<KeyBytes, Obkv<DelAdd, RoaringBitmap>>
         facet_string_docids_sorter.insert(&key_bytes, document_id.to_ne_bytes())?;
     }
 

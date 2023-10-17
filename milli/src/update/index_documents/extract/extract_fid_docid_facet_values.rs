@@ -6,17 +6,21 @@ use std::mem::size_of;
 
 use heed::zerocopy::AsBytes;
 use heed::BytesEncode;
+use itertools::EitherOrBoth;
+use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 use serde_json::{from_slice, Value};
 
 use super::helpers::{create_sorter, keep_first, sorter_into_reader, GrenadParameters};
 use crate::error::InternalError;
 use crate::facet::value_encoding::f64_into_bytes;
+use crate::update::del_add::{DelAdd, KvWriterDelAdd};
 use crate::update::index_documents::{create_writer, writer_into_reader};
 use crate::{CboRoaringBitmapCodec, DocumentId, FieldId, Result, BEU32, MAX_FACET_VALUE_LENGTH};
 
 /// The extracted facet values stored in grenad files by type.
 pub struct ExtractedFacetValues {
+    // TOOD rename into `fid_docid_*`
     pub docid_fid_facet_numbers_chunk: grenad::Reader<File>,
     pub docid_fid_facet_strings_chunk: grenad::Reader<File>,
     pub fid_facet_is_null_docids_chunk: grenad::Reader<File>,
@@ -31,6 +35,7 @@ pub struct ExtractedFacetValues {
 /// We need the fid of the geofields to correctly parse them as numbers if they were sent as strings initially.
 #[logging_timer::time]
 pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
+    // TODO Reader<Obkv<FieldId, Obkv<DelAdd, serde_json::Value>>>
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
     faceted_fields: &HashSet<FieldId>,
@@ -58,13 +63,15 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
         max_memory.map(|m| m / 2),
     );
 
-    let mut facet_exists_docids = BTreeMap::<FieldId, RoaringBitmap>::new();
-    let mut facet_is_null_docids = BTreeMap::<FieldId, RoaringBitmap>::new();
-    let mut facet_is_empty_docids = BTreeMap::<FieldId, RoaringBitmap>::new();
+    // The tuples represents the Del and Add side for a bitmap
+    let mut facet_exists_docids = BTreeMap::<FieldId, (RoaringBitmap, RoaringBitmap)>::new();
+    let mut facet_is_null_docids = BTreeMap::<FieldId, (RoaringBitmap, RoaringBitmap)>::new();
+    let mut facet_is_empty_docids = BTreeMap::<FieldId, (RoaringBitmap, RoaringBitmap)>::new();
 
     let mut key_buffer = Vec::new();
     let mut cursor = obkv_documents.into_cursor()?;
     while let Some((docid_bytes, value)) = cursor.move_on_next()? {
+        // TODO Obkv<FieldId, Obkv<DelAdd, serde_json::Value>>
         let obkv = obkv::KvReader::new(value);
 
         for (field_id, field_bytes) in obkv.iter() {
@@ -79,50 +86,233 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
                 let document: [u8; 4] = docid_bytes[..4].try_into().ok().unwrap();
                 let document = BEU32::from(document).get();
 
-                facet_exists_docids.entry(field_id).or_default().insert(document);
-
                 // For the other extraction tasks, prefix the key with the field_id and the document_id
                 key_buffer.extend_from_slice(docid_bytes);
 
-                let value = from_slice(field_bytes).map_err(InternalError::SerdeJson)?;
+                let del_add_obkv = obkv::KvReader::new(field_bytes);
+                let del_value = match del_add_obkv.get(DelAdd::Deletion) {
+                    Some(bytes) => from_slice(bytes).map_err(InternalError::SerdeJson)?,
+                    None => None,
+                };
+                let add_value = match del_add_obkv.get(DelAdd::Addition) {
+                    Some(bytes) => from_slice(bytes).map_err(InternalError::SerdeJson)?,
+                    None => None,
+                };
 
-                match extract_facet_values(
-                    &value,
-                    geo_fields_ids.map_or(false, |(lat, lng)| field_id == lat || field_id == lng),
-                ) {
-                    FilterableValues::Null => {
-                        facet_is_null_docids.entry(field_id).or_default().insert(document);
-                    }
-                    FilterableValues::Empty => {
-                        facet_is_empty_docids.entry(field_id).or_default().insert(document);
-                    }
-                    FilterableValues::Values { numbers, strings } => {
-                        // insert facet numbers in sorter
-                        for number in numbers {
-                            key_buffer.truncate(size_of::<FieldId>() + size_of::<DocumentId>());
-                            if let Some(value_bytes) = f64_into_bytes(number) {
-                                key_buffer.extend_from_slice(&value_bytes);
-                                key_buffer.extend_from_slice(&number.to_be_bytes());
+                // We insert the document id on the Del and the Add side if the field exists.
+                let (mut del_exists, mut add_exists) =
+                    facet_exists_docids.entry(field_id).or_default();
+                if del_value.is_some() {
+                    del_exists.insert(document);
+                }
+                if add_value.is_some() {
+                    add_exists.insert(document);
+                }
 
-                                fid_docid_facet_numbers_sorter
-                                    .insert(&key_buffer, ().as_bytes())?;
+                // TODO extract both Del and Add numbers an strings (dedup)
+                // TODO use the `itertools::merge_join_by` method to sort and diff both sides (Del and Add)
+                // TODO if there is a Left generate a Del
+                // TODO if there is a Right generate an Add
+                // TODO if there is a Both don't insert
+                // TODO compare numbers using OrderedFloat and strings using both normalized and original values.
+
+                let geo_support =
+                    geo_fields_ids.map_or(false, |(lat, lng)| field_id == lat || field_id == lng);
+
+                let del_filterable_values =
+                    del_value.map(|value| extract_facet_values(&value, geo_support));
+                let add_filterable_values =
+                    add_value.map(|value| extract_facet_values(&value, geo_support));
+
+                use FilterableValues::{Empty, Null, Values};
+
+                match (del_filterable_values, add_filterable_values) {
+                    (None, None) => (),
+                    (Some(del_filterable_values), None) => match del_filterable_values {
+                        Null => {
+                            let (mut del_is_null, _) =
+                                facet_is_null_docids.entry(field_id).or_default();
+                            del_is_null.insert(document);
+                        }
+                        Empty => {
+                            let (mut del_is_empty, _) =
+                                facet_is_empty_docids.entry(field_id).or_default();
+                            del_is_empty.insert(document);
+                        }
+                        Values { numbers, strings } => {
+                            // insert facet numbers in sorter
+                            for number in numbers {
+                                key_buffer.truncate(size_of::<FieldId>() + size_of::<DocumentId>());
+                                if let Some(value_bytes) = f64_into_bytes(number) {
+                                    key_buffer.extend_from_slice(&value_bytes);
+                                    key_buffer.extend_from_slice(&number.to_be_bytes());
+
+                                    // We insert only the Del part of the Obkv to inform
+                                    // that we only want to remove all those numbers.
+                                    let mut obkv = KvWriterDelAdd::memory();
+                                    obkv.insert(DelAdd::Deletion, ().as_bytes())?;
+                                    let bytes = obkv.into_inner()?;
+                                    fid_docid_facet_numbers_sorter.insert(&key_buffer, bytes)?;
+                                }
+                            }
+
+                            // insert normalized and original facet string in sorter
+                            for (normalized, original) in
+                                strings.into_iter().filter(|(n, _)| !n.is_empty())
+                            {
+                                let normalized_truncated_value: String = normalized
+                                    .char_indices()
+                                    .take_while(|(idx, _)| idx + 4 < MAX_FACET_VALUE_LENGTH)
+                                    .map(|(_, c)| c)
+                                    .collect();
+
+                                key_buffer.truncate(size_of::<FieldId>() + size_of::<DocumentId>());
+                                key_buffer.extend_from_slice(normalized_truncated_value.as_bytes());
+
+                                // We insert only the Del part of the Obkv to inform
+                                // that we only want to remove all those strings.
+                                let mut obkv = KvWriterDelAdd::memory();
+                                obkv.insert(DelAdd::Deletion, original.as_bytes())?;
+                                let bytes = obkv.into_inner()?;
+                                fid_docid_facet_strings_sorter.insert(&key_buffer, bytes)?;
                             }
                         }
+                    },
+                    (None, Some(add_filterable_values)) => {
+                        todo!()
+                    }
+                    (Some(del_filterable_values), Some(add_filterable_values)) => {
+                        let (mut del_is_null, mut add_is_null) =
+                            facet_is_null_docids.entry(field_id).or_default();
+                        let (mut del_is_empty, mut add_is_empty) =
+                            facet_is_empty_docids.entry(field_id).or_default();
 
-                        // insert normalized and original facet string in sorter
-                        for (normalized, original) in
-                            strings.into_iter().filter(|(n, _)| !n.is_empty())
-                        {
-                            let normalized_truncated_value: String = normalized
-                                .char_indices()
-                                .take_while(|(idx, _)| idx + 4 < MAX_FACET_VALUE_LENGTH)
-                                .map(|(_, c)| c)
-                                .collect();
+                        match (del_filterable_values, add_filterable_values) {
+                            (Null, Null) | (Empty, Empty) => (),
+                            (Null, Empty) => {
+                                del_is_null.insert(document);
+                                add_is_empty.insert(document);
+                            }
+                            (Empty, Null) => {
+                                del_is_empty.insert(document);
+                                add_is_null.insert(document);
+                            }
+                            (Null, Values { numbers, strings }) => {
+                                del_is_null.insert(document);
+                                todo!()
+                            }
+                            (Empty, Values { numbers, strings }) => {
+                                del_is_empty.insert(document);
+                                todo!()
+                            }
+                            (Values { numbers, strings }, Null) => {
+                                todo!();
+                                add_is_null.insert(document);
+                            }
+                            (Values { numbers, strings }, Empty) => {
+                                todo!();
+                                add_is_empty.insert(document);
+                            }
+                            (
+                                Values { numbers: mut del_numbers, strings: mut del_strings },
+                                Values { numbers: mut add_numbers, strings: mut add_strings },
+                            ) => {
+                                // We sort and dedup the float numbers
+                                del_numbers.sort_unstable_by_key(|f| OrderedFloat(*f));
+                                add_numbers.sort_unstable_by_key(|f| OrderedFloat(*f));
+                                del_numbers.dedup_by_key(|f| OrderedFloat(*f));
+                                add_numbers.dedup_by_key(|f| OrderedFloat(*f));
 
-                            key_buffer.truncate(size_of::<FieldId>() + size_of::<DocumentId>());
-                            key_buffer.extend_from_slice(normalized_truncated_value.as_bytes());
-                            fid_docid_facet_strings_sorter
-                                .insert(&key_buffer, original.as_bytes())?;
+                                let merged_numbers_iter = itertools::merge_join_by(
+                                    del_numbers.into_iter().map(OrderedFloat),
+                                    add_numbers.into_iter().map(OrderedFloat),
+                                    |del, add| del.cmp(&add),
+                                );
+
+                                // insert facet numbers in sorter
+                                for eob in merged_numbers_iter {
+                                    key_buffer
+                                        .truncate(size_of::<FieldId>() + size_of::<DocumentId>());
+                                    match eob {
+                                        EitherOrBoth::Both(_, _) => (), // no need to touch anything
+                                        EitherOrBoth::Left(OrderedFloat(number)) => {
+                                            if let Some(value_bytes) = f64_into_bytes(number) {
+                                                key_buffer.extend_from_slice(&value_bytes);
+                                                key_buffer.extend_from_slice(&number.to_be_bytes());
+
+                                                // We insert only the Del part of the Obkv to inform
+                                                // that we only want to remove all those numbers.
+                                                let mut obkv = KvWriterDelAdd::memory();
+                                                obkv.insert(DelAdd::Deletion, ().as_bytes())?;
+                                                let bytes = obkv.into_inner()?;
+                                                fid_docid_facet_numbers_sorter
+                                                    .insert(&key_buffer, bytes)?;
+                                            }
+                                        }
+                                        EitherOrBoth::Right(OrderedFloat(number)) => {
+                                            if let Some(value_bytes) = f64_into_bytes(number) {
+                                                key_buffer.extend_from_slice(&value_bytes);
+                                                key_buffer.extend_from_slice(&number.to_be_bytes());
+
+                                                // We insert only the Del part of the Obkv to inform
+                                                // that we only want to remove all those numbers.
+                                                let mut obkv = KvWriterDelAdd::memory();
+                                                obkv.insert(DelAdd::Addition, ().as_bytes())?;
+                                                let bytes = obkv.into_inner()?;
+                                                fid_docid_facet_numbers_sorter
+                                                    .insert(&key_buffer, bytes)?;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // We sort and dedup the normalized and original strings
+                                del_strings.sort_unstable();
+                                add_strings.sort_unstable();
+                                del_strings.dedup();
+                                add_strings.dedup();
+
+                                let merged_strings_iter = itertools::merge_join_by(
+                                    del_strings.into_iter().filter(|(n, _)| !n.is_empty()),
+                                    add_strings.into_iter().filter(|(n, _)| !n.is_empty()),
+                                    |del, add| del.cmp(&add),
+                                );
+
+                                // insert normalized and original facet string in sorter
+                                for eob in merged_strings_iter {
+                                    match eob {
+                                        EitherOrBoth::Both(_, _) => (), // no need to touch anything
+                                        EitherOrBoth::Left((normalized, original)) => {
+                                            let truncated = truncate_string(normalized);
+
+                                            key_buffer.truncate(
+                                                size_of::<FieldId>() + size_of::<DocumentId>(),
+                                            );
+                                            key_buffer.extend_from_slice(truncated.as_bytes());
+
+                                            let mut obkv = KvWriterDelAdd::memory();
+                                            obkv.insert(DelAdd::Deletion, original)?;
+                                            let bytes = obkv.into_inner()?;
+                                            fid_docid_facet_strings_sorter
+                                                .insert(&key_buffer, bytes)?;
+                                        }
+                                        EitherOrBoth::Right((normalized, original)) => {
+                                            let truncated = truncate_string(normalized);
+
+                                            key_buffer.truncate(
+                                                size_of::<FieldId>() + size_of::<DocumentId>(),
+                                            );
+                                            key_buffer.extend_from_slice(truncated.as_bytes());
+
+                                            let mut obkv = KvWriterDelAdd::memory();
+                                            obkv.insert(DelAdd::Addition, original)?;
+                                            let bytes = obkv.into_inner()?;
+                                            fid_docid_facet_strings_sorter
+                                                .insert(&key_buffer, bytes)?;
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -135,6 +325,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
         indexer.chunk_compression_level,
         tempfile::tempfile()?,
     );
+    // TODO generate an Obkv<DelAdd, Bitmap>
     for (fid, bitmap) in facet_exists_docids.into_iter() {
         let bitmap_bytes = CboRoaringBitmapCodec::bytes_encode(&bitmap).unwrap();
         facet_exists_docids_writer.insert(fid.to_be_bytes(), &bitmap_bytes)?;
@@ -146,12 +337,14 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
         indexer.chunk_compression_level,
         tempfile::tempfile()?,
     );
+    // TODO generate an Obkv<DelAdd, Bitmap>
     for (fid, bitmap) in facet_is_null_docids.into_iter() {
         let bitmap_bytes = CboRoaringBitmapCodec::bytes_encode(&bitmap).unwrap();
         facet_is_null_docids_writer.insert(fid.to_be_bytes(), &bitmap_bytes)?;
     }
     let facet_is_null_docids_reader = writer_into_reader(facet_is_null_docids_writer)?;
 
+    // TODO generate an Obkv<DelAdd, Bitmap>
     let mut facet_is_empty_docids_writer = create_writer(
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
@@ -242,4 +435,11 @@ fn extract_facet_values(value: &Value, geo_field: bool) -> FilterableValues {
             FilterableValues::Values { numbers, strings }
         }
     }
+}
+
+fn truncate_string(mut s: String) -> String {
+    s.char_indices()
+        .take_while(|(idx, _)| idx + 4 < MAX_FACET_VALUE_LENGTH)
+        .map(|(_, c)| c)
+        .collect()
 }
