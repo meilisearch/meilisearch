@@ -3707,7 +3707,7 @@ checksum = "4f3208ce4d8448b3f3e7d168a73f5e0c43a61e32930de3bceeccedb388b6bf06"
 [[package]]
 name = "rusty-s3"
 version = "0.5.0"
-source = "git+https://github.com/irevoire/rusty-s3?rev=b4d73a8#b4d73a83545fd6a6d211cc2b56eb8ed7bb248a62"
+source = "git+http://github.com/Kerollmops/rusty-s3?branch=kero/percent-decode-list-files#1efb1eee126222d52936cb72ce3287b9b6bf5ffa"
 dependencies = [
  "base64 0.21.2",
  "hmac",
@@ -4009,7 +4009,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "strois"
 version = "0.0.4"
-source = "git+http://github.com/meilisearch/strois?rev=7f6832a#7f6832ae701a5414b58441220e2a028c46bdb9ab"
+source = "git+http://github.com/meilisearch/strois?rev=eeb945c#eeb945cfb6c666935b0f06b1f410fd83182b2b67"
 dependencies = [
  "http",
  "log",

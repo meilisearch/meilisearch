@@ -38,4 +38,4 @@ opt-level = 3
 opt-level = 3
 
 [patch.crates-io]
-strois = { git = "http://github.com/meilisearch/strois", rev = "7f6832a" }
+strois = { git = "http://github.com/meilisearch/strois", rev = "eeb945c" }
