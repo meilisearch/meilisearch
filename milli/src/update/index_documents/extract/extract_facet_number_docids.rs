@@ -17,6 +17,7 @@ use crate::Result;
 /// documents ids from the given chunk of docid facet number positions.
 #[logging_timer::time]
 pub fn extract_facet_number_docids<R: io::Read + io::Seek>(
+    // TODO Reader<Key, Obkv<DelAdd, ()>>
     docid_fid_facet_number: grenad::Reader<R>,
     indexer: GrenadParameters,
 ) -> Result<grenad::Reader<BufReader<File>>> {
@@ -26,6 +27,7 @@ pub fn extract_facet_number_docids<R: io::Read + io::Seek>(
 
     let mut facet_number_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,
+        // TODO We must modify the merger to do unions of Del and Add separately
         merge_cbo_roaring_bitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
@@ -34,12 +36,14 @@ pub fn extract_facet_number_docids<R: io::Read + io::Seek>(
     );
 
     let mut cursor = docid_fid_facet_number.into_cursor()?;
+    // TODO the value is a Obkv<DelAdd, ()> and must be taken into account
     while let Some((key_bytes, _)) = cursor.move_on_next()? {
         let (field_id, document_id, number) =
             FieldDocIdFacetF64Codec::bytes_decode(key_bytes).unwrap();
 
         let key = FacetGroupKey { field_id, level: 0, left_bound: number };
         let key_bytes = FacetGroupKeyCodec::<OrderedF64Codec>::bytes_encode(&key).unwrap();
+        // TODO We must put a Obkv<DelAdd, RoaringBitmap>
         facet_number_docids_sorter.insert(key_bytes, document_id.to_ne_bytes())?;
     }
 
