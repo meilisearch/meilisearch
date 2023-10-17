@@ -114,7 +114,7 @@ pub fn create_app(
         .configure(routes::configure)
         .configure(|s| dashboard(s, enable_dashboard));
 
-    let app = app.wrap(middleware::RouteMetricsMiddlewareFactory::new(index_scheduler));
+    let app = app.wrap(middleware::RouteMetrics);
     app.wrap(
         Cors::default()
             .send_wildcard()

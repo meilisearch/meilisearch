@@ -3,29 +3,18 @@
 use std::future::{ready, Ready};
 
 use actix_web::dev::{self, Service, ServiceRequest, ServiceResponse, Transform};
-use actix_web::Error;
 use actix_web::web::Data;
+use actix_web::Error;
 use futures_util::future::LocalBoxFuture;
 use index_scheduler::IndexScheduler;
 use prometheus::HistogramTimer;
 
 pub struct RouteMetrics;
 
-pub struct RouteMetricsMiddlewareFactory {
-    index_scheduler: Data<IndexScheduler>,
-}
-
-impl RouteMetricsMiddlewareFactory {
-    pub fn new(index_scheduler: Data<IndexScheduler>) -> Self {
-        RouteMetricsMiddlewareFactory { index_scheduler }
-    }
-}
-
-
 // Middleware factory is `Transform` trait from actix-service crate
 // `S` - type of the next service
 // `B` - type of response's body
-impl<S, B> Transform<S, ServiceRequest> for RouteMetricsMiddlewareFactory
+impl<S, B> Transform<S, ServiceRequest> for RouteMetrics
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
     S::Future: 'static,
@@ -38,13 +27,12 @@ where
     type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
     fn new_transform(&self, service: S) -> Self::Future {
-        ready(Ok(RouteMetricsMiddleware { service, index_scheduler: self.index_scheduler.clone() }))
+        ready(Ok(RouteMetricsMiddleware { service }))
     }
 }
 
 pub struct RouteMetricsMiddleware<S> {
     service: S,
-    index_scheduler: Data<IndexScheduler>,
 }
 
 impl<S, B> Service<ServiceRequest> for RouteMetricsMiddleware<S>
@@ -61,7 +49,15 @@ where
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let mut histogram_timer: Option<HistogramTimer> = None;
-        if let Ok(()) = self.index_scheduler.features().and_then(|features| features.check_metrics()) {
+        let data = req.app_data::<Data<IndexScheduler>>();
+        let metrics_enabled = data
+            .ok_or("Could not get index scheduler")
+            .and_then(|index_scheduler| {
+                index_scheduler.features().map_err(|_| "Could not get features")
+            })
+            .and_then(|features| features.check_metrics().map_err(|_| "Metrics not enabled"));
+
+        if let Ok(()) = metrics_enabled {
             let request_path = req.path();
             let is_registered_resource = req.resource_map().has_resource(request_path);
             if is_registered_resource {
