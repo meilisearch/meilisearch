@@ -12,8 +12,8 @@ expression: "format!(\"{document_scores:#?}\")"
         ),
         Proximity(
             Rank {
-                rank: 15,
-                max_rank: 15,
+                rank: 7,
+                max_rank: 7,
             },
         ),
     ],
@@ -26,8 +26,8 @@ expression: "format!(\"{document_scores:#?}\")"
         ),
         Proximity(
             Rank {
-                rank: 8,
-                max_rank: 15,
+                rank: 4,
+                max_rank: 7,
             },
         ),
     ],

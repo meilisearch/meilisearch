@@ -68,8 +68,8 @@ fn test_trap_basic() {
         [
             Proximity(
                 Rank {
-                    rank: 8,
-                    max_rank: 8,
+                    rank: 4,
+                    max_rank: 4,
                 },
             ),
             Typo(
@@ -82,8 +82,8 @@ fn test_trap_basic() {
         [
             Proximity(
                 Rank {
-                    rank: 8,
-                    max_rank: 8,
+                    rank: 4,
+                    max_rank: 4,
                 },
             ),
             Typo(

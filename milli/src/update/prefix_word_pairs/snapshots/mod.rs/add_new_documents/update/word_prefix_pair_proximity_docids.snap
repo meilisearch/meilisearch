@@ -28,8 +28,4 @@ source: milli/src/update/prefix_word_pairs/mod.rs
 3  rings            a    [101, ]
 3  rings            am   [101, ]
 3  the              a    [101, ]
-4  at               b    [100, ]
-4  at               be   [100, ]
-4  bell             a    [101, ]
-4  bell             am   [101, ]
 

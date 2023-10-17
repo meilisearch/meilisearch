@@ -23,8 +23,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ),
             Proximity(
                 Rank {
-                    rank: 57,
-                    max_rank: 57,
+                    rank: 25,
+                    max_rank: 25,
                 },
             ),
         ],
@@ -49,8 +49,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ),
             Proximity(
                 Rank {
-                    rank: 56,
-                    max_rank: 57,
+                    rank: 24,
+                    max_rank: 25,
                 },
             ),
         ],
@@ -75,8 +75,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ),
             Proximity(
                 Rank {
-                    rank: 35,
-                    max_rank: 57,
+                    rank: 9,
+                    max_rank: 25,
                 },
             ),
         ],
@@ -101,8 +101,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ),
             Proximity(
                 Rank {
-                    rank: 22,
-                    max_rank: 22,
+                    rank: 10,
+                    max_rank: 10,
                 },
             ),
         ],
@@ -127,8 +127,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ),
             Proximity(
                 Rank {
-                    rank: 22,
-                    max_rank: 22,
+                    rank: 10,
+                    max_rank: 10,
                 },
             ),
         ],
@@ -153,8 +153,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ),
             Proximity(
                 Rank {
-                    rank: 22,
-                    max_rank: 22,
+                    rank: 10,
+                    max_rank: 10,
                 },
             ),
         ],
@@ -179,8 +179,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ),
             Proximity(
                 Rank {
-                    rank: 21,
-                    max_rank: 22,
+                    rank: 9,
+                    max_rank: 10,
                 },
             ),
         ],
@@ -205,8 +205,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ),
             Proximity(
                 Rank {
-                    rank: 17,
-                    max_rank: 22,
+                    rank: 5,
+                    max_rank: 10,
                 },
             ),
         ],
@@ -231,8 +231,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ),
             Proximity(
                 Rank {
-                    rank: 17,
-                    max_rank: 22,
+                    rank: 5,
+                    max_rank: 10,
                 },
             ),
         ],

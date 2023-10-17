@@ -6,56 +6,32 @@ expression: "format!(\"{document_scores:#?}\")"
     [
         Proximity(
             Rank {
-                rank: 8,
-                max_rank: 8,
-            },
-        ),
-    ],
-    [
-        Proximity(
-            Rank {
-                rank: 7,
-                max_rank: 8,
-            },
-        ),
-    ],
-    [
-        Proximity(
-            Rank {
-                rank: 6,
-                max_rank: 8,
-            },
-        ),
-    ],
-    [
-        Proximity(
-            Rank {
-                rank: 6,
-                max_rank: 8,
-            },
-        ),
-    ],
-    [
-        Proximity(
-            Rank {
-                rank: 5,
-                max_rank: 8,
-            },
-        ),
-    ],
-    [
-        Proximity(
-            Rank {
-                rank: 5,
-                max_rank: 8,
-            },
-        ),
-    ],
-    [
-        Proximity(
-            Rank {
                 rank: 4,
-                max_rank: 8,
+                max_rank: 4,
+            },
+        ),
+    ],
+    [
+        Proximity(
+            Rank {
+                rank: 3,
+                max_rank: 4,
+            },
+        ),
+    ],
+    [
+        Proximity(
+            Rank {
+                rank: 2,
+                max_rank: 4,
+            },
+        ),
+    ],
+    [
+        Proximity(
+            Rank {
+                rank: 2,
+                max_rank: 4,
             },
         ),
     ],
@@ -63,7 +39,7 @@ expression: "format!(\"{document_scores:#?}\")"
         Proximity(
             Rank {
                 rank: 1,
-                max_rank: 8,
+                max_rank: 4,
             },
         ),
     ],
@@ -71,7 +47,31 @@ expression: "format!(\"{document_scores:#?}\")"
         Proximity(
             Rank {
                 rank: 1,
-                max_rank: 8,
+                max_rank: 4,
+            },
+        ),
+    ],
+    [
+        Proximity(
+            Rank {
+                rank: 1,
+                max_rank: 4,
+            },
+        ),
+    ],
+    [
+        Proximity(
+            Rank {
+                rank: 1,
+                max_rank: 4,
+            },
+        ),
+    ],
+    [
+        Proximity(
+            Rank {
+                rank: 1,
+                max_rank: 4,
             },
         ),
     ],
