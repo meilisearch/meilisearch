@@ -193,6 +193,7 @@ pub fn obkvs_keep_last_addition_merge_deletions<'a>(
     inner_merge_del_add_obkvs(obkvs, false)
 }
 
+/// Do a union of all the CboRoaringBitmaps in the values.
 pub fn merge_cbo_roaring_bitmaps<'a>(
     _key: &[u8],
     values: &[Cow<'a, [u8]>],
@@ -206,6 +207,8 @@ pub fn merge_cbo_roaring_bitmaps<'a>(
     }
 }
 
+/// Do a union of CboRoaringBitmaps on both sides of a DelAdd obkv
+/// separately and outputs a new DelAdd with both unions.
 pub fn merge_deladd_cbo_roaring_bitmaps<'a>(
     _key: &[u8],
     values: &[Cow<'a, [u8]>],
