@@ -92,9 +92,9 @@ pub(crate) fn data_from_obkv_documents(
     let (
         docid_word_positions_chunks,
         (
-            docid_fid_facet_numbers_chunks,
+            fid_docid_facet_numbers_chunks,
             (
-                docid_fid_facet_strings_chunks,
+                fid_docid_facet_strings_chunks,
                 (
                     facet_is_null_docids_chunks,
                     (facet_is_empty_docids_chunks, facet_exists_docids_chunks),
@@ -206,7 +206,7 @@ pub(crate) fn data_from_obkv_documents(
     );
 
     spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
-        docid_fid_facet_strings_chunks,
+        fid_docid_facet_strings_chunks,
         indexer,
         lmdb_writer_sx.clone(),
         extract_facet_string_docids,
@@ -216,7 +216,7 @@ pub(crate) fn data_from_obkv_documents(
     );
 
     spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
-        docid_fid_facet_numbers_chunks,
+        fid_docid_facet_numbers_chunks,
         indexer,
         lmdb_writer_sx,
         extract_facet_number_docids,
@@ -352,7 +352,7 @@ fn send_and_extract_flattened_documents_data(
         });
     }
 
-    let (docid_word_positions_chunk, docid_fid_facet_values_chunks): (Result<_>, Result<_>) =
+    let (docid_word_positions_chunk, fid_docid_facet_values_chunks): (Result<_>, Result<_>) =
         rayon::join(
             || {
                 let (documents_ids, docid_word_positions_chunk, script_language_pair) =
@@ -380,8 +380,8 @@ fn send_and_extract_flattened_documents_data(
             },
             || {
                 let ExtractedFacetValues {
-                    docid_fid_facet_numbers_chunk,
-                    docid_fid_facet_strings_chunk,
+                    fid_docid_facet_numbers_chunk,
+                    fid_docid_facet_strings_chunk,
                     fid_facet_is_null_docids_chunk,
                     fid_facet_is_empty_docids_chunk,
                     fid_facet_exists_docids_chunk,
@@ -392,26 +392,26 @@ fn send_and_extract_flattened_documents_data(
                     geo_fields_ids,
                 )?;
 
-                // send docid_fid_facet_numbers_chunk to DB writer
-                let docid_fid_facet_numbers_chunk =
-                    unsafe { as_cloneable_grenad(&docid_fid_facet_numbers_chunk)? };
+                // send fid_docid_facet_numbers_chunk to DB writer
+                let fid_docid_facet_numbers_chunk =
+                    unsafe { as_cloneable_grenad(&fid_docid_facet_numbers_chunk)? };
 
                 let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdDocidFacetNumbers(
-                    docid_fid_facet_numbers_chunk.clone(),
+                    fid_docid_facet_numbers_chunk.clone(),
                 )));
 
-                // send docid_fid_facet_strings_chunk to DB writer
-                let docid_fid_facet_strings_chunk =
-                    unsafe { as_cloneable_grenad(&docid_fid_facet_strings_chunk)? };
+                // send fid_docid_facet_strings_chunk to DB writer
+                let fid_docid_facet_strings_chunk =
+                    unsafe { as_cloneable_grenad(&fid_docid_facet_strings_chunk)? };
 
                 let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdDocidFacetStrings(
-                    docid_fid_facet_strings_chunk.clone(),
+                    fid_docid_facet_strings_chunk.clone(),
                 )));
 
                 Ok((
-                    docid_fid_facet_numbers_chunk,
+                    fid_docid_facet_numbers_chunk,
                     (
-                        docid_fid_facet_strings_chunk,
+                        fid_docid_facet_strings_chunk,
                         (
                             fid_facet_is_null_docids_chunk,
                             (fid_facet_is_empty_docids_chunk, fid_facet_exists_docids_chunk),
@@ -421,5 +421,5 @@ fn send_and_extract_flattened_documents_data(
             },
         );
 
-    Ok((docid_word_positions_chunk?, docid_fid_facet_values_chunks?))
+    Ok((docid_word_positions_chunk?, fid_docid_facet_values_chunks?))
 }
