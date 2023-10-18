@@ -205,3 +205,34 @@ pub fn merge_cbo_roaring_bitmaps<'a>(
         Ok(Cow::from(vec))
     }
 }
+
+pub fn merge_deladd_cbo_roaring_bitmaps<'a>(
+    _key: &[u8],
+    values: &[Cow<'a, [u8]>],
+) -> Result<Cow<'a, [u8]>> {
+    if values.len() == 1 {
+        Ok(values[0].clone())
+    } else {
+        // Retrieve the bitmaps from both sides
+        let mut del_bitmaps_bytes = Vec::new();
+        let mut add_bitmaps_bytes = Vec::new();
+        for value in values {
+            let obkv = KvReaderDelAdd::new(value);
+            if let Some(bitmap_bytes) = obkv.get(DelAdd::Deletion) {
+                del_bitmaps_bytes.push(bitmap_bytes);
+            }
+            if let Some(bitmap_bytes) = obkv.get(DelAdd::Addition) {
+                add_bitmaps_bytes.push(bitmap_bytes);
+            }
+        }
+
+        let mut output_deladd_obkv = KvWriterDelAdd::memory();
+        let mut buffer = Vec::new();
+        CboRoaringBitmapCodec::merge_into(del_bitmaps_bytes, &mut buffer)?;
+        output_deladd_obkv.insert(DelAdd::Deletion, &buffer)?;
+        buffer.clear();
+        CboRoaringBitmapCodec::merge_into(add_bitmaps_bytes, &mut buffer)?;
+        output_deladd_obkv.insert(DelAdd::Addition, &buffer)?;
+        output_deladd_obkv.into_inner().map(Cow::from).map_err(Into::into)
+    }
+}
