@@ -113,6 +113,8 @@ pub enum Error {
     Dump(#[from] dump::Error),
     #[error(transparent)]
     Heed(#[from] heed::Error),
+    #[error("Unable to record metrics for request.")]
+    CannotRecordMetrics,
     #[error(transparent)]
     Milli(#[from] milli::Error),
     #[error("An unexpected crash occurred when processing the task.")]
@@ -177,6 +179,7 @@ impl Error {
             | Error::TaskCancelationWithEmptyQuery
             | Error::Dump(_)
             | Error::Heed(_)
+            | Error::CannotRecordMetrics
             | Error::Milli(_)
             | Error::ProcessBatchPanicked
             | Error::FileStore(_)
@@ -223,6 +226,7 @@ impl ErrorCode for Error {
             Error::Milli(e) => e.error_code(),
             Error::ProcessBatchPanicked => Code::Internal,
             Error::Heed(e) => e.error_code(),
+            Error::CannotRecordMetrics => Code::Internal,
             Error::HeedTransaction(e) => e.error_code(),
             Error::FileStore(e) => e.error_code(),
             Error::IoError(e) => e.error_code(),
