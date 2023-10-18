@@ -14,8 +14,9 @@ pub use grenad_helpers::{
 };
 pub use merge_functions::{
     concat_u32s_array, keep_first, keep_latest_obkv, merge_btreeset_string,
-    merge_cbo_roaring_bitmaps, merge_roaring_bitmaps, obkvs_keep_last_addition_merge_deletions,
-    obkvs_merge_additions_and_deletions, serialize_roaring_bitmap, MergeFn,
+    merge_cbo_roaring_bitmaps, merge_deladd_cbo_roaring_bitmaps, merge_roaring_bitmaps,
+    obkvs_keep_last_addition_merge_deletions, obkvs_merge_additions_and_deletions,
+    serialize_roaring_bitmap, MergeFn,
 };
 
 use crate::MAX_WORD_LENGTH;
