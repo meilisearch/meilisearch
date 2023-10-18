@@ -817,7 +817,7 @@ async fn experimental_feature_score_details() {
                       },
                       "proximity": {
                         "order": 2,
-                        "score": 0.875
+                        "score": 0.75
                       },
                       "attribute": {
                         "order": 3,

@@ -12,8 +12,8 @@ expression: "format!(\"{document_scores:#?}\")"
         ),
         Proximity(
             Rank {
-                rank: 50,
-                max_rank: 50,
+                rank: 22,
+                max_rank: 22,
             },
         ),
     ],
@@ -21,132 +21,6 @@ expression: "format!(\"{document_scores:#?}\")"
         Words(
             Words {
                 matching_words: 9,
-                max_matching_words: 9,
-            },
-        ),
-        Proximity(
-            Rank {
-                rank: 50,
-                max_rank: 50,
-            },
-        ),
-    ],
-    [
-        Words(
-            Words {
-                matching_words: 9,
-                max_matching_words: 9,
-            },
-        ),
-        Proximity(
-            Rank {
-                rank: 49,
-                max_rank: 50,
-            },
-        ),
-    ],
-    [
-        Words(
-            Words {
-                matching_words: 9,
-                max_matching_words: 9,
-            },
-        ),
-        Proximity(
-            Rank {
-                rank: 49,
-                max_rank: 50,
-            },
-        ),
-    ],
-    [
-        Words(
-            Words {
-                matching_words: 9,
-                max_matching_words: 9,
-            },
-        ),
-        Proximity(
-            Rank {
-                rank: 48,
-                max_rank: 50,
-            },
-        ),
-    ],
-    [
-        Words(
-            Words {
-                matching_words: 9,
-                max_matching_words: 9,
-            },
-        ),
-        Proximity(
-            Rank {
-                rank: 41,
-                max_rank: 50,
-            },
-        ),
-    ],
-    [
-        Words(
-            Words {
-                matching_words: 9,
-                max_matching_words: 9,
-            },
-        ),
-        Proximity(
-            Rank {
-                rank: 40,
-                max_rank: 50,
-            },
-        ),
-    ],
-    [
-        Words(
-            Words {
-                matching_words: 8,
-                max_matching_words: 9,
-            },
-        ),
-        Proximity(
-            Rank {
-                rank: 43,
-                max_rank: 43,
-            },
-        ),
-    ],
-    [
-        Words(
-            Words {
-                matching_words: 7,
-                max_matching_words: 9,
-            },
-        ),
-        Proximity(
-            Rank {
-                rank: 36,
-                max_rank: 36,
-            },
-        ),
-    ],
-    [
-        Words(
-            Words {
-                matching_words: 7,
-                max_matching_words: 9,
-            },
-        ),
-        Proximity(
-            Rank {
-                rank: 31,
-                max_rank: 36,
-            },
-        ),
-    ],
-    [
-        Words(
-            Words {
-                matching_words: 5,
                 max_matching_words: 9,
             },
         ),
@@ -160,14 +34,126 @@ expression: "format!(\"{document_scores:#?}\")"
     [
         Words(
             Words {
-                matching_words: 4,
+                matching_words: 9,
                 max_matching_words: 9,
             },
         ),
         Proximity(
             Rank {
-                rank: 15,
-                max_rank: 15,
+                rank: 21,
+                max_rank: 22,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 9,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 21,
+                max_rank: 22,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 9,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 20,
+                max_rank: 22,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 9,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 17,
+                max_rank: 22,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 9,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 16,
+                max_rank: 22,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 8,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 19,
+                max_rank: 19,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 7,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 16,
+                max_rank: 16,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 7,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 13,
+                max_rank: 16,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 5,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 10,
+                max_rank: 10,
             },
         ),
     ],
@@ -180,8 +166,8 @@ expression: "format!(\"{document_scores:#?}\")"
         ),
         Proximity(
             Rank {
-                rank: 15,
-                max_rank: 15,
+                rank: 7,
+                max_rank: 7,
             },
         ),
     ],
@@ -194,8 +180,22 @@ expression: "format!(\"{document_scores:#?}\")"
         ),
         Proximity(
             Rank {
-                rank: 15,
-                max_rank: 15,
+                rank: 7,
+                max_rank: 7,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 4,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 7,
+                max_rank: 7,
             },
         ),
     ],
@@ -208,8 +208,8 @@ expression: "format!(\"{document_scores:#?}\")"
         ),
         Proximity(
             Rank {
-                rank: 8,
-                max_rank: 8,
+                rank: 4,
+                max_rank: 4,
             },
         ),
     ],

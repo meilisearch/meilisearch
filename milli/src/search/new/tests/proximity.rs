@@ -273,7 +273,7 @@ fn test_proximity_simple() {
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quick brown fox jumps over the lazy dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 10, 4, 7, 6, 5, 2, 3, 0, 1]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 10, 4, 7, 6, 2, 3, 5, 1, 0]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -282,11 +282,11 @@ fn test_proximity_simple() {
         "\"the quickbrown fox jumps over the lazy dog\"",
         "\"the really quick brown fox jumps over the lazy dog\"",
         "\"the really quick brown fox jumps over the very lazy dog\"",
-        "\"brown quick fox jumps over the lazy dog\"",
         "\"the quick brown fox jumps over the lazy. dog\"",
         "\"dog the quick brown fox jumps over the lazy\"",
-        "\"the very quick dark brown and smart fox did jump over the terribly lazy and small dog\"",
+        "\"brown quick fox jumps over the lazy dog\"",
         "\"the. quick brown fox jumps over the lazy. dog\"",
+        "\"the very quick dark brown and smart fox did jump over the terribly lazy and small dog\"",
     ]
     "###);
 }
@@ -371,7 +371,7 @@ fn test_proximity_prefix_db() {
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("best s");
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 13, 9, 12, 8, 6, 7, 11, 15]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 13, 9, 12, 6, 7, 8, 11, 15]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
 
@@ -382,9 +382,9 @@ fn test_proximity_prefix_db() {
         "\"summer best\"",
         "\"this is the best meal of summer\"",
         "\"summer x best\"",
-        "\"this is the best meal of the summer\"",
         "\"this is the best meal I have ever had in such a beautiful summer day\"",
         "\"this is the best cooked meal of the summer\"",
+        "\"this is the best meal of the summer\"",
         "\"summer x y best\"",
         "\"this is the best meal I have ever had in such a beautiful winter day\"",
     ]
@@ -396,7 +396,7 @@ fn test_proximity_prefix_db() {
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("best su");
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 13, 9, 12, 8, 11, 7, 6, 15]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 13, 9, 12, 6, 7, 8, 11, 15]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
 
@@ -406,10 +406,10 @@ fn test_proximity_prefix_db() {
         "\"summer best\"",
         "\"this is the best meal of summer\"",
         "\"summer x best\"",
+        "\"this is the best meal I have ever had in such a beautiful summer day\"",
+        "\"this is the best cooked meal of the summer\"",
         "\"this is the best meal of the summer\"",
         "\"summer x y best\"",
-        "\"this is the best cooked meal of the summer\"",
-        "\"this is the best meal I have ever had in such a beautiful summer day\"",
         "\"this is the best meal I have ever had in such a beautiful winter day\"",
     ]
     "###);
@@ -447,7 +447,7 @@ fn test_proximity_prefix_db() {
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("best wint");
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[19, 22, 18, 21, 17, 20, 16, 15]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[19, 22, 18, 21, 15, 16, 17, 20]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
 
@@ -457,10 +457,10 @@ fn test_proximity_prefix_db() {
         "\"winter best\"",
         "\"this is the best meal of winter\"",
         "\"winter x best\"",
+        "\"this is the best meal I have ever had in such a beautiful winter day\"",
+        "\"this is the best cooked meal of the winter\"",
         "\"this is the best meal of the winter\"",
         "\"winter x y best\"",
-        "\"this is the best cooked meal of the winter\"",
-        "\"this is the best meal I have ever had in such a beautiful winter day\"",
     ]
     "###);
 
@@ -471,7 +471,7 @@ fn test_proximity_prefix_db() {
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("best wi");
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[19, 22, 18, 21, 17, 15, 16, 20]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[19, 22, 18, 21, 15, 16, 17, 20]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
 
@@ -481,9 +481,9 @@ fn test_proximity_prefix_db() {
         "\"winter best\"",
         "\"this is the best meal of winter\"",
         "\"winter x best\"",
-        "\"this is the best meal of the winter\"",
         "\"this is the best meal I have ever had in such a beautiful winter day\"",
         "\"this is the best cooked meal of the winter\"",
+        "\"this is the best meal of the winter\"",
         "\"winter x y best\"",
     ]
     "###);

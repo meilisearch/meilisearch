@@ -30,10 +30,4 @@ source: milli/src/update/prefix_word_pairs/mod.rs
 3  bell             5                [101, ]
 3  rings            am               [101, ]
 3  the              at               [101, ]
-4  an               house            [100, ]
-4  at               beautiful        [100, ]
-4  bell             am               [101, ]
-4  the              5                [101, ]
-5  at               house            [100, ]
-5  the              am               [101, ]
 

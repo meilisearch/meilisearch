@@ -277,7 +277,7 @@ fn test_words_proximity_tms_last_simple() {
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     // 7 is better than 6 because of the proximity between "the" and its surrounding terms
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 21, 14, 17, 13, 10, 18, 19, 20, 16, 15, 22, 8, 7, 6, 5, 4, 11, 12, 3]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 21, 14, 17, 13, 10, 18, 16, 19, 15, 20, 22, 8, 7, 6, 5, 4, 11, 12, 3]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
@@ -289,10 +289,10 @@ fn test_words_proximity_tms_last_simple() {
         "\"the mighty and quick brown fox jumps over the lazy dog\"",
         "\"the brown quick fox jumps over the lazy dog\"",
         "\"the brown quick fox jumps over the really lazy dog\"",
-        "\"the brown quick fox immediately jumps over the really lazy dog\"",
-        "\"the brown quick fox immediately jumps over the really lazy blue dog\"",
         "\"this quick brown and scary fox jumps over the lazy dog\"",
+        "\"the brown quick fox immediately jumps over the really lazy dog\"",
         "\"this quick brown and very scary fox jumps over the lazy dog\"",
+        "\"the brown quick fox immediately jumps over the really lazy blue dog\"",
         "\"the, quick, brown, fox, jumps, over, the, lazy, dog\"",
         "\"the quick brown fox jumps over the lazy\"",
         "\"the quick brown fox jumps over the\"",
@@ -312,7 +312,7 @@ fn test_words_proximity_tms_last_simple() {
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     // 10 is better than 9 because of the proximity between "quick" and "brown"
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 18, 19, 9, 20, 21, 14, 17, 13, 16, 15, 22, 8, 7, 6, 5, 4, 11, 12, 3]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 18, 19, 9, 20, 21, 14, 17, 13, 15, 16, 22, 8, 7, 6, 5, 4, 11, 12, 3]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
@@ -326,8 +326,8 @@ fn test_words_proximity_tms_last_simple() {
         "\"the great quick brown fox jumps over the lazy dog\"",
         "\"the quick brown fox jumps over the really lazy dog\"",
         "\"the mighty and quick brown fox jumps over the lazy dog\"",
-        "\"this quick brown and scary fox jumps over the lazy dog\"",
         "\"this quick brown and very scary fox jumps over the lazy dog\"",
+        "\"this quick brown and scary fox jumps over the lazy dog\"",
         "\"the, quick, brown, fox, jumps, over, the, lazy, dog\"",
         "\"the quick brown fox jumps over the lazy\"",
         "\"the quick brown fox jumps over the\"",
@@ -427,7 +427,7 @@ fn test_words_tms_all() {
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 21, 14, 17, 13, 10, 18, 19, 20, 16, 15, 22]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 21, 14, 17, 13, 10, 18, 16, 19, 15, 20, 22]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
@@ -439,10 +439,10 @@ fn test_words_tms_all() {
         "\"the mighty and quick brown fox jumps over the lazy dog\"",
         "\"the brown quick fox jumps over the lazy dog\"",
         "\"the brown quick fox jumps over the really lazy dog\"",
-        "\"the brown quick fox immediately jumps over the really lazy dog\"",
-        "\"the brown quick fox immediately jumps over the really lazy blue dog\"",
         "\"this quick brown and scary fox jumps over the lazy dog\"",
+        "\"the brown quick fox immediately jumps over the really lazy dog\"",
         "\"this quick brown and very scary fox jumps over the lazy dog\"",
+        "\"the brown quick fox immediately jumps over the really lazy blue dog\"",
         "\"the, quick, brown, fox, jumps, over, the, lazy, dog\"",
     ]
     "###);

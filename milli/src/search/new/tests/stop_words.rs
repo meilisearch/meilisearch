@@ -259,8 +259,8 @@ fn test_ignore_stop_words() {
             ),
             Proximity(
                 Rank {
-                    rank: 7,
-                    max_rank: 8,
+                    rank: 3,
+                    max_rank: 4,
                 },
             ),
             Fid(
@@ -411,8 +411,8 @@ fn test_stop_words_in_phrase() {
             ),
             Proximity(
                 Rank {
-                    rank: 6,
-                    max_rank: 8,
+                    rank: 2,
+                    max_rank: 4,
                 },
             ),
             Fid(

@@ -23,8 +23,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ),
             Proximity(
                 Rank {
-                    rank: 35,
-                    max_rank: 57,
+                    rank: 9,
+                    max_rank: 25,
                 },
             ),
         ],
@@ -49,8 +49,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ),
             Proximity(
                 Rank {
-                    rank: 35,
-                    max_rank: 57,
+                    rank: 9,
+                    max_rank: 25,
                 },
             ),
         ],
@@ -75,8 +75,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
             ),
             Proximity(
                 Rank {
-                    rank: 35,
-                    max_rank: 57,
+                    rank: 9,
+                    max_rank: 25,
                 },
             ),
         ],
