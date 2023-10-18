@@ -29,9 +29,8 @@ const TRUNCATE_SIZE: usize = size_of::<FieldId>() + size_of::<DocumentId>();
 
 /// The extracted facet values stored in grenad files by type.
 pub struct ExtractedFacetValues {
-    // TOOD rename into `fid_docid_*`
-    pub docid_fid_facet_numbers_chunk: grenad::Reader<File>,
-    pub docid_fid_facet_strings_chunk: grenad::Reader<File>,
+    pub fid_docid_facet_numbers_chunk: grenad::Reader<File>,
+    pub fid_docid_facet_strings_chunk: grenad::Reader<File>,
     pub fid_facet_is_null_docids_chunk: grenad::Reader<File>,
     pub fid_facet_is_empty_docids_chunk: grenad::Reader<File>,
     pub fid_facet_exists_docids_chunk: grenad::Reader<File>,
@@ -44,7 +43,6 @@ pub struct ExtractedFacetValues {
 /// We need the fid of the geofields to correctly parse them as numbers if they were sent as strings initially.
 #[logging_timer::time]
 pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
-    // TODO Reader<Obkv<FieldId, Obkv<DelAdd, serde_json::Value>>>
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
     faceted_fields: &HashSet<FieldId>,
@@ -83,7 +81,6 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
 
     let mut cursor = obkv_documents.into_cursor()?;
     while let Some((docid_bytes, value)) = cursor.move_on_next()? {
-        // TODO Obkv<FieldId, Obkv<DelAdd, serde_json::Value>>
         let obkv = obkv::KvReader::new(value);
 
         for (field_id, field_bytes) in obkv.iter() {
@@ -96,7 +93,6 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
                 numbers_key_buffer.extend_from_slice(&field_id.to_be_bytes());
                 strings_key_buffer.extend_from_slice(&field_id.to_be_bytes());
 
-                // Here, we know already that the document must be added to the “field id exists” database
                 let document: [u8; 4] = docid_bytes[..4].try_into().ok().unwrap();
                 let document = BEU32::from(document).get();
 
@@ -260,8 +256,8 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     let facet_is_empty_docids_reader = writer_into_reader(facet_is_empty_docids_writer)?;
 
     Ok(ExtractedFacetValues {
-        docid_fid_facet_numbers_chunk: sorter_into_reader(fid_docid_facet_numbers_sorter, indexer)?,
-        docid_fid_facet_strings_chunk: sorter_into_reader(fid_docid_facet_strings_sorter, indexer)?,
+        fid_docid_facet_numbers_chunk: sorter_into_reader(fid_docid_facet_numbers_sorter, indexer)?,
+        fid_docid_facet_strings_chunk: sorter_into_reader(fid_docid_facet_strings_sorter, indexer)?,
         fid_facet_is_null_docids_chunk: facet_is_null_docids_reader,
         fid_facet_is_empty_docids_chunk: facet_is_empty_docids_reader,
         fid_facet_exists_docids_chunk: facet_exists_docids_reader,
