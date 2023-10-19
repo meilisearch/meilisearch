@@ -60,6 +60,9 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
 
             let mut all_candidates = universe - excluded;
             all_candidates.extend(results.iter().copied());
+            // drain the results of the skipped elements
+            // this **must** be done **after** writing the entire results in `all_candidates` to ensure
+            // e.g. estimatedTotalHits is correct.
             if results.len() >= from {
                 results.drain(..from);
             } else {
