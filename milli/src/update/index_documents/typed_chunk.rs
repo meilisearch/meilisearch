@@ -19,6 +19,7 @@ use crate::distance::NDotProductPoint;
 use crate::error::UserError;
 use crate::facet::FacetType;
 use crate::index::Hnsw;
+use crate::update::del_add::{DelAdd, KvReaderDelAdd};
 use crate::update::facet::FacetsUpdate;
 use crate::update::index_documents::helpers::{as_cloneable_grenad, try_split_array_at};
 use crate::{lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index, Result, BEU32};
@@ -27,7 +28,7 @@ pub(crate) enum TypedChunk {
     FieldIdDocidFacetStrings(grenad::Reader<CursorClonableMmap>),
     FieldIdDocidFacetNumbers(grenad::Reader<CursorClonableMmap>),
     Documents(grenad::Reader<CursorClonableMmap>),
-    FieldIdWordcountDocids(grenad::Reader<File>),
+    FieldIdWordCountDocids(grenad::Reader<File>),
     NewDocumentsIds(RoaringBitmap),
     WordDocids {
         word_docids_reader: grenad::Reader<File>,
@@ -58,7 +59,7 @@ impl TypedChunk {
             TypedChunk::Documents(grenad) => {
                 format!("Documents {{ number_of_entries: {} }}", grenad.len())
             }
-            TypedChunk::FieldIdWordcountDocids(grenad) => {
+            TypedChunk::FieldIdWordCountDocids(grenad) => {
                 format!("FieldIdWordcountDocids {{ number_of_entries: {} }}", grenad.len())
             }
             TypedChunk::NewDocumentsIds(grenad) => {
@@ -126,14 +127,14 @@ pub(crate) fn write_typed_chunk_into_index(
                 index.documents.remap_types::<ByteSlice, ByteSlice>().put(wtxn, key, value)?;
             }
         }
-        TypedChunk::FieldIdWordcountDocids(fid_word_count_docids_iter) => {
+        TypedChunk::FieldIdWordCountDocids(fid_word_count_docids_iter) => {
             append_entries_into_database(
                 fid_word_count_docids_iter,
                 &index.field_id_word_count_docids,
                 wtxn,
                 index_is_empty,
-                |value, _buffer| Ok(value),
-                merge_cbo_roaring_bitmaps,
+                deladd_serialize_add_side,
+                merge_deladd_cbo_roaring_bitmaps,
             )?;
             is_merged_database = true;
         }
@@ -151,8 +152,8 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.word_docids,
                 wtxn,
                 index_is_empty,
-                |value, _buffer| Ok(value),
-                merge_cbo_roaring_bitmaps,
+                deladd_serialize_add_side,
+                merge_deladd_cbo_roaring_bitmaps,
             )?;
 
             let exact_word_docids_iter = unsafe { as_cloneable_grenad(&exact_word_docids_reader) }?;
@@ -161,8 +162,8 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.exact_word_docids,
                 wtxn,
                 index_is_empty,
-                |value, _buffer| Ok(value),
-                merge_cbo_roaring_bitmaps,
+                deladd_serialize_add_side,
+                merge_deladd_cbo_roaring_bitmaps,
             )?;
 
             let word_fid_docids_iter = unsafe { as_cloneable_grenad(&word_fid_docids_reader) }?;
@@ -171,8 +172,8 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.word_fid_docids,
                 wtxn,
                 index_is_empty,
-                |value, _buffer| Ok(value),
-                merge_cbo_roaring_bitmaps,
+                deladd_serialize_add_side,
+                merge_deladd_cbo_roaring_bitmaps,
             )?;
 
             // create fst from word docids
@@ -193,8 +194,8 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.word_position_docids,
                 wtxn,
                 index_is_empty,
-                |value, _buffer| Ok(value),
-                merge_cbo_roaring_bitmaps,
+                deladd_serialize_add_side,
+                merge_deladd_cbo_roaring_bitmaps,
             )?;
             is_merged_database = true;
         }
@@ -214,8 +215,8 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.facet_id_exists_docids,
                 wtxn,
                 index_is_empty,
-                |value, _buffer| Ok(value),
-                merge_cbo_roaring_bitmaps,
+                deladd_serialize_add_side,
+                merge_deladd_cbo_roaring_bitmaps,
             )?;
             is_merged_database = true;
         }
@@ -225,8 +226,8 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.facet_id_is_null_docids,
                 wtxn,
                 index_is_empty,
-                |value, _buffer| Ok(value),
-                merge_cbo_roaring_bitmaps,
+                deladd_serialize_add_side,
+                merge_deladd_cbo_roaring_bitmaps,
             )?;
             is_merged_database = true;
         }
@@ -236,8 +237,8 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.facet_id_is_empty_docids,
                 wtxn,
                 index_is_empty,
-                |value, _buffer| Ok(value),
-                merge_cbo_roaring_bitmaps,
+                deladd_serialize_add_side,
+                merge_deladd_cbo_roaring_bitmaps,
             )?;
             is_merged_database = true;
         }
@@ -247,8 +248,8 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.word_pair_proximity_docids,
                 wtxn,
                 index_is_empty,
-                |value, _buffer| Ok(value),
-                merge_cbo_roaring_bitmaps,
+                deladd_serialize_add_side,
+                merge_deladd_cbo_roaring_bitmaps,
             )?;
             is_merged_database = true;
         }
@@ -320,7 +321,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 let found = vector.len();
                 let expected = *expected_dimensions.get_or_insert(found);
                 if expected != found {
-                    return Err(UserError::InvalidVectorDimensions { expected, found })?;
+                    return Err(UserError::InvalidVectorDimensions { expected, found }.into());
                 }
 
                 points.push(NDotProductPoint::new(vector));
@@ -387,13 +388,28 @@ fn merge_word_docids_reader_into_fst(
     Ok(builder.into_set())
 }
 
-fn merge_cbo_roaring_bitmaps(
-    new_value: &[u8],
-    db_value: &[u8],
+/// A function that extracts and returns the Add side of a DelAdd obkv.
+/// This is useful when there are no previous value in the database and
+/// therefore we don't need to do a diff with what's already there.
+///
+/// If there is no Add side we currently write an empty buffer
+/// which is a valid CboRoaringBitmap.
+fn deladd_serialize_add_side<'a>(obkv: &'a [u8], _buffer: &mut Vec<u8>) -> Result<&'a [u8]> {
+    Ok(KvReaderDelAdd::new(obkv).get(DelAdd::Addition).unwrap_or_default())
+}
+
+/// A function that merges a DelAdd of bitmao into an already existing bitmap.
+///
+/// The first argument is the DelAdd obkv of CboRoaringBitmaps and
+/// the second one is the CboRoaringBitmap to merge into.
+fn merge_deladd_cbo_roaring_bitmaps(
+    deladd_obkv: &[u8],
+    previous: &[u8],
     buffer: &mut Vec<u8>,
 ) -> Result<()> {
-    Ok(CboRoaringBitmapCodec::merge_into(
-        &[Cow::Borrowed(db_value), Cow::Borrowed(new_value)],
+    Ok(CboRoaringBitmapCodec::merge_deladd_into(
+        KvReaderDelAdd::new(deladd_obkv),
+        previous,
         buffer,
     )?)
 }
@@ -478,7 +494,7 @@ where
     while let Some((key, value)) = cursor.move_on_next()? {
         if valid_lmdb_key(key) {
             debug_assert!(
-                K::bytes_decode(&key).is_some(),
+                K::bytes_decode(key).is_some(),
                 "Couldn't decode key with the database decoder, key length: {} - key bytes: {:x?}",
                 key.len(),
                 &key
