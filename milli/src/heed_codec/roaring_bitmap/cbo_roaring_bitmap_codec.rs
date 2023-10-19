@@ -6,6 +6,7 @@ use byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
 use roaring::RoaringBitmap;
 
 use crate::heed_codec::BytesDecodeOwned;
+use crate::update::del_add::{DelAdd, KvReaderDelAdd};
 
 /// This is the limit where using a byteorder became less size efficient
 /// than using a direct roaring encoding, it is also the point where we are able
@@ -98,6 +99,28 @@ impl CboRoaringBitmapCodec {
         }
 
         Ok(())
+    }
+
+    /// Merges a DelAdd delta into a CboRoaringBitmap.
+    pub fn merge_deladd_into(
+        deladd: KvReaderDelAdd<'_>,
+        previous: &[u8],
+        buffer: &mut Vec<u8>,
+    ) -> io::Result<()> {
+        // Deserialize the bitmap that is already there
+        let mut previous = Self::deserialize_from(previous)?;
+
+        // Remove integers we no more want in the previous bitmap
+        if let Some(value) = deladd.get(DelAdd::Deletion) {
+            previous -= Self::deserialize_from(value)?;
+        }
+
+        // Insert the new integers we want in the previous bitmap
+        if let Some(value) = deladd.get(DelAdd::Addition) {
+            previous |= Self::deserialize_from(value)?;
+        }
+
+        previous.serialize_into(buffer)
     }
 }
 
