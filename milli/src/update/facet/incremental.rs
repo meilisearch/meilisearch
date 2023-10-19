@@ -3,6 +3,7 @@ use std::fs::File;
 
 use heed::types::{ByteSlice, DecodeIgnore};
 use heed::{BytesDecode, Error, RoTxn, RwTxn};
+use obkv::KvReader;
 use roaring::RoaringBitmap;
 
 use crate::facet::FacetType;
@@ -11,6 +12,7 @@ use crate::heed_codec::facet::{
 };
 use crate::heed_codec::ByteSliceRefCodec;
 use crate::search::facet::get_highest_level;
+use crate::update::del_add::DelAdd;
 use crate::update::index_documents::valid_lmdb_key;
 use crate::{CboRoaringBitmapCodec, FieldId, Index, Result};
 
@@ -34,14 +36,14 @@ pub struct FacetsUpdateIncremental<'i> {
     index: &'i Index,
     inner: FacetsUpdateIncrementalInner,
     facet_type: FacetType,
-    new_data: grenad::Reader<File>,
+    delta_data: grenad::Reader<File>,
 }
 
 impl<'i> FacetsUpdateIncremental<'i> {
     pub fn new(
         index: &'i Index,
         facet_type: FacetType,
-        new_data: grenad::Reader<File>,
+        delta_data: grenad::Reader<File>,
         group_size: u8,
         min_level_size: u8,
         max_group_size: u8,
@@ -62,29 +64,82 @@ impl<'i> FacetsUpdateIncremental<'i> {
                 min_level_size,
             },
             facet_type,
-            new_data,
+            delta_data,
         }
     }
 
     pub fn execute(self, wtxn: &'i mut RwTxn) -> crate::Result<()> {
-        let mut new_faceted_docids = HashMap::<FieldId, RoaringBitmap>::default();
+        #[derive(Default)]
+        struct DeltaDocids {
+            deleted: RoaringBitmap,
+            added: RoaringBitmap,
+        }
+        impl DeltaDocids {
+            fn add(&mut self, added: &RoaringBitmap) {
+                self.deleted -= added;
+                self.added |= added;
+            }
+            fn delete(&mut self, deleted: &RoaringBitmap) {
+                self.deleted |= deleted;
+                self.added -= deleted;
+            }
+            fn applied(self, mut docids: RoaringBitmap) -> RoaringBitmap {
+                docids -= self.deleted;
+                docids |= self.added;
+                docids
+            }
+        }
 
-        let mut cursor = self.new_data.into_cursor()?;
+        let mut new_faceted_docids = HashMap::<FieldId, DeltaDocids>::default();
+
+        let mut cursor = self.delta_data.into_cursor()?;
         while let Some((key, value)) = cursor.move_on_next()? {
             if !valid_lmdb_key(key) {
                 continue;
             }
             let key = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(key)
                 .ok_or(heed::Error::Encoding)?;
-            let docids = CboRoaringBitmapCodec::bytes_decode(value).ok_or(heed::Error::Encoding)?;
-            self.inner.insert(wtxn, key.field_id, key.left_bound, &docids)?;
-            *new_faceted_docids.entry(key.field_id).or_default() |= docids;
+            let value = KvReader::new(value);
+
+            let entry = new_faceted_docids.entry(key.field_id).or_default();
+
+            let docids_to_delete = value
+                .get(DelAdd::Deletion)
+                .map(CboRoaringBitmapCodec::bytes_decode)
+                .map(|o| o.ok_or(heed::Error::Encoding));
+
+            let docids_to_add = value
+                .get(DelAdd::Addition)
+                .map(CboRoaringBitmapCodec::bytes_decode)
+                .map(|o| o.ok_or(heed::Error::Encoding));
+
+            if let Some(docids_to_delete) = docids_to_delete {
+                let docids_to_delete = docids_to_delete?;
+                self.inner.delete(wtxn, key.field_id, key.left_bound, &docids_to_delete)?;
+                entry.delete(&docids_to_delete);
+            }
+
+            if let Some(docids_to_add) = docids_to_add {
+                let docids_to_add = docids_to_add?;
+                self.inner.insert(wtxn, key.field_id, key.left_bound, &docids_to_add)?;
+                entry.add(&docids_to_add);
+            }
         }
 
+        // FIXME: broken for multi-value facets?
+        //
+        // Consider an incremental update: `facet="tags", facet_value="Action", {Del: Some([0, 1]), Add: None }`
+        // The current code will inconditionally remove docs 0 and 1 from faceted docs for "tags".
+        // Now for doc 0: `"tags": "Action"`, it's correct behavior
+        // for doc 1: `"tags": "Action, Adventure"`, it's incorrect behavior
         for (field_id, new_docids) in new_faceted_docids {
-            let mut docids = self.index.faceted_documents_ids(wtxn, field_id, self.facet_type)?;
-            docids |= new_docids;
-            self.index.put_faceted_documents_ids(wtxn, field_id, self.facet_type, &docids)?;
+            let old_docids = self.index.faceted_documents_ids(wtxn, field_id, self.facet_type)?;
+            self.index.put_faceted_documents_ids(
+                wtxn,
+                field_id,
+                self.facet_type,
+                &new_docids.applied(old_docids),
+            )?;
         }
         Ok(())
     }
