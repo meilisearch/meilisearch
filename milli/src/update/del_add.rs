@@ -98,3 +98,7 @@ pub fn del_add_from_two_obkvs<K: obkv::Key + PartialOrd + Ord>(
 
     writer.finish()
 }
+
+pub fn is_noop_del_add_obkv(del_add: KvReaderDelAdd) -> bool {
+    del_add.get(DelAdd::Deletion) == del_add.get(DelAdd::Addition)
+}
