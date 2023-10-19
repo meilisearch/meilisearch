@@ -40,6 +40,7 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
     #[logging_timer::time("WordPrefixDocids::{}")]
     pub fn execute(
         self,
+        // TODO grenad::Reader<onkv::Reader<Word, obkv::Reader<DelAdd, CboRoaringBitmap>>>
         mut new_word_docids_iter: grenad::ReaderCursor<CursorClonableMmap>,
         new_prefix_fst_words: &[String],
         common_prefix_fst_words: &[&[String]],
@@ -51,6 +52,7 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
         // and write into it at the same time, therefore we write into another file.
         let mut prefix_docids_sorter = create_sorter(
             grenad::SortAlgorithm::Unstable,
+            // TODO change to merge_deladd_cbo_roaring_bitmaps
             merge_cbo_roaring_bitmaps,
             self.chunk_compression_type,
             self.chunk_compression_level,
@@ -96,6 +98,7 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
             let prefix = std::str::from_utf8(prefix.as_bytes())?;
             for result in db.prefix_iter(self.wtxn, prefix)? {
                 let (_word, data) = result?;
+                // TODO fake a DelAdd -> Add(`data`)
                 prefix_docids_sorter.insert(prefix, data)?;
             }
         }
@@ -111,10 +114,13 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
         drop(iter);
 
         // We finally write the word prefix docids into the LMDB database.
+        // TODO introduce a new function that is similar to `append_entries_into_database`
+        //      and accepts the `merge_deladd_cbo_roaring_bitmaps` function
         sorter_into_lmdb_database(
             self.wtxn,
             *self.word_prefix_docids.as_polymorph(),
             prefix_docids_sorter,
+            // TODO change to `merge_deladd_cbo_roaring_bitmaps`
             merge_cbo_roaring_bitmaps,
         )?;
 
@@ -127,6 +133,7 @@ fn write_prefixes_in_sorter(
     sorter: &mut grenad::Sorter<MergeFn>,
 ) -> Result<()> {
     for (key, data_slices) in prefixes.drain() {
+        // TODO merge keys before inserting them in the sorter
         for data in data_slices {
             if valid_lmdb_key(&key) {
                 sorter.insert(&key, data)?;
