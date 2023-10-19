@@ -19,6 +19,7 @@ use crate::distance::NDotProductPoint;
 use crate::error::UserError;
 use crate::facet::FacetType;
 use crate::index::Hnsw;
+use crate::update::del_add::{DelAdd, KvReaderDelAdd};
 use crate::update::facet::FacetsUpdate;
 use crate::update::index_documents::helpers::{as_cloneable_grenad, try_split_array_at};
 use crate::{lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index, Result, BEU32};
@@ -132,7 +133,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.field_id_word_count_docids,
                 wtxn,
                 index_is_empty,
-                |value, _buffer| Ok(value),
+                deladd_serialize_add_side,
                 merge_cbo_roaring_bitmaps,
             )?;
             is_merged_database = true;
@@ -151,7 +152,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.word_docids,
                 wtxn,
                 index_is_empty,
-                |value, _buffer| Ok(value),
+                deladd_serialize_add_side,
                 merge_cbo_roaring_bitmaps,
             )?;
 
@@ -161,7 +162,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.exact_word_docids,
                 wtxn,
                 index_is_empty,
-                |value, _buffer| Ok(value),
+                deladd_serialize_add_side,
                 merge_cbo_roaring_bitmaps,
             )?;
 
@@ -171,7 +172,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.word_fid_docids,
                 wtxn,
                 index_is_empty,
-                |value, _buffer| Ok(value),
+                deladd_serialize_add_side,
                 merge_cbo_roaring_bitmaps,
             )?;
 
@@ -193,7 +194,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.word_position_docids,
                 wtxn,
                 index_is_empty,
-                |value, _buffer| Ok(value),
+                deladd_serialize_add_side,
                 merge_cbo_roaring_bitmaps,
             )?;
             is_merged_database = true;
@@ -214,7 +215,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.facet_id_exists_docids,
                 wtxn,
                 index_is_empty,
-                |value, _buffer| Ok(value),
+                deladd_serialize_add_side,
                 merge_cbo_roaring_bitmaps,
             )?;
             is_merged_database = true;
@@ -225,7 +226,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.facet_id_is_null_docids,
                 wtxn,
                 index_is_empty,
-                |value, _buffer| Ok(value),
+                deladd_serialize_add_side,
                 merge_cbo_roaring_bitmaps,
             )?;
             is_merged_database = true;
@@ -236,7 +237,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.facet_id_is_empty_docids,
                 wtxn,
                 index_is_empty,
-                |value, _buffer| Ok(value),
+                deladd_serialize_add_side,
                 merge_cbo_roaring_bitmaps,
             )?;
             is_merged_database = true;
@@ -247,7 +248,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.word_pair_proximity_docids,
                 wtxn,
                 index_is_empty,
-                |value, _buffer| Ok(value),
+                deladd_serialize_add_side,
                 merge_cbo_roaring_bitmaps,
             )?;
             is_merged_database = true;
@@ -320,7 +321,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 let found = vector.len();
                 let expected = *expected_dimensions.get_or_insert(found);
                 if expected != found {
-                    return Err(UserError::InvalidVectorDimensions { expected, found })?;
+                    return Err(UserError::InvalidVectorDimensions { expected, found }.into());
                 }
 
                 points.push(NDotProductPoint::new(vector));
@@ -396,6 +397,16 @@ fn merge_cbo_roaring_bitmaps(
         &[Cow::Borrowed(db_value), Cow::Borrowed(new_value)],
         buffer,
     )?)
+}
+
+/// A function that extracts and returns the Add side of a DelAdd obkv.
+/// This is useful when there are no previous value in the database and
+/// therefore we don't need to do a diff with what's already there.
+///
+/// If there is no Add side we currently write an empty buffer
+/// which is a valid CboRoaringBitmap.
+fn deladd_serialize_add_side<'a>(obkv: &'a [u8], _buffer: &mut Vec<u8>) -> Result<&'a [u8]> {
+    Ok(KvReaderDelAdd::new(obkv).get(DelAdd::Addition).unwrap_or_default())
 }
 
 /// Write provided entries in database using serialize_value function.
