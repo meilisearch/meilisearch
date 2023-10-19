@@ -43,9 +43,7 @@ pub(crate) enum TypedChunk {
     FieldIdFacetIsEmptyDocids(grenad::Reader<BufReader<File>>),
     GeoPoints(grenad::Reader<BufReader<File>>),
     VectorPoints(grenad::Reader<BufReader<File>>),
-    ScriptLanguageDocids(
-        (HashMap<(Script, Language), RoaringBitmap>, HashMap<(Script, Language), RoaringBitmap>),
-    ),
+    ScriptLanguageDocids(HashMap<(Script, Language), (RoaringBitmap, RoaringBitmap)>),
 }
 
 impl TypedChunk {
@@ -103,8 +101,8 @@ impl TypedChunk {
             TypedChunk::VectorPoints(grenad) => {
                 format!("VectorPoints {{ number_of_entries: {} }}", grenad.len())
             }
-            TypedChunk::ScriptLanguageDocids((_, addition)) => {
-                format!("ScriptLanguageDocids {{ number_of_entries: {} }}", addition.len())
+            TypedChunk::ScriptLanguageDocids(sl_map) => {
+                format!("ScriptLanguageDocids {{ number_of_entries: {} }}", sl_map.len())
             }
         }
     }
@@ -346,24 +344,25 @@ pub(crate) fn write_typed_chunk_into_index(
             log::debug!("There are {} entries in the HNSW so far", hnsw_length);
             index.put_vector_hnsw(wtxn, &new_hnsw)?;
         }
-        TypedChunk::ScriptLanguageDocids((deletion, addition)) => {
-            for (key, value) in deletion {
-                if let Some(mut db_values) = index.script_language_docids.get(wtxn, &key)? {
-                    db_values -= value;
-                    if db_values.is_empty() {
-                        index.script_language_docids.delete(wtxn, &key)?;
-                    } else {
-                        index.script_language_docids.put(wtxn, &key, &db_values)?;
-                    }
-                }
-            }
-
-            for (key, value) in addition {
+        TypedChunk::ScriptLanguageDocids(sl_map) => {
+            for (key, (deletion, addition)) in sl_map {
+                let mut db_key_exists = false;
                 let final_value = match index.script_language_docids.get(wtxn, &key)? {
-                    Some(mut db_values) => db_values | value,
-                    None => value,
+                    Some(db_values) => {
+                        db_key_exists = true;
+                        (db_values - deletion) | addition
+                    }
+                    None => addition,
                 };
-                index.script_language_docids.put(wtxn, &key, &final_value)?;
+
+                if final_value.is_empty() {
+                    // If the database entry exists, delete it.
+                    if db_key_exists == true {
+                        index.script_language_docids.delete(wtxn, &key)?;
+                    }
+                } else {
+                    index.script_language_docids.put(wtxn, &key, &final_value)?;
+                }
             }
         }
     }
@@ -386,13 +385,6 @@ fn merge_word_docids_reader_into_fst(
     }
 
     Ok(builder.into_set())
-}
-
-fn merge_roaring_bitmaps(new_value: &[u8], db_value: &[u8], buffer: &mut Vec<u8>) -> Result<()> {
-    let new_value = RoaringBitmap::deserialize_from(new_value)?;
-    let db_value = RoaringBitmap::deserialize_from(db_value)?;
-    let value = new_value | db_value;
-    Ok(serialize_roaring_bitmap(&value, buffer)?)
 }
 
 fn merge_cbo_roaring_bitmaps(

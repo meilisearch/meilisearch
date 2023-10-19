@@ -14,7 +14,7 @@ use crate::error::{InternalError, SerializationError};
 use crate::update::del_add::{del_add_from_two_obkvs, DelAdd, KvReaderDelAdd};
 use crate::{FieldId, Result, MAX_POSITION_PER_ATTRIBUTE, MAX_WORD_LENGTH};
 
-pub type ScriptLanguageDocidsMap = HashMap<(Script, Language), RoaringBitmap>;
+pub type ScriptLanguageDocidsMap = HashMap<(Script, Language), (RoaringBitmap, RoaringBitmap)>;
 
 /// Extracts the word and positions where this word appear and
 /// prefixes it by the document id.
@@ -30,11 +30,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     allowed_separators: Option<&[&str]>,
     dictionary: Option<&[&str]>,
     max_positions_per_attributes: Option<u32>,
-) -> Result<(
-    RoaringBitmap,
-    grenad::Reader<BufReader<File>>,
-    (ScriptLanguageDocidsMap, ScriptLanguageDocidsMap),
-)> {
+) -> Result<(RoaringBitmap, grenad::Reader<BufReader<File>>, ScriptLanguageDocidsMap)> {
     puffin::profile_function!();
 
     let max_positions_per_attributes = max_positions_per_attributes
@@ -43,8 +39,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
 
     // initialize destination values.
     let mut documents_ids = RoaringBitmap::new();
-    let mut del_script_language_docids = HashMap::new();
-    let mut add_script_language_docids = HashMap::new();
+    let mut script_language_docids = HashMap::new();
     let mut docid_word_positions_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
         keep_latest_obkv,
@@ -138,25 +133,24 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         // update script_language_docids deletions.
         for (script, languages_frequency) in del_script_language_word_count {
             for (language, _) in languages_frequency {
-                let entry = del_script_language_docids
+                let entry = script_language_docids
                     .entry((script, language))
-                    .or_insert_with(RoaringBitmap::new);
-                entry.push(document_id);
+                    .or_insert_with(|| (RoaringBitmap::new(), RoaringBitmap::new()));
+                entry.0.push(document_id);
             }
         }
 
         // update script_language_docids additions.
         for (script, languages_frequency) in add_script_language_word_count {
             for (language, _) in languages_frequency {
-                let entry = add_script_language_docids
+                let entry = script_language_docids
                     .entry((script, language))
-                    .or_insert_with(RoaringBitmap::new);
-                entry.push(document_id);
+                    .or_insert_with(|| (RoaringBitmap::new(), RoaringBitmap::new()));
+                entry.1.push(document_id);
             }
         }
     }
 
-    let script_language_docids = (del_script_language_docids, add_script_language_docids);
     sorter_into_reader(docid_word_positions_sorter, indexer)
         .map(|reader| (documents_ids, reader, script_language_docids))
 }
