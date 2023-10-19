@@ -27,7 +27,7 @@ pub(crate) enum TypedChunk {
     FieldIdDocidFacetStrings(grenad::Reader<CursorClonableMmap>),
     FieldIdDocidFacetNumbers(grenad::Reader<CursorClonableMmap>),
     Documents(grenad::Reader<CursorClonableMmap>),
-    FieldIdWordcountDocids(grenad::Reader<File>),
+    FieldIdWordCountDocids(grenad::Reader<File>),
     NewDocumentsIds(RoaringBitmap),
     WordDocids {
         word_docids_reader: grenad::Reader<File>,
@@ -58,7 +58,7 @@ impl TypedChunk {
             TypedChunk::Documents(grenad) => {
                 format!("Documents {{ number_of_entries: {} }}", grenad.len())
             }
-            TypedChunk::FieldIdWordcountDocids(grenad) => {
+            TypedChunk::FieldIdWordCountDocids(grenad) => {
                 format!("FieldIdWordcountDocids {{ number_of_entries: {} }}", grenad.len())
             }
             TypedChunk::NewDocumentsIds(grenad) => {
@@ -126,7 +126,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 index.documents.remap_types::<ByteSlice, ByteSlice>().put(wtxn, key, value)?;
             }
         }
-        TypedChunk::FieldIdWordcountDocids(fid_word_count_docids_iter) => {
+        TypedChunk::FieldIdWordCountDocids(fid_word_count_docids_iter) => {
             append_entries_into_database(
                 fid_word_count_docids_iter,
                 &index.field_id_word_count_docids,
@@ -478,7 +478,7 @@ where
     while let Some((key, value)) = cursor.move_on_next()? {
         if valid_lmdb_key(key) {
             debug_assert!(
-                K::bytes_decode(&key).is_some(),
+                K::bytes_decode(key).is_some(),
                 "Couldn't decode key with the database decoder, key length: {} - key bytes: {:x?}",
                 key.len(),
                 &key

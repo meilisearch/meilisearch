@@ -166,7 +166,7 @@ pub(crate) fn data_from_obkv_documents(
         lmdb_writer_sx.clone(),
         extract_fid_word_count_docids,
         merge_cbo_roaring_bitmaps,
-        TypedChunk::FieldIdWordcountDocids,
+        TypedChunk::FieldIdWordCountDocids,
         "field-id-wordcount-docids",
     );
 
