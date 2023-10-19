@@ -109,7 +109,7 @@ pub struct FacetsUpdate<'i> {
     index: &'i Index,
     database: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     facet_type: FacetType,
-    new_data: grenad::Reader<BufReader<File>>,
+    delta_data: grenad::Reader<BufReader<File>>,
     group_size: u8,
     max_group_size: u8,
     min_level_size: u8,
@@ -119,7 +119,7 @@ impl<'i> FacetsUpdate<'i> {
     pub fn new(
         index: &'i Index,
         facet_type: FacetType,
-        new_data: grenad::Reader<BufReader<File>>,
+        delta_data: grenad::Reader<BufReader<File>>,
     ) -> Self {
         let database = match facet_type {
             FacetType::String => index
@@ -136,26 +136,26 @@ impl<'i> FacetsUpdate<'i> {
             max_group_size: FACET_MAX_GROUP_SIZE,
             min_level_size: FACET_MIN_LEVEL_SIZE,
             facet_type,
-            new_data,
+            delta_data,
         }
     }
 
     pub fn execute(self, wtxn: &mut heed::RwTxn) -> Result<()> {
-        if self.new_data.is_empty() {
+        if self.delta_data.is_empty() {
             return Ok(());
         }
         debug!("Computing and writing the facet values levels docids into LMDB on disk...");
         self.index.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
 
         // See self::comparison_bench::benchmark_facet_indexing
-        if self.new_data.len() >= (self.database.len(wtxn)? as u64 / 50) {
+        if self.delta_data.len() >= (self.database.len(wtxn)? as u64 / 50) {
             let field_ids =
                 self.index.faceted_fields_ids(wtxn)?.iter().copied().collect::<Vec<_>>();
             let bulk_update = FacetsUpdateBulk::new(
                 self.index,
                 field_ids,
                 self.facet_type,
-                self.new_data,
+                self.delta_data,
                 self.group_size,
                 self.min_level_size,
             );
@@ -164,7 +164,7 @@ impl<'i> FacetsUpdate<'i> {
             let incremental_update = FacetsUpdateIncremental::new(
                 self.index,
                 self.facet_type,
-                self.new_data,
+                self.delta_data,
                 self.group_size,
                 self.min_level_size,
                 self.max_group_size,
@@ -464,7 +464,7 @@ pub(crate) mod test_helpers {
 
             let update = FacetsUpdateBulkInner {
                 db: self.content,
-                new_data: Some(reader),
+                delta_data: Some(reader),
                 group_size: self.group_size.get(),
                 min_level_size: self.min_level_size.get(),
             };

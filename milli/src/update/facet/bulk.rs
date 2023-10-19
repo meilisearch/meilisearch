@@ -2,9 +2,10 @@ use std::borrow::Cow;
 use std::fs::File;
 use std::io::BufReader;
 
-use grenad::CompressionType;
+use grenad::{CompressionType, Reader};
 use heed::types::ByteSlice;
 use heed::{BytesEncode, Error, RoTxn, RwTxn};
+use obkv::KvReader;
 use roaring::RoaringBitmap;
 
 use super::{FACET_GROUP_SIZE, FACET_MIN_LEVEL_SIZE};
@@ -13,6 +14,7 @@ use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
 };
 use crate::heed_codec::ByteSliceRefCodec;
+use crate::update::del_add::DelAdd;
 use crate::update::index_documents::{create_writer, valid_lmdb_key, writer_into_reader};
 use crate::{CboRoaringBitmapCodec, FieldId, Index, Result};
 
@@ -31,7 +33,7 @@ pub struct FacetsUpdateBulk<'i> {
     facet_type: FacetType,
     field_ids: Vec<FieldId>,
     // None if level 0 does not need to be updated
-    new_data: Option<grenad::Reader<BufReader<File>>>,
+    delta_data: Option<grenad::Reader<BufReader<File>>>,
 }
 
 impl<'i> FacetsUpdateBulk<'i> {
@@ -39,7 +41,7 @@ impl<'i> FacetsUpdateBulk<'i> {
         index: &'i Index,
         field_ids: Vec<FieldId>,
         facet_type: FacetType,
-        new_data: grenad::Reader<BufReader<File>>,
+        delta_data: grenad::Reader<BufReader<File>>,
         group_size: u8,
         min_level_size: u8,
     ) -> FacetsUpdateBulk<'i> {
@@ -49,7 +51,7 @@ impl<'i> FacetsUpdateBulk<'i> {
             group_size,
             min_level_size,
             facet_type,
-            new_data: Some(new_data),
+            delta_data: Some(delta_data),
         }
     }
 
@@ -64,13 +66,13 @@ impl<'i> FacetsUpdateBulk<'i> {
             group_size: FACET_GROUP_SIZE,
             min_level_size: FACET_MIN_LEVEL_SIZE,
             facet_type,
-            new_data: None,
+            delta_data: None,
         }
     }
 
     #[logging_timer::time("FacetsUpdateBulk::{}")]
     pub fn execute(self, wtxn: &mut heed::RwTxn) -> Result<()> {
-        let Self { index, field_ids, group_size, min_level_size, facet_type, new_data } = self;
+        let Self { index, field_ids, group_size, min_level_size, facet_type, delta_data } = self;
 
         let db = match facet_type {
             FacetType::String => index
@@ -81,7 +83,7 @@ impl<'i> FacetsUpdateBulk<'i> {
             }
         };
 
-        let inner = FacetsUpdateBulkInner { db, new_data, group_size, min_level_size };
+        let inner = FacetsUpdateBulkInner { db, delta_data, group_size, min_level_size };
 
         inner.update(wtxn, &field_ids, |wtxn, field_id, all_docids| {
             index.put_faceted_documents_ids(wtxn, field_id, facet_type, &all_docids)?;
@@ -95,7 +97,7 @@ impl<'i> FacetsUpdateBulk<'i> {
 /// Implementation of `FacetsUpdateBulk` that is independent of milli's `Index` type
 pub(crate) struct FacetsUpdateBulkInner<R: std::io::Read + std::io::Seek> {
     pub db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
-    pub new_data: Option<grenad::Reader<R>>,
+    pub delta_data: Option<grenad::Reader<R>>,
     pub group_size: u8,
     pub min_level_size: u8,
 }
@@ -134,20 +136,26 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
         Ok(())
     }
 
-    // TODO the new_data is an Reader<Obkv<Key, Obkv<DelAdd, RoaringBitmap>>>
     fn update_level0(&mut self, wtxn: &mut RwTxn) -> Result<()> {
-        let new_data = match self.new_data.take() {
+        let delta_data = match self.delta_data.take() {
             Some(x) => x,
             None => return Ok(()),
         };
         if self.db.is_empty(wtxn)? {
             let mut buffer = Vec::new();
             let mut database = self.db.iter_mut(wtxn)?.remap_types::<ByteSlice, ByteSlice>();
-            let mut cursor = new_data.into_cursor()?;
+            let mut cursor = delta_data.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
                 if !valid_lmdb_key(key) {
                     continue;
                 }
+                let value: KvReader<DelAdd> = KvReader::new(value);
+
+                // DB is empty, it is safe to ignore Del operations
+                let Some(value) = value.get(DelAdd::Addition) else {
+                    continue;
+                };
+
                 buffer.clear();
                 // the group size for level 0
                 buffer.push(1);
@@ -159,11 +167,14 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
             let mut buffer = Vec::new();
             let database = self.db.remap_types::<ByteSlice, ByteSlice>();
 
-            let mut cursor = new_data.into_cursor()?;
+            let mut cursor = delta_data.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
                 if !valid_lmdb_key(key) {
                     continue;
                 }
+
+                let value: KvReader<DelAdd> = KvReader::new(value);
+
                 // the value is a CboRoaringBitmap, but I still need to prepend the
                 // group size for level 0 (= 1) to it
                 buffer.clear();
@@ -172,12 +183,15 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
                 match database.get(wtxn, key)? {
                     Some(prev_value) => {
                         let old_bitmap = &prev_value[1..];
-                        CboRoaringBitmapCodec::merge_into(
-                            &[Cow::Borrowed(value), Cow::Borrowed(old_bitmap)],
-                            &mut buffer,
-                        )?;
+                        CboRoaringBitmapCodec::merge_deladd_into(value, old_bitmap, &mut buffer)?;
                     }
                     None => {
+                        // it is safe to ignore the del in that case.
+                        let Some(value) = value.get(DelAdd::Addition) else {
+                            // won't put the key in DB as the value would be empty
+                            continue;
+                        };
+
                         buffer.extend_from_slice(value);
                     }
                 };
