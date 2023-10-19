@@ -1,7 +1,10 @@
+use std::sync::{Arc, RwLock};
+
 use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn};
+use meilisearch_types::heed::{Database, Env, RwTxn};
 
+use crate::error::Error::RuntimeFeatureToggleError;
 use crate::error::FeatureNotEnabledError;
 use crate::Result;
 
@@ -9,7 +12,8 @@ const EXPERIMENTAL_FEATURES: &str = "experimental-features";
 
 #[derive(Clone)]
 pub(crate) struct FeatureData {
-    runtime: Database<Str, SerdeJson<RuntimeTogglableFeatures>>,
+    persisted: Database<Str, SerdeJson<RuntimeTogglableFeatures>>,
+    runtime: Arc<RwLock<RuntimeTogglableFeatures>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -18,8 +22,8 @@ pub struct RoFeatures {
 }
 
 impl RoFeatures {
-    fn new(txn: RoTxn<'_>, data: &FeatureData) -> Result<Self> {
-        let runtime = data.runtime_features(txn)?;
+    fn new(data: &FeatureData) -> Result<Self> {
+        let runtime = data.runtime_features()?;
         Ok(Self { runtime })
     }
 
@@ -83,13 +87,18 @@ impl RoFeatures {
 impl FeatureData {
     pub fn new(env: &Env, instance_features: InstanceTogglableFeatures) -> Result<Self> {
         let mut wtxn = env.write_txn()?;
-        let runtime_features = env.create_database(&mut wtxn, Some(EXPERIMENTAL_FEATURES))?;
-        let default_features =
-            RuntimeTogglableFeatures { metrics: instance_features.metrics, ..Default::default() };
-        runtime_features.put(&mut wtxn, EXPERIMENTAL_FEATURES, &default_features)?;
+        let runtime_features_db = env.create_database(&mut wtxn, Some(EXPERIMENTAL_FEATURES))?;
         wtxn.commit()?;
 
-        Ok(Self { runtime: runtime_features })
+        let txn = env.read_txn()?;
+        let persisted_features: RuntimeTogglableFeatures =
+            runtime_features_db.get(&txn, EXPERIMENTAL_FEATURES)?.unwrap_or_default();
+        let runtime = Arc::new(RwLock::new(RuntimeTogglableFeatures {
+            metrics: instance_features.metrics || persisted_features.metrics,
+            ..persisted_features
+        }));
+
+        Ok(Self { persisted: runtime_features_db, runtime })
     }
 
     pub fn put_runtime_features(
@@ -97,16 +106,19 @@ impl FeatureData {
         mut wtxn: RwTxn,
         features: RuntimeTogglableFeatures,
     ) -> Result<()> {
-        self.runtime.put(&mut wtxn, EXPERIMENTAL_FEATURES, &features)?;
+        self.persisted.put(&mut wtxn, EXPERIMENTAL_FEATURES, &features)?;
         wtxn.commit()?;
+
+        let mut toggled_features = self.runtime.write().map_err(|_| RuntimeFeatureToggleError)?;
+        *toggled_features = features;
         Ok(())
     }
 
-    fn runtime_features(&self, txn: RoTxn) -> Result<RuntimeTogglableFeatures> {
-        Ok(self.runtime.get(&txn, EXPERIMENTAL_FEATURES)?.unwrap_or_default())
+    fn runtime_features(&self) -> Result<RuntimeTogglableFeatures> {
+        Ok(*self.runtime.read().map_err(|_| RuntimeFeatureToggleError)?)
     }
 
-    pub fn features(&self, txn: RoTxn) -> Result<RoFeatures> {
-        RoFeatures::new(txn, self)
+    pub fn features(&self) -> Result<RoFeatures> {
+        RoFeatures::new(self)
     }
 }

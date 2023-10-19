@@ -126,6 +126,14 @@ async fn experimental_feature_metrics() {
     let (response, code) = server.get_metrics().await;
     meili_snap::snapshot!(code, @"200 OK");
     meili_snap::snapshot!(response, @"null");
+
+    // startup without flag respects persisted metrics value
+    let disable_metrics =
+        Opt { experimental_enable_metrics: false, ..default_settings(dir.path()) };
+    let server_no_flag = Server::new_with_options(disable_metrics).await.unwrap();
+    let (response, code) = server_no_flag.get_metrics().await;
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(response, @"null");
 }
 
 #[actix_rt::test]

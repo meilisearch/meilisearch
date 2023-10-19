@@ -127,6 +127,8 @@ pub enum Error {
     Persist(#[from] tempfile::PersistError),
     #[error(transparent)]
     FeatureNotEnabled(#[from] FeatureNotEnabledError),
+    #[error("An unexpected error occurred when accessing the runtime features.")]
+    RuntimeFeatureToggleError,
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
@@ -186,6 +188,7 @@ impl Error {
             | Error::IoError(_)
             | Error::Persist(_)
             | Error::FeatureNotEnabled(_)
+            | Error::RuntimeFeatureToggleError
             | Error::Anyhow(_) => true,
             Error::CreateBatch(_)
             | Error::CorruptedTaskQueue
@@ -232,6 +235,7 @@ impl ErrorCode for Error {
             Error::IoError(e) => e.error_code(),
             Error::Persist(e) => e.error_code(),
             Error::FeatureNotEnabled(_) => Code::FeatureNotEnabled,
+            Error::RuntimeFeatureToggleError => Code::Internal,
 
             // Irrecoverable errors
             Error::Anyhow(_) => Code::Internal,

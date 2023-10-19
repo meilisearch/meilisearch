@@ -1300,8 +1300,7 @@ impl IndexScheduler {
     }
 
     pub fn features(&self) -> Result<RoFeatures> {
-        let rtxn = self.read_txn()?;
-        self.features.features(rtxn)
+        self.features.features()
     }
 
     pub fn put_runtime_features(&self, features: RuntimeTogglableFeatures) -> Result<()> {
