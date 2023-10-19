@@ -193,6 +193,7 @@ pub fn obkvs_keep_last_addition_merge_deletions<'a>(
     inner_merge_del_add_obkvs(obkvs, false)
 }
 
+/// Do a union of all the CboRoaringBitmaps in the values.
 pub fn merge_cbo_roaring_bitmaps<'a>(
     _key: &[u8],
     values: &[Cow<'a, [u8]>],
@@ -203,5 +204,38 @@ pub fn merge_cbo_roaring_bitmaps<'a>(
         let mut vec = Vec::new();
         CboRoaringBitmapCodec::merge_into(values, &mut vec)?;
         Ok(Cow::from(vec))
+    }
+}
+
+/// Do a union of CboRoaringBitmaps on both sides of a DelAdd obkv
+/// separately and outputs a new DelAdd with both unions.
+pub fn merge_deladd_cbo_roaring_bitmaps<'a>(
+    _key: &[u8],
+    values: &[Cow<'a, [u8]>],
+) -> Result<Cow<'a, [u8]>> {
+    if values.len() == 1 {
+        Ok(values[0].clone())
+    } else {
+        // Retrieve the bitmaps from both sides
+        let mut del_bitmaps_bytes = Vec::new();
+        let mut add_bitmaps_bytes = Vec::new();
+        for value in values {
+            let obkv = KvReaderDelAdd::new(value);
+            if let Some(bitmap_bytes) = obkv.get(DelAdd::Deletion) {
+                del_bitmaps_bytes.push(bitmap_bytes);
+            }
+            if let Some(bitmap_bytes) = obkv.get(DelAdd::Addition) {
+                add_bitmaps_bytes.push(bitmap_bytes);
+            }
+        }
+
+        let mut output_deladd_obkv = KvWriterDelAdd::memory();
+        let mut buffer = Vec::new();
+        CboRoaringBitmapCodec::merge_into(del_bitmaps_bytes, &mut buffer)?;
+        output_deladd_obkv.insert(DelAdd::Deletion, &buffer)?;
+        buffer.clear();
+        CboRoaringBitmapCodec::merge_into(add_bitmaps_bytes, &mut buffer)?;
+        output_deladd_obkv.insert(DelAdd::Addition, &buffer)?;
+        output_deladd_obkv.into_inner().map(Cow::from).map_err(Into::into)
     }
 }

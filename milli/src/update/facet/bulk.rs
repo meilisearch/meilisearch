@@ -132,6 +132,8 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
         self.db.delete_range(wtxn, &range).map(drop)?;
         Ok(())
     }
+
+    // TODO the new_data is an Reader<Obkv<Key, Obkv<DelAdd, RoaringBitmap>>>
     fn update_level0(&mut self, wtxn: &mut RwTxn) -> Result<()> {
         let new_data = match self.new_data.take() {
             Some(x) => x,
