@@ -48,7 +48,21 @@ where
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let mut histogram_timer: Option<HistogramTimer> = None;
         let request_path = req.path();
-        let is_registered_resource = req.resource_map().has_resource(request_path);
+        let is_registered_resource = match req.resource_map().match_pattern(request_path).as_deref()
+        {
+            None => false,
+            Some("/tasks/{task_id}") => false,
+            Some("/manifest.json") => false,
+            Some(x)
+                if x.starts_with("/fonts/")
+                    || x.starts_with("/static/")
+                    || x.starts_with("/favicon") =>
+            {
+                false
+            }
+            _ => true,
+        };
+
         if is_registered_resource {
             let request_method = req.method().to_string();
             histogram_timer = Some(
