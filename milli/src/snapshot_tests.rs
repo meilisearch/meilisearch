@@ -359,31 +359,7 @@ pub fn snap_external_documents_ids(index: &Index) -> String {
 
     snap
 }
-pub fn snap_number_faceted_documents_ids(index: &Index) -> String {
-    let rtxn = index.read_txn().unwrap();
-    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
-    let mut snap = String::new();
-    for field_id in fields_ids_map.ids() {
-        let number_faceted_documents_ids =
-            index.faceted_documents_ids(&rtxn, field_id, FacetType::Number).unwrap();
-        writeln!(&mut snap, "{field_id:<3} {}", display_bitmap(&number_faceted_documents_ids))
-            .unwrap();
-    }
-    snap
-}
-pub fn snap_string_faceted_documents_ids(index: &Index) -> String {
-    let rtxn = index.read_txn().unwrap();
-    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let mut snap = String::new();
-    for field_id in fields_ids_map.ids() {
-        let string_faceted_documents_ids =
-            index.faceted_documents_ids(&rtxn, field_id, FacetType::String).unwrap();
-        writeln!(&mut snap, "{field_id:<3} {}", display_bitmap(&string_faceted_documents_ids))
-            .unwrap();
-    }
-    snap
-}
 pub fn snap_words_fst(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
     let words_fst = index.words_fst(&rtxn).unwrap();
@@ -530,12 +506,6 @@ macro_rules! full_snap_of_db {
     }};
     ($index:ident, external_documents_ids) => {{
         $crate::snapshot_tests::snap_external_documents_ids(&$index)
-    }};
-    ($index:ident, number_faceted_documents_ids) => {{
-        $crate::snapshot_tests::snap_number_faceted_documents_ids(&$index)
-    }};
-    ($index:ident, string_faceted_documents_ids) => {{
-        $crate::snapshot_tests::snap_string_faceted_documents_ids(&$index)
     }};
     ($index:ident, words_fst) => {{
         $crate::snapshot_tests::snap_words_fst(&$index)

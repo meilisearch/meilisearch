@@ -22,9 +22,6 @@ use crate::{CboRoaringBitmapCodec, FieldId, Index, Result};
 ///
 /// First, the new elements are inserted into the level 0 of the database. Then, the
 /// higher levels are cleared and recomputed from the content of level 0.
-///
-/// Finally, the `faceted_documents_ids` value in the main database of `Index`
-/// is updated to contain the new set of faceted documents.
 pub struct FacetsUpdateBulk<'i> {
     index: &'i Index,
     group_size: u8,
@@ -85,7 +82,7 @@ impl<'i> FacetsUpdateBulk<'i> {
         let inner = FacetsUpdateBulkInner { db, delta_data, group_size, min_level_size };
 
         inner.update(wtxn, &field_ids, |wtxn, field_id, all_docids| {
-            index.put_faceted_documents_ids(wtxn, field_id, facet_type, &all_docids)?;
+            // TODO: remove the lambda altogether
             Ok(())
         })?;
 
@@ -506,7 +503,6 @@ mod tests {
         index.add_documents(documents).unwrap();
 
         db_snap!(index, facet_id_f64_docids, "initial", @"c34f499261f3510d862fa0283bbe843a");
-        db_snap!(index, number_faceted_documents_ids, "initial", @"01594fecbb316798ce3651d6730a4521");
     }
 
     #[test]

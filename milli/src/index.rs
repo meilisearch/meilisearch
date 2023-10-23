@@ -55,7 +55,6 @@ pub mod main_key {
     /// e.g. vector-hnsw0x0032.
     pub const VECTOR_HNSW_KEY_PREFIX: &str = "vector-hnsw";
     pub const HARD_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "hard-external-documents-ids";
-    pub const NUMBER_FACETED_DOCUMENTS_IDS_PREFIX: &str = "number-faceted-documents-ids";
     pub const PRIMARY_KEY_KEY: &str = "primary-key";
     pub const SEARCHABLE_FIELDS_KEY: &str = "searchable-fields";
     pub const USER_DEFINED_SEARCHABLE_FIELDS_KEY: &str = "user-defined-searchable-fields";
@@ -64,7 +63,6 @@ pub mod main_key {
     pub const NON_SEPARATOR_TOKENS_KEY: &str = "non-separator-tokens";
     pub const SEPARATOR_TOKENS_KEY: &str = "separator-tokens";
     pub const DICTIONARY_KEY: &str = "dictionary";
-    pub const STRING_FACETED_DOCUMENTS_IDS_PREFIX: &str = "string-faceted-documents-ids";
     pub const SYNONYMS_KEY: &str = "synonyms";
     pub const USER_DEFINED_SYNONYMS_KEY: &str = "user-defined-synonyms";
     pub const WORDS_FST_KEY: &str = "words-fst";
@@ -925,44 +923,6 @@ impl Index {
     }
 
     /* faceted documents ids */
-
-    /// Writes the documents ids that are faceted under this field id for the given facet type.
-    pub fn put_faceted_documents_ids(
-        &self,
-        wtxn: &mut RwTxn,
-        field_id: FieldId,
-        facet_type: FacetType,
-        docids: &RoaringBitmap,
-    ) -> heed::Result<()> {
-        let key = match facet_type {
-            FacetType::String => main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX,
-            FacetType::Number => main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX,
-        };
-        let mut buffer = vec![0u8; key.len() + size_of::<FieldId>()];
-        buffer[..key.len()].copy_from_slice(key.as_bytes());
-        buffer[key.len()..].copy_from_slice(&field_id.to_be_bytes());
-        self.main.put::<_, ByteSlice, RoaringBitmapCodec>(wtxn, &buffer, docids)
-    }
-
-    /// Retrieve all the documents ids that are faceted under this field id for the given facet type.
-    pub fn faceted_documents_ids(
-        &self,
-        rtxn: &RoTxn,
-        field_id: FieldId,
-        facet_type: FacetType,
-    ) -> heed::Result<RoaringBitmap> {
-        let key = match facet_type {
-            FacetType::String => main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX,
-            FacetType::Number => main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX,
-        };
-        let mut buffer = vec![0u8; key.len() + size_of::<FieldId>()];
-        buffer[..key.len()].copy_from_slice(key.as_bytes());
-        buffer[key.len()..].copy_from_slice(&field_id.to_be_bytes());
-        match self.main.get::<_, ByteSlice, RoaringBitmapCodec>(rtxn, &buffer)? {
-            Some(docids) => Ok(docids),
-            None => Ok(RoaringBitmap::new()),
-        }
-    }
 
     /// Retrieve all the documents which contain this field id set as null
     pub fn null_faceted_documents_ids(

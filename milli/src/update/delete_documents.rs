@@ -382,12 +382,6 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         for facet_type in [FacetType::Number, FacetType::String] {
             let mut affected_facet_values = HashMap::new();
             for field_id in self.index.faceted_fields_ids(self.wtxn)? {
-                // Remove docids from the number faceted documents ids
-                let mut docids =
-                    self.index.faceted_documents_ids(self.wtxn, field_id, facet_type)?;
-                docids -= &self.to_delete_docids;
-                self.index.put_faceted_documents_ids(self.wtxn, field_id, facet_type, &docids)?;
-
                 let facet_values = remove_docids_from_field_id_docid_facet_value(
                     self.index,
                     self.wtxn,
