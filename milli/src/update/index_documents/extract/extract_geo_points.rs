@@ -60,19 +60,21 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
                     .map(|(lat, lng)| extract_lat_lng(lat, lng, document_id))
                     .transpose()?;
 
-                let mut obkv = KvWriterDelAdd::memory();
-                if let Some([lat, lng]) = del_lat_lng {
-                    #[allow(clippy::drop_non_drop)]
-                    let bytes: [u8; 16] = concat_arrays![lat.to_ne_bytes(), lng.to_ne_bytes()];
-                    obkv.insert(DelAdd::Deletion, bytes)?;
+                if del_lat_lng != add_lat_lng {
+                    let mut obkv = KvWriterDelAdd::memory();
+                    if let Some([lat, lng]) = del_lat_lng {
+                        #[allow(clippy::drop_non_drop)]
+                        let bytes: [u8; 16] = concat_arrays![lat.to_ne_bytes(), lng.to_ne_bytes()];
+                        obkv.insert(DelAdd::Deletion, bytes)?;
+                    }
+                    if let Some([lat, lng]) = add_lat_lng {
+                        #[allow(clippy::drop_non_drop)]
+                        let bytes: [u8; 16] = concat_arrays![lat.to_ne_bytes(), lng.to_ne_bytes()];
+                        obkv.insert(DelAdd::Addition, bytes)?;
+                    }
+                    let bytes = obkv.into_inner()?;
+                    writer.insert(docid_bytes, bytes)?;
                 }
-                if let Some([lat, lng]) = add_lat_lng {
-                    #[allow(clippy::drop_non_drop)]
-                    let bytes: [u8; 16] = concat_arrays![lat.to_ne_bytes(), lng.to_ne_bytes()];
-                    obkv.insert(DelAdd::Addition, bytes)?;
-                }
-                let bytes = obkv.into_inner()?;
-                writer.insert(docid_bytes, bytes)?;
             }
             (None, Some(_)) => {
                 return Err(GeoError::MissingLatitude { document_id: document_id() }.into())
