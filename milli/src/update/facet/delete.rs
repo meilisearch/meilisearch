@@ -160,7 +160,6 @@ mod tests {
         index.add_documents(documents).unwrap();
 
         db_snap!(index, facet_id_f64_docids, 1, @"550cd138d6fe31ccdd42cd5392fbd576");
-        db_snap!(index, number_faceted_documents_ids, 1, @"9a0ea88e7c9dcf6dc0ef0b601736ffcf");
 
         let mut wtxn = index.env.write_txn().unwrap();
 
@@ -178,7 +177,6 @@ mod tests {
 
         db_snap!(index, soft_deleted_documents_ids, @"[]");
         db_snap!(index, facet_id_f64_docids, 2, @"d4d5f14e7f1e1f09b86821a0b6defcc6");
-        db_snap!(index, number_faceted_documents_ids, 2, @"3570e0ac0fdb21be9ebe433f59264b56");
     }
 
     // Same test as above but working with string values for the facets
@@ -219,7 +217,6 @@ mod tests {
 
         // Note that empty strings are not stored in the facet db due to commit 4860fd452965 (comment written on 29 Nov 2022)
         db_snap!(index, facet_id_string_docids, 1, @"5fd1bd0724c65a6dc1aafb6db93c7503");
-        db_snap!(index, string_faceted_documents_ids, 1, @"54bc15494fa81d93339f43c08fd9d8f5");
 
         let mut wtxn = index.env.write_txn().unwrap();
 
@@ -237,7 +234,6 @@ mod tests {
 
         db_snap!(index, soft_deleted_documents_ids, @"[]");
         db_snap!(index, facet_id_string_docids, 2, @"7f9c00b29e04d58c1821202a5dda0ebc");
-        db_snap!(index, string_faceted_documents_ids, 2, @"504152afa5c94fd4e515dcdfa4c7161f");
     }
 
     #[test]
@@ -274,7 +270,6 @@ mod tests {
 
         // Note that empty strings are not stored in the facet db due to commit 4860fd452965 (comment written on 29 Nov 2022)
         db_snap!(index, facet_id_string_docids, 1, @"5fd1bd0724c65a6dc1aafb6db93c7503");
-        db_snap!(index, string_faceted_documents_ids, 1, @"54bc15494fa81d93339f43c08fd9d8f5");
 
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
 
@@ -291,12 +286,6 @@ mod tests {
 
         db_snap!(index, soft_deleted_documents_ids, @"[]");
         db_snap!(index, facet_id_string_docids, 2, @"ece56086e76d50e661fb2b58475b9f7d");
-        db_snap!(index, string_faceted_documents_ids, 2, @r###"
-        0   []
-        1   [11, 20, 73, 292, 324, 358, 381, 493, 839, 852, ]
-        2   [292, 324, 358, 381, 493, 839, 852, ]
-        3   [11, 20, 73, 292, 324, 358, 381, 493, 839, 852, ]
-        "###);
     }
 }
 

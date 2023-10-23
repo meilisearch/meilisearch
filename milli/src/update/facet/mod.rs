@@ -594,7 +594,6 @@ mod tests {
         index.add_documents(documents).unwrap();
 
         db_snap!(index, facet_id_f64_docids, "initial", @"777e0e221d778764b472c512617eeb3b");
-        db_snap!(index, number_faceted_documents_ids, "initial", @"bd916ef32b05fd5c3c4c518708f431a9");
         db_snap!(index, soft_deleted_documents_ids, "initial", @"[]");
 
         let mut documents = vec![];
@@ -617,7 +616,6 @@ mod tests {
         index.add_documents(documents).unwrap();
 
         db_snap!(index, facet_id_f64_docids, "replaced_1_soft", @"abba175d7bed727d0efadaef85a4388f");
-        db_snap!(index, number_faceted_documents_ids, "replaced_1_soft", @"de76488bd05ad94c6452d725acf1bd06");
         db_snap!(index, soft_deleted_documents_ids, "replaced_1_soft", @"6c975deb900f286d2f6456d2d5c3a123");
 
         // Then replace the last document while disabling soft_deletion
@@ -642,7 +640,6 @@ mod tests {
         index.add_documents(documents).unwrap();
 
         db_snap!(index, facet_id_f64_docids, "replaced_2_hard", @"029e27a46d09c574ae949aa4289b45e6");
-        db_snap!(index, number_faceted_documents_ids, "replaced_2_hard", @"60b19824f136affe6b240a7200779028");
         db_snap!(index, soft_deleted_documents_ids, "replaced_2_hard", @"[]");
     }
 }
