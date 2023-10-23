@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 
@@ -15,7 +14,7 @@ use crate::heed_codec::ByteSliceRefCodec;
 use crate::search::facet::get_highest_level;
 use crate::update::del_add::DelAdd;
 use crate::update::index_documents::valid_lmdb_key;
-use crate::{CboRoaringBitmapCodec, FieldId, Index, Result};
+use crate::{CboRoaringBitmapCodec, Index, Result};
 
 enum InsertionResult {
     InPlace,
@@ -30,16 +29,14 @@ enum DeletionResult {
 
 /// Algorithm to incrementally insert and delete elememts into the
 /// `facet_id_(string/f64)_docids` databases.
-pub struct FacetsUpdateIncremental<'i> {
-    index: &'i Index,
+pub struct FacetsUpdateIncremental {
     inner: FacetsUpdateIncrementalInner,
-    facet_type: FacetType,
     delta_data: grenad::Reader<BufReader<File>>,
 }
 
-impl<'i> FacetsUpdateIncremental<'i> {
+impl FacetsUpdateIncremental {
     pub fn new(
-        index: &'i Index,
+        index: &Index,
         facet_type: FacetType,
         delta_data: grenad::Reader<BufReader<File>>,
         group_size: u8,
@@ -47,7 +44,6 @@ impl<'i> FacetsUpdateIncremental<'i> {
         max_group_size: u8,
     ) -> Self {
         FacetsUpdateIncremental {
-            index,
             inner: FacetsUpdateIncrementalInner {
                 db: match facet_type {
                     FacetType::String => index
@@ -61,12 +57,11 @@ impl<'i> FacetsUpdateIncremental<'i> {
                 max_group_size,
                 min_level_size,
             },
-            facet_type,
             delta_data,
         }
     }
 
-    pub fn execute(self, wtxn: &'i mut RwTxn) -> crate::Result<()> {
+    pub fn execute(self, wtxn: &mut RwTxn) -> crate::Result<()> {
         let mut cursor = self.delta_data.into_cursor()?;
         while let Some((key, value)) = cursor.move_on_next()? {
             if !valid_lmdb_key(key) {

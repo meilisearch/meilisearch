@@ -115,7 +115,6 @@ pub struct FacetsUpdate<'i> {
     min_level_size: u8,
 }
 impl<'i> FacetsUpdate<'i> {
-    // TODO grenad::Reader<Key, Obkv<DelAdd, RoaringBitmap>>
     pub fn new(
         index: &'i Index,
         facet_type: FacetType,
