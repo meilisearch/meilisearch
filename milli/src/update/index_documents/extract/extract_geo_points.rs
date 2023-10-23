@@ -15,7 +15,6 @@ use crate::{FieldId, InternalError, Result};
 /// Returns the generated grenad reader containing the docid as key associated to the (latitude, longitude)
 #[logging_timer::time]
 pub fn extract_geo_points<R: io::Read + io::Seek>(
-    // TODO grenad::Reader<Obkv<FieldId, Obkv<DelAdd, JsonValue>>>
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
     primary_key_id: FieldId,
