@@ -167,6 +167,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
                 // then we extend the buffer with the docids bitmap
                 match database.get(wtxn, key)? {
                     Some(prev_value) => {
+                        // prev_value is the group size for level 0, followed by the previous bitmap.
                         let old_bitmap = &prev_value[1..];
                         CboRoaringBitmapCodec::merge_deladd_into(value, old_bitmap, &mut buffer)?;
                     }
