@@ -1499,12 +1499,6 @@ mod tests {
         3   2    second       second
         3   3    third        third
         "###);
-        db_snap!(index, string_faceted_documents_ids, @r###"
-        0   []
-        1   []
-        2   []
-        3   [0, 1, 2, 3, ]
-        "###);
 
         let rtxn = index.read_txn().unwrap();
 
@@ -1528,12 +1522,6 @@ mod tests {
 
         db_snap!(index, facet_id_string_docids, @"");
         db_snap!(index, field_id_docid_facet_strings, @"");
-        db_snap!(index, string_faceted_documents_ids, @r###"
-        0   []
-        1   []
-        2   []
-        3   [0, 1, 2, 3, ]
-        "###);
 
         let rtxn = index.read_txn().unwrap();
 
@@ -1559,12 +1547,6 @@ mod tests {
         3   1    first        first
         3   2    second       second
         3   3    third        third
-        "###);
-        db_snap!(index, string_faceted_documents_ids, @r###"
-        0   []
-        1   []
-        2   []
-        3   [0, 1, 2, 3, ]
         "###);
 
         let rtxn = index.read_txn().unwrap();

@@ -30,9 +30,6 @@ enum DeletionResult {
 
 /// Algorithm to incrementally insert and delete elememts into the
 /// `facet_id_(string/f64)_docids` databases.
-///
-/// Rhe `faceted_documents_ids` value in the main database of `Index`
-/// is also updated to contain the new set of faceted documents.
 pub struct FacetsUpdateIncremental<'i> {
     index: &'i Index,
     inner: FacetsUpdateIncrementalInner,
@@ -70,29 +67,6 @@ impl<'i> FacetsUpdateIncremental<'i> {
     }
 
     pub fn execute(self, wtxn: &'i mut RwTxn) -> crate::Result<()> {
-        #[derive(Default)]
-        struct DeltaDocids {
-            deleted: RoaringBitmap,
-            added: RoaringBitmap,
-        }
-        impl DeltaDocids {
-            fn add(&mut self, added: &RoaringBitmap) {
-                self.deleted -= added;
-                self.added |= added;
-            }
-            fn delete(&mut self, deleted: &RoaringBitmap) {
-                self.deleted |= deleted;
-                self.added -= deleted;
-            }
-            fn applied(self, mut docids: RoaringBitmap) -> RoaringBitmap {
-                docids -= self.deleted;
-                docids |= self.added;
-                docids
-            }
-        }
-
-        let mut new_faceted_docids = HashMap::<FieldId, DeltaDocids>::default();
-
         let mut cursor = self.delta_data.into_cursor()?;
         while let Some((key, value)) = cursor.move_on_next()? {
             if !valid_lmdb_key(key) {
@@ -101,8 +75,6 @@ impl<'i> FacetsUpdateIncremental<'i> {
             let key = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(key)
                 .ok_or(heed::Error::Encoding)?;
             let value = KvReader::new(value);
-
-            let entry = new_faceted_docids.entry(key.field_id).or_default();
 
             let docids_to_delete = value
                 .get(DelAdd::Deletion)
@@ -117,31 +89,14 @@ impl<'i> FacetsUpdateIncremental<'i> {
             if let Some(docids_to_delete) = docids_to_delete {
                 let docids_to_delete = docids_to_delete?;
                 self.inner.delete(wtxn, key.field_id, key.left_bound, &docids_to_delete)?;
-                entry.delete(&docids_to_delete);
             }
 
             if let Some(docids_to_add) = docids_to_add {
                 let docids_to_add = docids_to_add?;
                 self.inner.insert(wtxn, key.field_id, key.left_bound, &docids_to_add)?;
-                entry.add(&docids_to_add);
             }
         }
 
-        // FIXME: broken for multi-value facets?
-        //
-        // Consider an incremental update: `facet="tags", facet_value="Action", {Del: Some([0, 1]), Add: None }`
-        // The current code will inconditionally remove docs 0 and 1 from faceted docs for "tags".
-        // Now for doc 0: `"tags": "Action"`, it's correct behavior
-        // for doc 1: `"tags": "Action, Adventure"`, it's incorrect behavior
-        for (field_id, new_docids) in new_faceted_docids {
-            let old_docids = self.index.faceted_documents_ids(wtxn, field_id, self.facet_type)?;
-            self.index.put_faceted_documents_ids(
-                wtxn,
-                field_id,
-                self.facet_type,
-                &new_docids.applied(old_docids),
-            )?;
-        }
         Ok(())
     }
 }

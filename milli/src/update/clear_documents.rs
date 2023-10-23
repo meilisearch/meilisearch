@@ -64,22 +64,6 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         self.index.delete_geo_faceted_documents_ids(self.wtxn)?;
         self.index.delete_vector_hnsw(self.wtxn)?;
 
-        // We clean all the faceted documents ids.
-        for field_id in faceted_fields {
-            self.index.put_faceted_documents_ids(
-                self.wtxn,
-                field_id,
-                FacetType::Number,
-                &empty_roaring,
-            )?;
-            self.index.put_faceted_documents_ids(
-                self.wtxn,
-                field_id,
-                FacetType::String,
-                &empty_roaring,
-            )?;
-        }
-
         // Clear the other databases.
         word_docids.clear(self.wtxn)?;
         exact_word_docids.clear(self.wtxn)?;
