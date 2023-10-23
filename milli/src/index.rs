@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
-use std::mem::size_of;
 use std::path::Path;
 
 use charabia::{Language, Script};
@@ -14,7 +13,6 @@ use time::OffsetDateTime;
 
 use crate::distance::NDotProductPoint;
 use crate::error::{InternalError, UserError};
-use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;
 use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
