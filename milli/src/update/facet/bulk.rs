@@ -1,7 +1,6 @@
-use std::borrow::Cow;
 use std::fs::File;
 
-use grenad::{CompressionType, Reader};
+use grenad::CompressionType;
 use heed::types::ByteSlice;
 use heed::{BytesEncode, Error, RoTxn, RwTxn};
 use obkv::KvReader;
@@ -81,10 +80,7 @@ impl<'i> FacetsUpdateBulk<'i> {
 
         let inner = FacetsUpdateBulkInner { db, delta_data, group_size, min_level_size };
 
-        inner.update(wtxn, &field_ids, |wtxn, field_id, all_docids| {
-            // TODO: remove the lambda altogether
-            Ok(())
-        })?;
+        inner.update(wtxn, &field_ids)?;
 
         Ok(())
     }
@@ -98,21 +94,14 @@ pub(crate) struct FacetsUpdateBulkInner<R: std::io::Read + std::io::Seek> {
     pub min_level_size: u8,
 }
 impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
-    pub fn update(
-        mut self,
-        wtxn: &mut RwTxn,
-        field_ids: &[u16],
-        mut handle_all_docids: impl FnMut(&mut RwTxn, FieldId, RoaringBitmap) -> Result<()>,
-    ) -> Result<()> {
+    pub fn update(mut self, wtxn: &mut RwTxn, field_ids: &[u16]) -> Result<()> {
         self.update_level0(wtxn)?;
         for &field_id in field_ids.iter() {
             self.clear_levels(wtxn, field_id)?;
         }
 
         for &field_id in field_ids.iter() {
-            let (level_readers, all_docids) = self.compute_levels_for_field_id(field_id, wtxn)?;
-
-            handle_all_docids(wtxn, field_id, all_docids)?;
+            let level_readers = self.compute_levels_for_field_id(field_id, wtxn)?;
 
             for level_reader in level_readers {
                 let mut cursor = level_reader.into_cursor()?;
@@ -200,16 +189,10 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
         &self,
         field_id: FieldId,
         txn: &RoTxn,
-    ) -> Result<(Vec<grenad::Reader<File>>, RoaringBitmap)> {
-        let mut all_docids = RoaringBitmap::new();
-        let subwriters = self.compute_higher_levels(txn, field_id, 32, &mut |bitmaps, _| {
-            for bitmap in bitmaps {
-                all_docids |= bitmap;
-            }
-            Ok(())
-        })?;
+    ) -> Result<Vec<grenad::Reader<File>>> {
+        let subwriters = self.compute_higher_levels(txn, field_id, 32, &mut |_, _| Ok(()))?;
 
-        Ok((subwriters, all_docids))
+        Ok(subwriters)
     }
     #[allow(clippy::type_complexity)]
     fn read_level_0<'t>(

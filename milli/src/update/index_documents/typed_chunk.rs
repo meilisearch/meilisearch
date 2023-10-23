@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fs::File;
@@ -11,9 +10,7 @@ use heed::types::ByteSlice;
 use heed::RwTxn;
 use roaring::RoaringBitmap;
 
-use super::helpers::{
-    self, merge_ignore_values, serialize_roaring_bitmap, valid_lmdb_key, CursorClonableMmap,
-};
+use super::helpers::{self, merge_ignore_values, valid_lmdb_key, CursorClonableMmap};
 use super::{ClonableMmap, MergeFn};
 use crate::distance::NDotProductPoint;
 use crate::error::UserError;
