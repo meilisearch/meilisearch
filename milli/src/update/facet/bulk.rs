@@ -3,7 +3,6 @@ use std::fs::File;
 use grenad::CompressionType;
 use heed::types::ByteSlice;
 use heed::{BytesEncode, Error, RoTxn, RwTxn};
-use obkv::KvReader;
 use roaring::RoaringBitmap;
 
 use super::{FACET_GROUP_SIZE, FACET_MIN_LEVEL_SIZE};
@@ -12,7 +11,7 @@ use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
 };
 use crate::heed_codec::ByteSliceRefCodec;
-use crate::update::del_add::DelAdd;
+use crate::update::del_add::{DelAdd, KvReaderDelAdd};
 use crate::update::index_documents::{create_writer, valid_lmdb_key, writer_into_reader};
 use crate::{CboRoaringBitmapCodec, FieldId, Index, Result};
 
@@ -134,7 +133,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
                 if !valid_lmdb_key(key) {
                     continue;
                 }
-                let value: KvReader<DelAdd> = KvReader::new(value);
+                let value = KvReaderDelAdd::new(value);
 
                 // DB is empty, it is safe to ignore Del operations
                 let Some(value) = value.get(DelAdd::Addition) else {
@@ -158,7 +157,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
                     continue;
                 }
 
-                let value: KvReader<DelAdd> = KvReader::new(value);
+                let value = KvReaderDelAdd::new(value);
 
                 // the value is a CboRoaringBitmap, but I still need to prepend the
                 // group size for level 0 (= 1) to it
