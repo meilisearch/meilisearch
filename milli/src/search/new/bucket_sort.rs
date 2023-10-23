@@ -46,9 +46,8 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         if let Some(distinct_fid) = distinct_fid {
             let mut excluded = RoaringBitmap::new();
             let mut results = vec![];
-            let mut skip = 0;
             for docid in universe.iter() {
-                if results.len() >= length {
+                if results.len() >= from + length {
                     break;
                 }
                 if excluded.contains(docid) {
@@ -56,16 +55,19 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
                 }
 
                 distinct_single_docid(ctx.index, ctx.txn, distinct_fid, docid, &mut excluded)?;
-                skip += 1;
-                if skip <= from {
-                    continue;
-                }
-
                 results.push(docid);
             }
 
             let mut all_candidates = universe - excluded;
             all_candidates.extend(results.iter().copied());
+            // drain the results of the skipped elements
+            // this **must** be done **after** writing the entire results in `all_candidates` to ensure
+            // e.g. estimatedTotalHits is correct.
+            if results.len() >= from {
+                results.drain(..from);
+            } else {
+                results.clear();
+            }
 
             return Ok(BucketSortOutput {
                 scores: vec![Default::default(); results.len()],

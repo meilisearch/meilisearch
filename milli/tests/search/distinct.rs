@@ -202,7 +202,7 @@ test_distinct!(
     EXTERNAL_DOCUMENTS_IDS.len(),
     1,
     vec![],
-    2
+    3
 );
 test_distinct!(
     // testing: https://github.com/meilisearch/meilisearch/issues/4078
@@ -212,7 +212,7 @@ test_distinct!(
     1,
     2,
     vec![],
-    1
+    3
 );
 test_distinct!(
     // testing: https://github.com/meilisearch/meilisearch/issues/4078
@@ -222,7 +222,7 @@ test_distinct!(
     EXTERNAL_DOCUMENTS_IDS.len(),
     2,
     vec![],
-    5
+    7
 );
 test_distinct!(
     // testing: https://github.com/meilisearch/meilisearch/issues/4078
@@ -232,5 +232,5 @@ test_distinct!(
     2,
     4,
     vec![],
-    3
+    7
 );
