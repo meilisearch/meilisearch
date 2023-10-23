@@ -279,14 +279,17 @@ pub(crate) fn write_typed_chunk_into_index(
                 // convert the key back to a u32 (4 bytes)
                 let docid = key.try_into().map(DocumentId::from_be_bytes).unwrap();
 
-                // convert the latitude and longitude back to a f64 (8 bytes)
-                let (lat, tail) = helpers::try_split_array_at::<u8, 8>(value).unwrap();
-                let (lng, _) = helpers::try_split_array_at::<u8, 8>(tail).unwrap();
-                let point = [f64::from_ne_bytes(lat), f64::from_ne_bytes(lng)];
-                let xyz_point = lat_lng_to_xyz(&point);
-
-                rtree.insert(GeoPoint::new(xyz_point, (docid, point)));
-                geo_faceted_docids.insert(docid);
+                let deladd_obkv = KvReaderDelAdd::new(value);
+                if let Some(value) = deladd_obkv.get(DelAdd::Deletion) {
+                    let geopoint = extract_geo_point(value, docid);
+                    rtree.remove(&geopoint);
+                    geo_faceted_docids.remove(docid);
+                }
+                if let Some(value) = deladd_obkv.get(DelAdd::Addition) {
+                    let geopoint = extract_geo_point(value, docid);
+                    rtree.insert(geopoint);
+                    geo_faceted_docids.insert(docid);
+                }
             }
             index.put_geo_rtree(wtxn, &rtree)?;
             index.put_geo_faceted_documents_ids(wtxn, &geo_faceted_docids)?;
@@ -366,6 +369,15 @@ pub(crate) fn write_typed_chunk_into_index(
     }
 
     Ok((RoaringBitmap::new(), is_merged_database))
+}
+
+/// Converts the latitude and longitude back to an xyz GeoPoint.
+fn extract_geo_point(value: &[u8], docid: DocumentId) -> GeoPoint {
+    let (lat, tail) = helpers::try_split_array_at::<u8, 8>(value).unwrap();
+    let (lng, _) = helpers::try_split_array_at::<u8, 8>(tail).unwrap();
+    let point = [f64::from_ne_bytes(lat), f64::from_ne_bytes(lng)];
+    let xyz_point = lat_lng_to_xyz(&point);
+    GeoPoint::new(xyz_point, (docid, point))
 }
 
 fn merge_word_docids_reader_into_fst(
