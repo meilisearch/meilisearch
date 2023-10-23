@@ -113,8 +113,6 @@ pub enum Error {
     Dump(#[from] dump::Error),
     #[error(transparent)]
     Heed(#[from] heed::Error),
-    #[error("Unable to record metrics for request.")]
-    CannotRecordMetrics,
     #[error(transparent)]
     Milli(#[from] milli::Error),
     #[error("An unexpected crash occurred when processing the task.")]
@@ -127,8 +125,6 @@ pub enum Error {
     Persist(#[from] tempfile::PersistError),
     #[error(transparent)]
     FeatureNotEnabled(#[from] FeatureNotEnabledError),
-    #[error("An unexpected error occurred when accessing the runtime features.")]
-    RuntimeFeatureToggleError,
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
@@ -181,14 +177,12 @@ impl Error {
             | Error::TaskCancelationWithEmptyQuery
             | Error::Dump(_)
             | Error::Heed(_)
-            | Error::CannotRecordMetrics
             | Error::Milli(_)
             | Error::ProcessBatchPanicked
             | Error::FileStore(_)
             | Error::IoError(_)
             | Error::Persist(_)
             | Error::FeatureNotEnabled(_)
-            | Error::RuntimeFeatureToggleError
             | Error::Anyhow(_) => true,
             Error::CreateBatch(_)
             | Error::CorruptedTaskQueue
@@ -229,13 +223,11 @@ impl ErrorCode for Error {
             Error::Milli(e) => e.error_code(),
             Error::ProcessBatchPanicked => Code::Internal,
             Error::Heed(e) => e.error_code(),
-            Error::CannotRecordMetrics => Code::Internal,
             Error::HeedTransaction(e) => e.error_code(),
             Error::FileStore(e) => e.error_code(),
             Error::IoError(e) => e.error_code(),
             Error::Persist(e) => e.error_code(),
             Error::FeatureNotEnabled(_) => Code::FeatureNotEnabled,
-            Error::RuntimeFeatureToggleError => Code::Internal,
 
             // Irrecoverable errors
             Error::Anyhow(_) => Code::Internal,

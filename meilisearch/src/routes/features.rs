@@ -29,12 +29,12 @@ async fn get_features(
     >,
     req: HttpRequest,
     analytics: Data<dyn Analytics>,
-) -> Result<HttpResponse, ResponseError> {
-    let features = index_scheduler.features()?;
+) -> HttpResponse {
+    let features = index_scheduler.features();
 
     analytics.publish("Experimental features Seen".to_string(), json!(null), Some(&req));
     debug!("returns: {:?}", features.runtime_features());
-    Ok(HttpResponse::Ok().json(features.runtime_features()))
+    HttpResponse::Ok().json(features.runtime_features())
 }
 
 #[derive(Debug, Deserr)]
@@ -59,7 +59,7 @@ async fn patch_features(
     req: HttpRequest,
     analytics: Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let features = index_scheduler.features()?;
+    let features = index_scheduler.features();
 
     let old_features = features.runtime_features();
     let new_features = meilisearch_types::features::RuntimeTogglableFeatures {

@@ -579,13 +579,7 @@ impl IndexScheduler {
                 run.wake_up.wait();
 
                 loop {
-                    let puffin_enabled = match run.features() {
-                        Ok(features) => features.check_puffin().is_ok(),
-                        Err(e) => {
-                            log::error!("{e}");
-                            continue;
-                        }
-                    };
+                    let puffin_enabled = run.features().check_puffin().is_ok();
                     puffin::set_scopes_on(puffin_enabled);
                     puffin::GlobalProfiler::lock().new_frame();
 
@@ -1299,7 +1293,7 @@ impl IndexScheduler {
         Ok(IndexStats { is_indexing, inner_stats: index_stats })
     }
 
-    pub fn features(&self) -> Result<RoFeatures> {
+    pub fn features(&self) -> RoFeatures {
         self.features.features()
     }
 

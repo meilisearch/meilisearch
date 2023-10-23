@@ -4,7 +4,6 @@ use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFea
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RwTxn};
 
-use crate::error::Error::RuntimeFeatureToggleError;
 use crate::error::FeatureNotEnabledError;
 use crate::Result;
 
@@ -22,9 +21,9 @@ pub struct RoFeatures {
 }
 
 impl RoFeatures {
-    fn new(data: &FeatureData) -> Result<Self> {
-        let runtime = data.runtime_features()?;
-        Ok(Self { runtime })
+    fn new(data: &FeatureData) -> Self {
+        let runtime = data.runtime_features();
+        Self { runtime }
     }
 
     pub fn runtime_features(&self) -> RuntimeTogglableFeatures {
@@ -109,16 +108,22 @@ impl FeatureData {
         self.persisted.put(&mut wtxn, EXPERIMENTAL_FEATURES, &features)?;
         wtxn.commit()?;
 
-        let mut toggled_features = self.runtime.write().map_err(|_| RuntimeFeatureToggleError)?;
+        // safe to unwrap, the lock will only fail if:
+        // 1. requested by the same thread concurrently -> it is called and released in methods that don't call each other
+        // 2. there's a panic while the thread is held -> it is only used for an assignment here.
+        let mut toggled_features = self.runtime.write().unwrap();
         *toggled_features = features;
         Ok(())
     }
 
-    fn runtime_features(&self) -> Result<RuntimeTogglableFeatures> {
-        Ok(*self.runtime.read().map_err(|_| RuntimeFeatureToggleError)?)
+    fn runtime_features(&self) -> RuntimeTogglableFeatures {
+        // sound to unwrap, the lock will only fail if:
+        // 1. requested by the same thread concurrently -> it is called and released in methods that don't call each other
+        // 2. there's a panic while the thread is held -> it is only used for copying the data here
+        *self.runtime.read().unwrap()
     }
 
-    pub fn features(&self) -> Result<RoFeatures> {
+    pub fn features(&self) -> RoFeatures {
         RoFeatures::new(self)
     }
 }
