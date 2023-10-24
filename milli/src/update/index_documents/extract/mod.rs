@@ -366,9 +366,6 @@ fn send_and_extract_flattened_documents_data(
                         max_positions_per_attributes,
                     )?;
 
-                // send documents_ids to DB writer
-                let _ = lmdb_writer_sx.send(Ok(TypedChunk::NewDocumentsIds(documents_ids)));
-
                 // send docid_word_positions_chunk to DB writer
                 let docid_word_positions_chunk =
                     unsafe { as_cloneable_grenad(&docid_word_positions_chunk)? };
