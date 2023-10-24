@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::convert::TryInto;
 use std::io;
 use std::mem::size_of;
 
@@ -56,19 +57,26 @@ impl CboRoaringBitmapCodec {
     }
 
     /// Merge serialized CboRoaringBitmaps in a buffer.
+    /// The buffer must be empty before calling the function.
     ///
     /// if the merged values length is under the threshold, values are directly
     /// serialized in the buffer else a RoaringBitmap is created from the
     /// values and is serialized in the buffer.
     pub fn merge_into(slices: &[Cow<[u8]>], buffer: &mut Vec<u8>) -> io::Result<()> {
+        debug_assert!(buffer.is_empty());
+
         let mut roaring = RoaringBitmap::new();
         let mut vec = Vec::new();
 
         for bytes in slices {
             if bytes.len() <= THRESHOLD * size_of::<u32>() {
-                let mut reader = bytes.as_ref();
-                while let Ok(integer) = reader.read_u32::<NativeEndian>() {
-                    vec.push(integer);
+                debug_assert!(bytes.len() % size_of::<u32>() == 0);
+
+                for bytes in bytes.chunks_exact(size_of::<u32>()) {
+                    // unwrap can't happens since we ensured that everything
+                    // was a multiple of size_of<u32>.
+                    let v = u32::from_ne_bytes(bytes.try_into().unwrap());
+                    vec.push(v);
                 }
             } else {
                 roaring.union_with_serialized_unchecked(bytes.as_ref())?;
@@ -186,8 +194,11 @@ mod tests {
 
         let medium_data: Vec<_> =
             medium_data.iter().map(|b| CboRoaringBitmapCodec::bytes_encode(b).unwrap()).collect();
-        buffer.clear();
-        CboRoaringBitmapCodec::merge_into(medium_data.as_slice(), &mut buffer).unwrap();
+        // TODO: used for profiling purpose, get rids of it once the function is optimized
+        for _ in 0..100000 {
+            buffer.clear();
+            CboRoaringBitmapCodec::merge_into(medium_data.as_slice(), &mut buffer).unwrap();
+        }
 
         let bitmap = CboRoaringBitmapCodec::deserialize_from(&buffer).unwrap();
         let expected = RoaringBitmap::from_sorted_iter(0..23).unwrap();
