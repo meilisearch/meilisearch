@@ -1,5 +1,6 @@
 #![cfg_attr(all(test, fuzzing), feature(no_coverage))]
 #![allow(clippy::type_complexity)]
+#![feature(test)]
 
 #[cfg(test)]
 #[global_allocator]

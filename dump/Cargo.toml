@@ -19,7 +19,7 @@ meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 once_cell = "1.17.1"
 regex = "1.7.3"
-roaring = { version = "0.10.1", features = ["serde"] }
+roaring = { path = "../../roaring-rs", features = ["serde"] }
 serde = { version = "1.0.160", features = ["derive"] }
 serde_json = { version = "1.0.95", features = ["preserve_order"] }
 tar = "0.4.38"

@@ -71,7 +71,7 @@ impl CboRoaringBitmapCodec {
                     vec.push(integer);
                 }
             } else {
-                roaring |= RoaringBitmap::deserialize_unchecked_from(bytes.as_ref())?;
+                roaring.union_with_serialized_unchecked(bytes.as_ref())?;
             }
         }
 
@@ -85,7 +85,7 @@ impl CboRoaringBitmapCodec {
                 }
             } else {
                 // We can unwrap safely because the vector is sorted upper.
-                let roaring = RoaringBitmap::from_sorted_iter(vec.into_iter()).unwrap();
+                let roaring = RoaringBitmap::from_sorted_iter(vec).unwrap();
                 roaring.serialize_into(buffer)?;
             }
         } else {
