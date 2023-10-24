@@ -38,9 +38,6 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
             serde_json::from_slice(document_id).unwrap()
         };
 
-        // HELP we will receive two DelAdds here, one for the lat and one for the lng
-        //      what happens if there is a missing Del or Add for one of them?
-
         // first we get the two fields
         match (obkv.get(lat_fid), obkv.get(lng_fid)) {
             (Some(lat), Some(lng)) => {
