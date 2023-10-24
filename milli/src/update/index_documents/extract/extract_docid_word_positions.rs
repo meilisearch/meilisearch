@@ -115,6 +115,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         let (add_obkv, add_script_language_word_count) = add?;
 
         // merge deletions and additions.
+        // transforming two KV<FieldId, KV<u16, String>> into one KV<FieldId, KV<DelAdd, KV<u16, String>>>
         value_buffer.clear();
         del_add_from_two_obkvs(
             KvReader::<FieldId>::new(del_obkv),
@@ -122,8 +123,8 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
             &mut value_buffer,
         )?;
 
-        // write them into the sorter.
-        let obkv = KvReader::<FieldId>::new(value);
+        // write each KV<DelAdd, KV<u16, String>> into the sorter, field by field.
+        let obkv = KvReader::<FieldId>::new(&value_buffer);
         for (field_id, value) in obkv.iter() {
             key_buffer.truncate(mem::size_of::<u32>());
             key_buffer.extend_from_slice(&field_id.to_be_bytes());
@@ -151,6 +152,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         }
     }
 
+    // the returned sorter is serialized as: key: (DocId, FieldId), value: KV<DelAdd, KV<u16, String>>.
     sorter_into_reader(docid_word_positions_sorter, indexer)
         .map(|reader| (documents_ids, reader, script_language_docids))
 }
@@ -266,6 +268,7 @@ fn lang_safe_tokens_from_document<'a>(
         }
     }
 
+    // returns a (KV<FieldId, KV<u16, String>>, HashMap<Script, Vec<(Language, usize)>>)
     Ok((&buffers.obkv_buffer, script_language_word_count))
 }
 
@@ -331,6 +334,7 @@ fn tokens_from_document<'a>(
         }
     }
 
+    // returns a KV<FieldId, KV<u16, String>>
     Ok(document_writer.into_inner().map(|v| v.as_slice())?)
 }
 
