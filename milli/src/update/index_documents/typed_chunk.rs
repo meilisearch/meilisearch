@@ -118,22 +118,38 @@ pub(crate) fn write_typed_chunk_into_index(
     let mut is_merged_database = false;
     match typed_chunk {
         TypedChunk::Documents(obkv_documents_iter) => {
+            let mut docids = index.documents_ids(wtxn)?;
+
             let mut cursor = obkv_documents_iter.into_cursor()?;
             while let Some((docid, reader)) = cursor.move_on_next()? {
                 let mut writer: KvWriter<_, FieldId> = KvWriter::memory();
                 let reader: KvReader<FieldId> = KvReader::new(reader);
+                let mut written = false;
                 for (field_id, value) in reader.iter() {
                     let Some(value) = KvReaderDelAdd::new(value).get(DelAdd::Addition) else {
                         continue;
                     };
+                    // TODO: writer.is_empty
+                    written = true;
                     writer.insert(field_id, value)?;
                 }
-                index.documents.remap_types::<ByteSlice, ByteSlice>().put(
-                    wtxn,
-                    docid,
-                    &writer.into_inner().unwrap(),
-                )?;
+
+                let db = index.documents.remap_data_type::<ByteSlice>();
+                let docid = docid.try_into().map(DocumentId::from_be_bytes).unwrap();
+
+                if written {
+                    db.put(wtxn, &BEU32::new(docid), &writer.into_inner().unwrap())?;
+                    docids.insert(docid);
+                } else {
+                    db.delete(wtxn, &BEU32::new(docid))?;
+                    // FIXME: unwrap
+                    if !docids.remove(docid) {
+                        panic!("Attempt to remove a document id that doesn't exist")
+                    }
+                }
             }
+
+            index.put_documents_ids(wtxn, &docids)?;
         }
         TypedChunk::FieldIdWordCountDocids(fid_word_count_docids_iter) => {
             append_entries_into_database(

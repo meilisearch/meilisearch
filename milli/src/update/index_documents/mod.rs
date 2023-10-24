@@ -35,7 +35,7 @@ use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
-    self, DeletionStrategy, IndexerConfig, PrefixWordPairsProximityDocids, UpdateIndexingStep,
+    DeletionStrategy, IndexerConfig, PrefixWordPairsProximityDocids, UpdateIndexingStep,
     WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
 use crate::{CboRoaringBitmapCodec, Index, Result};
@@ -374,17 +374,6 @@ where
             drop(lmdb_writer_sx)
         });
 
-        // We delete the documents that this document addition replaces. This way we are
-        // able to simply insert all the documents even if they already exist in the database.
-        if !replaced_documents_ids.is_empty() {
-            let mut deletion_builder = update::DeleteDocuments::new(self.wtxn, self.index)?;
-            deletion_builder.strategy(self.config.deletion_strategy);
-            debug!("documents to delete {:?}", replaced_documents_ids);
-            deletion_builder.delete_documents(&replaced_documents_ids);
-            let deleted_documents_result = deletion_builder.execute_inner()?;
-            debug!("{} documents actually deleted", deleted_documents_result.deleted_documents);
-        }
-
         let index_documents_ids = self.index.documents_ids(self.wtxn)?;
         let index_is_empty = index_documents_ids.is_empty();
         let mut final_documents_ids = RoaringBitmap::new();
@@ -437,6 +426,7 @@ where
                 otherwise => otherwise,
             };
 
+            // FIXME: return newly added as well as newly deleted documents
             let (docids, is_merged_database) =
                 write_typed_chunk_into_index(typed_chunk, self.index, self.wtxn, index_is_empty)?;
             if !docids.is_empty() {
@@ -472,8 +462,9 @@ where
         let external_documents_ids = external_documents_ids.into_static();
         self.index.put_external_documents_ids(self.wtxn, &external_documents_ids)?;
 
+        // FIXME: remove `new_documents_ids` entirely and `replaced_documents_ids`
         let all_documents_ids = index_documents_ids | new_documents_ids;
-        self.index.put_documents_ids(self.wtxn, &all_documents_ids)?;
+        //self.index.put_documents_ids(self.wtxn, &all_documents_ids)?;
 
         // TODO: reactivate prefix DB with diff-indexing
         // self.execute_prefix_databases(
