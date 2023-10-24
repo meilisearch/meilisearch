@@ -761,14 +761,6 @@ impl<'a, 'i> Transform<'a, 'i> {
             .to_string();
         let field_distribution = self.index.field_distribution(wtxn)?;
 
-        // Delete the soft deleted document ids from the maps inside the external_document_ids structure
-        let new_external_documents_ids = {
-            let mut external_documents_ids = self.index.external_documents_ids(wtxn)?;
-            external_documents_ids.delete_soft_deleted_documents_ids_from_fsts()?;
-            // This call should be free and can't fail since the previous method merged both fsts.
-            external_documents_ids.into_static().to_fst()?.into_owned()
-        };
-
         let documents_ids = self.index.documents_ids(wtxn)?;
         let documents_count = documents_ids.len() as usize;
 
@@ -856,8 +848,10 @@ impl<'a, 'i> Transform<'a, 'i> {
             primary_key,
             fields_ids_map: new_fields_ids_map,
             field_distribution,
-            new_external_documents_ids,
+            // FIXME: remove this now unused field
+            new_external_documents_ids: fst::Map::default().map_data(Cow::Owned).unwrap(),
             new_documents_ids: documents_ids,
+            // FIXME: remove this now unused field
             replaced_documents_ids: RoaringBitmap::default(),
             documents_count,
             original_documents,

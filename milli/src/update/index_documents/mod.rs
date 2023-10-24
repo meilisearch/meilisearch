@@ -457,10 +457,10 @@ where
         self.index.put_primary_key(self.wtxn, &primary_key)?;
 
         // We write the external documents ids into the main database.
-        let mut external_documents_ids = self.index.external_documents_ids(self.wtxn)?;
-        external_documents_ids.insert_ids(&new_external_documents_ids)?;
-        let external_documents_ids = external_documents_ids.into_static();
-        self.index.put_external_documents_ids(self.wtxn, &external_documents_ids)?;
+        //let mut external_documents_ids = self.index.external_documents_ids(self.wtxn)?;
+        //external_documents_ids.insert_ids(&new_external_documents_ids)?;
+        //let external_documents_ids = external_documents_ids.into_static();
+        //self.index.put_external_documents_ids(self.wtxn, &external_documents_ids)?;
 
         // FIXME: remove `new_documents_ids` entirely and `replaced_documents_ids`
         let all_documents_ids = index_documents_ids | new_documents_ids;

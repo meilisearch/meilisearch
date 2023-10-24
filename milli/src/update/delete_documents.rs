@@ -253,12 +253,14 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         }
         // We acquire the current external documents ids map...
         // Note that its soft-deleted document ids field will be equal to the `to_delete_docids`
-        let mut new_external_documents_ids = self.index.external_documents_ids(self.wtxn)?;
+        //let mut new_external_documents_ids = self.index.external_documents_ids(self.wtxn)?;
         // We then remove the soft-deleted docids from it
-        new_external_documents_ids.delete_soft_deleted_documents_ids_from_fsts()?;
+        //new_external_documents_ids.delete_soft_deleted_documents_ids_from_fsts()?;
         // and write it back to the main database.
-        let new_external_documents_ids = new_external_documents_ids.into_static();
-        self.index.put_external_documents_ids(self.wtxn, &new_external_documents_ids)?;
+        //let new_external_documents_ids = new_external_documents_ids.into_static();
+        //self.index.put_external_documents_ids(self.wtxn, &new_external_documents_ids)?;
+
+        todo!("please autobatch deletions for now");
 
         let mut words_to_keep = BTreeSet::default();
         let mut words_to_delete = BTreeSet::default();
