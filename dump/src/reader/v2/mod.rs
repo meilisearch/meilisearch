@@ -46,6 +46,7 @@ pub type Checked = settings::Checked;
 pub type Unchecked = settings::Unchecked;
 
 pub type Task = updates::UpdateEntry;
+pub type Kind = updates::UpdateMeta;
 
 // everything related to the errors
 pub type ResponseError = errors::ResponseError;
@@ -107,8 +108,11 @@ impl V2Reader {
     pub fn indexes(&self) -> Result<impl Iterator<Item = Result<V2IndexReader>> + '_> {
         Ok(self.index_uuid.iter().map(|index| -> Result<_> {
             V2IndexReader::new(
-                index.uid.clone(),
                 &self.dump.path().join("indexes").join(format!("index-{}", index.uuid)),
+                index,
+                BufReader::new(
+                    File::open(self.dump.path().join("updates").join("data.jsonl")).unwrap(),
+                ),
             )
         }))
     }
@@ -143,16 +147,41 @@ pub struct V2IndexReader {
 }
 
 impl V2IndexReader {
-    pub fn new(name: String, path: &Path) -> Result<Self> {
+    pub fn new(path: &Path, index_uuid: &IndexUuid, tasks: BufReader<File>) -> Result<Self> {
         let meta = File::open(path.join("meta.json"))?;
         let meta: DumpMeta = serde_json::from_reader(meta)?;
 
+        let mut created_at = None;
+        let mut updated_at = None;
+
+        for line in tasks.lines() {
+            let task: Task = serde_json::from_str(&line?)?;
+            if !(task.uuid == index_uuid.uuid && task.is_finished()) {
+                continue;
+            }
+
+            let new_created_at = match task.update.meta() {
+                Kind::DocumentsAddition { .. } | Kind::Settings(_) => task.update.finished_at(),
+                _ => None,
+            };
+            let new_updated_at = task.update.finished_at();
+
+            if created_at.is_none() || created_at > new_created_at {
+                created_at = new_created_at;
+            }
+
+            if updated_at.is_none() || updated_at < new_updated_at {
+                updated_at = new_updated_at;
+            }
+        }
+
+        let current_time = OffsetDateTime::now_utc();
+
         let metadata = IndexMetadata {
-            uid: name,
+            uid: index_uuid.uid.clone(),
             primary_key: meta.primary_key,
-            // FIXME: Iterate over the whole task queue to find the creation and last update date.
-            created_at: OffsetDateTime::now_utc(),
-            updated_at: OffsetDateTime::now_utc(),
+            created_at: created_at.unwrap_or(current_time),
+            updated_at: updated_at.unwrap_or(current_time),
         };
 
         let ret = V2IndexReader {
@@ -248,12 +277,12 @@ pub(crate) mod test {
         assert!(indexes.is_empty());
 
         // products
-        insta::assert_json_snapshot!(products.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(products.metadata(), @r###"
         {
           "uid": "products",
           "primaryKey": "sku",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2022-10-09T20:27:22.688964637Z",
+          "updatedAt": "2022-10-09T20:27:23.951017769Z"
         }
         "###);
 
@@ -263,12 +292,12 @@ pub(crate) mod test {
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"548284a84de510f71e88e6cdea495cf5");
 
         // movies
-        insta::assert_json_snapshot!(movies.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(movies.metadata(), @r###"
         {
           "uid": "movies",
           "primaryKey": "id",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2022-10-09T20:27:22.197788495Z",
+          "updatedAt": "2022-10-09T20:28:01.93111053Z"
         }
         "###);
 
@@ -293,12 +322,12 @@ pub(crate) mod test {
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"d751713988987e9331980363e24189ce");
 
         // spells
-        insta::assert_json_snapshot!(spells.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(spells.metadata(), @r###"
         {
           "uid": "dnd_spells",
           "primaryKey": "index",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2022-10-09T20:27:24.242683494Z",
+          "updatedAt": "2022-10-09T20:27:24.312809641Z"
         }
         "###);
 
@@ -340,12 +369,12 @@ pub(crate) mod test {
         assert!(indexes.is_empty());
 
         // products
-        insta::assert_json_snapshot!(products.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(products.metadata(), @r###"
         {
           "uid": "products",
           "primaryKey": "sku",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2023-01-30T16:25:56.595257Z",
+          "updatedAt": "2023-01-30T16:25:58.70348Z"
         }
         "###);
 
@@ -355,12 +384,12 @@ pub(crate) mod test {
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"548284a84de510f71e88e6cdea495cf5");
 
         // movies
-        insta::assert_json_snapshot!(movies.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(movies.metadata(), @r###"
         {
           "uid": "movies",
           "primaryKey": "id",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2023-01-30T16:25:56.192178Z",
+          "updatedAt": "2023-01-30T16:25:56.455714Z"
         }
         "###);
 
@@ -370,12 +399,12 @@ pub(crate) mod test {
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"0227598af846e574139ee0b80e03a720");
 
         // spells
-        insta::assert_json_snapshot!(spells.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(spells.metadata(), @r###"
         {
           "uid": "dnd_spells",
           "primaryKey": "index",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2023-01-30T16:25:58.876405Z",
+          "updatedAt": "2023-01-30T16:25:59.079906Z"
         }
         "###);
 
