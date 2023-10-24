@@ -8,6 +8,7 @@ use charabia::{Language, Script};
 use grenad::MergerBuilder;
 use heed::types::ByteSlice;
 use heed::RwTxn;
+use obkv::{KvReader, KvWriter};
 use roaring::RoaringBitmap;
 
 use super::helpers::{self, merge_ignore_values, valid_lmdb_key, CursorClonableMmap};
@@ -19,7 +20,9 @@ use crate::index::Hnsw;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd};
 use crate::update::facet::FacetsUpdate;
 use crate::update::index_documents::helpers::{as_cloneable_grenad, try_split_array_at};
-use crate::{lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index, Result, BEU32};
+use crate::{
+    lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, FieldId, GeoPoint, Index, Result, BEU32,
+};
 
 pub(crate) enum TypedChunk {
     FieldIdDocidFacetStrings(grenad::Reader<CursorClonableMmap>),
@@ -120,8 +123,20 @@ pub(crate) fn write_typed_chunk_into_index(
     match typed_chunk {
         TypedChunk::Documents(obkv_documents_iter) => {
             let mut cursor = obkv_documents_iter.into_cursor()?;
-            while let Some((key, value)) = cursor.move_on_next()? {
-                index.documents.remap_types::<ByteSlice, ByteSlice>().put(wtxn, key, value)?;
+            while let Some((docid, reader)) = cursor.move_on_next()? {
+                let mut writer: KvWriter<_, FieldId> = KvWriter::memory();
+                let reader: KvReader<FieldId> = KvReader::new(reader);
+                for (field_id, value) in reader.iter() {
+                    let Some(value) = KvReaderDelAdd::new(value).get(DelAdd::Addition) else {
+                        continue;
+                    };
+                    writer.insert(field_id, value)?;
+                }
+                index.documents.remap_types::<ByteSlice, ByteSlice>().put(
+                    wtxn,
+                    docid,
+                    &writer.into_inner().unwrap(),
+                )?;
             }
         }
         TypedChunk::FieldIdWordCountDocids(fid_word_count_docids_iter) => {
