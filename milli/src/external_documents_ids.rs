@@ -7,133 +7,118 @@ use fst::map::IndexedValue;
 use fst::{IntoStreamer, Streamer};
 use roaring::RoaringBitmap;
 
+use crate::DocumentId;
+
 const DELETED_ID: u64 = u64::MAX;
 
-pub struct ExternalDocumentsIds<'a> {
-    pub(crate) hard: fst::Map<Cow<'a, [u8]>>,
-    pub(crate) soft: fst::Map<Cow<'a, [u8]>>,
-    soft_deleted_docids: RoaringBitmap,
+pub enum DocumentOperationKind {
+    Create,
+    Delete,
 }
 
+pub struct DocumentOperation {
+    pub external_id: String,
+    pub internal_id: DocumentId,
+    pub kind: DocumentOperationKind,
+}
+
+pub struct ExternalDocumentsIds<'a>(fst::Map<Cow<'a, [u8]>>);
+
 impl<'a> ExternalDocumentsIds<'a> {
-    pub fn new(
-        hard: fst::Map<Cow<'a, [u8]>>,
-        soft: fst::Map<Cow<'a, [u8]>>,
-        soft_deleted_docids: RoaringBitmap,
-    ) -> ExternalDocumentsIds<'a> {
-        ExternalDocumentsIds { hard, soft, soft_deleted_docids }
+    pub fn new(fst: fst::Map<Cow<'a, [u8]>>) -> ExternalDocumentsIds<'a> {
+        ExternalDocumentsIds(fst)
     }
 
     pub fn into_static(self) -> ExternalDocumentsIds<'static> {
-        ExternalDocumentsIds {
-            hard: self.hard.map_data(|c| Cow::Owned(c.into_owned())).unwrap(),
-            soft: self.soft.map_data(|c| Cow::Owned(c.into_owned())).unwrap(),
-            soft_deleted_docids: self.soft_deleted_docids,
-        }
+        ExternalDocumentsIds(self.0.map_data(|c| Cow::Owned(c.into_owned())).unwrap())
     }
 
     /// Returns `true` if hard and soft external documents lists are empty.
     pub fn is_empty(&self) -> bool {
-        self.hard.is_empty() && self.soft.is_empty()
+        self.0.is_empty()
     }
 
     pub fn get<A: AsRef<[u8]>>(&self, external_id: A) -> Option<u32> {
         let external_id = external_id.as_ref();
-        match self.soft.get(external_id).or_else(|| self.hard.get(external_id)) {
-            Some(id) if id != DELETED_ID && !self.soft_deleted_docids.contains(id as u32) => {
-                Some(id.try_into().unwrap())
-            }
-            _otherwise => None,
-        }
-    }
-
-    /// Rebuild the internal FSTs in the ExternalDocumentsIds structure such that they
-    /// don't contain any soft deleted document id.
-    pub fn delete_soft_deleted_documents_ids_from_fsts(&mut self) -> fst::Result<()> {
-        let mut new_hard_builder = fst::MapBuilder::memory();
-
-        let union_op = self.hard.op().add(&self.soft).r#union();
-        let mut iter = union_op.into_stream();
-        while let Some((external_id, docids)) = iter.next() {
-            // prefer selecting the ids from soft, always
-            let id = indexed_last_value(docids).unwrap();
-            if id != DELETED_ID && !self.soft_deleted_docids.contains(id as u32) {
-                new_hard_builder.insert(external_id, id)?;
-            }
-        }
-        drop(iter);
-
-        // Delete soft map completely
-        self.soft = fst::Map::default().map_data(Cow::Owned)?;
-        // We save the new map as the new hard map.
-        self.hard = new_hard_builder.into_map().map_data(Cow::Owned)?;
-
-        Ok(())
-    }
-
-    pub fn insert_ids<A: AsRef<[u8]>>(&mut self, other: &fst::Map<A>) -> fst::Result<()> {
-        let union_op = self.soft.op().add(other).r#union();
-
-        let mut new_soft_builder = fst::MapBuilder::memory();
-        let mut iter = union_op.into_stream();
-        while let Some((external_id, marked_docids)) = iter.next() {
-            let id = indexed_last_value(marked_docids).unwrap();
-            new_soft_builder.insert(external_id, id)?;
-        }
-
-        drop(iter);
-
-        // We save the new map as the new soft map.
-        self.soft = new_soft_builder.into_map().map_data(Cow::Owned)?;
-        self.merge_soft_into_hard()
+        self.0.get(external_id).map(|x| x.try_into().unwrap())
     }
 
     /// An helper function to debug this type, returns an `HashMap` of both,
     /// soft and hard fst maps, combined.
     pub fn to_hash_map(&self) -> HashMap<String, u32> {
-        let mut map = HashMap::new();
-
-        let union_op = self.hard.op().add(&self.soft).r#union();
-        let mut iter = union_op.into_stream();
-        while let Some((external_id, marked_docids)) = iter.next() {
-            let id = indexed_last_value(marked_docids).unwrap();
-            if id != DELETED_ID {
-                let external_id = str::from_utf8(external_id).unwrap();
-                map.insert(external_id.to_owned(), id.try_into().unwrap());
-            }
+        let mut map = HashMap::default();
+        let mut stream = self.0.stream();
+        while let Some((k, v)) = stream.next() {
+            let k = String::from_utf8(k.to_vec()).unwrap();
+            map.insert(k, v.try_into().unwrap());
         }
-
         map
     }
 
-    /// Return an fst of the combined hard and soft deleted ID.
-    pub fn to_fst<'b>(&'b self) -> fst::Result<Cow<'b, fst::Map<Cow<'a, [u8]>>>> {
-        if self.soft.is_empty() {
-            return Ok(Cow::Borrowed(&self.hard));
-        }
-        let union_op = self.hard.op().add(&self.soft).r#union();
-
-        let mut iter = union_op.into_stream();
-        let mut new_hard_builder = fst::MapBuilder::memory();
-        while let Some((external_id, marked_docids)) = iter.next() {
-            let value = indexed_last_value(marked_docids).unwrap();
-            if value != DELETED_ID {
-                new_hard_builder.insert(external_id, value)?;
-            }
-        }
-
-        drop(iter);
-
-        Ok(Cow::Owned(new_hard_builder.into_map().map_data(Cow::Owned)?))
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_fst().as_bytes()
     }
 
-    fn merge_soft_into_hard(&mut self) -> fst::Result<()> {
-        if self.soft.len() >= self.hard.len() / 2 {
-            self.hard = self.to_fst()?.into_owned();
-            self.soft = fst::Map::default().map_data(Cow::Owned)?;
-        }
+    /// Apply the list of operations passed as argument, modifying the current external to internal id mapping.
+    ///
+    /// If the list contains multiple operations on the same external id, then the result is unspecified.
+    ///
+    /// # Panics
+    ///
+    /// - If attempting to delete a document that doesn't exist
+    /// - If attempting to create a document that already exists
+    pub fn apply(&mut self, mut operations: Vec<DocumentOperation>) {
+        operations.sort_unstable_by(|left, right| left.external_id.cmp(&right.external_id));
+        operations.dedup_by(|left, right| left.external_id == right.external_id);
 
-        Ok(())
+        let mut builder = fst::MapBuilder::memory();
+
+        let mut stream = self.0.stream();
+        let mut next_stream = stream.next();
+        let mut operations = operations.iter();
+        let mut next_operation = operations.next();
+
+        loop {
+            (next_stream, next_operation) = match (next_stream.take(), next_operation.take()) {
+                (None, None) => break,
+                (None, Some(DocumentOperation { external_id, internal_id, kind })) => {
+                    if matches!(kind, DocumentOperationKind::Delete) {
+                        panic!("Attempting to delete a non-existing document")
+                    }
+                    builder.insert(external_id, (*internal_id).into()).unwrap();
+                    (None, operations.next())
+                }
+                (Some((k, v)), None) => {
+                    builder.insert(k, v).unwrap();
+                    (stream.next(), None)
+                }
+                (
+                    current_stream @ Some((left_external_id, left_internal_id)),
+                    current_operation @ Some(DocumentOperation {
+                        external_id: right_external_id,
+                        internal_id: right_internal_id,
+                        kind,
+                    }),
+                ) => match left_external_id.cmp(right_external_id.as_bytes()) {
+                    std::cmp::Ordering::Less => {
+                        builder.insert(left_external_id, left_internal_id).unwrap();
+                        (stream.next(), current_operation)
+                    }
+                    std::cmp::Ordering::Greater => {
+                        builder.insert(right_external_id, (*right_internal_id).into()).unwrap();
+                        (current_stream, operations.next())
+                    }
+                    std::cmp::Ordering::Equal => {
+                        if matches!(kind, DocumentOperationKind::Create) {
+                            panic!("Attempting to create an already-existing document");
+                        }
+                        // we delete the document, so we just advance both iterators to skip in stream
+                        (stream.next(), operations.next())
+                    }
+                },
+            }
+        }
+        self.0 = builder.into_map().map_data(Cow::Owned).unwrap();
     }
 }
 
@@ -145,11 +130,7 @@ impl fmt::Debug for ExternalDocumentsIds<'_> {
 
 impl Default for ExternalDocumentsIds<'static> {
     fn default() -> Self {
-        ExternalDocumentsIds {
-            hard: fst::Map::default().map_data(Cow::Owned).unwrap(),
-            soft: fst::Map::default().map_data(Cow::Owned).unwrap(),
-            soft_deleted_docids: RoaringBitmap::new(),
-        }
+        ExternalDocumentsIds(fst::Map::default().map_data(Cow::Owned).unwrap())
     }
 }
 
