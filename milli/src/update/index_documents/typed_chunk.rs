@@ -29,7 +29,6 @@ pub(crate) enum TypedChunk {
     FieldIdDocidFacetNumbers(grenad::Reader<CursorClonableMmap>),
     Documents(grenad::Reader<CursorClonableMmap>),
     FieldIdWordCountDocids(grenad::Reader<File>),
-    NewDocumentsIds(RoaringBitmap),
     WordDocids {
         word_docids_reader: grenad::Reader<File>,
         exact_word_docids_reader: grenad::Reader<File>,
@@ -61,9 +60,6 @@ impl TypedChunk {
             }
             TypedChunk::FieldIdWordCountDocids(grenad) => {
                 format!("FieldIdWordcountDocids {{ number_of_entries: {} }}", grenad.len())
-            }
-            TypedChunk::NewDocumentsIds(grenad) => {
-                format!("NewDocumentsIds {{ number_of_entries: {} }}", grenad.len())
             }
             TypedChunk::WordDocids {
                 word_docids_reader,
@@ -149,9 +145,6 @@ pub(crate) fn write_typed_chunk_into_index(
                 merge_deladd_cbo_roaring_bitmaps,
             )?;
             is_merged_database = true;
-        }
-        TypedChunk::NewDocumentsIds(documents_ids) => {
-            return Ok((documents_ids, is_merged_database))
         }
         TypedChunk::WordDocids {
             word_docids_reader,
