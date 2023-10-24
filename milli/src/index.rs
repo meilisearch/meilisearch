@@ -52,11 +52,10 @@ pub mod main_key {
     /// It is concatenated with a big-endian encoded number (non-human readable).
     /// e.g. vector-hnsw0x0032.
     pub const VECTOR_HNSW_KEY_PREFIX: &str = "vector-hnsw";
-    pub const HARD_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "hard-external-documents-ids";
+    pub const EXTERNAL_DOCUMENTS_IDS_KEY: &str = "external-documents-ids";
     pub const PRIMARY_KEY_KEY: &str = "primary-key";
     pub const SEARCHABLE_FIELDS_KEY: &str = "searchable-fields";
     pub const USER_DEFINED_SEARCHABLE_FIELDS_KEY: &str = "user-defined-searchable-fields";
-    pub const SOFT_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "soft-external-documents-ids";
     pub const STOP_WORDS_KEY: &str = "stop-words";
     pub const NON_SEPARATOR_TOKENS_KEY: &str = "non-separator-tokens";
     pub const SEPARATOR_TOKENS_KEY: &str = "separator-tokens";
@@ -417,18 +416,10 @@ impl Index {
         wtxn: &mut RwTxn,
         external_documents_ids: &ExternalDocumentsIds<'_>,
     ) -> heed::Result<()> {
-        let ExternalDocumentsIds { hard, soft, .. } = external_documents_ids;
-        let hard = hard.as_fst().as_bytes();
-        let soft = soft.as_fst().as_bytes();
         self.main.put::<_, Str, ByteSlice>(
             wtxn,
-            main_key::HARD_EXTERNAL_DOCUMENTS_IDS_KEY,
-            hard,
-        )?;
-        self.main.put::<_, Str, ByteSlice>(
-            wtxn,
-            main_key::SOFT_EXTERNAL_DOCUMENTS_IDS_KEY,
-            soft,
+            main_key::EXTERNAL_DOCUMENTS_IDS_KEY,
+            external_documents_ids.as_bytes(),
         )?;
         Ok(())
     }
@@ -436,20 +427,12 @@ impl Index {
     /// Returns the external documents ids map which associate the external ids
     /// with the internal ids (i.e. `u32`).
     pub fn external_documents_ids<'t>(&self, rtxn: &'t RoTxn) -> Result<ExternalDocumentsIds<'t>> {
-        let hard =
-            self.main.get::<_, Str, ByteSlice>(rtxn, main_key::HARD_EXTERNAL_DOCUMENTS_IDS_KEY)?;
-        let soft =
-            self.main.get::<_, Str, ByteSlice>(rtxn, main_key::SOFT_EXTERNAL_DOCUMENTS_IDS_KEY)?;
-        let hard = match hard {
-            Some(hard) => fst::Map::new(hard)?.map_data(Cow::Borrowed)?,
+        let fst = self.main.get::<_, Str, ByteSlice>(rtxn, main_key::EXTERNAL_DOCUMENTS_IDS_KEY)?;
+        let fst = match fst {
+            Some(fst) => fst::Map::new(fst)?.map_data(Cow::Borrowed)?,
             None => fst::Map::default().map_data(Cow::Owned)?,
         };
-        let soft = match soft {
-            Some(soft) => fst::Map::new(soft)?.map_data(Cow::Borrowed)?,
-            None => fst::Map::default().map_data(Cow::Owned)?,
-        };
-        let soft_deleted_docids = self.soft_deleted_documents_ids(rtxn)?;
-        Ok(ExternalDocumentsIds::new(hard, soft, soft_deleted_docids))
+        Ok(ExternalDocumentsIds::new(fst))
     }
 
     /* fields ids map */
