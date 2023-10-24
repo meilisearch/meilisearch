@@ -71,6 +71,7 @@ impl CboRoaringBitmapCodec {
         for bytes in slices {
             if bytes.len() <= THRESHOLD * size_of::<u32>() {
                 debug_assert!(bytes.len() % size_of::<u32>() == 0);
+                vec.reserve(bytes.len() / size_of::<u32>());
 
                 for bytes in bytes.chunks_exact(size_of::<u32>()) {
                     // unwrap can't happens since we ensured that everything
