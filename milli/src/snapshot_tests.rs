@@ -4,9 +4,8 @@ use std::path::Path;
 
 use roaring::RoaringBitmap;
 
-use crate::facet::FacetType;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
-use crate::{make_db_snap_from_iter, obkv_to_json, ExternalDocumentsIds, Index};
+use crate::{make_db_snap_from_iter, obkv_to_json, Index};
 
 #[track_caller]
 pub fn default_db_snapshot_settings_for_test(name: Option<&str>) -> (insta::Settings, String) {

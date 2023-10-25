@@ -923,7 +923,7 @@ mod tests {
     use super::*;
     use crate::error::Error;
     use crate::index::tests::TempIndex;
-    use crate::update::{ClearDocuments, DeleteDocuments};
+    use crate::update::ClearDocuments;
     use crate::{Criterion, Filter, SearchResult};
 
     #[test]
@@ -1768,13 +1768,9 @@ mod tests {
         }
         index.add_documents(documents! { docs }).unwrap();
 
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        (0..5).for_each(|id| {
-            builder.delete_external_id(&id.to_string());
-        });
-        builder.execute().unwrap();
+        index.delete_documents((0..5).map(|id| id.to_string()).collect());
 
+        let mut wtxn = index.write_txn().unwrap();
         index
             .update_settings_using_wtxn(&mut wtxn, |settings| {
                 settings.set_searchable_fields(vec!["id".to_string()]);

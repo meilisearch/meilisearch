@@ -142,9 +142,6 @@ pub fn write_into_lmdb_database_without_merging(
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
-    use std::iter::FromIterator;
-
-    use roaring::RoaringBitmap;
 
     use crate::db_snap;
     use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
@@ -335,22 +332,14 @@ mod tests {
         db_snap!(index, word_prefix_pair_proximity_docids, "initial");
         db_snap!(index, prefix_word_pair_proximity_docids, "initial");
 
-        let mut wtxn = index.write_txn().unwrap();
-        let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        delete.delete_documents(&RoaringBitmap::from_iter([50]));
-        delete.execute().unwrap();
-        wtxn.commit().unwrap();
+        index.delete_document("9000");
 
         db_snap!(index, documents_ids, "first_delete");
         db_snap!(index, word_docids, "first_delete");
         db_snap!(index, word_prefix_pair_proximity_docids, "first_delete");
         db_snap!(index, prefix_word_pair_proximity_docids, "first_delete");
 
-        let mut wtxn = index.write_txn().unwrap();
-        let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        delete.delete_documents(&RoaringBitmap::from_iter(0..50));
-        delete.execute().unwrap();
-        wtxn.commit().unwrap();
+        index.delete_documents((0..50).map(|id| id.to_string()).collect());
 
         db_snap!(index, documents_ids, "second_delete");
         db_snap!(index, word_docids, "second_delete");
@@ -417,23 +406,14 @@ mod tests {
         db_snap!(index, word_prefix_pair_proximity_docids, "initial");
         db_snap!(index, prefix_word_pair_proximity_docids, "initial");
 
-        let mut wtxn = index.write_txn().unwrap();
-        let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        delete.delete_documents(&RoaringBitmap::from_iter([50]));
-        delete.execute().unwrap();
-        wtxn.commit().unwrap();
+        index.delete_document("9000");
 
         db_snap!(index, documents_ids, "first_delete");
         db_snap!(index, word_docids, "first_delete");
         db_snap!(index, word_prefix_pair_proximity_docids, "first_delete");
         db_snap!(index, prefix_word_pair_proximity_docids, "first_delete");
 
-        let mut wtxn = index.write_txn().unwrap();
-        let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-
-        delete.delete_documents(&RoaringBitmap::from_iter(0..50));
-        delete.execute().unwrap();
-        wtxn.commit().unwrap();
+        index.delete_documents((0..50).map(|id| id.to_string()).collect());
 
         db_snap!(index, documents_ids, "second_delete");
         db_snap!(index, word_docids, "second_delete");

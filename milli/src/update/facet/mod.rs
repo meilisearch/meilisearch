@@ -561,7 +561,7 @@ mod tests {
 
     #[test]
     fn replace_all_identical_soft_deletion_then_hard_deletion() {
-        let mut index = TempIndex::new_with_map_size(4096 * 1000 * 100);
+        let index = TempIndex::new_with_map_size(4096 * 1000 * 100);
 
         index
             .update_settings(|settings| {
