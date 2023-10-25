@@ -1880,8 +1880,7 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[0, 1, 2, 3, ]");
         db_snap!(index, external_documents_ids, 1, @r###"
-        soft:
-        hard:
+        docids:
         0                        0
         1                        1
         2                        2
@@ -1902,13 +1901,12 @@ pub(crate) mod tests {
         }
         index.add_documents(documents!(docs)).unwrap();
 
-        db_snap!(index, documents_ids, @"[3, 4, 5, 6, ]");
+        db_snap!(index, documents_ids, @"[0, 1, 2, 3, ]");
         db_snap!(index, external_documents_ids, 2, @r###"
-        soft:
-        hard:
-        0                        4
-        1                        5
-        2                        6
+        docids:
+        0                        0
+        1                        1
+        2                        2
         3                        3
         "###);
         db_snap!(index, facet_id_f64_docids, 2, @r###"
@@ -1922,14 +1920,12 @@ pub(crate) mod tests {
             .add_documents(documents!([{ "id": 3, "doggo": 4 }, { "id": 3, "doggo": 5 },{ "id": 3, "doggo": 4 }]))
             .unwrap();
 
-        db_snap!(index, documents_ids, @"[4, 5, 6, 7, ]");
+        db_snap!(index, documents_ids, @"[0, 1, 2, 3, ]");
         db_snap!(index, external_documents_ids, 3, @r###"
-        soft:
-        3                        7
-        hard:
-        0                        4
-        1                        5
-        2                        6
+        docids:
+        0                        0
+        1                        1
+        2                        2
         3                        3
         "###);
         db_snap!(index, facet_id_f64_docids, 3, @r###"
@@ -1946,14 +1942,13 @@ pub(crate) mod tests {
             })
             .unwrap();
 
-        db_snap!(index, documents_ids, @"[4, 5, 6, 7, ]");
+        db_snap!(index, documents_ids, @"[0, 1, 2, 3, ]");
         db_snap!(index, external_documents_ids, 3, @r###"
-        soft:
-        hard:
-        0                        4
-        1                        5
-        2                        6
-        3                        7
+        docids:
+        0                        0
+        1                        1
+        2                        2
+        3                        3
         "###);
         db_snap!(index, facet_id_f64_docids, 3, @r###"
         0   0  0      1  [4, ]
@@ -2010,8 +2005,7 @@ pub(crate) mod tests {
 
             db_snap!(index, documents_ids, @"[0, 1, 2, 3, ]");
             db_snap!(index, external_documents_ids, 1, @r###"
-            soft:
-            hard:
+            docids:
             0                        0
             1                        1
             2                        2
@@ -2040,13 +2034,12 @@ pub(crate) mod tests {
             }
             add_documents(&index, vec![docs1, docs2]);
 
-            db_snap!(index, documents_ids, @"[3, 4, 5, 6, ]");
+            db_snap!(index, documents_ids, @"[0, 1, 2, 3, ]");
             db_snap!(index, external_documents_ids, 1, @r###"
-            soft:
-            hard:
-            0                        4
-            1                        5
-            2                        6
+            docids:
+            0                        0
+            1                        1
+            2                        2
             3                        3
             "###);
             db_snap!(index, facet_id_f64_docids, 1, @r###"
@@ -2248,8 +2241,7 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[0, 1, ]");
         db_snap!(index, external_documents_ids, 1, @r###"
-        soft:
-        hard:
+        docids:
         34                       1
         38                       0
         "###);
@@ -2258,9 +2250,7 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[0, ]");
         db_snap!(index, external_documents_ids, 2, @r###"
-        soft:
-        hard:
-        34                       1
+        docids:
         38                       0
         "###);
 
@@ -2274,8 +2264,7 @@ pub(crate) mod tests {
         // do not contain any entry for previously soft-deleted document ids
         db_snap!(index, documents_ids, @"[0, ]");
         db_snap!(index, external_documents_ids, 3, @r###"
-        soft:
-        hard:
+        docids:
         38                       0
         "###);
 
@@ -2285,8 +2274,7 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[0, 1, ]");
         db_snap!(index, external_documents_ids, 4, @r###"
-        soft:
-        hard:
+        docids:
         34                       1
         38                       0
         "###);
@@ -2296,10 +2284,8 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[1, ]");
         db_snap!(index, external_documents_ids, 5, @r###"
-        soft:
-        hard:
+        docids:
         34                       1
-        38                       0
         "###);
 
         index
@@ -2310,8 +2296,7 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[1, ]");
         db_snap!(index, external_documents_ids, 6, @r###"
-        soft:
-        hard:
+        docids:
         34                       1
         "###);
 
@@ -2321,8 +2306,7 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[0, 1, 2, 3, 4, 5, ]");
         db_snap!(index, external_documents_ids, 7, @r###"
-        soft:
-        hard:
+        docids:
         34                       1
         38                       0
         39                       2
@@ -2379,8 +2363,7 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[0, 1, ]");
         db_snap!(index, external_documents_ids, 1, @r###"
-        soft:
-        hard:
+        docids:
         30                       0
         34                       1
         "###);
@@ -2389,10 +2372,8 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[0, ]");
         db_snap!(index, external_documents_ids, 2, @r###"
-        soft:
-        hard:
+        docids:
         30                       0
-        34                       1
         "###);
 
         index
@@ -2405,8 +2386,7 @@ pub(crate) mod tests {
         // do not contain any entry for previously soft-deleted document ids
         db_snap!(index, documents_ids, @"[0, ]");
         db_snap!(index, external_documents_ids, 3, @r###"
-        soft:
-        hard:
+        docids:
         30                       0
         "###);
 
@@ -2417,8 +2397,7 @@ pub(crate) mod tests {
         // The external documents ids don't have several external ids pointing to the same
         // internal document id
         db_snap!(index, external_documents_ids, 4, @r###"
-        soft:
-        hard:
+        docids:
         30                       0
         35                       1
         "###);
@@ -2429,8 +2408,7 @@ pub(crate) mod tests {
         // And document 35 still exists, is not deleted
         db_snap!(index, documents_ids, @"[0, 1, 2, ]");
         db_snap!(index, external_documents_ids, 5, @r###"
-        soft:
-        hard:
+        docids:
         30                       0
         34                       2
         35                       1
@@ -2466,8 +2444,7 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[0, 1, 2, 3, 4, 5, ]");
         db_snap!(index, external_documents_ids, 6, @r###"
-        soft:
-        hard:
+        docids:
         30                       0
         34                       2
         35                       1
@@ -2499,8 +2476,7 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[0, 1, 2, ]");
         db_snap!(index, external_documents_ids, 1, @r###"
-        soft:
-        hard:
+        docids:
         3                        0
         4                        1
         5                        2
@@ -2510,20 +2486,17 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[1, 2, ]");
         db_snap!(index, external_documents_ids, 2, @r###"
-        soft:
-        hard:
-        3                        0
+        docids:
         4                        1
         5                        2
         "###);
 
         index.add_documents(documents!([{ "primary_key": "4", "a": 2 }])).unwrap();
 
-        db_snap!(index, documents_ids, @"[2, 3, ]");
+        db_snap!(index, documents_ids, @"[1, 2, ]");
         db_snap!(index, external_documents_ids, 2, @r###"
-        soft:
-        hard:
-        4                        3
+        docids:
+        4                        1
         5                        2
         "###);
 
@@ -2533,12 +2506,11 @@ pub(crate) mod tests {
             ]))
             .unwrap();
 
-        db_snap!(index, documents_ids, @"[0, 2, 3, ]");
+        db_snap!(index, documents_ids, @"[0, 1, 2, ]");
         db_snap!(index, external_documents_ids, 2, @r###"
-        soft:
-        hard:
+        docids:
         3                        0
-        4                        3
+        4                        1
         5                        2
         "###);
     }
@@ -2564,8 +2536,7 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[0, 1, ]");
         db_snap!(index, external_documents_ids, @r###"
-        soft:
-        hard:
+        docids:
         11                       0
         4                        1
         "###);
@@ -2577,24 +2548,22 @@ pub(crate) mod tests {
             ]))
             .unwrap();
 
-        db_snap!(index, documents_ids, @"[0, 2, 3, ]");
+        db_snap!(index, documents_ids, @"[0, 1, 2, ]");
         db_snap!(index, external_documents_ids, @r###"
-        soft:
-        hard:
-        1                        3
+        docids:
+        1                        2
         11                       0
-        4                        2
+        4                        1
         "###);
 
         index.delete_documents(Default::default());
 
-        db_snap!(index, documents_ids, @"[0, 2, 3, ]");
+        db_snap!(index, documents_ids, @"[0, 1, 2, ]");
         db_snap!(index, external_documents_ids, @r###"
-        soft:
-        hard:
-        1                        3
+        docids:
+        1                        2
         11                       0
-        4                        2
+        4                        1
         "###);
 
         index
@@ -2604,11 +2573,10 @@ pub(crate) mod tests {
             ]))
             .unwrap();
 
-        db_snap!(index, documents_ids, @"[0, 1, 4, ]");
+        db_snap!(index, documents_ids, @"[0, 1, 2, ]");
         db_snap!(index, external_documents_ids, @r###"
-        soft:
-        hard:
-        1                        4
+        docids:
+        1                        2
         11                       0
         4                        1
         "###);

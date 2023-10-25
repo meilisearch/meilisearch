@@ -2586,8 +2586,7 @@ mod tests {
         {"id":1,"doggo":"bernese"}
         "###);
         db_snap!(index, external_documents_ids, @r###"
-        soft:
-        hard:
+        docids:
         1                        0
         "###);
 
@@ -2632,8 +2631,7 @@ mod tests {
         "###);
 
         db_snap!(index, external_documents_ids, @r###"
-        soft:
-        hard:
+        docids:
         0                        1
         "###);
 
