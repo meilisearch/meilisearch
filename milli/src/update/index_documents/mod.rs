@@ -696,7 +696,6 @@ mod tests {
     use crate::documents::documents_batch_reader_from_objects;
     use crate::index::tests::TempIndex;
     use crate::search::TermsMatchingStrategy;
-    use crate::update::DeleteDocuments;
     use crate::{db_snap, BEU16};
 
     #[test]
@@ -1101,17 +1100,15 @@ mod tests {
                 { "objectId": 30,  "title": "Hamlet", "_geo": { "lat": 12, "lng": 89 } }
             ]))
             .unwrap();
-        let mut wtxn = index.write_txn().unwrap();
-        assert_eq!(index.primary_key(&wtxn).unwrap(), Some("objectId"));
 
         // Delete not all of the documents but some of them.
-        let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        builder.delete_external_id("30");
-        builder.execute().unwrap();
+        index.delete_document("30");
 
-        let external_documents_ids = index.external_documents_ids(&wtxn).unwrap();
+        let txn = index.read_txn().unwrap();
+        assert_eq!(index.primary_key(&txn).unwrap(), Some("objectId"));
+
+        let external_documents_ids = index.external_documents_ids(&txn).unwrap();
         assert!(external_documents_ids.get("30").is_none());
-        wtxn.commit().unwrap();
 
         index
             .add_documents(documents!([
@@ -2493,16 +2490,8 @@ mod tests {
         db_snap!(index, word_fid_docids, 2, @"a48d3f88db33f94bc23110a673ea49e4");
         db_snap!(index, word_position_docids, 2, @"3c9e66c6768ae2cf42b46b2c46e46a83");
 
-        let mut wtxn = index.write_txn().unwrap();
-
         // Delete not all of the documents but some of them.
-        let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        builder.delete_external_id("0");
-        builder.delete_external_id("3");
-        let result = builder.execute().unwrap();
-        println!("{result:?}");
-
-        wtxn.commit().unwrap();
+        index.delete_documents(vec!["0".into(), "3".into()]);
 
         db_snap!(index, word_fid_docids, 3, @"4c2e2a1832e5802796edc1638136d933");
         db_snap!(index, word_position_docids, 3, @"74f556b91d161d997a89468b4da1cb8f");
@@ -2557,7 +2546,7 @@ mod tests {
             ),
         ]
         */
-        let mut index = TempIndex::new();
+        let index = TempIndex::new();
 
         // START OF BATCH
 

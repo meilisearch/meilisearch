@@ -1861,8 +1861,7 @@ pub(crate) mod tests {
         use big_s::S;
         use maplit::hashset;
 
-        let mut index = TempIndex::new();
-        let index = index;
+        let index = TempIndex::new();
 
         index
             .update_settings(|settings| {
@@ -1973,7 +1972,7 @@ pub(crate) mod tests {
         use big_s::S;
         use maplit::hashset;
 
-        let mut index = TempIndex::new();
+        let index = TempIndex::new();
 
         index
             .update_settings(|settings| {
@@ -2561,10 +2560,7 @@ pub(crate) mod tests {
         4                        2
         "###);
 
-        let mut wtxn = index.write_txn().unwrap();
-        let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        delete.execute().unwrap();
-        wtxn.commit().unwrap();
+        index.delete_documents(Default::default());
 
         db_snap!(index, documents_ids, @"[0, 2, 3, ]");
         db_snap!(index, external_documents_ids, @r###"
