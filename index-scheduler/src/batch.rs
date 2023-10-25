@@ -29,8 +29,7 @@ use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
 use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::update::{
-    DeleteDocuments, DocumentDeletionResult, IndexDocumentsConfig, IndexDocumentsMethod,
-    Settings as MilliSettings,
+    IndexDocumentsConfig, IndexDocumentsMethod, Settings as MilliSettings,
 };
 use meilisearch_types::milli::{self, Filter, BEU32};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
@@ -1190,7 +1189,8 @@ impl IndexScheduler {
                             let (new_builder, user_result) =
                                 builder.remove_documents(document_ids)?;
                             builder = new_builder;
-
+                            // Uses Invariant: remove documents actually always returns Ok for the inner result
+                            let count = user_result.unwrap();
                             let provided_ids =
                                 if let Some(Details::DocumentDeletion { provided_ids, .. }) =
                                     task.details
@@ -1201,23 +1201,11 @@ impl IndexScheduler {
                                     unreachable!();
                                 };
 
-                            match user_result {
-                                Ok(count) => {
-                                    task.status = Status::Succeeded;
-                                    task.details = Some(Details::DocumentDeletion {
-                                        provided_ids,
-                                        deleted_documents: Some(count),
-                                    });
-                                }
-                                Err(e) => {
-                                    task.status = Status::Failed;
-                                    task.details = Some(Details::DocumentDeletion {
-                                        provided_ids,
-                                        deleted_documents: Some(0),
-                                    });
-                                    task.error = Some(milli::Error::from(e).into());
-                                }
-                            }
+                            task.status = Status::Succeeded;
+                            task.details = Some(Details::DocumentDeletion {
+                                provided_ids,
+                                deleted_documents: Some(count),
+                            });
                         }
                     }
                 }
@@ -1240,19 +1228,40 @@ impl IndexScheduler {
                 Ok(tasks)
             }
             IndexOperation::DocumentDeletion { index_uid: _, documents, mut tasks } => {
-                let mut builder = milli::update::DeleteDocuments::new(index_wtxn, index)?;
-                documents.iter().flatten().for_each(|id| {
-                    builder.delete_external_id(id);
-                });
+                let indexer_config = self.index_mapper.indexer_config();
+                let config = IndexDocumentsConfig {
+                    update_method: IndexDocumentsMethod::ReplaceDocuments,
+                    ..Default::default()
+                };
+                let must_stop_processing = self.must_stop_processing.clone();
 
-                let DocumentDeletionResult { deleted_documents, .. } = builder.execute()?;
+                let mut builder = milli::update::IndexDocuments::new(
+                    index_wtxn,
+                    index,
+                    indexer_config,
+                    config,
+                    |indexing_step| debug!("update: {:?}", indexing_step),
+                    || must_stop_processing.get(),
+                )?;
+
+                let document_ids = documents.iter().cloned().flatten().collect();
+
+                let (new_builder, user_result) = builder.remove_documents(document_ids)?;
+                builder = new_builder;
+                // Uses Invariant: remove documents actually always returns Ok for the inner result
+                let count = user_result.unwrap();
 
                 for (task, documents) in tasks.iter_mut().zip(documents) {
                     task.status = Status::Succeeded;
                     task.details = Some(Details::DocumentDeletion {
                         provided_ids: documents.len(),
-                        deleted_documents: Some(deleted_documents.min(documents.len() as u64)),
+                        deleted_documents: Some(count.min(documents.len() as u64)),
                     });
+                }
+
+                if !tasks.iter().all(|res| res.error.is_some()) {
+                    let addition = builder.execute()?;
+                    info!("document deletion done: {:?}", addition);
                 }
 
                 Ok(tasks)
@@ -1510,9 +1519,10 @@ fn delete_document_by_filter<'a>(
             }
             e => e.into(),
         })?;
-        let mut delete_operation = DeleteDocuments::new(wtxn, index)?;
-        delete_operation.delete_documents(&candidates);
-        delete_operation.execute().map(|result| result.deleted_documents)?
+        todo!("need a way to get back the external ids from the internal ids");
+        // let mut delete_operation = DeleteDocuments::new(wtxn, index)?;
+        // delete_operation.delete_documents(&candidates);
+        // delete_operation.execute().map(|result| result.deleted_documents)?
     } else {
         0
     })
