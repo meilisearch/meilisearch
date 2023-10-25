@@ -2333,6 +2333,32 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn simple_delete() {
+        let mut index = TempIndex::new();
+        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
+        index
+            .add_documents(documents!([
+                { "id": 30 },
+                { "id": 34 }
+            ]))
+            .unwrap();
+
+        db_snap!(index, documents_ids, @"[0, 1, ]");
+        db_snap!(index, external_documents_ids, 1, @r###"
+        docids:
+        30                       0
+        34                       1"###);
+
+        index.delete_document("34");
+
+        db_snap!(index, documents_ids, @"[0, ]");
+        db_snap!(index, external_documents_ids, 2, @r###"
+        docids:
+        30                       0
+        "###);
+    }
+
+    #[test]
     fn bug_3021_second() {
         // https://github.com/meilisearch/meilisearch/issues/3021
         let mut index = TempIndex::new();
