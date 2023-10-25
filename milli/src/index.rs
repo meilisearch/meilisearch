@@ -1526,7 +1526,7 @@ pub(crate) mod tests {
             Ok(())
         }
 
-        pub fn delete_document(&self, external_document_id: &str) {
+        pub fn delete_documents(&self, external_document_ids: Vec<String>) {
             let mut wtxn = self.write_txn().unwrap();
 
             let builder = IndexDocuments::new(
@@ -1538,12 +1538,15 @@ pub(crate) mod tests {
                 || false,
             )
             .unwrap();
-            let (builder, user_error) =
-                builder.remove_documents(vec![external_document_id.to_owned()]).unwrap();
+            let (builder, user_error) = builder.remove_documents(external_document_ids).unwrap();
             user_error.unwrap();
             builder.execute().unwrap();
 
             wtxn.commit().unwrap();
+        }
+
+        pub fn delete_document(&self, external_document_id: &str) {
+            self.delete_documents(vec![external_document_id.to_string()])
         }
     }
 
