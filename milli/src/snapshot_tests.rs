@@ -98,7 +98,6 @@ Create a snapshot test of the given database.
     - `facet_id_string_docids`
     - `documents_ids`
     - `stop_words`
-    - `soft_deleted_documents_ids`
     - `field_distribution`
     - `fields_ids_map`
     - `geo_faceted_documents_ids`
@@ -308,12 +307,6 @@ pub fn snap_stop_words(index: &Index) -> String {
     let snap = format!("{stop_words:?}");
     snap
 }
-pub fn snap_soft_deleted_documents_ids(index: &Index) -> String {
-    let rtxn = index.read_txn().unwrap();
-    let soft_deleted_documents_ids = index.soft_deleted_documents_ids(&rtxn).unwrap();
-
-    display_bitmap(&soft_deleted_documents_ids)
-}
 pub fn snap_field_distributions(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
     let mut snap = String::new();
@@ -483,9 +476,6 @@ macro_rules! full_snap_of_db {
     }};
     ($index:ident, stop_words) => {{
         $crate::snapshot_tests::snap_stop_words(&$index)
-    }};
-    ($index:ident, soft_deleted_documents_ids) => {{
-        $crate::snapshot_tests::snap_soft_deleted_documents_ids(&$index)
     }};
     ($index:ident, field_distribution) => {{
         $crate::snapshot_tests::snap_field_distributions(&$index)

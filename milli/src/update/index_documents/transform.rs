@@ -132,17 +132,13 @@ impl<'a, 'i> Transform<'a, 'i> {
             indexer_settings.max_memory.map(|mem| mem / 2),
         );
         let documents_ids = index.documents_ids(wtxn)?;
-        let soft_deleted_documents_ids = index.soft_deleted_documents_ids(wtxn)?;
 
         Ok(Transform {
             index,
             fields_ids_map: index.fields_ids_map(wtxn)?,
             indexer_settings,
             autogenerate_docids,
-            available_documents_ids: AvailableDocumentsIds::from_documents_ids(
-                &documents_ids,
-                &soft_deleted_documents_ids,
-            ),
+            available_documents_ids: AvailableDocumentsIds::from_documents_ids(&documents_ids),
             original_sorter,
             flattened_sorter,
             index_documents_method,

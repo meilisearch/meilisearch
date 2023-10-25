@@ -40,7 +40,6 @@ pub mod main_key {
     pub const DISPLAYED_FIELDS_KEY: &str = "displayed-fields";
     pub const DISTINCT_FIELD_KEY: &str = "distinct-field-key";
     pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
-    pub const SOFT_DELETED_DOCUMENTS_IDS_KEY: &str = "soft-deleted-documents-ids";
     pub const HIDDEN_FACETED_FIELDS_KEY: &str = "hidden-faceted-fields";
     pub const FILTERABLE_FIELDS_KEY: &str = "filterable-fields";
     pub const SORTABLE_FIELDS_KEY: &str = "sortable-fields";
@@ -365,29 +364,6 @@ impl Index {
         let count =
             self.main.get::<_, Str, RoaringBitmapLenCodec>(rtxn, main_key::DOCUMENTS_IDS_KEY)?;
         Ok(count.unwrap_or_default())
-    }
-
-    /* deleted documents ids */
-
-    /// Writes the soft deleted documents ids.
-    pub(crate) fn put_soft_deleted_documents_ids(
-        &self,
-        wtxn: &mut RwTxn,
-        docids: &RoaringBitmap,
-    ) -> heed::Result<()> {
-        self.main.put::<_, Str, RoaringBitmapCodec>(
-            wtxn,
-            main_key::SOFT_DELETED_DOCUMENTS_IDS_KEY,
-            docids,
-        )
-    }
-
-    /// Returns the soft deleted documents ids.
-    pub(crate) fn soft_deleted_documents_ids(&self, rtxn: &RoTxn) -> heed::Result<RoaringBitmap> {
-        Ok(self
-            .main
-            .get::<_, Str, RoaringBitmapCodec>(rtxn, main_key::SOFT_DELETED_DOCUMENTS_IDS_KEY)?
-            .unwrap_or_default())
     }
 
     /* primary key */
@@ -1187,12 +1163,7 @@ impl Index {
         rtxn: &'t RoTxn,
         ids: impl IntoIterator<Item = DocumentId> + 'a,
     ) -> Result<impl Iterator<Item = Result<(DocumentId, obkv::KvReaderU16<'t>)>> + 'a> {
-        let soft_deleted_documents = self.soft_deleted_documents_ids(rtxn)?;
-
         Ok(ids.into_iter().map(move |id| {
-            if soft_deleted_documents.contains(id) {
-                return Err(UserError::AccessingSoftDeletedDocument { document_id: id })?;
-            }
             let kv = self
                 .documents
                 .get(rtxn, &BEU32::new(id))?
@@ -1418,14 +1389,10 @@ impl Index {
         rtxn: &RoTxn,
         key: &(Script, Language),
     ) -> heed::Result<Option<RoaringBitmap>> {
-        let soft_deleted_documents = self.soft_deleted_documents_ids(rtxn)?;
-        let doc_ids = self.script_language_docids.get(rtxn, key)?;
-        Ok(doc_ids.map(|ids| ids - soft_deleted_documents))
+        Ok(self.script_language_docids.get(rtxn, key)?)
     }
 
     pub fn script_language(&self, rtxn: &RoTxn) -> heed::Result<HashMap<Script, Vec<Language>>> {
-        let soft_deleted_documents = self.soft_deleted_documents_ids(rtxn)?;
-
         let mut script_language: HashMap<Script, Vec<Language>> = HashMap::new();
         let mut script_language_doc_count: Vec<(Script, Language, u64)> = Vec::new();
         let mut total = 0;
@@ -1433,7 +1400,7 @@ impl Index {
             let ((script, language), docids) = sl?;
 
             // keep only Languages that contains at least 1 document.
-            let remaining_documents_count = (docids - &soft_deleted_documents).len();
+            let remaining_documents_count = docids.len();
             total += remaining_documents_count;
             if remaining_documents_count > 0 {
                 script_language_doc_count.push((script, language, remaining_documents_count));
@@ -1918,7 +1885,6 @@ pub(crate) mod tests {
         2                        2
         3                        3
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 1, @"[]");
         db_snap!(index, facet_id_f64_docids, 1, @r###"
         1   0  0      1  [0, ]
         1   0  1      1  [1, ]
@@ -1943,7 +1909,6 @@ pub(crate) mod tests {
         2                        6
         3                        3
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 2, @"[0, 1, 2, ]");
         db_snap!(index, facet_id_f64_docids, 2, @r###"
         1   0  0      1  [0, ]
         1   0  1      1  [1, 4, ]
@@ -1965,7 +1930,6 @@ pub(crate) mod tests {
         2                        6
         3                        3
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 3, @"[0, 1, 2, 3, ]");
         db_snap!(index, facet_id_f64_docids, 3, @r###"
         1   0  0      1  [0, ]
         1   0  1      1  [1, 4, ]
@@ -1989,7 +1953,6 @@ pub(crate) mod tests {
         2                        6
         3                        7
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 3, @"[]");
         db_snap!(index, facet_id_f64_docids, 3, @r###"
         0   0  0      1  [4, ]
         0   0  1      1  [5, ]
@@ -2052,7 +2015,6 @@ pub(crate) mod tests {
             2                        2
             3                        3
             "###);
-            db_snap!(index, soft_deleted_documents_ids, 1, @"[]");
             db_snap!(index, facet_id_f64_docids, 1, @r###"
             1   0  0      1  [0, ]
             1   0  1      1  [1, ]
@@ -2085,7 +2047,6 @@ pub(crate) mod tests {
             2                        6
             3                        3
             "###);
-            db_snap!(index, soft_deleted_documents_ids, 1, @"[0, 1, 2, ]");
             db_snap!(index, facet_id_f64_docids, 1, @r###"
             1   0  0      1  [0, 4, ]
             1   0  1      1  [1, 5, ]
@@ -2153,7 +2114,6 @@ pub(crate) mod tests {
             2                        9
             3                        3
             "###);
-            db_snap!(index, soft_deleted_documents_ids, 1, @"[0, 1, 2, 4, 5, 6, ]");
             db_snap!(index, facet_id_f64_docids, 1, @r###"
             1   0  0      1  [0, 4, 7, ]
             1   0  1      1  [1, 5, 8, ]
@@ -2221,7 +2181,7 @@ pub(crate) mod tests {
             2                        12
             3                        3
             "###);
-            db_snap!(index, soft_deleted_documents_ids, 1, @"[]");
+
             db_snap!(index, facet_id_f64_docids, 1, @r###"
             1   0  0      1  [10, ]
             1   0  3      1  [3, 11, ]
@@ -2291,7 +2251,6 @@ pub(crate) mod tests {
         34                       1
         38                       0
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 1, @"[]");
 
         index.delete_document("34");
 
@@ -2302,7 +2261,6 @@ pub(crate) mod tests {
         34                       1
         38                       0
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 2, @"[1, ]");
 
         index
             .update_settings(|s| {
@@ -2318,7 +2276,6 @@ pub(crate) mod tests {
         hard:
         38                       0
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 3, @"[]");
 
         // So that this document addition works correctly now.
         // It would be wrongly interpreted as a replacement before
@@ -2331,7 +2288,6 @@ pub(crate) mod tests {
         34                       1
         38                       0
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 4, @"[]");
 
         // We do the test again, but deleting the document with id 0 instead of id 1 now
         index.delete_document("38");
@@ -2343,7 +2299,6 @@ pub(crate) mod tests {
         34                       1
         38                       0
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 5, @"[0, ]");
 
         index
             .update_settings(|s| {
@@ -2357,7 +2312,6 @@ pub(crate) mod tests {
         hard:
         34                       1
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 6, @"[]");
 
         // And adding lots of documents afterwards instead of just one.
         // These extra subtests don't add much, but it's better than nothing.
@@ -2374,7 +2328,6 @@ pub(crate) mod tests {
         41                       3
         42                       5
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 7, @"[]");
     }
 
     #[test]
@@ -2403,7 +2356,6 @@ pub(crate) mod tests {
         30                       0
         34                       1
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 1, @"[]");
 
         index.delete_document("34");
 
@@ -2414,7 +2366,6 @@ pub(crate) mod tests {
         30                       0
         34                       1
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 2, @"[1, ]");
 
         index
             .update_settings(|s| {
@@ -2430,7 +2381,6 @@ pub(crate) mod tests {
         hard:
         30                       0
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 3, @"[]");
 
         // So that when we add a new document
         index.add_documents(documents!({ "primary_key": 35, "b": 2 })).unwrap();
@@ -2444,7 +2394,6 @@ pub(crate) mod tests {
         30                       0
         35                       1
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 4, @"[]");
 
         // And when we add 34 again, we don't replace document 35
         index.add_documents(documents!({ "primary_key": 34, "a": 1 })).unwrap();
@@ -2458,7 +2407,6 @@ pub(crate) mod tests {
         34                       2
         35                       1
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 5, @"[]");
 
         let rtxn = index.read_txn().unwrap();
         let (_docid, obkv) = index.documents(&rtxn, [0]).unwrap()[0];
@@ -2499,7 +2447,6 @@ pub(crate) mod tests {
         38                       4
         39                       5
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 6, @"[]");
     }
 
     #[test]
@@ -2530,7 +2477,6 @@ pub(crate) mod tests {
         4                        1
         5                        2
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 1, @"[]");
 
         index.delete_document("3");
 
@@ -2542,7 +2488,6 @@ pub(crate) mod tests {
         4                        1
         5                        2
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 2, @"[0, ]");
 
         index.add_documents(documents!([{ "primary_key": "4", "a": 2 }])).unwrap();
 
@@ -2553,7 +2498,6 @@ pub(crate) mod tests {
         4                        3
         5                        2
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 2, @"[]");
 
         index
             .add_documents(documents!([
@@ -2569,7 +2513,6 @@ pub(crate) mod tests {
         4                        3
         5                        2
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 2, @"[]");
     }
 
     #[test]
@@ -2598,7 +2541,6 @@ pub(crate) mod tests {
         11                       0
         4                        1
         "###);
-        db_snap!(index, soft_deleted_documents_ids, @"[]");
 
         index
             .add_documents(documents!([
@@ -2615,7 +2557,6 @@ pub(crate) mod tests {
         11                       0
         4                        2
         "###);
-        db_snap!(index, soft_deleted_documents_ids, @"[1, ]");
 
         let mut wtxn = index.write_txn().unwrap();
         let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
@@ -2630,7 +2571,6 @@ pub(crate) mod tests {
         11                       0
         4                        2
         "###);
-        db_snap!(index, soft_deleted_documents_ids, @"[]");
 
         index
             .add_documents(documents!([
@@ -2647,7 +2587,6 @@ pub(crate) mod tests {
         11                       0
         4                        1
         "###);
-        db_snap!(index, soft_deleted_documents_ids, @"[2, 3, ]");
 
         let rtxn = index.read_txn().unwrap();
         let search = Search::new(&rtxn, &index);
