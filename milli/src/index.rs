@@ -1469,8 +1469,7 @@ pub(crate) mod tests {
     use crate::error::{Error, InternalError};
     use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
     use crate::update::{
-        self, DeleteDocuments, DeletionStrategy, IndexDocuments, IndexDocumentsConfig,
-        IndexDocumentsMethod, IndexerConfig, Settings,
+        self, IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings,
     };
     use crate::{db_snap, obkv_to_json, Filter, Index, Search, SearchResult};
 
@@ -1563,11 +1562,20 @@ pub(crate) mod tests {
         pub fn delete_document(&self, external_document_id: &str) {
             let mut wtxn = self.write_txn().unwrap();
 
-            let mut delete = DeleteDocuments::new(&mut wtxn, self).unwrap();
-            delete.strategy(self.index_documents_config.deletion_strategy);
+            let builder = IndexDocuments::new(
+                &mut wtxn,
+                self,
+                &self.indexer_config,
+                self.index_documents_config.clone(),
+                |_| (),
+                || false,
+            )
+            .unwrap();
+            let (builder, user_error) =
+                builder.remove_documents(vec![external_document_id.to_owned()]).unwrap();
+            user_error.unwrap();
+            builder.execute().unwrap();
 
-            delete.delete_external_id(external_document_id);
-            delete.execute().unwrap();
             wtxn.commit().unwrap();
         }
     }
@@ -1884,7 +1892,6 @@ pub(crate) mod tests {
         use maplit::hashset;
 
         let mut index = TempIndex::new();
-        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
         let index = index;
 
         index
@@ -2055,8 +2062,6 @@ pub(crate) mod tests {
         }
         // Second Batch: replace the documents with soft-deletion
         {
-            index.index_documents_config.deletion_strategy =
-                crate::update::DeletionStrategy::AlwaysSoft;
             let mut docs1 = vec![];
             for i in 0..3 {
                 docs1.push(serde_json::json!(
@@ -2125,7 +2130,6 @@ pub(crate) mod tests {
         drop(rtxn);
         // Third Batch: replace the documents with soft-deletion again
         {
-            index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
             let mut docs1 = vec![];
             for i in 0..3 {
                 docs1.push(serde_json::json!(
@@ -2194,7 +2198,6 @@ pub(crate) mod tests {
 
         // Fourth Batch: replace the documents without soft-deletion
         {
-            index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysHard;
             let mut docs1 = vec![];
             for i in 0..3 {
                 docs1.push(serde_json::json!(
@@ -2266,7 +2269,6 @@ pub(crate) mod tests {
     fn bug_3021_first() {
         // https://github.com/meilisearch/meilisearch/issues/3021
         let mut index = TempIndex::new();
-        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
         index.index_documents_config.update_method = IndexDocumentsMethod::ReplaceDocuments;
 
         index
@@ -2379,7 +2381,6 @@ pub(crate) mod tests {
     fn bug_3021_second() {
         // https://github.com/meilisearch/meilisearch/issues/3021
         let mut index = TempIndex::new();
-        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
         index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         index
@@ -2505,7 +2506,6 @@ pub(crate) mod tests {
     fn bug_3021_third() {
         // https://github.com/meilisearch/meilisearch/issues/3021
         let mut index = TempIndex::new();
-        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
         index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         index
@@ -2544,8 +2544,6 @@ pub(crate) mod tests {
         "###);
         db_snap!(index, soft_deleted_documents_ids, 2, @"[0, ]");
 
-        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysHard;
-
         index.add_documents(documents!([{ "primary_key": "4", "a": 2 }])).unwrap();
 
         db_snap!(index, documents_ids, @"[2, 3, ]");
@@ -2579,7 +2577,6 @@ pub(crate) mod tests {
         // https://github.com/meilisearch/meilisearch/issues/3021
         let mut index = TempIndex::new();
         index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
-        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
 
         index
             .update_settings(|settings| {
@@ -2622,7 +2619,6 @@ pub(crate) mod tests {
 
         let mut wtxn = index.write_txn().unwrap();
         let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        delete.strategy(DeletionStrategy::AlwaysHard);
         delete.execute().unwrap();
         wtxn.commit().unwrap();
 

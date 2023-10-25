@@ -6,9 +6,7 @@ use std::path::Path;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use milli::heed::{EnvOpenOptions, RwTxn};
-use milli::update::{
-    DeleteDocuments, IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings,
-};
+use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
 use milli::Index;
 use rand::seq::SliceRandom;
 use rand_chacha::rand_core::SeedableRng;
