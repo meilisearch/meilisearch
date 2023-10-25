@@ -324,7 +324,6 @@ impl ErrorCode for milli::Error {
                     UserError::SerdeJson(_)
                     | UserError::InvalidLmdbOpenOptions
                     | UserError::DocumentLimitReached
-                    | UserError::AccessingSoftDeletedDocument { .. }
                     | UserError::UnknownInternalDocumentId { .. } => Code::Internal,
                     UserError::InvalidStoreFile => Code::InvalidStoreFile,
                     UserError::NoSpaceLeftOnDevice => Code::NoSpaceLeftOnDevice,

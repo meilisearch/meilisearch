@@ -999,7 +999,6 @@ mod tests {
         assert_eq!(count, 6);
 
         db_snap!(index, word_docids, "updated");
-        db_snap!(index, soft_deleted_documents_ids, "updated", @"[0, 1, 4, ]");
 
         drop(rtxn);
     }
@@ -2648,8 +2647,6 @@ mod tests {
         hard:
         0                        1
         "###);
-
-        db_snap!(index, soft_deleted_documents_ids, @"[]");
 
         // BATCH 3
 

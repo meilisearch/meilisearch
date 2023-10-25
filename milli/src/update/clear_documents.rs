@@ -56,7 +56,6 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         self.index.put_words_prefixes_fst(self.wtxn, &fst::Set::default())?;
         self.index.put_external_documents_ids(self.wtxn, &ExternalDocumentsIds::default())?;
         self.index.put_documents_ids(self.wtxn, &empty_roaring)?;
-        self.index.put_soft_deleted_documents_ids(self.wtxn, &empty_roaring)?;
         self.index.put_field_distribution(self.wtxn, &FieldDistribution::default())?;
         self.index.delete_geo_rtree(self.wtxn)?;
         self.index.delete_geo_faceted_documents_ids(self.wtxn)?;
