@@ -97,7 +97,6 @@ use crate::update::merge_btreeset_string;
 use crate::{BEU16StrCodec, Index, Result, BEU16, MAX_FACET_VALUE_LENGTH};
 
 pub mod bulk;
-pub mod delete;
 pub mod incremental;
 
 /// A builder used to add new elements to the `facet_id_string_docids` or `facet_id_f64_docids` databases.

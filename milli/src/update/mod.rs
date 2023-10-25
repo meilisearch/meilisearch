@@ -22,7 +22,6 @@ pub use self::words_prefixes_fst::WordsPrefixesFst;
 mod available_documents_ids;
 mod clear_documents;
 pub(crate) mod del_add;
-mod delete_documents;
 pub(crate) mod facet;
 mod index_documents;
 mod indexer_config;
