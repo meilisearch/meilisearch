@@ -333,6 +333,9 @@ pub fn snap_geo_faceted_documents_ids(index: &Index) -> String {
 pub fn snap_external_documents_ids(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
     let external_ids = index.external_documents_ids(&rtxn).unwrap().to_hash_map();
+    // ensure fixed order (not guaranteed by hashmap)
+    let mut external_ids: Vec<(String, u32)> = external_ids.into_iter().collect();
+    external_ids.sort_by(|(l, _), (r, _)| l.cmp(r));
 
     let mut snap = String::new();
 
