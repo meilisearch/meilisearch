@@ -149,7 +149,7 @@ mod tests {
     use crate::db_snap;
     use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
     use crate::index::tests::TempIndex;
-    use crate::update::{DeleteDocuments, DeletionStrategy, IndexDocumentsMethod};
+    use crate::update::IndexDocumentsMethod;
 
     fn documents_with_enough_different_words_for_prefixes(
         prefixes: &[&str],
@@ -337,7 +337,6 @@ mod tests {
 
         let mut wtxn = index.write_txn().unwrap();
         let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        delete.strategy(DeletionStrategy::AlwaysHard);
         delete.delete_documents(&RoaringBitmap::from_iter([50]));
         delete.execute().unwrap();
         wtxn.commit().unwrap();
@@ -349,7 +348,6 @@ mod tests {
 
         let mut wtxn = index.write_txn().unwrap();
         let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        delete.strategy(DeletionStrategy::AlwaysHard);
         delete.delete_documents(&RoaringBitmap::from_iter(0..50));
         delete.execute().unwrap();
         wtxn.commit().unwrap();
@@ -421,7 +419,6 @@ mod tests {
 
         let mut wtxn = index.write_txn().unwrap();
         let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        delete.strategy(DeletionStrategy::AlwaysSoft);
         delete.delete_documents(&RoaringBitmap::from_iter([50]));
         delete.execute().unwrap();
         wtxn.commit().unwrap();
@@ -433,7 +430,6 @@ mod tests {
 
         let mut wtxn = index.write_txn().unwrap();
         let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        delete.strategy(DeletionStrategy::AlwaysSoft);
 
         delete.delete_documents(&RoaringBitmap::from_iter(0..50));
         delete.execute().unwrap();
@@ -460,7 +456,6 @@ mod tests {
         let mut index = TempIndex::new();
         index.index_documents_config.words_prefix_threshold = Some(50);
         index.index_documents_config.update_method = IndexDocumentsMethod::ReplaceDocuments;
-        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
 
         index
             .update_settings(|settings| {
@@ -520,7 +515,6 @@ mod tests {
     fn replace_hard_deletion() {
         let mut index = TempIndex::new();
         index.index_documents_config.words_prefix_threshold = Some(50);
-        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysHard;
         index.index_documents_config.update_method = IndexDocumentsMethod::ReplaceDocuments;
 
         index

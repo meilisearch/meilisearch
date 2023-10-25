@@ -35,8 +35,8 @@ use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
-    DeletionStrategy, IndexerConfig, PrefixWordPairsProximityDocids, UpdateIndexingStep,
-    WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
+    IndexerConfig, PrefixWordPairsProximityDocids, UpdateIndexingStep, WordPrefixDocids,
+    WordPrefixIntegerDocids, WordsPrefixesFst,
 };
 use crate::{CboRoaringBitmapCodec, Index, Result};
 
@@ -89,7 +89,6 @@ pub struct IndexDocumentsConfig {
     pub words_positions_level_group_size: Option<NonZeroU32>,
     pub words_positions_min_level_size: Option<NonZeroU32>,
     pub update_method: IndexDocumentsMethod,
-    pub deletion_strategy: DeletionStrategy,
     pub autogenerate_docids: bool,
 }
 
@@ -2497,7 +2496,6 @@ mod tests {
 
         // Delete not all of the documents but some of them.
         let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        builder.strategy(DeletionStrategy::AlwaysHard);
         builder.delete_external_id("0");
         builder.delete_external_id("3");
         let result = builder.execute().unwrap();
@@ -2559,7 +2557,6 @@ mod tests {
         ]
         */
         let mut index = TempIndex::new();
-        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysHard;
 
         // START OF BATCH
 
