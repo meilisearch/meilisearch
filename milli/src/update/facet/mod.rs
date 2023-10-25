@@ -463,7 +463,7 @@ pub(crate) mod test_helpers {
                 min_level_size: self.min_level_size.get(),
             };
 
-            update.update(wtxn, field_ids, |_, _, _| Ok(())).unwrap();
+            update.update(wtxn, field_ids).unwrap();
         }
 
         pub fn verify_structure_validity(&self, txn: &RoTxn, field_id: u16) {
