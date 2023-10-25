@@ -377,11 +377,6 @@ where
         let index_documents_ids = self.index.documents_ids(self.wtxn)?;
         let index_is_empty = index_documents_ids.is_empty();
         let mut final_documents_ids = RoaringBitmap::new();
-        let mut word_pair_proximity_docids = None;
-        let mut word_position_docids = None;
-        let mut word_fid_docids = None;
-        let mut word_docids = None;
-        let mut exact_word_docids = None;
 
         let mut databases_seen = 0;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
@@ -399,30 +394,15 @@ where
                     word_docids_reader,
                     exact_word_docids_reader,
                     word_fid_docids_reader,
-                } => {
-                    let cloneable_chunk = unsafe { as_cloneable_grenad(&word_docids_reader)? };
-                    word_docids = Some(cloneable_chunk);
-                    let cloneable_chunk =
-                        unsafe { as_cloneable_grenad(&exact_word_docids_reader)? };
-                    exact_word_docids = Some(cloneable_chunk);
-                    let cloneable_chunk = unsafe { as_cloneable_grenad(&word_fid_docids_reader)? };
-                    word_fid_docids = Some(cloneable_chunk);
-                    TypedChunk::WordDocids {
-                        word_docids_reader,
-                        exact_word_docids_reader,
-                        word_fid_docids_reader,
-                    }
-                }
+                } => TypedChunk::WordDocids {
+                    word_docids_reader,
+                    exact_word_docids_reader,
+                    word_fid_docids_reader,
+                },
                 TypedChunk::WordPairProximityDocids(chunk) => {
-                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
-                    word_pair_proximity_docids = Some(cloneable_chunk);
                     TypedChunk::WordPairProximityDocids(chunk)
                 }
-                TypedChunk::WordPositionDocids(chunk) => {
-                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
-                    word_position_docids = Some(cloneable_chunk);
-                    TypedChunk::WordPositionDocids(chunk)
-                }
+                TypedChunk::WordPositionDocids(chunk) => TypedChunk::WordPositionDocids(chunk),
                 otherwise => otherwise,
             };
 

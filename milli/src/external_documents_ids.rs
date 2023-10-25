@@ -1,15 +1,11 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::{fmt, str};
+use std::fmt;
 
-use fst::map::IndexedValue;
-use fst::{IntoStreamer, Streamer};
-use roaring::RoaringBitmap;
+use fst::Streamer;
 
 use crate::DocumentId;
-
-const DELETED_ID: u64 = u64::MAX;
 
 pub enum DocumentOperationKind {
     Create,
@@ -132,9 +128,4 @@ impl Default for ExternalDocumentsIds<'static> {
     fn default() -> Self {
         ExternalDocumentsIds(fst::Map::default().map_data(Cow::Owned).unwrap())
     }
-}
-
-/// Returns the value of the `IndexedValue` with the highest _index_.
-fn indexed_last_value(indexed_values: &[IndexedValue]) -> Option<u64> {
-    indexed_values.iter().copied().max_by_key(|iv| iv.index).map(|iv| iv.value)
 }
