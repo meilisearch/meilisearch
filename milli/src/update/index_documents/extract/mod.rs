@@ -27,8 +27,8 @@ use self::extract_word_docids::extract_word_docids;
 use self::extract_word_pair_proximity_docids::extract_word_pair_proximity_docids;
 use self::extract_word_position_docids::extract_word_position_docids;
 use super::helpers::{
-    as_cloneable_grenad, merge_cbo_roaring_bitmaps, CursorClonableMmap, GrenadParameters, MergeFn,
-    MergeableReader,
+    as_cloneable_grenad, merge_deladd_cbo_roaring_bitmaps, CursorClonableMmap, GrenadParameters,
+    MergeFn, MergeableReader,
 };
 use super::{helpers, TypedChunk};
 use crate::{FieldId, Result};
@@ -107,7 +107,7 @@ pub(crate) fn data_from_obkv_documents(
         let lmdb_writer_sx = lmdb_writer_sx.clone();
         rayon::spawn(move || {
             debug!("merge {} database", "facet-id-exists-docids");
-            match facet_exists_docids_chunks.merge(merge_cbo_roaring_bitmaps, &indexer) {
+            match facet_exists_docids_chunks.merge(merge_deladd_cbo_roaring_bitmaps, &indexer) {
                 Ok(reader) => {
                     let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetExistsDocids(reader)));
                 }
@@ -123,7 +123,7 @@ pub(crate) fn data_from_obkv_documents(
         let lmdb_writer_sx = lmdb_writer_sx.clone();
         rayon::spawn(move || {
             debug!("merge {} database", "facet-id-is-null-docids");
-            match facet_is_null_docids_chunks.merge(merge_cbo_roaring_bitmaps, &indexer) {
+            match facet_is_null_docids_chunks.merge(merge_deladd_cbo_roaring_bitmaps, &indexer) {
                 Ok(reader) => {
                     let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetIsNullDocids(reader)));
                 }
@@ -139,7 +139,7 @@ pub(crate) fn data_from_obkv_documents(
         let lmdb_writer_sx = lmdb_writer_sx.clone();
         rayon::spawn(move || {
             debug!("merge {} database", "facet-id-is-empty-docids");
-            match facet_is_empty_docids_chunks.merge(merge_cbo_roaring_bitmaps, &indexer) {
+            match facet_is_empty_docids_chunks.merge(merge_deladd_cbo_roaring_bitmaps, &indexer) {
                 Ok(reader) => {
                     let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetIsEmptyDocids(reader)));
                 }
@@ -155,7 +155,7 @@ pub(crate) fn data_from_obkv_documents(
         indexer,
         lmdb_writer_sx.clone(),
         extract_word_pair_proximity_docids,
-        merge_cbo_roaring_bitmaps,
+        merge_deladd_cbo_roaring_bitmaps,
         TypedChunk::WordPairProximityDocids,
         "word-pair-proximity-docids",
     );
@@ -165,7 +165,7 @@ pub(crate) fn data_from_obkv_documents(
         indexer,
         lmdb_writer_sx.clone(),
         extract_fid_word_count_docids,
-        merge_cbo_roaring_bitmaps,
+        merge_deladd_cbo_roaring_bitmaps,
         TypedChunk::FieldIdWordCountDocids,
         "field-id-wordcount-docids",
     );
@@ -179,7 +179,7 @@ pub(crate) fn data_from_obkv_documents(
         indexer,
         lmdb_writer_sx.clone(),
         move |doc_word_pos, indexer| extract_word_docids(doc_word_pos, indexer, &exact_attributes),
-        merge_cbo_roaring_bitmaps,
+        merge_deladd_cbo_roaring_bitmaps,
         |(word_docids_reader, exact_word_docids_reader, word_fid_docids_reader)| {
             TypedChunk::WordDocids {
                 word_docids_reader,
@@ -195,7 +195,7 @@ pub(crate) fn data_from_obkv_documents(
         indexer,
         lmdb_writer_sx.clone(),
         extract_word_position_docids,
-        merge_cbo_roaring_bitmaps,
+        merge_deladd_cbo_roaring_bitmaps,
         TypedChunk::WordPositionDocids,
         "word-position-docids",
     );
@@ -205,7 +205,7 @@ pub(crate) fn data_from_obkv_documents(
         indexer,
         lmdb_writer_sx.clone(),
         extract_facet_string_docids,
-        merge_cbo_roaring_bitmaps,
+        merge_deladd_cbo_roaring_bitmaps,
         TypedChunk::FieldIdFacetStringDocids,
         "field-id-facet-string-docids",
     );
@@ -215,7 +215,7 @@ pub(crate) fn data_from_obkv_documents(
         indexer,
         lmdb_writer_sx,
         extract_facet_number_docids,
-        merge_cbo_roaring_bitmaps,
+        merge_deladd_cbo_roaring_bitmaps,
         TypedChunk::FieldIdFacetNumberDocids,
         "field-id-facet-number-docids",
     );
