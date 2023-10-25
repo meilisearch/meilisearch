@@ -201,7 +201,7 @@ where
     pub fn execute(mut self) -> Result<DocumentAdditionResult> {
         puffin::profile_function!();
 
-        if self.added_documents == 0 {
+        if self.added_documents == 0 && self.deleted_documents == 0 {
             let number_of_documents = self.index.number_of_documents(self.wtxn)?;
             return Ok(DocumentAdditionResult { indexed_documents: 0, number_of_documents });
         }
