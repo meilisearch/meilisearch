@@ -180,6 +180,7 @@ where
 
         // Early return when there is no document to add
         if to_delete.is_empty() {
+            // Maintains Invariant: remove documents actually always returns Ok for the inner result
             return Ok((self, Ok(0)));
         }
 
@@ -192,6 +193,7 @@ where
 
         self.deleted_documents += deleted_documents;
 
+        // Maintains Invariant: remove documents actually always returns Ok for the inner result
         Ok((self, Ok(deleted_documents)))
     }
 
