@@ -27,7 +27,7 @@ mod index_mapper;
 mod insta_snapshot;
 mod lru;
 mod utils;
-mod uuid_codec;
+pub mod uuid_codec;
 
 pub type Result<T> = std::result::Result<T, Error>;
 pub type TaskId = u32;
