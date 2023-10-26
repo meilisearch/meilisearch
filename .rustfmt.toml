@@ -1,5 +1,3 @@
-unstable_features = true
-
 use_small_heuristics = "max"
 imports_granularity = "Module"
 group_imports = "StdExternalCrate"
