@@ -4,6 +4,7 @@ use std::convert::TryInto;
 use std::fmt;
 
 use fst::Streamer;
+use roaring::RoaringBitmap;
 
 use crate::DocumentId;
 
@@ -55,7 +56,24 @@ impl<'a> ExternalDocumentsIds<'a> {
         self.0.as_fst().as_bytes()
     }
 
-    /// Apply the list of operations passed as argument, modifying the current external to internal id mapping.
+    /// Looks for the internal ids in the passed bitmap, and returns an iterator over the mapping between
+    /// these internal ids and their external id.
+    ///
+    /// The returned iterator has `Result<(String, DocumentId), RoaringBitmap>` as `Item`,
+    /// where the returned values can be:
+    /// - `Ok((external_id, internal_id))`: if a mapping was found
+    /// - `Err(remaining_ids)`: if the external ids for some of the requested internal ids weren't found.
+    ///   In that case the returned bitmap contains the internal ids whose external ids were not found after traversing
+    ///   the entire fst.
+    pub fn find_external_id_of(
+        &self,
+        internal_ids: RoaringBitmap,
+    ) -> ExternalToInternalOwnedIterator<'_> {
+        let it = ExternalToInternalOwnedIterator { stream: self.0.stream(), internal_ids };
+        it
+    }
+
+    /// Applies the list of operations passed as argument, modifying the current external to internal id mapping.
     ///
     /// If the list contains multiple operations on the same external id, then the result is unspecified.
     ///
@@ -127,5 +145,53 @@ impl fmt::Debug for ExternalDocumentsIds<'_> {
 impl Default for ExternalDocumentsIds<'static> {
     fn default() -> Self {
         ExternalDocumentsIds(fst::Map::default().map_data(Cow::Owned).unwrap())
+    }
+}
+
+/// An iterator over mappings between requested internal ids and external ids.
+///
+/// See [`ExternalDocumentsIds::find_external_id_of`] for details.
+pub struct ExternalToInternalOwnedIterator<'it> {
+    stream: fst::map::Stream<'it>,
+    internal_ids: RoaringBitmap,
+}
+
+impl<'it> Iterator for ExternalToInternalOwnedIterator<'it> {
+    /// A result indicating if a mapping was found, or if the stream was exhausted without finding all internal ids.
+    type Item = Result<(String, DocumentId), RoaringBitmap>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // if all requested ids were found, we won't find any other, so short-circuit
+        if self.internal_ids.is_empty() {
+            return None;
+        }
+        loop {
+            let Some((external, internal)) = self.stream.next() else {
+                // we exhausted the stream but we still have some internal ids to find
+                let remaining_ids = std::mem::take(&mut self.internal_ids);
+                return Some(Err(remaining_ids));
+                // note: next calls to `next` will return `None` since we replaced the internal_ids
+                // with the default empty bitmap
+            };
+            let internal = internal.try_into().unwrap();
+            let was_contained = self.internal_ids.remove(internal);
+            if was_contained {
+                return Some(Ok((std::str::from_utf8(external).unwrap().to_owned(), internal)));
+            }
+        }
+    }
+}
+
+impl<'it> ExternalToInternalOwnedIterator<'it> {
+    /// Returns the bitmap of internal ids whose external id are yet to be found
+    pub fn remaining_internal_ids(&self) -> &RoaringBitmap {
+        &self.internal_ids
+    }
+
+    /// Consumes this iterator and returns an iterator over only the external ids, ignoring the internal ids.
+    ///
+    /// Use this when you don't need the mapping between the external and the internal ids.
+    pub fn only_external_ids(self) -> impl Iterator<Item = Result<String, RoaringBitmap>> + 'it {
+        self.map(|res| res.map(|(external, _internal)| external))
     }
 }
