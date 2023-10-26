@@ -1526,11 +1526,13 @@ pub(crate) mod tests {
             Ok(())
         }
 
-        pub fn delete_documents(&self, external_document_ids: Vec<String>) {
-            let mut wtxn = self.write_txn().unwrap();
-
+        pub fn delete_documents_using_wtxn<'t>(
+            &'t self,
+            wtxn: &mut RwTxn<'t, '_>,
+            external_document_ids: Vec<String>,
+        ) {
             let builder = IndexDocuments::new(
-                &mut wtxn,
+                wtxn,
                 self,
                 &self.indexer_config,
                 self.index_documents_config.clone(),
@@ -1541,6 +1543,12 @@ pub(crate) mod tests {
             let (builder, user_error) = builder.remove_documents(external_document_ids).unwrap();
             user_error.unwrap();
             builder.execute().unwrap();
+        }
+
+        pub fn delete_documents(&self, external_document_ids: Vec<String>) {
+            let mut wtxn = self.write_txn().unwrap();
+
+            self.delete_documents_using_wtxn(&mut wtxn, external_document_ids);
 
             wtxn.commit().unwrap();
         }
