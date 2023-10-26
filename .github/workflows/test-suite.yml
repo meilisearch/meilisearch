@@ -183,7 +183,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly
+          toolchain: 1.71.1
           override: true
           components: rustfmt
       - name: Cache dependencies
