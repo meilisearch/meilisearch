@@ -50,6 +50,7 @@ hebrew = ["milli/hebrew"]
 japanese = ["milli/japanese"]
 # thai specialized tokenization
 thai = ["milli/thai"]
-
 # allow greek specialized tokenization
 greek = ["milli/greek"]
+# allow khmer specialized tokenization
+khmer = ["milli/khmer"]
