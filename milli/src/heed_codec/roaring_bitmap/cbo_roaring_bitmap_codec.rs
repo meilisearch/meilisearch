@@ -102,11 +102,11 @@ impl CboRoaringBitmapCodec {
     }
 
     /// Merges a DelAdd delta into a CboRoaringBitmap.
-    pub fn merge_deladd_into(
+    pub fn merge_deladd_into<'a>(
         deladd: KvReaderDelAdd<'_>,
         previous: &[u8],
-        buffer: &mut Vec<u8>,
-    ) -> io::Result<()> {
+        buffer: &'a mut Vec<u8>,
+    ) -> io::Result<Option<&'a [u8]>> {
         // Deserialize the bitmap that is already there
         let mut previous = Self::deserialize_from(previous)?;
 
@@ -120,7 +120,12 @@ impl CboRoaringBitmapCodec {
             previous |= Self::deserialize_from(value)?;
         }
 
-        previous.serialize_into(buffer)
+        if previous.is_empty() {
+            return Ok(None);
+        }
+
+        Self::serialize_into(&previous, buffer);
+        Ok(Some(&buffer[..]))
     }
 }
 

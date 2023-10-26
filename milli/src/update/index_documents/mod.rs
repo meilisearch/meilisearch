@@ -390,22 +390,7 @@ where
                 return Err(Error::InternalError(InternalError::AbortedIndexation));
             }
 
-            let typed_chunk = match result? {
-                TypedChunk::WordDocids {
-                    word_docids_reader,
-                    exact_word_docids_reader,
-                    word_fid_docids_reader,
-                } => TypedChunk::WordDocids {
-                    word_docids_reader,
-                    exact_word_docids_reader,
-                    word_fid_docids_reader,
-                },
-                TypedChunk::WordPairProximityDocids(chunk) => {
-                    TypedChunk::WordPairProximityDocids(chunk)
-                }
-                TypedChunk::WordPositionDocids(chunk) => TypedChunk::WordPositionDocids(chunk),
-                otherwise => otherwise,
-            };
+            let typed_chunk = result?;
 
             // FIXME: return newly added as well as newly deleted documents
             let (docids, is_merged_database) =

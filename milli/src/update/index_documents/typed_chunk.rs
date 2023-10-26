@@ -484,11 +484,11 @@ fn deladd_serialize_add_side<'a>(obkv: &'a [u8], _buffer: &mut Vec<u8>) -> Resul
 ///
 /// The first argument is the DelAdd obkv of CboRoaringBitmaps and
 /// the second one is the CboRoaringBitmap to merge into.
-fn merge_deladd_cbo_roaring_bitmaps(
+fn merge_deladd_cbo_roaring_bitmaps<'a>(
     deladd_obkv: &[u8],
     previous: &[u8],
-    buffer: &mut Vec<u8>,
-) -> Result<()> {
+    buffer: &'a mut Vec<u8>,
+) -> Result<Option<&'a [u8]>> {
     Ok(CboRoaringBitmapCodec::merge_deladd_into(
         KvReaderDelAdd::new(deladd_obkv),
         previous,
@@ -509,7 +509,7 @@ fn write_entries_into_database<R, K, V, FS, FM>(
 where
     R: io::Read + io::Seek,
     FS: for<'a> Fn(&'a [u8], &'a mut Vec<u8>) -> Result<&'a [u8]>,
-    FM: Fn(&[u8], &[u8], &mut Vec<u8>) -> Result<()>,
+    FM: for<'a> Fn(&[u8], &[u8], &'a mut Vec<u8>) -> Result<Option<&'a [u8]>>,
 {
     puffin::profile_function!(format!("number of entries: {}", data.len()));
 
@@ -521,17 +521,19 @@ where
         if valid_lmdb_key(key) {
             buffer.clear();
             let value = if index_is_empty {
-                serialize_value(value, &mut buffer)?
+                Some(serialize_value(value, &mut buffer)?)
             } else {
                 match database.get(wtxn, key)? {
-                    Some(prev_value) => {
-                        merge_values(value, prev_value, &mut buffer)?;
-                        &buffer[..]
-                    }
-                    None => serialize_value(value, &mut buffer)?,
+                    Some(prev_value) => merge_values(value, prev_value, &mut buffer)?,
+                    None => Some(serialize_value(value, &mut buffer)?),
                 }
             };
-            database.put(wtxn, key, value)?;
+            match value {
+                Some(value) => database.put(wtxn, key, value)?,
+                None => {
+                    database.delete(wtxn, key)?;
+                }
+            }
         }
     }
 
@@ -553,7 +555,7 @@ fn append_entries_into_database<R, K, V, FS, FM>(
 where
     R: io::Read + io::Seek,
     FS: for<'a> Fn(&'a [u8], &'a mut Vec<u8>) -> Result<&'a [u8]>,
-    FM: Fn(&[u8], &[u8], &mut Vec<u8>) -> Result<()>,
+    FM: for<'a> Fn(&[u8], &[u8], &'a mut Vec<u8>) -> Result<Option<&'a [u8]>>,
     K: for<'a> heed::BytesDecode<'a>,
 {
     puffin::profile_function!(format!("number of entries: {}", data.len()));
