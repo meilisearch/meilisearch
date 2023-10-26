@@ -328,8 +328,18 @@ pub(crate) fn write_typed_chunk_into_index(
                 index.field_id_docid_facet_f64s.remap_types::<ByteSlice, ByteSlice>();
             let mut cursor = fid_docid_facet_number.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
+                let reader = KvReaderDelAdd::new(value);
                 if valid_lmdb_key(key) {
-                    index_fid_docid_facet_numbers.put(wtxn, key, value)?;
+                    match (reader.get(DelAdd::Deletion), reader.get(DelAdd::Addition)) {
+                        (None, None) => {}
+                        (None, Some(new)) => index_fid_docid_facet_numbers.put(wtxn, key, new)?,
+                        (Some(_), None) => {
+                            index_fid_docid_facet_numbers.delete(wtxn, key)?;
+                        }
+                        (Some(_), Some(new)) => {
+                            index_fid_docid_facet_numbers.put(wtxn, key, new)?
+                        }
+                    }
                 }
             }
         }
@@ -338,8 +348,18 @@ pub(crate) fn write_typed_chunk_into_index(
                 index.field_id_docid_facet_strings.remap_types::<ByteSlice, ByteSlice>();
             let mut cursor = fid_docid_facet_string.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
+                let reader = KvReaderDelAdd::new(value);
                 if valid_lmdb_key(key) {
-                    index_fid_docid_facet_strings.put(wtxn, key, value)?;
+                    match (reader.get(DelAdd::Deletion), reader.get(DelAdd::Addition)) {
+                        (None, None) => {}
+                        (None, Some(new)) => index_fid_docid_facet_strings.put(wtxn, key, new)?,
+                        (Some(_), None) => {
+                            index_fid_docid_facet_strings.delete(wtxn, key)?;
+                        }
+                        (Some(_), Some(new)) => {
+                            index_fid_docid_facet_strings.put(wtxn, key, new)?
+                        }
+                    }
                 }
             }
         }
