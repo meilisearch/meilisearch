@@ -1575,11 +1575,14 @@ fn delete_document_by_filter<'a>(
             }
             e => e.into(),
         })?;
-        let external_documents_ids = index.external_documents_ids(wtxn)?;
+        let external_documents_ids = index.external_documents_ids();
         // FIXME: for filters matching a lot of documents, this will allocate a huge vec of external docids (strings).
         // Since what we have is an iterator, it would be better to delete in chunks
         let external_to_internal: std::result::Result<Vec<_>, RoaringBitmap> =
-            external_documents_ids.find_external_id_of(candidates).only_external_ids().collect();
+            external_documents_ids
+                .find_external_id_of(wtxn, candidates)?
+                .only_external_ids()
+                .collect();
         let document_ids = match external_to_internal {
             Ok(external_ids) => external_ids,
             Err(remaining_ids) => panic!("Couldn't find some external ids {:?}", remaining_ids),
