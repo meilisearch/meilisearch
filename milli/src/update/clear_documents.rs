@@ -1,7 +1,7 @@
 use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 
-use crate::{ExternalDocumentsIds, FieldDistribution, Index, Result};
+use crate::{FieldDistribution, Index, Result};
 
 pub struct ClearDocuments<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -20,6 +20,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         let Index {
             env: _env,
             main: _main,
+            external_documents_ids,
             word_docids,
             exact_word_docids,
             word_prefix_docids,
@@ -54,7 +55,6 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         // We clean some of the main engine datastructures.
         self.index.put_words_fst(self.wtxn, &fst::Set::default())?;
         self.index.put_words_prefixes_fst(self.wtxn, &fst::Set::default())?;
-        self.index.put_external_documents_ids(self.wtxn, &ExternalDocumentsIds::default())?;
         self.index.put_documents_ids(self.wtxn, &empty_roaring)?;
         self.index.put_field_distribution(self.wtxn, &FieldDistribution::default())?;
         self.index.delete_geo_rtree(self.wtxn)?;
@@ -62,6 +62,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         self.index.delete_vector_hnsw(self.wtxn)?;
 
         // Clear the other databases.
+        external_documents_ids.clear(self.wtxn)?;
         word_docids.clear(self.wtxn)?;
         exact_word_docids.clear(self.wtxn)?;
         word_prefix_docids.clear(self.wtxn)?;

@@ -194,10 +194,8 @@ pub(crate) fn write_typed_chunk_into_index(
                     db.delete(wtxn, &BEU32::new(docid))?;
                 }
             }
-            let mut external_documents_docids = index.external_documents_ids(wtxn)?.into_static();
-            external_documents_docids.apply(operations);
-            index.put_external_documents_ids(wtxn, &external_documents_docids)?;
-
+            let external_documents_docids = index.external_documents_ids();
+            external_documents_docids.apply(wtxn, operations)?;
             index.put_documents_ids(wtxn, &docids)?;
         }
         TypedChunk::FieldIdWordCountDocids(fid_word_count_docids_iter) => {

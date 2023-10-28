@@ -51,7 +51,6 @@ pub mod main_key {
     /// It is concatenated with a big-endian encoded number (non-human readable).
     /// e.g. vector-hnsw0x0032.
     pub const VECTOR_HNSW_KEY_PREFIX: &str = "vector-hnsw";
-    pub const EXTERNAL_DOCUMENTS_IDS_KEY: &str = "external-documents-ids";
     pub const PRIMARY_KEY_KEY: &str = "primary-key";
     pub const SEARCHABLE_FIELDS_KEY: &str = "searchable-fields";
     pub const USER_DEFINED_SEARCHABLE_FIELDS_KEY: &str = "user-defined-searchable-fields";
@@ -81,6 +80,7 @@ pub mod db_name {
     pub const EXACT_WORD_DOCIDS: &str = "exact-word-docids";
     pub const WORD_PREFIX_DOCIDS: &str = "word-prefix-docids";
     pub const EXACT_WORD_PREFIX_DOCIDS: &str = "exact-word-prefix-docids";
+    pub const EXTERNAL_DOCUMENTS_IDS: &str = "external-documents-ids";
     pub const DOCID_WORD_POSITIONS: &str = "docid-word-positions";
     pub const WORD_PAIR_PROXIMITY_DOCIDS: &str = "word-pair-proximity-docids";
     pub const WORD_PREFIX_PAIR_PROXIMITY_DOCIDS: &str = "word-prefix-pair-proximity-docids";
@@ -111,6 +111,9 @@ pub struct Index {
 
     /// Contains many different types (e.g. the fields ids map).
     pub(crate) main: PolyDatabase,
+
+    /// Maps the external documents ids with the internal document id.
+    pub external_documents_ids: Database<Str, OwnedType<BEU32>>,
 
     /// A word and all the documents ids containing the word.
     pub word_docids: Database<Str, CboRoaringBitmapCodec>,
@@ -183,13 +186,15 @@ impl Index {
     ) -> Result<Index> {
         use db_name::*;
 
-        options.max_dbs(25);
+        options.max_dbs(26);
         unsafe { options.flag(Flags::MdbAlwaysFreePages) };
 
         let env = options.open(path)?;
         let mut wtxn = env.write_txn()?;
         let main = env.create_poly_database(&mut wtxn, Some(MAIN))?;
         let word_docids = env.create_database(&mut wtxn, Some(WORD_DOCIDS))?;
+        let external_documents_ids =
+            env.create_database(&mut wtxn, Some(EXTERNAL_DOCUMENTS_IDS))?;
         let exact_word_docids = env.create_database(&mut wtxn, Some(EXACT_WORD_DOCIDS))?;
         let word_prefix_docids = env.create_database(&mut wtxn, Some(WORD_PREFIX_DOCIDS))?;
         let exact_word_prefix_docids =
@@ -235,6 +240,7 @@ impl Index {
         Ok(Index {
             env,
             main,
+            external_documents_ids,
             word_docids,
             exact_word_docids,
             word_prefix_docids,
@@ -386,29 +392,10 @@ impl Index {
 
     /* external documents ids */
 
-    /// Writes the external documents ids and internal ids (i.e. `u32`).
-    pub(crate) fn put_external_documents_ids(
-        &self,
-        wtxn: &mut RwTxn,
-        external_documents_ids: &ExternalDocumentsIds<'_>,
-    ) -> heed::Result<()> {
-        self.main.put::<_, Str, ByteSlice>(
-            wtxn,
-            main_key::EXTERNAL_DOCUMENTS_IDS_KEY,
-            external_documents_ids.as_bytes(),
-        )?;
-        Ok(())
-    }
-
     /// Returns the external documents ids map which associate the external ids
     /// with the internal ids (i.e. `u32`).
-    pub fn external_documents_ids<'t>(&self, rtxn: &'t RoTxn) -> Result<ExternalDocumentsIds<'t>> {
-        let fst = self.main.get::<_, Str, ByteSlice>(rtxn, main_key::EXTERNAL_DOCUMENTS_IDS_KEY)?;
-        let fst = match fst {
-            Some(fst) => fst::Map::new(fst)?.map_data(Cow::Borrowed)?,
-            None => fst::Map::default().map_data(Cow::Owned)?,
-        };
-        Ok(ExternalDocumentsIds::new(fst))
+    pub fn external_documents_ids(&self) -> ExternalDocumentsIds {
+        ExternalDocumentsIds::new(self.external_documents_ids)
     }
 
     /* fields ids map */

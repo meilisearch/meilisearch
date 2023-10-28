@@ -162,7 +162,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         FA: Fn() -> bool + Sync,
     {
         let (mut cursor, fields_index) = reader.into_cursor_and_fields_index();
-        let external_documents_ids = self.index.external_documents_ids(wtxn)?;
+        let external_documents_ids = self.index.external_documents_ids();
         let mapping = create_fields_mapping(&mut self.fields_ids_map, &fields_index)?;
 
         let primary_key = cursor.primary_key().to_string();
@@ -221,7 +221,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             let docid = match self.new_external_documents_ids_builder.entry((*external_id).into()) {
                 Entry::Occupied(entry) => *entry.get() as u32,
                 Entry::Vacant(entry) => {
-                    let docid = match external_documents_ids.get(entry.key()) {
+                    let docid = match external_documents_ids.get(wtxn, entry.key())? {
                         Some(docid) => {
                             // If it was already in the list of replaced documents it means it was deleted
                             // by the remove_document method. We should starts as if it never existed.
@@ -373,7 +373,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         to_remove.sort_unstable();
         to_remove.dedup();
 
-        let external_documents_ids = self.index.external_documents_ids(wtxn)?;
+        let external_documents_ids = self.index.external_documents_ids();
 
         let mut documents_deleted = 0;
         let mut document_sorter_buffer = Vec::new();
@@ -410,7 +410,7 @@ impl<'a, 'i> Transform<'a, 'i> {
 
             // If the document was already in the db we mark it as a `to_delete` document.
             // Then we push the document in sorters in deletion mode.
-            let deleted_from_db = match external_documents_ids.get(&to_remove) {
+            let deleted_from_db = match external_documents_ids.get(wtxn, &to_remove)? {
                 Some(docid) => {
                     self.replaced_documents_ids.insert(docid);
 
