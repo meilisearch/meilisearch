@@ -1,7 +1,6 @@
 use std::collections::{BTreeSet, HashSet};
 use std::fs::File;
 use std::io::{self, BufReader};
-use std::iter::FromIterator;
 
 use heed::BytesDecode;
 use obkv::KvReaderU16;
