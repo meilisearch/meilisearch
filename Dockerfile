@@ -17,7 +17,7 @@ RUN     set -eux; \
         if [ "$apkArch" = "aarch64" ]; then \
             export JEMALLOC_SYS_WITH_LG_PAGE=16; \
         fi && \
-        cargo build --release
+        cargo build --release -p meilisearch -p meilitool
 
 # Run
 FROM    alpine:3.16
@@ -28,9 +28,10 @@ ENV     MEILI_SERVER_PROVIDER docker
 RUN     apk update --quiet \
         && apk add -q --no-cache libgcc tini curl
 
-# add meilisearch to the `/bin` so you can run it from anywhere and it's easy
-# to find.
+# add meilisearch and meilitool to the `/bin` so you can run it from anywhere
+# and it's easy to find.
 COPY    --from=compiler /meilisearch/target/release/meilisearch /bin/meilisearch
+COPY    --from=compiler /meilisearch/target/release/meilitool /bin/meilitool
 # To stay compatible with the older version of the container (pre v0.27.0) we're
 # going to symlink the meilisearch binary in the path to `/meilisearch`
 RUN     ln -s /bin/meilisearch /meilisearch
