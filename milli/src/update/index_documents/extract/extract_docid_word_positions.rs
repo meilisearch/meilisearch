@@ -56,7 +56,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     let mut value_buffer = Vec::new();
 
     // initialize tokenizer.
-    let mut builder = tokenizer_builder(stop_words, dictionary, allowed_separators, None);
+    let mut builder = tokenizer_builder(stop_words, allowed_separators, dictionary, None);
     let tokenizer = builder.build();
 
     // iterate over documents.
@@ -247,8 +247,8 @@ fn lang_safe_tokens_from_document<'a>(
             // build a new temporary tokenizer including the allow list.
             let mut builder = tokenizer_builder(
                 stop_words,
-                dictionary,
                 allowed_separators,
+                dictionary,
                 Some(&script_language),
             );
             let tokenizer = builder.build();
