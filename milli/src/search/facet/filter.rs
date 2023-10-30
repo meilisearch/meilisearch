@@ -3,7 +3,7 @@ use std::fmt::{Debug, Display};
 use std::ops::Bound::{self, Excluded, Included};
 
 use either::Either;
-pub use filter_parser::{Condition, Error as FPError, FilterCondition, Span, Token};
+pub use filter_parser::{Condition, Error as FPError, FilterCondition, Token};
 use roaring::RoaringBitmap;
 use serde_json::Value;
 

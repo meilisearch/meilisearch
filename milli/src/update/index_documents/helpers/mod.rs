@@ -14,7 +14,7 @@ pub use grenad_helpers::{
 };
 pub use merge_functions::{
     concat_u32s_array, keep_first, keep_latest_obkv, merge_btreeset_string,
-    merge_cbo_roaring_bitmaps, merge_obkvs_and_operations, merge_roaring_bitmaps, merge_two_obkvs,
+    merge_cbo_roaring_bitmaps, merge_obkvs_and_operations, merge_roaring_bitmaps,
     serialize_roaring_bitmap, MergeFn,
 };
 

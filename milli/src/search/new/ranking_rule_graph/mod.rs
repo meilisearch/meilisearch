@@ -29,7 +29,7 @@ use std::hash::Hash;
 pub use cheapest_paths::PathVisitor;
 pub use condition_docids_cache::ConditionDocIdsCache;
 pub use dead_ends_cache::DeadEndsCache;
-pub use exactness::{ExactnessCondition, ExactnessGraph};
+pub use exactness::ExactnessGraph;
 pub use fid::{FidCondition, FidGraph};
 pub use position::{PositionCondition, PositionGraph};
 pub use proximity::{ProximityCondition, ProximityGraph};
