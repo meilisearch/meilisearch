@@ -10,7 +10,7 @@ license.workspace = true
 
 [dependencies]
 anyhow = "1.0.75"
-clap = { version = "4.4.7", features = ["derive"] }
+clap = { version = "4.2.1", features = ["derive"] }
 dump = { path = "../dump" }
 file-store = { path = "../file-store" }
 meilisearch-auth = { path = "../meilisearch-auth" }
