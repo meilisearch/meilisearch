@@ -674,10 +674,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                 total_documents: self.documents_count,
             });
 
-            // We increment all the field of the current document in the field distribution.
-            let obkv = KvReader::new(val);
-
-            for (key, value) in obkv.iter() {
+            for (key, value) in KvReader::new(val) {
                 let reader = KvReaderDelAdd::new(value);
                 match (reader.get(DelAdd::Deletion), reader.get(DelAdd::Addition)) {
                     (None, None) => {}
@@ -705,12 +702,14 @@ impl<'a, 'i> Transform<'a, 'i> {
                             BEntry::Occupied(mut entry) => {
                                 // attempt to remove one
                                 match entry.get_mut().checked_sub(1) {
+                                    Some(0) => {
+                                        entry.remove();
+                                    }
                                     Some(new_val) => {
                                         *entry.get_mut() = new_val;
                                     }
                                     None => {
-                                        // was 0, remove field from distribution
-                                        entry.remove();
+                                        unreachable!("Attempting to remove a field that wasn't in the field distribution")
                                     }
                                 }
                             }
