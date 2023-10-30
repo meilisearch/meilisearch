@@ -122,7 +122,7 @@ mod tests {
 
         assert!(index.words_fst(&rtxn).unwrap().is_empty());
         assert!(index.words_prefixes_fst(&rtxn).unwrap().is_empty());
-        assert!(index.external_documents_ids(&rtxn).unwrap().is_empty());
+        assert!(index.external_documents_ids().is_empty(&rtxn).unwrap());
         assert!(index.documents_ids(&rtxn).unwrap().is_empty());
         assert!(index.field_distribution(&rtxn).unwrap().is_empty());
         assert!(index.geo_rtree(&rtxn).unwrap().is_none());

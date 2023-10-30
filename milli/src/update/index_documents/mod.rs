@@ -1094,8 +1094,8 @@ mod tests {
         let txn = index.read_txn().unwrap();
         assert_eq!(index.primary_key(&txn).unwrap(), Some("objectId"));
 
-        let external_documents_ids = index.external_documents_ids(&txn).unwrap();
-        assert!(external_documents_ids.get("30").is_none());
+        let external_documents_ids = index.external_documents_ids();
+        assert!(external_documents_ids.get(&txn, "30").unwrap().is_none());
 
         index
             .add_documents(documents!([
@@ -1104,8 +1104,8 @@ mod tests {
             .unwrap();
 
         let wtxn = index.write_txn().unwrap();
-        let external_documents_ids = index.external_documents_ids(&wtxn).unwrap();
-        assert!(external_documents_ids.get("30").is_some());
+        let external_documents_ids = index.external_documents_ids();
+        assert!(external_documents_ids.get(&wtxn, "30").unwrap().is_some());
         wtxn.commit().unwrap();
 
         index
@@ -1399,8 +1399,8 @@ mod tests {
         index.add_documents(documents!({ "a" : { "b" : { "c" :  1 }}})).unwrap();
 
         let rtxn = index.read_txn().unwrap();
-        let external_documents_ids = index.external_documents_ids(&rtxn).unwrap();
-        assert!(external_documents_ids.get("1").is_some());
+        let external_documents_ids = index.external_documents_ids();
+        assert!(external_documents_ids.get(&rtxn, "1").unwrap().is_some());
     }
 
     #[test]
@@ -1665,7 +1665,7 @@ mod tests {
 
         let wtxn = index.read_txn().unwrap();
 
-        let map = index.external_documents_ids(&wtxn).unwrap().to_hash_map();
+        let map = index.external_documents_ids().to_hash_map(&wtxn).unwrap();
         let ids = map.values().collect::<HashSet<_>>();
 
         assert_eq!(ids.len(), map.len());
@@ -2669,10 +2669,10 @@ mod tests {
         index: &'t TempIndex,
         external_ids: &[&str],
     ) -> Vec<u32> {
-        let external_document_ids = index.external_documents_ids(wtxn).unwrap();
+        let external_document_ids = index.external_documents_ids();
         let ids_to_delete: Vec<u32> = external_ids
             .iter()
-            .map(|id| external_document_ids.get(id.as_bytes()).unwrap())
+            .map(|id| external_document_ids.get(&wtxn, id).unwrap().unwrap())
             .collect();
 
         // Delete some documents.
@@ -3052,9 +3052,13 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         // get internal docids from deleted external document ids
-        let results = index.external_documents_ids(&rtxn).unwrap();
+        let results = index.external_documents_ids();
         for id in deleted_external_ids {
-            assert!(results.get(id).is_none(), "The document {} was supposed to be deleted", id);
+            assert!(
+                results.get(&rtxn, id).unwrap().is_none(),
+                "The document {} was supposed to be deleted",
+                id
+            );
         }
         drop(rtxn);
     }
