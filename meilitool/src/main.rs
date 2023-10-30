@@ -260,6 +260,9 @@ fn export_a_dump(
 
     eprintln!("Dumping the indexes...");
 
+    eprintln!("Successfully dumped {count} tasks!");
+    eprintln!("Dumping the indexes...");
+
     // 4. Dump the indexes
     let mut count = 0;
     for result in index_mapping.iter(&rtxn)? {
