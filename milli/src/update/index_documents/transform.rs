@@ -3,7 +3,7 @@ use std::collections::btree_map::Entry as BEntry;
 use std::collections::hash_map::Entry as HEntry;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
-use std::io::{Read, Seek};
+use std::io::{BufRead, Read, Seek};
 
 use fxhash::FxHashMap;
 use heed::RoTxn;
@@ -150,7 +150,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         })
     }
 
-    pub fn read_documents<R, FP, FA>(
+    pub fn read_documents<R: BufRead, FP, FA>(
         &mut self,
         reader: EnrichedDocumentsBatchReader<R>,
         wtxn: &mut heed::RwTxn,
@@ -162,7 +162,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         FP: Fn(UpdateIndexingStep) + Sync,
         FA: Fn() -> bool + Sync,
     {
-        let (mut cursor, fields_index) = reader.into_cursor_and_fields_index();
+        let mut cursor = reader.into_cursor();
         let external_documents_ids = self.index.external_documents_ids();
         let mapping = create_fields_mapping(&mut self.fields_ids_map, &fields_index)?;
 

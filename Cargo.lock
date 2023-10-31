@@ -2687,6 +2687,7 @@ dependencies = [
  "deserr",
  "either",
  "filter-parser",
+ "flate2",
  "flatten-serde-json",
  "fst",
  "fxhash",

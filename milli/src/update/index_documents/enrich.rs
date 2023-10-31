@@ -1,4 +1,4 @@
-use std::io::{BufWriter, Read, Seek};
+use std::io::{BufRead, BufWriter, Read, Seek};
 use std::result::Result as StdResult;
 use std::{fmt, iter};
 
@@ -25,7 +25,7 @@ const DEFAULT_PRIMARY_KEY: &str = "id";
 /// # Panics
 ///
 /// - if reader.is_empty(), this function may panic in some cases
-pub fn enrich_documents_batch<R: Read + Seek>(
+pub fn enrich_documents_batch<R: BufRead>(
     rtxn: &heed::RoTxn,
     index: &Index,
     autogenerate_docids: bool,
@@ -33,8 +33,7 @@ pub fn enrich_documents_batch<R: Read + Seek>(
 ) -> Result<StdResult<EnrichedDocumentsBatchReader<R>, UserError>> {
     puffin::profile_function!();
 
-    let (mut cursor, mut documents_batch_index) = reader.into_cursor_and_fields_index();
-
+    let mut cursor = reader.into_iter();
     let mut external_ids = tempfile::tempfile().map(BufWriter::new).map(grenad::Writer::new)?;
     let mut uuid_buffer = [0; uuid::fmt::Hyphenated::LENGTH];
 

@@ -5,7 +5,7 @@ mod transform;
 mod typed_chunk;
 
 use std::collections::HashSet;
-use std::io::{Cursor, Read, Seek};
+use std::io::{BufRead, Cursor, Read, Seek};
 use std::iter::FromIterator;
 use std::num::NonZeroU32;
 use std::result::Result as StdResult;
@@ -132,7 +132,7 @@ where
     /// return an error and not the `IndexDocuments` struct as it is invalid to use it afterward.
     ///
     /// Returns the number of documents added to the builder.
-    pub fn add_documents<R: Read + Seek>(
+    pub fn add_documents<R: BufRead + Seek>(
         mut self,
         reader: DocumentsBatchReader<R>,
     ) -> Result<(Self, StdResult<u64, UserError>)> {

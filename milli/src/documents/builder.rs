@@ -1,11 +1,11 @@
+use std::collections::HashMap;
 use std::io::{self, Write};
 
-use grenad::{CompressionType, WriterBuilder};
-use serde::de::Deserializer;
-use serde_json::{to_writer, Value};
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use serde_json::Value;
 
-use super::{DocumentsBatchIndex, Error, DOCUMENTS_BATCH_INDEX_KEY};
-use crate::documents::serde_impl::DocumentVisitor;
+use super::Error;
 use crate::Object;
 
 /// The `DocumentsBatchBuilder` provides a way to build a documents batch in the intermediary
@@ -25,30 +25,19 @@ use crate::Object;
 /// builder.append_json_object(json.as_object().unwrap()).unwrap();
 /// let _vector = builder.into_inner().unwrap();
 /// ```
-pub struct DocumentsBatchBuilder<W> {
+pub struct DocumentsBatchBuilder<W: Write> {
     /// The inner grenad writer, the last value must always be the `DocumentsBatchIndex`.
-    writer: grenad::Writer<W>,
-    /// A map that creates the relation between field ids and field names.
-    fields_index: DocumentsBatchIndex,
+    writer: GzEncoder<W>,
     /// The number of documents that were added to this builder,
     /// it doesn't take the primary key of the documents into account at this point.
     documents_count: u32,
-
-    /// A buffer to store a temporary obkv buffer and avoid reallocating.
-    obkv_buffer: Vec<u8>,
-    /// A buffer to serialize the values and avoid reallocating,
-    /// serialized values are stored in an obkv.
-    value_buffer: Vec<u8>,
 }
 
 impl<W: Write> DocumentsBatchBuilder<W> {
     pub fn new(writer: W) -> DocumentsBatchBuilder<W> {
         DocumentsBatchBuilder {
-            writer: WriterBuilder::new().compression_type(CompressionType::None).build(writer),
-            fields_index: DocumentsBatchIndex::default(),
+            writer: GzEncoder::new(writer, Compression::default()),
             documents_count: 0,
-            obkv_buffer: Vec::new(),
-            value_buffer: Vec::new(),
         }
     }
 
@@ -59,117 +48,77 @@ impl<W: Write> DocumentsBatchBuilder<W> {
 
     /// Appends a new JSON object into the batch and updates the `DocumentsBatchIndex` accordingly.
     pub fn append_json_object(&mut self, object: &Object) -> io::Result<()> {
-        // Make sure that we insert the fields ids in order as the obkv writer has this requirement.
-        let mut fields_ids: Vec<_> = object.keys().map(|k| self.fields_index.insert(k)).collect();
-        fields_ids.sort_unstable();
-
-        self.obkv_buffer.clear();
-        let mut writer = obkv::KvWriter::new(&mut self.obkv_buffer);
-        for field_id in fields_ids {
-            let key = self.fields_index.name(field_id).unwrap();
-            self.value_buffer.clear();
-            to_writer(&mut self.value_buffer, &object[key])?;
-            writer.insert(field_id, &self.value_buffer)?;
-        }
-
-        let internal_id = self.documents_count.to_be_bytes();
-        let document_bytes = writer.into_inner()?;
-        self.writer.insert(internal_id, &document_bytes)?;
+        serde_json::to_writer(&mut self.writer, object)?;
         self.documents_count += 1;
-
         Ok(())
-    }
-
-    /// Appends a new JSON array of objects into the batch and updates the `DocumentsBatchIndex` accordingly.
-    pub fn append_json_array<R: io::Read>(&mut self, reader: R) -> Result<(), Error> {
-        let mut de = serde_json::Deserializer::from_reader(reader);
-        let mut visitor = DocumentVisitor::new(self);
-        de.deserialize_any(&mut visitor)?
     }
 
     /// Appends a new CSV file into the batch and updates the `DocumentsBatchIndex` accordingly.
     pub fn append_csv<R: io::Read>(&mut self, mut reader: csv::Reader<R>) -> Result<(), Error> {
-        // Make sure that we insert the fields ids in order as the obkv writer has this requirement.
-        let mut typed_fields_ids: Vec<_> = reader
+        // Extract the name and the type from the header
+        let typed_headers: Vec<_> = reader
             .headers()?
             .into_iter()
             .map(parse_csv_header)
-            .map(|(k, t)| (self.fields_index.insert(k), t))
-            .enumerate()
+            .map(|(s, t)| (s.to_owned(), t))
             .collect();
-        // Make sure that we insert the fields ids in order as the obkv writer has this requirement.
-        typed_fields_ids.sort_unstable_by_key(|(_, (fid, _))| *fid);
 
         let mut record = csv::StringRecord::new();
-        let mut line = 0;
+        let mut line: usize = 0;
         while reader.read_record(&mut record)? {
             // We increment here and not at the end of the while loop to take
             // the header offset into account.
             line += 1;
 
-            self.obkv_buffer.clear();
-            let mut writer = obkv::KvWriter::new(&mut self.obkv_buffer);
-
-            for (i, (field_id, type_)) in typed_fields_ids.iter() {
-                self.value_buffer.clear();
-
-                let value = &record[*i];
+            let mut document = HashMap::<&str, Value>::default();
+            for ((header, allowed_type), value) in typed_headers.iter().zip(record.iter()) {
                 let trimmed_value = value.trim();
-                match type_ {
+                match allowed_type {
                     AllowedType::Number => {
                         if trimmed_value.is_empty() {
-                            to_writer(&mut self.value_buffer, &Value::Null)?;
+                            document.insert(header, Value::Null);
                         } else if let Ok(integer) = trimmed_value.parse::<i64>() {
-                            to_writer(&mut self.value_buffer, &integer)?;
+                            document.insert(header, integer.into());
                         } else {
                             match trimmed_value.parse::<f64>() {
                                 Ok(float) => {
-                                    to_writer(&mut self.value_buffer, &float)?;
+                                    document.insert(header, float.into());
                                 }
                                 Err(error) => {
-                                    return Err(Error::ParseFloat {
-                                        error,
-                                        line,
-                                        value: value.to_string(),
-                                    });
+                                    let value = value.to_string();
+                                    return Err(Error::ParseFloat { error, line, value });
                                 }
                             }
                         }
                     }
                     AllowedType::Boolean => {
                         if trimmed_value.is_empty() {
-                            to_writer(&mut self.value_buffer, &Value::Null)?;
+                            document.insert(header, Value::Null);
                         } else {
                             match trimmed_value.parse::<bool>() {
                                 Ok(bool) => {
-                                    to_writer(&mut self.value_buffer, &bool)?;
+                                    document.insert(header, bool.into());
                                 }
                                 Err(error) => {
-                                    return Err(Error::ParseBool {
-                                        error,
-                                        line,
-                                        value: value.to_string(),
-                                    });
+                                    let value = value.to_string();
+                                    return Err(Error::ParseBool { error, line, value });
                                 }
                             }
                         }
                     }
                     AllowedType::String => {
                         if value.is_empty() {
-                            to_writer(&mut self.value_buffer, &Value::Null)?;
+                            document.insert(header, Value::Null);
                         } else {
-                            to_writer(&mut self.value_buffer, value)?;
+                            document.insert(header, value.into());
                         }
                     }
                 }
-
-                // We insert into the obkv writer the value buffer that has been filled just above.
-                writer.insert(*field_id, &self.value_buffer)?;
             }
 
-            let internal_id = self.documents_count.to_be_bytes();
-            let document_bytes = writer.into_inner()?;
-            self.writer.insert(internal_id, &document_bytes)?;
+            // We insert into the JSON lines file the value buffer that has been filled just above
+            serde_json::to_writer(&mut self.writer, &document)?;
+            self.writer.write_all(&[b'\n'])?;
             self.documents_count += 1;
         }
 
@@ -177,15 +126,8 @@ impl<W: Write> DocumentsBatchBuilder<W> {
     }
 
     /// Flushes the content on disk and stores the final version of the `DocumentsBatchIndex`.
-    pub fn into_inner(mut self) -> io::Result<W> {
-        let DocumentsBatchBuilder { mut writer, fields_index, .. } = self;
-
-        // We serialize and insert the `DocumentsBatchIndex` as the last key of the grenad writer.
-        self.value_buffer.clear();
-        to_writer(&mut self.value_buffer, &fields_index)?;
-        writer.insert(DOCUMENTS_BATCH_INDEX_KEY, &self.value_buffer)?;
-
-        writer.into_inner()
+    pub fn into_inner(self) -> io::Result<W> {
+        self.writer.finish()
     }
 }
 

@@ -1,7 +1,6 @@
 mod builder;
 mod enriched;
 mod reader;
-mod serde_impl;
 
 use std::fmt::Debug;
 use std::io;
@@ -9,17 +8,16 @@ use std::str::Utf8Error;
 
 use bimap::BiHashMap;
 pub use builder::DocumentsBatchBuilder;
-pub use enriched::{EnrichedDocument, EnrichedDocumentsBatchCursor, EnrichedDocumentsBatchReader};
+pub use enriched::{
+    DocumentsBatchCursorError, EnrichedDocument, EnrichedDocumentsBatchCursor,
+    EnrichedDocumentsBatchReader,
+};
 use obkv::KvReader;
-pub use reader::{DocumentsBatchCursor, DocumentsBatchCursorError, DocumentsBatchReader};
+pub use reader::DocumentsBatchReader;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{FieldIdMapMissingEntry, InternalError};
 use crate::{FieldId, Object, Result};
-
-/// The key that is used to store the `DocumentsBatchIndex` datastructure,
-/// it is the absolute last key of the list.
-const DOCUMENTS_BATCH_INDEX_KEY: [u8; 8] = u64::MAX.to_be_bytes();
 
 /// Helper function to convert an obkv reader into a JSON object.
 pub fn obkv_to_object(obkv: &KvReader<FieldId>, index: &DocumentsBatchIndex) -> Result<Object> {
@@ -148,7 +146,7 @@ pub fn documents_batch_reader_from_objects(
         builder.append_json_object(&object).unwrap();
     }
     let vector = builder.into_inner().unwrap();
-    DocumentsBatchReader::from_reader(std::io::Cursor::new(vector)).unwrap()
+    DocumentsBatchReader::new(std::io::Cursor::new(vector))
 }
 
 #[cfg(test)]

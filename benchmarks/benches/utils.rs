@@ -155,29 +155,25 @@ pub fn documents_from(filename: &str, filetype: &str) -> DocumentsBatchReader<im
 
 fn documents_from_jsonl(reader: impl BufRead) -> anyhow::Result<Vec<u8>> {
     let mut documents = DocumentsBatchBuilder::new(Vec::new());
-
     for result in serde_json::Deserializer::from_reader(reader).into_iter::<Object>() {
         let object = result?;
         documents.append_json_object(&object)?;
     }
-
     documents.into_inner().map_err(Into::into)
 }
 
 fn documents_from_json(reader: impl BufRead) -> anyhow::Result<Vec<u8>> {
-    let mut documents = DocumentsBatchBuilder::new(Vec::new());
-
-    documents.append_json_array(reader)?;
-
-    documents.into_inner().map_err(Into::into)
+    for document in serde_json::from_reader::<Vec<Object>>(reader)? {
+        let mut documents = DocumentsBatchBuilder::new(Vec::new());
+        documents.append_json_object(&document)?;
+        documents.into_inner().map_err(Into::into)
+    }
 }
 
 fn documents_from_csv(reader: impl BufRead) -> anyhow::Result<Vec<u8>> {
     let csv = csv::Reader::from_reader(reader);
-
     let mut documents = DocumentsBatchBuilder::new(Vec::new());
     documents.append_csv(csv)?;
-
     documents.into_inner().map_err(Into::into)
 }
 
@@ -210,9 +206,7 @@ where
 impl<R: Read> CSVDocumentDeserializer<R> {
     fn from_reader(reader: R) -> io::Result<Self> {
         let mut records = csv::Reader::from_reader(reader);
-
         let headers = records.headers()?.into_iter().map(parse_csv_header).collect();
-
         Ok(Self { documents: records.into_records(), headers })
     }
 }
