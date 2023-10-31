@@ -278,6 +278,7 @@ pub(crate) mod test_helpers {
     use crate::heed_codec::ByteSliceRefCodec;
     use crate::search::facet::get_highest_level;
     use crate::snapshot_tests::display_bitmap;
+    use crate::update::del_add::{DelAdd, KvWriterDelAdd};
     use crate::update::FacetsUpdateIncrementalInner;
     use crate::CboRoaringBitmapCodec;
 
@@ -454,8 +455,10 @@ pub(crate) mod test_helpers {
                 let key: FacetGroupKey<&[u8]> =
                     FacetGroupKey { field_id: *field_id, level: 0, left_bound: &left_bound_bytes };
                 let key = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_encode(&key).unwrap();
+                let mut inner_writer = KvWriterDelAdd::memory();
                 let value = CboRoaringBitmapCodec::bytes_encode(docids).unwrap();
-                writer.insert(&key, &value).unwrap();
+                inner_writer.insert(DelAdd::Addition, value).unwrap();
+                writer.insert(&key, inner_writer.into_inner().unwrap()).unwrap();
             }
             writer.finish().unwrap();
             let reader = grenad::Reader::new(std::io::Cursor::new(new_data)).unwrap();
