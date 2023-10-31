@@ -763,11 +763,10 @@ mod tests {
         assert_eq!(count, 1);
 
         // Check that we get only one document from the database.
-        // Since the document has been deleted and re-inserted, its internal docid has been incremented to 1
-        let docs = index.documents(&rtxn, Some(1)).unwrap();
+        let docs = index.documents(&rtxn, Some(0)).unwrap();
         assert_eq!(docs.len(), 1);
         let (id, doc) = docs[0];
-        assert_eq!(id, 1);
+        assert_eq!(id, 0);
 
         // Check that this document is equal to the last one sent.
         let mut doc_iter = doc.iter();
@@ -828,7 +827,7 @@ mod tests {
         assert_eq!(count, 3);
 
         // the document 0 has been deleted and reinserted with the id 3
-        let docs = index.documents(&rtxn, vec![1, 2, 3]).unwrap();
+        let docs = index.documents(&rtxn, vec![1, 2, 0]).unwrap();
         let kevin_position =
             docs.iter().position(|(_, d)| d.get(0).unwrap() == br#""updated kevin""#).unwrap();
         assert_eq!(kevin_position, 2);
