@@ -423,20 +423,20 @@ fn test_proximity_prefix_db() {
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("best win");
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[15, 16, 17, 18, 19, 20, 21, 22]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[19, 22, 18, 21, 15, 16, 17, 20]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
 
     insta::assert_debug_snapshot!(texts, @r###"
     [
+        "\"this is the best winter meal\"",
+        "\"winter best\"",
+        "\"this is the best meal of winter\"",
+        "\"winter x best\"",
         "\"this is the best meal I have ever had in such a beautiful winter day\"",
         "\"this is the best cooked meal of the winter\"",
         "\"this is the best meal of the winter\"",
-        "\"this is the best meal of winter\"",
-        "\"this is the best winter meal\"",
         "\"winter x y best\"",
-        "\"winter x best\"",
-        "\"winter best\"",
     ]
     "###);
 
