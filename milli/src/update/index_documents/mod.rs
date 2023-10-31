@@ -2750,7 +2750,7 @@ mod tests {
     }
 
     #[test]
-    fn filtered_placeholder_search_should_not_return_deleted_documents_() {
+    fn filtered_placeholder_search_should_not_return_deleted_documents() {
         let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
