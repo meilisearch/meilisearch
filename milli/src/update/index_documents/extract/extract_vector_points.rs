@@ -17,7 +17,6 @@ use crate::{DocumentId, FieldId, InternalError, Result, VectorOrArrayOfVectors};
 pub fn extract_vector_points<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
-    primary_key_id: FieldId,
     vectors_fid: FieldId,
 ) -> Result<grenad::Reader<BufReader<File>>> {
     puffin::profile_function!();
