@@ -19,7 +19,7 @@ internal_error!(
     AuthControllerError: meilisearch_types::milli::heed::Error,
     std::io::Error,
     serde_json::Error,
-    zookeeper::ZkError,
+    zookeeper_client_sync::Error,
     std::str::Utf8Error
 );
 

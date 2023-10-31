@@ -16,22 +16,22 @@ pub use store::open_auth_store_env;
 use store::{generate_key_as_hexa, HeedAuthStore};
 use time::OffsetDateTime;
 use uuid::Uuid;
-use zookeeper::{
-    Acl, AddWatchMode, CreateMode, WatchedEvent, WatchedEventType, ZkError, ZooKeeper,
+use zookeeper_client_sync::{
+    Acls, AddWatchMode, CreateMode, Error as ZkError, EventType, WatchedEvent, Zookeeper,
 };
 
 #[derive(Clone)]
 pub struct AuthController {
     store: Arc<HeedAuthStore>,
     master_key: Option<String>,
-    zookeeper: Option<Arc<ZooKeeper>>,
+    zookeeper: Option<Arc<Zookeeper>>,
 }
 
 impl AuthController {
     pub fn new(
         db_path: impl AsRef<Path>,
         master_key: &Option<String>,
-        zookeeper: Option<Arc<ZooKeeper>>,
+        zookeeper: Option<Arc<Zookeeper>>,
     ) -> Result<Self> {
         let store = HeedAuthStore::new(db_path)?;
         let controller = Self { store: Arc::new(store), master_key: master_key.clone(), zookeeper };
@@ -42,22 +42,21 @@ impl AuthController {
                 // Zookeeper Event listener loop
                 let controller_clone = controller.clone();
                 let zkk = zookeeper.clone();
-                zookeeper.add_watch("/auth", AddWatchMode::PersistentRecursive, move |event| {
-                    let WatchedEvent { event_type, path, keeper_state: _ } = dbg!(event);
+                let watcher = zookeeper.watch("/auth", AddWatchMode::PersistentRecursive)?;
+                watcher.run_on_change(move |event| {
+                    let WatchedEvent { event_type, path, .. } = dbg!(event);
 
                     match event_type {
-                        WatchedEventType::NodeDeleted => {
+                        EventType::NodeDeleted => {
                             // TODO: ugly unwraps
-                            let path = path.unwrap();
                             let uuid = path.strip_prefix("/auth/").unwrap();
                             let uuid = Uuid::parse_str(&uuid).unwrap();
                             log::info!("The key {} has been deleted", uuid);
                             controller_clone.store.delete_api_key(uuid).unwrap();
                         }
-                        WatchedEventType::NodeCreated | WatchedEventType::NodeDataChanged => {
-                            let path = path.unwrap();
+                        EventType::NodeCreated | EventType::NodeDataChanged => {
                             if path.strip_prefix("/auth/").map_or(false, |s| !s.is_empty()) {
-                                let (key, _stat) = zkk.get_data(&path, false).unwrap();
+                                let (key, _stat) = zkk.get_data(&path).unwrap();
                                 let key: Key = serde_json::from_slice(&key).unwrap();
                                 log::info!("The key {} has been deleted", key.uid);
                                 controller_clone.store.put_api_key(key).unwrap();
@@ -65,15 +64,14 @@ impl AuthController {
                         }
                         otherwise => panic!("Got the unexpected `{otherwise:?}` event!"),
                     }
-                })?;
+                });
 
                 // TODO: we should catch the potential unexpected errors here https://docs.rs/zookeeper-client/latest/zookeeper_client/struct.Client.html#method.create
                 // for the moment we consider that `create` only returns Error::NodeExists.
                 match zookeeper.create(
                     "/auth",
-                    vec![],
-                    Acl::open_unsafe().clone(),
-                    CreateMode::Persistent,
+                    &[],
+                    &CreateMode::Persistent.with_acls(Acls::anyone_all()),
                 ) {
                     // If the store is empty, we must generate and push the default api-keys.
                     Ok(_) => generate_default_keys(&controller)?,
@@ -83,14 +81,14 @@ impl AuthController {
 
                         let store = controller.store.clone();
                         store.delete_all_keys()?;
-                        let children = zookeeper
-                            .get_children("/auth", false)
+                        let (children, _) = zookeeper
+                            .get_children("/auth")
                             .expect("Internal, the auth directory was deleted during execution.");
 
                         log::info!("Importing {} api-keys", children.len());
                         for path in children {
                             log::info!("  Importing {}", path);
-                            match zookeeper.get_data(&format!("/auth/{}", &path), false) {
+                            match zookeeper.get_data(&format!("/auth/{}", &path)) {
                                 Ok((key, _stat)) => {
                                     let key = serde_json::from_slice(&key).unwrap();
                                     let store = controller.store.clone();
@@ -104,7 +102,7 @@ impl AuthController {
                         }
                     }
                     e @ Err(
-                        ZkError::NoNode | ZkError::NoChildrenForEphemerals | ZkError::InvalidACL,
+                        ZkError::NoNode | ZkError::NoChildrenForEphemerals | ZkError::InvalidAcl,
                     ) => unreachable!("{e:?}"),
                     Err(e) => panic!("{e}"),
                 }
@@ -154,9 +152,8 @@ impl AuthController {
             Some(zookeeper) => {
                 zookeeper.create(
                     &format!("/auth/{}", key.uid),
-                    serde_json::to_vec_pretty(&key)?,
-                    Acl::open_unsafe().clone(),
-                    CreateMode::Persistent,
+                    &serde_json::to_vec_pretty(&key)?,
+                    &CreateMode::Persistent.with_acls(Acls::anyone_all()),
                 )?;
 
                 Ok(key)
@@ -182,7 +179,7 @@ impl AuthController {
             Some(zookeeper) => {
                 zookeeper.set_data(
                     &format!("/auth/{}", key.uid),
-                    serde_json::to_vec_pretty(&key)?,
+                    &serde_json::to_vec_pretty(&key)?,
                     None,
                 )?;
 

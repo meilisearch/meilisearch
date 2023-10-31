@@ -63,9 +63,8 @@ use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 use utils::{filter_out_references_to_newer_tasks, keep_tasks_within_datetimes, map_bound};
 use uuid::Uuid;
-use zookeeper::recipes::leader::LeaderLatch;
-use zookeeper::{
-    Acl, AddWatchMode, CreateMode, WatchedEvent, WatchedEventType, ZkError, ZooKeeper,
+use zookeeper_client_sync::{
+    Acls, AddWatchMode, CreateMode, Error as ZkError, EventType, WatchedEvent, Zookeeper,
 };
 
 use crate::index_mapper::IndexMapper;
@@ -281,7 +280,7 @@ pub struct IndexSchedulerOptions {
     /// The experimental features enabled for this instance.
     pub instance_features: InstanceTogglableFeatures,
     /// zookeeper client
-    pub zookeeper: Option<Arc<ZooKeeper>>,
+    pub zookeeper: Option<Arc<Zookeeper>>,
     /// S3 bucket
     pub s3: Option<Arc<Bucket>>,
 }
@@ -291,7 +290,7 @@ pub struct IndexSchedulerOptions {
 #[derive(Clone)]
 pub struct IndexScheduler {
     inner: Arc<RwLock<Option<IndexSchedulerInner>>>,
-    zookeeper: Option<Arc<ZooKeeper>>,
+    zookeeper: Option<Arc<Zookeeper>>,
     pub s3: Option<Arc<Bucket>>,
     wake_up: Arc<SignalEvent>,
 }
@@ -317,9 +316,8 @@ impl IndexScheduler {
             // Create all the required directories in zookeeper
             match zookeeper.create(
                 "/election",
-                vec![],
-                Acl::open_unsafe().clone(),
-                CreateMode::Persistent,
+                &vec![],
+                &CreateMode::Persistent.with_acls(Acls::anyone_all()),
             ) {
                 Ok(_) | Err(ZkError::NodeExists) => (),
                 Err(e) => panic!("{e}"),
@@ -327,9 +325,8 @@ impl IndexScheduler {
 
             match zookeeper.create(
                 "/snapshots",
-                vec![],
-                Acl::open_unsafe().clone(),
-                CreateMode::Persistent,
+                &[],
+                &CreateMode::Persistent.with_acls(Acls::anyone_all()),
             ) {
                 Ok(_) | Err(ZkError::NodeExists) => (),
                 Err(e) => panic!("{e}"),
@@ -395,37 +392,35 @@ impl IndexScheduler {
                 // See https://zookeeper.apache.org/doc/current/recipes.html#sc_leaderElection
                 let latchc = latch.clone();
                 let this = self.clone();
-                zookeeper
-                    .add_watch("/snapshots", AddWatchMode::PersistentRecursive, move |event| {
-                        if !latchc.has_leadership() {
-                            let WatchedEvent { event_type, path, keeper_state: _ } = event;
-                            match event_type {
-                                WatchedEventType::NodeCreated => {
-                                    let path = path.unwrap();
-                                    log::info!("The snapshot {} is in preparation", path);
-                                }
-                                WatchedEventType::NodeDataChanged => {
-                                    let path = path.unwrap();
-                                    let snapshot_id =
-                                        path.strip_prefix("/snapshots/snapshot-").unwrap();
-                                    let snapshot_dir = format!("snapshots/{}", snapshot_id);
-                                    load_snapshot(&this, &snapshot_dir).unwrap();
-                                }
-                                otherwise => panic!("{otherwise:?}"),
+                let watcher =
+                    zookeeper.watch("/snapshots", AddWatchMode::PersistentRecursive).unwrap();
+                watcher.run_on_change(move |event| {
+                    if !latchc.has_leadership() {
+                        let WatchedEvent { event_type, path, .. } = event;
+                        match event_type {
+                            EventType::NodeCreated => {
+                                log::info!("The snapshot {} is in preparation", path);
                             }
+                            EventType::NodeDataChanged => {
+                                let snapshot_id =
+                                    path.strip_prefix("/snapshots/snapshot-").unwrap();
+                                let snapshot_dir = format!("snapshots/{}", snapshot_id);
+                                load_snapshot(&this, &snapshot_dir).unwrap();
+                            }
+                            otherwise => panic!("{otherwise:?}"),
                         }
-                    })
-                    .unwrap();
+                    }
+                });
 
                 {
                     // TODO we must lock the IndexSchedulerInner here to make sure that we don't
                     //      load this snapshot after the upper watcher find a more recent one.
-                    let mut snapshots = zookeeper.get_children("/snapshots", false).unwrap();
+                    let (mut snapshots, _) = zookeeper.get_children("/snapshots").unwrap();
                     snapshots.sort_unstable();
                     for snapshot_name in dbg!(snapshots).iter().rev() {
                         let (_, snapshot_id) = snapshot_name.rsplit_once('-').unwrap();
                         let snapshot_path = format!("/snapshots/{snapshot_name}");
-                        match zookeeper.get_data(&snapshot_path, false) {
+                        match zookeeper.get_data(&snapshot_path) {
                             Ok((data, _stat)) => {
                                 if data == b"ok" {
                                     eprintln!("Loading snapshot {snapshot_path}");
@@ -442,16 +437,15 @@ impl IndexScheduler {
 
                 match zookeeper.create(
                     "/tasks",
-                    vec![],
-                    Acl::open_unsafe().clone(),
-                    CreateMode::Persistent,
+                    &[],
+                    &CreateMode::Persistent.with_acls(Acls::anyone_all()),
                 ) {
                     Ok(_) => (),
                     Err(ZkError::NodeExists) => {
                         log::warn!("Tasks directory already exists, we're going to import all the tasks on the zk without altering the tasks already on disk.");
 
-                        let children = zookeeper
-                            .get_children("/tasks", false)
+                        let (children, _) = zookeeper
+                            .get_children("/tasks")
                             .expect("Internal, the /tasks directory was deleted during execution."); // TODO change me
 
                         log::info!("Importing {} tasks", children.len());
@@ -459,7 +453,7 @@ impl IndexScheduler {
                         let mut wtxn = inner.env.write_txn().unwrap();
                         for path in children {
                             log::info!("  Importing {}", path);
-                            match zookeeper.get_data(&format!("/tasks/{}", &path), false) {
+                            match zookeeper.get_data(&format!("/tasks/{}", &path)) {
                                 Ok((data, _stat)) => {
                                     if data != b"ok" {
                                         log::info!("  Task {} was not \"ok\", skipping.", path);
@@ -490,40 +484,34 @@ impl IndexScheduler {
                 // TODO: fix unwrap by returning a clear error.
                 let this = self.clone();
                 let zookeeperc = zookeeper.clone();
-                zookeeper
-                    .add_watch("/tasks", AddWatchMode::PersistentRecursive, move |event| {
-                        let WatchedEvent { event_type, path, keeper_state: _ } = event;
-                        match event_type {
-                            WatchedEventType::NodeDataChanged => {
-                                let path = path.unwrap();
-                                // Add raw task content in local DB
-                                log::info!("Received a new task from the cluster at {}", path);
-                                let inner = this.inner();
-                                let (data, _stat) = zookeeperc.get_data(&path, false).unwrap();
-                                if data == b"ok" {
-                                    let mut wtxn = inner.env.write_txn().unwrap();
-                                    let id = path
-                                        .rsplit_once('-')
-                                        .map(|(_, id)| id.parse::<u32>().unwrap())
-                                        .unwrap();
-                                    let s3 = inner.options.s3.as_ref().unwrap();
-                                    let task =
-                                        s3.get_object_json(format!("tasks/{id:0>10}")).unwrap();
-                                    inner.register_raw_task(&mut wtxn, &task).unwrap();
-                                    wtxn.commit().unwrap();
-                                }
+                let watcher = zookeeper.watch("/tasks", AddWatchMode::PersistentRecursive).unwrap();
+                watcher.run_on_change(move |event| {
+                    let WatchedEvent { event_type, path, .. } = event;
+                    match event_type {
+                        EventType::NodeDataChanged => {
+                            // Add raw task content in local DB
+                            log::info!("Received a new task from the cluster at {}", path);
+                            let inner = this.inner();
+                            let (data, _stat) = zookeeperc.get_data(&path).unwrap();
+                            if data == b"ok" {
+                                let mut wtxn = inner.env.write_txn().unwrap();
+                                let id = path
+                                    .rsplit_once('-')
+                                    .map(|(_, id)| id.parse::<u32>().unwrap())
+                                    .unwrap();
+                                let s3 = inner.options.s3.as_ref().unwrap();
+                                let task = s3.get_object_json(format!("tasks/{id:0>10}")).unwrap();
+                                inner.register_raw_task(&mut wtxn, &task).unwrap();
+                                wtxn.commit().unwrap();
                             }
-                            WatchedEventType::None
-                            | WatchedEventType::NodeCreated
-                            | WatchedEventType::NodeDeleted => (),
-                            WatchedEventType::NodeChildrenChanged
-                            | WatchedEventType::DataWatchRemoved
-                            | WatchedEventType::ChildWatchRemoved => panic!("{event_type:?}"),
                         }
+                        EventType::NodeCreated | EventType::NodeDeleted => (),
+                        EventType::NodeChildrenChanged => panic!("Node children changed"),
+                        EventType::Session => panic!("Session error"),
+                    }
 
-                        this.wake_up.signal();
-                    })
-                    .unwrap();
+                    this.wake_up.signal();
+                });
 
                 Some(latch)
             }
@@ -553,18 +541,12 @@ impl IndexScheduler {
                                 }
 
                                 let rtxn = inner.env.read_txn().unwrap();
-                                let snapshot_path = zookeeper
+                                let (_, snapshot_id) = zookeeper
                                     .create(
                                         "/snapshots/snapshot-",
-                                        vec![],
-                                        Acl::open_unsafe().clone(),
-                                        CreateMode::PersistentSequential,
+                                        &[],
+                                        &CreateMode::Persistent.with_acls(Acls::anyone_all()),
                                     )
-                                    .unwrap();
-
-                                let snapshot_id = snapshot_path
-                                    .rsplit_once('-')
-                                    .map(|(_, id)| id.parse::<u32>().unwrap())
                                     .unwrap();
 
                                 let zk_snapshots = format!("snapshots");
@@ -621,8 +603,8 @@ impl IndexScheduler {
 
                                 // we must notify everyone that we dropped a new snapshot on the s3
                                 let _stat = zookeeper.set_data(
-                                    &format!("/snapshots/snapshot-{:0>10?}", snapshot_id),
-                                    b"ok".to_vec(),
+                                    &format!("/snapshots/snapshot-{snapshot_id}"),
+                                    b"ok",
                                     None,
                                 );
                                 log::info!(
@@ -1018,8 +1000,8 @@ pub struct IndexSchedulerInner {
     /// The path to the version file of Meilisearch.
     pub(crate) version_file_path: PathBuf,
 
-    /// The URL to the ZooKeeper cluster
-    pub(crate) zookeeper: Option<Arc<ZooKeeper>>,
+    /// The URL to the Zookeeper cluster
+    pub(crate) zookeeper: Option<Arc<Zookeeper>>,
 
     // ================= test
     // The next entry is dedicated to the tests.
@@ -1435,16 +1417,14 @@ impl IndexSchedulerInner {
     ///
     /// If it fails and data was associated with the task, it tries to delete the associated data.
     pub fn register(&self, kind: KindWithContent) -> Result<Task> {
-        let id = match &self.zookeeper {
+        let zk_id = match &self.zookeeper {
             Some(zookeeper) => {
-                // Reserve uniq ID on zookeeper. And give it to the spawn blocking.
                 match zookeeper.create(
                     "/tasks/task-",
-                    vec![],
-                    Acl::open_unsafe().clone(),
-                    CreateMode::PersistentSequential,
+                    &[],
+                    &CreateMode::Persistent.with_acls(Acls::anyone_all()),
                 ) {
-                    Ok(path) => path.rsplit_once('-').map(|(_, id)| id.parse::<u32>().unwrap()),
+                    Ok((_, id)) => Some(id),
                     Err(e) => panic!("{e}"),
                 }
             }
@@ -1461,8 +1441,11 @@ impl IndexSchedulerInner {
         }
 
         // Retrieve the id generated by zookeeper or generate a local id.
-        let id = match id {
-            Some(id) => id as u32,
+        let id = match zk_id {
+            Some(id) => id
+                .into_i64()
+                .try_into()
+                .expect("Can't convert zookeeper task id to meilisearch task id"),
             None => self.next_task_id(&wtxn)?,
         };
 
@@ -1509,12 +1492,14 @@ impl IndexSchedulerInner {
 
         // TODO: send task to ZK in raw json.
         if let Some(zookeeper) = &self.zookeeper {
+            // safe because if we had a zookeeper at the beginning we must have a zk_id
+            let zk_id = zk_id.unwrap();
             let s3 = self.options.s3.as_ref().unwrap();
-            s3.put_object(format!("tasks/{id:0>10?}"), &serde_json::to_vec_pretty(&task).unwrap())
+            s3.put_object(format!("tasks/{zk_id}"), &serde_json::to_vec_pretty(&task).unwrap())
                 .unwrap();
 
             // TODO: ugly unwrap
-            zookeeper.set_data(&format!("/tasks/task-{:0>10?}", id), b"ok".to_vec(), None).unwrap();
+            zookeeper.set_data(&format!("/tasks/task-{zk_id}"), b"ok", None).unwrap();
         }
 
         Ok(task)
