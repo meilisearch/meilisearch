@@ -3,7 +3,7 @@ use std::io::BufReader;
 
 use grenad::CompressionType;
 use heed::types::ByteSlice;
-use heed::{BytesEncode, Error, RoTxn, RwTxn};
+use heed::{BytesDecode, BytesEncode, Error, RoTxn, RwTxn};
 use roaring::RoaringBitmap;
 
 use super::{FACET_GROUP_SIZE, FACET_MIN_LEVEL_SIZE};
@@ -14,7 +14,7 @@ use crate::heed_codec::facet::{
 use crate::heed_codec::ByteSliceRefCodec;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd};
 use crate::update::index_documents::{create_writer, valid_lmdb_key, writer_into_reader};
-use crate::{CboRoaringBitmapCodec, FieldId, Index, Result};
+use crate::{CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, FieldId, Index, Result};
 
 /// Algorithm to insert elememts into the `facet_id_(string/f64)_docids` databases
 /// by rebuilding the database "from scratch".
@@ -181,7 +181,13 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
                         buffer.extend_from_slice(value);
                     }
                 };
-                database.put(wtxn, key, &buffer)?;
+                let new_bitmap = &buffer[1..];
+                // if the new bitmap is empty, let's remove it
+                if CboRoaringBitmapLenCodec::bytes_decode(new_bitmap).unwrap_or_default() == 0 {
+                    database.delete(wtxn, key)?;
+                } else {
+                    database.put(wtxn, key, &buffer)?;
+                }
             }
         }
         Ok(())
