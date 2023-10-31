@@ -371,12 +371,11 @@ where
                 let _ = lmdb_writer_sx.send(Err(e));
             }
 
-            // needs to be droped to avoid channel waiting lock.
+            // needs to be dropped to avoid channel waiting lock.
             drop(lmdb_writer_sx)
         });
 
-        let index_documents_ids = self.index.documents_ids(self.wtxn)?;
-        let index_is_empty = index_documents_ids.is_empty();
+        let index_is_empty = self.index.number_of_documents(self.wtxn)? == 0;
         let mut final_documents_ids = RoaringBitmap::new();
 
         let mut databases_seen = 0;
@@ -422,16 +421,6 @@ where
         // We write the primary key field id into the main database
         self.index.put_primary_key(self.wtxn, &primary_key)?;
 
-        // We write the external documents ids into the main database.
-        //let mut external_documents_ids = self.index.external_documents_ids(self.wtxn)?;
-        //external_documents_ids.insert_ids(&new_external_documents_ids)?;
-        //let external_documents_ids = external_documents_ids.into_static();
-        //self.index.put_external_documents_ids(self.wtxn, &external_documents_ids)?;
-
-        // FIXME: remove `new_documents_ids` entirely and `replaced_documents_ids`
-        let all_documents_ids = index_documents_ids | new_documents_ids;
-        //self.index.put_documents_ids(self.wtxn, &all_documents_ids)?;
-
         // TODO: reactivate prefix DB with diff-indexing
         // self.execute_prefix_databases(
         //     word_docids,
@@ -441,7 +430,7 @@ where
         //     word_fid_docids,
         // )?;
 
-        Ok(all_documents_ids.len())
+        self.index.number_of_documents(self.wtxn)
     }
 
     #[logging_timer::time("IndexDocuments::{}")]
