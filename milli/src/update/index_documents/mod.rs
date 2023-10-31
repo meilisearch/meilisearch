@@ -1387,6 +1387,8 @@ mod tests {
         index.add_documents(documents!({ "a" : { "b" : { "c" :  1 }}})).unwrap();
 
         let rtxn = index.read_txn().unwrap();
+        let all_documents_count = index.all_documents(&rtxn).unwrap().count();
+        assert_eq!(all_documents_count, 1);
         let external_documents_ids = index.external_documents_ids();
         assert!(external_documents_ids.get(&rtxn, "1").unwrap().is_some());
     }
