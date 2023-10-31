@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "meilisearch",
+    "meilitool",
     "meilisearch-types",
     "meilisearch-auth",
     "meili-snap",
