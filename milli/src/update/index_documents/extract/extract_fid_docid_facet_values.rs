@@ -102,11 +102,11 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
 
                 let del_add_obkv = obkv::KvReader::new(field_bytes);
                 let del_value = match del_add_obkv.get(DelAdd::Deletion) {
-                    Some(bytes) => from_slice(bytes).map_err(InternalError::SerdeJson)?,
+                    Some(bytes) => Some(from_slice(bytes).map_err(InternalError::SerdeJson)?),
                     None => None,
                 };
                 let add_value = match del_add_obkv.get(DelAdd::Addition) {
-                    Some(bytes) => from_slice(bytes).map_err(InternalError::SerdeJson)?,
+                    Some(bytes) => Some(from_slice(bytes).map_err(InternalError::SerdeJson)?),
                     None => None,
                 };
 
