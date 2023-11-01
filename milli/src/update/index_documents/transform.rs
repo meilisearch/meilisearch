@@ -114,24 +114,43 @@ impl<'a, 'i> Transform<'a, 'i> {
         };
 
         // We initialize the sorter with the user indexing settings.
-        let original_sorter = create_sorter(
-            grenad::SortAlgorithm::Stable,
-            merge_function,
-            indexer_settings.chunk_compression_type,
-            indexer_settings.chunk_compression_level,
-            indexer_settings.max_nb_chunks,
-            indexer_settings.max_memory.map(|mem| mem / 2),
-        );
+        let original_sorter = {
+            let mut builder = grenad::Sorter::builder(merge_function);
+            builder.chunk_compression_type(indexer_settings.chunk_compression_type);
+            if let Some(level) = indexer_settings.chunk_compression_level {
+                builder.chunk_compression_level(level);
+            }
+            if let Some(nb_chunks) = indexer_settings.max_nb_chunks {
+                builder.max_nb_chunks(nb_chunks);
+            }
+            if let Some(memory) = indexer_settings.max_memory.map(|mem| mem / 2) {
+                builder.dump_threshold(memory);
+                builder.allow_realloc(false);
+            }
+            builder.sort_algorithm(grenad::SortAlgorithm::Stable);
+            builder.sort_in_parallel(true);
+            builder.build()
+        };
 
         // We initialize the sorter with the user indexing settings.
-        let flattened_sorter = create_sorter(
-            grenad::SortAlgorithm::Stable,
-            merge_function,
-            indexer_settings.chunk_compression_type,
-            indexer_settings.chunk_compression_level,
-            indexer_settings.max_nb_chunks,
-            indexer_settings.max_memory.map(|mem| mem / 2),
-        );
+        let flattened_sorter = {
+            let mut builder = grenad::Sorter::builder(merge_function);
+            builder.chunk_compression_type(indexer_settings.chunk_compression_type);
+            if let Some(level) = indexer_settings.chunk_compression_level {
+                builder.chunk_compression_level(level);
+            }
+            if let Some(nb_chunks) = indexer_settings.max_nb_chunks {
+                builder.max_nb_chunks(nb_chunks);
+            }
+            if let Some(memory) = indexer_settings.max_memory.map(|mem| mem / 2) {
+                builder.dump_threshold(memory);
+                builder.allow_realloc(false);
+            }
+            builder.sort_algorithm(grenad::SortAlgorithm::Stable);
+            builder.sort_in_parallel(true);
+            builder.build()
+        };
+
         let documents_ids = index.documents_ids(wtxn)?;
 
         Ok(Transform {

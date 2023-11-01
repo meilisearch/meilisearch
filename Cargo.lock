@@ -1664,11 +1664,12 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 [[package]]
 name = "grenad"
 version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5232b2d157b7bf63d7abe1b12177039e58db2f29e377517c0cdee1578cca4c93"
+source = "git+https://github.com/meilisearch/grenad?branch=parallel-sorter#eafb6ae795af6078e087edf77e7cd31a26238707"
 dependencies = [
  "bytemuck",
  "byteorder",
+ "crossbeam-channel",
+ "rayon",
  "tempfile",
 ]
 
