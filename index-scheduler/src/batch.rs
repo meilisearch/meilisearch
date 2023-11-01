@@ -24,7 +24,7 @@ use std::fs::{self, File};
 use std::io::BufWriter;
 
 use dump::IndexMetadata;
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 use meilisearch_types::error::Code;
 use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
@@ -1190,7 +1190,7 @@ impl IndexScheduler {
                     index,
                     indexer_config,
                     config,
-                    |indexing_step| debug!("update: {:?}", indexing_step),
+                    |indexing_step| trace!("update: {:?}", indexing_step),
                     || must_stop_processing.get(),
                 )?;
 
@@ -1268,7 +1268,7 @@ impl IndexScheduler {
                         milli::update::Settings::new(index_wtxn, index, indexer_config);
                     builder.reset_primary_key();
                     builder.execute(
-                        |indexing_step| debug!("update: {:?}", indexing_step),
+                        |indexing_step| trace!("update: {:?}", indexing_step),
                         || must_stop_processing.clone().get(),
                     )?;
                 }
@@ -1288,7 +1288,7 @@ impl IndexScheduler {
                     index,
                     indexer_config,
                     config,
-                    |indexing_step| debug!("update: {:?}", indexing_step),
+                    |indexing_step| trace!("update: {:?}", indexing_step),
                     || must_stop_processing.get(),
                 )?;
 
