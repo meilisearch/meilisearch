@@ -50,7 +50,7 @@ jobs:
     needs: check-version
     steps:
       - name: Create PR to Homebrew
-        uses: mislav/bump-homebrew-formula-action@v2
+        uses: mislav/bump-homebrew-formula-action@v3
         with:
           formula-name: meilisearch
           formula-path: Formula/m/meilisearch.rb
