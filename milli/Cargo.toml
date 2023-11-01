@@ -26,9 +26,8 @@ flatten-serde-json = { path = "../flatten-serde-json" }
 fst = "0.4.7"
 fxhash = "0.2.1"
 geoutils = "0.5.1"
-grenad = { git = "https://github.com/meilisearch/grenad", branch = "parallel-sorter", default-features = false, features = [
-    "rayon",
-    "tempfile",
+grenad = { version = "0.4.5", default-features = false, features = [
+    "rayon", "tempfile"
 ] }
 heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.7", default-features = false, features = [
     "lmdb", "read-txn-no-tls"
