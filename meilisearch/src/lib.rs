@@ -138,7 +138,7 @@ enum OnFailure {
     KeepDb,
 }
 
-pub async fn setup_meilisearch(
+pub fn setup_meilisearch(
     opt: &Opt,
     zookeeper: Option<Arc<Zookeeper>>,
 ) -> anyhow::Result<(Arc<IndexScheduler>, Arc<AuthController>)> {

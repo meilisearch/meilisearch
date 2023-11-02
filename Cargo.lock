@@ -4011,7 +4011,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "strois"
 version = "0.0.4"
-source = "git+http://github.com/meilisearch/strois?rev=eeb945c#eeb945cfb6c666935b0f06b1f410fd83182b2b67"
+source = "git+https://github.com/meilisearch/strois?rev=eeb945c#eeb945cfb6c666935b0f06b1f410fd83182b2b67"
 dependencies = [
  "http",
  "log",
@@ -4964,7 +4964,6 @@ dependencies = [
 [[package]]
 name = "zookeeper-client-sync"
 version = "0.1.0"
-source = "git+https://github.com/irevoire/zookeeper-client-sync.git#e781ad856d23b655c2c74d51833e04972e400207"
 dependencies = [
  "futures",
  "once_cell",

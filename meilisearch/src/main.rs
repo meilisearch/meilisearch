@@ -68,7 +68,9 @@ async fn main() -> anyhow::Result<()> {
         Some(ref url) => Some(Arc::new(Zookeeper::connect(url).await.unwrap())),
         None => None,
     };
-    let (index_scheduler, auth_controller) = setup_meilisearch(&opt, zookeeper).await?;
+    let optc = opt.clone();
+    let (index_scheduler, auth_controller) =
+        tokio::task::spawn_blocking(move || setup_meilisearch(&optc, zookeeper)).await.unwrap()?;
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     let analytics = if !opt.no_analytics {

@@ -50,7 +50,7 @@ impl AuthController {
                         EventType::NodeDeleted => {
                             // TODO: ugly unwraps
                             let uuid = path.strip_prefix("/auth/").unwrap();
-                            let uuid = Uuid::parse_str(&uuid).unwrap();
+                            let uuid = Uuid::parse_str(uuid).unwrap();
                             log::info!("The key {} has been deleted", uuid);
                             controller_clone.store.delete_api_key(uuid).unwrap();
                         }
@@ -58,7 +58,7 @@ impl AuthController {
                             if path.strip_prefix("/auth/").map_or(false, |s| !s.is_empty()) {
                                 let (key, _stat) = zkk.get_data(&path).unwrap();
                                 let key: Key = serde_json::from_slice(&key).unwrap();
-                                log::info!("The key {} has been deleted", key.uid);
+                                log::info!("The key {} has been inserted", key.uid);
                                 controller_clone.store.put_api_key(key).unwrap();
                             }
                         }
