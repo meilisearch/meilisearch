@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::{self, BufReader};
@@ -8,7 +8,9 @@ use charabia::{Language, Script};
 use grenad::MergerBuilder;
 use heed::types::ByteSlice;
 use heed::RwTxn;
+use log::error;
 use obkv::{KvReader, KvWriter};
+use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 
 use super::helpers::{self, merge_ignore_values, valid_lmdb_key, CursorClonableMmap};
@@ -22,10 +24,9 @@ use crate::index::Hnsw;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd};
 use crate::update::facet::FacetsUpdate;
 use crate::update::index_documents::helpers::{as_cloneable_grenad, try_split_array_at};
-use crate::update::index_documents::validate_document_id_value;
 use crate::{
-    lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, FieldId, GeoPoint, Index, InternalError,
-    Result, SerializationError, BEU32,
+    lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, FieldId, GeoPoint, Index, Result,
+    SerializationError, BEU32,
 };
 
 pub(crate) enum TypedChunk {
@@ -366,44 +367,70 @@ pub(crate) fn write_typed_chunk_into_index(
             index.put_geo_faceted_documents_ids(wtxn, &geo_faceted_docids)?;
         }
         TypedChunk::VectorPoints(vector_points) => {
-            let (pids, mut points): (Vec<_>, Vec<_>) = match index.vector_hnsw(wtxn)? {
-                Some(hnsw) => hnsw.iter().map(|(pid, point)| (pid, point.clone())).unzip(),
-                None => Default::default(),
-            };
-
-            // Convert the PointIds into DocumentIds
-            let mut docids = Vec::new();
-            for pid in pids {
-                let docid =
-                    index.vector_id_docid.get(wtxn, &BEU32::new(pid.into_inner()))?.unwrap();
-                docids.push(docid.get());
+            let mut vectors_set = HashSet::new();
+            // We extract and store the previous vectors
+            if let Some(hnsw) = index.vector_hnsw(wtxn)? {
+                for (pid, point) in hnsw.iter() {
+                    let pid_key = BEU32::new(pid.into_inner());
+                    let docid = index.vector_id_docid.get(wtxn, &pid_key)?.unwrap().get();
+                    let vector: Vec<_> = point.iter().copied().map(OrderedFloat).collect();
+                    vectors_set.insert((docid, vector));
+                }
             }
 
-            let mut expected_dimensions = points.get(0).map(|p| p.len());
             let mut cursor = vector_points.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
                 // convert the key back to a u32 (4 bytes)
                 let (left, _index) = try_split_array_at(key).unwrap();
                 let docid = DocumentId::from_be_bytes(left);
-                // convert the vector back to a Vec<f32>
-                let vector: Vec<f32> = pod_collect_to_vec(value);
 
-                // TODO Inform the user about the document that has a wrong `_vectors`
-                let found = vector.len();
-                let expected = *expected_dimensions.get_or_insert(found);
-                if expected != found {
-                    return Err(UserError::InvalidVectorDimensions { expected, found }.into());
+                let vector_deladd_obkv = KvReaderDelAdd::new(value);
+                if let Some(value) = vector_deladd_obkv.get(DelAdd::Deletion) {
+                    // convert the vector back to a Vec<f32>
+                    let vector = pod_collect_to_vec(value).into_iter().map(OrderedFloat).collect();
+                    let key = (docid, vector);
+                    if !vectors_set.remove(&key) {
+                        error!("Unable to delete the vector: {:?}", key.1);
+                    }
                 }
-
-                points.push(NDotProductPoint::new(vector));
-                docids.push(docid);
+                if let Some(value) = vector_deladd_obkv.get(DelAdd::Addition) {
+                    // convert the vector back to a Vec<f32>
+                    let vector = pod_collect_to_vec(value).into_iter().map(OrderedFloat).collect();
+                    vectors_set.insert((docid, vector));
+                }
             }
 
-            assert_eq!(docids.len(), points.len());
+            // Extract the most common vector dimension
+            let expected_dimension_size = {
+                let mut dims = HashMap::new();
+                vectors_set.iter().for_each(|(_, v)| *dims.entry(v.len()).or_insert(0) += 1);
+                dims.into_iter().max_by_key(|(_, count)| *count).map(|(len, _)| len)
+            };
+
+            // Ensure that the vector lenghts are correct and
+            // prepare the vectors before inserting them in the HNSW.
+            let mut points = Vec::new();
+            let mut docids = Vec::new();
+            for (docid, vector) in vectors_set {
+                if expected_dimension_size.map_or(false, |expected| expected != vector.len()) {
+                    return Err(UserError::InvalidVectorDimensions {
+                        expected: expected_dimension_size.unwrap_or(vector.len()),
+                        found: vector.len(),
+                    }
+                    .into());
+                } else {
+                    let vector = vector.into_iter().map(OrderedFloat::into_inner).collect();
+                    points.push(NDotProductPoint::new(vector));
+                    docids.push(docid);
+                }
+            }
 
             let hnsw_length = points.len();
             let (new_hnsw, pids) = Hnsw::builder().build_hnsw(points);
 
+            assert_eq!(docids.len(), pids.len());
+
+            // Store the vectors in the point-docid relation database
             index.vector_id_docid.clear(wtxn)?;
             for (docid, pid) in docids.into_iter().zip(pids) {
                 index.vector_id_docid.put(
