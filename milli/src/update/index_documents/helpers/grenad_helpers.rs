@@ -47,6 +47,7 @@ pub fn create_sorter(
         builder.allow_realloc(false);
     }
     builder.sort_algorithm(sort_algorithm);
+    builder.sort_in_parallel(true);
     builder.build()
 }
 
