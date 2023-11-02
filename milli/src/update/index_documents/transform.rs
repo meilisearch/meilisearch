@@ -799,7 +799,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         let mut obkv_buffer = Vec::new();
         let mut document_sorter_key_buffer = Vec::new();
         let mut document_sorter_value_buffer = Vec::new();
-        for result in self.index.external_documents_ids().0.iter(wtxn)? {
+        for result in self.index.external_documents_ids().iter(wtxn)? {
             let (external_id, docid) = result?;
             let obkv = self.index.documents.get(wtxn, &docid)?.ok_or(
                 InternalError::DatabaseMissingEntry { db_name: db_name::DOCUMENTS, key: None },

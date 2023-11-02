@@ -18,7 +18,7 @@ pub struct DocumentOperation {
     pub kind: DocumentOperationKind,
 }
 
-pub struct ExternalDocumentsIds(pub Database<Str, OwnedType<BEU32>>);
+pub struct ExternalDocumentsIds(Database<Str, OwnedType<BEU32>>);
 
 impl ExternalDocumentsIds {
     pub fn new(db: Database<Str, OwnedType<BEU32>>) -> ExternalDocumentsIds {
@@ -85,6 +85,11 @@ impl ExternalDocumentsIds {
         }
 
         Ok(())
+    }
+
+    /// Returns an iterator over all the external ids.
+    pub fn iter<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<RoIter<'t, Str, OwnedType<BEU32>>> {
+        self.0.iter(rtxn)
     }
 }
 
