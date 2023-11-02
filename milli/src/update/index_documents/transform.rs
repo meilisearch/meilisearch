@@ -281,7 +281,8 @@ impl<'a, 'i> Transform<'a, 'i> {
                         keep_original_version,
                         &mut document_sorter_value_buffer,
                     )?;
-                    self.original_sorter.insert(&document_sorter_key_buffer, &document_sorter_buffer)?;
+                    self.original_sorter
+                        .insert(&document_sorter_key_buffer, &document_sorter_value_buffer)?;
                     let base_obkv = KvReader::new(base_obkv);
                     if let Some(flattened_obkv) = self.flatten_from_fields_ids_map(base_obkv)? {
                         // we recreate our buffer with the flattened documents
@@ -294,7 +295,8 @@ impl<'a, 'i> Transform<'a, 'i> {
                             &mut document_sorter_value_buffer,
                         )?;
                     }
-                    self.flattened_sorter.insert(docid.to_be_bytes(), &document_sorter_value_buffer)?;
+                    self.flattened_sorter
+                        .insert(docid.to_be_bytes(), &document_sorter_value_buffer)?;
                 }
             }
 
@@ -465,7 +467,8 @@ impl<'a, 'i> Transform<'a, 'i> {
                             &mut document_sorter_value_buffer,
                         )?;
                     }
-                    self.flattened_sorter.insert(docid.to_be_bytes(), &document_sorter_value_buffer)?;
+                    self.flattened_sorter
+                        .insert(docid.to_be_bytes(), &document_sorter_value_buffer)?;
 
                     true
                 }
