@@ -2,7 +2,6 @@ use std::env;
 use std::io::{stderr, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 
 use actix_web::http::KeepAlive;
 use actix_web::web::Data;
@@ -13,7 +12,7 @@ use meilisearch::analytics::Analytics;
 use meilisearch::{analytics, create_app, prototype_name, setup_meilisearch, Opt};
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
-use zookeeper::ZooKeeper;
+use zookeeper_client_sync::Zookeeper;
 
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -65,9 +64,10 @@ async fn main() -> anyhow::Result<()> {
         _ => (),
     }
 
-    let timeout = Duration::from_millis(2500);
-    let zookeeper =
-        opt.zk_url.as_ref().map(|url| Arc::new(ZooKeeper::connect(url, timeout, drop).unwrap()));
+    let zookeeper = match opt.zk_url {
+        Some(ref url) => Some(Arc::new(Zookeeper::connect(url).await.unwrap())),
+        None => None,
+    };
     let (index_scheduler, auth_controller) = setup_meilisearch(&opt, zookeeper).await?;
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]

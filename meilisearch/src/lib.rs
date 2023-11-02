@@ -40,7 +40,7 @@ use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
 pub use option::Opt;
 use option::ScheduleSnapshot;
 use strois::Bucket;
-use zookeeper::ZooKeeper;
+use zookeeper_client_sync::Zookeeper;
 
 use crate::error::MeilisearchHttpError;
 
@@ -140,7 +140,7 @@ enum OnFailure {
 
 pub async fn setup_meilisearch(
     opt: &Opt,
-    zookeeper: Option<Arc<ZooKeeper>>,
+    zookeeper: Option<Arc<Zookeeper>>,
 ) -> anyhow::Result<(Arc<IndexScheduler>, Arc<AuthController>)> {
     let empty_db = is_empty_db(&opt.db_path);
     let (index_scheduler, auth_controller) = if let Some(ref snapshot_path) = opt.import_snapshot {
@@ -219,7 +219,7 @@ pub async fn setup_meilisearch(
 fn open_or_create_database_unchecked(
     opt: &Opt,
     on_failure: OnFailure,
-    zookeeper: Option<Arc<ZooKeeper>>,
+    zookeeper: Option<Arc<Zookeeper>>,
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
     // we don't want to create anything in the data.ms yet, thus we
     // wrap our two builders in a closure that'll be executed later.
@@ -278,7 +278,7 @@ fn open_or_create_database_unchecked(
 fn open_or_create_database(
     opt: &Opt,
     empty_db: bool,
-    zookeeper: Option<Arc<ZooKeeper>>,
+    zookeeper: Option<Arc<Zookeeper>>,
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
     if !empty_db {
         check_version_file(&opt.db_path)?;

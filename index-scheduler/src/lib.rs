@@ -370,7 +370,7 @@ impl IndexScheduler {
         // The lowest in the list is the leader. And if we're not the leader
         // we watch the node right before us to be notified if he dies.
         // See https://zookeeper.apache.org/doc/current/recipes.html#sc_leaderElection
-        let clusterized = match self.zookeeper {
+        let clusterized = match self.zookeeper.clone() {
             Some(zk) => {
                 // First, load the already existing tasks in the cluster, or, if we're the first one to join the cluster, create the task directory.
                 let tasks_watcher = match zk.create(
@@ -459,7 +459,7 @@ impl IndexScheduler {
                 ) {
                     Ok(_) => (),
                     Err(ZkError::NodeExists) => (),
-                    Err(e) => return Err(e.into()),
+                    Err(e) => panic!("{e}"),
                 };
 
                 let (_, id) = zk
@@ -475,13 +475,13 @@ impl IndexScheduler {
                 let string_id = id.to_string();
 
                 // there is at least us in the childrens of election
-                if childrens[0].ends_with(id.to_string()) {
+                if childrens[0].ends_with(&string_id) {
                     log::warn!("I'm the leader");
                     None
                 } else {
                     let should_watch = childrens
                         .into_iter()
-                        .rfind(|path| path[path.len() - id.len()..] < id)
+                        .rfind(|path| &path[path.len() - string_id.len()..] < string_id.as_str())
                         .unwrap();
                     log::warn!("I'm a follower When `{should_watch}` die I should check if I'm the new leader");
 
