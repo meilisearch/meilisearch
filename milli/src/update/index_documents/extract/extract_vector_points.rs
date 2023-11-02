@@ -7,7 +7,8 @@ use serde_json::{from_slice, Value};
 
 use super::helpers::{create_writer, writer_into_reader, GrenadParameters};
 use crate::error::UserError;
-use crate::{FieldId, InternalError, Result, VectorOrArrayOfVectors};
+use crate::update::index_documents::helpers::try_split_at;
+use crate::{DocumentId, FieldId, InternalError, Result, VectorOrArrayOfVectors};
 
 /// Extracts the embedding vector contained in each document under the `_vectors` field.
 ///
@@ -16,7 +17,6 @@ use crate::{FieldId, InternalError, Result, VectorOrArrayOfVectors};
 pub fn extract_vector_points<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
-    primary_key_id: FieldId,
     vectors_fid: FieldId,
 ) -> Result<grenad::Reader<BufReader<File>>> {
     puffin::profile_function!();
@@ -28,15 +28,17 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
     );
 
     let mut cursor = obkv_documents.into_cursor()?;
-    while let Some((docid_bytes, value)) = cursor.move_on_next()? {
+    while let Some((key, value)) = cursor.move_on_next()? {
+        // this must always be serialized as (docid, external_docid);
+        let (docid_bytes, external_id_bytes) =
+            try_split_at(key, std::mem::size_of::<DocumentId>()).unwrap();
+        debug_assert!(std::str::from_utf8(external_id_bytes).is_ok());
+
         let obkv = obkv::KvReader::new(value);
 
         // since we only needs the primary key when we throw an error we create this getter to
         // lazily get it when needed
-        let document_id = || -> Value {
-            let document_id = obkv.get(primary_key_id).unwrap();
-            from_slice(document_id).unwrap()
-        };
+        let document_id = || -> Value { std::str::from_utf8(external_id_bytes).unwrap().into() };
 
         // first we retrieve the _vectors field
         if let Some(vectors) = obkv.get(vectors_fid) {

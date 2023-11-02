@@ -74,10 +74,6 @@ impl ExternalDocumentsIds {
         for DocumentOperation { external_id, internal_id, kind } in operations {
             match kind {
                 DocumentOperationKind::Create => {
-                    // TODO should we get before insert to be able to detect bugs?
-                    // if matches!(kind, DocumentOperationKind::Create) {
-                    //     panic!("Attempting to create an already-existing document");
-                    // }
                     self.0.put(wtxn, &external_id, &BEU32::new(internal_id))?;
                 }
                 DocumentOperationKind::Delete => {
@@ -89,6 +85,11 @@ impl ExternalDocumentsIds {
         }
 
         Ok(())
+    }
+
+    /// Returns an iterator over all the external ids.
+    pub fn iter<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<RoIter<'t, Str, OwnedType<BEU32>>> {
+        self.0.iter(rtxn)
     }
 }
 

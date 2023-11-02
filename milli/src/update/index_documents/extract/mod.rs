@@ -63,7 +63,6 @@ pub(crate) fn data_from_obkv_documents(
                 indexer,
                 lmdb_writer_sx.clone(),
                 vectors_field_id,
-                primary_key_id,
             )
         })
         .collect::<Result<()>>()?;
@@ -274,7 +273,6 @@ fn send_original_documents_data(
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     vectors_field_id: Option<FieldId>,
-    primary_key_id: FieldId,
 ) -> Result<()> {
     let original_documents_chunk =
         original_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
@@ -283,12 +281,7 @@ fn send_original_documents_data(
         let documents_chunk_cloned = original_documents_chunk.clone();
         let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
         rayon::spawn(move || {
-            let result = extract_vector_points(
-                documents_chunk_cloned,
-                indexer,
-                primary_key_id,
-                vectors_field_id,
-            );
+            let result = extract_vector_points(documents_chunk_cloned, indexer, vectors_field_id);
             let _ = match result {
                 Ok(vector_points) => {
                     lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints(vector_points)))
