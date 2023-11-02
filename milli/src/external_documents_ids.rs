@@ -18,7 +18,7 @@ pub struct DocumentOperation {
     pub kind: DocumentOperationKind,
 }
 
-pub struct ExternalDocumentsIds(Database<Str, OwnedType<BEU32>>);
+pub struct ExternalDocumentsIds(pub Database<Str, OwnedType<BEU32>>);
 
 impl ExternalDocumentsIds {
     pub fn new(db: Database<Str, OwnedType<BEU32>>) -> ExternalDocumentsIds {
