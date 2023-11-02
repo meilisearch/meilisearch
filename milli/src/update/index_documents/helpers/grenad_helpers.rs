@@ -223,11 +223,13 @@ pub fn grenad_obkv_into_chunks<R: io::Read + io::Seek>(
         );
 
         while let Some((document_id, obkv)) = cursor.move_on_next()? {
-            obkv_documents.insert(document_id, obkv)?;
-            current_chunk_size += document_id.len() as u64 + obkv.len() as u64;
+            if !obkv.is_empty() {
+                obkv_documents.insert(document_id, obkv)?;
+                current_chunk_size += document_id.len() as u64 + obkv.len() as u64;
 
-            if current_chunk_size >= documents_chunk_size as u64 {
-                return writer_into_reader(obkv_documents).map(Some);
+                if current_chunk_size >= documents_chunk_size as u64 {
+                    return writer_into_reader(obkv_documents).map(Some);
+                }
             }
         }
 
