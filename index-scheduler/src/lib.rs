@@ -502,10 +502,13 @@ impl IndexScheduler {
         thread::spawn(move || {
             loop {
                 if let Some((zk, id, watchers)) = &mut clusterized {
+                    log::info!("Waiting for an event to happen as a follower");
                     // We're a follower
+                    // TODO: TAMO: the watchers never changes, that's not normal
                     let event = watchers.changed();
+                    log::info!("Woke up, we got a new event at {}", event.path);
 
-                    if event.path.starts_with("election") {
+                    if event.path.starts_with("/election") {
                         if event.event_type == EventType::NodeDeleted {
                             // The person we were following died, we must see if we're the new leader
                             let (mut childrens, _) = zk.get_children("/election").unwrap();
@@ -580,7 +583,8 @@ impl IndexScheduler {
                                     .create(
                                         "/snapshots/snapshot-",
                                         &[],
-                                        &CreateMode::Persistent.with_acls(Acls::anyone_all()),
+                                        &CreateMode::PersistentSequential
+                                            .with_acls(Acls::anyone_all()),
                                     )
                                     .unwrap();
 
@@ -1457,7 +1461,7 @@ impl IndexSchedulerInner {
                 match zookeeper.create(
                     "/tasks/task-",
                     &[],
-                    &CreateMode::Persistent.with_acls(Acls::anyone_all()),
+                    &CreateMode::PersistentSequential.with_acls(Acls::anyone_all()),
                 ) {
                     Ok((_, id)) => Some(id),
                     Err(e) => panic!("{e}"),
