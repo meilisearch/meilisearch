@@ -57,30 +57,34 @@ where
 
         if features.check_metrics().is_ok() {
             let request_path = req.path();
-            let is_registered_resource = match req.resource_map().match_pattern(request_path).as_deref()
-            {
-                None => false,
-                Some("/tasks/{task_id}") => false,
-                Some("/manifest.json") => false,
+            let generic_route = req.resource_map().match_pattern(request_path);
+
+            // We group certain routes together as we otherwise would generate too many
+            // prometheus metric with no additional value.
+            // See: https://github.com/meilisearch/meilisearch/issues/3983
+            let opt_metric_path = match generic_route.as_deref() {
+                Some("/tasks/{task_id}") => Some("/tasks/{task_id}"),
+                Some(x) if x.starts_with("/keys") => None,
                 Some(x)
                     if x.starts_with("/fonts/")
                         || x.starts_with("/static/")
-                        || x.starts_with("/favicon") =>
+                        || x.starts_with("/favicon")
+                        || x == "/manifest.json" =>
                 {
-                    false
+                    Some("static_resource")
                 }
-                _ => true,
+                other => other,
             };
-            
-            if is_registered_resource {
+
+            if let Some(metric_group) = opt_metric_path {
                 let request_method = req.method().to_string();
                 histogram_timer = Some(
                     crate::metrics::MEILISEARCH_HTTP_RESPONSE_TIME_SECONDS
-                        .with_label_values(&[&request_method, request_path])
+                        .with_label_values(&[&request_method, metric_group])
                         .start_timer(),
                 );
                 crate::metrics::MEILISEARCH_HTTP_REQUESTS_TOTAL
-                    .with_label_values(&[&request_method, request_path])
+                    .with_label_values(&[&request_method, metric_group])
                     .inc();
             }
         };
