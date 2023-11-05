@@ -25,12 +25,6 @@
 
 <p align="center">⚡ A lightning-fast search engine that fits effortlessly into your apps, websites, and workflow 🔍</p>
 
----
-
-### 🔥 On November 2nd, we are hosting our first-ever live demo and product updates for [Meilisearch Cloud](https://www.meilisearch.com/cloud?utm_campaign=oss&utm_source=github&utm_medium=meilisearch). Make sure to [register here](https://us06web.zoom.us/meeting/register/tZMlc-mqrjIsH912-HTRe-AaT-pp41bDe81a#/registration) and bring your questions for live Q&A!
-
----
-
 Meilisearch helps you shape a delightful search experience in a snap, offering features that work out-of-the-box to speed up your workflow.
 
 <p align="center" name="demo">

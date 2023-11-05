@@ -2,10 +2,12 @@ use std::collections::{HashMap, HashSet};
 
 use ::time::format_description::well_known::Rfc3339;
 use maplit::{hashmap, hashset};
+use meilisearch::Opt;
 use once_cell::sync::Lazy;
+use tempfile::TempDir;
 use time::{Duration, OffsetDateTime};
 
-use crate::common::{Server, Value};
+use crate::common::{default_settings, Server, Value};
 use crate::json;
 
 pub static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'static str>>> =
@@ -195,7 +197,9 @@ async fn access_authorized_master_key() {
 
 #[actix_rt::test]
 async fn access_authorized_restricted_index() {
-    let mut server = Server::new_auth().await;
+    let dir = TempDir::new().unwrap();
+    let enable_metrics = Opt { experimental_enable_metrics: true, ..default_settings(dir.path()) };
+    let mut server = Server::new_auth_with_options(enable_metrics, dir).await;
     for ((method, route), actions) in AUTHORIZATIONS.iter() {
         for action in actions {
             // create a new API key letting only the needed action.

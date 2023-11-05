@@ -29,12 +29,12 @@ async fn get_features(
     >,
     req: HttpRequest,
     analytics: Data<dyn Analytics>,
-) -> Result<HttpResponse, ResponseError> {
-    let features = index_scheduler.features()?;
+) -> HttpResponse {
+    let features = index_scheduler.features();
 
     analytics.publish("Experimental features Seen".to_string(), json!(null), Some(&req));
     debug!("returns: {:?}", features.runtime_features());
-    Ok(HttpResponse::Ok().json(features.runtime_features()))
+    HttpResponse::Ok().json(features.runtime_features())
 }
 
 #[derive(Debug, Deserr)]
@@ -44,6 +44,8 @@ pub struct RuntimeTogglableFeatures {
     pub score_details: Option<bool>,
     #[deserr(default)]
     pub vector_store: Option<bool>,
+    #[deserr(default)]
+    pub metrics: Option<bool>,
     #[deserr(default)]
     pub export_puffin_reports: Option<bool>,
 }
@@ -57,12 +59,13 @@ async fn patch_features(
     req: HttpRequest,
     analytics: Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let features = index_scheduler.features()?;
+    let features = index_scheduler.features();
 
     let old_features = features.runtime_features();
     let new_features = meilisearch_types::features::RuntimeTogglableFeatures {
         score_details: new_features.0.score_details.unwrap_or(old_features.score_details),
         vector_store: new_features.0.vector_store.unwrap_or(old_features.vector_store),
+        metrics: new_features.0.metrics.unwrap_or(old_features.metrics),
         export_puffin_reports: new_features
             .0
             .export_puffin_reports
@@ -75,6 +78,7 @@ async fn patch_features(
     let meilisearch_types::features::RuntimeTogglableFeatures {
         score_details,
         vector_store,
+        metrics,
         export_puffin_reports,
     } = new_features;
 
@@ -83,6 +87,7 @@ async fn patch_features(
         json!({
             "score_details": score_details,
             "vector_store": vector_store,
+            "metrics": metrics,
             "export_puffin_reports": export_puffin_reports,
         }),
         Some(&req),

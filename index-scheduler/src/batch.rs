@@ -896,7 +896,7 @@ impl IndexScheduler {
                 })?;
 
                 // 4. Dump experimental feature settings
-                let features = self.features()?.runtime_features();
+                let features = self.features().runtime_features();
                 dump.create_experimental_features(features)?;
 
                 let dump_uid = started_at.format(format_description!(

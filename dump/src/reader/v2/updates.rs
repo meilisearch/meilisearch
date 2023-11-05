@@ -227,4 +227,14 @@ impl UpdateStatus {
             _ => None,
         }
     }
+
+    pub fn finished_at(&self) -> Option<OffsetDateTime> {
+        match self {
+            UpdateStatus::Processing(_) => None,
+            UpdateStatus::Enqueued(_) => None,
+            UpdateStatus::Processed(u) => Some(u.processed_at),
+            UpdateStatus::Aborted(_) => None,
+            UpdateStatus::Failed(u) => Some(u.failed_at),
+        }
+    }
 }
