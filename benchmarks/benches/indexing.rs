@@ -264,17 +264,7 @@ fn deleting_songs_in_batches_default(c: &mut Criterion) {
                 (index, document_ids_to_delete)
             },
             move |(index, document_ids_to_delete)| {
-                let mut wtxn = index.write_txn().unwrap();
-
-                for ids in document_ids_to_delete {
-                    let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-                    builder.delete_documents(&ids);
-                    builder.execute().unwrap();
-                }
-
-                wtxn.commit().unwrap();
-
-                index.prepare_for_closing().wait();
+                delete_documents_from_ids(index, document_ids_to_delete)
             },
         )
     });
@@ -611,17 +601,7 @@ fn deleting_wiki_in_batches_default(c: &mut Criterion) {
                 (index, document_ids_to_delete)
             },
             move |(index, document_ids_to_delete)| {
-                let mut wtxn = index.write_txn().unwrap();
-
-                for ids in document_ids_to_delete {
-                    let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-                    builder.delete_documents(&ids);
-                    builder.execute().unwrap();
-                }
-
-                wtxn.commit().unwrap();
-
-                index.prepare_for_closing().wait();
+                delete_documents_from_ids(index, document_ids_to_delete)
             },
         )
     });
@@ -873,20 +853,39 @@ fn deleting_movies_in_batches_default(c: &mut Criterion) {
                 (index, document_ids_to_delete)
             },
             move |(index, document_ids_to_delete)| {
-                let mut wtxn = index.write_txn().unwrap();
-
-                for ids in document_ids_to_delete {
-                    let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-                    builder.delete_documents(&ids);
-                    builder.execute().unwrap();
-                }
-
-                wtxn.commit().unwrap();
-
-                index.prepare_for_closing().wait();
+                delete_documents_from_ids(index, document_ids_to_delete)
             },
         )
     });
+}
+
+fn delete_documents_from_ids(index: Index, document_ids_to_delete: Vec<RoaringBitmap>) {
+    let mut wtxn = index.write_txn().unwrap();
+
+    let indexer_config = IndexerConfig::default();
+    for ids in document_ids_to_delete {
+        let external_documents_ids = index.external_documents_ids();
+        // FIXME: for filters matching a lot of documents, this will allocate a huge vec of external docids (strings).
+        // Since what we have is an iterator, it would be better to delete in chunks
+        let external_to_internal: std::result::Result<Vec<_>, RoaringBitmap> =
+            external_documents_ids
+                .find_external_id_of(&wtxn, ids)
+                .unwrap()
+                .only_external_ids()
+                .collect();
+        let ids = external_to_internal.unwrap();
+        let config = IndexDocumentsConfig::default();
+
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &indexer_config, config, |_| (), || false)
+                .unwrap();
+        (builder, _) = builder.remove_documents(ids).unwrap();
+        builder.execute().unwrap();
+    }
+
+    wtxn.commit().unwrap();
+
+    index.prepare_for_closing().wait();
 }
 
 fn indexing_movies_in_three_batches(c: &mut Criterion) {
@@ -1110,17 +1109,7 @@ fn deleting_nested_movies_in_batches_default(c: &mut Criterion) {
                 (index, document_ids_to_delete)
             },
             move |(index, document_ids_to_delete)| {
-                let mut wtxn = index.write_txn().unwrap();
-
-                for ids in document_ids_to_delete {
-                    let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-                    builder.delete_documents(&ids);
-                    builder.execute().unwrap();
-                }
-
-                wtxn.commit().unwrap();
-
-                index.prepare_for_closing().wait();
+                delete_documents_from_ids(index, document_ids_to_delete)
             },
         )
     });
@@ -1336,17 +1325,7 @@ fn deleting_geo_in_batches_default(c: &mut Criterion) {
                 (index, document_ids_to_delete)
             },
             move |(index, document_ids_to_delete)| {
-                let mut wtxn = index.write_txn().unwrap();
-
-                for ids in document_ids_to_delete {
-                    let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-                    builder.delete_documents(&ids);
-                    builder.execute().unwrap();
-                }
-
-                wtxn.commit().unwrap();
-
-                index.prepare_for_closing().wait();
+                delete_documents_from_ids(index, document_ids_to_delete)
             },
         )
     });
