@@ -474,6 +474,8 @@ impl IndexScheduler {
 
                 let string_id = id.to_string();
 
+                log::info!("Entering the election game with the ID: {id}");
+
                 // there is at least us in the childrens of election
                 if childrens[0].ends_with(&string_id) {
                     log::warn!("I'm the leader");
@@ -483,7 +485,7 @@ impl IndexScheduler {
                         .into_iter()
                         .rfind(|path| &path[path.len() - string_id.len()..] < string_id.as_str())
                         .unwrap();
-                    log::warn!("I'm a follower When `{should_watch}` die I should check if I'm the new leader");
+                    log::warn!("I'm a follower. When `{should_watch}` die I should check if I'm the new leader");
 
                     let leader_watcher = zk
                         .watch(&format!("/election/{should_watch}"), AddWatchMode::Persistent)
@@ -524,8 +526,13 @@ impl IndexScheduler {
                                     .rfind(|path| &path[path.len() - id.len()..] < id.as_str())
                                     .unwrap();
 
-                                let watcher =
-                                    zk.watch(&should_watch, AddWatchMode::Persistent).unwrap();
+                                log::warn!("Watching {should_watch} for now");
+                                let watcher = zk
+                                    .watch(
+                                        &format!("/election/{}", should_watch),
+                                        AddWatchMode::Persistent,
+                                    )
+                                    .unwrap();
 
                                 watchers.replace(event, watcher).unwrap();
                             }
