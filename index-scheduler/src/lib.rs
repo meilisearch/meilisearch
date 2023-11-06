@@ -316,7 +316,7 @@ impl IndexScheduler {
             // Create all the required directories in zookeeper
             match zookeeper.create(
                 "/election",
-                &vec![],
+                &[],
                 &CreateMode::Persistent.with_acls(Acls::anyone_all()),
             ) {
                 Ok(_) | Err(ZkError::NodeExists) => (),
@@ -595,7 +595,7 @@ impl IndexScheduler {
                                     )
                                     .unwrap();
 
-                                let zk_snapshots = format!("snapshots");
+                                let zk_snapshots = "snapshots";
                                 let snapshot_dir = format!("{zk_snapshots}/{snapshot_id}");
 
                                 let s3 = inner.options.s3.as_ref().unwrap();
@@ -633,7 +633,7 @@ impl IndexScheduler {
                                     let (name, uuid) = ret.unwrap();
                                     log::info!("  Snapshotting index {name}");
                                     let dst = dst.clone();
-                                    let index = inner.index_mapper.index(&rtxn, &name).unwrap();
+                                    let index = inner.index_mapper.index(&rtxn, name).unwrap();
                                     let temp = TempDir::new().unwrap();
                                     let mut file = index
                                         .copy_to_path(
@@ -662,12 +662,11 @@ impl IndexScheduler {
                                     inner.processing_tasks.read().processed_previously().clone();
                                 log::info!("Deleting {} processed tasks", processed.len());
                                 for task_id in processed {
-                                    let node = format!("/tasks/task-{:0>10?}", task_id as i32);
-                                    let _ = zookeeper // we don't want to crash if we can't delete an update file.
+                                    let node = format!("/tasks/task-{:0>10?}", task_id);
+                                    zookeeper // we don't want to crash if we can't delete an update file.
                                         .delete(&node, None)
                                         .unwrap();
-                                    s3.delete_object(format!("tasks/{:0>10?}", task_id as u32))
-                                        .unwrap();
+                                    s3.delete_object(format!("tasks/{:0>10?}", task_id)).unwrap();
                                     // TODO: Delete the update files associated with the deleted tasks
                                     if let Some(content_uuid) = inner
                                         .get_task(&rtxn, task_id)
@@ -1540,7 +1539,7 @@ impl IndexSchedulerInner {
             // safe because if we had a zookeeper at the beginning we must have a zk_id
             let zk_id = zk_id.unwrap();
             let s3 = self.options.s3.as_ref().unwrap();
-            s3.put_object(format!("tasks/{zk_id}"), &serde_json::to_vec_pretty(&task).unwrap())
+            s3.put_object(format!("tasks/{zk_id}"), serde_json::to_vec_pretty(&task).unwrap())
                 .unwrap();
 
             // TODO: ugly unwrap
@@ -1767,7 +1766,7 @@ impl IndexSchedulerInner {
     }
 
     pub fn register_raw_task(&self, wtxn: &mut RwTxn, task: &Task) -> Result<()> {
-        self.all_tasks.put(wtxn, &BEU32::new(task.uid), &task)?;
+        self.all_tasks.put(wtxn, &BEU32::new(task.uid), task)?;
 
         for index in task.indexes() {
             self.update_index(wtxn, index, |bitmap| {
@@ -1988,8 +1987,8 @@ impl<'a> Dump<'a> {
             }
         }
 
-        self.statuses.entry(task.status).or_insert(RoaringBitmap::new()).insert(task.uid);
-        self.kinds.entry(task.kind.as_kind()).or_insert(RoaringBitmap::new()).insert(task.uid);
+        self.statuses.entry(task.status).or_default().insert(task.uid);
+        self.kinds.entry(task.kind.as_kind()).or_default().insert(task.uid);
 
         Ok(task)
     }
