@@ -104,12 +104,6 @@ pub(crate) enum IndexOperation {
         operations: Vec<DocumentOperation>,
         tasks: Vec<Task>,
     },
-    DocumentDeletion {
-        index_uid: String,
-        // The vec associated with each document deletion tasks.
-        documents: Vec<Vec<String>>,
-        tasks: Vec<Task>,
-    },
     IndexDocumentDeletionByFilter {
         index_uid: String,
         task: Task,
@@ -161,7 +155,6 @@ impl Batch {
             }
             Batch::IndexOperation { op, .. } => match op {
                 IndexOperation::DocumentOperation { tasks, .. }
-                | IndexOperation::DocumentDeletion { tasks, .. }
                 | IndexOperation::Settings { tasks, .. }
                 | IndexOperation::DocumentClear { tasks, .. } => {
                     tasks.iter().map(|task| task.uid).collect()
@@ -226,7 +219,6 @@ impl IndexOperation {
     pub fn index_uid(&self) -> &str {
         match self {
             IndexOperation::DocumentOperation { index_uid, .. }
-            | IndexOperation::DocumentDeletion { index_uid, .. }
             | IndexOperation::IndexDocumentDeletionByFilter { index_uid, .. }
             | IndexOperation::DocumentClear { index_uid, .. }
             | IndexOperation::Settings { index_uid, .. }
@@ -241,9 +233,6 @@ impl fmt::Display for IndexOperation {
         match self {
             IndexOperation::DocumentOperation { .. } => {
                 f.write_str("IndexOperation::DocumentOperation")
-            }
-            IndexOperation::DocumentDeletion { .. } => {
-                f.write_str("IndexOperation::DocumentDeletion")
             }
             IndexOperation::IndexDocumentDeletionByFilter { .. } => {
                 f.write_str("IndexOperation::IndexDocumentDeletionByFilter")
@@ -347,18 +336,27 @@ impl IndexScheduler {
             BatchKind::DocumentDeletion { deletion_ids } => {
                 let tasks = self.get_existing_tasks(rtxn, deletion_ids)?;
 
-                let mut documents = Vec::new();
+                let mut operations = Vec::with_capacity(tasks.len());
+                let mut documents_counts = Vec::with_capacity(tasks.len());
                 for task in &tasks {
                     match task.kind {
                         KindWithContent::DocumentDeletion { ref documents_ids, .. } => {
-                            documents.push(documents_ids.clone())
+                            operations.push(DocumentOperation::Delete(documents_ids.clone()));
+                            documents_counts.push(documents_ids.len() as u64);
                         }
                         _ => unreachable!(),
                     }
                 }
 
                 Ok(Some(Batch::IndexOperation {
-                    op: IndexOperation::DocumentDeletion { index_uid, documents, tasks },
+                    op: IndexOperation::DocumentOperation {
+                        index_uid,
+                        primary_key: None,
+                        method: IndexDocumentsMethod::ReplaceDocuments,
+                        documents_counts,
+                        operations,
+                        tasks,
+                    },
                     must_create_index,
                 }))
             }
@@ -1271,45 +1269,6 @@ impl IndexScheduler {
                         |indexing_step| trace!("update: {:?}", indexing_step),
                         || must_stop_processing.clone().get(),
                     )?;
-                }
-
-                Ok(tasks)
-            }
-            IndexOperation::DocumentDeletion { index_uid: _, documents, mut tasks } => {
-                let indexer_config = self.index_mapper.indexer_config();
-                let config = IndexDocumentsConfig {
-                    update_method: IndexDocumentsMethod::ReplaceDocuments,
-                    ..Default::default()
-                };
-                let must_stop_processing = self.must_stop_processing.clone();
-
-                let mut builder = milli::update::IndexDocuments::new(
-                    index_wtxn,
-                    index,
-                    indexer_config,
-                    config,
-                    |indexing_step| trace!("update: {:?}", indexing_step),
-                    || must_stop_processing.get(),
-                )?;
-
-                let document_ids = documents.iter().flatten().cloned().collect();
-
-                let (new_builder, user_result) = builder.remove_documents(document_ids)?;
-                builder = new_builder;
-                // Uses Invariant: remove documents actually always returns Ok for the inner result
-                let count = user_result.unwrap();
-
-                for (task, documents) in tasks.iter_mut().zip(documents) {
-                    task.status = Status::Succeeded;
-                    task.details = Some(Details::DocumentDeletion {
-                        provided_ids: documents.len(),
-                        deleted_documents: Some(count.min(documents.len() as u64)),
-                    });
-                }
-
-                if !tasks.iter().all(|res| res.error.is_some()) {
-                    let addition = builder.execute()?;
-                    info!("document deletion done: {:?}", addition);
                 }
 
                 Ok(tasks)
