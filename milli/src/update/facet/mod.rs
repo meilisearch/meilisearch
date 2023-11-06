@@ -14,7 +14,7 @@ The databases must be able to return results for queries such as:
 The algorithms that implement these queries are found in the `src/search/facet` folder.
 
 To make these queries fast to compute, the database adopts a tree structure:
-```ignore
+```text
             ┌───────────────────────────────┬───────────────────────────────┬───────────────┐
 ┌───────┐   │           "ab" (2)            │           "gaf" (2)           │   "woz" (1)   │
 │Level 2│   │                               │                               │               │
@@ -41,7 +41,7 @@ These documents all contain a facet value that is contained within `ab .. gaf`.
 In the database, each node is represented by a key/value pair encoded as a [`FacetGroupKey`] and a
 [`FacetGroupValue`], which have the following format:
 
-```ignore
+```text
 FacetGroupKey:
 - field id  : u16
 - level     : u8
