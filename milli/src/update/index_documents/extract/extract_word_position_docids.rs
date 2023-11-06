@@ -60,7 +60,7 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
 
         current_document_id = Some(document_id);
 
-        let del_add_reader = KvReaderDelAdd::new(&value);
+        let del_add_reader = KvReaderDelAdd::new(value);
         // extract all unique words to remove.
         if let Some(deletion) = del_add_reader.get(DelAdd::Deletion) {
             for (position, word_bytes) in KvReaderU16::new(deletion).iter() {

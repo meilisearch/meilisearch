@@ -29,7 +29,6 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
     let max_memory = indexer.max_memory_by_thread();
 
     let mut word_pair_proximity_docids_sorters: Vec<_> = (1..MAX_DISTANCE)
-        .into_iter()
         .map(|_| {
             create_sorter(
                 grenad::SortAlgorithm::Unstable,
@@ -75,7 +74,7 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
         let (del, add): (Result<_>, Result<_>) = rayon::join(
             || {
                 // deletions
-                if let Some(deletion) = KvReaderDelAdd::new(&value).get(DelAdd::Deletion) {
+                if let Some(deletion) = KvReaderDelAdd::new(value).get(DelAdd::Deletion) {
                     for (position, word) in KvReaderU16::new(deletion).iter() {
                         // drain the proximity window until the head word is considered close to the word we are inserting.
                         while del_word_positions.get(0).map_or(false, |(_w, p)| {
@@ -104,7 +103,7 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
             },
             || {
                 // additions
-                if let Some(addition) = KvReaderDelAdd::new(&value).get(DelAdd::Addition) {
+                if let Some(addition) = KvReaderDelAdd::new(value).get(DelAdd::Addition) {
                     for (position, word) in KvReaderU16::new(addition).iter() {
                         // drain the proximity window until the head word is considered close to the word we are inserting.
                         while add_word_positions.get(0).map_or(false, |(_w, p)| {
@@ -170,7 +169,7 @@ fn document_word_positions_into_sorter(
     document_id: DocumentId,
     del_word_pair_proximity: &BTreeMap<(String, String), u8>,
     add_word_pair_proximity: &BTreeMap<(String, String), u8>,
-    word_pair_proximity_docids_sorters: &mut Vec<grenad::Sorter<MergeFn>>,
+    word_pair_proximity_docids_sorters: &mut [grenad::Sorter<MergeFn>],
 ) -> Result<()> {
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};
@@ -201,7 +200,7 @@ fn document_word_positions_into_sorter(
         };
 
         key_buffer.clear();
-        key_buffer.push(*prox as u8);
+        key_buffer.push(*prox);
         key_buffer.extend_from_slice(w1.as_bytes());
         key_buffer.push(0);
         key_buffer.extend_from_slice(w2.as_bytes());

@@ -57,17 +57,17 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         let document_id = u32::from_be_bytes(document_id_bytes);
         let fid = u16::from_be_bytes(fid_bytes);
 
-        let del_add_reader = KvReaderDelAdd::new(&value);
+        let del_add_reader = KvReaderDelAdd::new(value);
         // extract all unique words to remove.
         if let Some(deletion) = del_add_reader.get(DelAdd::Deletion) {
-            for (_pos, word) in KvReaderU16::new(&deletion).iter() {
+            for (_pos, word) in KvReaderU16::new(deletion).iter() {
                 del_words.insert(word.to_vec());
             }
         }
 
         // extract all unique additional words.
         if let Some(addition) = del_add_reader.get(DelAdd::Addition) {
-            for (_pos, word) in KvReaderU16::new(&addition).iter() {
+            for (_pos, word) in KvReaderU16::new(addition).iter() {
                 add_words.insert(word.to_vec());
             }
         }
@@ -122,9 +122,9 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
 
         // every words contained in an attribute set to exact must be pushed in the exact_words list.
         if exact_attributes.contains(&fid) {
-            exact_word_docids_sorter.insert(word.as_bytes(), &value)?;
+            exact_word_docids_sorter.insert(word.as_bytes(), value)?;
         } else {
-            word_docids_sorter.insert(word.as_bytes(), &value)?;
+            word_docids_sorter.insert(word.as_bytes(), value)?;
         }
     }
 
@@ -169,7 +169,7 @@ fn words_into_sorter(
         };
 
         key_buffer.clear();
-        key_buffer.extend_from_slice(&word_bytes);
+        key_buffer.extend_from_slice(word_bytes);
         key_buffer.push(0);
         key_buffer.extend_from_slice(&fid.to_be_bytes());
         word_fid_docids_sorter.insert(&key_buffer, value_writer.into_inner().unwrap())?;

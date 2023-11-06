@@ -456,7 +456,7 @@ pub(crate) fn write_typed_chunk_into_index(
 
                 if final_value.is_empty() {
                     // If the database entry exists, delete it.
-                    if db_key_exists == true {
+                    if db_key_exists {
                         index.script_language_docids.delete(wtxn, &key)?;
                     }
                 } else {
@@ -501,6 +501,7 @@ fn merge_word_docids_reader_into_fst(
 ///
 /// If there is no Add side we currently write an empty buffer
 /// which is a valid CboRoaringBitmap.
+#[allow(clippy::ptr_arg)] // required to avoid signature mismatch
 fn deladd_serialize_add_side<'a>(obkv: &'a [u8], _buffer: &mut Vec<u8>) -> Result<&'a [u8]> {
     Ok(KvReaderDelAdd::new(obkv).get(DelAdd::Addition).unwrap_or_default())
 }

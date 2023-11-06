@@ -1376,7 +1376,7 @@ impl Index {
         rtxn: &RoTxn,
         key: &(Script, Language),
     ) -> heed::Result<Option<RoaringBitmap>> {
-        Ok(self.script_language_docids.get(rtxn, key)?)
+        self.script_language_docids.get(rtxn, key)
     }
 
     pub fn script_language(&self, rtxn: &RoTxn) -> heed::Result<HashMap<Script, Vec<Language>>> {

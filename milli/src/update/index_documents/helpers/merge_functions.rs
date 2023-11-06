@@ -157,7 +157,7 @@ fn inner_merge_del_add_obkvs<'a>(
     let mut acc = newest[1..].to_vec();
     let mut buffer = Vec::new();
     // reverse iter from the most recent to the oldest.
-    for current in obkvs.into_iter().rev() {
+    for current in obkvs.iter().rev() {
         // if in the previous iteration there was a complete deletion,
         // stop the merge process.
         if acc_operation_type == Operation::Deletion as u8 {

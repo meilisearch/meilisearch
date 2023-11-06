@@ -198,7 +198,7 @@ fn tokenizer_builder<'a>(
     }
 
     if let Some(script_language) = script_language {
-        tokenizer_builder.allow_list(&script_language);
+        tokenizer_builder.allow_list(script_language);
     }
 
     tokenizer_builder
@@ -206,6 +206,7 @@ fn tokenizer_builder<'a>(
 
 /// Extract words maped with their positions of a document,
 /// ensuring no Language detection mistakes was made.
+#[allow(clippy::too_many_arguments)] // FIXME: consider grouping arguments in a struct
 fn lang_safe_tokens_from_document<'a>(
     obkv: &KvReader<FieldId>,
     searchable_fields: &Option<HashSet<FieldId>>,
@@ -220,9 +221,9 @@ fn lang_safe_tokens_from_document<'a>(
     let mut script_language_word_count = HashMap::new();
 
     tokens_from_document(
-        &obkv,
+        obkv,
         searchable_fields,
-        &tokenizer,
+        tokenizer,
         max_positions_per_attributes,
         del_add,
         buffers,
@@ -257,7 +258,7 @@ fn lang_safe_tokens_from_document<'a>(
 
             // rerun the extraction.
             tokens_from_document(
-                &obkv,
+                obkv,
                 searchable_fields,
                 &tokenizer,
                 max_positions_per_attributes,

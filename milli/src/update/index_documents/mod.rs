@@ -2659,7 +2659,7 @@ mod tests {
         let external_document_ids = index.external_documents_ids();
         let ids_to_delete: Vec<u32> = external_ids
             .iter()
-            .map(|id| external_document_ids.get(&wtxn, id).unwrap().unwrap())
+            .map(|id| external_document_ids.get(wtxn, id).unwrap().unwrap())
             .collect();
 
         // Delete some documents.

@@ -1292,7 +1292,7 @@ impl IndexScheduler {
                     || must_stop_processing.get(),
                 )?;
 
-                let document_ids = documents.iter().cloned().flatten().collect();
+                let document_ids = documents.iter().flatten().cloned().collect();
 
                 let (new_builder, user_result) = builder.remove_documents(document_ids)?;
                 builder = new_builder;

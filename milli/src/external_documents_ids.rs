@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::convert::TryInto;
 
 use heed::types::{OwnedType, Str};
 use heed::{Database, RoIter, RoTxn, RwTxn};
@@ -31,7 +30,7 @@ impl ExternalDocumentsIds {
     }
 
     pub fn get<A: AsRef<str>>(&self, rtxn: &RoTxn, external_id: A) -> heed::Result<Option<u32>> {
-        Ok(self.0.get(rtxn, external_id.as_ref())?.map(|x| x.get().try_into().unwrap()))
+        Ok(self.0.get(rtxn, external_id.as_ref())?.map(|x| x.get()))
     }
 
     /// An helper function to debug this type, returns an `HashMap` of both,
@@ -40,7 +39,7 @@ impl ExternalDocumentsIds {
         let mut map = HashMap::default();
         for result in self.0.iter(rtxn)? {
             let (external, internal) = result?;
-            map.insert(external.to_owned(), internal.get().try_into().unwrap());
+            map.insert(external.to_owned(), internal.get());
         }
         Ok(map)
     }
