@@ -30,7 +30,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     allowed_separators: Option<&[&str]>,
     dictionary: Option<&[&str]>,
     max_positions_per_attributes: Option<u32>,
-) -> Result<(RoaringBitmap, grenad::Reader<BufReader<File>>, ScriptLanguageDocidsMap)> {
+) -> Result<(grenad::Reader<BufReader<File>>, ScriptLanguageDocidsMap)> {
     puffin::profile_function!();
 
     let max_positions_per_attributes = max_positions_per_attributes
@@ -154,7 +154,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
 
     // the returned sorter is serialized as: key: (DocId, FieldId), value: KV<DelAdd, KV<u16, String>>.
     sorter_into_reader(docid_word_positions_sorter, indexer)
-        .map(|reader| (documents_ids, reader, script_language_docids))
+        .map(|reader| (reader, script_language_docids))
 }
 
 /// Check if any searchable fields of a document changed.

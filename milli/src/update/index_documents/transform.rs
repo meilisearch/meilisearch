@@ -32,9 +32,6 @@ pub struct TransformOutput {
     pub primary_key: String,
     pub fields_ids_map: FieldsIdsMap,
     pub field_distribution: FieldDistribution,
-    pub new_external_documents_ids: fst::Map<Cow<'static, [u8]>>,
-    pub new_documents_ids: RoaringBitmap,
-    pub replaced_documents_ids: RoaringBitmap,
     pub documents_count: usize,
     pub original_documents: File,
     pub flattened_documents: File,
@@ -735,15 +732,11 @@ impl<'a, 'i> Transform<'a, 'i> {
         new_external_documents_ids_builder.into_iter().try_for_each(|(key, value)| {
             fst_new_external_documents_ids_builder.insert(key, value)
         })?;
-        let new_external_documents_ids = fst_new_external_documents_ids_builder.into_map();
 
         Ok(TransformOutput {
             primary_key,
             fields_ids_map: self.fields_ids_map,
             field_distribution,
-            new_external_documents_ids: new_external_documents_ids.map_data(Cow::Owned).unwrap(),
-            new_documents_ids: self.new_documents_ids,
-            replaced_documents_ids: self.replaced_documents_ids,
             documents_count: self.documents_count,
             original_documents: original_documents.into_inner().map_err(|err| err.into_error())?,
             flattened_documents: flattened_documents
@@ -889,11 +882,6 @@ impl<'a, 'i> Transform<'a, 'i> {
             primary_key,
             fields_ids_map: new_fields_ids_map,
             field_distribution,
-            // FIXME: remove this now unused field
-            new_external_documents_ids: fst::Map::default().map_data(Cow::Owned).unwrap(),
-            new_documents_ids: documents_ids,
-            // FIXME: remove this now unused field
-            replaced_documents_ids: RoaringBitmap::default(),
             documents_count,
             original_documents: original_documents.into_inner().into_inner(),
             flattened_documents: flattened_documents.into_inner().into_inner(),
