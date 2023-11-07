@@ -39,6 +39,3 @@ opt-level = 3
 
 [patch.crates-io]
 strois = { git = "https://github.com/meilisearch/strois", rev = "eeb945c" }
-
-[patch."https://github.com/irevoire/zookeeper-client-sync"]
-zookeeper-client-sync = { path = "../zookeeper-client-sync" }
