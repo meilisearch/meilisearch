@@ -171,7 +171,6 @@ mod tests {
         documents
     }
 
-    #[ignore]
     #[test]
     fn add_new_documents() {
         let mut index = TempIndex::new();
@@ -236,7 +235,6 @@ mod tests {
         db_snap!(index, word_prefix_pair_proximity_docids, "update");
         db_snap!(index, prefix_word_pair_proximity_docids, "update");
     }
-    #[ignore]
     #[test]
     fn batch_bug_3043() {
         // https://github.com/meilisearch/meilisearch/issues/3043
@@ -285,7 +283,6 @@ mod tests {
         db_snap!(index, prefix_word_pair_proximity_docids);
     }
 
-    #[ignore]
     #[test]
     fn hard_delete_and_reupdate() {
         let mut index = TempIndex::new();
@@ -360,7 +357,6 @@ mod tests {
         db_snap!(index, prefix_word_pair_proximity_docids, "reupdate");
     }
 
-    #[ignore]
     #[test]
     fn replace_hard_deletion() {
         let mut index = TempIndex::new();
