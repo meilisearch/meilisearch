@@ -4,10 +4,11 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{AscDesc, Member};
+use crate::boost::{Boost, BoostError};
+use crate::{AscDesc, AscDescError, Member};
 
 #[derive(Error, Debug)]
-pub enum CriterionError {
+pub enum RankingRuleError {
     #[error("`{name}` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules.")]
     InvalidName { name: String },
     #[error("`{name}` is a reserved keyword and thus can't be used as a ranking rule")]
@@ -25,10 +26,12 @@ pub enum CriterionError {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
-pub enum Criterion {
+pub enum RankingRule {
     /// Sorted by decreasing number of matched query terms.
     /// Query words at the front of an attribute is considered better than if it was at the back.
     Words,
+    /// Sorted by documents matching the given filter and then documents not matching it.
+    Boost(String),
     /// Sorted by increasing number of typos.
     Typo,
     /// Sorted by increasing distance between matched query terms.
@@ -47,62 +50,76 @@ pub enum Criterion {
     Desc(String),
 }
 
-impl Criterion {
+impl RankingRule {
     /// Returns the field name parameter of this criterion.
     pub fn field_name(&self) -> Option<&str> {
         match self {
-            Criterion::Asc(name) | Criterion::Desc(name) => Some(name),
+            RankingRule::Asc(name) | RankingRule::Desc(name) => Some(name),
             _otherwise => None,
         }
     }
 }
 
-impl FromStr for Criterion {
-    type Err = CriterionError;
+impl FromStr for RankingRule {
+    type Err = RankingRuleError;
 
-    fn from_str(text: &str) -> Result<Criterion, Self::Err> {
+    fn from_str(text: &str) -> Result<RankingRule, Self::Err> {
         match text {
-            "words" => Ok(Criterion::Words),
-            "typo" => Ok(Criterion::Typo),
-            "proximity" => Ok(Criterion::Proximity),
-            "attribute" => Ok(Criterion::Attribute),
-            "sort" => Ok(Criterion::Sort),
-            "exactness" => Ok(Criterion::Exactness),
-            text => match AscDesc::from_str(text)? {
-                AscDesc::Asc(Member::Field(field)) => Ok(Criterion::Asc(field)),
-                AscDesc::Desc(Member::Field(field)) => Ok(Criterion::Desc(field)),
-                AscDesc::Asc(Member::Geo(_)) | AscDesc::Desc(Member::Geo(_)) => {
-                    Err(CriterionError::ReservedNameForSort { name: "_geoPoint".to_string() })?
-                }
+            "words" => Ok(RankingRule::Words),
+            "typo" => Ok(RankingRule::Typo),
+            "proximity" => Ok(RankingRule::Proximity),
+            "attribute" => Ok(RankingRule::Attribute),
+            "sort" => Ok(RankingRule::Sort),
+            "exactness" => Ok(RankingRule::Exactness),
+            text => match (AscDesc::from_str(text), Boost::from_str(text)) {
+                (Ok(asc_desc), _) => match asc_desc {
+                    AscDesc::Asc(Member::Field(field)) => Ok(RankingRule::Asc(field)),
+                    AscDesc::Desc(Member::Field(field)) => Ok(RankingRule::Desc(field)),
+                    AscDesc::Asc(Member::Geo(_)) | AscDesc::Desc(Member::Geo(_)) => {
+                        Err(RankingRuleError::ReservedNameForSort {
+                            name: "_geoPoint".to_string(),
+                        })?
+                    }
+                },
+                (_, Ok(Boost(filter))) => Ok(RankingRule::Boost(filter)),
+                (
+                    Err(AscDescError::InvalidSyntax { name: asc_desc_name }),
+                    Err(BoostError::InvalidSyntax { name: boost_name }),
+                ) => Err(RankingRuleError::InvalidName {
+                    // TODO improve the error message quality
+                    name: format!("{asc_desc_name} {boost_name}"),
+                }),
+                (Err(asc_desc_error), _) => Err(asc_desc_error.into()),
             },
         }
     }
 }
 
-pub fn default_criteria() -> Vec<Criterion> {
+pub fn default_criteria() -> Vec<RankingRule> {
     vec![
-        Criterion::Words,
-        Criterion::Typo,
-        Criterion::Proximity,
-        Criterion::Attribute,
-        Criterion::Sort,
-        Criterion::Exactness,
+        RankingRule::Words,
+        RankingRule::Typo,
+        RankingRule::Proximity,
+        RankingRule::Attribute,
+        RankingRule::Sort,
+        RankingRule::Exactness,
     ]
 }
 
-impl fmt::Display for Criterion {
+impl fmt::Display for RankingRule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use Criterion::*;
+        use RankingRule::*;
 
         match self {
             Words => f.write_str("words"),
+            Boost(filter) => write!(f, "boost:{filter}"),
             Typo => f.write_str("typo"),
             Proximity => f.write_str("proximity"),
             Attribute => f.write_str("attribute"),
             Sort => f.write_str("sort"),
             Exactness => f.write_str("exactness"),
-            Asc(attr) => write!(f, "{}:asc", attr),
-            Desc(attr) => write!(f, "{}:desc", attr),
+            Asc(attr) => write!(f, "{attr}:asc"),
+            Desc(attr) => write!(f, "{attr}:desc"),
         }
     }
 }
@@ -110,29 +127,29 @@ impl fmt::Display for Criterion {
 #[cfg(test)]
 mod tests {
     use big_s::S;
-    use CriterionError::*;
+    use RankingRuleError::*;
 
     use super::*;
 
     #[test]
     fn parse_criterion() {
         let valid_criteria = [
-            ("words", Criterion::Words),
-            ("typo", Criterion::Typo),
-            ("proximity", Criterion::Proximity),
-            ("attribute", Criterion::Attribute),
-            ("sort", Criterion::Sort),
-            ("exactness", Criterion::Exactness),
-            ("price:asc", Criterion::Asc(S("price"))),
-            ("price:desc", Criterion::Desc(S("price"))),
-            ("price:asc:desc", Criterion::Desc(S("price:asc"))),
-            ("truc:machin:desc", Criterion::Desc(S("truc:machin"))),
-            ("hello-world!:desc", Criterion::Desc(S("hello-world!"))),
-            ("it's spacy over there:asc", Criterion::Asc(S("it's spacy over there"))),
+            ("words", RankingRule::Words),
+            ("typo", RankingRule::Typo),
+            ("proximity", RankingRule::Proximity),
+            ("attribute", RankingRule::Attribute),
+            ("sort", RankingRule::Sort),
+            ("exactness", RankingRule::Exactness),
+            ("price:asc", RankingRule::Asc(S("price"))),
+            ("price:desc", RankingRule::Desc(S("price"))),
+            ("price:asc:desc", RankingRule::Desc(S("price:asc"))),
+            ("truc:machin:desc", RankingRule::Desc(S("truc:machin"))),
+            ("hello-world!:desc", RankingRule::Desc(S("hello-world!"))),
+            ("it's spacy over there:asc", RankingRule::Asc(S("it's spacy over there"))),
         ];
 
         for (input, expected) in valid_criteria {
-            let res = input.parse::<Criterion>();
+            let res = input.parse::<RankingRule>();
             assert!(
                 res.is_ok(),
                 "Failed to parse `{}`, was expecting `{:?}` but instead got `{:?}`",
@@ -167,7 +184,7 @@ mod tests {
         ];
 
         for (input, expected) in invalid_criteria {
-            let res = input.parse::<Criterion>();
+            let res = input.parse::<RankingRule>();
             assert!(
                 res.is_err(),
                 "Should no be able to parse `{}`, was expecting an error but instead got: `{:?}`",

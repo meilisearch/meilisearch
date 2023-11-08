@@ -5,6 +5,7 @@ use crate::distance_between_two_points;
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScoreDetails {
     Words(Words),
+    Boost(Boost),
     Typo(Typo),
     Proximity(Rank),
     Fid(Rank),
@@ -23,6 +24,7 @@ impl ScoreDetails {
     pub fn rank(&self) -> Option<Rank> {
         match self {
             ScoreDetails::Words(details) => Some(details.rank()),
+            ScoreDetails::Boost(_) => None,
             ScoreDetails::Typo(details) => Some(details.rank()),
             ScoreDetails::Proximity(details) => Some(*details),
             ScoreDetails::Fid(details) => Some(*details),
@@ -58,6 +60,14 @@ impl ScoreDetails {
                             "score": words.rank().local_score(),
                     });
                     details_map.insert("words".into(), words_details);
+                    order += 1;
+                }
+                ScoreDetails::Boost(Boost { filter, matching }) => {
+                    let sort = format!("boost:{}", filter);
+                    let sort_details = serde_json::json!({
+                        "value": matching,
+                    });
+                    details_map.insert(sort, sort_details);
                     order += 1;
                 }
                 ScoreDetails::Typo(typo) => {
@@ -219,6 +229,12 @@ impl Words {
     pub(crate) fn from_rank(rank: Rank) -> Self {
         Self { matching_words: rank.rank, max_matching_words: rank.max_rank }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Boost {
+    pub filter: String,
+    pub matching: bool,
 }
 
 /// Structure that is super similar to [`Words`], but whose semantics is a bit distinct.

@@ -9,6 +9,7 @@ pub static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 pub mod documents;
 
 mod asc_desc;
+mod boost;
 pub mod distance;
 mod error;
 mod external_documents_ids;

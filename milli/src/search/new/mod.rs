@@ -14,6 +14,7 @@ mod ranking_rules;
 mod resolve_query_graph;
 mod small_bitmap;
 
+mod boost;
 mod exact_attribute;
 mod sort;
 
@@ -22,6 +23,7 @@ mod tests;
 
 use std::collections::HashSet;
 
+use boost::Boost;
 use bucket_sort::{bucket_sort, BucketSortOutput};
 use charabia::TokenizerBuilder;
 use db_cache::DatabaseCache;
@@ -208,6 +210,7 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
             | crate::RankingRule::Attribute
             | crate::RankingRule::Proximity
             | crate::RankingRule::Exactness => continue,
+            crate::RankingRule::Boost(filter) => ranking_rules.push(Box::new(Boost::new(filter)?)),
             crate::RankingRule::Sort => {
                 if sort {
                     continue;
@@ -287,6 +290,9 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 ranking_rules.push(Box::new(Words::new(terms_matching_strategy)));
                 words = true;
             }
+            crate::RankingRule::Boost(filter) => {
+                ranking_rules.push(Box::new(Boost::new(filter)?));
+            }
             crate::RankingRule::Typo => {
                 if typo {
                     continue;
@@ -332,6 +338,7 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 exactness = true;
             }
             crate::RankingRule::Asc(field_name) => {
+                // TODO Question: Why would it be invalid to sort price:asc, typo, price:desc?
                 if sorted_fields.contains(&field_name) {
                     continue;
                 }

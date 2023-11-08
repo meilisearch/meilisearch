@@ -583,6 +583,8 @@ pub enum RankingRuleView {
     /// Sorted by decreasing number of matched query terms.
     /// Query words at the front of an attribute is considered better than if it was at the back.
     Words,
+    /// Sorted by documents matching the given filter and then documents not matching it.
+    Boost(String),
     /// Sorted by increasing number of typos.
     Typo,
     /// Sorted by increasing distance between matched query terms.
@@ -648,6 +650,7 @@ impl From<RankingRule> for RankingRuleView {
     fn from(value: RankingRule) -> Self {
         match value {
             RankingRule::Words => RankingRuleView::Words,
+            RankingRule::Boost(filter) => RankingRuleView::Boost(filter),
             RankingRule::Typo => RankingRuleView::Typo,
             RankingRule::Proximity => RankingRuleView::Proximity,
             RankingRule::Attribute => RankingRuleView::Attribute,
@@ -662,6 +665,7 @@ impl From<RankingRuleView> for RankingRule {
     fn from(value: RankingRuleView) -> Self {
         match value {
             RankingRuleView::Words => RankingRule::Words,
+            RankingRuleView::Boost(filter) => RankingRule::Boost(filter),
             RankingRuleView::Typo => RankingRule::Typo,
             RankingRuleView::Proximity => RankingRule::Proximity,
             RankingRuleView::Attribute => RankingRule::Attribute,
