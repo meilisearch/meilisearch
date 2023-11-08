@@ -9,9 +9,9 @@ use time::OffsetDateTime;
 
 use super::index_documents::{IndexDocumentsConfig, Transform};
 use super::IndexerConfig;
-use crate::criterion::Criterion;
 use crate::error::UserError;
 use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
+use crate::ranking_rule::RankingRule;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::{FieldsIdsMap, Index, OrderBy, Result};
@@ -110,7 +110,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     displayed_fields: Setting<Vec<String>>,
     filterable_fields: Setting<HashSet<String>>,
     sortable_fields: Setting<HashSet<String>>,
-    criteria: Setting<Vec<Criterion>>,
+    ranking_rules: Setting<Vec<RankingRule>>,
     stop_words: Setting<BTreeSet<String>>,
     non_separator_tokens: Setting<BTreeSet<String>>,
     separator_tokens: Setting<BTreeSet<String>>,
@@ -142,7 +142,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             displayed_fields: Setting::NotSet,
             filterable_fields: Setting::NotSet,
             sortable_fields: Setting::NotSet,
-            criteria: Setting::NotSet,
+            ranking_rules: Setting::NotSet,
             stop_words: Setting::NotSet,
             non_separator_tokens: Setting::NotSet,
             separator_tokens: Setting::NotSet,
@@ -194,12 +194,12 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.sortable_fields = Setting::Reset;
     }
 
-    pub fn reset_criteria(&mut self) {
-        self.criteria = Setting::Reset;
+    pub fn reset_ranking_rules(&mut self) {
+        self.ranking_rules = Setting::Reset;
     }
 
-    pub fn set_criteria(&mut self, criteria: Vec<Criterion>) {
-        self.criteria = Setting::Set(criteria);
+    pub fn set_ranking_rules(&mut self, ranking_rules: Vec<RankingRule>) {
+        self.ranking_rules = Setting::Set(ranking_rules);
     }
 
     pub fn reset_stop_words(&mut self) {
@@ -696,7 +696,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     }
 
     fn update_criteria(&mut self) -> Result<()> {
-        match &self.criteria {
+        match &self.ranking_rules {
             Setting::Set(criteria) => {
                 self.index.put_criteria(self.wtxn, criteria)?;
             }
@@ -924,7 +924,7 @@ mod tests {
     use crate::error::Error;
     use crate::index::tests::TempIndex;
     use crate::update::{ClearDocuments, DeleteDocuments};
-    use crate::{Criterion, Filter, SearchResult};
+    use crate::{Filter, RankingRule, SearchResult};
 
     #[test]
     fn set_and_reset_searchable_fields() {
@@ -1167,7 +1167,7 @@ mod tests {
         index
             .update_settings(|settings| {
                 settings.set_displayed_fields(vec![S("name")]);
-                settings.set_criteria(vec![Criterion::Asc("age".to_owned())]);
+                settings.set_ranking_rules(vec![RankingRule::Asc("age".to_owned())]);
             })
             .unwrap();
 
@@ -1473,7 +1473,7 @@ mod tests {
             .update_settings(|settings| {
                 settings.set_displayed_fields(vec!["hello".to_string()]);
                 settings.set_filterable_fields(hashset! { S("age"), S("toto") });
-                settings.set_criteria(vec![Criterion::Asc(S("toto"))]);
+                settings.set_ranking_rules(vec![RankingRule::Asc(S("toto"))]);
             })
             .unwrap();
 
@@ -1482,7 +1482,7 @@ mod tests {
         assert_eq!(&["hello"][..], index.displayed_fields(&rtxn).unwrap().unwrap());
         // since no documents have been pushed the primary key is still unset
         assert!(index.primary_key(&rtxn).unwrap().is_none());
-        assert_eq!(vec![Criterion::Asc("toto".to_string())], index.criteria(&rtxn).unwrap());
+        assert_eq!(vec![RankingRule::Asc("toto".to_string())], index.criteria(&rtxn).unwrap());
         drop(rtxn);
 
         // We set toto and age as searchable to force reordering of the fields
@@ -1495,7 +1495,7 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         assert_eq!(&["hello"][..], index.displayed_fields(&rtxn).unwrap().unwrap());
         assert!(index.primary_key(&rtxn).unwrap().is_none());
-        assert_eq!(vec![Criterion::Asc("toto".to_string())], index.criteria(&rtxn).unwrap());
+        assert_eq!(vec![RankingRule::Asc("toto".to_string())], index.criteria(&rtxn).unwrap());
     }
 
     #[test]
@@ -1507,7 +1507,7 @@ mod tests {
             .update_settings(|settings| {
                 settings.set_displayed_fields(vec!["hello".to_string()]);
                 // It is only Asc(toto), there is a facet database but it is denied to filter with toto.
-                settings.set_criteria(vec![Criterion::Asc(S("toto"))]);
+                settings.set_ranking_rules(vec![RankingRule::Asc(S("toto"))]);
             })
             .unwrap();
 
@@ -1715,7 +1715,7 @@ mod tests {
                     displayed_fields,
                     filterable_fields,
                     sortable_fields,
-                    criteria,
+                    ranking_rules: criteria,
                     stop_words,
                     non_separator_tokens,
                     separator_tokens,

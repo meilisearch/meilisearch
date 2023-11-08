@@ -9,7 +9,7 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::documents::{self, DocumentsBatchCursorError};
-use crate::{CriterionError, DocumentId, FieldId, Object, SortError};
+use crate::{DocumentId, FieldId, Object, RankingRuleError, SortError};
 
 pub fn is_reserved_keyword(keyword: &str) -> bool {
     ["_geo", "_geoDistance", "_geoPoint", "_geoRadius", "_geoBoundingBox"].contains(&keyword)
@@ -94,7 +94,7 @@ pub enum UserError {
     #[error("A document cannot contain more than 65,535 fields.")]
     AttributeLimitReached,
     #[error(transparent)]
-    CriterionError(#[from] CriterionError),
+    CriterionError(#[from] RankingRuleError),
     #[error("Maximum number of documents reached.")]
     DocumentLimitReached,
     #[error(
@@ -280,7 +280,7 @@ error_from_sub_error! {
     ThreadPoolBuildError => InternalError,
     SerializationError => InternalError,
     GeoError => UserError,
-    CriterionError => UserError,
+    RankingRuleError => UserError,
 }
 
 impl<E> From<grenad::Error<E>> for Error

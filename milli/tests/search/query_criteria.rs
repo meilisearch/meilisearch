@@ -7,9 +7,9 @@ use itertools::Itertools;
 use maplit::hashset;
 use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
-use milli::{AscDesc, Criterion, Index, Member, Search, SearchResult, TermsMatchingStrategy};
+use milli::{AscDesc, Index, Member, RankingRule, Search, SearchResult, TermsMatchingStrategy};
 use rand::Rng;
-use Criterion::*;
+use RankingRule::*;
 
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
 
@@ -88,7 +88,7 @@ test_criterion!(
 
 #[test]
 fn criteria_mixup() {
-    use Criterion::*;
+    use RankingRule::*;
     let index = search::setup_search_index_with_criteria(&[
         Words,
         Attribute,
@@ -233,7 +233,7 @@ fn criteria_mixup() {
         //update criteria
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, &config);
-        builder.set_criteria(criteria.clone());
+        builder.set_ranking_rules(criteria.clone());
         builder.execute(|_| (), || false).unwrap();
         wtxn.commit().unwrap();
 
@@ -324,7 +324,7 @@ fn criteria_ascdesc() {
 
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, &config);
-        builder.set_criteria(vec![criterion.clone()]);
+        builder.set_ranking_rules(vec![criterion.clone()]);
         builder.execute(|_| (), || false).unwrap();
         wtxn.commit().unwrap();
 

@@ -6,10 +6,10 @@ use maplit::{btreemap, hashset};
 
 use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use crate::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
-use crate::{db_snap, Criterion, Index, Object};
+use crate::{db_snap, Index, Object, RankingRule};
 pub const CONTENT: &str = include_str!("../../../../tests/assets/test_set.ndjson");
 
-pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
+pub fn setup_search_index_with_criteria(criteria: &[RankingRule]) -> Index {
     let path = tempfile::tempdir().unwrap();
     let mut options = EnvOpenOptions::new();
     options.map_size(10 * 1024 * 1024); // 10 MB
@@ -20,7 +20,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
 
     let mut builder = Settings::new(&mut wtxn, &index, &config);
 
-    builder.set_criteria(criteria.to_vec());
+    builder.set_ranking_rules(criteria.to_vec());
     builder.set_filterable_fields(hashset! {
         S("tag"),
         S("asc_desc_rank"),
@@ -70,6 +70,6 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
 
 #[test]
 fn snapshot_integration_dataset() {
-    let index = setup_search_index_with_criteria(&[Criterion::Attribute]);
+    let index = setup_search_index_with_criteria(&[RankingRule::Attribute]);
     db_snap!(index, word_position_docids, @"3c9347a767bceef3beb31465f1e5f3ae");
 }

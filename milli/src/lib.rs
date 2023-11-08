@@ -9,7 +9,6 @@ pub static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 pub mod documents;
 
 mod asc_desc;
-mod criterion;
 pub mod distance;
 mod error;
 mod external_documents_ids;
@@ -18,6 +17,7 @@ mod fields_ids_map;
 pub mod heed_codec;
 pub mod index;
 pub mod proximity;
+mod ranking_rule;
 mod readable_slices;
 pub mod score_details;
 mod search;
@@ -44,7 +44,6 @@ use serde_json::Value;
 pub use {charabia as tokenizer, heed};
 
 pub use self::asc_desc::{AscDesc, AscDescError, Member, SortError};
-pub use self::criterion::{default_criteria, Criterion, CriterionError};
 pub use self::error::{
     Error, FieldIdMapMissingEntry, InternalError, SerializationError, UserError,
 };
@@ -57,6 +56,7 @@ pub use self::heed_codec::{
     UncheckedU8StrStrCodec,
 };
 pub use self::index::Index;
+pub use self::ranking_rule::{default_criteria, RankingRule, RankingRuleError};
 pub use self::search::{
     FacetDistribution, FacetValueHit, Filter, FormatOptions, MatchBounds, MatcherBuilder,
     MatchingWords, OrderBy, Search, SearchForFacetValues, SearchResult, TermsMatchingStrategy,

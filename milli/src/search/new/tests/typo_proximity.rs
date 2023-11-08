@@ -17,7 +17,7 @@ because the typo ranking rule before it only used the derivation `beautiful`.
 
 use crate::index::tests::TempIndex;
 use crate::search::new::tests::collect_field_values;
-use crate::{Criterion, Search, SearchResult, TermsMatchingStrategy};
+use crate::{RankingRule, Search, SearchResult, TermsMatchingStrategy};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -26,7 +26,11 @@ fn create_index() -> TempIndex {
         .update_settings(|s| {
             s.set_primary_key("id".to_owned());
             s.set_searchable_fields(vec!["text".to_owned()]);
-            s.set_criteria(vec![Criterion::Words, Criterion::Typo, Criterion::Proximity]);
+            s.set_ranking_rules(vec![
+                RankingRule::Words,
+                RankingRule::Typo,
+                RankingRule::Proximity,
+            ]);
         })
         .unwrap();
 

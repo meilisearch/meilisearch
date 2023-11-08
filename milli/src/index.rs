@@ -25,10 +25,9 @@ use crate::heed_codec::{
 };
 use crate::readable_slices::ReadableSlices;
 use crate::{
-    default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
-    FacetDistribution, FieldDistribution, FieldId, FieldIdWordCountCodec, GeoPoint, ObkvCodec,
-    OrderBy, Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, BEU16,
-    BEU32,
+    default_criteria, CboRoaringBitmapCodec, DocumentId, ExternalDocumentsIds, FacetDistribution,
+    FieldDistribution, FieldId, FieldIdWordCountCodec, GeoPoint, ObkvCodec, OrderBy, RankingRule,
+    Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, BEU16, BEU32,
 };
 
 /// The HNSW data-structure that we serialize, fill and search in.
@@ -895,7 +894,7 @@ impl Index {
         let distinct_field = self.distinct_field(rtxn)?;
         let asc_desc_fields =
             self.criteria(rtxn)?.into_iter().filter_map(|criterion| match criterion {
-                Criterion::Asc(field) | Criterion::Desc(field) => Some(field),
+                RankingRule::Asc(field) | RankingRule::Desc(field) => Some(field),
                 _otherwise => None,
             });
 
@@ -1023,17 +1022,17 @@ impl Index {
     pub(crate) fn put_criteria(
         &self,
         wtxn: &mut RwTxn,
-        criteria: &[Criterion],
+        criteria: &[RankingRule],
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeJson<&[Criterion]>>(wtxn, main_key::CRITERIA_KEY, &criteria)
+        self.main.put::<_, Str, SerdeJson<&[RankingRule]>>(wtxn, main_key::CRITERIA_KEY, &criteria)
     }
 
     pub(crate) fn delete_criteria(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
         self.main.delete::<_, Str>(wtxn, main_key::CRITERIA_KEY)
     }
 
-    pub fn criteria(&self, rtxn: &RoTxn) -> heed::Result<Vec<Criterion>> {
-        match self.main.get::<_, Str, SerdeJson<Vec<Criterion>>>(rtxn, main_key::CRITERIA_KEY)? {
+    pub fn criteria(&self, rtxn: &RoTxn) -> heed::Result<Vec<RankingRule>> {
+        match self.main.get::<_, Str, SerdeJson<Vec<RankingRule>>>(rtxn, main_key::CRITERIA_KEY)? {
             Some(criteria) => Ok(criteria),
             None => Ok(default_criteria()),
         }

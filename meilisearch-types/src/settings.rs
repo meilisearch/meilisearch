@@ -9,7 +9,7 @@ use std::str::FromStr;
 use deserr::{DeserializeError, Deserr, ErrorKind, MergeWithError, ValuePointerRef};
 use fst::IntoStreamer;
 use milli::update::Setting;
-use milli::{Criterion, CriterionError, Index, DEFAULT_VALUES_PER_FACET};
+use milli::{Index, RankingRule, RankingRuleError, DEFAULT_VALUES_PER_FACET};
 use serde::{Deserialize, Serialize, Serializer};
 
 use crate::deserr::DeserrJsonError;
@@ -117,10 +117,10 @@ pub struct PaginationSettings {
     pub max_total_hits: Setting<usize>,
 }
 
-impl MergeWithError<milli::CriterionError> for DeserrJsonError<InvalidSettingsRankingRules> {
+impl MergeWithError<milli::RankingRuleError> for DeserrJsonError<InvalidSettingsRankingRules> {
     fn merge(
         _self_: Option<Self>,
-        other: milli::CriterionError,
+        other: milli::RankingRuleError,
         merge_location: ValuePointerRef,
     ) -> ControlFlow<Self, Self> {
         Self::error::<Infallible>(
@@ -344,9 +344,9 @@ pub fn apply_settings_to_builder(
 
     match settings.ranking_rules {
         Setting::Set(ref criteria) => {
-            builder.set_criteria(criteria.iter().map(|c| c.clone().into()).collect())
+            builder.set_ranking_rules(criteria.iter().map(|c| c.clone().into()).collect())
         }
-        Setting::Reset => builder.reset_criteria(),
+        Setting::Reset => builder.reset_ranking_rules(),
         Setting::NotSet => (),
     }
 
@@ -578,7 +578,7 @@ pub fn settings(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserr)]
-#[deserr(try_from(&String) = FromStr::from_str -> CriterionError)]
+#[deserr(try_from(&String) = FromStr::from_str -> RankingRuleError)]
 pub enum RankingRuleView {
     /// Sorted by decreasing number of matched query terms.
     /// Query words at the front of an attribute is considered better than if it was at the back.
@@ -605,7 +605,7 @@ impl Serialize for RankingRuleView {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&format!("{}", Criterion::from(self.clone())))
+        serializer.serialize_str(&format!("{}", RankingRule::from(self.clone())))
     }
 }
 impl<'de> Deserialize<'de> for RankingRuleView {
@@ -623,7 +623,7 @@ impl<'de> Deserialize<'de> for RankingRuleView {
             where
                 E: serde::de::Error,
             {
-                let criterion = Criterion::from_str(v).map_err(|_| {
+                let criterion = RankingRule::from_str(v).map_err(|_| {
                     E::invalid_value(serde::de::Unexpected::Str(v), &"a valid ranking rule")
                 })?;
                 Ok(RankingRuleView::from(criterion))
@@ -633,42 +633,42 @@ impl<'de> Deserialize<'de> for RankingRuleView {
     }
 }
 impl FromStr for RankingRuleView {
-    type Err = <Criterion as FromStr>::Err;
+    type Err = <RankingRule as FromStr>::Err;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(RankingRuleView::from(Criterion::from_str(s)?))
+        Ok(RankingRuleView::from(RankingRule::from_str(s)?))
     }
 }
 impl fmt::Display for RankingRuleView {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fmt::Display::fmt(&Criterion::from(self.clone()), f)
+        fmt::Display::fmt(&RankingRule::from(self.clone()), f)
     }
 }
-impl From<Criterion> for RankingRuleView {
-    fn from(value: Criterion) -> Self {
+impl From<RankingRule> for RankingRuleView {
+    fn from(value: RankingRule) -> Self {
         match value {
-            Criterion::Words => RankingRuleView::Words,
-            Criterion::Typo => RankingRuleView::Typo,
-            Criterion::Proximity => RankingRuleView::Proximity,
-            Criterion::Attribute => RankingRuleView::Attribute,
-            Criterion::Sort => RankingRuleView::Sort,
-            Criterion::Exactness => RankingRuleView::Exactness,
-            Criterion::Asc(x) => RankingRuleView::Asc(x),
-            Criterion::Desc(x) => RankingRuleView::Desc(x),
+            RankingRule::Words => RankingRuleView::Words,
+            RankingRule::Typo => RankingRuleView::Typo,
+            RankingRule::Proximity => RankingRuleView::Proximity,
+            RankingRule::Attribute => RankingRuleView::Attribute,
+            RankingRule::Sort => RankingRuleView::Sort,
+            RankingRule::Exactness => RankingRuleView::Exactness,
+            RankingRule::Asc(x) => RankingRuleView::Asc(x),
+            RankingRule::Desc(x) => RankingRuleView::Desc(x),
         }
     }
 }
-impl From<RankingRuleView> for Criterion {
+impl From<RankingRuleView> for RankingRule {
     fn from(value: RankingRuleView) -> Self {
         match value {
-            RankingRuleView::Words => Criterion::Words,
-            RankingRuleView::Typo => Criterion::Typo,
-            RankingRuleView::Proximity => Criterion::Proximity,
-            RankingRuleView::Attribute => Criterion::Attribute,
-            RankingRuleView::Sort => Criterion::Sort,
-            RankingRuleView::Exactness => Criterion::Exactness,
-            RankingRuleView::Asc(x) => Criterion::Asc(x),
-            RankingRuleView::Desc(x) => Criterion::Desc(x),
+            RankingRuleView::Words => RankingRule::Words,
+            RankingRuleView::Typo => RankingRule::Typo,
+            RankingRuleView::Proximity => RankingRule::Proximity,
+            RankingRuleView::Attribute => RankingRule::Attribute,
+            RankingRuleView::Sort => RankingRule::Sort,
+            RankingRuleView::Exactness => RankingRule::Exactness,
+            RankingRuleView::Asc(x) => RankingRule::Asc(x),
+            RankingRuleView::Desc(x) => RankingRule::Desc(x),
         }
     }
 }

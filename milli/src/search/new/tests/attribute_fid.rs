@@ -1,5 +1,5 @@
 use crate::index::tests::TempIndex;
-use crate::{Criterion, Search, SearchResult, TermsMatchingStrategy};
+use crate::{RankingRule, Search, SearchResult, TermsMatchingStrategy};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -12,7 +12,7 @@ fn create_index() -> TempIndex {
                 "description".to_owned(),
                 "plot".to_owned(),
             ]);
-            s.set_criteria(vec![Criterion::Attribute]);
+            s.set_ranking_rules(vec![RankingRule::Attribute]);
         })
         .unwrap();
 

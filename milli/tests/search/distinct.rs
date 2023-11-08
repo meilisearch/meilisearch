@@ -2,8 +2,8 @@ use std::collections::HashSet;
 
 use big_s::S;
 use milli::update::Settings;
-use milli::{Criterion, Search, SearchResult, TermsMatchingStrategy};
-use Criterion::*;
+use milli::{RankingRule, Search, SearchResult, TermsMatchingStrategy};
+use RankingRule::*;
 
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
 

@@ -9,7 +9,7 @@ use maplit::hashset;
 use crate::index::tests::TempIndex;
 use crate::score_details::ScoreDetails;
 use crate::search::new::tests::collect_field_values;
-use crate::{AscDesc, Criterion, GeoSortStrategy, Member, Search, SearchResult};
+use crate::{AscDesc, GeoSortStrategy, Member, RankingRule, Search, SearchResult};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -18,7 +18,7 @@ fn create_index() -> TempIndex {
         .update_settings(|s| {
             s.set_primary_key("id".to_owned());
             s.set_sortable_fields(hashset! { S("_geo") });
-            s.set_criteria(vec![Criterion::Words, Criterion::Sort]);
+            s.set_ranking_rules(vec![RankingRule::Words, RankingRule::Sort]);
         })
         .unwrap();
     index

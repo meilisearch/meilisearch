@@ -8,7 +8,7 @@ use heed::EnvOpenOptions;
 use maplit::{btreemap, hashset};
 use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
-use milli::{AscDesc, Criterion, DocumentId, Index, Member, Object, TermsMatchingStrategy};
+use milli::{AscDesc, DocumentId, Index, Member, Object, RankingRule, TermsMatchingStrategy};
 use serde::{Deserialize, Deserializer};
 use slice_group_by::GroupBy;
 
@@ -27,7 +27,7 @@ pub const EXTERNAL_DOCUMENTS_IDS: &[&str; 17] =
 
 pub const CONTENT: &str = include_str!("../assets/test_set.ndjson");
 
-pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
+pub fn setup_search_index_with_criteria(criteria: &[RankingRule]) -> Index {
     let path = tempfile::tempdir().unwrap();
     let mut options = EnvOpenOptions::new();
     options.map_size(10 * 1024 * 1024); // 10 MB
@@ -38,7 +38,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
 
     let mut builder = Settings::new(&mut wtxn, &index, &config);
 
-    builder.set_criteria(criteria.to_vec());
+    builder.set_ranking_rules(criteria.to_vec());
     builder.set_filterable_fields(hashset! {
         S("tag"),
         S("asc_desc_rank"),
@@ -95,7 +95,7 @@ pub fn internal_to_external_ids(index: &Index, internal_ids: &[DocumentId]) -> V
 }
 
 pub fn expected_order(
-    criteria: &[Criterion],
+    criteria: &[RankingRule],
     optional_words: TermsMatchingStrategy,
     sort_by: &[AscDesc],
 ) -> Vec<TestDocument> {
@@ -107,47 +107,47 @@ pub fn expected_order(
         let mut new_groups = Vec::new();
         for group in groups.iter_mut() {
             match criterion {
-                Criterion::Attribute => {
+                RankingRule::Attribute => {
                     group.sort_by_key(|d| d.attribute_rank);
                     new_groups
                         .extend(group.linear_group_by_key(|d| d.attribute_rank).map(Vec::from));
                 }
-                Criterion::Exactness => {
+                RankingRule::Exactness => {
                     group.sort_by_key(|d| d.exact_rank);
                     new_groups.extend(group.linear_group_by_key(|d| d.exact_rank).map(Vec::from));
                 }
-                Criterion::Proximity => {
+                RankingRule::Proximity => {
                     group.sort_by_key(|d| d.proximity_rank);
                     new_groups
                         .extend(group.linear_group_by_key(|d| d.proximity_rank).map(Vec::from));
                 }
-                Criterion::Sort if sort_by == [AscDesc::Asc(Member::Field(S("tag")))] => {
+                RankingRule::Sort if sort_by == [AscDesc::Asc(Member::Field(S("tag")))] => {
                     group.sort_by_key(|d| d.sort_by_rank);
                     new_groups.extend(group.linear_group_by_key(|d| d.sort_by_rank).map(Vec::from));
                 }
-                Criterion::Sort if sort_by == [AscDesc::Desc(Member::Field(S("tag")))] => {
+                RankingRule::Sort if sort_by == [AscDesc::Desc(Member::Field(S("tag")))] => {
                     group.sort_by_key(|d| Reverse(d.sort_by_rank));
                     new_groups.extend(group.linear_group_by_key(|d| d.sort_by_rank).map(Vec::from));
                 }
-                Criterion::Typo => {
+                RankingRule::Typo => {
                     group.sort_by_key(|d| d.typo_rank);
                     new_groups.extend(group.linear_group_by_key(|d| d.typo_rank).map(Vec::from));
                 }
-                Criterion::Words => {
+                RankingRule::Words => {
                     group.sort_by_key(|d| d.word_rank);
                     new_groups.extend(group.linear_group_by_key(|d| d.word_rank).map(Vec::from));
                 }
-                Criterion::Asc(field_name) if field_name == "asc_desc_rank" => {
+                RankingRule::Asc(field_name) if field_name == "asc_desc_rank" => {
                     group.sort_by_key(|d| d.asc_desc_rank);
                     new_groups
                         .extend(group.linear_group_by_key(|d| d.asc_desc_rank).map(Vec::from));
                 }
-                Criterion::Desc(field_name) if field_name == "asc_desc_rank" => {
+                RankingRule::Desc(field_name) if field_name == "asc_desc_rank" => {
                     group.sort_by_key(|d| Reverse(d.asc_desc_rank));
                     new_groups
                         .extend(group.linear_group_by_key(|d| d.asc_desc_rank).map(Vec::from));
                 }
-                Criterion::Asc(_) | Criterion::Desc(_) | Criterion::Sort => {
+                RankingRule::Asc(_) | RankingRule::Desc(_) | RankingRule::Sort => {
                     new_groups.push(group.clone())
                 }
             }

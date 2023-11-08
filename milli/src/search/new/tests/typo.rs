@@ -22,7 +22,7 @@ use std::collections::BTreeMap;
 
 use crate::index::tests::TempIndex;
 use crate::search::new::tests::collect_field_values;
-use crate::{Criterion, Search, SearchResult, TermsMatchingStrategy};
+use crate::{RankingRule, Search, SearchResult, TermsMatchingStrategy};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -31,7 +31,7 @@ fn create_index() -> TempIndex {
         .update_settings(|s| {
             s.set_primary_key("id".to_owned());
             s.set_searchable_fields(vec!["text".to_owned()]);
-            s.set_criteria(vec![Criterion::Words]);
+            s.set_ranking_rules(vec![RankingRule::Words]);
         })
         .unwrap();
 
@@ -457,7 +457,7 @@ fn test_typo_ranking_rule_not_preceded_by_words_ranking_rule() {
     let index = create_index();
     index
         .update_settings(|s| {
-            s.set_criteria(vec![Criterion::Typo]);
+            s.set_ranking_rules(vec![RankingRule::Typo]);
         })
         .unwrap();
 
@@ -495,7 +495,7 @@ fn test_typo_ranking_rule_not_preceded_by_words_ranking_rule() {
 
     index
         .update_settings(|s| {
-            s.set_criteria(vec![Criterion::Words, Criterion::Typo]);
+            s.set_ranking_rules(vec![RankingRule::Words, RankingRule::Typo]);
         })
         .unwrap();
 
@@ -540,7 +540,7 @@ fn test_typo_bucketing() {
     drop(txn);
     index
         .update_settings(|s| {
-            s.set_criteria(vec![Criterion::Typo]);
+            s.set_ranking_rules(vec![RankingRule::Typo]);
         })
         .unwrap();
     let txn = index.read_txn().unwrap();
@@ -589,7 +589,7 @@ fn test_typo_synonyms() {
     let index = create_index();
     index
         .update_settings(|s| {
-            s.set_criteria(vec![Criterion::Typo]);
+            s.set_ranking_rules(vec![RankingRule::Typo]);
 
             let mut synonyms = BTreeMap::new();
             synonyms.insert("lackadaisical".to_owned(), vec!["lazy".to_owned()]);

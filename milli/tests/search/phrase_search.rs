@@ -1,7 +1,7 @@
 use milli::update::{IndexerConfig, Settings};
-use milli::{Criterion, Index, Search, TermsMatchingStrategy};
+use milli::{Index, RankingRule, Search, TermsMatchingStrategy};
 
-use crate::search::Criterion::{Attribute, Exactness, Proximity};
+use crate::search::RankingRule::{Attribute, Exactness, Proximity};
 
 fn set_stop_words(index: &Index, stop_words: &[&str]) {
     let mut wtxn = index.write_txn().unwrap();
@@ -14,7 +14,7 @@ fn set_stop_words(index: &Index, stop_words: &[&str]) {
     wtxn.commit().unwrap();
 }
 
-fn test_phrase_search_with_stop_words_given_criteria(criteria: &[Criterion]) {
+fn test_phrase_search_with_stop_words_given_criteria(criteria: &[RankingRule]) {
     let index = super::setup_search_index_with_criteria(criteria);
 
     // Add stop_words

@@ -2,10 +2,10 @@ use std::collections::BTreeSet;
 
 use heed::EnvOpenOptions;
 use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
-use milli::{Criterion, Index, Search, TermsMatchingStrategy};
+use milli::{Index, RankingRule, Search, TermsMatchingStrategy};
 use serde_json::json;
 use tempfile::tempdir;
-use Criterion::*;
+use RankingRule::*;
 
 #[test]
 fn test_typo_tolerance_one_typo() {

@@ -3,7 +3,7 @@ use heed::EnvOpenOptions;
 // use maplit::hashset;
 use milli::{
     update::{IndexerConfig, Settings},
-    Criterion, Index,
+    Index, RankingRule,
 };
 
 fn main() {
@@ -19,13 +19,13 @@ fn main() {
     // builder.set_min_word_len_one_typo(5);
     // builder.set_min_word_len_two_typos(7);
     // builder.set_sortable_fields(hashset! { S("release_date") });
-    builder.set_criteria(vec![
-        Criterion::Words,
-        Criterion::Typo,
-        Criterion::Proximity,
-        Criterion::Attribute,
-        Criterion::Sort,
-        Criterion::Exactness,
+    builder.set_ranking_rules(vec![
+        RankingRule::Words,
+        RankingRule::Typo,
+        RankingRule::Proximity,
+        RankingRule::Attribute,
+        RankingRule::Sort,
+        RankingRule::Exactness,
     ]);
 
     builder.execute(|_| (), || false).unwrap();

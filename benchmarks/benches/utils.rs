@@ -12,7 +12,7 @@ use milli::heed::EnvOpenOptions;
 use milli::update::{
     IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings,
 };
-use milli::{Criterion, Filter, Index, Object, TermsMatchingStrategy};
+use milli::{Filter, Index, Object, RankingRule, TermsMatchingStrategy};
 use serde_json::Value;
 
 pub struct Conf<'a> {
@@ -78,11 +78,11 @@ pub fn base_setup(conf: &Conf) -> Index {
 
     if let Some(criterion) = conf.criterion {
         builder.reset_filterable_fields();
-        builder.reset_criteria();
+        builder.reset_ranking_rules();
         builder.reset_stop_words();
 
-        let criterion = criterion.iter().map(|s| Criterion::from_str(s).unwrap()).collect();
-        builder.set_criteria(criterion);
+        let criterion = criterion.iter().map(|s| RankingRule::from_str(s).unwrap()).collect();
+        builder.set_ranking_rules(criterion);
     }
 
     (conf.configure)(&mut builder);

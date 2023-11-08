@@ -203,12 +203,12 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
     for rr in settings_ranking_rules {
         match rr {
             // These rules need a query to have an effect; ignore them in placeholder search
-            crate::Criterion::Words
-            | crate::Criterion::Typo
-            | crate::Criterion::Attribute
-            | crate::Criterion::Proximity
-            | crate::Criterion::Exactness => continue,
-            crate::Criterion::Sort => {
+            crate::RankingRule::Words
+            | crate::RankingRule::Typo
+            | crate::RankingRule::Attribute
+            | crate::RankingRule::Proximity
+            | crate::RankingRule::Exactness => continue,
+            crate::RankingRule::Sort => {
                 if sort {
                     continue;
                 }
@@ -222,14 +222,14 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
                 )?;
                 sort = true;
             }
-            crate::Criterion::Asc(field_name) => {
+            crate::RankingRule::Asc(field_name) => {
                 if sorted_fields.contains(&field_name) {
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
                 ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, true)?));
             }
-            crate::Criterion::Desc(field_name) => {
+            crate::RankingRule::Desc(field_name) => {
                 if sorted_fields.contains(&field_name) {
                     continue;
                 }
@@ -268,10 +268,10 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
     for rr in settings_ranking_rules {
         // Add Words before any of: typo, proximity, attribute
         match rr {
-            crate::Criterion::Typo
-            | crate::Criterion::Attribute
-            | crate::Criterion::Proximity
-            | crate::Criterion::Exactness => {
+            crate::RankingRule::Typo
+            | crate::RankingRule::Attribute
+            | crate::RankingRule::Proximity
+            | crate::RankingRule::Exactness => {
                 if !words {
                     ranking_rules.push(Box::new(Words::new(terms_matching_strategy)));
                     words = true;
@@ -280,28 +280,28 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
             _ => {}
         }
         match rr {
-            crate::Criterion::Words => {
+            crate::RankingRule::Words => {
                 if words {
                     continue;
                 }
                 ranking_rules.push(Box::new(Words::new(terms_matching_strategy)));
                 words = true;
             }
-            crate::Criterion::Typo => {
+            crate::RankingRule::Typo => {
                 if typo {
                     continue;
                 }
                 typo = true;
                 ranking_rules.push(Box::new(Typo::new(None)));
             }
-            crate::Criterion::Proximity => {
+            crate::RankingRule::Proximity => {
                 if proximity {
                     continue;
                 }
                 proximity = true;
                 ranking_rules.push(Box::new(Proximity::new(None)));
             }
-            crate::Criterion::Attribute => {
+            crate::RankingRule::Attribute => {
                 if attribute {
                     continue;
                 }
@@ -309,7 +309,7 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 ranking_rules.push(Box::new(Fid::new(None)));
                 ranking_rules.push(Box::new(Position::new(None)));
             }
-            crate::Criterion::Sort => {
+            crate::RankingRule::Sort => {
                 if sort {
                     continue;
                 }
@@ -323,7 +323,7 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 )?;
                 sort = true;
             }
-            crate::Criterion::Exactness => {
+            crate::RankingRule::Exactness => {
                 if exactness {
                     continue;
                 }
@@ -331,14 +331,14 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 ranking_rules.push(Box::new(Exactness::new()));
                 exactness = true;
             }
-            crate::Criterion::Asc(field_name) => {
+            crate::RankingRule::Asc(field_name) => {
                 if sorted_fields.contains(&field_name) {
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
                 ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, true)?));
             }
-            crate::Criterion::Desc(field_name) => {
+            crate::RankingRule::Desc(field_name) => {
                 if sorted_fields.contains(&field_name) {
                     continue;
                 }
@@ -580,7 +580,8 @@ fn check_sort_criteria(ctx: &SearchContext, sort_criteria: Option<&Vec<AscDesc>>
 
     // We check that the sort ranking rule exists and throw an
     // error if we try to use it and that it doesn't.
-    let sort_ranking_rule_missing = !ctx.index.criteria(ctx.txn)?.contains(&crate::Criterion::Sort);
+    let sort_ranking_rule_missing =
+        !ctx.index.criteria(ctx.txn)?.contains(&crate::RankingRule::Sort);
     if sort_ranking_rule_missing {
         return Err(UserError::SortRankingRuleMissing.into());
     }

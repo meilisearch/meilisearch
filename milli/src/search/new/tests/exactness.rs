@@ -21,7 +21,7 @@ Then these rules will only work with
 
 use crate::index::tests::TempIndex;
 use crate::search::new::tests::collect_field_values;
-use crate::{Criterion, Search, SearchResult, TermsMatchingStrategy};
+use crate::{RankingRule, Search, SearchResult, TermsMatchingStrategy};
 
 fn create_index_simple_ordered() -> TempIndex {
     let index = TempIndex::new();
@@ -30,7 +30,7 @@ fn create_index_simple_ordered() -> TempIndex {
         .update_settings(|s| {
             s.set_primary_key("id".to_owned());
             s.set_searchable_fields(vec!["text".to_owned()]);
-            s.set_criteria(vec![Criterion::Exactness]);
+            s.set_ranking_rules(vec![RankingRule::Exactness]);
         })
         .unwrap();
 
@@ -89,7 +89,7 @@ fn create_index_simple_reversed() -> TempIndex {
         .update_settings(|s| {
             s.set_primary_key("id".to_owned());
             s.set_searchable_fields(vec!["text".to_owned()]);
-            s.set_criteria(vec![Criterion::Exactness]);
+            s.set_ranking_rules(vec![RankingRule::Exactness]);
         })
         .unwrap();
 
@@ -147,7 +147,7 @@ fn create_index_simple_random() -> TempIndex {
         .update_settings(|s| {
             s.set_primary_key("id".to_owned());
             s.set_searchable_fields(vec!["text".to_owned()]);
-            s.set_criteria(vec![Criterion::Exactness]);
+            s.set_ranking_rules(vec![RankingRule::Exactness]);
         })
         .unwrap();
 
@@ -201,7 +201,7 @@ fn create_index_attribute_starts_with() -> TempIndex {
         .update_settings(|s| {
             s.set_primary_key("id".to_owned());
             s.set_searchable_fields(vec!["text".to_owned()]);
-            s.set_criteria(vec![Criterion::Exactness]);
+            s.set_ranking_rules(vec![RankingRule::Exactness]);
         })
         .unwrap();
 
@@ -251,7 +251,7 @@ fn create_index_simple_ordered_with_typos() -> TempIndex {
         .update_settings(|s| {
             s.set_primary_key("id".to_owned());
             s.set_searchable_fields(vec!["text".to_owned()]);
-            s.set_criteria(vec![Criterion::Exactness]);
+            s.set_ranking_rules(vec![RankingRule::Exactness]);
         })
         .unwrap();
 
@@ -350,7 +350,11 @@ fn create_index_with_varying_proximities() -> TempIndex {
         .update_settings(|s| {
             s.set_primary_key("id".to_owned());
             s.set_searchable_fields(vec!["text".to_owned()]);
-            s.set_criteria(vec![Criterion::Exactness, Criterion::Words, Criterion::Proximity]);
+            s.set_ranking_rules(vec![
+                RankingRule::Exactness,
+                RankingRule::Words,
+                RankingRule::Proximity,
+            ]);
         })
         .unwrap();
 
@@ -404,7 +408,7 @@ fn create_index_with_typo_and_prefix() -> TempIndex {
         .update_settings(|s| {
             s.set_primary_key("id".to_owned());
             s.set_searchable_fields(vec!["text".to_owned()]);
-            s.set_criteria(vec![Criterion::Exactness]);
+            s.set_ranking_rules(vec![RankingRule::Exactness]);
         })
         .unwrap();
 
@@ -442,7 +446,11 @@ fn create_index_all_equal_except_proximity_between_ignored_terms() -> TempIndex 
         .update_settings(|s| {
             s.set_primary_key("id".to_owned());
             s.set_searchable_fields(vec!["text".to_owned()]);
-            s.set_criteria(vec![Criterion::Exactness, Criterion::Words, Criterion::Proximity]);
+            s.set_ranking_rules(vec![
+                RankingRule::Exactness,
+                RankingRule::Words,
+                RankingRule::Proximity,
+            ]);
         })
         .unwrap();
 
@@ -698,7 +706,7 @@ fn test_exactness_after_words() {
 
     index
         .update_settings(|s| {
-            s.set_criteria(vec![Criterion::Words, Criterion::Exactness]);
+            s.set_ranking_rules(vec![RankingRule::Words, RankingRule::Exactness]);
         })
         .unwrap();
 
@@ -747,7 +755,7 @@ fn test_words_after_exactness() {
 
     index
         .update_settings(|s| {
-            s.set_criteria(vec![Criterion::Exactness, Criterion::Words]);
+            s.set_ranking_rules(vec![RankingRule::Exactness, RankingRule::Words]);
         })
         .unwrap();
 
@@ -796,7 +804,11 @@ fn test_proximity_after_exactness() {
 
     index
         .update_settings(|s| {
-            s.set_criteria(vec![Criterion::Exactness, Criterion::Words, Criterion::Proximity]);
+            s.set_ranking_rules(vec![
+                RankingRule::Exactness,
+                RankingRule::Words,
+                RankingRule::Proximity,
+            ]);
         })
         .unwrap();
 
@@ -834,7 +846,11 @@ fn test_proximity_after_exactness() {
 
     index
         .update_settings(|s| {
-            s.set_criteria(vec![Criterion::Exactness, Criterion::Words, Criterion::Proximity]);
+            s.set_ranking_rules(vec![
+                RankingRule::Exactness,
+                RankingRule::Words,
+                RankingRule::Proximity,
+            ]);
         })
         .unwrap();
 
@@ -868,7 +884,11 @@ fn test_exactness_followed_by_typo_prefer_no_typo_prefix() {
 
     index
         .update_settings(|s| {
-            s.set_criteria(vec![Criterion::Exactness, Criterion::Words, Criterion::Typo]);
+            s.set_ranking_rules(vec![
+                RankingRule::Exactness,
+                RankingRule::Words,
+                RankingRule::Typo,
+            ]);
         })
         .unwrap();
 
@@ -904,7 +924,11 @@ fn test_typo_followed_by_exactness() {
 
     index
         .update_settings(|s| {
-            s.set_criteria(vec![Criterion::Words, Criterion::Typo, Criterion::Exactness]);
+            s.set_ranking_rules(vec![
+                RankingRule::Words,
+                RankingRule::Typo,
+                RankingRule::Exactness,
+            ]);
         })
         .unwrap();
 

@@ -1,6 +1,6 @@
 use either::{Either, Left, Right};
-use milli::{Criterion, Filter, Search, SearchResult, TermsMatchingStrategy};
-use Criterion::*;
+use milli::{Filter, RankingRule, Search, SearchResult, TermsMatchingStrategy};
+use RankingRule::*;
 
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
 

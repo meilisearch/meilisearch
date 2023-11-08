@@ -19,7 +19,7 @@ use maplit::hashset;
 
 use super::collect_field_values;
 use crate::index::tests::TempIndex;
-use crate::{AscDesc, Criterion, Index, Member, Search, SearchResult, TermsMatchingStrategy};
+use crate::{AscDesc, Index, Member, RankingRule, Search, SearchResult, TermsMatchingStrategy};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -30,7 +30,7 @@ fn create_index() -> TempIndex {
             s.set_searchable_fields(vec!["text".to_owned()]);
             s.set_sortable_fields(hashset! { S("rank1"), S("letter") });
             s.set_distinct_field("letter".to_owned());
-            s.set_criteria(vec![Criterion::Words]);
+            s.set_ranking_rules(vec![RankingRule::Words]);
         })
         .unwrap();
 
@@ -252,7 +252,7 @@ fn test_distinct_placeholder_sort() {
     let index = create_index();
     index
         .update_settings(|s| {
-            s.set_criteria(vec![Criterion::Sort]);
+            s.set_ranking_rules(vec![RankingRule::Sort]);
         })
         .unwrap();
 
@@ -387,7 +387,7 @@ fn test_distinct_words() {
     let index = create_index();
     index
         .update_settings(|s| {
-            s.set_criteria(vec![Criterion::Words]);
+            s.set_ranking_rules(vec![RankingRule::Words]);
         })
         .unwrap();
 
@@ -440,7 +440,11 @@ fn test_distinct_sort_words() {
     let index = create_index();
     index
         .update_settings(|s| {
-            s.set_criteria(vec![Criterion::Sort, Criterion::Words, Criterion::Desc(S("rank1"))]);
+            s.set_ranking_rules(vec![
+                RankingRule::Sort,
+                RankingRule::Words,
+                RankingRule::Desc(S("rank1")),
+            ]);
         })
         .unwrap();
 
@@ -513,7 +517,7 @@ fn test_distinct_all_candidates() {
     let index = create_index();
     index
         .update_settings(|s| {
-            s.set_criteria(vec![Criterion::Sort]);
+            s.set_ranking_rules(vec![RankingRule::Sort]);
         })
         .unwrap();
 
@@ -536,7 +540,7 @@ fn test_distinct_typo() {
     let index = create_index();
     index
         .update_settings(|s| {
-            s.set_criteria(vec![Criterion::Words, Criterion::Typo]);
+            s.set_ranking_rules(vec![RankingRule::Words, RankingRule::Typo]);
         })
         .unwrap();
 

@@ -19,7 +19,7 @@ use std::collections::BTreeMap;
 
 use crate::index::tests::TempIndex;
 use crate::search::new::tests::collect_field_values;
-use crate::{Criterion, Search, SearchResult, TermsMatchingStrategy};
+use crate::{RankingRule, Search, SearchResult, TermsMatchingStrategy};
 
 fn create_simple_index() -> TempIndex {
     let index = TempIndex::new();
@@ -28,7 +28,7 @@ fn create_simple_index() -> TempIndex {
         .update_settings(|s| {
             s.set_primary_key("id".to_owned());
             s.set_searchable_fields(vec!["text".to_owned()]);
-            s.set_criteria(vec![Criterion::Words, Criterion::Proximity]);
+            s.set_ranking_rules(vec![RankingRule::Words, RankingRule::Proximity]);
         })
         .unwrap();
 
@@ -94,7 +94,7 @@ fn create_edge_cases_index() -> TempIndex {
         .update_settings(|s| {
             s.set_primary_key("id".to_owned());
             s.set_searchable_fields(vec!["text".to_owned()]);
-            s.set_criteria(vec![Criterion::Words, Criterion::Proximity]);
+            s.set_ranking_rules(vec![RankingRule::Words, RankingRule::Proximity]);
         })
         .unwrap();
 

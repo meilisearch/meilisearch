@@ -17,7 +17,7 @@ use maplit::hashset;
 use crate::index::tests::TempIndex;
 use crate::search::new::tests::collect_field_values;
 use crate::{
-    score_details, AscDesc, Criterion, Member, Search, SearchResult, TermsMatchingStrategy,
+    score_details, AscDesc, Member, RankingRule, Search, SearchResult, TermsMatchingStrategy,
 };
 
 fn create_index() -> TempIndex {
@@ -28,7 +28,7 @@ fn create_index() -> TempIndex {
             s.set_primary_key("id".to_owned());
             s.set_searchable_fields(vec!["text".to_owned()]);
             s.set_sortable_fields(hashset! { S("rank"), S("vague"), S("letter") });
-            s.set_criteria(vec![Criterion::Sort]);
+            s.set_ranking_rules(vec![RankingRule::Sort]);
         })
         .unwrap();
 
@@ -331,7 +331,7 @@ fn test_redacted() {
         .update_settings(|s| {
             s.set_displayed_fields(vec!["text".to_owned(), "vague".to_owned()]);
             s.set_sortable_fields(hashset! { S("rank"), S("vague"), S("letter") });
-            s.set_criteria(vec![Criterion::Sort]);
+            s.set_ranking_rules(vec![RankingRule::Sort]);
         })
         .unwrap();
 

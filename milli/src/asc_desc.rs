@@ -8,7 +8,7 @@ use thiserror::Error;
 
 use crate::error::is_reserved_keyword;
 use crate::search::facet::BadGeoError;
-use crate::{CriterionError, Error, UserError};
+use crate::{Error, RankingRuleError, UserError};
 
 /// This error type is never supposed to be shown to the end user.
 /// You must always cast it to a sort error or a criterion error.
@@ -28,23 +28,23 @@ impl From<BadGeoError> for AscDescError {
     }
 }
 
-impl From<AscDescError> for CriterionError {
+impl From<AscDescError> for RankingRuleError {
     fn from(error: AscDescError) -> Self {
         match error {
             AscDescError::GeoError(_) => {
-                CriterionError::ReservedNameForSort { name: "_geoPoint".to_string() }
+                RankingRuleError::ReservedNameForSort { name: "_geoPoint".to_string() }
             }
-            AscDescError::InvalidSyntax { name } => CriterionError::InvalidName { name },
+            AscDescError::InvalidSyntax { name } => RankingRuleError::InvalidName { name },
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoPoint") => {
-                CriterionError::ReservedNameForSort { name: "_geoPoint".to_string() }
+                RankingRuleError::ReservedNameForSort { name: "_geoPoint".to_string() }
             }
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoRadius") => {
-                CriterionError::ReservedNameForFilter { name: "_geoRadius".to_string() }
+                RankingRuleError::ReservedNameForFilter { name: "_geoRadius".to_string() }
             }
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoBoundingBox") => {
-                CriterionError::ReservedNameForFilter { name: "_geoBoundingBox".to_string() }
+                RankingRuleError::ReservedNameForFilter { name: "_geoBoundingBox".to_string() }
             }
-            AscDescError::ReservedKeyword { name } => CriterionError::ReservedName { name },
+            AscDescError::ReservedKeyword { name } => RankingRuleError::ReservedName { name },
         }
     }
 }
