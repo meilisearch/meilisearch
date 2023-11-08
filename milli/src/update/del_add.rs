@@ -102,3 +102,17 @@ pub fn del_add_from_two_obkvs<K: obkv::Key + PartialOrd + Ord>(
 pub fn is_noop_del_add_obkv(del_add: KvReaderDelAdd) -> bool {
     del_add.get(DelAdd::Deletion) == del_add.get(DelAdd::Addition)
 }
+
+/// A function that extracts and returns the Add side of a DelAdd obkv.
+/// This is useful when there are no previous value in the database and
+/// therefore we don't need to do a diff with what's already there.
+///
+/// If there is no Add side we currently write an empty buffer
+/// which is a valid CboRoaringBitmap.
+#[allow(clippy::ptr_arg)] // required to avoid signature mismatch
+pub fn deladd_serialize_add_side<'a>(
+    obkv: &'a [u8],
+    _buffer: &mut Vec<u8>,
+) -> crate::Result<&'a [u8]> {
+    Ok(KvReaderDelAdd::new(obkv).get(DelAdd::Addition).unwrap_or_default())
+}

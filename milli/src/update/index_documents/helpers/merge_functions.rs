@@ -239,3 +239,19 @@ pub fn merge_deladd_cbo_roaring_bitmaps<'a>(
         output_deladd_obkv.into_inner().map(Cow::from).map_err(Into::into)
     }
 }
+
+/// A function that merges a DelAdd of bitmao into an already existing bitmap.
+///
+/// The first argument is the DelAdd obkv of CboRoaringBitmaps and
+/// the second one is the CboRoaringBitmap to merge into.
+pub fn merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap<'a>(
+    deladd_obkv: &[u8],
+    previous: &[u8],
+    buffer: &'a mut Vec<u8>,
+) -> Result<Option<&'a [u8]>> {
+    Ok(CboRoaringBitmapCodec::merge_deladd_into(
+        KvReaderDelAdd::new(deladd_obkv),
+        previous,
+        buffer,
+    )?)
+}

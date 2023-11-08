@@ -9,6 +9,7 @@ use log::debug;
 
 use super::{ClonableMmap, MergeFn};
 use crate::error::InternalError;
+use crate::update::index_documents::valid_lmdb_key;
 use crate::Result;
 
 pub type CursorClonableMmap = io::Cursor<ClonableMmap>;
@@ -279,6 +280,49 @@ pub fn sorter_into_lmdb_database(
     }
 
     debug!("MTBL sorter writen in {:.02?}!", before.elapsed());
+    Ok(())
+}
+
+/// Write provided sorter in database using serialize_value function.
+/// merge_values function is used if an entry already exist in the database.
+pub fn write_sorter_into_database<K, V, FS, FM>(
+    sorter: Sorter<MergeFn>,
+    database: &heed::Database<K, V>,
+    wtxn: &mut heed::RwTxn,
+    index_is_empty: bool,
+    serialize_value: FS,
+    merge_values: FM,
+) -> Result<()>
+where
+    FS: for<'a> Fn(&'a [u8], &'a mut Vec<u8>) -> Result<&'a [u8]>,
+    FM: for<'a> Fn(&[u8], &[u8], &'a mut Vec<u8>) -> Result<Option<&'a [u8]>>,
+{
+    puffin::profile_function!();
+
+    let mut buffer = Vec::new();
+    let database = database.remap_types::<ByteSlice, ByteSlice>();
+
+    let mut merger_iter = sorter.into_stream_merger_iter()?;
+    while let Some((key, value)) = merger_iter.next()? {
+        if valid_lmdb_key(key) {
+            buffer.clear();
+            let value = if index_is_empty {
+                Some(serialize_value(value, &mut buffer)?)
+            } else {
+                match database.get(wtxn, key)? {
+                    Some(prev_value) => merge_values(value, prev_value, &mut buffer)?,
+                    None => Some(serialize_value(value, &mut buffer)?),
+                }
+            };
+            match value {
+                Some(value) => database.put(wtxn, key, value)?,
+                None => {
+                    database.delete(wtxn, key)?;
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
