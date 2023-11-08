@@ -381,12 +381,48 @@ where
             total_databases: TOTAL_POSTING_DATABASE_COUNT,
         });
 
+        let mut word_pair_proximity_docids = None;
+        let mut word_position_docids = None;
+        let mut word_fid_docids = None;
+        let mut word_docids = None;
+        let mut exact_word_docids = None;
+
         for result in lmdb_writer_rx {
             if (self.should_abort)() {
                 return Err(Error::InternalError(InternalError::AbortedIndexation));
             }
 
-            let typed_chunk = result?;
+            let typed_chunk = match result? {
+                TypedChunk::WordDocids {
+                    word_docids_reader,
+                    exact_word_docids_reader,
+                    word_fid_docids_reader,
+                } => {
+                    let cloneable_chunk = unsafe { as_cloneable_grenad(&word_docids_reader)? };
+                    word_docids = Some(cloneable_chunk);
+                    let cloneable_chunk =
+                        unsafe { as_cloneable_grenad(&exact_word_docids_reader)? };
+                    exact_word_docids = Some(cloneable_chunk);
+                    let cloneable_chunk = unsafe { as_cloneable_grenad(&word_fid_docids_reader)? };
+                    word_fid_docids = Some(cloneable_chunk);
+                    TypedChunk::WordDocids {
+                        word_docids_reader,
+                        exact_word_docids_reader,
+                        word_fid_docids_reader,
+                    }
+                }
+                TypedChunk::WordPairProximityDocids(chunk) => {
+                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
+                    word_pair_proximity_docids = Some(cloneable_chunk);
+                    TypedChunk::WordPairProximityDocids(chunk)
+                }
+                TypedChunk::WordPositionDocids(chunk) => {
+                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
+                    word_position_docids = Some(cloneable_chunk);
+                    TypedChunk::WordPositionDocids(chunk)
+                }
+                otherwise => otherwise,
+            };
 
             // FIXME: return newly added as well as newly deleted documents
             let (docids, is_merged_database) =
@@ -417,17 +453,17 @@ where
 
         // We write the primary key field id into the main database
         self.index.put_primary_key(self.wtxn, &primary_key)?;
+        let number_of_documents = self.index.number_of_documents(self.wtxn)?;
 
-        // TODO: reactivate prefix DB with diff-indexing
-        // self.execute_prefix_databases(
-        //     word_docids,
-        //     exact_word_docids,
-        //     word_pair_proximity_docids,
-        //     word_position_docids,
-        //     word_fid_docids,
-        // )?;
+        self.execute_prefix_databases(
+            word_docids,
+            exact_word_docids,
+            word_pair_proximity_docids,
+            word_position_docids,
+            word_fid_docids,
+        )?;
 
-        self.index.number_of_documents(self.wtxn)
+        Ok(number_of_documents)
     }
 
     #[logging_timer::time("IndexDocuments::{}")]
