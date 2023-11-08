@@ -4964,7 +4964,7 @@ dependencies = [
 [[package]]
 name = "zookeeper-client-sync"
 version = "0.1.0"
-source = "git+https://github.com/irevoire/zookeeper-client-sync.git#ff10407b7b2ef34b727ce4291729f3b8bd676f30"
+source = "git+https://github.com/meilisearch/zookeeper-client-sync.git#ff10407b7b2ef34b727ce4291729f3b8bd676f30"
 dependencies = [
  "futures",
  "once_cell",

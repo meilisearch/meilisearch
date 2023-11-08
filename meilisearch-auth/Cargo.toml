@@ -25,4 +25,4 @@ sha2 = "0.10.6"
 thiserror = "1.0.40"
 time = { version = "0.3.20", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 uuid = { version = "1.3.1", features = ["serde", "v4"] }
-zookeeper-client-sync = { git = "https://github.com/irevoire/zookeeper-client-sync.git" }
+zookeeper-client-sync = { git = "https://github.com/meilisearch/zookeeper-client-sync.git" }
