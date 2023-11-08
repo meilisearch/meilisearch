@@ -35,13 +35,12 @@ use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
-    IndexerConfig, PrefixWordPairsProximityDocids, UpdateIndexingStep, WordPrefixDocids,
-    WordPrefixIntegerDocids, WordsPrefixesFst,
+    IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
 use crate::{CboRoaringBitmapCodec, Index, Result};
 
 static MERGED_DATABASE_COUNT: usize = 7;
-static PREFIX_DATABASE_COUNT: usize = 5;
+static PREFIX_DATABASE_COUNT: usize = 4;
 static TOTAL_POSTING_DATABASE_COUNT: usize = MERGED_DATABASE_COUNT + PREFIX_DATABASE_COUNT;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -381,7 +380,6 @@ where
             total_databases: TOTAL_POSTING_DATABASE_COUNT,
         });
 
-        let mut word_pair_proximity_docids = None;
         let mut word_position_docids = None;
         let mut word_fid_docids = None;
         let mut word_docids = None;
@@ -410,11 +408,6 @@ where
                         exact_word_docids_reader,
                         word_fid_docids_reader,
                     }
-                }
-                TypedChunk::WordPairProximityDocids(chunk) => {
-                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
-                    word_pair_proximity_docids = Some(cloneable_chunk);
-                    TypedChunk::WordPairProximityDocids(chunk)
                 }
                 TypedChunk::WordPositionDocids(chunk) => {
                     let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
@@ -458,7 +451,6 @@ where
         self.execute_prefix_databases(
             word_docids,
             exact_word_docids,
-            word_pair_proximity_docids,
             word_position_docids,
             word_fid_docids,
         )?;
@@ -471,7 +463,6 @@ where
         self,
         word_docids: Option<grenad::Reader<CursorClonableMmap>>,
         exact_word_docids: Option<grenad::Reader<CursorClonableMmap>>,
-        word_pair_proximity_docids: Option<grenad::Reader<CursorClonableMmap>>,
         word_position_docids: Option<grenad::Reader<CursorClonableMmap>>,
         word_fid_docids: Option<grenad::Reader<CursorClonableMmap>>,
     ) -> Result<()>
@@ -576,32 +567,6 @@ where
                 self.index.exact_word_docids,
                 self.index.exact_word_prefix_docids,
                 self.indexer_config,
-                &new_prefix_fst_words,
-                &common_prefix_fst_words,
-                &del_prefix_fst_words,
-            )?;
-        }
-
-        if (self.should_abort)() {
-            return Err(Error::InternalError(InternalError::AbortedIndexation));
-        }
-
-        databases_seen += 1;
-        (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
-            databases_seen,
-            total_databases: TOTAL_POSTING_DATABASE_COUNT,
-        });
-
-        if let Some(word_pair_proximity_docids) = word_pair_proximity_docids {
-            // Run the word prefix pair proximity docids update operation.
-            PrefixWordPairsProximityDocids::new(
-                self.wtxn,
-                self.index,
-                self.indexer_config.chunk_compression_type,
-                self.indexer_config.chunk_compression_level,
-            )
-            .execute(
-                word_pair_proximity_docids,
                 &new_prefix_fst_words,
                 &common_prefix_fst_words,
                 &del_prefix_fst_words,
