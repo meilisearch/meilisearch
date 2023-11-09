@@ -481,16 +481,16 @@ impl<'a, 'i> Transform<'a, 'i> {
         Ok(documents_deleted)
     }
 
-    /// The counter part of `read_documents` that removes documents either from the transform or the database.
-    /// It can be called before, after or in between two calls of the `read_documents`.
+    /// Removes documents from db using their internal document ids.
     ///
-    /// It needs to update all the internal datastructure in the transform.
-    /// - If the document is coming from the database -> it's marked as a to_delete document
-    /// - If the document to remove was inserted by the `read_documents` method before AND was present in the db,
-    ///   it's marked as `to_delete` + added into the grenad to ensure we don't reinsert it.
-    /// - If the document to remove was inserted by the `read_documents` method before but was NOT present in the db,
-    ///   it's added into the grenad to ensure we don't insert it + removed from the list of new documents ids.
-    /// - If the document to remove was not present in either the db or the transform we do nothing.
+    /// # Warning
+    ///
+    /// This function is dangerous and will only work correctly if:
+    ///
+    /// - All the passed ids currently exist in the database
+    /// - No batching using the standards `remove_documents` and `add_documents` took place
+    ///
+    /// TODO: make it impossible to call `remove_documents` or `add_documents` on an instance that calls this function.
     #[logging_timer::time]
     pub fn remove_documents_from_db_no_batch<FA>(
         &mut self,
