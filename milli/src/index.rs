@@ -12,6 +12,7 @@ use rstar::RTree;
 use time::OffsetDateTime;
 
 use crate::distance::NDotProductPoint;
+use crate::documents::PrimaryKey;
 use crate::error::{InternalError, UserError};
 use crate::fields_ids_map::FieldsIdsMap;
 use crate::heed_codec::facet::{
@@ -1174,6 +1175,36 @@ impl Index {
         rtxn: &'t RoTxn,
     ) -> Result<impl Iterator<Item = Result<(DocumentId, obkv::KvReaderU16<'t>)>> + 'a> {
         self.iter_documents(rtxn, self.documents_ids(rtxn)?)
+    }
+
+    pub fn external_id_of<'a, 't: 'a>(
+        &'a self,
+        rtxn: &'t RoTxn,
+        ids: impl IntoIterator<Item = DocumentId> + 'a,
+    ) -> Result<impl IntoIterator<Item = Result<String>> + 'a> {
+        let fields = self.fields_ids_map(rtxn)?;
+
+        // uses precondition "never called on an empty index"
+        let primary_key = self.primary_key(rtxn)?.ok_or(InternalError::DatabaseMissingEntry {
+            db_name: db_name::MAIN,
+            key: Some(main_key::PRIMARY_KEY_KEY),
+        })?;
+        let primary_key = PrimaryKey::new(primary_key, &fields).ok_or_else(|| {
+            InternalError::FieldIdMapMissingEntry(crate::FieldIdMapMissingEntry::FieldName {
+                field_name: primary_key.to_owned(),
+                process: "external_id_of",
+            })
+        })?;
+        Ok(self.iter_documents(rtxn, ids)?.map(move |entry| -> Result<_> {
+            let (_docid, obkv) = entry?;
+            match primary_key.document_id(&obkv, &fields)? {
+                Ok(document_id) => Ok(document_id),
+                Err(_) => Err(InternalError::DocumentsError(
+                    crate::documents::Error::InvalidDocumentFormat,
+                )
+                .into()),
+            }
+        }))
     }
 
     pub fn facets_distribution<'a>(&'a self, rtxn: &'a RoTxn) -> FacetDistribution<'a> {
