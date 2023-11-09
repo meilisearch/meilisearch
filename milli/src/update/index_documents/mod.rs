@@ -194,6 +194,39 @@ where
         Ok((self, Ok(deleted_documents)))
     }
 
+    /// Removes documents from db using their internal document ids.
+    ///
+    /// # Warning
+    ///
+    /// This function is dangerous and will only work correctly if:
+    ///
+    /// - All the passed ids currently exist in the database
+    /// - No batching using the standards `remove_documents` and `add_documents` took place
+    ///
+    /// TODO: make it impossible to call `remove_documents` or `add_documents` on an instance that calls this function.
+    pub fn remove_documents_from_db_no_batch(
+        mut self,
+        to_delete: &RoaringBitmap,
+    ) -> Result<(Self, u64)> {
+        puffin::profile_function!();
+
+        // Early return when there is no document to add
+        if to_delete.is_empty() {
+            return Ok((self, 0));
+        }
+
+        let deleted_documents = self
+            .transform
+            .as_mut()
+            .expect("Invalid document deletion state")
+            .remove_documents_from_db_no_batch(to_delete, self.wtxn, &self.should_abort)?
+            as u64;
+
+        self.deleted_documents += deleted_documents;
+
+        Ok((self, deleted_documents))
+    }
+
     #[logging_timer::time("IndexDocuments::{}")]
     pub fn execute(mut self) -> Result<DocumentAdditionResult> {
         puffin::profile_function!();
