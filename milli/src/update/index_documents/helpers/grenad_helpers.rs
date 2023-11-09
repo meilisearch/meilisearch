@@ -1,14 +1,11 @@
 use std::borrow::Cow;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Seek};
-use std::time::Instant;
 
 use grenad::{CompressionType, Sorter};
 use heed::types::ByteSlice;
-use log::debug;
 
 use super::{ClonableMmap, MergeFn};
-use crate::error::InternalError;
 use crate::update::index_documents::valid_lmdb_key;
 use crate::Result;
 
@@ -239,48 +236,6 @@ pub fn grenad_obkv_into_chunks<R: io::Read + io::Seek>(
     };
 
     Ok(std::iter::from_fn(move || transposer().transpose()))
-}
-
-pub fn sorter_into_lmdb_database(
-    wtxn: &mut heed::RwTxn,
-    database: heed::PolyDatabase,
-    sorter: Sorter<MergeFn>,
-    merge: MergeFn,
-) -> Result<()> {
-    puffin::profile_function!();
-    debug!("Writing MTBL sorter...");
-    let before = Instant::now();
-
-    let mut merger_iter = sorter.into_stream_merger_iter()?;
-    if database.is_empty(wtxn)? {
-        let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
-        while let Some((k, v)) = merger_iter.next()? {
-            // safety: we don't keep references from inside the LMDB database.
-            unsafe { out_iter.append(k, v)? };
-        }
-    } else {
-        while let Some((k, v)) = merger_iter.next()? {
-            let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, k)?;
-            match iter.next().transpose()? {
-                Some((key, old_val)) if key == k => {
-                    let vals = vec![Cow::Borrowed(old_val), Cow::Borrowed(v)];
-                    let val = merge(k, &vals).map_err(|_| {
-                        // TODO just wrap this error?
-                        InternalError::IndexingMergingKeys { process: "get-put-merge" }
-                    })?;
-                    // safety: we don't keep references from inside the LMDB database.
-                    unsafe { iter.put_current(k, &val)? };
-                }
-                _ => {
-                    drop(iter);
-                    database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?;
-                }
-            }
-        }
-    }
-
-    debug!("MTBL sorter writen in {:.02?}!", before.elapsed());
-    Ok(())
 }
 
 /// Write provided sorter in database using serialize_value function.
