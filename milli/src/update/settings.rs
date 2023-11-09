@@ -894,7 +894,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         let non_separator_tokens_updated = self.update_non_separator_tokens()?;
         let separator_tokens_updated = self.update_separator_tokens()?;
         let dictionary_updated = self.update_dictionary()?;
-        let synonyms_updated = self.update_synonyms()?;
+        self.update_synonyms()?;
         let searchable_updated = self.update_searchable()?;
         let exact_attributes_updated = self.update_exact_attributes()?;
 
@@ -903,7 +903,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             || separator_tokens_updated
             || dictionary_updated
             || faceted_updated
-            || synonyms_updated
+            // || synonyms_updated
             || searchable_updated
             || exact_attributes_updated
         {
