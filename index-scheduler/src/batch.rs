@@ -924,7 +924,8 @@ impl IndexScheduler {
                 };
 
                 // the index operation can take a long time, so save this handle to make it available tothe search for the duration of the tick
-                *self.currently_updating_index.write().unwrap() = Some((index_uid.clone(), index.clone()));
+                *self.currently_updating_index.write().unwrap() =
+                    Some((index_uid.clone(), index.clone()));
 
                 let mut index_wtxn = index.write_txn()?;
                 let tasks = self.apply_index_operation(&mut index_wtxn, &index, op)?;
@@ -963,8 +964,8 @@ impl IndexScheduler {
                 let rtxn = self.env.read_txn()?;
                 let index = self.index_mapper.index(&rtxn, &index_uid)?;
                 // the index update can take a long time, so save this handle to make it available tothe search for the duration of the tick
-                *self.currently_updating_index.write().unwrap() = Some((index_uid.clone(), index.clone()));
-
+                *self.currently_updating_index.write().unwrap() =
+                    Some((index_uid.clone(), index.clone()));
 
                 if let Some(primary_key) = primary_key.clone() {
                     let mut index_wtxn = index.write_txn()?;

@@ -658,9 +658,11 @@ impl IndexScheduler {
     /// If you need to fetch information from or perform an action on all indexes,
     /// see the `try_for_each_index` function.
     pub fn index(&self, name: &str) -> Result<Index> {
-        if let Some((current_name, current_index)) = self.currently_updating_index.read().unwrap().as_ref() {
+        if let Some((current_name, current_index)) =
+            self.currently_updating_index.read().unwrap().as_ref()
+        {
             if current_name == name {
-                return Ok(current_index.clone())
+                return Ok(current_index.clone());
             }
         }
         let rtxn = self.env.read_txn()?;
