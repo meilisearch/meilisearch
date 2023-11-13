@@ -923,7 +923,7 @@ impl IndexScheduler {
                     self.index_mapper.index(&rtxn, &index_uid)?
                 };
 
-                // the index operation can take a long time, so save this handle to make it available tothe search for the duration of the tick
+                // the index operation can take a long time, so save this handle to make it available to the search for the duration of the tick
                 *self.currently_updating_index.write().unwrap() =
                     Some((index_uid.clone(), index.clone()));
 
@@ -963,9 +963,6 @@ impl IndexScheduler {
             Batch::IndexUpdate { index_uid, primary_key, mut task } => {
                 let rtxn = self.env.read_txn()?;
                 let index = self.index_mapper.index(&rtxn, &index_uid)?;
-                // the index update can take a long time, so save this handle to make it available tothe search for the duration of the tick
-                *self.currently_updating_index.write().unwrap() =
-                    Some((index_uid.clone(), index.clone()));
 
                 if let Some(primary_key) = primary_key.clone() {
                     let mut index_wtxn = index.write_txn()?;
