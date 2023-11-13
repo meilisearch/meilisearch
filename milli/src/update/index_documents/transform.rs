@@ -421,52 +421,13 @@ impl<'a, 'i> Transform<'a, 'i> {
             // Then we push the document in sorters in deletion mode.
             let deleted_from_db = match external_documents_ids.get(wtxn, &to_remove)? {
                 Some(docid) => {
-                    self.replaced_documents_ids.insert(docid);
-
-                    // fetch the obkv document
-                    let original_key = BEU32::new(docid);
-                    let base_obkv = self
-                        .index
-                        .documents
-                        .remap_data_type::<heed::types::ByteSlice>()
-                        .get(wtxn, &original_key)?
-                        .ok_or(InternalError::DatabaseMissingEntry {
-                            db_name: db_name::DOCUMENTS,
-                            key: None,
-                        })?;
-
-                    // Key is the concatenation of the internal docid and the external one.
-                    document_sorter_key_buffer.clear();
-                    document_sorter_key_buffer.extend_from_slice(&docid.to_be_bytes());
-                    document_sorter_key_buffer.extend_from_slice(to_remove.as_bytes());
-                    // push it as to delete in the original_sorter
-                    document_sorter_value_buffer.clear();
-                    document_sorter_value_buffer.push(Operation::Deletion as u8);
-                    into_del_add_obkv(
-                        KvReaderU16::new(base_obkv),
-                        true,
-                        false,
+                    self.remove_document_from_db(
+                        docid,
+                        to_remove,
+                        wtxn,
+                        &mut document_sorter_key_buffer,
                         &mut document_sorter_value_buffer,
                     )?;
-                    self.original_sorter
-                        .insert(&document_sorter_key_buffer, &document_sorter_value_buffer)?;
-
-                    // flatten it and push it as to delete in the flattened_sorter
-                    let flattened_obkv = KvReader::new(base_obkv);
-                    if let Some(obkv) = self.flatten_from_fields_ids_map(flattened_obkv)? {
-                        // we recreate our buffer with the flattened documents
-                        document_sorter_value_buffer.clear();
-                        document_sorter_value_buffer.push(Operation::Deletion as u8);
-                        into_del_add_obkv(
-                            KvReaderU16::new(&obkv),
-                            true,
-                            false,
-                            &mut document_sorter_value_buffer,
-                        )?;
-                    }
-                    self.flattened_sorter
-                        .insert(docid.to_be_bytes(), &document_sorter_value_buffer)?;
-
                     true
                 }
                 None => false,
@@ -508,60 +469,68 @@ impl<'a, 'i> Transform<'a, 'i> {
         let mut document_sorter_key_buffer = Vec::new();
         let external_ids = self.index.external_id_of(wtxn, to_remove.iter())?;
 
-        for (to_remove, external_docid) in to_remove.iter().zip(external_ids) {
+        for (internal_docid, external_docid) in to_remove.iter().zip(external_ids) {
             let external_docid = external_docid?;
             if should_abort() {
                 return Err(Error::InternalError(InternalError::AbortedIndexation));
             }
-            self.replaced_documents_ids.insert(to_remove);
-
-            // fetch the obkv document
-            let original_key = BEU32::new(to_remove);
-            let base_obkv = self
-                .index
-                .documents
-                .remap_data_type::<heed::types::ByteSlice>()
-                .get(wtxn, &original_key)?
-                .ok_or(InternalError::DatabaseMissingEntry {
-                    db_name: db_name::DOCUMENTS,
-                    key: None,
-                })?;
-
-            // Key is the concatenation of the internal docid and the external one.
-            document_sorter_key_buffer.clear();
-            document_sorter_key_buffer.extend_from_slice(&to_remove.to_be_bytes());
-            document_sorter_key_buffer.extend_from_slice(external_docid.as_bytes());
-            // push it as to delete in the original_sorter
-            document_sorter_value_buffer.clear();
-            document_sorter_value_buffer.push(Operation::Deletion as u8);
-            into_del_add_obkv(
-                KvReaderU16::new(base_obkv),
-                true,
-                false,
+            self.remove_document_from_db(
+                internal_docid,
+                external_docid,
+                wtxn,
+                &mut document_sorter_key_buffer,
                 &mut document_sorter_value_buffer,
             )?;
-            self.original_sorter
-                .insert(&document_sorter_key_buffer, &document_sorter_value_buffer)?;
-
-            // flatten it and push it as to delete in the flattened_sorter
-            let flattened_obkv = KvReader::new(base_obkv);
-            if let Some(obkv) = self.flatten_from_fields_ids_map(flattened_obkv)? {
-                // we recreate our buffer with the flattened documents
-                document_sorter_value_buffer.clear();
-                document_sorter_value_buffer.push(Operation::Deletion as u8);
-                into_del_add_obkv(
-                    KvReaderU16::new(&obkv),
-                    true,
-                    false,
-                    &mut document_sorter_value_buffer,
-                )?;
-            }
-            self.flattened_sorter.insert(to_remove.to_be_bytes(), &document_sorter_value_buffer)?;
 
             documents_deleted += 1;
         }
 
         Ok(documents_deleted)
+    }
+
+    fn remove_document_from_db(
+        &mut self,
+        internal_docid: u32,
+        external_docid: String,
+        txn: &heed::RoTxn,
+        document_sorter_key_buffer: &mut Vec<u8>,
+        document_sorter_value_buffer: &mut Vec<u8>,
+    ) -> Result<()> {
+        self.replaced_documents_ids.insert(internal_docid);
+
+        // fetch the obkv document
+        let original_key = BEU32::new(internal_docid);
+        let base_obkv = self
+            .index
+            .documents
+            .remap_data_type::<heed::types::ByteSlice>()
+            .get(txn, &original_key)?
+            .ok_or(InternalError::DatabaseMissingEntry {
+                db_name: db_name::DOCUMENTS,
+                key: None,
+            })?;
+
+        // Key is the concatenation of the internal docid and the external one.
+        document_sorter_key_buffer.clear();
+        document_sorter_key_buffer.extend_from_slice(&internal_docid.to_be_bytes());
+        document_sorter_key_buffer.extend_from_slice(external_docid.as_bytes());
+        // push it as to delete in the original_sorter
+        document_sorter_value_buffer.clear();
+        document_sorter_value_buffer.push(Operation::Deletion as u8);
+        into_del_add_obkv(KvReaderU16::new(base_obkv), true, false, document_sorter_value_buffer)?;
+        self.original_sorter.insert(&document_sorter_key_buffer, &document_sorter_value_buffer)?;
+
+        // flatten it and push it as to delete in the flattened_sorter
+        let flattened_obkv = KvReader::new(base_obkv);
+        if let Some(obkv) = self.flatten_from_fields_ids_map(flattened_obkv)? {
+            // we recreate our buffer with the flattened documents
+            document_sorter_value_buffer.clear();
+            document_sorter_value_buffer.push(Operation::Deletion as u8);
+            into_del_add_obkv(KvReaderU16::new(&obkv), true, false, document_sorter_value_buffer)?;
+        }
+        self.flattened_sorter
+            .insert(internal_docid.to_be_bytes(), &document_sorter_value_buffer)?;
+        Ok(())
     }
 
     // Flatten a document from the fields ids map contained in self and insert the new
