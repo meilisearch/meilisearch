@@ -12,9 +12,7 @@ use bimap::BiHashMap;
 pub use builder::DocumentsBatchBuilder;
 pub use enriched::{EnrichedDocument, EnrichedDocumentsBatchCursor, EnrichedDocumentsBatchReader};
 use obkv::KvReader;
-pub use primary_key::{
-    DocumentIdExtractionError, FieldDistribution, PrimaryKey, DEFAULT_PRIMARY_KEY,
-};
+pub use primary_key::{DocumentIdExtractionError, FieldIdMapper, PrimaryKey, DEFAULT_PRIMARY_KEY};
 pub use reader::{DocumentsBatchCursor, DocumentsBatchCursorError, DocumentsBatchReader};
 use serde::{Deserialize, Serialize};
 
@@ -91,7 +89,7 @@ impl DocumentsBatchIndex {
     }
 }
 
-impl FieldDistribution for DocumentsBatchIndex {
+impl FieldIdMapper for DocumentsBatchIndex {
     fn id(&self, name: &str) -> Option<FieldId> {
         self.id(name)
     }

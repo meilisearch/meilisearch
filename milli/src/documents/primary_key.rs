@@ -11,7 +11,11 @@ const PRIMARY_KEY_SPLIT_SYMBOL: char = '.';
 /// The default primary that is used when not specified.
 pub const DEFAULT_PRIMARY_KEY: &str = "id";
 
-pub trait FieldDistribution {
+/// Trait for objects that can map the name of a field to its [`FieldId`].
+pub trait FieldIdMapper {
+    /// Attempts to map the passed name to its [`FieldId`].
+    ///
+    /// `None` if the field with this name was not found.
     fn id(&self, name: &str) -> Option<FieldId>;
 }
 
@@ -30,7 +34,7 @@ pub enum DocumentIdExtractionError {
 }
 
 impl<'a> PrimaryKey<'a> {
-    pub fn new(path: &'a str, fields: &impl FieldDistribution) -> Option<Self> {
+    pub fn new(path: &'a str, fields: &impl FieldIdMapper) -> Option<Self> {
         Some(if path.contains(PRIMARY_KEY_SPLIT_SYMBOL) {
             Self::Nested { name: path }
         } else {
@@ -49,7 +53,7 @@ impl<'a> PrimaryKey<'a> {
     pub fn document_id(
         &self,
         document: &obkv::KvReader<FieldId>,
-        fields: &impl FieldDistribution,
+        fields: &impl FieldIdMapper,
     ) -> Result<StdResult<String, DocumentIdExtractionError>> {
         match self {
             PrimaryKey::Flat { name: _, field_id } => match document.get(*field_id) {
