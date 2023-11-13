@@ -20,10 +20,7 @@ use slice_group_by::GroupBy;
 use typed_chunk::{write_typed_chunk_into_index, TypedChunk};
 
 use self::enrich::enrich_documents_batch;
-pub use self::enrich::{
-    extract_finite_float_from_value, validate_document_id, validate_document_id_value,
-    validate_geo_from_json, DocumentId,
-};
+pub use self::enrich::{extract_finite_float_from_value, validate_geo_from_json, DocumentId};
 pub use self::helpers::{
     as_cloneable_grenad, create_sorter, create_writer, fst_stream_into_hashset,
     fst_stream_into_vec, merge_btreeset_string, merge_cbo_roaring_bitmaps, merge_roaring_bitmaps,
@@ -195,6 +192,39 @@ where
 
         // Maintains Invariant: remove documents actually always returns Ok for the inner result
         Ok((self, Ok(deleted_documents)))
+    }
+
+    /// Removes documents from db using their internal document ids.
+    ///
+    /// # Warning
+    ///
+    /// This function is dangerous and will only work correctly if:
+    ///
+    /// - All the passed ids currently exist in the database
+    /// - No batching using the standards `remove_documents` and `add_documents` took place
+    ///
+    /// TODO: make it impossible to call `remove_documents` or `add_documents` on an instance that calls this function.
+    pub fn remove_documents_from_db_no_batch(
+        mut self,
+        to_delete: &RoaringBitmap,
+    ) -> Result<(Self, u64)> {
+        puffin::profile_function!();
+
+        // Early return when there is no document to add
+        if to_delete.is_empty() {
+            return Ok((self, 0));
+        }
+
+        let deleted_documents = self
+            .transform
+            .as_mut()
+            .expect("Invalid document deletion state")
+            .remove_documents_from_db_no_batch(to_delete, self.wtxn, &self.should_abort)?
+            as u64;
+
+        self.deleted_documents += deleted_documents;
+
+        Ok((self, deleted_documents))
     }
 
     #[logging_timer::time("IndexDocuments::{}")]
