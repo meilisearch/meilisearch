@@ -26,8 +26,6 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
             word_prefix_docids,
             exact_word_prefix_docids,
             word_pair_proximity_docids,
-            word_prefix_pair_proximity_docids,
-            prefix_word_pair_proximity_docids,
             word_position_docids,
             word_fid_docids,
             field_id_word_count_docids,
@@ -68,8 +66,6 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         word_prefix_docids.clear(self.wtxn)?;
         exact_word_prefix_docids.clear(self.wtxn)?;
         word_pair_proximity_docids.clear(self.wtxn)?;
-        word_prefix_pair_proximity_docids.clear(self.wtxn)?;
-        prefix_word_pair_proximity_docids.clear(self.wtxn)?;
         word_position_docids.clear(self.wtxn)?;
         word_fid_docids.clear(self.wtxn)?;
         field_id_word_count_docids.clear(self.wtxn)?;
@@ -132,7 +128,6 @@ mod tests {
         assert!(index.word_prefix_docids.is_empty(&rtxn).unwrap());
         assert!(index.word_pair_proximity_docids.is_empty(&rtxn).unwrap());
         assert!(index.field_id_word_count_docids.is_empty(&rtxn).unwrap());
-        assert!(index.word_prefix_pair_proximity_docids.is_empty(&rtxn).unwrap());
         assert!(index.facet_id_f64_docids.is_empty(&rtxn).unwrap());
         assert!(index.facet_id_string_docids.is_empty(&rtxn).unwrap());
         assert!(index.field_id_docid_facet_f64s.is_empty(&rtxn).unwrap());

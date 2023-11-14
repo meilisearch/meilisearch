@@ -4,9 +4,11 @@ use grenad::CompressionType;
 use heed::types::{ByteSlice, Str};
 use heed::Database;
 
+use crate::update::del_add::{deladd_serialize_add_side, DelAdd, KvWriterDelAdd};
 use crate::update::index_documents::{
-    create_sorter, merge_cbo_roaring_bitmaps, sorter_into_lmdb_database, valid_lmdb_key,
-    CursorClonableMmap, MergeFn,
+    create_sorter, merge_deladd_cbo_roaring_bitmaps,
+    merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, valid_lmdb_key,
+    write_sorter_into_database, CursorClonableMmap, MergeFn,
 };
 use crate::{CboRoaringBitmapCodec, Result};
 
@@ -51,7 +53,7 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
         // and write into it at the same time, therefore we write into another file.
         let mut prefix_docids_sorter = create_sorter(
             grenad::SortAlgorithm::Unstable,
-            merge_cbo_roaring_bitmaps,
+            merge_deladd_cbo_roaring_bitmaps,
             self.chunk_compression_type,
             self.chunk_compression_level,
             self.max_nb_chunks,
@@ -92,11 +94,16 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
 
         // We fetch the docids associated to the newly added word prefix fst only.
         let db = self.word_docids.remap_data_type::<ByteSlice>();
+        let mut buffer = Vec::new();
         for prefix in new_prefix_fst_words {
             let prefix = std::str::from_utf8(prefix.as_bytes())?;
             for result in db.prefix_iter(self.wtxn, prefix)? {
                 let (_word, data) = result?;
-                prefix_docids_sorter.insert(prefix, data)?;
+                buffer.clear();
+                let mut writer = KvWriterDelAdd::new(&mut buffer);
+                writer.insert(DelAdd::Addition, data)?;
+
+                prefix_docids_sorter.insert(prefix, writer.into_inner()?)?;
             }
         }
 
@@ -110,12 +117,16 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
 
         drop(iter);
 
+        let database_is_empty = self.word_prefix_docids.is_empty(self.wtxn)?;
+
         // We finally write the word prefix docids into the LMDB database.
-        sorter_into_lmdb_database(
-            self.wtxn,
-            *self.word_prefix_docids.as_polymorph(),
+        write_sorter_into_database(
             prefix_docids_sorter,
-            merge_cbo_roaring_bitmaps,
+            &self.word_prefix_docids,
+            self.wtxn,
+            database_is_empty,
+            deladd_serialize_add_side,
+            merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
         )?;
 
         Ok(())

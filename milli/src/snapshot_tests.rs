@@ -219,22 +219,6 @@ pub fn snap_word_pair_proximity_docids(index: &Index) -> String {
         &format!("{proximity:<2} {word1:<16} {word2:<16} {}", display_bitmap(&b))
     })
 }
-pub fn snap_word_prefix_pair_proximity_docids(index: &Index) -> String {
-    make_db_snap_from_iter!(index, word_prefix_pair_proximity_docids, |(
-        (proximity, word1, prefix),
-        b,
-    )| {
-        &format!("{proximity:<2} {word1:<16} {prefix:<4} {}", display_bitmap(&b))
-    })
-}
-pub fn snap_prefix_word_pair_proximity_docids(index: &Index) -> String {
-    make_db_snap_from_iter!(index, prefix_word_pair_proximity_docids, |(
-        (proximity, prefix, word2),
-        b,
-    )| {
-        &format!("{proximity:<2} {prefix:<4} {word2:<16} {}", display_bitmap(&b))
-    })
-}
 pub fn snap_word_position_docids(index: &Index) -> String {
     make_db_snap_from_iter!(index, word_position_docids, |((word, position), b)| {
         &format!("{word:<16} {position:<6} {}", display_bitmap(&b))

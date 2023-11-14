@@ -8,10 +8,6 @@ pub use self::index_documents::{
     MergeFn,
 };
 pub use self::indexer_config::IndexerConfig;
-pub use self::prefix_word_pairs::{
-    PrefixWordPairsProximityDocids, MAX_LENGTH_FOR_PREFIX_PROXIMITY_DB,
-    MAX_PROXIMITY_FOR_PREFIX_PROXIMITY_DB,
-};
 pub use self::settings::{Setting, Settings};
 pub use self::update_step::UpdateIndexingStep;
 pub use self::word_prefix_docids::WordPrefixDocids;
@@ -24,7 +20,6 @@ pub(crate) mod del_add;
 pub(crate) mod facet;
 mod index_documents;
 mod indexer_config;
-mod prefix_word_pairs;
 mod settings;
 mod update_step;
 mod word_prefix_docids;

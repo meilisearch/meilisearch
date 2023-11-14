@@ -23,8 +23,10 @@ use self::enrich::enrich_documents_batch;
 pub use self::enrich::{extract_finite_float_from_value, validate_geo_from_json, DocumentId};
 pub use self::helpers::{
     as_cloneable_grenad, create_sorter, create_writer, fst_stream_into_hashset,
-    fst_stream_into_vec, merge_btreeset_string, merge_cbo_roaring_bitmaps, merge_roaring_bitmaps,
-    sorter_into_lmdb_database, valid_lmdb_key, writer_into_reader, ClonableMmap, MergeFn,
+    fst_stream_into_vec, merge_btreeset_string, merge_cbo_roaring_bitmaps,
+    merge_deladd_cbo_roaring_bitmaps, merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+    merge_roaring_bitmaps, valid_lmdb_key, write_sorter_into_database, writer_into_reader,
+    ClonableMmap, MergeFn,
 };
 use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
@@ -32,13 +34,12 @@ use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
-    IndexerConfig, PrefixWordPairsProximityDocids, UpdateIndexingStep, WordPrefixDocids,
-    WordPrefixIntegerDocids, WordsPrefixesFst,
+    IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
 use crate::{CboRoaringBitmapCodec, Index, Result};
 
 static MERGED_DATABASE_COUNT: usize = 7;
-static PREFIX_DATABASE_COUNT: usize = 5;
+static PREFIX_DATABASE_COUNT: usize = 4;
 static TOTAL_POSTING_DATABASE_COUNT: usize = MERGED_DATABASE_COUNT + PREFIX_DATABASE_COUNT;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -411,12 +412,42 @@ where
             total_databases: TOTAL_POSTING_DATABASE_COUNT,
         });
 
+        let mut word_position_docids = None;
+        let mut word_fid_docids = None;
+        let mut word_docids = None;
+        let mut exact_word_docids = None;
+
         for result in lmdb_writer_rx {
             if (self.should_abort)() {
                 return Err(Error::InternalError(InternalError::AbortedIndexation));
             }
 
-            let typed_chunk = result?;
+            let typed_chunk = match result? {
+                TypedChunk::WordDocids {
+                    word_docids_reader,
+                    exact_word_docids_reader,
+                    word_fid_docids_reader,
+                } => {
+                    let cloneable_chunk = unsafe { as_cloneable_grenad(&word_docids_reader)? };
+                    word_docids = Some(cloneable_chunk);
+                    let cloneable_chunk =
+                        unsafe { as_cloneable_grenad(&exact_word_docids_reader)? };
+                    exact_word_docids = Some(cloneable_chunk);
+                    let cloneable_chunk = unsafe { as_cloneable_grenad(&word_fid_docids_reader)? };
+                    word_fid_docids = Some(cloneable_chunk);
+                    TypedChunk::WordDocids {
+                        word_docids_reader,
+                        exact_word_docids_reader,
+                        word_fid_docids_reader,
+                    }
+                }
+                TypedChunk::WordPositionDocids(chunk) => {
+                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
+                    word_position_docids = Some(cloneable_chunk);
+                    TypedChunk::WordPositionDocids(chunk)
+                }
+                otherwise => otherwise,
+            };
 
             // FIXME: return newly added as well as newly deleted documents
             let (docids, is_merged_database) =
@@ -447,17 +478,16 @@ where
 
         // We write the primary key field id into the main database
         self.index.put_primary_key(self.wtxn, &primary_key)?;
+        let number_of_documents = self.index.number_of_documents(self.wtxn)?;
 
-        // TODO: reactivate prefix DB with diff-indexing
-        // self.execute_prefix_databases(
-        //     word_docids,
-        //     exact_word_docids,
-        //     word_pair_proximity_docids,
-        //     word_position_docids,
-        //     word_fid_docids,
-        // )?;
+        self.execute_prefix_databases(
+            word_docids,
+            exact_word_docids,
+            word_position_docids,
+            word_fid_docids,
+        )?;
 
-        self.index.number_of_documents(self.wtxn)
+        Ok(number_of_documents)
     }
 
     #[logging_timer::time("IndexDocuments::{}")]
@@ -465,7 +495,6 @@ where
         self,
         word_docids: Option<grenad::Reader<CursorClonableMmap>>,
         exact_word_docids: Option<grenad::Reader<CursorClonableMmap>>,
-        word_pair_proximity_docids: Option<grenad::Reader<CursorClonableMmap>>,
         word_position_docids: Option<grenad::Reader<CursorClonableMmap>>,
         word_fid_docids: Option<grenad::Reader<CursorClonableMmap>>,
     ) -> Result<()>
@@ -570,32 +599,6 @@ where
                 self.index.exact_word_docids,
                 self.index.exact_word_prefix_docids,
                 self.indexer_config,
-                &new_prefix_fst_words,
-                &common_prefix_fst_words,
-                &del_prefix_fst_words,
-            )?;
-        }
-
-        if (self.should_abort)() {
-            return Err(Error::InternalError(InternalError::AbortedIndexation));
-        }
-
-        databases_seen += 1;
-        (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
-            databases_seen,
-            total_databases: TOTAL_POSTING_DATABASE_COUNT,
-        });
-
-        if let Some(word_pair_proximity_docids) = word_pair_proximity_docids {
-            // Run the word prefix pair proximity docids update operation.
-            PrefixWordPairsProximityDocids::new(
-                self.wtxn,
-                self.index,
-                self.indexer_config.chunk_compression_type,
-                self.indexer_config.chunk_compression_level,
-            )
-            .execute(
-                word_pair_proximity_docids,
                 &new_prefix_fst_words,
                 &common_prefix_fst_words,
                 &del_prefix_fst_words,

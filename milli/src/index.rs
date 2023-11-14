@@ -84,8 +84,6 @@ pub mod db_name {
     pub const EXTERNAL_DOCUMENTS_IDS: &str = "external-documents-ids";
     pub const DOCID_WORD_POSITIONS: &str = "docid-word-positions";
     pub const WORD_PAIR_PROXIMITY_DOCIDS: &str = "word-pair-proximity-docids";
-    pub const WORD_PREFIX_PAIR_PROXIMITY_DOCIDS: &str = "word-prefix-pair-proximity-docids";
-    pub const PREFIX_WORD_PAIR_PROXIMITY_DOCIDS: &str = "prefix-word-pair-proximity-docids";
     pub const WORD_POSITION_DOCIDS: &str = "word-position-docids";
     pub const WORD_FIELD_ID_DOCIDS: &str = "word-field-id-docids";
     pub const WORD_PREFIX_POSITION_DOCIDS: &str = "word-prefix-position-docids";
@@ -130,10 +128,6 @@ pub struct Index {
 
     /// Maps the proximity between a pair of words with all the docids where this relation appears.
     pub word_pair_proximity_docids: Database<U8StrStrCodec, CboRoaringBitmapCodec>,
-    /// Maps the proximity between a pair of word and prefix with all the docids where this relation appears.
-    pub word_prefix_pair_proximity_docids: Database<U8StrStrCodec, CboRoaringBitmapCodec>,
-    /// Maps the proximity between a pair of prefix and word with all the docids where this relation appears.
-    pub prefix_word_pair_proximity_docids: Database<U8StrStrCodec, CboRoaringBitmapCodec>,
 
     /// Maps the word and the position with the docids that corresponds to it.
     pub word_position_docids: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
@@ -187,7 +181,7 @@ impl Index {
     ) -> Result<Index> {
         use db_name::*;
 
-        options.max_dbs(26);
+        options.max_dbs(24);
         unsafe { options.flag(Flags::MdbAlwaysFreePages) };
 
         let env = options.open(path)?;
@@ -204,10 +198,6 @@ impl Index {
             env.create_database(&mut wtxn, Some(WORD_PAIR_PROXIMITY_DOCIDS))?;
         let script_language_docids =
             env.create_database(&mut wtxn, Some(SCRIPT_LANGUAGE_DOCIDS))?;
-        let word_prefix_pair_proximity_docids =
-            env.create_database(&mut wtxn, Some(WORD_PREFIX_PAIR_PROXIMITY_DOCIDS))?;
-        let prefix_word_pair_proximity_docids =
-            env.create_database(&mut wtxn, Some(PREFIX_WORD_PAIR_PROXIMITY_DOCIDS))?;
         let word_position_docids = env.create_database(&mut wtxn, Some(WORD_POSITION_DOCIDS))?;
         let word_fid_docids = env.create_database(&mut wtxn, Some(WORD_FIELD_ID_DOCIDS))?;
         let field_id_word_count_docids =
@@ -248,8 +238,6 @@ impl Index {
             exact_word_prefix_docids,
             word_pair_proximity_docids,
             script_language_docids,
-            word_prefix_pair_proximity_docids,
-            prefix_word_pair_proximity_docids,
             word_position_docids,
             word_fid_docids,
             word_prefix_position_docids,

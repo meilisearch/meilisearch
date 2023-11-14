@@ -1,14 +1,12 @@
 use std::borrow::Cow;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Seek};
-use std::time::Instant;
 
 use grenad::{CompressionType, Sorter};
 use heed::types::ByteSlice;
-use log::debug;
 
 use super::{ClonableMmap, MergeFn};
-use crate::error::InternalError;
+use crate::update::index_documents::valid_lmdb_key;
 use crate::Result;
 
 pub type CursorClonableMmap = io::Cursor<ClonableMmap>;
@@ -240,45 +238,46 @@ pub fn grenad_obkv_into_chunks<R: io::Read + io::Seek>(
     Ok(std::iter::from_fn(move || transposer().transpose()))
 }
 
-pub fn sorter_into_lmdb_database(
-    wtxn: &mut heed::RwTxn,
-    database: heed::PolyDatabase,
+/// Write provided sorter in database using serialize_value function.
+/// merge_values function is used if an entry already exist in the database.
+pub fn write_sorter_into_database<K, V, FS, FM>(
     sorter: Sorter<MergeFn>,
-    merge: MergeFn,
-) -> Result<()> {
+    database: &heed::Database<K, V>,
+    wtxn: &mut heed::RwTxn,
+    index_is_empty: bool,
+    serialize_value: FS,
+    merge_values: FM,
+) -> Result<()>
+where
+    FS: for<'a> Fn(&'a [u8], &'a mut Vec<u8>) -> Result<&'a [u8]>,
+    FM: for<'a> Fn(&[u8], &[u8], &'a mut Vec<u8>) -> Result<Option<&'a [u8]>>,
+{
     puffin::profile_function!();
-    debug!("Writing MTBL sorter...");
-    let before = Instant::now();
+
+    let mut buffer = Vec::new();
+    let database = database.remap_types::<ByteSlice, ByteSlice>();
 
     let mut merger_iter = sorter.into_stream_merger_iter()?;
-    if database.is_empty(wtxn)? {
-        let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
-        while let Some((k, v)) = merger_iter.next()? {
-            // safety: we don't keep references from inside the LMDB database.
-            unsafe { out_iter.append(k, v)? };
-        }
-    } else {
-        while let Some((k, v)) = merger_iter.next()? {
-            let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, k)?;
-            match iter.next().transpose()? {
-                Some((key, old_val)) if key == k => {
-                    let vals = vec![Cow::Borrowed(old_val), Cow::Borrowed(v)];
-                    let val = merge(k, &vals).map_err(|_| {
-                        // TODO just wrap this error?
-                        InternalError::IndexingMergingKeys { process: "get-put-merge" }
-                    })?;
-                    // safety: we don't keep references from inside the LMDB database.
-                    unsafe { iter.put_current(k, &val)? };
+    while let Some((key, value)) = merger_iter.next()? {
+        if valid_lmdb_key(key) {
+            buffer.clear();
+            let value = if index_is_empty {
+                Some(serialize_value(value, &mut buffer)?)
+            } else {
+                match database.get(wtxn, key)? {
+                    Some(prev_value) => merge_values(value, prev_value, &mut buffer)?,
+                    None => Some(serialize_value(value, &mut buffer)?),
                 }
-                _ => {
-                    drop(iter);
-                    database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?;
+            };
+            match value {
+                Some(value) => database.put(wtxn, key, value)?,
+                None => {
+                    database.delete(wtxn, key)?;
                 }
             }
         }
     }
 
-    debug!("MTBL sorter writen in {:.02?}!", before.elapsed());
     Ok(())
 }
 
