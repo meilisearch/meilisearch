@@ -825,6 +825,10 @@ impl IndexScheduler {
                 // 2. dump the tasks
                 let mut dump_tasks = dump.create_tasks_queue()?;
                 for ret in self.all_tasks.iter(&rtxn)? {
+                    if self.must_stop_processing.get() {
+                        return Err(Error::AbortedTask);
+                    }
+
                     let (_, mut t) = ret?;
                     let status = t.status;
                     let content_file = t.content_uuid();
@@ -845,6 +849,9 @@ impl IndexScheduler {
 
                     // 2.1. Dump the `content_file` associated with the task if there is one and the task is not finished yet.
                     if let Some(content_file) = content_file {
+                        if self.must_stop_processing.get() {
+                            return Err(Error::AbortedTask);
+                        }
                         if status == Status::Enqueued {
                             let content_file = self.file_store.get_update(content_file)?;
 
@@ -884,6 +891,9 @@ impl IndexScheduler {
 
                     // 3.1. Dump the documents
                     for ret in index.all_documents(&rtxn)? {
+                        if self.must_stop_processing.get() {
+                            return Err(Error::AbortedTask);
+                        }
                         let (_id, doc) = ret?;
                         let document = milli::obkv_to_json(&all_fields, &fields_ids_map, doc)?;
                         index_dumper.push_document(&document)?;
@@ -903,6 +913,9 @@ impl IndexScheduler {
                     "[year repr:full][month repr:numerical][day padding:zero]-[hour padding:zero][minute padding:zero][second padding:zero][subsecond digits:3]"
                 )).unwrap();
 
+                if self.must_stop_processing.get() {
+                    return Err(Error::AbortedTask);
+                }
                 let path = self.dumps_path.join(format!("{}.dump", dump_uid));
                 let file = File::create(path)?;
                 dump.persist_to(BufWriter::new(file))?;

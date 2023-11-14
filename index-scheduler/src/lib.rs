@@ -1167,7 +1167,8 @@ impl IndexScheduler {
             // If we have an abortion error we must stop the tick here and re-schedule tasks.
             Err(Error::Milli(milli::Error::InternalError(
                 milli::InternalError::AbortedIndexation,
-            ))) => {
+            )))
+            | Err(Error::AbortedTask) => {
                 #[cfg(test)]
                 self.breakpoint(Breakpoint::AbortedIndexation);
                 wtxn.abort().map_err(Error::HeedTransaction)?;
@@ -4322,5 +4323,27 @@ mod tests {
           }
         }
         "###);
+    }
+
+    #[test]
+    fn cancel_processing_dump() {
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        let dump_creation = KindWithContent::DumpCreation { keys: Vec::new(), instance_uid: None };
+        let dump_cancellation = KindWithContent::TaskCancelation {
+            query: "cancel dump".to_owned(),
+            tasks: RoaringBitmap::from_iter([0]),
+        };
+        let _ = index_scheduler.register(dump_creation).unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_dump_register");
+        handle.advance_till([Start, BatchCreated, InsideProcessBatch]);
+
+        let _ = index_scheduler.register(dump_cancellation).unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "cancel_registered");
+
+        snapshot!(format!("{:?}", handle.advance()), @"AbortedIndexation");
+
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "cancel_processed");
     }
 }
