@@ -117,8 +117,13 @@ pub enum Error {
     Heed(#[from] heed::Error),
     #[error(transparent)]
     Milli(#[from] milli::Error),
-    #[error("An unexpected crash occurred when processing the task.")]
-    ProcessBatchPanicked,
+    #[error("An unexpected crash occurred when processing the task. {}", {
+        match .0 {
+            Some(report) => format!("Get /reports/{}", report),
+            None => "No report was saved.".into(),
+        }
+    })]
+    ProcessBatchPanicked(Option<uuid::Uuid>),
     #[error(transparent)]
     FileStore(#[from] file_store::Error),
     #[error(transparent)]
@@ -181,7 +186,7 @@ impl Error {
             | Error::Dump(_)
             | Error::Heed(_)
             | Error::Milli(_)
-            | Error::ProcessBatchPanicked
+            | Error::ProcessBatchPanicked(_)
             | Error::FileStore(_)
             | Error::IoError(_)
             | Error::Persist(_)
@@ -224,7 +229,7 @@ impl ErrorCode for Error {
             Error::NoSpaceLeftInTaskQueue => Code::NoSpaceLeftOnDevice,
             Error::Dump(e) => e.error_code(),
             Error::Milli(e) => e.error_code(),
-            Error::ProcessBatchPanicked => Code::Internal,
+            Error::ProcessBatchPanicked(_) => Code::Internal,
             Error::Heed(e) => e.error_code(),
             Error::HeedTransaction(e) => e.error_code(),
             Error::FileStore(e) => e.error_code(),

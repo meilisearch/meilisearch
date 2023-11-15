@@ -54,6 +54,7 @@ use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
+use panic_hook::PanicReader;
 use puffin::FrameView;
 use roaring::RoaringBitmap;
 use synchronoise::SignalEvent;
@@ -332,6 +333,8 @@ pub struct IndexScheduler {
     /// The path to the version file of Meilisearch.
     pub(crate) version_file_path: PathBuf,
 
+    pub(crate) panic_reader: PanicReader,
+
     // ================= test
     // The next entry is dedicated to the tests.
     /// Provide a way to set a breakpoint in multiple part of the scheduler.
@@ -382,6 +385,7 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: self.run_loop_iteration.clone(),
             features: self.features.clone(),
+            panic_reader: self.panic_reader.clone(),
         }
     }
 }
@@ -439,6 +443,12 @@ impl IndexScheduler {
         let finished_at = env.create_database(&mut wtxn, Some(db_name::FINISHED_AT))?;
         wtxn.commit()?;
 
+        const MAX_REPORT_COUNT: usize = 20;
+
+        let panic_reader = panic_hook::PanicReader::install_panic_hook(
+            std::num::NonZeroUsize::new(MAX_REPORT_COUNT).unwrap(),
+        );
+
         // allow unreachable_code to get rids of the warning in the case of a test build.
         let this = Self {
             must_stop_processing: MustStopProcessing::default(),
@@ -479,6 +489,7 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: Arc::new(RwLock::new(0)),
             features,
+            panic_reader,
         };
 
         this.run();
@@ -1131,7 +1142,10 @@ impl IndexScheduler {
                 .name(String::from("batch-operation"))
                 .spawn(move || cloned_index_scheduler.process_batch(batch))
                 .unwrap();
-            handle.join().unwrap_or(Err(Error::ProcessBatchPanicked))
+
+            self.panic_reader
+                .join_thread(handle)
+                .unwrap_or_else(|maybe_report| Err(Error::ProcessBatchPanicked(maybe_report)))
         };
 
         #[cfg(test)]
