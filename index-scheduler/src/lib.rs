@@ -26,6 +26,7 @@ mod index_mapper;
 #[cfg(test)]
 mod insta_snapshot;
 mod lru;
+mod panic_hook;
 mod utils;
 mod uuid_codec;
 
