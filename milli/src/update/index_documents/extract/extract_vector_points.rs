@@ -1,9 +1,10 @@
 use std::cmp::Ordering;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter};
 use std::mem::size_of;
 use std::str::from_utf8;
+use std::sync::Arc;
 
 use bytemuck::cast_slice;
 use grenad::Writer;
@@ -13,12 +14,55 @@ use serde_json::{from_slice, Value};
 
 use super::helpers::{create_writer, writer_into_reader, GrenadParameters};
 use crate::error::UserError;
+use crate::prompt::Prompt;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::index_documents::helpers::try_split_at;
-use crate::{DocumentId, FieldId, InternalError, Result, VectorOrArrayOfVectors};
+use crate::vector::Embedder;
+use crate::{DocumentId, FieldsIdsMap, InternalError, Result, VectorOrArrayOfVectors};
 
 /// The length of the elements that are always in the buffer when inserting new values.
 const TRUNCATE_SIZE: usize = size_of::<DocumentId>();
+
+pub struct ExtractedVectorPoints {
+    // docid, _index -> KvWriterDelAdd -> Vector
+    pub manual_vectors: grenad::Reader<BufReader<File>>,
+    // docid -> ()
+    pub remove_vectors: grenad::Reader<BufReader<File>>,
+    // docid -> prompt
+    pub prompts: grenad::Reader<BufReader<File>>,
+}
+
+enum VectorStateDelta {
+    NoChange,
+    // Remove all vectors, generated or manual, from this document
+    NowRemoved,
+
+    // Add the manually specified vectors, passed in the other grenad
+    // Remove any previously generated vectors
+    // Note: changing the value of the manually specified vector **should not record** this delta
+    WasGeneratedNowManual(Vec<Vec<f32>>),
+
+    ManualDelta(Vec<Vec<f32>>, Vec<Vec<f32>>),
+
+    // Add the vector computed from the specified prompt
+    // Remove any previous vector
+    // Note: changing the value of the prompt **does require** recording this delta
+    NowGenerated(String),
+}
+
+impl VectorStateDelta {
+    fn into_values(self) -> (bool, String, (Vec<Vec<f32>>, Vec<Vec<f32>>)) {
+        match self {
+            VectorStateDelta::NoChange => Default::default(),
+            VectorStateDelta::NowRemoved => (true, Default::default(), Default::default()),
+            VectorStateDelta::WasGeneratedNowManual(add) => {
+                (true, Default::default(), (Default::default(), add))
+            }
+            VectorStateDelta::ManualDelta(del, add) => (false, Default::default(), (del, add)),
+            VectorStateDelta::NowGenerated(prompt) => (true, prompt, Default::default()),
+        }
+    }
+}
 
 /// Extracts the embedding vector contained in each document under the `_vectors` field.
 ///
@@ -27,15 +71,33 @@ const TRUNCATE_SIZE: usize = size_of::<DocumentId>();
 pub fn extract_vector_points<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
-    vectors_fid: FieldId,
-) -> Result<grenad::Reader<BufReader<File>>> {
+    field_id_map: FieldsIdsMap,
+    prompt: Option<&Prompt>,
+) -> Result<ExtractedVectorPoints> {
     puffin::profile_function!();
 
-    let mut writer = create_writer(
+    // (docid, _index) -> KvWriterDelAdd -> Vector
+    let mut manual_vectors_writer = create_writer(
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         tempfile::tempfile()?,
     );
+
+    // (docid) -> (prompt)
+    let mut prompts_writer = create_writer(
+        indexer.chunk_compression_type,
+        indexer.chunk_compression_level,
+        tempfile::tempfile()?,
+    );
+
+    // (docid) -> ()
+    let mut remove_vectors_writer = create_writer(
+        indexer.chunk_compression_type,
+        indexer.chunk_compression_level,
+        tempfile::tempfile()?,
+    );
+
+    let vectors_fid = field_id_map.id("_vectors");
 
     let mut key_buffer = Vec::new();
     let mut cursor = obkv_documents.into_cursor()?;
@@ -53,43 +115,148 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
         // lazily get it when needed
         let document_id = || -> Value { from_utf8(external_id_bytes).unwrap().into() };
 
-        // first we retrieve the _vectors field
-        if let Some(value) = obkv.get(vectors_fid) {
+        let delta = if let Some(value) = vectors_fid.and_then(|vectors_fid| obkv.get(vectors_fid)) {
             let vectors_obkv = KvReaderDelAdd::new(value);
+            match (vectors_obkv.get(DelAdd::Deletion), vectors_obkv.get(DelAdd::Addition)) {
+                (Some(old), Some(new)) => {
+                    // no autogeneration
+                    let del_vectors = extract_vectors(old, document_id)?;
+                    let add_vectors = extract_vectors(new, document_id)?;
 
-            // then we extract the values
-            let del_vectors = vectors_obkv
-                .get(DelAdd::Deletion)
-                .map(|vectors| extract_vectors(vectors, document_id))
-                .transpose()?
-                .flatten();
-            let add_vectors = vectors_obkv
-                .get(DelAdd::Addition)
-                .map(|vectors| extract_vectors(vectors, document_id))
-                .transpose()?
-                .flatten();
+                    VectorStateDelta::ManualDelta(
+                        del_vectors.unwrap_or_default(),
+                        add_vectors.unwrap_or_default(),
+                    )
+                }
+                (None, Some(new)) => {
+                    // was possibly autogenerated, remove all vectors for that document
+                    let add_vectors = extract_vectors(new, document_id)?;
 
-            // and we finally push the unique vectors into the writer
-            push_vectors_diff(
-                &mut writer,
-                &mut key_buffer,
-                del_vectors.unwrap_or_default(),
-                add_vectors.unwrap_or_default(),
-            )?;
-        }
+                    VectorStateDelta::WasGeneratedNowManual(add_vectors.unwrap_or_default())
+                }
+                (Some(_old), None) => {
+                    // Do we keep this document?
+                    let document_is_kept = obkv
+                        .iter()
+                        .map(|(_, deladd)| KvReaderDelAdd::new(deladd))
+                        .any(|deladd| deladd.get(DelAdd::Addition).is_some());
+                    if document_is_kept {
+                        // becomes autogenerated
+                        match prompt {
+                            Some(prompt) => VectorStateDelta::NowGenerated(prompt.render(
+                                obkv,
+                                DelAdd::Addition,
+                                &field_id_map,
+                            )?),
+                            None => VectorStateDelta::NowRemoved,
+                        }
+                    } else {
+                        VectorStateDelta::NowRemoved
+                    }
+                }
+                (None, None) => {
+                    // Do we keep this document?
+                    let document_is_kept = obkv
+                        .iter()
+                        .map(|(_, deladd)| KvReaderDelAdd::new(deladd))
+                        .any(|deladd| deladd.get(DelAdd::Addition).is_some());
+
+                    if document_is_kept {
+                        match prompt {
+                            Some(prompt) => {
+                                // Don't give up if the old prompt was failing
+                                let old_prompt = prompt
+                                    .render(obkv, DelAdd::Deletion, &field_id_map)
+                                    .unwrap_or_default();
+                                let new_prompt =
+                                    prompt.render(obkv, DelAdd::Addition, &field_id_map)?;
+                                if old_prompt != new_prompt {
+                                    log::trace!(
+                                        "Changing prompt from\n{old_prompt}\n===\nto\n{new_prompt}"
+                                    );
+                                    VectorStateDelta::NowGenerated(new_prompt)
+                                } else {
+                                    VectorStateDelta::NoChange
+                                }
+                            }
+                            // We no longer have a prompt, so we need to remove any existing vector
+                            None => VectorStateDelta::NowRemoved,
+                        }
+                    } else {
+                        VectorStateDelta::NowRemoved
+                    }
+                }
+            }
+        } else {
+            // Do we keep this document?
+            let document_is_kept = obkv
+                .iter()
+                .map(|(_, deladd)| KvReaderDelAdd::new(deladd))
+                .any(|deladd| deladd.get(DelAdd::Addition).is_some());
+
+            if document_is_kept {
+                match prompt {
+                    Some(prompt) => {
+                        // Don't give up if the old prompt was failing
+                        let old_prompt = prompt
+                            .render(obkv, DelAdd::Deletion, &field_id_map)
+                            .unwrap_or_default();
+                        let new_prompt = prompt.render(obkv, DelAdd::Addition, &field_id_map)?;
+                        if old_prompt != new_prompt {
+                            log::trace!(
+                                "Changing prompt from\n{old_prompt}\n===\nto\n{new_prompt}"
+                            );
+                            VectorStateDelta::NowGenerated(new_prompt)
+                        } else {
+                            VectorStateDelta::NoChange
+                        }
+                    }
+                    None => VectorStateDelta::NowRemoved,
+                }
+            } else {
+                VectorStateDelta::NowRemoved
+            }
+        };
+
+        // and we finally push the unique vectors into the writer
+        push_vectors_diff(
+            &mut remove_vectors_writer,
+            &mut prompts_writer,
+            &mut manual_vectors_writer,
+            &mut key_buffer,
+            delta,
+        )?;
     }
 
-    writer_into_reader(writer)
+    Ok(ExtractedVectorPoints {
+        // docid, _index -> KvWriterDelAdd -> Vector
+        manual_vectors: writer_into_reader(manual_vectors_writer)?,
+        // docid -> ()
+        remove_vectors: writer_into_reader(remove_vectors_writer)?,
+        // docid -> prompt
+        prompts: writer_into_reader(prompts_writer)?,
+    })
 }
 
 /// Computes the diff between both Del and Add numbers and
 /// only inserts the parts that differ in the sorter.
 fn push_vectors_diff(
-    writer: &mut Writer<BufWriter<File>>,
+    remove_vectors_writer: &mut Writer<BufWriter<File>>,
+    prompts_writer: &mut Writer<BufWriter<File>>,
+    manual_vectors_writer: &mut Writer<BufWriter<File>>,
     key_buffer: &mut Vec<u8>,
-    mut del_vectors: Vec<Vec<f32>>,
-    mut add_vectors: Vec<Vec<f32>>,
+    delta: VectorStateDelta,
 ) -> Result<()> {
+    let (must_remove, prompt, (mut del_vectors, mut add_vectors)) = delta.into_values();
+    if must_remove {
+        key_buffer.truncate(TRUNCATE_SIZE);
+        remove_vectors_writer.insert(&key_buffer, [])?;
+    }
+    if !prompt.is_empty() {
+        key_buffer.truncate(TRUNCATE_SIZE);
+        prompts_writer.insert(&key_buffer, prompt.as_bytes())?;
+    }
+
     // We sort and dedup the vectors
     del_vectors.sort_unstable_by(|a, b| compare_vectors(a, b));
     add_vectors.sort_unstable_by(|a, b| compare_vectors(a, b));
@@ -114,7 +281,7 @@ fn push_vectors_diff(
                 let mut obkv = KvWriterDelAdd::memory();
                 obkv.insert(DelAdd::Deletion, cast_slice(&vector))?;
                 let bytes = obkv.into_inner()?;
-                writer.insert(&key_buffer, bytes)?;
+                manual_vectors_writer.insert(&key_buffer, bytes)?;
             }
             EitherOrBoth::Right(vector) => {
                 // We insert only the Add part of the Obkv to inform
@@ -122,7 +289,7 @@ fn push_vectors_diff(
                 let mut obkv = KvWriterDelAdd::memory();
                 obkv.insert(DelAdd::Addition, cast_slice(&vector))?;
                 let bytes = obkv.into_inner()?;
-                writer.insert(&key_buffer, bytes)?;
+                manual_vectors_writer.insert(&key_buffer, bytes)?;
             }
         }
     }
@@ -145,4 +312,103 @@ fn extract_vectors(value: &[u8], document_id: impl Fn() -> Value) -> Result<Opti
         }
         .into()),
     }
+}
+
+#[logging_timer::time]
+pub fn extract_embeddings<R: io::Read + io::Seek>(
+    // docid, prompt
+    prompt_reader: grenad::Reader<R>,
+    indexer: GrenadParameters,
+    embedder: Arc<Embedder>,
+) -> Result<(grenad::Reader<BufReader<File>>, Option<usize>)> {
+    let rt = tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build()?;
+
+    let n_chunks = embedder.chunk_count_hint(); // chunk level parellelism
+    let n_vectors_per_chunk = embedder.prompt_count_in_chunk_hint(); // number of vectors in a single chunk
+
+    // docid, state with embedding
+    let mut state_writer = create_writer(
+        indexer.chunk_compression_type,
+        indexer.chunk_compression_level,
+        tempfile::tempfile()?,
+    );
+
+    let mut chunks = Vec::with_capacity(n_chunks);
+    let mut current_chunk = Vec::with_capacity(n_vectors_per_chunk);
+    let mut current_chunk_ids = Vec::with_capacity(n_vectors_per_chunk);
+    let mut chunks_ids = Vec::with_capacity(n_chunks);
+    let mut cursor = prompt_reader.into_cursor()?;
+
+    let mut expected_dimension = None;
+
+    while let Some((key, value)) = cursor.move_on_next()? {
+        let docid = key.try_into().map(DocumentId::from_be_bytes).unwrap();
+        // SAFETY: precondition, the grenad value was saved from a string
+        let prompt = unsafe { std::str::from_utf8_unchecked(value) };
+        if current_chunk.len() == current_chunk.capacity() {
+            chunks.push(std::mem::replace(
+                &mut current_chunk,
+                Vec::with_capacity(n_vectors_per_chunk),
+            ));
+            chunks_ids.push(std::mem::replace(
+                &mut current_chunk_ids,
+                Vec::with_capacity(n_vectors_per_chunk),
+            ));
+        };
+        current_chunk.push(prompt.to_owned());
+        current_chunk_ids.push(docid);
+
+        if chunks.len() == chunks.capacity() {
+            let chunked_embeds = rt
+                .block_on(
+                    embedder
+                        .embed_chunks(std::mem::replace(&mut chunks, Vec::with_capacity(n_chunks))),
+                )
+                .map_err(crate::vector::Error::from)
+                .map_err(crate::UserError::from)
+                .map_err(crate::Error::from)?;
+
+            for (docid, embeddings) in chunks_ids
+                .iter()
+                .flat_map(|docids| docids.iter())
+                .zip(chunked_embeds.iter().flat_map(|embeds| embeds.iter()))
+            {
+                state_writer.insert(docid.to_be_bytes(), cast_slice(embeddings.as_inner()))?;
+                expected_dimension = Some(embeddings.dimension());
+            }
+            chunks_ids.clear();
+        }
+    }
+
+    // send last chunk
+    if !chunks.is_empty() {
+        let chunked_embeds = rt
+            .block_on(embedder.embed_chunks(std::mem::take(&mut chunks)))
+            .map_err(crate::vector::Error::from)
+            .map_err(crate::UserError::from)
+            .map_err(crate::Error::from)?;
+        for (docid, embeddings) in chunks_ids
+            .iter()
+            .flat_map(|docids| docids.iter())
+            .zip(chunked_embeds.iter().flat_map(|embeds| embeds.iter()))
+        {
+            state_writer.insert(docid.to_be_bytes(), cast_slice(embeddings.as_inner()))?;
+            expected_dimension = Some(embeddings.dimension());
+        }
+    }
+
+    if !current_chunk.is_empty() {
+        let embeds = rt
+            .block_on(embedder.embed(std::mem::take(&mut current_chunk)))
+            .map_err(crate::vector::Error::from)
+            .map_err(crate::UserError::from)
+            .map_err(crate::Error::from)?;
+
+        for (docid, embeddings) in current_chunk_ids.iter().zip(embeds.iter()) {
+            state_writer.insert(docid.to_be_bytes(), cast_slice(embeddings.as_inner()))?;
+            expected_dimension = Some(embeddings.dimension());
+        }
+    }
+
+    Ok((writer_into_reader(state_writer)?, expected_dimension))
 }

@@ -256,6 +256,7 @@ InvalidSettingsProximityPrecision     , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFaceting               , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFilterableAttributes   , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsPagination             , InvalidRequest       , BAD_REQUEST ;
+InvalidSettingsEmbedders              , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsRankingRules           , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsSearchableAttributes   , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsSortableAttributes     , InvalidRequest       , BAD_REQUEST ;
@@ -303,7 +304,8 @@ TaskNotFound                          , InvalidRequest       , NOT_FOUND ;
 TooManyOpenFiles                      , System               , UNPROCESSABLE_ENTITY ;
 UnretrievableDocument                 , Internal             , BAD_REQUEST ;
 UnretrievableErrorCode                , InvalidRequest       , BAD_REQUEST ;
-UnsupportedMediaType                  , InvalidRequest       , UNSUPPORTED_MEDIA_TYPE
+UnsupportedMediaType                  , InvalidRequest       , UNSUPPORTED_MEDIA_TYPE ;
+VectorEmbeddingError                  , InvalidRequest       , BAD_REQUEST
 }
 
 impl ErrorCode for JoinError {
@@ -336,6 +338,9 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidDocumentId { .. } | UserError::TooManyDocumentIds { .. } => {
                         Code::InvalidDocumentId
                     }
+                    UserError::MissingDocumentField(_) => Code::InvalidDocumentFields,
+                    UserError::InvalidPrompt(_) => Code::InvalidSettingsEmbedders,
+                    UserError::InvalidPromptForEmbeddings(..) => Code::InvalidSettingsEmbedders,
                     UserError::NoPrimaryKeyCandidateFound => Code::IndexPrimaryKeyNoCandidateFound,
                     UserError::MultiplePrimaryKeyCandidatesFound { .. } => {
                         Code::IndexPrimaryKeyMultipleCandidatesFound
@@ -358,6 +363,7 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidMinTypoWordLenSetting(_, _) => {
                         Code::InvalidSettingsTypoTolerance
                     }
+                    UserError::VectorEmbeddingError(_) => Code::VectorEmbeddingError,
                 }
             }
         }

@@ -19,7 +19,11 @@ static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 /// does all the setup before meilisearch is launched
 fn setup(opt: &Opt) -> anyhow::Result<()> {
     let mut log_builder = env_logger::Builder::new();
-    log_builder.parse_filters(&opt.log_level.to_string());
+    let log_filters = format!(
+        "{},h2=warn,hyper=warn,tokio_util=warn,tracing=warn,rustls=warn,mio=warn,reqwest=warn",
+        opt.log_level
+    );
+    log_builder.parse_filters(&log_filters);
 
     log_builder.init();
 

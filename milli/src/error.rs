@@ -180,6 +180,14 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     UnknownInternalDocumentId { document_id: DocumentId },
     #[error("`minWordSizeForTypos` setting is invalid. `oneTypo` and `twoTypos` fields should be between `0` and `255`, and `twoTypos` should be greater or equals to `oneTypo` but found `oneTypo: {0}` and twoTypos: {1}`.")]
     InvalidMinTypoWordLenSetting(u8, u8),
+    #[error(transparent)]
+    VectorEmbeddingError(#[from] crate::vector::Error),
+    #[error(transparent)]
+    MissingDocumentField(#[from] crate::prompt::error::RenderPromptError),
+    #[error(transparent)]
+    InvalidPrompt(#[from] crate::prompt::error::NewPromptError),
+    #[error("Invalid prompt in for embeddings with name '{0}': {1}")]
+    InvalidPromptForEmbeddings(String, crate::prompt::error::NewPromptError),
 }
 
 #[derive(Error, Debug)]
@@ -333,6 +341,26 @@ impl From<HeedError> for Error {
             HeedError::DatabaseClosing => InternalError(DatabaseClosing),
             HeedError::BadOpenOptions { .. } => UserError(InvalidLmdbOpenOptions),
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum FaultSource {
+    User,
+    Runtime,
+    Bug,
+    Undecided,
+}
+
+impl std::fmt::Display for FaultSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            FaultSource::User => "user error",
+            FaultSource::Runtime => "runtime error",
+            FaultSource::Bug => "coding error",
+            FaultSource::Undecided => "error",
+        };
+        f.write_str(s)
     }
 }
 

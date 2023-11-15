@@ -17,11 +17,13 @@ pub mod facet;
 mod fields_ids_map;
 pub mod heed_codec;
 pub mod index;
+pub mod prompt;
 pub mod proximity;
 mod readable_slices;
 pub mod score_details;
 mod search;
 pub mod update;
+pub mod vector;
 
 #[cfg(test)]
 #[macro_use]
@@ -37,8 +39,8 @@ pub use filter_parser::{Condition, FilterCondition, Span, Token};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
 pub use search::new::{
-    execute_search, DefaultSearchLogger, GeoSortStrategy, SearchContext, SearchLogger,
-    VisualSearchLogger,
+    execute_search, filtered_universe, DefaultSearchLogger, GeoSortStrategy, SearchContext,
+    SearchLogger, VisualSearchLogger,
 };
 use serde_json::Value;
 pub use {charabia as tokenizer, heed};
@@ -60,7 +62,7 @@ pub use self::index::Index;
 pub use self::search::{
     FacetDistribution, FacetValueHit, Filter, FormatOptions, MatchBounds, MatcherBuilder,
     MatchingWords, OrderBy, Search, SearchForFacetValues, SearchResult, TermsMatchingStrategy,
-    DEFAULT_VALUES_PER_FACET,
+    VectorQuery, DEFAULT_VALUES_PER_FACET,
 };
 
 pub type Result<T> = std::result::Result<T, error::Error>;

@@ -16,6 +16,7 @@ use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::{
     dot_product_similarity, FacetValueHit, InternalError, OrderBy, SearchForFacetValues,
+    VectorQuery,
 };
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
@@ -46,7 +47,7 @@ pub struct SearchQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
-    pub vector: Option<Vec<f32>>,
+    pub vector: Option<milli::VectorQuery>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
@@ -105,7 +106,7 @@ pub struct SearchQueryWithIndex {
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
-    pub vector: Option<Vec<f32>>,
+    pub vector: Option<VectorQuery>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
@@ -339,11 +340,18 @@ fn prepare_search<'t>(
     let mut search = index.search(rtxn);
 
     if query.vector.is_some() && query.q.is_some() {
-        warn!("Ignoring the query string `q` when used with the `vector` parameter.");
+        warn!("Attempting hybrid search");
     }
 
     if let Some(ref vector) = query.vector {
-        search.vector(vector.clone());
+        match vector {
+            VectorQuery::Vector(vector) => {
+                search.vector(vector.clone());
+            }
+            VectorQuery::String(_) => {
+                panic!("Failed while preparing search; caller did not generate embedding for query")
+            }
+        }
     }
 
     if let Some(ref query) = query.q {
@@ -375,7 +383,7 @@ fn prepare_search<'t>(
     }
 
     if query.vector.is_some() {
-        features.check_vector()?;
+        features.check_vector("Passing `vector` as a query parameter")?;
     }
 
     // compute the offset on the limit depending on the pagination mode.
@@ -429,7 +437,11 @@ pub fn perform_search(
         prepare_search(index, &rtxn, &query, features)?;
 
     let milli::SearchResult { documents_ids, matching_words, candidates, document_scores, .. } =
-        search.execute()?;
+        if query.q.is_some() && query.vector.is_some() {
+            search.execute_hybrid()?
+        } else {
+            search.execute()?
+        };
 
     let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
@@ -538,13 +550,13 @@ pub fn perform_search(
             insert_geo_distance(sort, &mut document);
         }
 
-        let semantic_score = match query.vector.as_ref() {
+        let semantic_score = /*match query.vector.as_ref() {
             Some(vector) => match extract_field("_vectors", &fields_ids_map, obkv)? {
                 Some(vectors) => compute_semantic_score(vector, vectors)?,
                 None => None,
             },
             None => None,
-        };
+        };*/ None;
 
         let ranking_score =
             query.show_ranking_score.then(|| ScoreDetails::global_score(score.iter()));
@@ -629,7 +641,8 @@ pub fn perform_search(
         hits: documents,
         hits_info,
         query: query.q.unwrap_or_default(),
-        vector: query.vector,
+        // FIXME: display input vector
+        vector: None,
         processing_time_ms: before_search.elapsed().as_millis(),
         facet_distribution,
         facet_stats,

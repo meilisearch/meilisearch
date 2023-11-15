@@ -13,6 +13,7 @@ use crate::analytics::{Analytics, MultiSearchAggregator};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::routes::indexes::search::embed;
 use crate::search::{
     add_search_rules, perform_search, SearchQueryWithIndex, SearchResultWithIndex,
 };
@@ -73,6 +74,8 @@ pub async fn multi_search_with_post(
                     err
                 })
                 .with_index(query_index)?;
+
+            embed(&mut query, index_scheduler.get_ref(), &index).await.with_index(query_index)?;
 
             let search_result =
                 tokio::task::spawn_blocking(move || perform_search(&index, query, features))

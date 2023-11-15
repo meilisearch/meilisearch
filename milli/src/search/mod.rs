@@ -3,6 +3,7 @@ use std::ops::ControlFlow;
 
 use charabia::normalizer::NormalizerOption;
 use charabia::Normalize;
+use deserr::{DeserializeError, Deserr, Sequence};
 use fst::automaton::{Automaton, Str};
 use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
@@ -12,12 +13,13 @@ use roaring::bitmap::RoaringBitmap;
 
 pub use self::facet::{FacetDistribution, Filter, OrderBy, DEFAULT_VALUES_PER_FACET};
 pub use self::new::matches::{FormatOptions, MatchBounds, MatcherBuilder, MatchingWords};
-use self::new::PartialSearchResult;
+use self::new::{execute_vector_search, PartialSearchResult};
 use crate::error::UserError;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::{
-    execute_search, AscDesc, DefaultSearchLogger, DocumentId, FieldId, Index, Result, SearchContext,
+    execute_search, filtered_universe, AscDesc, DefaultSearchLogger, DocumentId, FieldId, Index,
+    Result, SearchContext,
 };
 
 // Building these factories is not free.
@@ -30,6 +32,7 @@ const MAX_NUMBER_OF_FACETS: usize = 100;
 
 pub mod facet;
 mod fst_utils;
+pub mod hybrid;
 pub mod new;
 
 pub struct Search<'a> {
@@ -48,6 +51,53 @@ pub struct Search<'a> {
     exhaustive_number_hits: bool,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum VectorQuery {
+    Vector(Vec<f32>),
+    String(String),
+}
+
+impl<E> Deserr<E> for VectorQuery
+where
+    E: DeserializeError,
+{
+    fn deserialize_from_value<V: deserr::IntoValue>(
+        value: deserr::Value<V>,
+        location: deserr::ValuePointerRef,
+    ) -> std::result::Result<Self, E> {
+        match value {
+            deserr::Value::String(s) => Ok(VectorQuery::String(s)),
+            deserr::Value::Sequence(seq) => {
+                let v: std::result::Result<Vec<f32>, _> = seq
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, v)| match v.into_value() {
+                        deserr::Value::Float(f) => Ok(f as f32),
+                        deserr::Value::Integer(i) => Ok(i as f32),
+                        v => Err(deserr::take_cf_content(E::error::<V>(
+                            None,
+                            deserr::ErrorKind::IncorrectValueKind {
+                                actual: v,
+                                accepted: &[deserr::ValueKind::Float, deserr::ValueKind::Integer],
+                            },
+                            location.push_index(index),
+                        ))),
+                    })
+                    .collect();
+                Ok(VectorQuery::Vector(v?))
+            }
+            _ => Err(deserr::take_cf_content(E::error::<V>(
+                None,
+                deserr::ErrorKind::IncorrectValueKind {
+                    actual: value,
+                    accepted: &[deserr::ValueKind::String, deserr::ValueKind::Sequence],
+                },
+                location,
+            ))),
+        }
+    }
 }
 
 impl<'a> Search<'a> {
@@ -75,8 +125,8 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn vector(&mut self, vector: impl Into<Vec<f32>>) -> &mut Search<'a> {
-        self.vector = Some(vector.into());
+    pub fn vector(&mut self, vector: Vec<f32>) -> &mut Search<'a> {
+        self.vector = Some(vector);
         self
     }
 
@@ -140,23 +190,35 @@ impl<'a> Search<'a> {
             ctx.searchable_attributes(searchable_attributes)?;
         }
 
+        let universe = filtered_universe(&ctx, &self.filter)?;
         let PartialSearchResult { located_query_terms, candidates, documents_ids, document_scores } =
-            execute_search(
-                &mut ctx,
-                &self.query,
-                &self.vector,
-                self.terms_matching_strategy,
-                self.scoring_strategy,
-                self.exhaustive_number_hits,
-                &self.filter,
-                &self.sort_criteria,
-                self.geo_strategy,
-                self.offset,
-                self.limit,
-                Some(self.words_limit),
-                &mut DefaultSearchLogger,
-                &mut DefaultSearchLogger,
-            )?;
+            match self.vector.as_ref() {
+                Some(vector) => execute_vector_search(
+                    &mut ctx,
+                    vector,
+                    self.scoring_strategy,
+                    universe,
+                    &self.sort_criteria,
+                    self.geo_strategy,
+                    self.offset,
+                    self.limit,
+                )?,
+                None => execute_search(
+                    &mut ctx,
+                    self.query.as_deref(),
+                    self.terms_matching_strategy,
+                    self.scoring_strategy,
+                    self.exhaustive_number_hits,
+                    universe,
+                    &self.sort_criteria,
+                    self.geo_strategy,
+                    self.offset,
+                    self.limit,
+                    Some(self.words_limit),
+                    &mut DefaultSearchLogger,
+                    &mut DefaultSearchLogger,
+                )?,
+            };
 
         // consume context and located_query_terms to build MatchingWords.
         let matching_words = match located_query_terms {

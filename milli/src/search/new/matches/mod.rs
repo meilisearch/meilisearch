@@ -498,19 +498,19 @@ mod tests {
 
     use super::*;
     use crate::index::tests::TempIndex;
-    use crate::{execute_search, SearchContext};
+    use crate::{execute_search, filtered_universe, SearchContext};
 
     impl<'a> MatcherBuilder<'a> {
         fn new_test(rtxn: &'a heed::RoTxn, index: &'a TempIndex, query: &str) -> Self {
             let mut ctx = SearchContext::new(index, rtxn);
+            let universe = filtered_universe(&ctx, &None).unwrap();
             let crate::search::PartialSearchResult { located_query_terms, .. } = execute_search(
                 &mut ctx,
-                &Some(query.to_string()),
-                &None,
+                Some(query),
                 crate::TermsMatchingStrategy::default(),
                 crate::score_details::ScoringStrategy::Skip,
                 false,
-                &None,
+                universe,
                 &None,
                 crate::search::new::GeoSortStrategy::default(),
                 0,

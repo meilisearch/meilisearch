@@ -40,6 +40,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         planned_failures: _,
         run_loop_iteration: _,
         currently_updating_index: _,
+        embedders: _,
     } = scheduler;
 
     let rtxn = env.read_txn().unwrap();
