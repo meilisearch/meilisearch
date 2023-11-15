@@ -22,6 +22,7 @@ mod readable_slices;
 pub mod score_details;
 mod search;
 pub mod update;
+pub mod vector;
 
 #[cfg(test)]
 #[macro_use]
