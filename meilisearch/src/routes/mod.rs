@@ -24,6 +24,7 @@ pub mod features;
 pub mod indexes;
 mod metrics;
 mod multi_search;
+mod reports;
 mod snapshot;
 mod swap_indexes;
 pub mod tasks;
@@ -40,7 +41,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/multi-search").configure(multi_search::configure))
         .service(web::scope("/swap-indexes").configure(swap_indexes::configure))
         .service(web::scope("/metrics").configure(metrics::configure))
-        .service(web::scope("/experimental-features").configure(features::configure));
+        .service(web::scope("/experimental-features").configure(features::configure))
+        .service(web::scope("/reports").configure(reports::configure));
 }
 
 #[derive(Debug, Serialize)]

@@ -88,7 +88,6 @@ pub trait ErrorCode {
     }
 }
 
-#[allow(clippy::enum_variant_names)]
 enum ErrorType {
     Internal,
     InvalidRequest,
@@ -298,6 +297,7 @@ MissingSwapIndexes                    , InvalidRequest       , BAD_REQUEST ;
 MissingTaskFilters                    , InvalidRequest       , BAD_REQUEST ;
 NoSpaceLeftOnDevice                   , System               , UNPROCESSABLE_ENTITY;
 PayloadTooLarge                       , InvalidRequest       , PAYLOAD_TOO_LARGE ;
+ReportNotFound                        , InvalidRequest       , NOT_FOUND ;
 TaskNotFound                          , InvalidRequest       , NOT_FOUND ;
 TooManyOpenFiles                      , System               , UNPROCESSABLE_ENTITY ;
 UnretrievableDocument                 , Internal             , BAD_REQUEST ;

@@ -51,6 +51,8 @@ pub enum MeilisearchHttpError {
     DocumentFormat(#[from] DocumentFormatError),
     #[error(transparent)]
     Join(#[from] JoinError),
+    #[error("Report `{0}` not found. Either its id is incorrect, or it was deleted. To save on memory, only a limited amount of reports are kept.")]
+    ReportNotFound(uuid::Uuid),
 }
 
 impl ErrorCode for MeilisearchHttpError {
@@ -74,6 +76,7 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::FileStore(_) => Code::Internal,
             MeilisearchHttpError::DocumentFormat(e) => e.error_code(),
             MeilisearchHttpError::Join(_) => Code::Internal,
+            MeilisearchHttpError::ReportNotFound(_) => Code::ReportNotFound,
         }
     }
 }

@@ -55,6 +55,7 @@ use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use panic_hook::PanicReader;
+pub use panic_hook::{Panic, Report, ReportRegistry};
 use puffin::FrameView;
 use roaring::RoaringBitmap;
 use synchronoise::SignalEvent;
@@ -1324,6 +1325,10 @@ impl IndexScheduler {
             Some(content_file) => self.delete_update_file(content_file),
             None => Ok(()),
         }
+    }
+
+    pub fn reports(&self) -> Arc<RwLock<ReportRegistry>> {
+        self.panic_reader.registry()
     }
 
     /// Blocks the thread until the test handle asks to progress to/through this breakpoint.
