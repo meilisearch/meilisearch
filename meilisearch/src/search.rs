@@ -538,13 +538,13 @@ pub fn perform_search(
             insert_geo_distance(sort, &mut document);
         }
 
-        let semantic_score = match query.vector.as_ref() {
+        let semantic_score = /*match query.vector.as_ref() {
             Some(vector) => match extract_field("_vectors", &fields_ids_map, obkv)? {
                 Some(vectors) => compute_semantic_score(vector, vectors)?,
                 None => None,
             },
             None => None,
-        };
+        };*/ None;
 
         let ranking_score =
             query.show_ranking_score.then(|| ScoreDetails::global_score(score.iter()));
@@ -629,7 +629,8 @@ pub fn perform_search(
         hits: documents,
         hits_info,
         query: query.q.unwrap_or_default(),
-        vector: query.vector,
+        // FIXME: display input vector
+        vector: None,
         processing_time_ms: before_search.elapsed().as_millis(),
         facet_distribution,
         facet_stats,
