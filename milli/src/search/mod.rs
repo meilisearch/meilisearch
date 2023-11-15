@@ -1,8 +1,10 @@
 use std::fmt;
 use std::ops::ControlFlow;
+use std::sync::{Arc, OnceLock};
 
 use charabia::normalizer::NormalizerOption;
 use charabia::Normalize;
+use deserr::{DeserializeError, Deserr, Sequence};
 use fst::automaton::{Automaton, Str};
 use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
@@ -34,7 +36,7 @@ pub mod new;
 
 pub struct Search<'a> {
     query: Option<String>,
-    vector: Option<Vec<f32>>,
+    vector: Option<VectorQuery>,
     // this should be linked to the String in the query
     filter: Option<Filter<'a>>,
     offset: usize,
@@ -48,6 +50,54 @@ pub struct Search<'a> {
     exhaustive_number_hits: bool,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
+    embedder: Arc<OnceLock<crate::vector::Embedder>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum VectorQuery {
+    Vector(Vec<f32>),
+    String(String),
+}
+
+impl<E> Deserr<E> for VectorQuery
+where
+    E: DeserializeError,
+{
+    fn deserialize_from_value<V: deserr::IntoValue>(
+        value: deserr::Value<V>,
+        location: deserr::ValuePointerRef,
+    ) -> std::result::Result<Self, E> {
+        match value {
+            deserr::Value::String(s) => Ok(VectorQuery::String(s)),
+            deserr::Value::Sequence(seq) => {
+                let v: std::result::Result<Vec<f32>, _> = seq
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, v)| match v.into_value() {
+                        deserr::Value::Float(f) => Ok(f as f32),
+                        deserr::Value::Integer(i) => Ok(i as f32),
+                        v => Err(deserr::take_cf_content(E::error::<V>(
+                            None,
+                            deserr::ErrorKind::IncorrectValueKind {
+                                actual: v,
+                                accepted: &[deserr::ValueKind::Float, deserr::ValueKind::Integer],
+                            },
+                            location.push_index(index),
+                        ))),
+                    })
+                    .collect();
+                Ok(VectorQuery::Vector(v?))
+            }
+            _ => Err(deserr::take_cf_content(E::error::<V>(
+                None,
+                deserr::ErrorKind::IncorrectValueKind {
+                    actual: value,
+                    accepted: &[deserr::ValueKind::String, deserr::ValueKind::Sequence],
+                },
+                location,
+            ))),
+        }
+    }
 }
 
 impl<'a> Search<'a> {
@@ -67,7 +117,16 @@ impl<'a> Search<'a> {
             words_limit: 10,
             rtxn,
             index,
+            embedder: Default::default(),
         }
+    }
+
+    pub fn embedder(
+        &mut self,
+        embedder: Arc<OnceLock<crate::vector::Embedder>>,
+    ) -> &mut Search<'a> {
+        self.embedder = embedder;
+        self
     }
 
     pub fn query(&mut self, query: impl Into<String>) -> &mut Search<'a> {
@@ -75,8 +134,8 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn vector(&mut self, vector: impl Into<Vec<f32>>) -> &mut Search<'a> {
-        self.vector = Some(vector.into());
+    pub fn vector(&mut self, vector: VectorQuery) -> &mut Search<'a> {
+        self.vector = Some(vector);
         self
     }
 
@@ -134,7 +193,7 @@ impl<'a> Search<'a> {
     }
 
     pub fn execute(&self) -> Result<SearchResult> {
-        let mut ctx = SearchContext::new(self.index, self.rtxn);
+        let mut ctx = SearchContext::new(self.index, self.rtxn, self.embedder.clone());
 
         if let Some(searchable_attributes) = self.searchable_attributes {
             ctx.searchable_attributes(searchable_attributes)?;
@@ -185,6 +244,7 @@ impl fmt::Debug for Search<'_> {
             exhaustive_number_hits,
             rtxn: _,
             index: _,
+            embedder: _,
         } = self;
         f.debug_struct("Search")
             .field("query", query)

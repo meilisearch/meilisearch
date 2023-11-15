@@ -8,6 +8,7 @@ use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::milli::VectorQuery;
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 
@@ -88,7 +89,7 @@ impl From<SearchQueryGet> for SearchQuery {
 
         Self {
             q: other.q,
-            vector: other.vector.map(CS::into_inner),
+            vector: other.vector.map(CS::into_inner).map(VectorQuery::Vector),
             offset: other.offset.0,
             limit: other.limit.0,
             page: other.page.as_deref().copied(),

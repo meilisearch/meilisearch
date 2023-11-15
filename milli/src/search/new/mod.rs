@@ -21,6 +21,7 @@ mod sort;
 mod tests;
 
 use std::collections::HashSet;
+use std::sync::{Arc, OnceLock};
 
 use bucket_sort::{bucket_sort, BucketSortOutput};
 use charabia::TokenizerBuilder;
@@ -46,10 +47,12 @@ use self::geo_sort::GeoSort;
 pub use self::geo_sort::Strategy as GeoSortStrategy;
 use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
+use super::VectorQuery;
 use crate::distance::NDotProductPoint;
 use crate::error::FieldIdMapMissingEntry;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::apply_distinct_rule;
+use crate::vector::{Embedder, EmbedderOptions};
 use crate::{AscDesc, DocumentId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError};
 
 /// A structure used throughout the execution of a search query.
@@ -62,10 +65,15 @@ pub struct SearchContext<'ctx> {
     pub term_interner: Interner<QueryTerm>,
     pub phrase_docids: PhraseDocIdsCache,
     pub restricted_fids: Option<Vec<u16>>,
+    pub embedder: Arc<OnceLock<crate::vector::Embedder>>,
 }
 
 impl<'ctx> SearchContext<'ctx> {
-    pub fn new(index: &'ctx Index, txn: &'ctx RoTxn<'ctx>) -> Self {
+    pub fn new(
+        index: &'ctx Index,
+        txn: &'ctx RoTxn<'ctx>,
+        embedder: Arc<OnceLock<crate::vector::Embedder>>,
+    ) -> Self {
         Self {
             index,
             txn,
@@ -75,6 +83,7 @@ impl<'ctx> SearchContext<'ctx> {
             term_interner: <_>::default(),
             phrase_docids: <_>::default(),
             restricted_fids: None,
+            embedder,
         }
     }
 
@@ -407,7 +416,7 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
 pub fn execute_search(
     ctx: &mut SearchContext,
     query: &Option<String>,
-    vector: &Option<Vec<f32>>,
+    vector: &Option<VectorQuery>,
     terms_matching_strategy: TermsMatchingStrategy,
     scoring_strategy: ScoringStrategy,
     exhaustive_number_hits: bool,
@@ -427,6 +436,18 @@ pub fn execute_search(
     };
 
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
+
+    let vector = match vector {
+        Some(VectorQuery::String(string)) => ctx
+            .embedder
+            // FIXME: unwrap
+            .get_or_init(|| Embedder::new(EmbedderOptions::default()).unwrap())
+            .embed(vec![string.clone()])
+            .unwrap()
+            .pop(),
+        Some(VectorQuery::Vector(vector)) => Some(vector.clone()),
+        None => None,
+    };
 
     if let Some(vector) = vector {
         let mut search = Search::default();

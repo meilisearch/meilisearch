@@ -16,6 +16,7 @@ use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::{
     dot_product_similarity, FacetValueHit, InternalError, OrderBy, SearchForFacetValues,
+    VectorQuery,
 };
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
@@ -46,7 +47,7 @@ pub struct SearchQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
-    pub vector: Option<Vec<f32>>,
+    pub vector: Option<milli::VectorQuery>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
@@ -105,7 +106,7 @@ pub struct SearchQueryWithIndex {
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
-    pub vector: Option<Vec<f32>>,
+    pub vector: Option<VectorQuery>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]

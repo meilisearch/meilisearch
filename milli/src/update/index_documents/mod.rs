@@ -2506,7 +2506,11 @@ mod tests {
             .unwrap();
 
         let rtxn = index.read_txn().unwrap();
-        let res = index.search(&rtxn).vector([0.0, 1.0, 2.0]).execute().unwrap();
+        let res = index
+            .search(&rtxn)
+            .vector(crate::search::VectorQuery::Vector([0.0, 1.0, 2.0].to_vec()))
+            .execute()
+            .unwrap();
         assert_eq!(res.documents_ids.len(), 3);
     }
 

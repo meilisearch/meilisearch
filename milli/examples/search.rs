@@ -48,7 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             let start = Instant::now();
 
-            let mut ctx = SearchContext::new(&index, &txn);
+            let mut ctx = SearchContext::new(&index, &txn, Default::default());
             let docs = execute_search(
                 &mut ctx,
                 &(!query.trim().is_empty()).then(|| query.trim().to_owned()),
