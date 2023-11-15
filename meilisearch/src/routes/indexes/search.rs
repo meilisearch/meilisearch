@@ -2,12 +2,13 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use index_scheduler::IndexScheduler;
-use log::debug;
+use log::{debug, warn};
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::milli::VectorQuery;
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 
@@ -88,7 +89,7 @@ impl From<SearchQueryGet> for SearchQuery {
 
         Self {
             q: other.q,
-            vector: other.vector.map(CS::into_inner),
+            vector: other.vector.map(CS::into_inner).map(VectorQuery::Vector),
             offset: other.offset.0,
             limit: other.limit.0,
             page: other.page.as_deref().copied(),
@@ -193,6 +194,9 @@ pub async fn search_with_post(
     let index = index_scheduler.index(&index_uid)?;
 
     let features = index_scheduler.features();
+
+    embed(&mut query, index_scheduler.get_ref(), &index).await?;
+
     let search_result =
         tokio::task::spawn_blocking(move || perform_search(&index, query, features)).await?;
     if let Ok(ref search_result) = search_result {
@@ -204,6 +208,38 @@ pub async fn search_with_post(
 
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))
+}
+
+pub async fn embed(
+    query: &mut SearchQuery,
+    index_scheduler: &IndexScheduler,
+    index: &meilisearch_types::milli::Index,
+) -> Result<(), ResponseError> {
+    if let Some(VectorQuery::String(prompt)) = query.vector.take() {
+        let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
+        let embedder = index_scheduler.embedders(embedder_configs)?;
+
+        /// FIXME: add error if no embedder, remove unwrap, support multiple embedders
+        let embeddings = embedder
+            .get("default")
+            .unwrap()
+            .0
+            .embed(vec![prompt])
+            .await
+            .map_err(meilisearch_types::milli::vector::Error::from)
+            .map_err(meilisearch_types::milli::UserError::from)
+            .map_err(meilisearch_types::milli::Error::from)?
+            .pop()
+            .expect("No vector returned from embedding");
+
+        if embeddings.iter().nth(1).is_some() {
+            warn!("Ignoring embeddings past the first one in long search query");
+            query.vector = Some(VectorQuery::Vector(embeddings.iter().next().unwrap().to_vec()));
+        } else {
+            query.vector = Some(VectorQuery::Vector(embeddings.into_inner()));
+        }
+    };
+    Ok(())
 }
 
 #[cfg(test)]

@@ -56,12 +56,12 @@ impl RoFeatures {
         }
     }
 
-    pub fn check_vector(&self) -> Result<()> {
+    pub fn check_vector(&self, disabled_action: &'static str) -> Result<()> {
         if self.runtime.vector_store {
             Ok(())
         } else {
             Err(FeatureNotEnabledError {
-                disabled_action: "Passing `vector` as a query parameter",
+                disabled_action,
                 feature: "vector store",
                 issue_link: "https://github.com/meilisearch/product/discussions/677",
             }

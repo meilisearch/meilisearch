@@ -9,9 +9,10 @@ mod extract_word_docids;
 mod extract_word_pair_proximity_docids;
 mod extract_word_position_docids;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::BufReader;
+use std::sync::Arc;
 
 use crossbeam_channel::Sender;
 use log::debug;
@@ -23,7 +24,9 @@ use self::extract_facet_string_docids::extract_facet_string_docids;
 use self::extract_fid_docid_facet_values::{extract_fid_docid_facet_values, ExtractedFacetValues};
 use self::extract_fid_word_count_docids::extract_fid_word_count_docids;
 use self::extract_geo_points::extract_geo_points;
-use self::extract_vector_points::extract_vector_points;
+use self::extract_vector_points::{
+    extract_embeddings, extract_vector_points, ExtractedVectorPoints,
+};
 use self::extract_word_docids::extract_word_docids;
 use self::extract_word_pair_proximity_docids::extract_word_pair_proximity_docids;
 use self::extract_word_position_docids::extract_word_position_docids;
@@ -32,8 +35,10 @@ use super::helpers::{
     MergeFn, MergeableReader,
 };
 use super::{helpers, TypedChunk};
+use crate::prompt::Prompt;
 use crate::proximity::ProximityPrecision;
-use crate::{FieldId, Result};
+use crate::vector::Embedder;
+use crate::{FieldId, FieldsIdsMap, Result};
 
 /// Extract data for each databases from obkv documents in parallel.
 /// Send data in grenad file over provided Sender.
@@ -47,13 +52,14 @@ pub(crate) fn data_from_obkv_documents(
     faceted_fields: HashSet<FieldId>,
     primary_key_id: FieldId,
     geo_fields_ids: Option<(FieldId, FieldId)>,
-    vectors_field_id: Option<FieldId>,
+    field_id_map: FieldsIdsMap,
     stop_words: Option<fst::Set<&[u8]>>,
     allowed_separators: Option<&[&str]>,
     dictionary: Option<&[&str]>,
     max_positions_per_attributes: Option<u32>,
     exact_attributes: HashSet<FieldId>,
     proximity_precision: ProximityPrecision,
+    embedders: HashMap<String, (Arc<Embedder>, Arc<Prompt>)>,
 ) -> Result<()> {
     puffin::profile_function!();
 
@@ -64,7 +70,8 @@ pub(crate) fn data_from_obkv_documents(
                 original_documents_chunk,
                 indexer,
                 lmdb_writer_sx.clone(),
-                vectors_field_id,
+                field_id_map.clone(),
+                embedders.clone(),
             )
         })
         .collect::<Result<()>>()?;
@@ -276,24 +283,42 @@ fn send_original_documents_data(
     original_documents_chunk: Result<grenad::Reader<BufReader<File>>>,
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
-    vectors_field_id: Option<FieldId>,
+    field_id_map: FieldsIdsMap,
+    embedders: HashMap<String, (Arc<Embedder>, Arc<Prompt>)>,
 ) -> Result<()> {
     let original_documents_chunk =
         original_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
 
-    if let Some(vectors_field_id) = vectors_field_id {
-        let documents_chunk_cloned = original_documents_chunk.clone();
-        let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
-        rayon::spawn(move || {
-            let result = extract_vector_points(documents_chunk_cloned, indexer, vectors_field_id);
-            let _ = match result {
-                Ok(vector_points) => {
-                    lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints(vector_points)))
-                }
-                Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
-            };
-        });
-    }
+    let documents_chunk_cloned = original_documents_chunk.clone();
+    let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
+    rayon::spawn(move || {
+        let (embedder, prompt) = embedders.get("default").cloned().unzip();
+        let result =
+            extract_vector_points(documents_chunk_cloned, indexer, field_id_map, prompt.as_deref());
+        let _ = match result {
+            Ok(ExtractedVectorPoints { manual_vectors, remove_vectors, prompts }) => {
+                /// FIXME: support multiple embedders
+                let results = embedder.and_then(|embedder| {
+                    match extract_embeddings(prompts, indexer, embedder.clone()) {
+                        Ok(results) => Some(results),
+                        Err(error) => {
+                            let _ = lmdb_writer_sx_cloned.send(Err(error));
+                            None
+                        }
+                    }
+                });
+                let (embeddings, expected_dimension) = results.unzip();
+                let expected_dimension = expected_dimension.flatten();
+                lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints {
+                    remove_vectors,
+                    embeddings,
+                    expected_dimension,
+                    manual_vectors,
+                }))
+            }
+            Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
+        };
+    });
 
     // TODO: create a custom internal error
     lmdb_writer_sx.send(Ok(TypedChunk::Documents(original_documents_chunk))).unwrap();

@@ -23,6 +23,7 @@ use crate::heed_codec::{
 };
 use crate::proximity::ProximityPrecision;
 use crate::readable_slices::ReadableSlices;
+use crate::vector::EmbeddingConfig;
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdWordCountCodec, GeoPoint, ObkvCodec,
@@ -74,6 +75,7 @@ pub mod main_key {
     pub const SORT_FACET_VALUES_BY: &str = "sort-facet-values-by";
     pub const PAGINATION_MAX_TOTAL_HITS: &str = "pagination-max-total-hits";
     pub const PROXIMITY_PRECISION: &str = "proximity-precision";
+    pub const EMBEDDING_CONFIGS: &str = "embedding_configs";
 }
 
 pub mod db_name {
@@ -1527,6 +1529,33 @@ impl Index {
         }
 
         Ok(script_language)
+    }
+
+    pub(crate) fn put_embedding_configs(
+        &self,
+        wtxn: &mut RwTxn<'_>,
+        configs: Vec<(String, EmbeddingConfig)>,
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, SerdeJson<Vec<(String, EmbeddingConfig)>>>().put(
+            wtxn,
+            main_key::EMBEDDING_CONFIGS,
+            &configs,
+        )
+    }
+
+    pub(crate) fn delete_embedding_configs(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::EMBEDDING_CONFIGS)
+    }
+
+    pub fn embedding_configs(
+        &self,
+        rtxn: &RoTxn<'_>,
+    ) -> Result<Vec<(String, crate::vector::EmbeddingConfig)>> {
+        Ok(self
+            .main
+            .remap_types::<Str, SerdeJson<Vec<(String, EmbeddingConfig)>>>()
+            .get(rtxn, main_key::EMBEDDING_CONFIGS)?
+            .unwrap_or_default())
     }
 }
 

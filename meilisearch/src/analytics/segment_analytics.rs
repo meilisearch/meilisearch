@@ -686,7 +686,7 @@ impl SearchAggregator {
             ret.max_terms_number = q.split_whitespace().count();
         }
 
-        if let Some(ref vector) = vector {
+        if let Some(meilisearch_types::milli::VectorQuery::Vector(ref vector)) = vector {
             ret.max_vector_size = vector.len();
         }
 
