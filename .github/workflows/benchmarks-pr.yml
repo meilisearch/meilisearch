@@ -90,7 +90,8 @@ jobs:
           set -x
           export base_ref=$(git merge-base origin/main ${{ steps.comment-branch.outputs.head_ref }} | head -c8)
           export base_filename=$(echo ${{ steps.command.outputs.command-arguments }}_main_${base_ref}.json)
-          echo 'Here are your benchmarks diff 👊' >> body.txt
+          export bench_name=$(echo ${{ steps.command.outputs.command-arguments }})
+          echo "Here are your $bench_name benchmarks diff 👊" >> body.txt
           echo '```' >> body.txt
           ./benchmarks/scripts/compare.sh $base_filename ${{ steps.file.outputs.basename }}.json >> body.txt
           echo '```' >> body.txt
