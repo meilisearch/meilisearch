@@ -302,7 +302,8 @@ TaskNotFound                          , InvalidRequest       , NOT_FOUND ;
 TooManyOpenFiles                      , System               , UNPROCESSABLE_ENTITY ;
 UnretrievableDocument                 , Internal             , BAD_REQUEST ;
 UnretrievableErrorCode                , InvalidRequest       , BAD_REQUEST ;
-UnsupportedMediaType                  , InvalidRequest       , UNSUPPORTED_MEDIA_TYPE
+UnsupportedMediaType                  , InvalidRequest       , UNSUPPORTED_MEDIA_TYPE ;
+VectorEmbeddingError                  , InvalidRequest       , BAD_REQUEST
 }
 
 impl ErrorCode for JoinError {
@@ -357,6 +358,7 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidMinTypoWordLenSetting(_, _) => {
                         Code::InvalidSettingsTypoTolerance
                     }
+                    UserError::VectorEmbeddingError(_) => Code::VectorEmbeddingError,
                 }
             }
         }

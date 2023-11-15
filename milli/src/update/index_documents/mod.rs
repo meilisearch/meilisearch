@@ -363,6 +363,8 @@ where
             self.indexer_config.documents_chunk_size.unwrap_or(1024 * 1024 * 4); // 4MiB
         let max_positions_per_attributes = self.indexer_config.max_positions_per_attributes;
 
+        let cloned_embedder = self.indexer_config.embedder.clone();
+
         // Run extraction pipeline in parallel.
         pool.install(|| {
             puffin::profile_scope!("extract_and_send_grenad_chunks");
@@ -392,6 +394,7 @@ where
                     dictionary.as_deref(),
                     max_positions_per_attributes,
                     exact_attributes,
+                    cloned_embedder,
                 )
             });
 

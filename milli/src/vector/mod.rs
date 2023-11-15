@@ -117,7 +117,10 @@ impl Embedder {
         Ok(Self { model, tokenizer, options })
     }
 
-    pub fn embed(&self, texts: Vec<String>) -> std::result::Result<Vec<Vec<f32>>, EmbedError> {
+    pub async fn embed(
+        &self,
+        texts: Vec<String>,
+    ) -> std::result::Result<Vec<Vec<f32>>, EmbedError> {
         let tokens = self.tokenizer.encode_batch(texts, true).map_err(EmbedError::tokenize)?;
         let token_ids = tokens
             .iter()
@@ -146,6 +149,14 @@ impl Embedder {
 
         let embeddings = embeddings.to_vec2().map_err(EmbedError::tensor_shape)?;
         Ok(embeddings)
+    }
+
+    pub async fn embed_chunks(
+        &self,
+        text_chunks: Vec<Vec<String>>,
+    ) -> std::result::Result<Vec<Vec<Vec<f32>>>, EmbedError> {
+        futures::future::try_join_all(text_chunks.into_iter().map(|prompts| self.embed(prompts)))
+            .await
     }
 }
 

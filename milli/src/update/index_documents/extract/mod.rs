@@ -12,6 +12,7 @@ mod extract_word_position_docids;
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::BufReader;
+use std::sync::{Arc, OnceLock};
 
 use crossbeam_channel::Sender;
 use log::debug;
@@ -23,7 +24,9 @@ use self::extract_facet_string_docids::extract_facet_string_docids;
 use self::extract_fid_docid_facet_values::{extract_fid_docid_facet_values, ExtractedFacetValues};
 use self::extract_fid_word_count_docids::extract_fid_word_count_docids;
 use self::extract_geo_points::extract_geo_points;
-use self::extract_vector_points::extract_vector_points;
+use self::extract_vector_points::{
+    extract_embeddings, extract_vector_points, ExtractedVectorPoints,
+};
 use self::extract_word_docids::extract_word_docids;
 use self::extract_word_pair_proximity_docids::extract_word_pair_proximity_docids;
 use self::extract_word_position_docids::extract_word_position_docids;
@@ -52,6 +55,7 @@ pub(crate) fn data_from_obkv_documents(
     dictionary: Option<&[&str]>,
     max_positions_per_attributes: Option<u32>,
     exact_attributes: HashSet<FieldId>,
+    embedder: Arc<OnceLock<crate::vector::Embedder>>,
 ) -> Result<()> {
     puffin::profile_function!();
 
@@ -63,6 +67,7 @@ pub(crate) fn data_from_obkv_documents(
                 indexer,
                 lmdb_writer_sx.clone(),
                 vectors_field_id,
+                embedder.clone(),
             )
         })
         .collect::<Result<()>>()?;
@@ -273,6 +278,7 @@ fn send_original_documents_data(
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     vectors_field_id: Option<FieldId>,
+    embedder: Arc<OnceLock<crate::vector::Embedder>>,
 ) -> Result<()> {
     let original_documents_chunk =
         original_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
@@ -283,8 +289,17 @@ fn send_original_documents_data(
         rayon::spawn(move || {
             let result = extract_vector_points(documents_chunk_cloned, indexer, vectors_field_id);
             let _ = match result {
-                Ok(vector_points) => {
-                    lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints(vector_points)))
+                Ok(ExtractedVectorPoints { manual_vectors, remove_vectors, prompts }) => {
+                    match extract_embeddings(prompts, indexer, embedder) {
+                        Ok(embeddings) => {
+                            lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints {
+                                remove_vectors,
+                                embeddings,
+                                manual_vectors,
+                            }))
+                        }
+                        Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
+                    }
                 }
                 Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
             };

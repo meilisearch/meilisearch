@@ -1,3 +1,5 @@
+use std::sync::{Arc, OnceLock};
+
 use grenad::CompressionType;
 use rayon::ThreadPool;
 
@@ -12,6 +14,7 @@ pub struct IndexerConfig {
     pub thread_pool: Option<ThreadPool>,
     pub max_positions_per_attributes: Option<u32>,
     pub skip_index_budget: bool,
+    pub embedder: Arc<OnceLock<crate::vector::Embedder>>,
 }
 
 impl Default for IndexerConfig {
@@ -26,6 +29,7 @@ impl Default for IndexerConfig {
             thread_pool: None,
             max_positions_per_attributes: None,
             skip_index_budget: false,
+            embedder: Arc::new(OnceLock::new()),
         }
     }
 }

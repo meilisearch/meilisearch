@@ -47,7 +47,11 @@ pub(crate) enum TypedChunk {
     FieldIdFacetIsNullDocids(grenad::Reader<BufReader<File>>),
     FieldIdFacetIsEmptyDocids(grenad::Reader<BufReader<File>>),
     GeoPoints(grenad::Reader<BufReader<File>>),
-    VectorPoints(grenad::Reader<BufReader<File>>),
+    VectorPoints {
+        remove_vectors: grenad::Reader<BufReader<File>>,
+        embeddings: grenad::Reader<BufReader<File>>,
+        manual_vectors: grenad::Reader<BufReader<File>>,
+    },
     ScriptLanguageDocids(HashMap<(Script, Language), (RoaringBitmap, RoaringBitmap)>),
 }
 
@@ -100,8 +104,8 @@ impl TypedChunk {
             TypedChunk::GeoPoints(grenad) => {
                 format!("GeoPoints {{ number_of_entries: {} }}", grenad.len())
             }
-            TypedChunk::VectorPoints(grenad) => {
-                format!("VectorPoints {{ number_of_entries: {} }}", grenad.len())
+            TypedChunk::VectorPoints{ remove_vectors, manual_vectors, embeddings } => {
+                format!("VectorPoints {{ remove_vectors: {}, manual_vectors: {}, embeddings: {} }}", remove_vectors.len(), manual_vectors.len(), embeddings.len())
             }
             TypedChunk::ScriptLanguageDocids(sl_map) => {
                 format!("ScriptLanguageDocids {{ number_of_entries: {} }}", sl_map.len())
@@ -355,19 +359,41 @@ pub(crate) fn write_typed_chunk_into_index(
             index.put_geo_rtree(wtxn, &rtree)?;
             index.put_geo_faceted_documents_ids(wtxn, &geo_faceted_docids)?;
         }
-        TypedChunk::VectorPoints(vector_points) => {
-            let mut vectors_set = HashSet::new();
+        TypedChunk::VectorPoints { remove_vectors, manual_vectors, embeddings } => {
+            let mut docid_vectors_map: HashMap<DocumentId, HashSet<Vec<OrderedFloat<f32>>>> =
+                HashMap::new();
+
             // We extract and store the previous vectors
             if let Some(hnsw) = index.vector_hnsw(wtxn)? {
                 for (pid, point) in hnsw.iter() {
                     let pid_key = pid.into_inner();
                     let docid = index.vector_id_docid.get(wtxn, &pid_key)?.unwrap();
                     let vector: Vec<_> = point.iter().copied().map(OrderedFloat).collect();
-                    vectors_set.insert((docid, vector));
+                    docid_vectors_map.entry(docid).or_default().insert(vector);
                 }
             }
 
-            let mut cursor = vector_points.into_cursor()?;
+            // remove vectors for docids we want them removed
+            let mut cursor = remove_vectors.into_cursor()?;
+            while let Some((key, _)) = cursor.move_on_next()? {
+                let docid = key.try_into().map(DocumentId::from_be_bytes).unwrap();
+
+                docid_vectors_map.remove(&docid);
+            }
+
+            // add generated embeddings
+            let mut cursor = embeddings.into_cursor()?;
+            while let Some((key, value)) = cursor.move_on_next()? {
+                let docid = key.try_into().map(DocumentId::from_be_bytes).unwrap();
+                let vector: Vec<OrderedFloat<_>> =
+                    pod_collect_to_vec(value).into_iter().map(OrderedFloat).collect();
+                let mut set = HashSet::new();
+                set.insert(vector);
+                docid_vectors_map.insert(docid, set);
+            }
+
+            // perform the manual diff
+            let mut cursor = manual_vectors.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
                 // convert the key back to a u32 (4 bytes)
                 let (left, _index) = try_split_array_at(key).unwrap();
@@ -376,23 +402,30 @@ pub(crate) fn write_typed_chunk_into_index(
                 let vector_deladd_obkv = KvReaderDelAdd::new(value);
                 if let Some(value) = vector_deladd_obkv.get(DelAdd::Deletion) {
                     // convert the vector back to a Vec<f32>
-                    let vector = pod_collect_to_vec(value).into_iter().map(OrderedFloat).collect();
-                    let key = (docid, vector);
-                    if !vectors_set.remove(&key) {
-                        error!("Unable to delete the vector: {:?}", key.1);
-                    }
+                    let vector: Vec<OrderedFloat<_>> =
+                        pod_collect_to_vec(value).into_iter().map(OrderedFloat).collect();
+                    docid_vectors_map.entry(docid).and_modify(|v| {
+                        if !v.remove(&vector) {
+                            error!("Unable to delete the vector: {:?}", vector);
+                        }
+                    });
                 }
                 if let Some(value) = vector_deladd_obkv.get(DelAdd::Addition) {
                     // convert the vector back to a Vec<f32>
                     let vector = pod_collect_to_vec(value).into_iter().map(OrderedFloat).collect();
-                    vectors_set.insert((docid, vector));
+                    docid_vectors_map.entry(docid).and_modify(|v| {
+                        v.insert(vector);
+                    });
                 }
             }
 
             // Extract the most common vector dimension
             let expected_dimension_size = {
                 let mut dims = HashMap::new();
-                vectors_set.iter().for_each(|(_, v)| *dims.entry(v.len()).or_insert(0) += 1);
+                docid_vectors_map
+                    .values()
+                    .flat_map(|v| v.iter())
+                    .for_each(|v| *dims.entry(v.len()).or_insert(0) += 1);
                 dims.into_iter().max_by_key(|(_, count)| *count).map(|(len, _)| len)
             };
 
@@ -400,7 +433,10 @@ pub(crate) fn write_typed_chunk_into_index(
             // prepare the vectors before inserting them in the HNSW.
             let mut points = Vec::new();
             let mut docids = Vec::new();
-            for (docid, vector) in vectors_set {
+            for (docid, vector) in docid_vectors_map
+                .into_iter()
+                .flat_map(|(docid, vectors)| std::iter::repeat(docid).zip(vectors))
+            {
                 if expected_dimension_size.map_or(false, |expected| expected != vector.len()) {
                     return Err(UserError::InvalidVectorDimensions {
                         expected: expected_dimension_size.unwrap_or(vector.len()),
