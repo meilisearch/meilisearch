@@ -72,6 +72,11 @@ puffin = "0.16.0"
 log = "0.4.17"
 logging_timer = "1.1.0"
 csv = "1.2.1"
+candle-core = { git = "https://github.com/huggingface/candle.git", version = "0.3.1" }
+candle-transformers = { git = "https://github.com/huggingface/candle.git", version = "0.3.1" }
+candle-nn = { git = "https://github.com/huggingface/candle.git", version = "0.3.1" }
+tokenizers = { git = "https://github.com/huggingface/tokenizers.git", tag = "v0.14.1", version = "0.14.1" }
+hf-hub = "0.3.2"
 
 [dev-dependencies]
 mimalloc = { version = "0.1.37", default-features = false }
