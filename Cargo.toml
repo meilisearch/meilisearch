@@ -28,6 +28,7 @@ license = "MIT"
 
 [profile.release]
 codegen-units = 1
+debug = true
 
 [profile.dev.package.flate2]
 opt-level = 3
