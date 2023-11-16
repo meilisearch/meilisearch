@@ -54,7 +54,7 @@ use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
-use panic_hook::PanicReader;
+use panic_hook::ReportReader;
 pub use panic_hook::{Panic, Report, ReportRegistry};
 use puffin::FrameView;
 use roaring::RoaringBitmap;
@@ -334,7 +334,7 @@ pub struct IndexScheduler {
     /// The path to the version file of Meilisearch.
     pub(crate) version_file_path: PathBuf,
 
-    pub(crate) panic_reader: PanicReader,
+    pub(crate) panic_reader: ReportReader,
 
     // ================= test
     // The next entry is dedicated to the tests.
@@ -446,7 +446,7 @@ impl IndexScheduler {
 
         const MAX_REPORT_COUNT: usize = 20;
 
-        let panic_reader = panic_hook::PanicReader::install_panic_hook(
+        let panic_reader = panic_hook::ReportReader::install_panic_hook(
             std::num::NonZeroUsize::new(MAX_REPORT_COUNT).unwrap(),
         );
 

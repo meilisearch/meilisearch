@@ -8,6 +8,7 @@ use std::thread::{JoinHandle, ThreadId};
 
 use backtrace::Backtrace;
 
+// Represents a panic in a shallowy structured fashion
 pub struct Panic {
     pub payload: Option<String>,
     pub location: Option<String>,
@@ -16,6 +17,7 @@ pub struct Panic {
     pub backtrace: Backtrace,
 }
 
+/// A panic enriched with a unique id
 #[derive(serde::Serialize)]
 pub struct Report {
     pub id: uuid::Uuid,
@@ -96,8 +98,9 @@ mod json {
     }
 }
 
-struct PanicWriter(Arc<RwLock<ReportRegistry>>);
+struct ReportWriter(Arc<RwLock<ReportRegistry>>);
 
+/// A FIFO queue of reports.
 pub struct ReportRegistry {
     reports: std::collections::VecDeque<Report>,
 }
@@ -126,7 +129,7 @@ impl ReportRegistry {
     }
 }
 
-impl PanicWriter {
+impl ReportWriter {
     #[track_caller]
     fn write_panic(&self, panic_info: &PanicInfo<'_>) {
         let payload = panic_info
@@ -167,19 +170,28 @@ impl PanicWriter {
     }
 }
 
+/// Reads the reports written in case of a panic.
 #[derive(Clone)]
-pub struct PanicReader(Arc<RwLock<ReportRegistry>>);
+pub struct ReportReader(Arc<RwLock<ReportRegistry>>);
 
-impl PanicReader {
+impl ReportReader {
+    /// Installs a new global panic hook, overriding any existing hook.
+    ///
+    /// The hook writes any incoming panic in reports.
+    /// The reports can then be read by the returned [`ReportReader`].
     pub fn install_panic_hook(capacity: NonZeroUsize) -> Self {
         let registry = Arc::new(RwLock::new(ReportRegistry::new(capacity)));
-        let reader = PanicReader(registry.clone());
-        let writer = PanicWriter(registry.clone());
+        let reader = ReportReader(registry.clone());
+        let writer = ReportWriter(registry.clone());
 
         std::panic::set_hook(Box::new(move |panic_info| writer.write_panic(panic_info)));
         reader
     }
 
+    /// Join the thread corresponding to the passed handle, recovering either its value
+    /// or, in case the thread panicked, the id of the report corresponding to the panic.
+    ///
+    /// The id can be used to read the report from the [`self.registry()`].
     pub fn join_thread<T>(&self, thread: JoinHandle<T>) -> Result<T, Option<uuid::Uuid>> {
         let thread_id = thread.thread().id();
         thread.join().map_err(|_e| {
@@ -192,31 +204,8 @@ impl PanicReader {
         })
     }
 
+    /// Returns a registry that can be used to read the reports written during a panic.
     pub fn registry(&self) -> Arc<RwLock<ReportRegistry>> {
         self.0.clone()
     }
 }
-
-/*
-fn deep_panic() {
-    panic!("Panic message sent from deep inside the sub-thread");
-}
-
-fn do_work() {
-    deep_panic();
-}
-
-fn main() {
-    let mut panic_receiver = PanicReceiver::install_panic_hook();
-    let subthread = std::thread::Builder::new()
-        .name("subthread".into())
-        .spawn(|| {
-            do_work();
-        })
-        .unwrap();
-    match panic_receiver.join_thread(subthread) {
-        Ok(_) => {}
-        Err(frame) => println!("{}", serde_json::to_string_pretty(frame.to_json()).unwrap()),
-    }
-}
-*/
