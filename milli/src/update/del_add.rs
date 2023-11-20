@@ -53,7 +53,9 @@ pub fn into_del_add_obkv<K: obkv::Key + PartialOrd>(
             value_writer.insert(DelAdd::Addition, value)?;
         }
         value_writer.finish()?;
-        writer.insert(key, &value_buffer)?;
+        if !value_buffer.is_empty() {
+            writer.insert(key, &value_buffer)?;
+        }
     }
 
     writer.finish()

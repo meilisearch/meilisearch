@@ -121,6 +121,7 @@ fn words_position_into_sorter(
                 key
             }
             Both(key, _) => {
+                // both values needs to be kept because it will be used in other extractors.
                 value_writer.insert(DelAdd::Deletion, document_id.to_ne_bytes()).unwrap();
                 value_writer.insert(DelAdd::Addition, document_id.to_ne_bytes()).unwrap();
                 key
