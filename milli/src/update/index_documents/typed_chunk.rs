@@ -140,20 +140,9 @@ pub(crate) fn write_typed_chunk_into_index(
 
                 for (field_id, value) in reader.iter() {
                     let del_add_reader = KvReaderDelAdd::new(value);
-                    match (
-                        del_add_reader.get(DelAdd::Deletion),
-                        del_add_reader.get(DelAdd::Addition),
-                    ) {
-                        (None, None) => {}
-                        (None, Some(value)) => {
-                            // anyway, write
-                            writer.insert(field_id, value)?;
-                        }
-                        (Some(_), None) => {}
-                        (Some(_), Some(value)) => {
-                            // updated field, write
-                            writer.insert(field_id, value)?;
-                        }
+
+                    if let Some(addition) = del_add_reader.get(DelAdd::Addition) {
+                        writer.insert(field_id, addition)?;
                     }
                 }
 
