@@ -119,9 +119,15 @@ impl Embedder {
 
     pub async fn embed(
         &self,
-        texts: Vec<String>,
+        mut texts: Vec<String>,
     ) -> std::result::Result<Vec<Vec<f32>>, EmbedError> {
-        let tokens = self.tokenizer.encode_batch(texts, true).map_err(EmbedError::tokenize)?;
+        let tokens = match texts.len() {
+            1 => vec![self
+                .tokenizer
+                .encode(texts.pop().unwrap(), true)
+                .map_err(EmbedError::tokenize)?],
+            _ => self.tokenizer.encode_batch(texts, true).map_err(EmbedError::tokenize)?,
+        };
         let token_ids = tokens
             .iter()
             .map(|tokens| {
