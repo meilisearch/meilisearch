@@ -159,8 +159,10 @@ pub async fn search_with_url_query(
 
     let index = index_scheduler.index(&index_uid)?;
     let features = index_scheduler.features();
-    let search_result =
-        tokio::task::spawn_blocking(move || perform_search(&index, query, features)).await?;
+    let search_result = tokio::task::spawn_blocking(move || {
+        perform_search(&index, query, features, index_scheduler.embedder())
+    })
+    .await?;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
@@ -194,8 +196,10 @@ pub async fn search_with_post(
     let index = index_scheduler.index(&index_uid)?;
 
     let features = index_scheduler.features();
-    let search_result =
-        tokio::task::spawn_blocking(move || perform_search(&index, query, features)).await?;
+    let search_result = tokio::task::spawn_blocking(move || {
+        perform_search(&index, query, features, index_scheduler.embedder())
+    })
+    .await?;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }

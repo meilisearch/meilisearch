@@ -336,8 +336,10 @@ fn prepare_search<'t>(
     rtxn: &'t RoTxn,
     query: &'t SearchQuery,
     features: RoFeatures,
+    embedder: std::sync::Arc<std::sync::OnceLock<milli::vector::Embedder>>,
 ) -> Result<(milli::Search<'t>, bool, usize, usize), MeilisearchHttpError> {
     let mut search = index.search(rtxn);
+    search.embedder(embedder);
 
     if query.vector.is_some() && query.q.is_some() {
         warn!("Ignoring the query string `q` when used with the `vector` parameter.");
@@ -422,12 +424,13 @@ pub fn perform_search(
     index: &Index,
     query: SearchQuery,
     features: RoFeatures,
+    embedder: std::sync::Arc<std::sync::OnceLock<milli::vector::Embedder>>,
 ) -> Result<SearchResult, MeilisearchHttpError> {
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
 
     let (search, is_finite_pagination, max_total_hits, offset) =
-        prepare_search(index, &rtxn, &query, features)?;
+        prepare_search(index, &rtxn, &query, features, embedder)?;
 
     let milli::SearchResult { documents_ids, matching_words, candidates, document_scores, .. } =
         search.execute()?;
@@ -645,11 +648,12 @@ pub fn perform_facet_search(
     facet_query: Option<String>,
     facet_name: String,
     features: RoFeatures,
+    embedder: std::sync::Arc<std::sync::OnceLock<milli::vector::Embedder>>,
 ) -> Result<FacetSearchResult, MeilisearchHttpError> {
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
 
-    let (search, _, _, _) = prepare_search(index, &rtxn, &search_query, features)?;
+    let (search, _, _, _) = prepare_search(index, &rtxn, &search_query, features, embedder)?;
     let mut facet_search = SearchForFacetValues::new(facet_name, search);
     if let Some(facet_query) = &facet_query {
         facet_search.query(facet_query);

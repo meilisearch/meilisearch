@@ -38,7 +38,7 @@ use std::ops::{Bound, RangeBounds};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, OnceLock, RwLock};
 use std::time::Duration;
 
 use dump::{KindDump, TaskDump, UpdateFile};
@@ -1323,6 +1323,10 @@ impl IndexScheduler {
             Some(content_file) => self.delete_update_file(content_file),
             None => Ok(()),
         }
+    }
+
+    pub fn embedder(&self) -> Arc<OnceLock<milli::vector::Embedder>> {
+        self.indexer_config().embedder.clone()
     }
 
     /// Blocks the thread until the test handle asks to progress to/through this breakpoint.
