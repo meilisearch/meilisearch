@@ -32,13 +32,12 @@ impl Key for DelAdd {
 
 /// Creates a Kv<K, Kv<DelAdd, value>> from Kv<K, value>
 ///
-/// if deletion is `true`, the value will be inserted behind a DelAdd::Deletion key.
-/// if addition is `true`, the value will be inserted behind a DelAdd::Addition key.
-/// if both deletion and addition are `true, the value will be inserted in both keys.
+/// Deletion: put all the values under DelAdd::Deletion
+/// Addition: put all the values under DelAdd::Addition,
+/// DeletionAndAddition: put all the values under DelAdd::Deletion and DelAdd::Addition,
 pub fn into_del_add_obkv<K: obkv::Key + PartialOrd>(
     reader: obkv::KvReader<K>,
-    deletion: bool,
-    addition: bool,
+    operation: DelAddOperation,
     buffer: &mut Vec<u8>,
 ) -> Result<(), std::io::Error> {
     let mut writer = obkv::KvWriter::new(buffer);
@@ -46,19 +45,25 @@ pub fn into_del_add_obkv<K: obkv::Key + PartialOrd>(
     for (key, value) in reader.iter() {
         value_buffer.clear();
         let mut value_writer = KvWriterDelAdd::new(&mut value_buffer);
-        if deletion {
+        if matches!(operation, DelAddOperation::Deletion | DelAddOperation::DeletionAndAddition) {
             value_writer.insert(DelAdd::Deletion, value)?;
         }
-        if addition {
+        if matches!(operation, DelAddOperation::Addition | DelAddOperation::DeletionAndAddition) {
             value_writer.insert(DelAdd::Addition, value)?;
         }
         value_writer.finish()?;
-        if !value_buffer.is_empty() {
-            writer.insert(key, &value_buffer)?;
-        }
+        writer.insert(key, &value_buffer)?;
     }
 
     writer.finish()
+}
+
+/// Enum controlling the side of the DelAdd obkv in which the provided value will be written.
+#[derive(Debug, Clone, Copy)]
+pub enum DelAddOperation {
+    Deletion,
+    Addition,
+    DeletionAndAddition,
 }
 
 /// Creates a Kv<K, Kv<DelAdd, value>> from two Kv<K, value>

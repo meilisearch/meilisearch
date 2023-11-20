@@ -21,7 +21,7 @@ use super::{IndexDocumentsMethod, IndexerConfig};
 use crate::documents::{DocumentsBatchIndex, EnrichedDocument, EnrichedDocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
 use crate::index::{db_name, main_key};
-use crate::update::del_add::{into_del_add_obkv, DelAdd, KvReaderDelAdd};
+use crate::update::del_add::{into_del_add_obkv, DelAdd, DelAddOperation, KvReaderDelAdd};
 use crate::update::index_documents::GrenadParameters;
 use crate::update::{AvailableDocumentsIds, ClearDocuments, UpdateIndexingStep};
 use crate::{
@@ -265,8 +265,12 @@ impl<'a, 'i> Transform<'a, 'i> {
                     skip_insertion = true;
                 } else {
                     // we associate the base document with the new key, everything will get merged later.
-                    let keep_original_version =
-                        self.index_documents_method == IndexDocumentsMethod::UpdateDocuments;
+                    let deladd_operation = match self.index_documents_method {
+                        IndexDocumentsMethod::UpdateDocuments => {
+                            DelAddOperation::DeletionAndAddition
+                        }
+                        IndexDocumentsMethod::ReplaceDocuments => DelAddOperation::Deletion,
+                    };
                     document_sorter_key_buffer.clear();
                     document_sorter_key_buffer.extend_from_slice(&docid.to_be_bytes());
                     document_sorter_key_buffer.extend_from_slice(external_id.as_bytes());
@@ -274,8 +278,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                     document_sorter_value_buffer.push(Operation::Addition as u8);
                     into_del_add_obkv(
                         KvReaderU16::new(base_obkv),
-                        true,
-                        keep_original_version,
+                        deladd_operation,
                         &mut document_sorter_value_buffer,
                     )?;
                     self.original_sorter
@@ -287,8 +290,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                         document_sorter_value_buffer.push(Operation::Addition as u8);
                         into_del_add_obkv(
                             KvReaderU16::new(&flattened_obkv),
-                            true,
-                            keep_original_version,
+                            deladd_operation,
                             &mut document_sorter_value_buffer,
                         )?;
                     }
@@ -307,8 +309,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                 document_sorter_value_buffer.push(Operation::Addition as u8);
                 into_del_add_obkv(
                     KvReaderU16::new(&obkv_buffer),
-                    false,
-                    true,
+                    DelAddOperation::Addition,
                     &mut document_sorter_value_buffer,
                 )?;
                 // We use the extracted/generated user id as the key for this document.
@@ -321,8 +322,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                     document_sorter_value_buffer.push(Operation::Addition as u8);
                     into_del_add_obkv(
                         KvReaderU16::new(&obkv),
-                        false,
-                        true,
+                        DelAddOperation::Addition,
                         &mut document_sorter_value_buffer,
                     )?
                 }
@@ -517,7 +517,11 @@ impl<'a, 'i> Transform<'a, 'i> {
         // push it as to delete in the original_sorter
         document_sorter_value_buffer.clear();
         document_sorter_value_buffer.push(Operation::Deletion as u8);
-        into_del_add_obkv(KvReaderU16::new(base_obkv), true, false, document_sorter_value_buffer)?;
+        into_del_add_obkv(
+            KvReaderU16::new(base_obkv),
+            DelAddOperation::Deletion,
+            document_sorter_value_buffer,
+        )?;
         self.original_sorter.insert(&document_sorter_key_buffer, &document_sorter_value_buffer)?;
 
         // flatten it and push it as to delete in the flattened_sorter
@@ -526,7 +530,11 @@ impl<'a, 'i> Transform<'a, 'i> {
             // we recreate our buffer with the flattened documents
             document_sorter_value_buffer.clear();
             document_sorter_value_buffer.push(Operation::Deletion as u8);
-            into_del_add_obkv(KvReaderU16::new(&obkv), true, false, document_sorter_value_buffer)?;
+            into_del_add_obkv(
+                KvReaderU16::new(&obkv),
+                DelAddOperation::Deletion,
+                document_sorter_value_buffer,
+            )?;
         }
         self.flattened_sorter
             .insert(internal_docid.to_be_bytes(), &document_sorter_value_buffer)?;
@@ -869,8 +877,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             document_sorter_value_buffer.clear();
             into_del_add_obkv(
                 KvReaderU16::new(buffer),
-                false,
-                true,
+                DelAddOperation::Addition,
                 &mut document_sorter_value_buffer,
             )?;
             original_sorter.insert(&document_sorter_key_buffer, &document_sorter_value_buffer)?;
@@ -911,8 +918,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             document_sorter_value_buffer.clear();
             into_del_add_obkv(
                 KvReaderU16::new(&buffer),
-                false,
-                true,
+                DelAddOperation::Addition,
                 &mut document_sorter_value_buffer,
             )?;
             flattened_sorter.insert(docid.to_be_bytes(), &document_sorter_value_buffer)?;
@@ -986,18 +992,38 @@ mod test {
         let mut kv_writer = KvWriter::memory();
         kv_writer.insert(0_u8, [0]).unwrap();
         let buffer = kv_writer.into_inner().unwrap();
-        into_del_add_obkv(KvReaderU16::new(&buffer), false, true, &mut additive_doc_0).unwrap();
+        into_del_add_obkv(
+            KvReaderU16::new(&buffer),
+            DelAddOperation::Addition,
+            &mut additive_doc_0,
+        )
+        .unwrap();
         additive_doc_0.insert(0, Operation::Addition as u8);
-        into_del_add_obkv(KvReaderU16::new(&buffer), true, false, &mut deletive_doc_0).unwrap();
+        into_del_add_obkv(
+            KvReaderU16::new(&buffer),
+            DelAddOperation::Deletion,
+            &mut deletive_doc_0,
+        )
+        .unwrap();
         deletive_doc_0.insert(0, Operation::Deletion as u8);
-        into_del_add_obkv(KvReaderU16::new(&buffer), true, true, &mut del_add_doc_0).unwrap();
+        into_del_add_obkv(
+            KvReaderU16::new(&buffer),
+            DelAddOperation::DeletionAndAddition,
+            &mut del_add_doc_0,
+        )
+        .unwrap();
         del_add_doc_0.insert(0, Operation::Addition as u8);
 
         let mut additive_doc_1 = Vec::new();
         let mut kv_writer = KvWriter::memory();
         kv_writer.insert(1_u8, [1]).unwrap();
         let buffer = kv_writer.into_inner().unwrap();
-        into_del_add_obkv(KvReaderU16::new(&buffer), false, true, &mut additive_doc_1).unwrap();
+        into_del_add_obkv(
+            KvReaderU16::new(&buffer),
+            DelAddOperation::Addition,
+            &mut additive_doc_1,
+        )
+        .unwrap();
         additive_doc_1.insert(0, Operation::Addition as u8);
 
         let mut additive_doc_0_1 = Vec::new();
@@ -1005,7 +1031,12 @@ mod test {
         kv_writer.insert(0_u8, [0]).unwrap();
         kv_writer.insert(1_u8, [1]).unwrap();
         let buffer = kv_writer.into_inner().unwrap();
-        into_del_add_obkv(KvReaderU16::new(&buffer), false, true, &mut additive_doc_0_1).unwrap();
+        into_del_add_obkv(
+            KvReaderU16::new(&buffer),
+            DelAddOperation::Addition,
+            &mut additive_doc_0_1,
+        )
+        .unwrap();
         additive_doc_0_1.insert(0, Operation::Addition as u8);
 
         let ret = obkvs_merge_additions_and_deletions(&[], &[Cow::from(additive_doc_0.as_slice())])
