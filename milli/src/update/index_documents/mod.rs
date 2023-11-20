@@ -449,7 +449,6 @@ where
                 otherwise => otherwise,
             };
 
-            // FIXME: return newly added as well as newly deleted documents
             let (docids, is_merged_database) =
                 write_typed_chunk_into_index(typed_chunk, self.index, self.wtxn, index_is_empty)?;
             if !docids.is_empty() {

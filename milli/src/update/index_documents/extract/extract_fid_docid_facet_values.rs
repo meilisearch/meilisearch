@@ -75,7 +75,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     let mut facet_is_null_docids = BTreeMap::<FieldId, (RoaringBitmap, RoaringBitmap)>::new();
     let mut facet_is_empty_docids = BTreeMap::<FieldId, (RoaringBitmap, RoaringBitmap)>::new();
 
-    // We create two buffer for mutable ref issues with closures.
+    // We create two buffers for mutable ref issues with closures.
     let mut numbers_key_buffer = Vec::new();
     let mut strings_key_buffer = Vec::new();
 
@@ -333,7 +333,7 @@ where
                     key_buffer.extend_from_slice(&value_bytes);
                     key_buffer.extend_from_slice(&number.to_be_bytes());
 
-                    // We insert only the Del part of the Obkv to inform
+                    // We insert only the Add part of the Obkv to inform
                     // that we only want to remove all those numbers.
                     let mut obkv = KvWriterDelAdd::memory();
                     obkv.insert(DelAdd::Addition, ().as_bytes())?;

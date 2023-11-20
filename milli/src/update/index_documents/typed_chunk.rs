@@ -409,7 +409,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 dims.into_iter().max_by_key(|(_, count)| *count).map(|(len, _)| len)
             };
 
-            // Ensure that the vector lenghts are correct and
+            // Ensure that the vector lengths are correct and
             // prepare the vectors before inserting them in the HNSW.
             let mut points = Vec::new();
             let mut docids = Vec::new();

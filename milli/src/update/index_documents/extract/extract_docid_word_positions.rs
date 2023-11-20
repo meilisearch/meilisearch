@@ -204,7 +204,7 @@ fn tokenizer_builder<'a>(
     tokenizer_builder
 }
 
-/// Extract words maped with their positions of a document,
+/// Extract words mapped with their positions of a document,
 /// ensuring no Language detection mistakes was made.
 #[allow(clippy::too_many_arguments)] // FIXME: consider grouping arguments in a struct
 fn lang_safe_tokens_from_document<'a>(
@@ -273,7 +273,7 @@ fn lang_safe_tokens_from_document<'a>(
     Ok((&buffers.obkv_buffer, script_language_word_count))
 }
 
-/// Extract words maped with their positions of a document.
+/// Extract words mapped with their positions of a document.
 fn tokens_from_document<'a>(
     obkv: &KvReader<FieldId>,
     searchable_fields: &Option<HashSet<FieldId>>,
@@ -294,11 +294,11 @@ fn tokens_from_document<'a>(
                 let value =
                     serde_json::from_slice(field_bytes).map_err(InternalError::SerdeJson)?;
 
-                // prepare writting destination.
+                // prepare writing destination.
                 buffers.obkv_positions_buffer.clear();
                 let mut writer = KvWriterU16::new(&mut buffers.obkv_positions_buffer);
 
-                // convert json into an unique string.
+                // convert json into a unique string.
                 buffers.field_buffer.clear();
                 if let Some(field) = json_to_string(&value, &mut buffers.field_buffer) {
                     // create an iterator of token with their positions.
