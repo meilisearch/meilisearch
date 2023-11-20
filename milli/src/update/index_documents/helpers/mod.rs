@@ -13,11 +13,10 @@ pub use grenad_helpers::{
     GrenadParameters, MergeableReader,
 };
 pub use merge_functions::{
-    concat_u32s_array, keep_first, keep_latest_obkv, merge_btreeset_string,
-    merge_cbo_roaring_bitmaps, merge_deladd_cbo_roaring_bitmaps,
-    merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, merge_roaring_bitmaps,
-    obkvs_keep_last_addition_merge_deletions, obkvs_merge_additions_and_deletions,
-    serialize_roaring_bitmap, MergeFn,
+    keep_first, keep_latest_obkv, merge_btreeset_string, merge_cbo_roaring_bitmaps,
+    merge_deladd_cbo_roaring_bitmaps, merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+    merge_roaring_bitmaps, obkvs_keep_last_addition_merge_deletions,
+    obkvs_merge_additions_and_deletions, serialize_roaring_bitmap, MergeFn,
 };
 
 use crate::MAX_WORD_LENGTH;
@@ -44,11 +43,6 @@ where
     let (head, tail) = try_split_at(slice, N)?;
     let head = head.try_into().ok()?;
     Some((head, tail))
-}
-
-#[allow(unused)]
-pub fn read_u32_ne_bytes(bytes: &[u8]) -> impl Iterator<Item = u32> + '_ {
-    bytes.chunks_exact(4).flat_map(TryInto::try_into).map(u32::from_ne_bytes)
 }
 
 /// Converts an fst Stream into an HashSet of Strings.

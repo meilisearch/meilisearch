@@ -12,18 +12,6 @@ use crate::Result;
 
 pub type MergeFn = for<'a> fn(&[u8], &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>>;
 
-#[allow(unused)]
-pub fn concat_u32s_array<'a>(_key: &[u8], values: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
-    if values.len() == 1 {
-        Ok(values[0].clone())
-    } else {
-        let capacity = values.iter().map(|v| v.len()).sum::<usize>();
-        let mut output = Vec::with_capacity(capacity);
-        values.iter().for_each(|integers| output.extend_from_slice(integers));
-        Ok(Cow::Owned(output))
-    }
-}
-
 pub fn serialize_roaring_bitmap(bitmap: &RoaringBitmap, buffer: &mut Vec<u8>) -> io::Result<()> {
     buffer.clear();
     buffer.reserve(bitmap.serialized_size());
