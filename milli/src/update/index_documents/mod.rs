@@ -20,14 +20,13 @@ use slice_group_by::GroupBy;
 use typed_chunk::{write_typed_chunk_into_index, TypedChunk};
 
 use self::enrich::enrich_documents_batch;
-pub use self::enrich::{
-    extract_finite_float_from_value, validate_document_id, validate_document_id_value,
-    validate_geo_from_json, DocumentId,
-};
+pub use self::enrich::{extract_finite_float_from_value, validate_geo_from_json, DocumentId};
 pub use self::helpers::{
     as_cloneable_grenad, create_sorter, create_writer, fst_stream_into_hashset,
-    fst_stream_into_vec, merge_btreeset_string, merge_cbo_roaring_bitmaps, merge_roaring_bitmaps,
-    sorter_into_lmdb_database, valid_lmdb_key, writer_into_reader, ClonableMmap, MergeFn,
+    fst_stream_into_vec, merge_btreeset_string, merge_cbo_roaring_bitmaps,
+    merge_deladd_cbo_roaring_bitmaps, merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+    merge_roaring_bitmaps, valid_lmdb_key, write_sorter_into_database, writer_into_reader,
+    ClonableMmap, MergeFn,
 };
 use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
@@ -35,13 +34,12 @@ use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
-    self, DeletionStrategy, IndexerConfig, PrefixWordPairsProximityDocids, UpdateIndexingStep,
-    WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
+    IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
-use crate::{Index, Result, RoaringBitmapCodec};
+use crate::{CboRoaringBitmapCodec, Index, Result};
 
 static MERGED_DATABASE_COUNT: usize = 7;
-static PREFIX_DATABASE_COUNT: usize = 5;
+static PREFIX_DATABASE_COUNT: usize = 4;
 static TOTAL_POSTING_DATABASE_COUNT: usize = MERGED_DATABASE_COUNT + PREFIX_DATABASE_COUNT;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -89,7 +87,6 @@ pub struct IndexDocumentsConfig {
     pub words_positions_level_group_size: Option<NonZeroU32>,
     pub words_positions_min_level_size: Option<NonZeroU32>,
     pub update_method: IndexDocumentsMethod,
-    pub deletion_strategy: DeletionStrategy,
     pub autogenerate_docids: bool,
 }
 
@@ -181,6 +178,7 @@ where
 
         // Early return when there is no document to add
         if to_delete.is_empty() {
+            // Maintains Invariant: remove documents actually always returns Ok for the inner result
             return Ok((self, Ok(0)));
         }
 
@@ -193,14 +191,48 @@ where
 
         self.deleted_documents += deleted_documents;
 
+        // Maintains Invariant: remove documents actually always returns Ok for the inner result
         Ok((self, Ok(deleted_documents)))
+    }
+
+    /// Removes documents from db using their internal document ids.
+    ///
+    /// # Warning
+    ///
+    /// This function is dangerous and will only work correctly if:
+    ///
+    /// - All the passed ids currently exist in the database
+    /// - No batching using the standards `remove_documents` and `add_documents` took place
+    ///
+    /// TODO: make it impossible to call `remove_documents` or `add_documents` on an instance that calls this function.
+    pub fn remove_documents_from_db_no_batch(
+        mut self,
+        to_delete: &RoaringBitmap,
+    ) -> Result<(Self, u64)> {
+        puffin::profile_function!();
+
+        // Early return when there is no document to add
+        if to_delete.is_empty() {
+            return Ok((self, 0));
+        }
+
+        let deleted_documents = self
+            .transform
+            .as_mut()
+            .expect("Invalid document deletion state")
+            .remove_documents_from_db_no_batch(to_delete, self.wtxn, &self.should_abort)?
+            as u64;
+
+        self.deleted_documents += deleted_documents;
+
+        Ok((self, deleted_documents))
     }
 
     #[logging_timer::time("IndexDocuments::{}")]
     pub fn execute(mut self) -> Result<DocumentAdditionResult> {
         puffin::profile_function!();
 
-        if self.added_documents == 0 {
+        if self.added_documents == 0 && self.deleted_documents == 0 {
             let number_of_documents = self.index.number_of_documents(self.wtxn)?;
             return Ok(DocumentAdditionResult { indexed_documents: 0, number_of_documents });
         }
@@ -244,9 +276,6 @@ where
             primary_key,
             fields_ids_map,
             field_distribution,
-            new_external_documents_ids,
-            new_documents_ids,
-            replaced_documents_ids,
             documents_count,
             original_documents,
             flattened_documents,
@@ -370,29 +399,12 @@ where
                 let _ = lmdb_writer_sx.send(Err(e));
             }
 
-            // needs to be droped to avoid channel waiting lock.
+            // needs to be dropped to avoid channel waiting lock.
             drop(lmdb_writer_sx)
         });
 
-        // We delete the documents that this document addition replaces. This way we are
-        // able to simply insert all the documents even if they already exist in the database.
-        if !replaced_documents_ids.is_empty() {
-            let mut deletion_builder = update::DeleteDocuments::new(self.wtxn, self.index)?;
-            deletion_builder.strategy(self.config.deletion_strategy);
-            debug!("documents to delete {:?}", replaced_documents_ids);
-            deletion_builder.delete_documents(&replaced_documents_ids);
-            let deleted_documents_result = deletion_builder.execute_inner()?;
-            debug!("{} documents actually deleted", deleted_documents_result.deleted_documents);
-        }
-
-        let index_documents_ids = self.index.documents_ids(self.wtxn)?;
-        let index_is_empty = index_documents_ids.is_empty();
+        let index_is_empty = self.index.number_of_documents(self.wtxn)? == 0;
         let mut final_documents_ids = RoaringBitmap::new();
-        let mut word_pair_proximity_docids = None;
-        let mut word_position_docids = None;
-        let mut word_fid_docids = None;
-        let mut word_docids = None;
-        let mut exact_word_docids = None;
 
         let mut databases_seen = 0;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
@@ -400,34 +412,39 @@ where
             total_databases: TOTAL_POSTING_DATABASE_COUNT,
         });
 
+        let mut word_position_docids = None;
+        let mut word_fid_docids = None;
+        let mut word_docids = None;
+        let mut exact_word_docids = None;
+
         for result in lmdb_writer_rx {
             if (self.should_abort)() {
                 return Err(Error::InternalError(InternalError::AbortedIndexation));
             }
 
             let typed_chunk = match result? {
-                TypedChunk::WordDocids { word_docids_reader, exact_word_docids_reader } => {
+                TypedChunk::WordDocids {
+                    word_docids_reader,
+                    exact_word_docids_reader,
+                    word_fid_docids_reader,
+                } => {
                     let cloneable_chunk = unsafe { as_cloneable_grenad(&word_docids_reader)? };
                     word_docids = Some(cloneable_chunk);
                     let cloneable_chunk =
                         unsafe { as_cloneable_grenad(&exact_word_docids_reader)? };
                     exact_word_docids = Some(cloneable_chunk);
-                    TypedChunk::WordDocids { word_docids_reader, exact_word_docids_reader }
-                }
-                TypedChunk::WordPairProximityDocids(chunk) => {
-                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
-                    word_pair_proximity_docids = Some(cloneable_chunk);
-                    TypedChunk::WordPairProximityDocids(chunk)
+                    let cloneable_chunk = unsafe { as_cloneable_grenad(&word_fid_docids_reader)? };
+                    word_fid_docids = Some(cloneable_chunk);
+                    TypedChunk::WordDocids {
+                        word_docids_reader,
+                        exact_word_docids_reader,
+                        word_fid_docids_reader,
+                    }
                 }
                 TypedChunk::WordPositionDocids(chunk) => {
                     let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
                     word_position_docids = Some(cloneable_chunk);
                     TypedChunk::WordPositionDocids(chunk)
-                }
-                TypedChunk::WordFidDocids(chunk) => {
-                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
-                    word_fid_docids = Some(cloneable_chunk);
-                    TypedChunk::WordFidDocids(chunk)
                 }
                 otherwise => otherwise,
             };
@@ -460,25 +477,16 @@ where
 
         // We write the primary key field id into the main database
         self.index.put_primary_key(self.wtxn, &primary_key)?;
-
-        // We write the external documents ids into the main database.
-        let mut external_documents_ids = self.index.external_documents_ids(self.wtxn)?;
-        external_documents_ids.insert_ids(&new_external_documents_ids)?;
-        let external_documents_ids = external_documents_ids.into_static();
-        self.index.put_external_documents_ids(self.wtxn, &external_documents_ids)?;
-
-        let all_documents_ids = index_documents_ids | new_documents_ids;
-        self.index.put_documents_ids(self.wtxn, &all_documents_ids)?;
+        let number_of_documents = self.index.number_of_documents(self.wtxn)?;
 
         self.execute_prefix_databases(
             word_docids,
             exact_word_docids,
-            word_pair_proximity_docids,
             word_position_docids,
             word_fid_docids,
         )?;
 
-        Ok(all_documents_ids.len())
+        Ok(number_of_documents)
     }
 
     #[logging_timer::time("IndexDocuments::{}")]
@@ -486,7 +494,6 @@ where
         self,
         word_docids: Option<grenad::Reader<CursorClonableMmap>>,
         exact_word_docids: Option<grenad::Reader<CursorClonableMmap>>,
-        word_pair_proximity_docids: Option<grenad::Reader<CursorClonableMmap>>,
         word_position_docids: Option<grenad::Reader<CursorClonableMmap>>,
         word_fid_docids: Option<grenad::Reader<CursorClonableMmap>>,
     ) -> Result<()>
@@ -607,32 +614,6 @@ where
             total_databases: TOTAL_POSTING_DATABASE_COUNT,
         });
 
-        if let Some(word_pair_proximity_docids) = word_pair_proximity_docids {
-            // Run the word prefix pair proximity docids update operation.
-            PrefixWordPairsProximityDocids::new(
-                self.wtxn,
-                self.index,
-                self.indexer_config.chunk_compression_type,
-                self.indexer_config.chunk_compression_level,
-            )
-            .execute(
-                word_pair_proximity_docids,
-                &new_prefix_fst_words,
-                &common_prefix_fst_words,
-                &del_prefix_fst_words,
-            )?;
-        }
-
-        if (self.should_abort)() {
-            return Err(Error::InternalError(InternalError::AbortedIndexation));
-        }
-
-        databases_seen += 1;
-        (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
-            databases_seen,
-            total_databases: TOTAL_POSTING_DATABASE_COUNT,
-        });
-
         if let Some(word_position_docids) = word_position_docids {
             // Run the words prefix position docids update operation.
             let mut builder = WordPrefixIntegerDocids::new(
@@ -690,8 +671,8 @@ where
 fn execute_word_prefix_docids(
     txn: &mut heed::RwTxn,
     reader: grenad::Reader<Cursor<ClonableMmap>>,
-    word_docids_db: Database<Str, RoaringBitmapCodec>,
-    word_prefix_docids_db: Database<Str, RoaringBitmapCodec>,
+    word_docids_db: Database<Str, CboRoaringBitmapCodec>,
+    word_prefix_docids_db: Database<Str, CboRoaringBitmapCodec>,
     indexer_config: &IndexerConfig,
     new_prefix_fst_words: &[String],
     common_prefix_fst_words: &[&[String]],
@@ -712,14 +693,15 @@ fn execute_word_prefix_docids(
 #[cfg(test)]
 mod tests {
     use big_s::S;
+    use fst::IntoStreamer;
+    use heed::RwTxn;
     use maplit::hashset;
 
     use super::*;
     use crate::documents::documents_batch_reader_from_objects;
     use crate::index::tests::TempIndex;
     use crate::search::TermsMatchingStrategy;
-    use crate::update::DeleteDocuments;
-    use crate::{db_snap, BEU16};
+    use crate::{db_snap, Filter, Search, BEU16};
 
     #[test]
     fn simple_document_replacement() {
@@ -810,11 +792,10 @@ mod tests {
         assert_eq!(count, 1);
 
         // Check that we get only one document from the database.
-        // Since the document has been deleted and re-inserted, its internal docid has been incremented to 1
-        let docs = index.documents(&rtxn, Some(1)).unwrap();
+        let docs = index.documents(&rtxn, Some(0)).unwrap();
         assert_eq!(docs.len(), 1);
         let (id, doc) = docs[0];
-        assert_eq!(id, 1);
+        assert_eq!(id, 0);
 
         // Check that this document is equal to the last one sent.
         let mut doc_iter = doc.iter();
@@ -875,7 +856,7 @@ mod tests {
         assert_eq!(count, 3);
 
         // the document 0 has been deleted and reinserted with the id 3
-        let docs = index.documents(&rtxn, vec![1, 2, 3]).unwrap();
+        let docs = index.documents(&rtxn, vec![1, 2, 0]).unwrap();
         let kevin_position =
             docs.iter().position(|(_, d)| d.get(0).unwrap() == br#""updated kevin""#).unwrap();
         assert_eq!(kevin_position, 2);
@@ -1021,7 +1002,6 @@ mod tests {
         assert_eq!(count, 6);
 
         db_snap!(index, word_docids, "updated");
-        db_snap!(index, soft_deleted_documents_ids, "updated", @"[0, 1, 4, ]");
 
         drop(rtxn);
     }
@@ -1124,17 +1104,15 @@ mod tests {
                 { "objectId": 30,  "title": "Hamlet", "_geo": { "lat": 12, "lng": 89 } }
             ]))
             .unwrap();
-        let mut wtxn = index.write_txn().unwrap();
-        assert_eq!(index.primary_key(&wtxn).unwrap(), Some("objectId"));
 
         // Delete not all of the documents but some of them.
-        let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        builder.delete_external_id("30");
-        builder.execute().unwrap();
+        index.delete_document("30");
 
-        let external_documents_ids = index.external_documents_ids(&wtxn).unwrap();
-        assert!(external_documents_ids.get("30").is_none());
-        wtxn.commit().unwrap();
+        let txn = index.read_txn().unwrap();
+        assert_eq!(index.primary_key(&txn).unwrap(), Some("objectId"));
+
+        let external_documents_ids = index.external_documents_ids();
+        assert!(external_documents_ids.get(&txn, "30").unwrap().is_none());
 
         index
             .add_documents(documents!([
@@ -1143,8 +1121,8 @@ mod tests {
             .unwrap();
 
         let wtxn = index.write_txn().unwrap();
-        let external_documents_ids = index.external_documents_ids(&wtxn).unwrap();
-        assert!(external_documents_ids.get("30").is_some());
+        let external_documents_ids = index.external_documents_ids();
+        assert!(external_documents_ids.get(&wtxn, "30").unwrap().is_some());
         wtxn.commit().unwrap();
 
         index
@@ -1438,8 +1416,10 @@ mod tests {
         index.add_documents(documents!({ "a" : { "b" : { "c" :  1 }}})).unwrap();
 
         let rtxn = index.read_txn().unwrap();
-        let external_documents_ids = index.external_documents_ids(&rtxn).unwrap();
-        assert!(external_documents_ids.get("1").is_some());
+        let all_documents_count = index.all_documents(&rtxn).unwrap().count();
+        assert_eq!(all_documents_count, 1);
+        let external_documents_ids = index.external_documents_ids();
+        assert!(external_documents_ids.get(&rtxn, "1").unwrap().is_some());
     }
 
     #[test]
@@ -1493,12 +1473,6 @@ mod tests {
         3   2    second       second
         3   3    third        third
         "###);
-        db_snap!(index, string_faceted_documents_ids, @r###"
-        0   []
-        1   []
-        2   []
-        3   [0, 1, 2, 3, ]
-        "###);
 
         let rtxn = index.read_txn().unwrap();
 
@@ -1522,12 +1496,6 @@ mod tests {
 
         db_snap!(index, facet_id_string_docids, @"");
         db_snap!(index, field_id_docid_facet_strings, @"");
-        db_snap!(index, string_faceted_documents_ids, @r###"
-        0   []
-        1   []
-        2   []
-        3   [0, 1, 2, 3, ]
-        "###);
 
         let rtxn = index.read_txn().unwrap();
 
@@ -1553,12 +1521,6 @@ mod tests {
         3   1    first        first
         3   2    second       second
         3   3    third        third
-        "###);
-        db_snap!(index, string_faceted_documents_ids, @r###"
-        0   []
-        1   []
-        2   []
-        3   [0, 1, 2, 3, ]
         "###);
 
         let rtxn = index.read_txn().unwrap();
@@ -1722,7 +1684,7 @@ mod tests {
 
         let wtxn = index.read_txn().unwrap();
 
-        let map = index.external_documents_ids(&wtxn).unwrap().to_hash_map();
+        let map = index.external_documents_ids().to_hash_map(&wtxn).unwrap();
         let ids = map.values().collect::<HashSet<_>>();
 
         assert_eq!(ids.len(), map.len());
@@ -2534,17 +2496,8 @@ mod tests {
         db_snap!(index, word_fid_docids, 2, @"a48d3f88db33f94bc23110a673ea49e4");
         db_snap!(index, word_position_docids, 2, @"3c9e66c6768ae2cf42b46b2c46e46a83");
 
-        let mut wtxn = index.write_txn().unwrap();
-
         // Delete not all of the documents but some of them.
-        let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        builder.strategy(DeletionStrategy::AlwaysHard);
-        builder.delete_external_id("0");
-        builder.delete_external_id("3");
-        let result = builder.execute().unwrap();
-        println!("{result:?}");
-
-        wtxn.commit().unwrap();
+        index.delete_documents(vec!["0".into(), "3".into()]);
 
         db_snap!(index, word_fid_docids, 3, @"4c2e2a1832e5802796edc1638136d933");
         db_snap!(index, word_position_docids, 3, @"74f556b91d161d997a89468b4da1cb8f");
@@ -2599,8 +2552,7 @@ mod tests {
             ),
         ]
         */
-        let mut index = TempIndex::new();
-        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysHard;
+        let index = TempIndex::new();
 
         // START OF BATCH
 
@@ -2640,8 +2592,7 @@ mod tests {
         {"id":1,"doggo":"bernese"}
         "###);
         db_snap!(index, external_documents_ids, @r###"
-        soft:
-        hard:
+        docids:
         1                        0
         "###);
 
@@ -2686,12 +2637,9 @@ mod tests {
         "###);
 
         db_snap!(index, external_documents_ids, @r###"
-        soft:
-        hard:
+        docids:
         0                        1
         "###);
-
-        db_snap!(index, soft_deleted_documents_ids, @"[]");
 
         // BATCH 3
 
@@ -2733,5 +2681,538 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let res = index.search(&rtxn).execute().unwrap();
         index.documents(&rtxn, res.documents_ids).unwrap();
+    }
+
+    fn delete_documents<'t>(
+        wtxn: &mut RwTxn<'t, '_>,
+        index: &'t TempIndex,
+        external_ids: &[&str],
+    ) -> Vec<u32> {
+        let external_document_ids = index.external_documents_ids();
+        let ids_to_delete: Vec<u32> = external_ids
+            .iter()
+            .map(|id| external_document_ids.get(wtxn, id).unwrap().unwrap())
+            .collect();
+
+        // Delete some documents.
+        index.delete_documents_using_wtxn(
+            wtxn,
+            external_ids.iter().map(ToString::to_string).collect(),
+        );
+
+        ids_to_delete
+    }
+
+    #[test]
+    fn delete_documents_with_numbers_as_primary_key() {
+        let index = TempIndex::new();
+
+        let mut wtxn = index.write_txn().unwrap();
+        index
+            .add_documents_using_wtxn(
+                &mut wtxn,
+                documents!([
+                    { "id": 0, "name": "kevin", "object": { "key1": "value1", "key2": "value2" } },
+                    { "id": 1, "name": "kevina", "array": ["I", "am", "fine"] },
+                    { "id": 2, "name": "benoit", "array_of_object": [{ "wow": "amazing" }] }
+                ]),
+            )
+            .unwrap();
+
+        // delete those documents, ids are synchronous therefore 0, 1, and 2.
+        index.delete_documents_using_wtxn(&mut wtxn, vec![S("0"), S("1"), S("2")]);
+
+        wtxn.commit().unwrap();
+
+        // All these snapshots should be empty since the database was cleared
+        db_snap!(index, documents_ids);
+        db_snap!(index, word_docids);
+        db_snap!(index, word_pair_proximity_docids);
+        db_snap!(index, facet_id_exists_docids);
+
+        let rtxn = index.read_txn().unwrap();
+
+        assert!(index.field_distribution(&rtxn).unwrap().is_empty());
+    }
+
+    #[test]
+    fn delete_documents_with_strange_primary_key() {
+        let index = TempIndex::new();
+
+        index
+            .update_settings(|settings| settings.set_searchable_fields(vec!["name".to_string()]))
+            .unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        index
+            .add_documents_using_wtxn(
+                &mut wtxn,
+                documents!([
+                    { "mysuperid": 0, "name": "kevin" },
+                    { "mysuperid": 1, "name": "kevina" },
+                    { "mysuperid": 2, "name": "benoit" }
+                ]),
+            )
+            .unwrap();
+        wtxn.commit().unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+
+        // Delete not all of the documents but some of them.
+        index.delete_documents_using_wtxn(&mut wtxn, vec![S("0"), S("1")]);
+
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents_ids);
+        db_snap!(index, word_docids);
+        db_snap!(index, word_pair_proximity_docids);
+    }
+
+    #[test]
+    fn filtered_placeholder_search_should_not_return_deleted_documents() {
+        let index = TempIndex::new();
+
+        let mut wtxn = index.write_txn().unwrap();
+
+        index
+            .update_settings_using_wtxn(&mut wtxn, |settings| {
+                settings.set_primary_key(S("docid"));
+                settings.set_filterable_fields(hashset! { S("label"), S("label2") });
+            })
+            .unwrap();
+
+        index
+            .add_documents_using_wtxn(
+                &mut wtxn,
+                documents!([
+                    { "docid": "1_4",  "label": ["sign"] },
+                    { "docid": "1_5",  "label": ["letter"] },
+                    { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"] },
+                    { "docid": "1_36", "label": ["drawing","painting","pattern"] },
+                    { "docid": "1_37", "label": ["art","drawing","outdoor"] },
+                    { "docid": "1_38", "label": ["aquarium","art","drawing"] },
+                    { "docid": "1_39", "label": ["abstract"] },
+                    { "docid": "1_40", "label": ["cartoon"] },
+                    { "docid": "1_41", "label": ["art","drawing"] },
+                    { "docid": "1_42", "label": ["art","pattern"] },
+                    { "docid": "1_43", "label": ["abstract","art","drawing","pattern"] },
+                    { "docid": "1_44", "label": ["drawing"] },
+                    { "docid": "1_45", "label": ["art"] },
+                    { "docid": "1_46", "label": ["abstract","colorfulness","pattern"] },
+                    { "docid": "1_47", "label": ["abstract","pattern"] },
+                    { "docid": "1_52", "label": ["abstract","cartoon"] },
+                    { "docid": "1_57", "label": ["abstract","drawing","pattern"] },
+                    { "docid": "1_58", "label": ["abstract","art","cartoon"] },
+                    { "docid": "1_68", "label": ["design"] },
+                    { "docid": "1_69", "label": ["geometry"] },
+                    { "docid": "1_70", "label2": ["geometry", 1.2] },
+                    { "docid": "1_71", "label2": ["design", 2.2] },
+                    { "docid": "1_72", "label2": ["geometry", 1.2] }
+                ]),
+            )
+            .unwrap();
+
+        delete_documents(&mut wtxn, &index, &["1_4", "1_70", "1_72"]);
+
+        // Placeholder search with filter
+        let filter = Filter::from_str("label = sign").unwrap().unwrap();
+        let results = index.search(&wtxn).filter(filter).execute().unwrap();
+        assert!(results.documents_ids.is_empty());
+
+        wtxn.commit().unwrap();
+
+        db_snap!(index, word_docids);
+        db_snap!(index, facet_id_f64_docids);
+        db_snap!(index, word_pair_proximity_docids);
+        db_snap!(index, facet_id_exists_docids);
+        db_snap!(index, facet_id_string_docids);
+    }
+
+    #[test]
+    fn placeholder_search_should_not_return_deleted_documents() {
+        let index = TempIndex::new();
+
+        let mut wtxn = index.write_txn().unwrap();
+        index
+            .update_settings_using_wtxn(&mut wtxn, |settings| {
+                settings.set_primary_key(S("docid"));
+            })
+            .unwrap();
+
+        index
+            .add_documents_using_wtxn(
+                &mut wtxn,
+                documents!([
+                    { "docid": "1_4",  "label": ["sign"] },
+                    { "docid": "1_5",  "label": ["letter"] },
+                    { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"] },
+                    { "docid": "1_36", "label": ["drawing","painting","pattern"] },
+                    { "docid": "1_37", "label": ["art","drawing","outdoor"] },
+                    { "docid": "1_38", "label": ["aquarium","art","drawing"] },
+                    { "docid": "1_39", "label": ["abstract"] },
+                    { "docid": "1_40", "label": ["cartoon"] },
+                    { "docid": "1_41", "label": ["art","drawing"] },
+                    { "docid": "1_42", "label": ["art","pattern"] },
+                    { "docid": "1_43", "label": ["abstract","art","drawing","pattern"] },
+                    { "docid": "1_44", "label": ["drawing"] },
+                    { "docid": "1_45", "label": ["art"] },
+                    { "docid": "1_46", "label": ["abstract","colorfulness","pattern"] },
+                    { "docid": "1_47", "label": ["abstract","pattern"] },
+                    { "docid": "1_52", "label": ["abstract","cartoon"] },
+                    { "docid": "1_57", "label": ["abstract","drawing","pattern"] },
+                    { "docid": "1_58", "label": ["abstract","art","cartoon"] },
+                    { "docid": "1_68", "label": ["design"] },
+                    { "docid": "1_69", "label": ["geometry"] },
+                    { "docid": "1_70", "label2": ["geometry", 1.2] },
+                    { "docid": "1_71", "label2": ["design", 2.2] },
+                    { "docid": "1_72", "label2": ["geometry", 1.2] }
+                ]),
+            )
+            .unwrap();
+
+        let deleted_internal_ids = delete_documents(&mut wtxn, &index, &["1_4"]);
+
+        // Placeholder search
+        let results = index.search(&wtxn).execute().unwrap();
+        assert!(!results.documents_ids.is_empty());
+        for id in results.documents_ids.iter() {
+            assert!(
+                !deleted_internal_ids.contains(id),
+                "The document {} was supposed to be deleted",
+                id
+            );
+        }
+
+        wtxn.commit().unwrap();
+    }
+
+    #[test]
+    fn search_should_not_return_deleted_documents() {
+        let index = TempIndex::new();
+
+        let mut wtxn = index.write_txn().unwrap();
+        index
+            .update_settings_using_wtxn(&mut wtxn, |settings| {
+                settings.set_primary_key(S("docid"));
+            })
+            .unwrap();
+
+        index
+            .add_documents_using_wtxn(
+                &mut wtxn,
+                documents!([
+                    { "docid": "1_4",  "label": ["sign"] },
+                    { "docid": "1_5",  "label": ["letter"] },
+                    { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"] },
+                    { "docid": "1_36", "label": ["drawing","painting","pattern"] },
+                    { "docid": "1_37", "label": ["art","drawing","outdoor"] },
+                    { "docid": "1_38", "label": ["aquarium","art","drawing"] },
+                    { "docid": "1_39", "label": ["abstract"] },
+                    { "docid": "1_40", "label": ["cartoon"] },
+                    { "docid": "1_41", "label": ["art","drawing"] },
+                    { "docid": "1_42", "label": ["art","pattern"] },
+                    { "docid": "1_43", "label": ["abstract","art","drawing","pattern"] },
+                    { "docid": "1_44", "label": ["drawing"] },
+                    { "docid": "1_45", "label": ["art"] },
+                    { "docid": "1_46", "label": ["abstract","colorfulness","pattern"] },
+                    { "docid": "1_47", "label": ["abstract","pattern"] },
+                    { "docid": "1_52", "label": ["abstract","cartoon"] },
+                    { "docid": "1_57", "label": ["abstract","drawing","pattern"] },
+                    { "docid": "1_58", "label": ["abstract","art","cartoon"] },
+                    { "docid": "1_68", "label": ["design"] },
+                    { "docid": "1_69", "label": ["geometry"] },
+                    { "docid": "1_70", "label2": ["geometry", 1.2] },
+                    { "docid": "1_71", "label2": ["design", 2.2] },
+                    { "docid": "1_72", "label2": ["geometry", 1.2] }
+                ]),
+            )
+            .unwrap();
+
+        let deleted_internal_ids = delete_documents(&mut wtxn, &index, &["1_7", "1_52"]);
+
+        // search for abstract
+        let results = index.search(&wtxn).query("abstract").execute().unwrap();
+        assert!(!results.documents_ids.is_empty());
+        for id in results.documents_ids.iter() {
+            assert!(
+                !deleted_internal_ids.contains(id),
+                "The document {} was supposed to be deleted",
+                id
+            );
+        }
+
+        wtxn.commit().unwrap();
+    }
+
+    #[test]
+    fn geo_filtered_placeholder_search_should_not_return_deleted_documents() {
+        let index = TempIndex::new();
+
+        let mut wtxn = index.write_txn().unwrap();
+        index
+            .update_settings_using_wtxn(&mut wtxn, |settings| {
+                settings.set_primary_key(S("id"));
+                settings.set_filterable_fields(hashset!(S("_geo")));
+                settings.set_sortable_fields(hashset!(S("_geo")));
+            })
+            .unwrap();
+
+        index.add_documents_using_wtxn(&mut wtxn, documents!([
+            { "id": "1",  "city": "Lille",             "_geo": { "lat": 50.6299, "lng": 3.0569 } },
+            { "id": "2",  "city": "Mons-en-Barœul",    "_geo": { "lat": 50.6415, "lng": 3.1106 } },
+            { "id": "3",  "city": "Hellemmes",         "_geo": { "lat": 50.6312, "lng": 3.1106 } },
+            { "id": "4",  "city": "Villeneuve-d'Ascq", "_geo": { "lat": 50.6224, "lng": 3.1476 } },
+            { "id": "5",  "city": "Hem",               "_geo": { "lat": 50.6552, "lng": 3.1897 } },
+            { "id": "6",  "city": "Roubaix",           "_geo": { "lat": 50.6924, "lng": 3.1763 } },
+            { "id": "7",  "city": "Tourcoing",         "_geo": { "lat": 50.7263, "lng": 3.1541 } },
+            { "id": "8",  "city": "Mouscron",          "_geo": { "lat": 50.7453, "lng": 3.2206 } },
+            { "id": "9",  "city": "Tournai",           "_geo": { "lat": 50.6053, "lng": 3.3758 } },
+            { "id": "10", "city": "Ghent",             "_geo": { "lat": 51.0537, "lng": 3.6957 } },
+            { "id": "11", "city": "Brussels",          "_geo": { "lat": 50.8466, "lng": 4.3370 } },
+            { "id": "12", "city": "Charleroi",         "_geo": { "lat": 50.4095, "lng": 4.4347 } },
+            { "id": "13", "city": "Mons",              "_geo": { "lat": 50.4502, "lng": 3.9623 } },
+            { "id": "14", "city": "Valenciennes",      "_geo": { "lat": 50.3518, "lng": 3.5326 } },
+            { "id": "15", "city": "Arras",             "_geo": { "lat": 50.2844, "lng": 2.7637 } },
+            { "id": "16", "city": "Cambrai",           "_geo": { "lat": 50.1793, "lng": 3.2189 } },
+            { "id": "17", "city": "Bapaume",           "_geo": { "lat": 50.1112, "lng": 2.8547 } },
+            { "id": "18", "city": "Amiens",            "_geo": { "lat": 49.9314, "lng": 2.2710 } },
+            { "id": "19", "city": "Compiègne",         "_geo": { "lat": 49.4449, "lng": 2.7913 } },
+            { "id": "20", "city": "Paris",             "_geo": { "lat": 48.9021, "lng": 2.3708 } }
+        ])).unwrap();
+
+        let external_ids_to_delete = ["5", "6", "7", "12", "17", "19"];
+        let deleted_internal_ids = delete_documents(&mut wtxn, &index, &external_ids_to_delete);
+
+        // Placeholder search with geo filter
+        let filter = Filter::from_str("_geoRadius(50.6924, 3.1763, 20000)").unwrap().unwrap();
+        let results = index.search(&wtxn).filter(filter).execute().unwrap();
+        assert!(!results.documents_ids.is_empty());
+        for id in results.documents_ids.iter() {
+            assert!(
+                !deleted_internal_ids.contains(id),
+                "The document {} was supposed to be deleted",
+                id
+            );
+        }
+
+        wtxn.commit().unwrap();
+
+        db_snap!(index, facet_id_f64_docids);
+        db_snap!(index, facet_id_string_docids);
+    }
+
+    #[test]
+    fn get_documents_should_not_return_deleted_documents() {
+        let index = TempIndex::new();
+
+        let mut wtxn = index.write_txn().unwrap();
+        index
+            .update_settings_using_wtxn(&mut wtxn, |settings| {
+                settings.set_primary_key(S("docid"));
+            })
+            .unwrap();
+
+        index
+            .add_documents_using_wtxn(
+                &mut wtxn,
+                documents!([
+                    { "docid": "1_4",  "label": ["sign"] },
+                    { "docid": "1_5",  "label": ["letter"] },
+                    { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"] },
+                    { "docid": "1_36", "label": ["drawing","painting","pattern"] },
+                    { "docid": "1_37", "label": ["art","drawing","outdoor"] },
+                    { "docid": "1_38", "label": ["aquarium","art","drawing"] },
+                    { "docid": "1_39", "label": ["abstract"] },
+                    { "docid": "1_40", "label": ["cartoon"] },
+                    { "docid": "1_41", "label": ["art","drawing"] },
+                    { "docid": "1_42", "label": ["art","pattern"] },
+                    { "docid": "1_43", "label": ["abstract","art","drawing","pattern"] },
+                    { "docid": "1_44", "label": ["drawing"] },
+                    { "docid": "1_45", "label": ["art"] },
+                    { "docid": "1_46", "label": ["abstract","colorfulness","pattern"] },
+                    { "docid": "1_47", "label": ["abstract","pattern"] },
+                    { "docid": "1_52", "label": ["abstract","cartoon"] },
+                    { "docid": "1_57", "label": ["abstract","drawing","pattern"] },
+                    { "docid": "1_58", "label": ["abstract","art","cartoon"] },
+                    { "docid": "1_68", "label": ["design"] },
+                    { "docid": "1_69", "label": ["geometry"] },
+                    { "docid": "1_70", "label2": ["geometry", 1.2] },
+                    { "docid": "1_71", "label2": ["design", 2.2] },
+                    { "docid": "1_72", "label2": ["geometry", 1.2] }
+                ]),
+            )
+            .unwrap();
+
+        let deleted_external_ids = ["1_7", "1_52"];
+        let deleted_internal_ids = delete_documents(&mut wtxn, &index, &deleted_external_ids);
+
+        // list all documents
+        let results = index.all_documents(&wtxn).unwrap();
+        for result in results {
+            let (id, _) = result.unwrap();
+            assert!(
+                !deleted_internal_ids.contains(&id),
+                "The document {} was supposed to be deleted",
+                id
+            );
+        }
+
+        // list internal document ids
+        let results = index.documents_ids(&wtxn).unwrap();
+        for id in results {
+            assert!(
+                !deleted_internal_ids.contains(&id),
+                "The document {} was supposed to be deleted",
+                id
+            );
+        }
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+
+        // get internal docids from deleted external document ids
+        let results = index.external_documents_ids();
+        for id in deleted_external_ids {
+            assert!(
+                results.get(&rtxn, id).unwrap().is_none(),
+                "The document {} was supposed to be deleted",
+                id
+            );
+        }
+        drop(rtxn);
+    }
+
+    #[test]
+    fn stats_should_not_return_deleted_documents() {
+        let index = TempIndex::new();
+
+        let mut wtxn = index.write_txn().unwrap();
+
+        index
+            .update_settings_using_wtxn(&mut wtxn, |settings| {
+                settings.set_primary_key(S("docid"));
+            })
+            .unwrap();
+
+        index.add_documents_using_wtxn(&mut wtxn, documents!([
+            { "docid": "1_4",  "label": ["sign"]},
+            { "docid": "1_5",  "label": ["letter"]},
+            { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"], "title": "Mickey Mouse"},
+            { "docid": "1_36", "label": ["drawing","painting","pattern"]},
+            { "docid": "1_37", "label": ["art","drawing","outdoor"]},
+            { "docid": "1_38", "label": ["aquarium","art","drawing"], "title": "Nemo"},
+            { "docid": "1_39", "label": ["abstract"]},
+            { "docid": "1_40", "label": ["cartoon"]},
+            { "docid": "1_41", "label": ["art","drawing"]},
+            { "docid": "1_42", "label": ["art","pattern"]},
+            { "docid": "1_43", "label": ["abstract","art","drawing","pattern"], "number": 32i32},
+            { "docid": "1_44", "label": ["drawing"], "number": 44i32},
+            { "docid": "1_45", "label": ["art"]},
+            { "docid": "1_46", "label": ["abstract","colorfulness","pattern"]},
+            { "docid": "1_47", "label": ["abstract","pattern"]},
+            { "docid": "1_52", "label": ["abstract","cartoon"]},
+            { "docid": "1_57", "label": ["abstract","drawing","pattern"]},
+            { "docid": "1_58", "label": ["abstract","art","cartoon"]},
+            { "docid": "1_68", "label": ["design"]},
+            { "docid": "1_69", "label": ["geometry"]}
+        ])).unwrap();
+
+        delete_documents(&mut wtxn, &index, &["1_7", "1_52"]);
+
+        // count internal documents
+        let results = index.number_of_documents(&wtxn).unwrap();
+        assert_eq!(18, results);
+
+        // count field distribution
+        let results = index.field_distribution(&wtxn).unwrap();
+        assert_eq!(Some(&18), results.get("label"));
+        assert_eq!(Some(&1), results.get("title"));
+        assert_eq!(Some(&2), results.get("number"));
+
+        wtxn.commit().unwrap();
+    }
+
+    #[test]
+    fn stored_detected_script_and_language_should_not_return_deleted_documents() {
+        use charabia::{Language, Script};
+        let index = TempIndex::new();
+        let mut wtxn = index.write_txn().unwrap();
+        index
+            .add_documents_using_wtxn(
+                &mut wtxn,
+                documents!([
+                { "id": "0", "title": "The quick (\"brown\") fox can't jump 32.3 feet, right? Brr, it's 29.3°F!" },
+                { "id": "1", "title": "人人生而自由﹐在尊嚴和權利上一律平等。他們賦有理性和良心﹐並應以兄弟關係的精神互相對待。" },
+                { "id": "2", "title": "הַשּׁוּעָל הַמָּהִיר (״הַחוּם״) לֹא יָכוֹל לִקְפֹּץ 9.94 מֶטְרִים, נָכוֹן? ברר, 1.5°C- בַּחוּץ!" },
+                { "id": "3", "title": "関西国際空港限定トートバッグ すもももももももものうち" },
+                { "id": "4", "title": "ภาษาไทยง่ายนิดเดียว" },
+                { "id": "5", "title": "The quick 在尊嚴和權利上一律平等。" },
+            ]))
+            .unwrap();
+
+        let key_cmn = (Script::Cj, Language::Cmn);
+        let cj_cmn_docs =
+            index.script_language_documents_ids(&wtxn, &key_cmn).unwrap().unwrap_or_default();
+        let mut expected_cj_cmn_docids = RoaringBitmap::new();
+        expected_cj_cmn_docids.push(1);
+        expected_cj_cmn_docids.push(5);
+        assert_eq!(cj_cmn_docs, expected_cj_cmn_docids);
+
+        delete_documents(&mut wtxn, &index, &["1"]);
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let cj_cmn_docs =
+            index.script_language_documents_ids(&rtxn, &key_cmn).unwrap().unwrap_or_default();
+        let mut expected_cj_cmn_docids = RoaringBitmap::new();
+        expected_cj_cmn_docids.push(5);
+        assert_eq!(cj_cmn_docs, expected_cj_cmn_docids);
+    }
+
+    #[test]
+    fn delete_words_exact_attributes() {
+        let index = TempIndex::new();
+
+        index
+            .update_settings(|settings| {
+                settings.set_primary_key(S("id"));
+                settings.set_searchable_fields(vec![S("text"), S("exact")]);
+                settings.set_exact_attributes(vec![S("exact")].into_iter().collect());
+            })
+            .unwrap();
+
+        index
+            .add_documents(documents!([
+                { "id": 0, "text": "hello" },
+                { "id": 1, "exact": "hello"}
+            ]))
+            .unwrap();
+        db_snap!(index, word_docids, 1, @r###"
+        hello            [0, ]
+        "###);
+        db_snap!(index, exact_word_docids, 1, @r###"
+        hello            [1, ]
+        "###);
+        db_snap!(index, words_fst, 1, @"300000000000000001084cfcfc2ce1000000016000000090ea47f");
+
+        let mut wtxn = index.write_txn().unwrap();
+        let deleted_internal_ids = delete_documents(&mut wtxn, &index, &["1"]);
+        wtxn.commit().unwrap();
+
+        db_snap!(index, word_docids, 2, @r###"
+        hello            [0, ]
+        "###);
+        db_snap!(index, exact_word_docids, 2, @"");
+        db_snap!(index, words_fst, 2, @"300000000000000001084cfcfc2ce1000000016000000090ea47f");
+
+        insta::assert_snapshot!(format!("{deleted_internal_ids:?}"), @"[1]");
+        let txn = index.read_txn().unwrap();
+        let words = index.words_fst(&txn).unwrap().into_stream().into_strs().unwrap();
+        insta::assert_snapshot!(format!("{words:?}"), @r###"["hello"]"###);
+
+        let mut s = Search::new(&txn, &index);
+        s.query("hello");
+        let crate::SearchResult { documents_ids, .. } = s.execute().unwrap();
+        insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0]");
     }
 }

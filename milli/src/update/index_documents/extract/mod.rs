@@ -6,7 +6,6 @@ mod extract_fid_word_count_docids;
 mod extract_geo_points;
 mod extract_vector_points;
 mod extract_word_docids;
-mod extract_word_fid_docids;
 mod extract_word_pair_proximity_docids;
 mod extract_word_position_docids;
 
@@ -26,12 +25,11 @@ use self::extract_fid_word_count_docids::extract_fid_word_count_docids;
 use self::extract_geo_points::extract_geo_points;
 use self::extract_vector_points::extract_vector_points;
 use self::extract_word_docids::extract_word_docids;
-use self::extract_word_fid_docids::extract_word_fid_docids;
 use self::extract_word_pair_proximity_docids::extract_word_pair_proximity_docids;
 use self::extract_word_position_docids::extract_word_position_docids;
 use super::helpers::{
-    as_cloneable_grenad, merge_cbo_roaring_bitmaps, merge_roaring_bitmaps, CursorClonableMmap,
-    GrenadParameters, MergeFn, MergeableReader,
+    as_cloneable_grenad, merge_deladd_cbo_roaring_bitmaps, CursorClonableMmap, GrenadParameters,
+    MergeFn, MergeableReader,
 };
 use super::{helpers, TypedChunk};
 use crate::{FieldId, Result};
@@ -65,7 +63,6 @@ pub(crate) fn data_from_obkv_documents(
                 indexer,
                 lmdb_writer_sx.clone(),
                 vectors_field_id,
-                primary_key_id,
             )
         })
         .collect::<Result<()>>()?;
@@ -94,9 +91,9 @@ pub(crate) fn data_from_obkv_documents(
     let (
         docid_word_positions_chunks,
         (
-            docid_fid_facet_numbers_chunks,
+            fid_docid_facet_numbers_chunks,
             (
-                docid_fid_facet_strings_chunks,
+                fid_docid_facet_strings_chunks,
                 (
                     facet_is_null_docids_chunks,
                     (facet_is_empty_docids_chunks, facet_exists_docids_chunks),
@@ -110,7 +107,7 @@ pub(crate) fn data_from_obkv_documents(
         let lmdb_writer_sx = lmdb_writer_sx.clone();
         rayon::spawn(move || {
             debug!("merge {} database", "facet-id-exists-docids");
-            match facet_exists_docids_chunks.merge(merge_cbo_roaring_bitmaps, &indexer) {
+            match facet_exists_docids_chunks.merge(merge_deladd_cbo_roaring_bitmaps, &indexer) {
                 Ok(reader) => {
                     let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetExistsDocids(reader)));
                 }
@@ -126,7 +123,7 @@ pub(crate) fn data_from_obkv_documents(
         let lmdb_writer_sx = lmdb_writer_sx.clone();
         rayon::spawn(move || {
             debug!("merge {} database", "facet-id-is-null-docids");
-            match facet_is_null_docids_chunks.merge(merge_cbo_roaring_bitmaps, &indexer) {
+            match facet_is_null_docids_chunks.merge(merge_deladd_cbo_roaring_bitmaps, &indexer) {
                 Ok(reader) => {
                     let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetIsNullDocids(reader)));
                 }
@@ -142,7 +139,7 @@ pub(crate) fn data_from_obkv_documents(
         let lmdb_writer_sx = lmdb_writer_sx.clone();
         rayon::spawn(move || {
             debug!("merge {} database", "facet-id-is-empty-docids");
-            match facet_is_empty_docids_chunks.merge(merge_cbo_roaring_bitmaps, &indexer) {
+            match facet_is_empty_docids_chunks.merge(merge_deladd_cbo_roaring_bitmaps, &indexer) {
                 Ok(reader) => {
                     let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetIsEmptyDocids(reader)));
                 }
@@ -158,7 +155,7 @@ pub(crate) fn data_from_obkv_documents(
         indexer,
         lmdb_writer_sx.clone(),
         extract_word_pair_proximity_docids,
-        merge_cbo_roaring_bitmaps,
+        merge_deladd_cbo_roaring_bitmaps,
         TypedChunk::WordPairProximityDocids,
         "word-pair-proximity-docids",
     );
@@ -168,24 +165,31 @@ pub(crate) fn data_from_obkv_documents(
         indexer,
         lmdb_writer_sx.clone(),
         extract_fid_word_count_docids,
-        merge_cbo_roaring_bitmaps,
-        TypedChunk::FieldIdWordcountDocids,
+        merge_deladd_cbo_roaring_bitmaps,
+        TypedChunk::FieldIdWordCountDocids,
         "field-id-wordcount-docids",
     );
 
     spawn_extraction_task::<
         _,
         _,
-        Vec<(grenad::Reader<BufReader<File>>, grenad::Reader<BufReader<File>>)>,
+        Vec<(
+            grenad::Reader<BufReader<File>>,
+            grenad::Reader<BufReader<File>>,
+            grenad::Reader<BufReader<File>>,
+        )>,
     >(
         docid_word_positions_chunks.clone(),
         indexer,
         lmdb_writer_sx.clone(),
         move |doc_word_pos, indexer| extract_word_docids(doc_word_pos, indexer, &exact_attributes),
-        merge_roaring_bitmaps,
-        |(word_docids_reader, exact_word_docids_reader)| TypedChunk::WordDocids {
-            word_docids_reader,
-            exact_word_docids_reader,
+        merge_deladd_cbo_roaring_bitmaps,
+        |(word_docids_reader, exact_word_docids_reader, word_fid_docids_reader)| {
+            TypedChunk::WordDocids {
+                word_docids_reader,
+                exact_word_docids_reader,
+                word_fid_docids_reader,
+            }
         },
         "word-docids",
     );
@@ -195,36 +199,27 @@ pub(crate) fn data_from_obkv_documents(
         indexer,
         lmdb_writer_sx.clone(),
         extract_word_position_docids,
-        merge_cbo_roaring_bitmaps,
+        merge_deladd_cbo_roaring_bitmaps,
         TypedChunk::WordPositionDocids,
         "word-position-docids",
     );
-    spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
-        docid_word_positions_chunks,
-        indexer,
-        lmdb_writer_sx.clone(),
-        extract_word_fid_docids,
-        merge_cbo_roaring_bitmaps,
-        TypedChunk::WordFidDocids,
-        "word-fid-docids",
-    );
 
     spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
-        docid_fid_facet_strings_chunks,
+        fid_docid_facet_strings_chunks,
         indexer,
         lmdb_writer_sx.clone(),
         extract_facet_string_docids,
-        merge_cbo_roaring_bitmaps,
+        merge_deladd_cbo_roaring_bitmaps,
         TypedChunk::FieldIdFacetStringDocids,
         "field-id-facet-string-docids",
     );
 
     spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
-        docid_fid_facet_numbers_chunks,
+        fid_docid_facet_numbers_chunks,
         indexer,
         lmdb_writer_sx,
         extract_facet_number_docids,
-        merge_cbo_roaring_bitmaps,
+        merge_deladd_cbo_roaring_bitmaps,
         TypedChunk::FieldIdFacetNumberDocids,
         "field-id-facet-number-docids",
     );
@@ -278,7 +273,6 @@ fn send_original_documents_data(
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     vectors_field_id: Option<FieldId>,
-    primary_key_id: FieldId,
 ) -> Result<()> {
     let original_documents_chunk =
         original_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
@@ -287,12 +281,7 @@ fn send_original_documents_data(
         let documents_chunk_cloned = original_documents_chunk.clone();
         let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
         rayon::spawn(move || {
-            let result = extract_vector_points(
-                documents_chunk_cloned,
-                indexer,
-                primary_key_id,
-                vectors_field_id,
-            );
+            let result = extract_vector_points(documents_chunk_cloned, indexer, vectors_field_id);
             let _ = match result {
                 Ok(vector_points) => {
                     lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints(vector_points)))
@@ -356,10 +345,10 @@ fn send_and_extract_flattened_documents_data(
         });
     }
 
-    let (docid_word_positions_chunk, docid_fid_facet_values_chunks): (Result<_>, Result<_>) =
+    let (docid_word_positions_chunk, fid_docid_facet_values_chunks): (Result<_>, Result<_>) =
         rayon::join(
             || {
-                let (documents_ids, docid_word_positions_chunk, script_language_pair) =
+                let (docid_word_positions_chunk, script_language_pair) =
                     extract_docid_word_positions(
                         flattened_documents_chunk.clone(),
                         indexer,
@@ -369,9 +358,6 @@ fn send_and_extract_flattened_documents_data(
                         *dictionary,
                         max_positions_per_attributes,
                     )?;
-
-                // send documents_ids to DB writer
-                let _ = lmdb_writer_sx.send(Ok(TypedChunk::NewDocumentsIds(documents_ids)));
 
                 // send docid_word_positions_chunk to DB writer
                 let docid_word_positions_chunk =
@@ -384,8 +370,8 @@ fn send_and_extract_flattened_documents_data(
             },
             || {
                 let ExtractedFacetValues {
-                    docid_fid_facet_numbers_chunk,
-                    docid_fid_facet_strings_chunk,
+                    fid_docid_facet_numbers_chunk,
+                    fid_docid_facet_strings_chunk,
                     fid_facet_is_null_docids_chunk,
                     fid_facet_is_empty_docids_chunk,
                     fid_facet_exists_docids_chunk,
@@ -396,26 +382,26 @@ fn send_and_extract_flattened_documents_data(
                     geo_fields_ids,
                 )?;
 
-                // send docid_fid_facet_numbers_chunk to DB writer
-                let docid_fid_facet_numbers_chunk =
-                    unsafe { as_cloneable_grenad(&docid_fid_facet_numbers_chunk)? };
+                // send fid_docid_facet_numbers_chunk to DB writer
+                let fid_docid_facet_numbers_chunk =
+                    unsafe { as_cloneable_grenad(&fid_docid_facet_numbers_chunk)? };
 
                 let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdDocidFacetNumbers(
-                    docid_fid_facet_numbers_chunk.clone(),
+                    fid_docid_facet_numbers_chunk.clone(),
                 )));
 
-                // send docid_fid_facet_strings_chunk to DB writer
-                let docid_fid_facet_strings_chunk =
-                    unsafe { as_cloneable_grenad(&docid_fid_facet_strings_chunk)? };
+                // send fid_docid_facet_strings_chunk to DB writer
+                let fid_docid_facet_strings_chunk =
+                    unsafe { as_cloneable_grenad(&fid_docid_facet_strings_chunk)? };
 
                 let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdDocidFacetStrings(
-                    docid_fid_facet_strings_chunk.clone(),
+                    fid_docid_facet_strings_chunk.clone(),
                 )));
 
                 Ok((
-                    docid_fid_facet_numbers_chunk,
+                    fid_docid_facet_numbers_chunk,
                     (
-                        docid_fid_facet_strings_chunk,
+                        fid_docid_facet_strings_chunk,
                         (
                             fid_facet_is_null_docids_chunk,
                             (fid_facet_is_empty_docids_chunk, fid_facet_exists_docids_chunk),
@@ -425,5 +411,5 @@ fn send_and_extract_flattened_documents_data(
             },
         );
 
-    Ok((docid_word_positions_chunk?, docid_fid_facet_values_chunks?))
+    Ok((docid_word_positions_chunk?, fid_docid_facet_values_chunks?))
 }

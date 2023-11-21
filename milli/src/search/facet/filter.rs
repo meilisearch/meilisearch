@@ -223,12 +223,9 @@ impl<'a> Filter<'a> {
 impl<'a> Filter<'a> {
     pub fn evaluate(&self, rtxn: &heed::RoTxn, index: &Index) -> Result<RoaringBitmap> {
         // to avoid doing this for each recursive call we're going to do it ONCE ahead of time
-        let soft_deleted_documents = index.soft_deleted_documents_ids(rtxn)?;
         let filterable_fields = index.filterable_fields(rtxn)?;
 
-        // and finally we delete all the soft_deleted_documents, again, only once at the very end
         self.inner_evaluate(rtxn, index, &filterable_fields)
-            .map(|result| result - soft_deleted_documents)
     }
 
     fn evaluate_operator(

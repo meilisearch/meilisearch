@@ -397,7 +397,7 @@ async fn delete_document_by_complex_filter() {
       "canceledBy": null,
       "details": {
         "providedIds": 0,
-        "deletedDocuments": 4,
+        "deletedDocuments": 2,
         "originalFilter": "[[\"color = green\",\"color NOT EXISTS\"]]"
       },
       "error": null,

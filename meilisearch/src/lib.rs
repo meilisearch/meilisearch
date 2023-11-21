@@ -362,7 +362,7 @@ fn import_dump(
                 update_method: IndexDocumentsMethod::ReplaceDocuments,
                 ..Default::default()
             },
-            |indexing_step| log::debug!("update: {:?}", indexing_step),
+            |indexing_step| log::trace!("update: {:?}", indexing_step),
             || false,
         )?;
 

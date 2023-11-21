@@ -26,8 +26,8 @@ flatten-serde-json = { path = "../flatten-serde-json" }
 fst = "0.4.7"
 fxhash = "0.2.1"
 geoutils = "0.5.1"
-grenad = { version = "0.4.4", default-features = false, features = [
-    "tempfile",
+grenad = { version = "0.4.5", default-features = false, features = [
+    "rayon", "tempfile"
 ] }
 heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.7", default-features = false, features = [
     "lmdb", "read-txn-no-tls"
@@ -79,6 +79,7 @@ big_s = "1.0.2"
 insta = "1.29.0"
 maplit = "1.0.2"
 md5 = "0.7.0"
+meili-snap = { path = "../meili-snap" }
 rand = { version = "0.8.5", features = ["small_rng"] }
 
 [features]

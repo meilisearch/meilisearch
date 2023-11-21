@@ -612,8 +612,8 @@ fn retrieve_document<S: AsRef<str>>(
     let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
 
     let internal_id = index
-        .external_documents_ids(&txn)?
-        .get(doc_id.as_bytes())
+        .external_documents_ids()
+        .get(&txn, doc_id)?
         .ok_or_else(|| MeilisearchHttpError::DocumentNotFound(doc_id.to_string()))?;
 
     let document = index
