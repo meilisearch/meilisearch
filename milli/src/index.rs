@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
-use std::mem::size_of;
 use std::path::Path;
 
 use charabia::{Language, Script};
@@ -13,8 +12,8 @@ use rstar::RTree;
 use time::OffsetDateTime;
 
 use crate::distance::NDotProductPoint;
+use crate::documents::PrimaryKey;
 use crate::error::{InternalError, UserError};
-use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;
 use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
@@ -42,7 +41,6 @@ pub mod main_key {
     pub const DISPLAYED_FIELDS_KEY: &str = "displayed-fields";
     pub const DISTINCT_FIELD_KEY: &str = "distinct-field-key";
     pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
-    pub const SOFT_DELETED_DOCUMENTS_IDS_KEY: &str = "soft-deleted-documents-ids";
     pub const HIDDEN_FACETED_FIELDS_KEY: &str = "hidden-faceted-fields";
     pub const FILTERABLE_FIELDS_KEY: &str = "filterable-fields";
     pub const SORTABLE_FIELDS_KEY: &str = "sortable-fields";
@@ -54,17 +52,13 @@ pub mod main_key {
     /// It is concatenated with a big-endian encoded number (non-human readable).
     /// e.g. vector-hnsw0x0032.
     pub const VECTOR_HNSW_KEY_PREFIX: &str = "vector-hnsw";
-    pub const HARD_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "hard-external-documents-ids";
-    pub const NUMBER_FACETED_DOCUMENTS_IDS_PREFIX: &str = "number-faceted-documents-ids";
     pub const PRIMARY_KEY_KEY: &str = "primary-key";
     pub const SEARCHABLE_FIELDS_KEY: &str = "searchable-fields";
     pub const USER_DEFINED_SEARCHABLE_FIELDS_KEY: &str = "user-defined-searchable-fields";
-    pub const SOFT_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "soft-external-documents-ids";
     pub const STOP_WORDS_KEY: &str = "stop-words";
     pub const NON_SEPARATOR_TOKENS_KEY: &str = "non-separator-tokens";
     pub const SEPARATOR_TOKENS_KEY: &str = "separator-tokens";
     pub const DICTIONARY_KEY: &str = "dictionary";
-    pub const STRING_FACETED_DOCUMENTS_IDS_PREFIX: &str = "string-faceted-documents-ids";
     pub const SYNONYMS_KEY: &str = "synonyms";
     pub const USER_DEFINED_SYNONYMS_KEY: &str = "user-defined-synonyms";
     pub const WORDS_FST_KEY: &str = "words-fst";
@@ -87,10 +81,9 @@ pub mod db_name {
     pub const EXACT_WORD_DOCIDS: &str = "exact-word-docids";
     pub const WORD_PREFIX_DOCIDS: &str = "word-prefix-docids";
     pub const EXACT_WORD_PREFIX_DOCIDS: &str = "exact-word-prefix-docids";
+    pub const EXTERNAL_DOCUMENTS_IDS: &str = "external-documents-ids";
     pub const DOCID_WORD_POSITIONS: &str = "docid-word-positions";
     pub const WORD_PAIR_PROXIMITY_DOCIDS: &str = "word-pair-proximity-docids";
-    pub const WORD_PREFIX_PAIR_PROXIMITY_DOCIDS: &str = "word-prefix-pair-proximity-docids";
-    pub const PREFIX_WORD_PAIR_PROXIMITY_DOCIDS: &str = "prefix-word-pair-proximity-docids";
     pub const WORD_POSITION_DOCIDS: &str = "word-position-docids";
     pub const WORD_FIELD_ID_DOCIDS: &str = "word-field-id-docids";
     pub const WORD_PREFIX_POSITION_DOCIDS: &str = "word-prefix-position-docids";
@@ -118,24 +111,23 @@ pub struct Index {
     /// Contains many different types (e.g. the fields ids map).
     pub(crate) main: PolyDatabase,
 
+    /// Maps the external documents ids with the internal document id.
+    pub external_documents_ids: Database<Str, OwnedType<BEU32>>,
+
     /// A word and all the documents ids containing the word.
-    pub word_docids: Database<Str, RoaringBitmapCodec>,
+    pub word_docids: Database<Str, CboRoaringBitmapCodec>,
 
     /// A word and all the documents ids containing the word, from attributes for which typos are not allowed.
-    pub exact_word_docids: Database<Str, RoaringBitmapCodec>,
+    pub exact_word_docids: Database<Str, CboRoaringBitmapCodec>,
 
     /// A prefix of word and all the documents ids containing this prefix.
-    pub word_prefix_docids: Database<Str, RoaringBitmapCodec>,
+    pub word_prefix_docids: Database<Str, CboRoaringBitmapCodec>,
 
     /// A prefix of word and all the documents ids containing this prefix, from attributes for which typos are not allowed.
-    pub exact_word_prefix_docids: Database<Str, RoaringBitmapCodec>,
+    pub exact_word_prefix_docids: Database<Str, CboRoaringBitmapCodec>,
 
     /// Maps the proximity between a pair of words with all the docids where this relation appears.
     pub word_pair_proximity_docids: Database<U8StrStrCodec, CboRoaringBitmapCodec>,
-    /// Maps the proximity between a pair of word and prefix with all the docids where this relation appears.
-    pub word_prefix_pair_proximity_docids: Database<U8StrStrCodec, CboRoaringBitmapCodec>,
-    /// Maps the proximity between a pair of prefix and word with all the docids where this relation appears.
-    pub prefix_word_pair_proximity_docids: Database<U8StrStrCodec, CboRoaringBitmapCodec>,
 
     /// Maps the word and the position with the docids that corresponds to it.
     pub word_position_docids: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
@@ -189,13 +181,15 @@ impl Index {
     ) -> Result<Index> {
         use db_name::*;
 
-        options.max_dbs(25);
+        options.max_dbs(24);
         unsafe { options.flag(Flags::MdbAlwaysFreePages) };
 
         let env = options.open(path)?;
         let mut wtxn = env.write_txn()?;
         let main = env.create_poly_database(&mut wtxn, Some(MAIN))?;
         let word_docids = env.create_database(&mut wtxn, Some(WORD_DOCIDS))?;
+        let external_documents_ids =
+            env.create_database(&mut wtxn, Some(EXTERNAL_DOCUMENTS_IDS))?;
         let exact_word_docids = env.create_database(&mut wtxn, Some(EXACT_WORD_DOCIDS))?;
         let word_prefix_docids = env.create_database(&mut wtxn, Some(WORD_PREFIX_DOCIDS))?;
         let exact_word_prefix_docids =
@@ -204,10 +198,6 @@ impl Index {
             env.create_database(&mut wtxn, Some(WORD_PAIR_PROXIMITY_DOCIDS))?;
         let script_language_docids =
             env.create_database(&mut wtxn, Some(SCRIPT_LANGUAGE_DOCIDS))?;
-        let word_prefix_pair_proximity_docids =
-            env.create_database(&mut wtxn, Some(WORD_PREFIX_PAIR_PROXIMITY_DOCIDS))?;
-        let prefix_word_pair_proximity_docids =
-            env.create_database(&mut wtxn, Some(PREFIX_WORD_PAIR_PROXIMITY_DOCIDS))?;
         let word_position_docids = env.create_database(&mut wtxn, Some(WORD_POSITION_DOCIDS))?;
         let word_fid_docids = env.create_database(&mut wtxn, Some(WORD_FIELD_ID_DOCIDS))?;
         let field_id_word_count_docids =
@@ -241,14 +231,13 @@ impl Index {
         Ok(Index {
             env,
             main,
+            external_documents_ids,
             word_docids,
             exact_word_docids,
             word_prefix_docids,
             exact_word_prefix_docids,
             word_pair_proximity_docids,
             script_language_docids,
-            word_prefix_pair_proximity_docids,
-            prefix_word_pair_proximity_docids,
             word_position_docids,
             word_fid_docids,
             word_prefix_position_docids,
@@ -372,29 +361,6 @@ impl Index {
         Ok(count.unwrap_or_default())
     }
 
-    /* deleted documents ids */
-
-    /// Writes the soft deleted documents ids.
-    pub(crate) fn put_soft_deleted_documents_ids(
-        &self,
-        wtxn: &mut RwTxn,
-        docids: &RoaringBitmap,
-    ) -> heed::Result<()> {
-        self.main.put::<_, Str, RoaringBitmapCodec>(
-            wtxn,
-            main_key::SOFT_DELETED_DOCUMENTS_IDS_KEY,
-            docids,
-        )
-    }
-
-    /// Returns the soft deleted documents ids.
-    pub(crate) fn soft_deleted_documents_ids(&self, rtxn: &RoTxn) -> heed::Result<RoaringBitmap> {
-        Ok(self
-            .main
-            .get::<_, Str, RoaringBitmapCodec>(rtxn, main_key::SOFT_DELETED_DOCUMENTS_IDS_KEY)?
-            .unwrap_or_default())
-    }
-
     /* primary key */
 
     /// Writes the documents primary key, this is the field name that is used to store the id.
@@ -415,45 +381,10 @@ impl Index {
 
     /* external documents ids */
 
-    /// Writes the external documents ids and internal ids (i.e. `u32`).
-    pub(crate) fn put_external_documents_ids(
-        &self,
-        wtxn: &mut RwTxn,
-        external_documents_ids: &ExternalDocumentsIds<'_>,
-    ) -> heed::Result<()> {
-        let ExternalDocumentsIds { hard, soft, .. } = external_documents_ids;
-        let hard = hard.as_fst().as_bytes();
-        let soft = soft.as_fst().as_bytes();
-        self.main.put::<_, Str, ByteSlice>(
-            wtxn,
-            main_key::HARD_EXTERNAL_DOCUMENTS_IDS_KEY,
-            hard,
-        )?;
-        self.main.put::<_, Str, ByteSlice>(
-            wtxn,
-            main_key::SOFT_EXTERNAL_DOCUMENTS_IDS_KEY,
-            soft,
-        )?;
-        Ok(())
-    }
-
     /// Returns the external documents ids map which associate the external ids
     /// with the internal ids (i.e. `u32`).
-    pub fn external_documents_ids<'t>(&self, rtxn: &'t RoTxn) -> Result<ExternalDocumentsIds<'t>> {
-        let hard =
-            self.main.get::<_, Str, ByteSlice>(rtxn, main_key::HARD_EXTERNAL_DOCUMENTS_IDS_KEY)?;
-        let soft =
-            self.main.get::<_, Str, ByteSlice>(rtxn, main_key::SOFT_EXTERNAL_DOCUMENTS_IDS_KEY)?;
-        let hard = match hard {
-            Some(hard) => fst::Map::new(hard)?.map_data(Cow::Borrowed)?,
-            None => fst::Map::default().map_data(Cow::Owned)?,
-        };
-        let soft = match soft {
-            Some(soft) => fst::Map::new(soft)?.map_data(Cow::Borrowed)?,
-            None => fst::Map::default().map_data(Cow::Owned)?,
-        };
-        let soft_deleted_docids = self.soft_deleted_documents_ids(rtxn)?;
-        Ok(ExternalDocumentsIds::new(hard, soft, soft_deleted_docids))
+    pub fn external_documents_ids(&self) -> ExternalDocumentsIds {
+        ExternalDocumentsIds::new(self.external_documents_ids)
     }
 
     /* fields ids map */
@@ -926,44 +857,6 @@ impl Index {
 
     /* faceted documents ids */
 
-    /// Writes the documents ids that are faceted under this field id for the given facet type.
-    pub fn put_faceted_documents_ids(
-        &self,
-        wtxn: &mut RwTxn,
-        field_id: FieldId,
-        facet_type: FacetType,
-        docids: &RoaringBitmap,
-    ) -> heed::Result<()> {
-        let key = match facet_type {
-            FacetType::String => main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX,
-            FacetType::Number => main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX,
-        };
-        let mut buffer = vec![0u8; key.len() + size_of::<FieldId>()];
-        buffer[..key.len()].copy_from_slice(key.as_bytes());
-        buffer[key.len()..].copy_from_slice(&field_id.to_be_bytes());
-        self.main.put::<_, ByteSlice, RoaringBitmapCodec>(wtxn, &buffer, docids)
-    }
-
-    /// Retrieve all the documents ids that are faceted under this field id for the given facet type.
-    pub fn faceted_documents_ids(
-        &self,
-        rtxn: &RoTxn,
-        field_id: FieldId,
-        facet_type: FacetType,
-    ) -> heed::Result<RoaringBitmap> {
-        let key = match facet_type {
-            FacetType::String => main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX,
-            FacetType::Number => main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX,
-        };
-        let mut buffer = vec![0u8; key.len() + size_of::<FieldId>()];
-        buffer[..key.len()].copy_from_slice(key.as_bytes());
-        buffer[key.len()..].copy_from_slice(&field_id.to_be_bytes());
-        match self.main.get::<_, ByteSlice, RoaringBitmapCodec>(rtxn, &buffer)? {
-            Some(docids) => Ok(docids),
-            None => Ok(RoaringBitmap::new()),
-        }
-    }
-
     /// Retrieve all the documents which contain this field id set as null
     pub fn null_faceted_documents_ids(
         &self,
@@ -1246,12 +1139,7 @@ impl Index {
         rtxn: &'t RoTxn,
         ids: impl IntoIterator<Item = DocumentId> + 'a,
     ) -> Result<impl Iterator<Item = Result<(DocumentId, obkv::KvReaderU16<'t>)>> + 'a> {
-        let soft_deleted_documents = self.soft_deleted_documents_ids(rtxn)?;
-
         Ok(ids.into_iter().map(move |id| {
-            if soft_deleted_documents.contains(id) {
-                return Err(UserError::AccessingSoftDeletedDocument { document_id: id })?;
-            }
             let kv = self
                 .documents
                 .get(rtxn, &BEU32::new(id))?
@@ -1275,6 +1163,36 @@ impl Index {
         rtxn: &'t RoTxn,
     ) -> Result<impl Iterator<Item = Result<(DocumentId, obkv::KvReaderU16<'t>)>> + 'a> {
         self.iter_documents(rtxn, self.documents_ids(rtxn)?)
+    }
+
+    pub fn external_id_of<'a, 't: 'a>(
+        &'a self,
+        rtxn: &'t RoTxn,
+        ids: impl IntoIterator<Item = DocumentId> + 'a,
+    ) -> Result<impl IntoIterator<Item = Result<String>> + 'a> {
+        let fields = self.fields_ids_map(rtxn)?;
+
+        // uses precondition "never called on an empty index"
+        let primary_key = self.primary_key(rtxn)?.ok_or(InternalError::DatabaseMissingEntry {
+            db_name: db_name::MAIN,
+            key: Some(main_key::PRIMARY_KEY_KEY),
+        })?;
+        let primary_key = PrimaryKey::new(primary_key, &fields).ok_or_else(|| {
+            InternalError::FieldIdMapMissingEntry(crate::FieldIdMapMissingEntry::FieldName {
+                field_name: primary_key.to_owned(),
+                process: "external_id_of",
+            })
+        })?;
+        Ok(self.iter_documents(rtxn, ids)?.map(move |entry| -> Result<_> {
+            let (_docid, obkv) = entry?;
+            match primary_key.document_id(&obkv, &fields)? {
+                Ok(document_id) => Ok(document_id),
+                Err(_) => Err(InternalError::DocumentsError(
+                    crate::documents::Error::InvalidDocumentFormat,
+                )
+                .into()),
+            }
+        }))
     }
 
     pub fn facets_distribution<'a>(&'a self, rtxn: &'a RoTxn) -> FacetDistribution<'a> {
@@ -1477,14 +1395,10 @@ impl Index {
         rtxn: &RoTxn,
         key: &(Script, Language),
     ) -> heed::Result<Option<RoaringBitmap>> {
-        let soft_deleted_documents = self.soft_deleted_documents_ids(rtxn)?;
-        let doc_ids = self.script_language_docids.get(rtxn, key)?;
-        Ok(doc_ids.map(|ids| ids - soft_deleted_documents))
+        self.script_language_docids.get(rtxn, key)
     }
 
     pub fn script_language(&self, rtxn: &RoTxn) -> heed::Result<HashMap<Script, Vec<Language>>> {
-        let soft_deleted_documents = self.soft_deleted_documents_ids(rtxn)?;
-
         let mut script_language: HashMap<Script, Vec<Language>> = HashMap::new();
         let mut script_language_doc_count: Vec<(Script, Language, u64)> = Vec::new();
         let mut total = 0;
@@ -1492,7 +1406,7 @@ impl Index {
             let ((script, language), docids) = sl?;
 
             // keep only Languages that contains at least 1 document.
-            let remaining_documents_count = (docids - &soft_deleted_documents).len();
+            let remaining_documents_count = docids.len();
             total += remaining_documents_count;
             if remaining_documents_count > 0 {
                 script_language_doc_count.push((script, language, remaining_documents_count));
@@ -1528,8 +1442,7 @@ pub(crate) mod tests {
     use crate::error::{Error, InternalError};
     use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
     use crate::update::{
-        self, DeleteDocuments, DeletionStrategy, IndexDocuments, IndexDocumentsConfig,
-        IndexDocumentsMethod, IndexerConfig, Settings,
+        self, IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings,
     };
     use crate::{db_snap, obkv_to_json, Filter, Index, Search, SearchResult};
 
@@ -1619,15 +1532,35 @@ pub(crate) mod tests {
             Ok(())
         }
 
-        pub fn delete_document(&self, external_document_id: &str) {
+        pub fn delete_documents_using_wtxn<'t>(
+            &'t self,
+            wtxn: &mut RwTxn<'t, '_>,
+            external_document_ids: Vec<String>,
+        ) {
+            let builder = IndexDocuments::new(
+                wtxn,
+                self,
+                &self.indexer_config,
+                self.index_documents_config.clone(),
+                |_| (),
+                || false,
+            )
+            .unwrap();
+            let (builder, user_error) = builder.remove_documents(external_document_ids).unwrap();
+            user_error.unwrap();
+            builder.execute().unwrap();
+        }
+
+        pub fn delete_documents(&self, external_document_ids: Vec<String>) {
             let mut wtxn = self.write_txn().unwrap();
 
-            let mut delete = DeleteDocuments::new(&mut wtxn, self).unwrap();
-            delete.strategy(self.index_documents_config.deletion_strategy);
+            self.delete_documents_using_wtxn(&mut wtxn, external_document_ids);
 
-            delete.delete_external_id(external_document_id);
-            delete.execute().unwrap();
             wtxn.commit().unwrap();
+        }
+
+        pub fn delete_document(&self, external_document_id: &str) {
+            self.delete_documents(vec![external_document_id.to_string()])
         }
     }
 
@@ -1942,9 +1875,7 @@ pub(crate) mod tests {
         use big_s::S;
         use maplit::hashset;
 
-        let mut index = TempIndex::new();
-        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
-        let index = index;
+        let index = TempIndex::new();
 
         index
             .update_settings(|settings| {
@@ -1963,14 +1894,12 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[0, 1, 2, 3, ]");
         db_snap!(index, external_documents_ids, 1, @r###"
-        soft:
-        hard:
+        docids:
         0                        0
         1                        1
         2                        2
         3                        3
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 1, @"[]");
         db_snap!(index, facet_id_f64_docids, 1, @r###"
         1   0  0      1  [0, ]
         1   0  1      1  [1, ]
@@ -1986,44 +1915,37 @@ pub(crate) mod tests {
         }
         index.add_documents(documents!(docs)).unwrap();
 
-        db_snap!(index, documents_ids, @"[3, 4, 5, 6, ]");
+        db_snap!(index, documents_ids, @"[0, 1, 2, 3, ]");
         db_snap!(index, external_documents_ids, 2, @r###"
-        soft:
-        hard:
-        0                        4
-        1                        5
-        2                        6
+        docids:
+        0                        0
+        1                        1
+        2                        2
         3                        3
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 2, @"[0, 1, 2, ]");
         db_snap!(index, facet_id_f64_docids, 2, @r###"
-        1   0  0      1  [0, ]
-        1   0  1      1  [1, 4, ]
-        1   0  2      1  [2, 5, ]
-        1   0  3      1  [3, 6, ]
+        1   0  1      1  [0, ]
+        1   0  2      1  [1, ]
+        1   0  3      1  [2, 3, ]
         "###);
 
         index
             .add_documents(documents!([{ "id": 3, "doggo": 4 }, { "id": 3, "doggo": 5 },{ "id": 3, "doggo": 4 }]))
             .unwrap();
 
-        db_snap!(index, documents_ids, @"[4, 5, 6, 7, ]");
+        db_snap!(index, documents_ids, @"[0, 1, 2, 3, ]");
         db_snap!(index, external_documents_ids, 3, @r###"
-        soft:
-        3                        7
-        hard:
-        0                        4
-        1                        5
-        2                        6
+        docids:
+        0                        0
+        1                        1
+        2                        2
         3                        3
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 3, @"[0, 1, 2, 3, ]");
         db_snap!(index, facet_id_f64_docids, 3, @r###"
-        1   0  0      1  [0, ]
-        1   0  1      1  [1, 4, ]
-        1   0  2      1  [2, 5, ]
-        1   0  3      1  [3, 6, ]
-        1   0  4      1  [7, ]
+        1   0  1      1  [0, ]
+        1   0  2      1  [1, ]
+        1   0  3      1  [2, ]
+        1   0  4      1  [3, ]
         "###);
 
         index
@@ -2032,300 +1954,30 @@ pub(crate) mod tests {
             })
             .unwrap();
 
-        db_snap!(index, documents_ids, @"[4, 5, 6, 7, ]");
+        db_snap!(index, documents_ids, @"[0, 1, 2, 3, ]");
         db_snap!(index, external_documents_ids, 3, @r###"
-        soft:
-        hard:
-        0                        4
-        1                        5
-        2                        6
-        3                        7
+        docids:
+        0                        0
+        1                        1
+        2                        2
+        3                        3
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 3, @"[]");
         db_snap!(index, facet_id_f64_docids, 3, @r###"
-        0   0  0      1  [4, ]
-        0   0  1      1  [5, ]
-        0   0  2      1  [6, ]
-        0   0  3      1  [7, ]
-        1   0  1      1  [4, ]
-        1   0  2      1  [5, ]
-        1   0  3      1  [6, ]
-        1   0  4      1  [7, ]
+        0   0  0      1  [0, ]
+        0   0  1      1  [1, ]
+        0   0  2      1  [2, ]
+        0   0  3      1  [3, ]
+        1   0  1      1  [0, ]
+        1   0  2      1  [1, ]
+        1   0  3      1  [2, ]
+        1   0  4      1  [3, ]
         "###);
-    }
-
-    #[test]
-    fn replace_documents_in_batches_external_ids_and_soft_deletion_check() {
-        use big_s::S;
-        use maplit::hashset;
-
-        let mut index = TempIndex::new();
-
-        index
-            .update_settings(|settings| {
-                settings.set_primary_key("id".to_owned());
-                settings.set_filterable_fields(hashset! { S("doggo") });
-            })
-            .unwrap();
-
-        let add_documents = |index: &TempIndex, docs: Vec<Vec<serde_json::Value>>| {
-            let mut wtxn = index.write_txn().unwrap();
-            let mut builder = IndexDocuments::new(
-                &mut wtxn,
-                index,
-                &index.indexer_config,
-                index.index_documents_config.clone(),
-                |_| (),
-                || false,
-            )
-            .unwrap();
-            for docs in docs {
-                (builder, _) = builder.add_documents(documents!(docs)).unwrap();
-            }
-            builder.execute().unwrap();
-            wtxn.commit().unwrap();
-        };
-        // First Batch
-        {
-            let mut docs1 = vec![];
-            for i in 0..4 {
-                docs1.push(serde_json::json!(
-                    { "id": i, "doggo": i }
-                ));
-            }
-            add_documents(&index, vec![docs1]);
-
-            db_snap!(index, documents_ids, @"[0, 1, 2, 3, ]");
-            db_snap!(index, external_documents_ids, 1, @r###"
-            soft:
-            hard:
-            0                        0
-            1                        1
-            2                        2
-            3                        3
-            "###);
-            db_snap!(index, soft_deleted_documents_ids, 1, @"[]");
-            db_snap!(index, facet_id_f64_docids, 1, @r###"
-            1   0  0      1  [0, ]
-            1   0  1      1  [1, ]
-            1   0  2      1  [2, ]
-            1   0  3      1  [3, ]
-            "###);
-        }
-        // Second Batch: replace the documents with soft-deletion
-        {
-            index.index_documents_config.deletion_strategy =
-                crate::update::DeletionStrategy::AlwaysSoft;
-            let mut docs1 = vec![];
-            for i in 0..3 {
-                docs1.push(serde_json::json!(
-                    { "id": i, "doggo": i+1 }
-                ));
-            }
-            let mut docs2 = vec![];
-            for i in 0..3 {
-                docs2.push(serde_json::json!(
-                    { "id": i, "doggo": i }
-                ));
-            }
-            add_documents(&index, vec![docs1, docs2]);
-
-            db_snap!(index, documents_ids, @"[3, 4, 5, 6, ]");
-            db_snap!(index, external_documents_ids, 1, @r###"
-            soft:
-            hard:
-            0                        4
-            1                        5
-            2                        6
-            3                        3
-            "###);
-            db_snap!(index, soft_deleted_documents_ids, 1, @"[0, 1, 2, ]");
-            db_snap!(index, facet_id_f64_docids, 1, @r###"
-            1   0  0      1  [0, 4, ]
-            1   0  1      1  [1, 5, ]
-            1   0  2      1  [2, 6, ]
-            1   0  3      1  [3, ]
-            "###);
-        }
-        let rtxn = index.read_txn().unwrap();
-        let (_docid, obkv) = index.documents(&rtxn, [3]).unwrap()[0];
-        let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
-        insta::assert_debug_snapshot!(json, @r###"
-        {
-            "id": Number(3),
-            "doggo": Number(3),
-        }
-        "###);
-        let (_docid, obkv) = index.documents(&rtxn, [4]).unwrap()[0];
-
-        let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
-        insta::assert_debug_snapshot!(json, @r###"
-        {
-            "id": Number(0),
-            "doggo": Number(0),
-        }
-        "###);
-        let (_docid, obkv) = index.documents(&rtxn, [5]).unwrap()[0];
-        let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
-        insta::assert_debug_snapshot!(json, @r###"
-        {
-            "id": Number(1),
-            "doggo": Number(1),
-        }
-        "###);
-        let (_docid, obkv) = index.documents(&rtxn, [6]).unwrap()[0];
-        let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
-        insta::assert_debug_snapshot!(json, @r###"
-        {
-            "id": Number(2),
-            "doggo": Number(2),
-        }
-        "###);
-        drop(rtxn);
-        // Third Batch: replace the documents with soft-deletion again
-        {
-            index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
-            let mut docs1 = vec![];
-            for i in 0..3 {
-                docs1.push(serde_json::json!(
-                    { "id": i, "doggo": i+1 }
-                ));
-            }
-            let mut docs2 = vec![];
-            for i in 0..4 {
-                docs2.push(serde_json::json!(
-                    { "id": i, "doggo": i }
-                ));
-            }
-            add_documents(&index, vec![docs1, docs2]);
-
-            db_snap!(index, documents_ids, @"[3, 7, 8, 9, ]");
-            db_snap!(index, external_documents_ids, 1, @r###"
-            soft:
-            hard:
-            0                        7
-            1                        8
-            2                        9
-            3                        3
-            "###);
-            db_snap!(index, soft_deleted_documents_ids, 1, @"[0, 1, 2, 4, 5, 6, ]");
-            db_snap!(index, facet_id_f64_docids, 1, @r###"
-            1   0  0      1  [0, 4, 7, ]
-            1   0  1      1  [1, 5, 8, ]
-            1   0  2      1  [2, 6, 9, ]
-            1   0  3      1  [3, ]
-            "###);
-        }
-        let rtxn = index.read_txn().unwrap();
-        let (_docid, obkv) = index.documents(&rtxn, [3]).unwrap()[0];
-        let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
-        insta::assert_debug_snapshot!(json, @r###"
-        {
-            "id": Number(3),
-            "doggo": Number(3),
-        }
-        "###);
-        let (_docid, obkv) = index.documents(&rtxn, [7]).unwrap()[0];
-        let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
-        insta::assert_debug_snapshot!(json, @r###"
-        {
-            "id": Number(0),
-            "doggo": Number(0),
-        }
-        "###);
-        let (_docid, obkv) = index.documents(&rtxn, [8]).unwrap()[0];
-        let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
-        insta::assert_debug_snapshot!(json, @r###"
-        {
-            "id": Number(1),
-            "doggo": Number(1),
-        }
-        "###);
-        let (_docid, obkv) = index.documents(&rtxn, [9]).unwrap()[0];
-        let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
-        insta::assert_debug_snapshot!(json, @r###"
-        {
-            "id": Number(2),
-            "doggo": Number(2),
-        }
-        "###);
-        drop(rtxn);
-
-        // Fourth Batch: replace the documents without soft-deletion
-        {
-            index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysHard;
-            let mut docs1 = vec![];
-            for i in 0..3 {
-                docs1.push(serde_json::json!(
-                    { "id": i, "doggo": i+2 }
-                ));
-            }
-            let mut docs2 = vec![];
-            for i in 0..1 {
-                docs2.push(serde_json::json!(
-                    { "id": i, "doggo": i }
-                ));
-            }
-            add_documents(&index, vec![docs1, docs2]);
-
-            db_snap!(index, documents_ids, @"[3, 10, 11, 12, ]");
-            db_snap!(index, external_documents_ids, 1, @r###"
-            soft:
-            hard:
-            0                        10
-            1                        11
-            2                        12
-            3                        3
-            "###);
-            db_snap!(index, soft_deleted_documents_ids, 1, @"[]");
-            db_snap!(index, facet_id_f64_docids, 1, @r###"
-            1   0  0      1  [10, ]
-            1   0  3      1  [3, 11, ]
-            1   0  4      1  [12, ]
-            "###);
-
-            let rtxn = index.read_txn().unwrap();
-            let (_docid, obkv) = index.documents(&rtxn, [3]).unwrap()[0];
-            let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
-            insta::assert_debug_snapshot!(json, @r###"
-            {
-                "id": Number(3),
-                "doggo": Number(3),
-            }
-            "###);
-            let (_docid, obkv) = index.documents(&rtxn, [10]).unwrap()[0];
-            let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
-            insta::assert_debug_snapshot!(json, @r###"
-            {
-                "id": Number(0),
-                "doggo": Number(0),
-            }
-            "###);
-            let (_docid, obkv) = index.documents(&rtxn, [11]).unwrap()[0];
-            let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
-            insta::assert_debug_snapshot!(json, @r###"
-            {
-                "id": Number(1),
-                "doggo": Number(3),
-            }
-            "###);
-            let (_docid, obkv) = index.documents(&rtxn, [12]).unwrap()[0];
-            let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
-            insta::assert_debug_snapshot!(json, @r###"
-            {
-                "id": Number(2),
-                "doggo": Number(4),
-            }
-            "###);
-            drop(rtxn);
-        }
     }
 
     #[test]
     fn bug_3021_first() {
         // https://github.com/meilisearch/meilisearch/issues/3021
         let mut index = TempIndex::new();
-        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
         index.index_documents_config.update_method = IndexDocumentsMethod::ReplaceDocuments;
 
         index
@@ -2343,23 +1995,18 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[0, 1, ]");
         db_snap!(index, external_documents_ids, 1, @r###"
-        soft:
-        hard:
+        docids:
         34                       1
         38                       0
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 1, @"[]");
 
         index.delete_document("34");
 
         db_snap!(index, documents_ids, @"[0, ]");
         db_snap!(index, external_documents_ids, 2, @r###"
-        soft:
-        hard:
-        34                       1
+        docids:
         38                       0
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 2, @"[1, ]");
 
         index
             .update_settings(|s| {
@@ -2371,11 +2018,9 @@ pub(crate) mod tests {
         // do not contain any entry for previously soft-deleted document ids
         db_snap!(index, documents_ids, @"[0, ]");
         db_snap!(index, external_documents_ids, 3, @r###"
-        soft:
-        hard:
+        docids:
         38                       0
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 3, @"[]");
 
         // So that this document addition works correctly now.
         // It would be wrongly interpreted as a replacement before
@@ -2383,24 +2028,19 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[0, 1, ]");
         db_snap!(index, external_documents_ids, 4, @r###"
-        soft:
-        hard:
+        docids:
         34                       1
         38                       0
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 4, @"[]");
 
         // We do the test again, but deleting the document with id 0 instead of id 1 now
         index.delete_document("38");
 
         db_snap!(index, documents_ids, @"[1, ]");
         db_snap!(index, external_documents_ids, 5, @r###"
-        soft:
-        hard:
+        docids:
         34                       1
-        38                       0
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 5, @"[0, ]");
 
         index
             .update_settings(|s| {
@@ -2410,11 +2050,9 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[1, ]");
         db_snap!(index, external_documents_ids, 6, @r###"
-        soft:
-        hard:
+        docids:
         34                       1
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 6, @"[]");
 
         // And adding lots of documents afterwards instead of just one.
         // These extra subtests don't add much, but it's better than nothing.
@@ -2422,8 +2060,7 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[0, 1, 2, 3, 4, 5, ]");
         db_snap!(index, external_documents_ids, 7, @r###"
-        soft:
-        hard:
+        docids:
         34                       1
         38                       0
         39                       2
@@ -2431,14 +2068,38 @@ pub(crate) mod tests {
         41                       3
         42                       5
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 7, @"[]");
+    }
+
+    #[test]
+    fn simple_delete() {
+        let mut index = TempIndex::new();
+        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
+        index
+            .add_documents(documents!([
+                { "id": 30 },
+                { "id": 34 }
+            ]))
+            .unwrap();
+
+        db_snap!(index, documents_ids, @"[0, 1, ]");
+        db_snap!(index, external_documents_ids, 1, @r###"
+        docids:
+        30                       0
+        34                       1"###);
+
+        index.delete_document("34");
+
+        db_snap!(index, documents_ids, @"[0, ]");
+        db_snap!(index, external_documents_ids, 2, @r###"
+        docids:
+        30                       0
+        "###);
     }
 
     #[test]
     fn bug_3021_second() {
         // https://github.com/meilisearch/meilisearch/issues/3021
         let mut index = TempIndex::new();
-        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
         index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         index
@@ -2456,23 +2117,18 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[0, 1, ]");
         db_snap!(index, external_documents_ids, 1, @r###"
-        soft:
-        hard:
+        docids:
         30                       0
         34                       1
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 1, @"[]");
 
         index.delete_document("34");
 
         db_snap!(index, documents_ids, @"[0, ]");
         db_snap!(index, external_documents_ids, 2, @r###"
-        soft:
-        hard:
+        docids:
         30                       0
-        34                       1
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 2, @"[1, ]");
 
         index
             .update_settings(|s| {
@@ -2484,11 +2140,9 @@ pub(crate) mod tests {
         // do not contain any entry for previously soft-deleted document ids
         db_snap!(index, documents_ids, @"[0, ]");
         db_snap!(index, external_documents_ids, 3, @r###"
-        soft:
-        hard:
+        docids:
         30                       0
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 3, @"[]");
 
         // So that when we add a new document
         index.add_documents(documents!({ "primary_key": 35, "b": 2 })).unwrap();
@@ -2497,12 +2151,10 @@ pub(crate) mod tests {
         // The external documents ids don't have several external ids pointing to the same
         // internal document id
         db_snap!(index, external_documents_ids, 4, @r###"
-        soft:
-        hard:
+        docids:
         30                       0
         35                       1
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 4, @"[]");
 
         // And when we add 34 again, we don't replace document 35
         index.add_documents(documents!({ "primary_key": 34, "a": 1 })).unwrap();
@@ -2510,13 +2162,11 @@ pub(crate) mod tests {
         // And document 35 still exists, is not deleted
         db_snap!(index, documents_ids, @"[0, 1, 2, ]");
         db_snap!(index, external_documents_ids, 5, @r###"
-        soft:
-        hard:
+        docids:
         30                       0
         34                       2
         35                       1
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 5, @"[]");
 
         let rtxn = index.read_txn().unwrap();
         let (_docid, obkv) = index.documents(&rtxn, [0]).unwrap()[0];
@@ -2548,8 +2198,7 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[0, 1, 2, 3, 4, 5, ]");
         db_snap!(index, external_documents_ids, 6, @r###"
-        soft:
-        hard:
+        docids:
         30                       0
         34                       2
         35                       1
@@ -2557,14 +2206,12 @@ pub(crate) mod tests {
         38                       4
         39                       5
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 6, @"[]");
     }
 
     #[test]
     fn bug_3021_third() {
         // https://github.com/meilisearch/meilisearch/issues/3021
         let mut index = TempIndex::new();
-        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
         index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         index
@@ -2583,38 +2230,29 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[0, 1, 2, ]");
         db_snap!(index, external_documents_ids, 1, @r###"
-        soft:
-        hard:
+        docids:
         3                        0
         4                        1
         5                        2
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 1, @"[]");
 
         index.delete_document("3");
 
         db_snap!(index, documents_ids, @"[1, 2, ]");
         db_snap!(index, external_documents_ids, 2, @r###"
-        soft:
-        hard:
-        3                        0
+        docids:
         4                        1
         5                        2
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 2, @"[0, ]");
-
-        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysHard;
 
         index.add_documents(documents!([{ "primary_key": "4", "a": 2 }])).unwrap();
 
-        db_snap!(index, documents_ids, @"[2, 3, ]");
+        db_snap!(index, documents_ids, @"[1, 2, ]");
         db_snap!(index, external_documents_ids, 2, @r###"
-        soft:
-        hard:
-        4                        3
+        docids:
+        4                        1
         5                        2
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 2, @"[]");
 
         index
             .add_documents(documents!([
@@ -2622,15 +2260,13 @@ pub(crate) mod tests {
             ]))
             .unwrap();
 
-        db_snap!(index, documents_ids, @"[0, 2, 3, ]");
+        db_snap!(index, documents_ids, @"[0, 1, 2, ]");
         db_snap!(index, external_documents_ids, 2, @r###"
-        soft:
-        hard:
+        docids:
         3                        0
-        4                        3
+        4                        1
         5                        2
         "###);
-        db_snap!(index, soft_deleted_documents_ids, 2, @"[]");
     }
 
     #[test]
@@ -2638,7 +2274,6 @@ pub(crate) mod tests {
         // https://github.com/meilisearch/meilisearch/issues/3021
         let mut index = TempIndex::new();
         index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
-        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
 
         index
             .update_settings(|settings| {
@@ -2655,12 +2290,10 @@ pub(crate) mod tests {
 
         db_snap!(index, documents_ids, @"[0, 1, ]");
         db_snap!(index, external_documents_ids, @r###"
-        soft:
-        hard:
+        docids:
         11                       0
         4                        1
         "###);
-        db_snap!(index, soft_deleted_documents_ids, @"[]");
 
         index
             .add_documents(documents!([
@@ -2669,31 +2302,23 @@ pub(crate) mod tests {
             ]))
             .unwrap();
 
-        db_snap!(index, documents_ids, @"[0, 2, 3, ]");
+        db_snap!(index, documents_ids, @"[0, 1, 2, ]");
         db_snap!(index, external_documents_ids, @r###"
-        soft:
-        hard:
-        1                        3
+        docids:
+        1                        2
         11                       0
-        4                        2
+        4                        1
         "###);
-        db_snap!(index, soft_deleted_documents_ids, @"[1, ]");
 
-        let mut wtxn = index.write_txn().unwrap();
-        let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        delete.strategy(DeletionStrategy::AlwaysHard);
-        delete.execute().unwrap();
-        wtxn.commit().unwrap();
+        index.delete_documents(Default::default());
 
-        db_snap!(index, documents_ids, @"[0, 2, 3, ]");
+        db_snap!(index, documents_ids, @"[0, 1, 2, ]");
         db_snap!(index, external_documents_ids, @r###"
-        soft:
-        hard:
-        1                        3
+        docids:
+        1                        2
         11                       0
-        4                        2
+        4                        1
         "###);
-        db_snap!(index, soft_deleted_documents_ids, @"[]");
 
         index
             .add_documents(documents!([
@@ -2702,15 +2327,13 @@ pub(crate) mod tests {
             ]))
             .unwrap();
 
-        db_snap!(index, documents_ids, @"[0, 1, 4, ]");
+        db_snap!(index, documents_ids, @"[0, 1, 2, ]");
         db_snap!(index, external_documents_ids, @r###"
-        soft:
-        hard:
-        1                        4
+        docids:
+        1                        2
         11                       0
         4                        1
         "###);
-        db_snap!(index, soft_deleted_documents_ids, @"[2, 3, ]");
 
         let rtxn = index.read_txn().unwrap();
         let search = Search::new(&rtxn, &index);

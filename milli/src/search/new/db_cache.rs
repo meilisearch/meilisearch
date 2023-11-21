@@ -12,7 +12,7 @@ use super::Word;
 use crate::heed_codec::{BytesDecodeOwned, StrBEU16Codec};
 use crate::update::{merge_cbo_roaring_bitmaps, MergeFn};
 use crate::{
-    CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, Result, RoaringBitmapCodec, SearchContext,
+    CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, Result, SearchContext, U8StrStrCodec,
 };
 
 /// A cache storing pointers to values in the LMDB databases.
@@ -25,7 +25,7 @@ pub struct DatabaseCache<'ctx> {
     pub word_pair_proximity_docids:
         FxHashMap<(u8, Interned<String>, Interned<String>), Option<Cow<'ctx, [u8]>>>,
     pub word_prefix_pair_proximity_docids:
-        FxHashMap<(u8, Interned<String>, Interned<String>), Option<Cow<'ctx, [u8]>>>,
+        FxHashMap<(u8, Interned<String>, Interned<String>), Option<RoaringBitmap>>,
     pub prefix_word_pair_proximity_docids:
         FxHashMap<(u8, Interned<String>, Interned<String>), Option<Cow<'ctx, [u8]>>>,
     pub word_docids: FxHashMap<Interned<String>, Option<Cow<'ctx, [u8]>>>,
@@ -168,7 +168,7 @@ impl<'ctx> SearchContext<'ctx> {
                     merge_cbo_roaring_bitmaps,
                 )
             }
-            None => DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
+            None => DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
                 self.txn,
                 word,
                 self.word_interner.get(word).as_str(),
@@ -182,7 +182,7 @@ impl<'ctx> SearchContext<'ctx> {
         &mut self,
         word: Interned<String>,
     ) -> Result<Option<RoaringBitmap>> {
-        DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
+        DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
             self.txn,
             word,
             self.word_interner.get(word).as_str(),
@@ -230,7 +230,7 @@ impl<'ctx> SearchContext<'ctx> {
                     merge_cbo_roaring_bitmaps,
                 )
             }
-            None => DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
+            None => DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
                 self.txn,
                 prefix,
                 self.word_interner.get(prefix).as_str(),
@@ -244,7 +244,7 @@ impl<'ctx> SearchContext<'ctx> {
         &mut self,
         prefix: Interned<String>,
     ) -> Result<Option<RoaringBitmap>> {
-        DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
+        DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
             self.txn,
             prefix,
             self.word_interner.get(prefix).as_str(),
@@ -297,35 +297,47 @@ impl<'ctx> SearchContext<'ctx> {
         prefix2: Interned<String>,
         proximity: u8,
     ) -> Result<Option<RoaringBitmap>> {
-        DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
-            self.txn,
-            (proximity, word1, prefix2),
-            &(
-                proximity,
-                self.word_interner.get(word1).as_str(),
-                self.word_interner.get(prefix2).as_str(),
-            ),
-            &mut self.db_cache.word_prefix_pair_proximity_docids,
-            self.index.word_prefix_pair_proximity_docids.remap_data_type::<ByteSlice>(),
-        )
+        let docids = match self
+            .db_cache
+            .word_prefix_pair_proximity_docids
+            .entry((proximity, word1, prefix2))
+        {
+            Entry::Occupied(docids) => docids.get().clone(),
+            Entry::Vacant(entry) => {
+                // compute docids using prefix iter and store the result in the cache.
+                let key = U8StrStrCodec::bytes_encode(&(
+                    proximity,
+                    self.word_interner.get(word1).as_str(),
+                    self.word_interner.get(prefix2).as_str(),
+                ))
+                .unwrap()
+                .into_owned();
+                let mut prefix_docids = RoaringBitmap::new();
+                let remap_key_type = self
+                    .index
+                    .word_pair_proximity_docids
+                    .remap_key_type::<ByteSlice>()
+                    .prefix_iter(self.txn, &key)?;
+                for result in remap_key_type {
+                    let (_, docids) = result?;
+
+                    prefix_docids |= docids;
+                }
+                entry.insert(Some(prefix_docids.clone()));
+                Some(prefix_docids)
+            }
+        };
+        Ok(docids)
     }
+
     pub fn get_db_prefix_word_pair_proximity_docids(
         &mut self,
         left_prefix: Interned<String>,
         right: Interned<String>,
         proximity: u8,
     ) -> Result<Option<RoaringBitmap>> {
-        DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
-            self.txn,
-            (proximity, left_prefix, right),
-            &(
-                proximity,
-                self.word_interner.get(left_prefix).as_str(),
-                self.word_interner.get(right).as_str(),
-            ),
-            &mut self.db_cache.prefix_word_pair_proximity_docids,
-            self.index.prefix_word_pair_proximity_docids.remap_data_type::<ByteSlice>(),
-        )
+        // only accept exact matches on reverted positions
+        self.get_db_word_pair_proximity_docids(left_prefix, right, proximity)
     }
 
     pub fn get_db_word_fid_docids(

@@ -24,14 +24,13 @@ use std::fs::{self, File};
 use std::io::BufWriter;
 
 use dump::IndexMetadata;
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 use meilisearch_types::error::Code;
 use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
 use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::update::{
-    DeleteDocuments, DocumentDeletionResult, IndexDocumentsConfig, IndexDocumentsMethod,
-    Settings as MilliSettings,
+    IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings as MilliSettings,
 };
 use meilisearch_types::milli::{self, Filter, BEU32};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
@@ -44,7 +43,7 @@ use uuid::Uuid;
 
 use crate::autobatcher::{self, BatchKind};
 use crate::utils::{self, swap_index_uid_in_task};
-use crate::{Error, IndexScheduler, ProcessingTasks, Result, TaskId};
+use crate::{Error, IndexScheduler, MustStopProcessing, ProcessingTasks, Result, TaskId};
 
 /// Represents a combination of tasks that can all be processed at the same time.
 ///
@@ -105,12 +104,6 @@ pub(crate) enum IndexOperation {
         operations: Vec<DocumentOperation>,
         tasks: Vec<Task>,
     },
-    DocumentDeletion {
-        index_uid: String,
-        // The vec associated with each document deletion tasks.
-        documents: Vec<Vec<String>>,
-        tasks: Vec<Task>,
-    },
     IndexDocumentDeletionByFilter {
         index_uid: String,
         task: Task,
@@ -162,7 +155,6 @@ impl Batch {
             }
             Batch::IndexOperation { op, .. } => match op {
                 IndexOperation::DocumentOperation { tasks, .. }
-                | IndexOperation::DocumentDeletion { tasks, .. }
                 | IndexOperation::Settings { tasks, .. }
                 | IndexOperation::DocumentClear { tasks, .. } => {
                     tasks.iter().map(|task| task.uid).collect()
@@ -227,7 +219,6 @@ impl IndexOperation {
     pub fn index_uid(&self) -> &str {
         match self {
             IndexOperation::DocumentOperation { index_uid, .. }
-            | IndexOperation::DocumentDeletion { index_uid, .. }
             | IndexOperation::IndexDocumentDeletionByFilter { index_uid, .. }
             | IndexOperation::DocumentClear { index_uid, .. }
             | IndexOperation::Settings { index_uid, .. }
@@ -242,9 +233,6 @@ impl fmt::Display for IndexOperation {
         match self {
             IndexOperation::DocumentOperation { .. } => {
                 f.write_str("IndexOperation::DocumentOperation")
-            }
-            IndexOperation::DocumentDeletion { .. } => {
-                f.write_str("IndexOperation::DocumentDeletion")
             }
             IndexOperation::IndexDocumentDeletionByFilter { .. } => {
                 f.write_str("IndexOperation::IndexDocumentDeletionByFilter")
@@ -348,18 +336,27 @@ impl IndexScheduler {
             BatchKind::DocumentDeletion { deletion_ids } => {
                 let tasks = self.get_existing_tasks(rtxn, deletion_ids)?;
 
-                let mut documents = Vec::new();
+                let mut operations = Vec::with_capacity(tasks.len());
+                let mut documents_counts = Vec::with_capacity(tasks.len());
                 for task in &tasks {
                     match task.kind {
                         KindWithContent::DocumentDeletion { ref documents_ids, .. } => {
-                            documents.push(documents_ids.clone())
+                            operations.push(DocumentOperation::Delete(documents_ids.clone()));
+                            documents_counts.push(documents_ids.len() as u64);
                         }
                         _ => unreachable!(),
                     }
                 }
 
                 Ok(Some(Batch::IndexOperation {
-                    op: IndexOperation::DocumentDeletion { index_uid, documents, tasks },
+                    op: IndexOperation::DocumentOperation {
+                        index_uid,
+                        primary_key: None,
+                        method: IndexDocumentsMethod::ReplaceDocuments,
+                        documents_counts,
+                        operations,
+                        tasks,
+                    },
                     must_create_index,
                 }))
             }
@@ -825,6 +822,10 @@ impl IndexScheduler {
                 // 2. dump the tasks
                 let mut dump_tasks = dump.create_tasks_queue()?;
                 for ret in self.all_tasks.iter(&rtxn)? {
+                    if self.must_stop_processing.get() {
+                        return Err(Error::AbortedTask);
+                    }
+
                     let (_, mut t) = ret?;
                     let status = t.status;
                     let content_file = t.content_uuid();
@@ -845,6 +846,9 @@ impl IndexScheduler {
 
                     // 2.1. Dump the `content_file` associated with the task if there is one and the task is not finished yet.
                     if let Some(content_file) = content_file {
+                        if self.must_stop_processing.get() {
+                            return Err(Error::AbortedTask);
+                        }
                         if status == Status::Enqueued {
                             let content_file = self.file_store.get_update(content_file)?;
 
@@ -884,6 +888,9 @@ impl IndexScheduler {
 
                     // 3.1. Dump the documents
                     for ret in index.all_documents(&rtxn)? {
+                        if self.must_stop_processing.get() {
+                            return Err(Error::AbortedTask);
+                        }
                         let (_id, doc) = ret?;
                         let document = milli::obkv_to_json(&all_fields, &fields_ids_map, doc)?;
                         index_dumper.push_document(&document)?;
@@ -903,6 +910,9 @@ impl IndexScheduler {
                     "[year repr:full][month repr:numerical][day padding:zero]-[hour padding:zero][minute padding:zero][second padding:zero][subsecond digits:3]"
                 )).unwrap();
 
+                if self.must_stop_processing.get() {
+                    return Err(Error::AbortedTask);
+                }
                 let path = self.dumps_path.join(format!("{}.dump", dump_uid));
                 let file = File::create(path)?;
                 dump.persist_to(BufWriter::new(file))?;
@@ -1195,7 +1205,7 @@ impl IndexScheduler {
                     index,
                     indexer_config,
                     config,
-                    |indexing_step| debug!("update: {:?}", indexing_step),
+                    |indexing_step| trace!("update: {:?}", indexing_step),
                     || must_stop_processing.get(),
                 )?;
 
@@ -1242,7 +1252,8 @@ impl IndexScheduler {
                             let (new_builder, user_result) =
                                 builder.remove_documents(document_ids)?;
                             builder = new_builder;
-
+                            // Uses Invariant: remove documents actually always returns Ok for the inner result
+                            let count = user_result.unwrap();
                             let provided_ids =
                                 if let Some(Details::DocumentDeletion { provided_ids, .. }) =
                                     task.details
@@ -1253,23 +1264,11 @@ impl IndexScheduler {
                                     unreachable!();
                                 };
 
-                            match user_result {
-                                Ok(count) => {
-                                    task.status = Status::Succeeded;
-                                    task.details = Some(Details::DocumentDeletion {
-                                        provided_ids,
-                                        deleted_documents: Some(count),
-                                    });
-                                }
-                                Err(e) => {
-                                    task.status = Status::Failed;
-                                    task.details = Some(Details::DocumentDeletion {
-                                        provided_ids,
-                                        deleted_documents: Some(0),
-                                    });
-                                    task.error = Some(milli::Error::from(e).into());
-                                }
-                            }
+                            task.status = Status::Succeeded;
+                            task.details = Some(Details::DocumentDeletion {
+                                provided_ids,
+                                deleted_documents: Some(count),
+                            });
                         }
                     }
                 }
@@ -1284,27 +1283,9 @@ impl IndexScheduler {
                         milli::update::Settings::new(index_wtxn, index, indexer_config);
                     builder.reset_primary_key();
                     builder.execute(
-                        |indexing_step| debug!("update: {:?}", indexing_step),
+                        |indexing_step| trace!("update: {:?}", indexing_step),
                         || must_stop_processing.clone().get(),
                     )?;
-                }
-
-                Ok(tasks)
-            }
-            IndexOperation::DocumentDeletion { index_uid: _, documents, mut tasks } => {
-                let mut builder = milli::update::DeleteDocuments::new(index_wtxn, index)?;
-                documents.iter().flatten().for_each(|id| {
-                    builder.delete_external_id(id);
-                });
-
-                let DocumentDeletionResult { deleted_documents, .. } = builder.execute()?;
-
-                for (task, documents) in tasks.iter_mut().zip(documents) {
-                    task.status = Status::Succeeded;
-                    task.details = Some(Details::DocumentDeletion {
-                        provided_ids: documents.len(),
-                        deleted_documents: Some(deleted_documents.min(documents.len() as u64)),
-                    });
                 }
 
                 Ok(tasks)
@@ -1318,7 +1299,13 @@ impl IndexScheduler {
                     } else {
                         unreachable!()
                     };
-                let deleted_documents = delete_document_by_filter(index_wtxn, filter, index);
+                let deleted_documents = delete_document_by_filter(
+                    index_wtxn,
+                    filter,
+                    self.index_mapper.indexer_config(),
+                    self.must_stop_processing.clone(),
+                    index,
+                );
                 let original_filter = if let Some(Details::DocumentDeletionByFilter {
                     original_filter,
                     deleted_documents: _,
@@ -1552,6 +1539,8 @@ impl IndexScheduler {
 fn delete_document_by_filter<'a>(
     wtxn: &mut RwTxn<'a, '_>,
     filter: &serde_json::Value,
+    indexer_config: &IndexerConfig,
+    must_stop_processing: MustStopProcessing,
     index: &'a Index,
 ) -> Result<u64> {
     let filter = Filter::from_json(filter)?;
@@ -1562,9 +1551,26 @@ fn delete_document_by_filter<'a>(
             }
             e => e.into(),
         })?;
-        let mut delete_operation = DeleteDocuments::new(wtxn, index)?;
-        delete_operation.delete_documents(&candidates);
-        delete_operation.execute().map(|result| result.deleted_documents)?
+
+        let config = IndexDocumentsConfig {
+            update_method: IndexDocumentsMethod::ReplaceDocuments,
+            ..Default::default()
+        };
+
+        let mut builder = milli::update::IndexDocuments::new(
+            wtxn,
+            index,
+            indexer_config,
+            config,
+            |indexing_step| debug!("update: {:?}", indexing_step),
+            || must_stop_processing.get(),
+        )?;
+
+        let (new_builder, count) = builder.remove_documents_from_db_no_batch(&candidates)?;
+        builder = new_builder;
+
+        let _ = builder.execute()?;
+        count
     } else {
         0
     })

@@ -81,6 +81,12 @@ impl Default for FieldsIdsMap {
     }
 }
 
+impl crate::documents::FieldIdMapper for FieldsIdsMap {
+    fn id(&self, name: &str) -> Option<FieldId> {
+        self.id(name)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

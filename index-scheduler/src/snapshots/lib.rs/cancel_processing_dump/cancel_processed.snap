@@ -1,0 +1,45 @@
+---
+source: index-scheduler/src/lib.rs
+---
+### Autobatching Enabled = true
+### Processing Tasks:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, status: canceled, canceled_by: 1, details: { dump_uid: None }, kind: DumpCreation { keys: [], instance_uid: None }}
+1 {uid: 1, status: succeeded, details: { matched_tasks: 1, canceled_tasks: Some(0), original_filter: "cancel dump" }, kind: TaskCancelation { query: "cancel dump", tasks: RoaringBitmap<[0]> }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [1,]
+canceled [0,]
+----------------------------------------------------------------------
+### Kind:
+"taskCancelation" [1,]
+"dumpCreation" [0,]
+----------------------------------------------------------------------
+### Index Tasks:
+----------------------------------------------------------------------
+### Index Mapper:
+
+----------------------------------------------------------------------
+### Canceled By:
+1 [0,]
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------
+

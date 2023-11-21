@@ -1,8 +1,7 @@
 use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 
-use crate::facet::FacetType;
-use crate::{ExternalDocumentsIds, FieldDistribution, Index, Result};
+use crate::{FieldDistribution, Index, Result};
 
 pub struct ClearDocuments<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -21,13 +20,12 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         let Index {
             env: _env,
             main: _main,
+            external_documents_ids,
             word_docids,
             exact_word_docids,
             word_prefix_docids,
             exact_word_prefix_docids,
             word_pair_proximity_docids,
-            word_prefix_pair_proximity_docids,
-            prefix_word_pair_proximity_docids,
             word_position_docids,
             word_fid_docids,
             field_id_word_count_docids,
@@ -51,43 +49,23 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
 
         // We retrieve the number of documents ids that we are deleting.
         let number_of_documents = self.index.number_of_documents(self.wtxn)?;
-        let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
 
         // We clean some of the main engine datastructures.
         self.index.put_words_fst(self.wtxn, &fst::Set::default())?;
         self.index.put_words_prefixes_fst(self.wtxn, &fst::Set::default())?;
-        self.index.put_external_documents_ids(self.wtxn, &ExternalDocumentsIds::default())?;
         self.index.put_documents_ids(self.wtxn, &empty_roaring)?;
-        self.index.put_soft_deleted_documents_ids(self.wtxn, &empty_roaring)?;
         self.index.put_field_distribution(self.wtxn, &FieldDistribution::default())?;
         self.index.delete_geo_rtree(self.wtxn)?;
         self.index.delete_geo_faceted_documents_ids(self.wtxn)?;
         self.index.delete_vector_hnsw(self.wtxn)?;
 
-        // We clean all the faceted documents ids.
-        for field_id in faceted_fields {
-            self.index.put_faceted_documents_ids(
-                self.wtxn,
-                field_id,
-                FacetType::Number,
-                &empty_roaring,
-            )?;
-            self.index.put_faceted_documents_ids(
-                self.wtxn,
-                field_id,
-                FacetType::String,
-                &empty_roaring,
-            )?;
-        }
-
         // Clear the other databases.
+        external_documents_ids.clear(self.wtxn)?;
         word_docids.clear(self.wtxn)?;
         exact_word_docids.clear(self.wtxn)?;
         word_prefix_docids.clear(self.wtxn)?;
         exact_word_prefix_docids.clear(self.wtxn)?;
         word_pair_proximity_docids.clear(self.wtxn)?;
-        word_prefix_pair_proximity_docids.clear(self.wtxn)?;
-        prefix_word_pair_proximity_docids.clear(self.wtxn)?;
         word_position_docids.clear(self.wtxn)?;
         word_fid_docids.clear(self.wtxn)?;
         field_id_word_count_docids.clear(self.wtxn)?;
@@ -140,7 +118,7 @@ mod tests {
 
         assert!(index.words_fst(&rtxn).unwrap().is_empty());
         assert!(index.words_prefixes_fst(&rtxn).unwrap().is_empty());
-        assert!(index.external_documents_ids(&rtxn).unwrap().is_empty());
+        assert!(index.external_documents_ids().is_empty(&rtxn).unwrap());
         assert!(index.documents_ids(&rtxn).unwrap().is_empty());
         assert!(index.field_distribution(&rtxn).unwrap().is_empty());
         assert!(index.geo_rtree(&rtxn).unwrap().is_none());
@@ -150,7 +128,6 @@ mod tests {
         assert!(index.word_prefix_docids.is_empty(&rtxn).unwrap());
         assert!(index.word_pair_proximity_docids.is_empty(&rtxn).unwrap());
         assert!(index.field_id_word_count_docids.is_empty(&rtxn).unwrap());
-        assert!(index.word_prefix_pair_proximity_docids.is_empty(&rtxn).unwrap());
         assert!(index.facet_id_f64_docids.is_empty(&rtxn).unwrap());
         assert!(index.facet_id_string_docids.is_empty(&rtxn).unwrap());
         assert!(index.field_id_docid_facet_f64s.is_empty(&rtxn).unwrap());

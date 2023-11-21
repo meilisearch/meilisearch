@@ -13,7 +13,7 @@ use crate::heed_codec::ByteSliceRefCodec;
 /// The documents returned by the iterator are grouped by the facet values that
 /// determined their rank. For example, given the documents:
 ///
-/// ```ignore
+/// ```text
 /// 0: { "colour": ["blue", "green"] }
 /// 1: { "colour": ["blue", "red"] }
 /// 2: { "colour": ["orange", "red"] }
@@ -22,7 +22,7 @@ use crate::heed_codec::ByteSliceRefCodec;
 /// ```
 /// Then calling the function on the candidates `[0, 2, 3, 4]` will return an iterator
 /// over the following elements:
-/// ```ignore
+/// ```text
 /// [0, 4]  // corresponds to all the documents within the candidates that have the facet value "blue"
 /// [3]     // same for "green"
 /// [2]     // same for "orange"

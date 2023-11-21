@@ -1,13 +1,15 @@
 use std::fs::File;
-use std::io::{self, BufReader};
+use std::io::BufReader;
+use std::{io, str};
 
 use heed::BytesEncode;
 
 use super::helpers::{create_sorter, sorter_into_reader, try_split_array_at, GrenadParameters};
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
 use crate::heed_codec::StrRefCodec;
-use crate::update::index_documents::merge_cbo_roaring_bitmaps;
-use crate::{FieldId, Result, MAX_FACET_VALUE_LENGTH};
+use crate::update::del_add::{KvReaderDelAdd, KvWriterDelAdd};
+use crate::update::index_documents::helpers::merge_deladd_cbo_roaring_bitmaps;
+use crate::{FieldId, Result};
 
 /// Extracts the facet string and the documents ids where this facet string appear.
 ///
@@ -24,15 +26,16 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
 
     let mut facet_string_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
-        merge_cbo_roaring_bitmaps,
+        merge_deladd_cbo_roaring_bitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
         max_memory,
     );
 
+    let mut buffer = Vec::new();
     let mut cursor = docid_fid_facet_string.into_cursor()?;
-    while let Some((key, _original_value_bytes)) = cursor.move_on_next()? {
+    while let Some((key, deladd_original_value_bytes)) = cursor.move_on_next()? {
         let (field_id_bytes, bytes) = try_split_array_at(key).unwrap();
         let field_id = FieldId::from_be_bytes(field_id_bytes);
 
@@ -40,21 +43,17 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
             try_split_array_at::<_, 4>(bytes).unwrap();
         let document_id = u32::from_be_bytes(document_id_bytes);
 
-        let mut normalised_value = std::str::from_utf8(normalized_value_bytes)?;
-
-        let normalised_truncated_value: String;
-        if normalised_value.len() > MAX_FACET_VALUE_LENGTH {
-            normalised_truncated_value = normalised_value
-                .char_indices()
-                .take_while(|(idx, _)| *idx < MAX_FACET_VALUE_LENGTH)
-                .map(|(_, c)| c)
-                .collect();
-            normalised_value = normalised_truncated_value.as_str();
-        }
-        let key = FacetGroupKey { field_id, level: 0, left_bound: normalised_value };
+        let normalized_value = str::from_utf8(normalized_value_bytes)?;
+        let key = FacetGroupKey { field_id, level: 0, left_bound: normalized_value };
         let key_bytes = FacetGroupKeyCodec::<StrRefCodec>::bytes_encode(&key).unwrap();
-        // document id is encoded in native-endian because of the CBO roaring bitmap codec
-        facet_string_docids_sorter.insert(&key_bytes, document_id.to_ne_bytes())?;
+
+        buffer.clear();
+        let mut obkv = KvWriterDelAdd::new(&mut buffer);
+        for (deladd_key, _) in KvReaderDelAdd::new(deladd_original_value_bytes).iter() {
+            obkv.insert(deladd_key, document_id.to_ne_bytes())?;
+        }
+        obkv.finish()?;
+        facet_string_docids_sorter.insert(&key_bytes, &buffer)?;
     }
 
     sorter_into_reader(facet_string_docids_sorter, indexer)

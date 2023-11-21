@@ -14,7 +14,7 @@ The databases must be able to return results for queries such as:
 The algorithms that implement these queries are found in the `src/search/facet` folder.
 
 To make these queries fast to compute, the database adopts a tree structure:
-```ignore
+```text
             ┌───────────────────────────────┬───────────────────────────────┬───────────────┐
 ┌───────┐   │           "ab" (2)            │           "gaf" (2)           │   "woz" (1)   │
 │Level 2│   │                               │                               │               │
@@ -41,7 +41,7 @@ These documents all contain a facet value that is contained within `ab .. gaf`.
 In the database, each node is represented by a key/value pair encoded as a [`FacetGroupKey`] and a
 [`FacetGroupValue`], which have the following format:
 
-```ignore
+```text
 FacetGroupKey:
 - field id  : u16
 - level     : u8
@@ -98,7 +98,6 @@ use crate::update::merge_btreeset_string;
 use crate::{BEU16StrCodec, Index, Result, BEU16, MAX_FACET_VALUE_LENGTH};
 
 pub mod bulk;
-pub mod delete;
 pub mod incremental;
 
 /// A builder used to add new elements to the `facet_id_string_docids` or `facet_id_f64_docids` databases.
@@ -109,7 +108,7 @@ pub struct FacetsUpdate<'i> {
     index: &'i Index,
     database: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     facet_type: FacetType,
-    new_data: grenad::Reader<BufReader<File>>,
+    delta_data: grenad::Reader<BufReader<File>>,
     group_size: u8,
     max_group_size: u8,
     min_level_size: u8,
@@ -118,7 +117,7 @@ impl<'i> FacetsUpdate<'i> {
     pub fn new(
         index: &'i Index,
         facet_type: FacetType,
-        new_data: grenad::Reader<BufReader<File>>,
+        delta_data: grenad::Reader<BufReader<File>>,
     ) -> Self {
         let database = match facet_type {
             FacetType::String => index
@@ -135,26 +134,26 @@ impl<'i> FacetsUpdate<'i> {
             max_group_size: FACET_MAX_GROUP_SIZE,
             min_level_size: FACET_MIN_LEVEL_SIZE,
             facet_type,
-            new_data,
+            delta_data,
         }
     }
 
     pub fn execute(self, wtxn: &mut heed::RwTxn) -> Result<()> {
-        if self.new_data.is_empty() {
+        if self.delta_data.is_empty() {
             return Ok(());
         }
         debug!("Computing and writing the facet values levels docids into LMDB on disk...");
         self.index.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
 
         // See self::comparison_bench::benchmark_facet_indexing
-        if self.new_data.len() >= (self.database.len(wtxn)? as u64 / 50) {
+        if self.delta_data.len() >= (self.database.len(wtxn)? as u64 / 50) {
             let field_ids =
                 self.index.faceted_fields_ids(wtxn)?.iter().copied().collect::<Vec<_>>();
             let bulk_update = FacetsUpdateBulk::new(
                 self.index,
                 field_ids,
                 self.facet_type,
-                self.new_data,
+                self.delta_data,
                 self.group_size,
                 self.min_level_size,
             );
@@ -163,7 +162,7 @@ impl<'i> FacetsUpdate<'i> {
             let incremental_update = FacetsUpdateIncremental::new(
                 self.index,
                 self.facet_type,
-                self.new_data,
+                self.delta_data,
                 self.group_size,
                 self.min_level_size,
                 self.max_group_size,
@@ -279,6 +278,7 @@ pub(crate) mod test_helpers {
     use crate::heed_codec::ByteSliceRefCodec;
     use crate::search::facet::get_highest_level;
     use crate::snapshot_tests::display_bitmap;
+    use crate::update::del_add::{DelAdd, KvWriterDelAdd};
     use crate::update::FacetsUpdateIncrementalInner;
     use crate::CboRoaringBitmapCodec;
 
@@ -455,20 +455,22 @@ pub(crate) mod test_helpers {
                 let key: FacetGroupKey<&[u8]> =
                     FacetGroupKey { field_id: *field_id, level: 0, left_bound: &left_bound_bytes };
                 let key = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_encode(&key).unwrap();
+                let mut inner_writer = KvWriterDelAdd::memory();
                 let value = CboRoaringBitmapCodec::bytes_encode(docids).unwrap();
-                writer.insert(&key, &value).unwrap();
+                inner_writer.insert(DelAdd::Addition, value).unwrap();
+                writer.insert(&key, inner_writer.into_inner().unwrap()).unwrap();
             }
             writer.finish().unwrap();
             let reader = grenad::Reader::new(std::io::Cursor::new(new_data)).unwrap();
 
             let update = FacetsUpdateBulkInner {
                 db: self.content,
-                new_data: Some(reader),
+                delta_data: Some(reader),
                 group_size: self.group_size.get(),
                 min_level_size: self.min_level_size.get(),
             };
 
-            update.update(wtxn, field_ids, |_, _, _| Ok(())).unwrap();
+            update.update(wtxn, field_ids).unwrap();
         }
 
         pub fn verify_structure_validity(&self, txn: &RoTxn, field_id: u16) {
@@ -553,101 +555,6 @@ pub(crate) mod test_helpers {
             }
             Ok(())
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use big_s::S;
-    use maplit::hashset;
-
-    use crate::db_snap;
-    use crate::documents::documents_batch_reader_from_objects;
-    use crate::index::tests::TempIndex;
-    use crate::update::DeletionStrategy;
-
-    #[test]
-    fn replace_all_identical_soft_deletion_then_hard_deletion() {
-        let mut index = TempIndex::new_with_map_size(4096 * 1000 * 100);
-
-        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
-
-        index
-            .update_settings(|settings| {
-                settings.set_primary_key("id".to_owned());
-                settings.set_filterable_fields(hashset! { S("size") });
-            })
-            .unwrap();
-
-        let mut documents = vec![];
-        for i in 0..1000 {
-            documents.push(
-                serde_json::json! {
-                    {
-                        "id": i,
-                        "size": i % 250,
-                    }
-                }
-                .as_object()
-                .unwrap()
-                .clone(),
-            );
-        }
-
-        let documents = documents_batch_reader_from_objects(documents);
-        index.add_documents(documents).unwrap();
-
-        db_snap!(index, facet_id_f64_docids, "initial", @"777e0e221d778764b472c512617eeb3b");
-        db_snap!(index, number_faceted_documents_ids, "initial", @"bd916ef32b05fd5c3c4c518708f431a9");
-        db_snap!(index, soft_deleted_documents_ids, "initial", @"[]");
-
-        let mut documents = vec![];
-        for i in 0..999 {
-            documents.push(
-                serde_json::json! {
-                    {
-                        "id": i,
-                        "size": i % 250,
-                        "other": 0,
-                    }
-                }
-                .as_object()
-                .unwrap()
-                .clone(),
-            );
-        }
-
-        let documents = documents_batch_reader_from_objects(documents);
-        index.add_documents(documents).unwrap();
-
-        db_snap!(index, facet_id_f64_docids, "replaced_1_soft", @"abba175d7bed727d0efadaef85a4388f");
-        db_snap!(index, number_faceted_documents_ids, "replaced_1_soft", @"de76488bd05ad94c6452d725acf1bd06");
-        db_snap!(index, soft_deleted_documents_ids, "replaced_1_soft", @"6c975deb900f286d2f6456d2d5c3a123");
-
-        // Then replace the last document while disabling soft_deletion
-        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysHard;
-        let mut documents = vec![];
-        for i in 999..1000 {
-            documents.push(
-                serde_json::json! {
-                    {
-                        "id": i,
-                        "size": i % 250,
-                        "other": 0,
-                    }
-                }
-                .as_object()
-                .unwrap()
-                .clone(),
-            );
-        }
-
-        let documents = documents_batch_reader_from_objects(documents);
-        index.add_documents(documents).unwrap();
-
-        db_snap!(index, facet_id_f64_docids, "replaced_2_hard", @"029e27a46d09c574ae949aa4289b45e6");
-        db_snap!(index, number_faceted_documents_ids, "replaced_2_hard", @"60b19824f136affe6b240a7200779028");
-        db_snap!(index, soft_deleted_documents_ids, "replaced_2_hard", @"[]");
     }
 }
 

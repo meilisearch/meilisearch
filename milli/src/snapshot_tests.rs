@@ -4,9 +4,8 @@ use std::path::Path;
 
 use roaring::RoaringBitmap;
 
-use crate::facet::FacetType;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
-use crate::{make_db_snap_from_iter, obkv_to_json, ExternalDocumentsIds, Index};
+use crate::{make_db_snap_from_iter, obkv_to_json, Index};
 
 #[track_caller]
 pub fn default_db_snapshot_settings_for_test(name: Option<&str>) -> (insta::Settings, String) {
@@ -98,7 +97,6 @@ Create a snapshot test of the given database.
     - `facet_id_string_docids`
     - `documents_ids`
     - `stop_words`
-    - `soft_deleted_documents_ids`
     - `field_distribution`
     - `fields_ids_map`
     - `geo_faceted_documents_ids`
@@ -221,22 +219,6 @@ pub fn snap_word_pair_proximity_docids(index: &Index) -> String {
         &format!("{proximity:<2} {word1:<16} {word2:<16} {}", display_bitmap(&b))
     })
 }
-pub fn snap_word_prefix_pair_proximity_docids(index: &Index) -> String {
-    make_db_snap_from_iter!(index, word_prefix_pair_proximity_docids, |(
-        (proximity, word1, prefix),
-        b,
-    )| {
-        &format!("{proximity:<2} {word1:<16} {prefix:<4} {}", display_bitmap(&b))
-    })
-}
-pub fn snap_prefix_word_pair_proximity_docids(index: &Index) -> String {
-    make_db_snap_from_iter!(index, prefix_word_pair_proximity_docids, |(
-        (proximity, prefix, word2),
-        b,
-    )| {
-        &format!("{proximity:<2} {prefix:<4} {word2:<16} {}", display_bitmap(&b))
-    })
-}
 pub fn snap_word_position_docids(index: &Index) -> String {
     make_db_snap_from_iter!(index, word_position_docids, |((word, position), b)| {
         &format!("{word:<16} {position:<6} {}", display_bitmap(&b))
@@ -308,12 +290,6 @@ pub fn snap_stop_words(index: &Index) -> String {
     let snap = format!("{stop_words:?}");
     snap
 }
-pub fn snap_soft_deleted_documents_ids(index: &Index) -> String {
-    let rtxn = index.read_txn().unwrap();
-    let soft_deleted_documents_ids = index.soft_deleted_documents_ids(&rtxn).unwrap();
-
-    display_bitmap(&soft_deleted_documents_ids)
-}
 pub fn snap_field_distributions(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
     let mut snap = String::new();
@@ -340,50 +316,21 @@ pub fn snap_geo_faceted_documents_ids(index: &Index) -> String {
 }
 pub fn snap_external_documents_ids(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
-    let ExternalDocumentsIds { soft, hard, .. } = index.external_documents_ids(&rtxn).unwrap();
+    let external_ids = index.external_documents_ids().to_hash_map(&rtxn).unwrap();
+    // ensure fixed order (not guaranteed by hashmap)
+    let mut external_ids: Vec<(String, u32)> = external_ids.into_iter().collect();
+    external_ids.sort_by(|(l, _), (r, _)| l.cmp(r));
 
     let mut snap = String::new();
 
-    writeln!(&mut snap, "soft:").unwrap();
-    let stream_soft = soft.stream();
-    let soft_external_ids = stream_soft.into_str_vec().unwrap();
-    for (key, id) in soft_external_ids {
-        writeln!(&mut snap, "{key:<24} {id}").unwrap();
-    }
-    writeln!(&mut snap, "hard:").unwrap();
-    let stream_hard = hard.stream();
-    let hard_external_ids = stream_hard.into_str_vec().unwrap();
-    for (key, id) in hard_external_ids {
+    writeln!(&mut snap, "docids:").unwrap();
+    for (key, id) in external_ids {
         writeln!(&mut snap, "{key:<24} {id}").unwrap();
     }
 
     snap
 }
-pub fn snap_number_faceted_documents_ids(index: &Index) -> String {
-    let rtxn = index.read_txn().unwrap();
-    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
-    let mut snap = String::new();
-    for field_id in fields_ids_map.ids() {
-        let number_faceted_documents_ids =
-            index.faceted_documents_ids(&rtxn, field_id, FacetType::Number).unwrap();
-        writeln!(&mut snap, "{field_id:<3} {}", display_bitmap(&number_faceted_documents_ids))
-            .unwrap();
-    }
-    snap
-}
-pub fn snap_string_faceted_documents_ids(index: &Index) -> String {
-    let rtxn = index.read_txn().unwrap();
-    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let mut snap = String::new();
-    for field_id in fields_ids_map.ids() {
-        let string_faceted_documents_ids =
-            index.faceted_documents_ids(&rtxn, field_id, FacetType::String).unwrap();
-        writeln!(&mut snap, "{field_id:<3} {}", display_bitmap(&string_faceted_documents_ids))
-            .unwrap();
-    }
-    snap
-}
 pub fn snap_words_fst(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
     let words_fst = index.words_fst(&rtxn).unwrap();
@@ -516,9 +463,6 @@ macro_rules! full_snap_of_db {
     ($index:ident, stop_words) => {{
         $crate::snapshot_tests::snap_stop_words(&$index)
     }};
-    ($index:ident, soft_deleted_documents_ids) => {{
-        $crate::snapshot_tests::snap_soft_deleted_documents_ids(&$index)
-    }};
     ($index:ident, field_distribution) => {{
         $crate::snapshot_tests::snap_field_distributions(&$index)
     }};
@@ -530,12 +474,6 @@ macro_rules! full_snap_of_db {
     }};
     ($index:ident, external_documents_ids) => {{
         $crate::snapshot_tests::snap_external_documents_ids(&$index)
-    }};
-    ($index:ident, number_faceted_documents_ids) => {{
-        $crate::snapshot_tests::snap_number_faceted_documents_ids(&$index)
-    }};
-    ($index:ident, string_faceted_documents_ids) => {{
-        $crate::snapshot_tests::snap_string_faceted_documents_ids(&$index)
     }};
     ($index:ident, words_fst) => {{
         $crate::snapshot_tests::snap_words_fst(&$index)
