@@ -47,8 +47,9 @@ pub use features::RoFeatures;
 use file_store::FileStore;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
-use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
-use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn};
+use meilisearch_types::heed::byteorder::BE;
+use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str, I128};
+use meilisearch_types::heed::{self, Database, Env, PutFlags, RoTxn, RwTxn};
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
@@ -64,8 +65,7 @@ use uuid::Uuid;
 use crate::index_mapper::IndexMapper;
 use crate::utils::{check_index_swap_validity, clamp_to_page_size};
 
-pub(crate) type BEI128 =
-    meilisearch_types::heed::zerocopy::I128<meilisearch_types::heed::byteorder::BE>;
+pub(crate) type BEI128 = I128<BE>;
 
 /// Defines a subset of tasks to be retrieved from the [`IndexScheduler`].
 ///
@@ -278,7 +278,7 @@ pub struct IndexScheduler {
     pub(crate) file_store: FileStore,
 
     // The main database, it contains all the tasks accessible by their Id.
-    pub(crate) all_tasks: Database<OwnedType<BEU32>, SerdeJson<Task>>,
+    pub(crate) all_tasks: Database<BEU32, SerdeJson<Task>>,
 
     /// All the tasks ids grouped by their status.
     // TODO we should not be able to serialize a `Status::Processing` in this database.
@@ -289,16 +289,16 @@ pub struct IndexScheduler {
     pub(crate) index_tasks: Database<Str, RoaringBitmapCodec>,
 
     /// Store the tasks that were canceled by a task uid
-    pub(crate) canceled_by: Database<OwnedType<BEU32>, RoaringBitmapCodec>,
+    pub(crate) canceled_by: Database<BEU32, RoaringBitmapCodec>,
 
     /// Store the task ids of tasks which were enqueued at a specific date
-    pub(crate) enqueued_at: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
+    pub(crate) enqueued_at: Database<BEI128, CboRoaringBitmapCodec>,
 
     /// Store the task ids of finished tasks which started being processed at a specific date
-    pub(crate) started_at: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
+    pub(crate) started_at: Database<BEI128, CboRoaringBitmapCodec>,
 
     /// Store the task ids of tasks which finished at a specific date
-    pub(crate) finished_at: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
+    pub(crate) finished_at: Database<BEI128, CboRoaringBitmapCodec>,
 
     /// In charge of creating, opening, storing and returning indexes.
     pub(crate) index_mapper: IndexMapper,
@@ -730,9 +730,7 @@ impl IndexScheduler {
         if let Some(canceled_by) = &query.canceled_by {
             let mut all_canceled_tasks = RoaringBitmap::new();
             for cancel_task_uid in canceled_by {
-                if let Some(canceled_by_uid) =
-                    self.canceled_by.get(rtxn, &BEU32::new(*cancel_task_uid))?
-                {
+                if let Some(canceled_by_uid) = self.canceled_by.get(rtxn, &*cancel_task_uid)? {
                     all_canceled_tasks |= canceled_by_uid;
                 }
             }
@@ -983,7 +981,7 @@ impl IndexScheduler {
 
         // if the task doesn't delete anything and 50% of the task queue is full, we must refuse to enqueue the incomming task
         if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } if !tasks.is_empty())
-            && (self.env.non_free_pages_size()? * 100) / self.env.map_size()? as u64 > 50
+            && (self.env.non_free_pages_size()? * 100) / self.env.info().map_size as u64 > 50
         {
             return Err(Error::NoSpaceLeftInTaskQueue);
         }
@@ -1009,7 +1007,7 @@ impl IndexScheduler {
         // Get rid of the mutability.
         let task = task;
 
-        self.all_tasks.append(&mut wtxn, &BEU32::new(task.uid), &task)?;
+        self.all_tasks.put_with_flags(&mut wtxn, PutFlags::APPEND, &task.uid, &task)?;
 
         for index in task.indexes() {
             self.update_index(&mut wtxn, index, |bitmap| {
@@ -1187,7 +1185,7 @@ impl IndexScheduler {
             | Err(Error::AbortedTask) => {
                 #[cfg(test)]
                 self.breakpoint(Breakpoint::AbortedIndexation);
-                wtxn.abort().map_err(Error::HeedTransaction)?;
+                wtxn.abort();
 
                 // We make sure that we don't call `stop_processing` on the `processing_tasks`,
                 // this is because we want to let the next tick call `create_next_batch` and keep
@@ -1208,7 +1206,7 @@ impl IndexScheduler {
                 let index_uid = index_uid.unwrap();
                 // fixme: handle error more gracefully? not sure when this could happen
                 self.index_mapper.resize_index(&wtxn, &index_uid)?;
-                wtxn.abort().map_err(Error::HeedTransaction)?;
+                wtxn.abort();
 
                 return Ok(TickOutcome::TickAgain(0));
             }
@@ -1354,7 +1352,7 @@ impl IndexScheduler {
 
 pub struct Dump<'a> {
     index_scheduler: &'a IndexScheduler,
-    wtxn: RwTxn<'a, 'a>,
+    wtxn: RwTxn<'a>,
 
     indexes: HashMap<String, RoaringBitmap>,
     statuses: HashMap<Status, RoaringBitmap>,
@@ -1469,7 +1467,7 @@ impl<'a> Dump<'a> {
             },
         };
 
-        self.index_scheduler.all_tasks.put(&mut self.wtxn, &BEU32::new(task.uid), &task)?;
+        self.index_scheduler.all_tasks.put(&mut self.wtxn, &task.uid, &task)?;
 
         for index in task.indexes() {
             match self.indexes.get_mut(index) {

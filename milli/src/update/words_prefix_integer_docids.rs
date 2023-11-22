@@ -17,8 +17,8 @@ use crate::update::index_documents::{
 };
 use crate::{CboRoaringBitmapCodec, Result};
 
-pub struct WordPrefixIntegerDocids<'t, 'u, 'i> {
-    wtxn: &'t mut heed::RwTxn<'i, 'u>,
+pub struct WordPrefixIntegerDocids<'t, 'i> {
+    wtxn: &'t mut heed::RwTxn<'i>,
     prefix_database: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
     word_database: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
     pub(crate) chunk_compression_type: CompressionType,
@@ -27,12 +27,12 @@ pub struct WordPrefixIntegerDocids<'t, 'u, 'i> {
     pub(crate) max_memory: Option<usize>,
 }
 
-impl<'t, 'u, 'i> WordPrefixIntegerDocids<'t, 'u, 'i> {
+impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
     pub fn new(
-        wtxn: &'t mut heed::RwTxn<'i, 'u>,
+        wtxn: &'t mut heed::RwTxn<'i>,
         prefix_database: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
         word_database: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
-    ) -> WordPrefixIntegerDocids<'t, 'u, 'i> {
+    ) -> WordPrefixIntegerDocids<'t, 'i> {
         WordPrefixIntegerDocids {
             wtxn,
             prefix_database,
@@ -72,7 +72,8 @@ impl<'t, 'u, 'i> WordPrefixIntegerDocids<'t, 'u, 'i> {
             let mut current_prefixes: Option<&&[String]> = None;
             let mut prefixes_cache = HashMap::new();
             while let Some((key, data)) = new_word_integer_docids_iter.move_on_next()? {
-                let (word, pos) = StrBEU16Codec::bytes_decode(key).ok_or(heed::Error::Decoding)?;
+                let (word, pos) =
+                    StrBEU16Codec::bytes_decode(key).map_err(heed::Error::Decoding)?;
 
                 current_prefixes = match current_prefixes.take() {
                     Some(prefixes) if word.starts_with(&prefixes[0]) => Some(prefixes),

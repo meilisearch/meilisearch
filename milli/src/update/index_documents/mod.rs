@@ -68,8 +68,8 @@ impl Default for IndexDocumentsMethod {
     }
 }
 
-pub struct IndexDocuments<'t, 'u, 'i, 'a, FP, FA> {
-    wtxn: &'t mut heed::RwTxn<'i, 'u>,
+pub struct IndexDocuments<'t, 'i, 'a, FP, FA> {
+    wtxn: &'t mut heed::RwTxn<'i>,
     index: &'i Index,
     config: IndexDocumentsConfig,
     indexer_config: &'a IndexerConfig,
@@ -90,19 +90,19 @@ pub struct IndexDocumentsConfig {
     pub autogenerate_docids: bool,
 }
 
-impl<'t, 'u, 'i, 'a, FP, FA> IndexDocuments<'t, 'u, 'i, 'a, FP, FA>
+impl<'t, 'i, 'a, FP, FA> IndexDocuments<'t, 'i, 'a, FP, FA>
 where
     FP: Fn(UpdateIndexingStep) + Sync,
     FA: Fn() -> bool + Sync,
 {
     pub fn new(
-        wtxn: &'t mut heed::RwTxn<'i, 'u>,
+        wtxn: &'t mut heed::RwTxn<'i>,
         index: &'i Index,
         indexer_config: &'a IndexerConfig,
         config: IndexDocumentsConfig,
         progress: FP,
         should_abort: FA,
-    ) -> Result<IndexDocuments<'t, 'u, 'i, 'a, FP, FA>> {
+    ) -> Result<IndexDocuments<'t, 'i, 'a, FP, FA>> {
         let transform = Some(Transform::new(
             wtxn,
             index,

@@ -25,11 +25,11 @@ where
     let inner;
     let left = match left {
         Bound::Included(left) => {
-            inner = BoundCodec::bytes_encode(left).ok_or(heed::Error::Encoding)?;
+            inner = BoundCodec::bytes_encode(left).map_err(heed::Error::Encoding)?;
             Bound::Included(inner.as_ref())
         }
         Bound::Excluded(left) => {
-            inner = BoundCodec::bytes_encode(left).ok_or(heed::Error::Encoding)?;
+            inner = BoundCodec::bytes_encode(left).map_err(heed::Error::Encoding)?;
             Bound::Excluded(inner.as_ref())
         }
         Bound::Unbounded => Bound::Unbounded,
@@ -37,11 +37,11 @@ where
     let inner;
     let right = match right {
         Bound::Included(right) => {
-            inner = BoundCodec::bytes_encode(right).ok_or(heed::Error::Encoding)?;
+            inner = BoundCodec::bytes_encode(right).map_err(heed::Error::Encoding)?;
             Bound::Included(inner.as_ref())
         }
         Bound::Excluded(right) => {
-            inner = BoundCodec::bytes_encode(right).ok_or(heed::Error::Encoding)?;
+            inner = BoundCodec::bytes_encode(right).map_err(heed::Error::Encoding)?;
             Bound::Excluded(inner.as_ref())
         }
         Bound::Unbounded => Bound::Unbounded,

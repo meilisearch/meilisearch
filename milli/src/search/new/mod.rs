@@ -50,9 +50,7 @@ use crate::distance::NDotProductPoint;
 use crate::error::FieldIdMapMissingEntry;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::apply_distinct_rule;
-use crate::{
-    AscDesc, DocumentId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError, BEU32,
-};
+use crate::{AscDesc, DocumentId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError};
 
 /// A structure used throughout the execution of a search query.
 pub struct SearchContext<'ctx> {
@@ -451,8 +449,8 @@ pub fn execute_search(
                 let mut docids = Vec::new();
                 let mut uniq_docids = RoaringBitmap::new();
                 for instant_distance::Item { distance: _, pid, point: _ } in neighbors {
-                    let index = BEU32::new(pid.into_inner());
-                    let docid = ctx.index.vector_id_docid.get(ctx.txn, &index)?.unwrap().get();
+                    let index = pid.into_inner();
+                    let docid = ctx.index.vector_id_docid.get(ctx.txn, &index)?.unwrap();
                     if universe.contains(docid) && uniq_docids.insert(docid) {
                         docids.push(docid);
                         if docids.len() == (from + length) {

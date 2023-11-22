@@ -152,7 +152,7 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
         valid_fields: BTreeSet<String>,
         hidden_fields: bool,
     },
-    #[error("{}", HeedError::BadOpenOptions)]
+    #[error("an environment is already opened with different options")]
     InvalidLmdbOpenOptions,
     #[error("You must specify where `sort` is listed in the rankingRules setting to use the sort parameter at search time.")]
     SortRankingRuleMissing,
@@ -326,11 +326,12 @@ impl From<HeedError> for Error {
             HeedError::Mdb(MdbError::MapFull) => UserError(MaxDatabaseSizeReached),
             HeedError::Mdb(MdbError::Invalid) => UserError(InvalidStoreFile),
             HeedError::Mdb(error) => InternalError(Store(error)),
-            HeedError::Encoding => InternalError(Serialization(Encoding { db_name: None })),
-            HeedError::Decoding => InternalError(Serialization(Decoding { db_name: None })),
+            // TODO use the encoding
+            HeedError::Encoding(_) => InternalError(Serialization(Encoding { db_name: None })),
+            HeedError::Decoding(_) => InternalError(Serialization(Decoding { db_name: None })),
             HeedError::InvalidDatabaseTyping => InternalError(InvalidDatabaseTyping),
             HeedError::DatabaseClosing => InternalError(DatabaseClosing),
-            HeedError::BadOpenOptions => UserError(InvalidLmdbOpenOptions),
+            HeedError::BadOpenOptions { .. } => UserError(InvalidLmdbOpenOptions),
         }
     }
 }

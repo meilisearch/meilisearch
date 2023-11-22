@@ -13,6 +13,7 @@ mod str_ref;
 mod str_str_u8_codec;
 
 pub use byte_slice_ref::ByteSliceRefCodec;
+use heed::BoxedError;
 pub use str_ref::StrRefCodec;
 
 pub use self::beu16_str_codec::BEU16StrCodec;
@@ -31,5 +32,5 @@ pub use self::str_str_u8_codec::{U8StrStrCodec, UncheckedU8StrStrCodec};
 pub trait BytesDecodeOwned {
     type DItem;
 
-    fn bytes_decode_owned(bytes: &[u8]) -> Option<Self::DItem>;
+    fn bytes_decode_owned(bytes: &[u8]) -> Result<Self::DItem, BoxedError>;
 }

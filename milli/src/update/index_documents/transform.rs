@@ -24,9 +24,7 @@ use crate::index::{db_name, main_key};
 use crate::update::del_add::{into_del_add_obkv, DelAdd, DelAddOperation, KvReaderDelAdd};
 use crate::update::index_documents::GrenadParameters;
 use crate::update::{AvailableDocumentsIds, ClearDocuments, UpdateIndexingStep};
-use crate::{
-    FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldsIdsMap, Index, Result, BEU32,
-};
+use crate::{FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldsIdsMap, Index, Result};
 
 pub struct TransformOutput {
     pub primary_key: String,
@@ -245,7 +243,7 @@ impl<'a, 'i> Transform<'a, 'i> {
 
             let mut skip_insertion = false;
             if let Some(original_docid) = original_docid {
-                let original_key = BEU32::new(original_docid);
+                let original_key = original_docid;
                 let base_obkv = self
                     .index
                     .documents
@@ -499,7 +497,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         self.replaced_documents_ids.insert(internal_docid);
 
         // fetch the obkv document
-        let original_key = BEU32::new(internal_docid);
+        let original_key = internal_docid;
         let base_obkv = self
             .index
             .documents
@@ -811,7 +809,7 @@ impl<'a, 'i> Transform<'a, 'i> {
     // TODO this can be done in parallel by using the rayon `ThreadPool`.
     pub fn prepare_for_documents_reindexing(
         self,
-        wtxn: &mut heed::RwTxn<'i, '_>,
+        wtxn: &mut heed::RwTxn<'i>,
         old_fields_ids_map: FieldsIdsMap,
         mut new_fields_ids_map: FieldsIdsMap,
     ) -> Result<TransformOutput> {
@@ -857,7 +855,6 @@ impl<'a, 'i> Transform<'a, 'i> {
             let obkv = self.index.documents.get(wtxn, &docid)?.ok_or(
                 InternalError::DatabaseMissingEntry { db_name: db_name::DOCUMENTS, key: None },
             )?;
-            let docid = docid.get();
 
             obkv_buffer.clear();
             let mut obkv_writer = KvWriter::<_, FieldId>::new(&mut obkv_buffer);

@@ -4,11 +4,13 @@ use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
 use std::fs::create_dir_all;
 use std::path::Path;
+use std::result::Result as StdResult;
 use std::str;
 use std::str::FromStr;
 use std::sync::Arc;
 
 use hmac::{Hmac, Mac};
+use meilisearch_types::heed::BoxedError;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::keys::KeyId;
 use meilisearch_types::milli;
@@ -294,23 +296,23 @@ pub struct KeyIdActionCodec;
 impl<'a> milli::heed::BytesDecode<'a> for KeyIdActionCodec {
     type DItem = (KeyId, Action, Option<&'a [u8]>);
 
-    fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        let (key_id_bytes, action_bytes) = try_split_array_at(bytes)?;
-        let (action_bytes, index) = match try_split_array_at(action_bytes)? {
+    fn bytes_decode(bytes: &'a [u8]) -> StdResult<Self::DItem, BoxedError> {
+        let (key_id_bytes, action_bytes) = try_split_array_at(bytes).unwrap();
+        let (action_bytes, index) = match try_split_array_at(action_bytes).unwrap() {
             (action, []) => (action, None),
             (action, index) => (action, Some(index)),
         };
         let key_id = Uuid::from_bytes(*key_id_bytes);
-        let action = Action::from_repr(u8::from_be_bytes(*action_bytes))?;
+        let action = Action::from_repr(u8::from_be_bytes(*action_bytes)).unwrap();
 
-        Some((key_id, action, index))
+        Ok((key_id, action, index))
     }
 }
 
 impl<'a> milli::heed::BytesEncode<'a> for KeyIdActionCodec {
     type EItem = (&'a KeyId, &'a Action, Option<&'a [u8]>);
 
-    fn bytes_encode((key_id, action, index): &Self::EItem) -> Option<Cow<[u8]>> {
+    fn bytes_encode((key_id, action, index): &Self::EItem) -> StdResult<Cow<[u8]>, BoxedError> {
         let mut bytes = Vec::new();
 
         bytes.extend_from_slice(key_id.as_bytes());
@@ -320,7 +322,7 @@ impl<'a> milli::heed::BytesEncode<'a> for KeyIdActionCodec {
             bytes.extend_from_slice(index);
         }
 
-        Some(Cow::Owned(bytes))
+        Ok(Cow::Owned(bytes))
     }
 }
 

@@ -68,18 +68,18 @@ impl FacetsUpdateIncremental {
                 continue;
             }
             let key = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(key)
-                .ok_or(heed::Error::Encoding)?;
+                .map_err(heed::Error::Encoding)?;
             let value = KvReader::new(value);
 
             let docids_to_delete = value
                 .get(DelAdd::Deletion)
                 .map(CboRoaringBitmapCodec::bytes_decode)
-                .map(|o| o.ok_or(heed::Error::Encoding));
+                .map(|o| o.map_err(heed::Error::Encoding));
 
             let docids_to_add = value
                 .get(DelAdd::Addition)
                 .map(CboRoaringBitmapCodec::bytes_decode)
-                .map(|o| o.ok_or(heed::Error::Encoding));
+                .map(|o| o.map_err(heed::Error::Encoding));
 
             if let Some(docids_to_delete) = docids_to_delete {
                 let docids_to_delete = docids_to_delete?;
@@ -134,15 +134,14 @@ impl FacetsUpdateIncrementalInner {
                     prefix.extend_from_slice(&field_id.to_be_bytes());
                     prefix.push(level);
 
-                    let mut iter =
-                        self.db.as_polymorph().prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(
-                            txn,
-                            prefix.as_slice(),
-                        )?;
+                    let mut iter = self
+                        .db
+                        .remap_types::<ByteSlice, FacetGroupValueCodec>()
+                        .prefix_iter(txn, prefix.as_slice())?;
                     let (key_bytes, value) = iter.next().unwrap()?;
                     Ok((
                         FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(key_bytes)
-                            .ok_or(Error::Encoding)?
+                            .map_err(Error::Encoding)?
                             .into_owned(),
                         value,
                     ))
@@ -177,10 +176,8 @@ impl FacetsUpdateIncrementalInner {
         level0_prefix.extend_from_slice(&field_id.to_be_bytes());
         level0_prefix.push(0);
 
-        let mut iter = self
-            .db
-            .as_polymorph()
-            .prefix_iter::<_, ByteSlice, DecodeIgnore>(txn, &level0_prefix)?;
+        let mut iter =
+            self.db.remap_types::<ByteSlice, DecodeIgnore>().prefix_iter(txn, &level0_prefix)?;
 
         if iter.next().is_none() {
             drop(iter);
@@ -384,8 +381,8 @@ impl FacetsUpdateIncrementalInner {
 
         let size_highest_level = self
             .db
-            .as_polymorph()
-            .prefix_iter::<_, ByteSlice, ByteSlice>(txn, &highest_level_prefix)?
+            .remap_types::<ByteSlice, ByteSlice>()
+            .prefix_iter(txn, &highest_level_prefix)?
             .count();
 
         if size_highest_level < self.group_size as usize * self.min_level_size as usize {
@@ -394,8 +391,8 @@ impl FacetsUpdateIncrementalInner {
 
         let mut groups_iter = self
             .db
-            .as_polymorph()
-            .prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(txn, &highest_level_prefix)?;
+            .remap_types::<ByteSlice, FacetGroupValueCodec>()
+            .prefix_iter(txn, &highest_level_prefix)?;
 
         let nbr_new_groups = size_highest_level / self.group_size as usize;
         let nbr_leftover_elements = size_highest_level % self.group_size as usize;
@@ -407,7 +404,7 @@ impl FacetsUpdateIncrementalInner {
             for _ in 0..group_size {
                 let (key_bytes, value_i) = groups_iter.next().unwrap()?;
                 let key_i = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(key_bytes)
-                    .ok_or(Error::Encoding)?;
+                    .map_err(Error::Encoding)?;
 
                 if first_key.is_none() {
                     first_key = Some(key_i);
@@ -430,7 +427,7 @@ impl FacetsUpdateIncrementalInner {
             for _ in 0..nbr_leftover_elements {
                 let (key_bytes, value_i) = groups_iter.next().unwrap()?;
                 let key_i = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(key_bytes)
-                    .ok_or(Error::Encoding)?;
+                    .map_err(Error::Encoding)?;
 
                 if first_key.is_none() {
                     first_key = Some(key_i);
@@ -597,8 +594,8 @@ impl FacetsUpdateIncrementalInner {
         if highest_level == 0
             || self
                 .db
-                .as_polymorph()
-                .prefix_iter::<_, ByteSlice, ByteSlice>(txn, &highest_level_prefix)?
+                .remap_types::<ByteSlice, ByteSlice>()
+                .prefix_iter(txn, &highest_level_prefix)?
                 .count()
                 >= self.min_level_size as usize
         {
@@ -607,13 +604,13 @@ impl FacetsUpdateIncrementalInner {
         let mut to_delete = vec![];
         let mut iter = self
             .db
-            .as_polymorph()
-            .prefix_iter::<_, ByteSlice, ByteSlice>(txn, &highest_level_prefix)?;
+            .remap_types::<ByteSlice, ByteSlice>()
+            .prefix_iter(txn, &highest_level_prefix)?;
         for el in iter.by_ref() {
             let (k, _) = el?;
             to_delete.push(
                 FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(k)
-                    .ok_or(Error::Encoding)?
+                    .map_err(Error::Encoding)?
                     .into_owned(),
             );
         }

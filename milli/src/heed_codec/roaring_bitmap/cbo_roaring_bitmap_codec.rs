@@ -3,6 +3,7 @@ use std::io;
 use std::mem::size_of;
 
 use byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
+use heed::BoxedError;
 use roaring::RoaringBitmap;
 
 use crate::heed_codec::BytesDecodeOwned;
@@ -132,26 +133,26 @@ impl CboRoaringBitmapCodec {
 impl heed::BytesDecode<'_> for CboRoaringBitmapCodec {
     type DItem = RoaringBitmap;
 
-    fn bytes_decode(bytes: &[u8]) -> Option<Self::DItem> {
-        Self::deserialize_from(bytes).ok()
+    fn bytes_decode(bytes: &[u8]) -> Result<Self::DItem, BoxedError> {
+        Self::deserialize_from(bytes).map_err(Into::into)
     }
 }
 
 impl BytesDecodeOwned for CboRoaringBitmapCodec {
     type DItem = RoaringBitmap;
 
-    fn bytes_decode_owned(bytes: &[u8]) -> Option<Self::DItem> {
-        Self::deserialize_from(bytes).ok()
+    fn bytes_decode_owned(bytes: &[u8]) -> Result<Self::DItem, BoxedError> {
+        Self::deserialize_from(bytes).map_err(Into::into)
     }
 }
 
 impl heed::BytesEncode<'_> for CboRoaringBitmapCodec {
     type EItem = RoaringBitmap;
 
-    fn bytes_encode(item: &Self::EItem) -> Option<Cow<[u8]>> {
+    fn bytes_encode(item: &Self::EItem) -> Result<Cow<[u8]>, BoxedError> {
         let mut vec = Vec::with_capacity(Self::serialized_size(item));
         Self::serialize_into(item, &mut vec);
-        Some(Cow::Owned(vec))
+        Ok(Cow::Owned(vec))
     }
 }
 

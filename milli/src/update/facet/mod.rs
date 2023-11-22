@@ -95,7 +95,7 @@ use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValu
 use crate::heed_codec::ByteSliceRefCodec;
 use crate::update::index_documents::create_sorter;
 use crate::update::merge_btreeset_string;
-use crate::{BEU16StrCodec, Index, Result, BEU16, MAX_FACET_VALUE_LENGTH};
+use crate::{BEU16StrCodec, Index, Result, MAX_FACET_VALUE_LENGTH};
 
 pub mod bulk;
 pub mod incremental;
@@ -207,8 +207,8 @@ impl<'i> FacetsUpdate<'i> {
                 }
                 let set = BTreeSet::from_iter(std::iter::once(left_bound));
                 let key = (field_id, normalized_facet.as_ref());
-                let key = BEU16StrCodec::bytes_encode(&key).ok_or(heed::Error::Encoding)?;
-                let val = SerdeJson::bytes_encode(&set).ok_or(heed::Error::Encoding)?;
+                let key = BEU16StrCodec::bytes_encode(&key).map_err(heed::Error::Encoding)?;
+                let val = SerdeJson::bytes_encode(&set).map_err(heed::Error::Encoding)?;
                 sorter.insert(key, val)?;
             }
         }
@@ -252,7 +252,7 @@ impl<'i> FacetsUpdate<'i> {
 
         // We write those FSTs in LMDB now
         for (field_id, fst) in text_fsts {
-            self.index.facet_id_string_fst.put(wtxn, &BEU16::new(field_id), &fst)?;
+            self.index.facet_id_string_fst.put(wtxn, &field_id, &fst)?;
         }
 
         Ok(())

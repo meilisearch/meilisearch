@@ -22,8 +22,10 @@ fn facet_extreme_value<'t>(
     let extreme_value =
         if let Some(extreme_value) = extreme_it.next() { extreme_value } else { return Ok(None) };
     let (_, extreme_value) = extreme_value?;
-
-    Ok(OrderedF64Codec::bytes_decode(extreme_value))
+    OrderedF64Codec::bytes_decode(extreme_value)
+        .map(Some)
+        .map_err(heed::Error::Decoding)
+        .map_err(Into::into)
 }
 
 pub fn facet_min_value<'t>(
@@ -60,13 +62,12 @@ where
     let mut level0prefix = vec![];
     level0prefix.extend_from_slice(&field_id.to_be_bytes());
     level0prefix.push(0);
-    let mut level0_iter_forward = db
-        .as_polymorph()
-        .prefix_iter::<_, ByteSlice, DecodeIgnore>(txn, level0prefix.as_slice())?;
+    let mut level0_iter_forward =
+        db.remap_types::<ByteSlice, DecodeIgnore>().prefix_iter(txn, level0prefix.as_slice())?;
     if let Some(first) = level0_iter_forward.next() {
         let (first_key, _) = first?;
         let first_key = FacetGroupKeyCodec::<BoundCodec>::bytes_decode(first_key)
-            .ok_or(heed::Error::Encoding)?;
+            .map_err(heed::Error::Decoding)?;
         Ok(Some(first_key.left_bound))
     } else {
         Ok(None)
@@ -86,12 +87,12 @@ where
     level0prefix.extend_from_slice(&field_id.to_be_bytes());
     level0prefix.push(0);
     let mut level0_iter_backward = db
-        .as_polymorph()
-        .rev_prefix_iter::<_, ByteSlice, DecodeIgnore>(txn, level0prefix.as_slice())?;
+        .remap_types::<ByteSlice, DecodeIgnore>()
+        .rev_prefix_iter(txn, level0prefix.as_slice())?;
     if let Some(last) = level0_iter_backward.next() {
         let (last_key, _) = last?;
         let last_key = FacetGroupKeyCodec::<BoundCodec>::bytes_decode(last_key)
-            .ok_or(heed::Error::Encoding)?;
+            .map_err(heed::Error::Decoding)?;
         Ok(Some(last_key.left_bound))
     } else {
         Ok(None)
@@ -106,8 +107,8 @@ pub(crate) fn get_highest_level<'t>(
 ) -> heed::Result<u8> {
     let field_id_prefix = &field_id.to_be_bytes();
     Ok(db
-        .as_polymorph()
-        .rev_prefix_iter::<_, ByteSlice, DecodeIgnore>(txn, field_id_prefix)?
+        .remap_types::<ByteSlice, DecodeIgnore>()
+        .rev_prefix_iter(txn, field_id_prefix)?
         .next()
         .map(|el| {
             let (key, _) = el.unwrap();

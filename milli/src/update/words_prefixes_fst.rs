@@ -2,21 +2,19 @@ use std::iter::{repeat_with, FromIterator};
 use std::str;
 
 use fst::{SetBuilder, Streamer};
+use heed::RwTxn;
 
 use crate::{Index, Result, SmallString32};
 
-pub struct WordsPrefixesFst<'t, 'u, 'i> {
-    wtxn: &'t mut heed::RwTxn<'i, 'u>,
+pub struct WordsPrefixesFst<'t, 'i> {
+    wtxn: &'t mut RwTxn<'i>,
     index: &'i Index,
     threshold: u32,
     max_prefix_length: usize,
 }
 
-impl<'t, 'u, 'i> WordsPrefixesFst<'t, 'u, 'i> {
-    pub fn new(
-        wtxn: &'t mut heed::RwTxn<'i, 'u>,
-        index: &'i Index,
-    ) -> WordsPrefixesFst<'t, 'u, 'i> {
+impl<'t, 'i> WordsPrefixesFst<'t, 'i> {
+    pub fn new(wtxn: &'t mut RwTxn<'i>, index: &'i Index) -> WordsPrefixesFst<'t, 'i> {
         WordsPrefixesFst { wtxn, index, threshold: 100, max_prefix_length: 4 }
     }
 

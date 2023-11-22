@@ -63,12 +63,14 @@ impl<'ctx> DatabaseCache<'ctx> {
         }
 
         match cache.get(&cache_key).unwrap() {
-            Some(Cow::Borrowed(bytes)) => {
-                DC::bytes_decode_owned(bytes).ok_or(heed::Error::Decoding.into()).map(Some)
-            }
-            Some(Cow::Owned(bytes)) => {
-                DC::bytes_decode_owned(bytes).ok_or(heed::Error::Decoding.into()).map(Some)
-            }
+            Some(Cow::Borrowed(bytes)) => DC::bytes_decode_owned(bytes)
+                .map_err(heed::Error::Decoding)
+                .map_err(Into::into)
+                .map(Some),
+            Some(Cow::Owned(bytes)) => DC::bytes_decode_owned(bytes)
+                .map_err(heed::Error::Decoding)
+                .map_err(Into::into)
+                .map(Some),
             None => Ok(None),
         }
     }
@@ -110,12 +112,14 @@ impl<'ctx> DatabaseCache<'ctx> {
         }
 
         match cache.get(&cache_key).unwrap() {
-            Some(Cow::Borrowed(bytes)) => {
-                DC::bytes_decode_owned(bytes).ok_or(heed::Error::Decoding.into()).map(Some)
-            }
-            Some(Cow::Owned(bytes)) => {
-                DC::bytes_decode_owned(bytes).ok_or(heed::Error::Decoding.into()).map(Some)
-            }
+            Some(Cow::Borrowed(bytes)) => DC::bytes_decode_owned(bytes)
+                .map_err(heed::Error::Decoding)
+                .map_err(Into::into)
+                .map(Some),
+            Some(Cow::Owned(bytes)) => DC::bytes_decode_owned(bytes)
+                .map_err(heed::Error::Decoding)
+                .map_err(Into::into)
+                .map(Some),
             None => Ok(None),
         }
     }

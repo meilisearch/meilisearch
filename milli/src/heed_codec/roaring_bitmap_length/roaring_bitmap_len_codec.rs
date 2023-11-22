@@ -2,6 +2,7 @@ use std::io::{self, BufRead, Read};
 use std::mem;
 
 use byteorder::{LittleEndian, ReadBytesExt};
+use heed::BoxedError;
 
 use crate::heed_codec::BytesDecodeOwned;
 
@@ -56,16 +57,16 @@ impl RoaringBitmapLenCodec {
 impl heed::BytesDecode<'_> for RoaringBitmapLenCodec {
     type DItem = u64;
 
-    fn bytes_decode(bytes: &[u8]) -> Option<Self::DItem> {
-        RoaringBitmapLenCodec::deserialize_from_slice(bytes).ok()
+    fn bytes_decode(bytes: &[u8]) -> Result<Self::DItem, BoxedError> {
+        RoaringBitmapLenCodec::deserialize_from_slice(bytes).map_err(Into::into)
     }
 }
 
 impl BytesDecodeOwned for RoaringBitmapLenCodec {
     type DItem = u64;
 
-    fn bytes_decode_owned(bytes: &[u8]) -> Option<Self::DItem> {
-        RoaringBitmapLenCodec::deserialize_from_slice(bytes).ok()
+    fn bytes_decode_owned(bytes: &[u8]) -> Result<Self::DItem, BoxedError> {
+        RoaringBitmapLenCodec::deserialize_from_slice(bytes).map_err(Into::into)
     }
 }
 

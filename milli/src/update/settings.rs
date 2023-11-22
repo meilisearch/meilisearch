@@ -100,8 +100,8 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Setting<T> {
     }
 }
 
-pub struct Settings<'a, 't, 'u, 'i> {
-    wtxn: &'t mut heed::RwTxn<'i, 'u>,
+pub struct Settings<'a, 't, 'i> {
+    wtxn: &'t mut heed::RwTxn<'i>,
     index: &'i Index,
 
     indexer_config: &'a IndexerConfig,
@@ -129,12 +129,12 @@ pub struct Settings<'a, 't, 'u, 'i> {
     pagination_max_total_hits: Setting<usize>,
 }
 
-impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
+impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     pub fn new(
-        wtxn: &'t mut heed::RwTxn<'i, 'u>,
+        wtxn: &'t mut heed::RwTxn<'i>,
         index: &'i Index,
         indexer_config: &'a IndexerConfig,
-    ) -> Settings<'a, 't, 'u, 'i> {
+    ) -> Settings<'a, 't, 'i> {
         Settings {
             wtxn,
             index,

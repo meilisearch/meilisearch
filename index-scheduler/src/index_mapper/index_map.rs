@@ -5,8 +5,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::Duration;
 
-use meilisearch_types::heed::flags::Flags;
-use meilisearch_types::heed::{EnvClosingEvent, EnvOpenOptions};
+use meilisearch_types::heed::{EnvClosingEvent, EnvFlags, EnvOpenOptions};
 use meilisearch_types::milli::Index;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -309,7 +308,7 @@ fn create_or_open_index(
     options.map_size(clamp_to_page_size(map_size));
     options.max_readers(1024);
     if enable_mdb_writemap {
-        unsafe { options.flag(Flags::MdbWriteMap) };
+        unsafe { options.flags(EnvFlags::WRITE_MAP) };
     }
 
     if let Some((created, updated)) = date {

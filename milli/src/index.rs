@@ -4,9 +4,8 @@ use std::fs::File;
 use std::path::Path;
 
 use charabia::{Language, Script};
-use heed::flags::Flags;
 use heed::types::*;
-use heed::{CompactionOption, Database, PolyDatabase, RoTxn, RwTxn};
+use heed::{CompactionOption, Database, RoTxn, RwTxn, Unspecified};
 use roaring::RoaringBitmap;
 use rstar::RTree;
 use time::OffsetDateTime;
@@ -109,10 +108,10 @@ pub struct Index {
     pub(crate) env: heed::Env,
 
     /// Contains many different types (e.g. the fields ids map).
-    pub(crate) main: PolyDatabase,
+    pub(crate) main: Database<Unspecified, Unspecified>,
 
     /// Maps the external documents ids with the internal document id.
-    pub external_documents_ids: Database<Str, OwnedType<BEU32>>,
+    pub external_documents_ids: Database<Str, BEU32>,
 
     /// A word and all the documents ids containing the word.
     pub word_docids: Database<Str, CboRoaringBitmapCodec>,
@@ -158,7 +157,7 @@ pub struct Index {
     /// Maps the facet field id of the normalized-for-search string facets with their original versions.
     pub facet_id_normalized_string_strings: Database<BEU16StrCodec, SerdeJson<BTreeSet<String>>>,
     /// Maps the facet field id of the string facets with an FST containing all the facets values.
-    pub facet_id_string_fst: Database<OwnedType<BEU16>, FstSetCodec>,
+    pub facet_id_string_fst: Database<BEU16, FstSetCodec>,
 
     /// Maps the document id, the facet field id and the numbers.
     pub field_id_docid_facet_f64s: Database<FieldDocIdFacetF64Codec, Unit>,
@@ -166,10 +165,10 @@ pub struct Index {
     pub field_id_docid_facet_strings: Database<FieldDocIdFacetStringCodec, Str>,
 
     /// Maps a vector id to the document id that have it.
-    pub vector_id_docid: Database<OwnedType<BEU32>, OwnedType<BEU32>>,
+    pub vector_id_docid: Database<BEU32, BEU32>,
 
     /// Maps the document id to the document as an obkv store.
-    pub(crate) documents: Database<OwnedType<BEU32>, ObkvCodec>,
+    pub(crate) documents: Database<BEU32, ObkvCodec>,
 }
 
 impl Index {
@@ -182,11 +181,10 @@ impl Index {
         use db_name::*;
 
         options.max_dbs(24);
-        unsafe { options.flag(Flags::MdbAlwaysFreePages) };
 
         let env = options.open(path)?;
         let mut wtxn = env.write_txn()?;
-        let main = env.create_poly_database(&mut wtxn, Some(MAIN))?;
+        let main = env.database_options().name(MAIN).create(&mut wtxn)?;
         let word_docids = env.create_database(&mut wtxn, Some(WORD_DOCIDS))?;
         let external_documents_ids =
             env.create_database(&mut wtxn, Some(EXTERNAL_DOCUMENTS_IDS))?;
@@ -264,20 +262,23 @@ impl Index {
 
     fn set_creation_dates(
         env: &heed::Env,
-        main: PolyDatabase,
+        main: Database<Unspecified, Unspecified>,
         created_at: OffsetDateTime,
         updated_at: OffsetDateTime,
     ) -> heed::Result<()> {
         let mut txn = env.write_txn()?;
         // The db was just created, we update its metadata with the relevant information.
-        if main.get::<_, Str, SerdeJson<OffsetDateTime>>(&txn, main_key::CREATED_AT_KEY)?.is_none()
+        if main
+            .remap_types::<Str, SerdeJson<OffsetDateTime>>()
+            .get(&txn, main_key::CREATED_AT_KEY)?
+            .is_none()
         {
-            main.put::<_, Str, SerdeJson<OffsetDateTime>>(
+            main.remap_types::<Str, SerdeJson<OffsetDateTime>>().put(
                 &mut txn,
                 main_key::UPDATED_AT_KEY,
                 &updated_at,
             )?;
-            main.put::<_, Str, SerdeJson<OffsetDateTime>>(
+            main.remap_types::<Str, SerdeJson<OffsetDateTime>>().put(
                 &mut txn,
                 main_key::CREATED_AT_KEY,
                 &created_at,
@@ -319,11 +320,11 @@ impl Index {
     /// This value is the maximum between the map size passed during the opening of the index
     /// and the on-disk size of the index at the time of opening.
     pub fn map_size(&self) -> Result<usize> {
-        Ok(self.env.map_size()?)
+        Ok(self.env.info().map_size) // TODO remove Result
     }
 
     pub fn copy_to_path<P: AsRef<Path>>(&self, path: P, option: CompactionOption) -> Result<File> {
-        self.env.copy_to_path(path, option).map_err(Into::into)
+        self.env.copy_to_file(path, option).map_err(Into::into)
     }
 
     /// Returns an `EnvClosingEvent` that can be used to wait for the closing event,
@@ -343,21 +344,28 @@ impl Index {
         wtxn: &mut RwTxn,
         docids: &RoaringBitmap,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, RoaringBitmapCodec>(wtxn, main_key::DOCUMENTS_IDS_KEY, docids)
+        self.main.remap_types::<Str, RoaringBitmapCodec>().put(
+            wtxn,
+            main_key::DOCUMENTS_IDS_KEY,
+            docids,
+        )
     }
 
     /// Returns the internal documents ids.
     pub fn documents_ids(&self, rtxn: &RoTxn) -> heed::Result<RoaringBitmap> {
         Ok(self
             .main
-            .get::<_, Str, RoaringBitmapCodec>(rtxn, main_key::DOCUMENTS_IDS_KEY)?
+            .remap_types::<Str, RoaringBitmapCodec>()
+            .get(rtxn, main_key::DOCUMENTS_IDS_KEY)?
             .unwrap_or_default())
     }
 
     /// Returns the number of documents indexed in the database.
     pub fn number_of_documents(&self, rtxn: &RoTxn) -> Result<u64> {
-        let count =
-            self.main.get::<_, Str, RoaringBitmapLenCodec>(rtxn, main_key::DOCUMENTS_IDS_KEY)?;
+        let count = self
+            .main
+            .remap_types::<Str, RoaringBitmapLenCodec>()
+            .get(rtxn, main_key::DOCUMENTS_IDS_KEY)?;
         Ok(count.unwrap_or_default())
     }
 
@@ -366,17 +374,17 @@ impl Index {
     /// Writes the documents primary key, this is the field name that is used to store the id.
     pub(crate) fn put_primary_key(&self, wtxn: &mut RwTxn, primary_key: &str) -> heed::Result<()> {
         self.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
-        self.main.put::<_, Str, Str>(wtxn, main_key::PRIMARY_KEY_KEY, primary_key)
+        self.main.remap_types::<Str, Str>().put(wtxn, main_key::PRIMARY_KEY_KEY, primary_key)
     }
 
     /// Deletes the primary key of the documents, this can be done to reset indexes settings.
     pub(crate) fn delete_primary_key(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, main_key::PRIMARY_KEY_KEY)
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::PRIMARY_KEY_KEY)
     }
 
     /// Returns the documents primary key, `None` if it hasn't been defined.
     pub fn primary_key<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<Option<&'t str>> {
-        self.main.get::<_, Str, Str>(rtxn, main_key::PRIMARY_KEY_KEY)
+        self.main.remap_types::<Str, Str>().get(rtxn, main_key::PRIMARY_KEY_KEY)
     }
 
     /* external documents ids */
@@ -396,7 +404,11 @@ impl Index {
         wtxn: &mut RwTxn,
         map: &FieldsIdsMap,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeJson<FieldsIdsMap>>(wtxn, main_key::FIELDS_IDS_MAP_KEY, map)
+        self.main.remap_types::<Str, SerdeJson<FieldsIdsMap>>().put(
+            wtxn,
+            main_key::FIELDS_IDS_MAP_KEY,
+            map,
+        )
     }
 
     /// Returns the fields ids map which associate the documents keys with an internal field id
@@ -404,7 +416,8 @@ impl Index {
     pub fn fields_ids_map(&self, rtxn: &RoTxn) -> heed::Result<FieldsIdsMap> {
         Ok(self
             .main
-            .get::<_, Str, SerdeJson<FieldsIdsMap>>(rtxn, main_key::FIELDS_IDS_MAP_KEY)?
+            .remap_types::<Str, SerdeJson<FieldsIdsMap>>()
+            .get(rtxn, main_key::FIELDS_IDS_MAP_KEY)?
             .unwrap_or_default())
     }
 
@@ -416,19 +429,24 @@ impl Index {
         wtxn: &mut RwTxn,
         rtree: &RTree<GeoPoint>,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeBincode<RTree<GeoPoint>>>(wtxn, main_key::GEO_RTREE_KEY, rtree)
+        self.main.remap_types::<Str, SerdeBincode<RTree<GeoPoint>>>().put(
+            wtxn,
+            main_key::GEO_RTREE_KEY,
+            rtree,
+        )
     }
 
     /// Delete the `rtree` which associates coordinates to documents ids.
     pub(crate) fn delete_geo_rtree(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, main_key::GEO_RTREE_KEY)
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::GEO_RTREE_KEY)
     }
 
     /// Returns the `rtree` which associates coordinates to documents ids.
     pub fn geo_rtree(&self, rtxn: &RoTxn) -> Result<Option<RTree<GeoPoint>>> {
         match self
             .main
-            .get::<_, Str, SerdeBincode<RTree<GeoPoint>>>(rtxn, main_key::GEO_RTREE_KEY)?
+            .remap_types::<Str, SerdeBincode<RTree<GeoPoint>>>()
+            .get(rtxn, main_key::GEO_RTREE_KEY)?
         {
             Some(rtree) => Ok(Some(rtree)),
             None => Ok(None),
@@ -443,7 +461,7 @@ impl Index {
         wtxn: &mut RwTxn,
         docids: &RoaringBitmap,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, RoaringBitmapCodec>(
+        self.main.remap_types::<Str, RoaringBitmapCodec>().put(
             wtxn,
             main_key::GEO_FACETED_DOCUMENTS_IDS_KEY,
             docids,
@@ -452,14 +470,15 @@ impl Index {
 
     /// Delete the documents ids that are faceted with a _geo field.
     pub(crate) fn delete_geo_faceted_documents_ids(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, main_key::GEO_FACETED_DOCUMENTS_IDS_KEY)
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::GEO_FACETED_DOCUMENTS_IDS_KEY)
     }
 
     /// Retrieve all the documents ids that are faceted with a _geo field.
     pub fn geo_faceted_documents_ids(&self, rtxn: &RoTxn) -> heed::Result<RoaringBitmap> {
         match self
             .main
-            .get::<_, Str, RoaringBitmapCodec>(rtxn, main_key::GEO_FACETED_DOCUMENTS_IDS_KEY)?
+            .remap_types::<Str, RoaringBitmapCodec>()
+            .get(rtxn, main_key::GEO_FACETED_DOCUMENTS_IDS_KEY)?
         {
             Some(docids) => Ok(docids),
             None => Ok(RoaringBitmap::new()),
@@ -474,22 +493,22 @@ impl Index {
         self.delete_vector_hnsw(wtxn)?;
 
         let chunk_size = 1024 * 1024 * (1024 + 512); // 1.5 GiB
-        let bytes = bincode::serialize(hnsw).map_err(|_| heed::Error::Encoding)?;
+        let bytes = bincode::serialize(hnsw).map_err(Into::into).map_err(heed::Error::Encoding)?;
         for (i, chunk) in bytes.chunks(chunk_size).enumerate() {
             let i = i as u32;
             let mut key = main_key::VECTOR_HNSW_KEY_PREFIX.as_bytes().to_vec();
             key.extend_from_slice(&i.to_be_bytes());
-            self.main.put::<_, ByteSlice, ByteSlice>(wtxn, &key, chunk)?;
+            self.main.remap_types::<ByteSlice, ByteSlice>().put(wtxn, &key, chunk)?;
         }
         Ok(())
     }
 
     /// Delete the `hnsw`.
     pub(crate) fn delete_vector_hnsw(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        let mut iter = self.main.prefix_iter_mut::<_, ByteSlice, DecodeIgnore>(
-            wtxn,
-            main_key::VECTOR_HNSW_KEY_PREFIX.as_bytes(),
-        )?;
+        let mut iter = self
+            .main
+            .remap_types::<ByteSlice, DecodeIgnore>()
+            .prefix_iter_mut(wtxn, main_key::VECTOR_HNSW_KEY_PREFIX.as_bytes())?;
         let mut deleted = false;
         while iter.next().transpose()?.is_some() {
             // We do not keep a reference to the key or the value.
@@ -501,8 +520,10 @@ impl Index {
     /// Returns the `hnsw`.
     pub fn vector_hnsw(&self, rtxn: &RoTxn) -> Result<Option<Hnsw>> {
         let mut slices = Vec::new();
-        for result in
-            self.main.prefix_iter::<_, Str, ByteSlice>(rtxn, main_key::VECTOR_HNSW_KEY_PREFIX)?
+        for result in self
+            .main
+            .remap_types::<Str, ByteSlice>()
+            .prefix_iter(rtxn, main_key::VECTOR_HNSW_KEY_PREFIX)?
         {
             let (_, slice) = result?;
             slices.push(slice);
@@ -512,7 +533,11 @@ impl Index {
             Ok(None)
         } else {
             let readable_slices: ReadableSlices<_> = slices.into_iter().collect();
-            Ok(Some(bincode::deserialize_from(readable_slices).map_err(|_| heed::Error::Decoding)?))
+            Ok(Some(
+                bincode::deserialize_from(readable_slices)
+                    .map_err(Into::into)
+                    .map_err(heed::Error::Decoding)?,
+            ))
         }
     }
 
@@ -525,7 +550,7 @@ impl Index {
         wtxn: &mut RwTxn,
         distribution: &FieldDistribution,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeJson<FieldDistribution>>(
+        self.main.remap_types::<Str, SerdeJson<FieldDistribution>>().put(
             wtxn,
             main_key::FIELD_DISTRIBUTION_KEY,
             distribution,
@@ -537,7 +562,8 @@ impl Index {
     pub fn field_distribution(&self, rtxn: &RoTxn) -> heed::Result<FieldDistribution> {
         Ok(self
             .main
-            .get::<_, Str, SerdeJson<FieldDistribution>>(rtxn, main_key::FIELD_DISTRIBUTION_KEY)?
+            .remap_types::<Str, SerdeJson<FieldDistribution>>()
+            .get(rtxn, main_key::FIELD_DISTRIBUTION_KEY)?
             .unwrap_or_default())
     }
 
@@ -550,7 +576,7 @@ impl Index {
         wtxn: &mut RwTxn,
         fields: &[&str],
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeBincode<&[&str]>>(
+        self.main.remap_types::<Str, SerdeBincode<&[&str]>>().put(
             wtxn,
             main_key::DISPLAYED_FIELDS_KEY,
             &fields,
@@ -560,13 +586,15 @@ impl Index {
     /// Deletes the displayed fields ids, this will make the engine to display
     /// all the documents attributes in the order of the `FieldsIdsMap`.
     pub(crate) fn delete_displayed_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, main_key::DISPLAYED_FIELDS_KEY)
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::DISPLAYED_FIELDS_KEY)
     }
 
     /// Returns the displayed fields in the order they were set by the user. If it returns
     /// `None` it means that all the attributes are set as displayed in the order of the `FieldsIdsMap`.
     pub fn displayed_fields<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<Option<Vec<&'t str>>> {
-        self.main.get::<_, Str, SerdeBincode<Vec<&'t str>>>(rtxn, main_key::DISPLAYED_FIELDS_KEY)
+        self.main
+            .remap_types::<Str, SerdeBincode<Vec<&'t str>>>()
+            .get(rtxn, main_key::DISPLAYED_FIELDS_KEY)
     }
 
     /// Identical to `displayed_fields`, but returns the ids instead.
@@ -646,7 +674,7 @@ impl Index {
 
     /// Writes the searchable fields, when this list is specified, only these are indexed.
     fn put_searchable_fields(&self, wtxn: &mut RwTxn, fields: &[&str]) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeBincode<&[&str]>>(
+        self.main.remap_types::<Str, SerdeBincode<&[&str]>>().put(
             wtxn,
             main_key::SEARCHABLE_FIELDS_KEY,
             &fields,
@@ -655,13 +683,15 @@ impl Index {
 
     /// Deletes the searchable fields, when no fields are specified, all fields are indexed.
     fn delete_searchable_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, main_key::SEARCHABLE_FIELDS_KEY)
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::SEARCHABLE_FIELDS_KEY)
     }
 
     /// Returns the searchable fields, those are the fields that are indexed,
     /// if the searchable fields aren't there it means that **all** the fields are indexed.
     pub fn searchable_fields<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<Option<Vec<&'t str>>> {
-        self.main.get::<_, Str, SerdeBincode<Vec<&'t str>>>(rtxn, main_key::SEARCHABLE_FIELDS_KEY)
+        self.main
+            .remap_types::<Str, SerdeBincode<Vec<&'t str>>>()
+            .get(rtxn, main_key::SEARCHABLE_FIELDS_KEY)
     }
 
     /// Identical to `searchable_fields`, but returns the ids instead.
@@ -687,7 +717,7 @@ impl Index {
         wtxn: &mut RwTxn,
         fields: &[&str],
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeBincode<_>>(
+        self.main.remap_types::<Str, SerdeBincode<_>>().put(
             wtxn,
             main_key::USER_DEFINED_SEARCHABLE_FIELDS_KEY,
             &fields,
@@ -699,7 +729,7 @@ impl Index {
         &self,
         wtxn: &mut RwTxn,
     ) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, main_key::USER_DEFINED_SEARCHABLE_FIELDS_KEY)
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::USER_DEFINED_SEARCHABLE_FIELDS_KEY)
     }
 
     /// Returns the user defined searchable fields.
@@ -708,7 +738,8 @@ impl Index {
         rtxn: &'t RoTxn,
     ) -> heed::Result<Option<Vec<&'t str>>> {
         self.main
-            .get::<_, Str, SerdeBincode<Vec<_>>>(rtxn, main_key::USER_DEFINED_SEARCHABLE_FIELDS_KEY)
+            .remap_types::<Str, SerdeBincode<Vec<_>>>()
+            .get(rtxn, main_key::USER_DEFINED_SEARCHABLE_FIELDS_KEY)
     }
 
     /* filterable fields */
@@ -719,19 +750,24 @@ impl Index {
         wtxn: &mut RwTxn,
         fields: &HashSet<String>,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeJson<_>>(wtxn, main_key::FILTERABLE_FIELDS_KEY, fields)
+        self.main.remap_types::<Str, SerdeJson<_>>().put(
+            wtxn,
+            main_key::FILTERABLE_FIELDS_KEY,
+            fields,
+        )
     }
 
     /// Deletes the filterable fields ids in the database.
     pub(crate) fn delete_filterable_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, main_key::FILTERABLE_FIELDS_KEY)
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::FILTERABLE_FIELDS_KEY)
     }
 
     /// Returns the filterable fields names.
     pub fn filterable_fields(&self, rtxn: &RoTxn) -> heed::Result<HashSet<String>> {
         Ok(self
             .main
-            .get::<_, Str, SerdeJson<_>>(rtxn, main_key::FILTERABLE_FIELDS_KEY)?
+            .remap_types::<Str, SerdeJson<_>>()
+            .get(rtxn, main_key::FILTERABLE_FIELDS_KEY)?
             .unwrap_or_default())
     }
 
@@ -758,19 +794,24 @@ impl Index {
         wtxn: &mut RwTxn,
         fields: &HashSet<String>,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeJson<_>>(wtxn, main_key::SORTABLE_FIELDS_KEY, fields)
+        self.main.remap_types::<Str, SerdeJson<_>>().put(
+            wtxn,
+            main_key::SORTABLE_FIELDS_KEY,
+            fields,
+        )
     }
 
     /// Deletes the sortable fields ids in the database.
     pub(crate) fn delete_sortable_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, main_key::SORTABLE_FIELDS_KEY)
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::SORTABLE_FIELDS_KEY)
     }
 
     /// Returns the sortable fields names.
     pub fn sortable_fields(&self, rtxn: &RoTxn) -> heed::Result<HashSet<String>> {
         Ok(self
             .main
-            .get::<_, Str, SerdeJson<_>>(rtxn, main_key::SORTABLE_FIELDS_KEY)?
+            .remap_types::<Str, SerdeJson<_>>()
+            .get(rtxn, main_key::SORTABLE_FIELDS_KEY)?
             .unwrap_or_default())
     }
 
@@ -789,14 +830,19 @@ impl Index {
         wtxn: &mut RwTxn,
         fields: &HashSet<String>,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeJson<_>>(wtxn, main_key::HIDDEN_FACETED_FIELDS_KEY, fields)
+        self.main.remap_types::<Str, SerdeJson<_>>().put(
+            wtxn,
+            main_key::HIDDEN_FACETED_FIELDS_KEY,
+            fields,
+        )
     }
 
     /// Returns the faceted fields names.
     pub fn faceted_fields(&self, rtxn: &RoTxn) -> heed::Result<HashSet<String>> {
         Ok(self
             .main
-            .get::<_, Str, SerdeJson<_>>(rtxn, main_key::HIDDEN_FACETED_FIELDS_KEY)?
+            .remap_types::<Str, SerdeJson<_>>()
+            .get(rtxn, main_key::HIDDEN_FACETED_FIELDS_KEY)?
             .unwrap_or_default())
     }
 
@@ -863,7 +909,7 @@ impl Index {
         rtxn: &RoTxn,
         field_id: FieldId,
     ) -> heed::Result<RoaringBitmap> {
-        match self.facet_id_is_null_docids.get(rtxn, &BEU16::new(field_id))? {
+        match self.facet_id_is_null_docids.get(rtxn, &field_id)? {
             Some(docids) => Ok(docids),
             None => Ok(RoaringBitmap::new()),
         }
@@ -875,7 +921,7 @@ impl Index {
         rtxn: &RoTxn,
         field_id: FieldId,
     ) -> heed::Result<RoaringBitmap> {
-        match self.facet_id_is_empty_docids.get(rtxn, &BEU16::new(field_id))? {
+        match self.facet_id_is_empty_docids.get(rtxn, &field_id)? {
             Some(docids) => Ok(docids),
             None => Ok(RoaringBitmap::new()),
         }
@@ -887,7 +933,7 @@ impl Index {
         rtxn: &RoTxn,
         field_id: FieldId,
     ) -> heed::Result<RoaringBitmap> {
-        match self.facet_id_exists_docids.get(rtxn, &BEU16::new(field_id))? {
+        match self.facet_id_exists_docids.get(rtxn, &field_id)? {
             Some(docids) => Ok(docids),
             None => Ok(RoaringBitmap::new()),
         }
@@ -900,15 +946,15 @@ impl Index {
         wtxn: &mut RwTxn,
         distinct_field: &str,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, Str>(wtxn, main_key::DISTINCT_FIELD_KEY, distinct_field)
+        self.main.remap_types::<Str, Str>().put(wtxn, main_key::DISTINCT_FIELD_KEY, distinct_field)
     }
 
     pub fn distinct_field<'a>(&self, rtxn: &'a RoTxn) -> heed::Result<Option<&'a str>> {
-        self.main.get::<_, Str, Str>(rtxn, main_key::DISTINCT_FIELD_KEY)
+        self.main.remap_types::<Str, Str>().get(rtxn, main_key::DISTINCT_FIELD_KEY)
     }
 
     pub(crate) fn delete_distinct_field(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, main_key::DISTINCT_FIELD_KEY)
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::DISTINCT_FIELD_KEY)
     }
 
     /* criteria */
@@ -918,15 +964,23 @@ impl Index {
         wtxn: &mut RwTxn,
         criteria: &[Criterion],
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeJson<&[Criterion]>>(wtxn, main_key::CRITERIA_KEY, &criteria)
+        self.main.remap_types::<Str, SerdeJson<&[Criterion]>>().put(
+            wtxn,
+            main_key::CRITERIA_KEY,
+            &criteria,
+        )
     }
 
     pub(crate) fn delete_criteria(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, main_key::CRITERIA_KEY)
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::CRITERIA_KEY)
     }
 
     pub fn criteria(&self, rtxn: &RoTxn) -> heed::Result<Vec<Criterion>> {
-        match self.main.get::<_, Str, SerdeJson<Vec<Criterion>>>(rtxn, main_key::CRITERIA_KEY)? {
+        match self
+            .main
+            .remap_types::<Str, SerdeJson<Vec<Criterion>>>()
+            .get(rtxn, main_key::CRITERIA_KEY)?
+        {
             Some(criteria) => Ok(criteria),
             None => Ok(default_criteria()),
         }
@@ -940,12 +994,16 @@ impl Index {
         wtxn: &mut RwTxn,
         fst: &fst::Set<A>,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, ByteSlice>(wtxn, main_key::WORDS_FST_KEY, fst.as_fst().as_bytes())
+        self.main.remap_types::<Str, ByteSlice>().put(
+            wtxn,
+            main_key::WORDS_FST_KEY,
+            fst.as_fst().as_bytes(),
+        )
     }
 
     /// Returns the FST which is the words dictionary of the engine.
     pub fn words_fst<'t>(&self, rtxn: &'t RoTxn) -> Result<fst::Set<Cow<'t, [u8]>>> {
-        match self.main.get::<_, Str, ByteSlice>(rtxn, main_key::WORDS_FST_KEY)? {
+        match self.main.remap_types::<Str, ByteSlice>().get(rtxn, main_key::WORDS_FST_KEY)? {
             Some(bytes) => Ok(fst::Set::new(bytes)?.map_data(Cow::Borrowed)?),
             None => Ok(fst::Set::default().map_data(Cow::Owned)?),
         }
@@ -958,15 +1016,19 @@ impl Index {
         wtxn: &mut RwTxn,
         fst: &fst::Set<A>,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, ByteSlice>(wtxn, main_key::STOP_WORDS_KEY, fst.as_fst().as_bytes())
+        self.main.remap_types::<Str, ByteSlice>().put(
+            wtxn,
+            main_key::STOP_WORDS_KEY,
+            fst.as_fst().as_bytes(),
+        )
     }
 
     pub(crate) fn delete_stop_words(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, main_key::STOP_WORDS_KEY)
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::STOP_WORDS_KEY)
     }
 
     pub fn stop_words<'t>(&self, rtxn: &'t RoTxn) -> Result<Option<fst::Set<&'t [u8]>>> {
-        match self.main.get::<_, Str, ByteSlice>(rtxn, main_key::STOP_WORDS_KEY)? {
+        match self.main.remap_types::<Str, ByteSlice>().get(rtxn, main_key::STOP_WORDS_KEY)? {
             Some(bytes) => Ok(Some(fst::Set::new(bytes)?)),
             None => Ok(None),
         }
@@ -979,18 +1041,22 @@ impl Index {
         wtxn: &mut RwTxn,
         set: &BTreeSet<String>,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeBincode<_>>(wtxn, main_key::NON_SEPARATOR_TOKENS_KEY, set)
+        self.main.remap_types::<Str, SerdeBincode<_>>().put(
+            wtxn,
+            main_key::NON_SEPARATOR_TOKENS_KEY,
+            set,
+        )
     }
 
     pub(crate) fn delete_non_separator_tokens(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, main_key::NON_SEPARATOR_TOKENS_KEY)
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::NON_SEPARATOR_TOKENS_KEY)
     }
 
     pub fn non_separator_tokens(&self, rtxn: &RoTxn) -> Result<Option<BTreeSet<String>>> {
-        Ok(self.main.get::<_, Str, SerdeBincode<BTreeSet<String>>>(
-            rtxn,
-            main_key::NON_SEPARATOR_TOKENS_KEY,
-        )?)
+        Ok(self
+            .main
+            .remap_types::<Str, SerdeBincode<BTreeSet<String>>>()
+            .get(rtxn, main_key::NON_SEPARATOR_TOKENS_KEY)?)
     }
 
     /* separator tokens */
@@ -1000,17 +1066,22 @@ impl Index {
         wtxn: &mut RwTxn,
         set: &BTreeSet<String>,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeBincode<_>>(wtxn, main_key::SEPARATOR_TOKENS_KEY, set)
+        self.main.remap_types::<Str, SerdeBincode<_>>().put(
+            wtxn,
+            main_key::SEPARATOR_TOKENS_KEY,
+            set,
+        )
     }
 
     pub(crate) fn delete_separator_tokens(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, main_key::SEPARATOR_TOKENS_KEY)
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::SEPARATOR_TOKENS_KEY)
     }
 
     pub fn separator_tokens(&self, rtxn: &RoTxn) -> Result<Option<BTreeSet<String>>> {
         Ok(self
             .main
-            .get::<_, Str, SerdeBincode<BTreeSet<String>>>(rtxn, main_key::SEPARATOR_TOKENS_KEY)?)
+            .remap_types::<Str, SerdeBincode<BTreeSet<String>>>()
+            .get(rtxn, main_key::SEPARATOR_TOKENS_KEY)?)
     }
 
     /* separators easing method */
@@ -1040,17 +1111,18 @@ impl Index {
         wtxn: &mut RwTxn,
         set: &BTreeSet<String>,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeBincode<_>>(wtxn, main_key::DICTIONARY_KEY, set)
+        self.main.remap_types::<Str, SerdeBincode<_>>().put(wtxn, main_key::DICTIONARY_KEY, set)
     }
 
     pub(crate) fn delete_dictionary(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, main_key::DICTIONARY_KEY)
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::DICTIONARY_KEY)
     }
 
     pub fn dictionary(&self, rtxn: &RoTxn) -> Result<Option<BTreeSet<String>>> {
         Ok(self
             .main
-            .get::<_, Str, SerdeBincode<BTreeSet<String>>>(rtxn, main_key::DICTIONARY_KEY)?)
+            .remap_types::<Str, SerdeBincode<BTreeSet<String>>>()
+            .get(rtxn, main_key::DICTIONARY_KEY)?)
     }
 
     /* synonyms */
@@ -1061,8 +1133,12 @@ impl Index {
         synonyms: &HashMap<Vec<String>, Vec<Vec<String>>>,
         user_defined_synonyms: &BTreeMap<String, Vec<String>>,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeBincode<_>>(wtxn, main_key::SYNONYMS_KEY, synonyms)?;
-        self.main.put::<_, Str, SerdeBincode<_>>(
+        self.main.remap_types::<Str, SerdeBincode<_>>().put(
+            wtxn,
+            main_key::SYNONYMS_KEY,
+            synonyms,
+        )?;
+        self.main.remap_types::<Str, SerdeBincode<_>>().put(
             wtxn,
             main_key::USER_DEFINED_SYNONYMS_KEY,
             user_defined_synonyms,
@@ -1070,8 +1146,8 @@ impl Index {
     }
 
     pub(crate) fn delete_synonyms(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, main_key::SYNONYMS_KEY)?;
-        self.main.delete::<_, Str>(wtxn, main_key::USER_DEFINED_SYNONYMS_KEY)
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::SYNONYMS_KEY)?;
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::USER_DEFINED_SYNONYMS_KEY)
     }
 
     pub fn user_defined_synonyms(
@@ -1080,14 +1156,16 @@ impl Index {
     ) -> heed::Result<BTreeMap<String, Vec<String>>> {
         Ok(self
             .main
-            .get::<_, Str, SerdeBincode<_>>(rtxn, main_key::USER_DEFINED_SYNONYMS_KEY)?
+            .remap_types::<Str, SerdeBincode<_>>()
+            .get(rtxn, main_key::USER_DEFINED_SYNONYMS_KEY)?
             .unwrap_or_default())
     }
 
     pub fn synonyms(&self, rtxn: &RoTxn) -> heed::Result<HashMap<Vec<String>, Vec<Vec<String>>>> {
         Ok(self
             .main
-            .get::<_, Str, SerdeBincode<_>>(rtxn, main_key::SYNONYMS_KEY)?
+            .remap_types::<Str, SerdeBincode<_>>()
+            .get(rtxn, main_key::SYNONYMS_KEY)?
             .unwrap_or_default())
     }
 
@@ -1108,7 +1186,7 @@ impl Index {
         wtxn: &mut RwTxn,
         fst: &fst::Set<A>,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, ByteSlice>(
+        self.main.remap_types::<Str, ByteSlice>().put(
             wtxn,
             main_key::WORDS_PREFIXES_FST_KEY,
             fst.as_fst().as_bytes(),
@@ -1117,7 +1195,11 @@ impl Index {
 
     /// Returns the FST which is the words prefixes dictionnary of the engine.
     pub fn words_prefixes_fst<'t>(&self, rtxn: &'t RoTxn) -> Result<fst::Set<Cow<'t, [u8]>>> {
-        match self.main.get::<_, Str, ByteSlice>(rtxn, main_key::WORDS_PREFIXES_FST_KEY)? {
+        match self
+            .main
+            .remap_types::<Str, ByteSlice>()
+            .get(rtxn, main_key::WORDS_PREFIXES_FST_KEY)?
+        {
             Some(bytes) => Ok(fst::Set::new(bytes)?.map_data(Cow::Borrowed)?),
             None => Ok(fst::Set::default().map_data(Cow::Owned)?),
         }
@@ -1142,7 +1224,7 @@ impl Index {
         Ok(ids.into_iter().map(move |id| {
             let kv = self
                 .documents
-                .get(rtxn, &BEU32::new(id))?
+                .get(rtxn, &id)?
                 .ok_or(UserError::UnknownInternalDocumentId { document_id: id })?;
             Ok((id, kv))
         }))
@@ -1207,7 +1289,8 @@ impl Index {
     pub fn created_at(&self, rtxn: &RoTxn) -> Result<OffsetDateTime> {
         Ok(self
             .main
-            .get::<_, Str, SerdeJson<OffsetDateTime>>(rtxn, main_key::CREATED_AT_KEY)?
+            .remap_types::<Str, SerdeJson<OffsetDateTime>>()
+            .get(rtxn, main_key::CREATED_AT_KEY)?
             .ok_or(InternalError::DatabaseMissingEntry {
                 db_name: db_name::MAIN,
                 key: Some(main_key::CREATED_AT_KEY),
@@ -1218,7 +1301,8 @@ impl Index {
     pub fn updated_at(&self, rtxn: &RoTxn) -> Result<OffsetDateTime> {
         Ok(self
             .main
-            .get::<_, Str, SerdeJson<OffsetDateTime>>(rtxn, main_key::UPDATED_AT_KEY)?
+            .remap_types::<Str, SerdeJson<OffsetDateTime>>()
+            .get(rtxn, main_key::UPDATED_AT_KEY)?
             .ok_or(InternalError::DatabaseMissingEntry {
                 db_name: db_name::MAIN,
                 key: Some(main_key::UPDATED_AT_KEY),
@@ -1230,14 +1314,18 @@ impl Index {
         wtxn: &mut RwTxn,
         time: &OffsetDateTime,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeJson<OffsetDateTime>>(wtxn, main_key::UPDATED_AT_KEY, time)
+        self.main.remap_types::<Str, SerdeJson<OffsetDateTime>>().put(
+            wtxn,
+            main_key::UPDATED_AT_KEY,
+            time,
+        )
     }
 
     pub fn authorize_typos(&self, txn: &RoTxn) -> heed::Result<bool> {
         // It is not possible to put a bool in heed with OwnedType, so we put a u8 instead. We
         // identify 0 as being false, and anything else as true. The absence of a value is true,
         // because by default, we authorize typos.
-        match self.main.get::<_, Str, OwnedType<u8>>(txn, main_key::AUTHORIZE_TYPOS)? {
+        match self.main.remap_types::<Str, OwnedType<u8>>().get(txn, main_key::AUTHORIZE_TYPOS)? {
             Some(0) => Ok(false),
             _ => Ok(true),
         }
@@ -1247,7 +1335,11 @@ impl Index {
         // It is not possible to put a bool in heed with OwnedType, so we put a u8 instead. We
         // identify 0 as being false, and anything else as true. The absence of a value is true,
         // because by default, we authorize typos.
-        self.main.put::<_, Str, OwnedType<u8>>(txn, main_key::AUTHORIZE_TYPOS, &(flag as u8))?;
+        self.main.remap_types::<Str, OwnedType<u8>>().put(
+            txn,
+            main_key::AUTHORIZE_TYPOS,
+            &(flag as u8),
+        )?;
 
         Ok(())
     }
@@ -1258,7 +1350,8 @@ impl Index {
         // because by default, we authorize typos.
         Ok(self
             .main
-            .get::<_, Str, OwnedType<u8>>(txn, main_key::ONE_TYPO_WORD_LEN)?
+            .remap_types::<Str, OwnedType<u8>>()
+            .get(txn, main_key::ONE_TYPO_WORD_LEN)?
             .unwrap_or(DEFAULT_MIN_WORD_LEN_ONE_TYPO))
     }
 
@@ -1266,7 +1359,11 @@ impl Index {
         // It is not possible to put a bool in heed with OwnedType, so we put a u8 instead. We
         // identify 0 as being false, and anything else as true. The absence of a value is true,
         // because by default, we authorize typos.
-        self.main.put::<_, Str, OwnedType<u8>>(txn, main_key::ONE_TYPO_WORD_LEN, &val)?;
+        self.main.remap_types::<Str, OwnedType<u8>>().put(
+            txn,
+            main_key::ONE_TYPO_WORD_LEN,
+            &val,
+        )?;
         Ok(())
     }
 
@@ -1276,7 +1373,8 @@ impl Index {
         // because by default, we authorize typos.
         Ok(self
             .main
-            .get::<_, Str, OwnedType<u8>>(txn, main_key::TWO_TYPOS_WORD_LEN)?
+            .remap_types::<Str, OwnedType<u8>>()
+            .get(txn, main_key::TWO_TYPOS_WORD_LEN)?
             .unwrap_or(DEFAULT_MIN_WORD_LEN_TWO_TYPOS))
     }
 
@@ -1284,13 +1382,17 @@ impl Index {
         // It is not possible to put a bool in heed with OwnedType, so we put a u8 instead. We
         // identify 0 as being false, and anything else as true. The absence of a value is true,
         // because by default, we authorize typos.
-        self.main.put::<_, Str, OwnedType<u8>>(txn, main_key::TWO_TYPOS_WORD_LEN, &val)?;
+        self.main.remap_types::<Str, OwnedType<u8>>().put(
+            txn,
+            main_key::TWO_TYPOS_WORD_LEN,
+            &val,
+        )?;
         Ok(())
     }
 
     /// List the words on which typo are not allowed
     pub fn exact_words<'t>(&self, txn: &'t RoTxn) -> Result<Option<fst::Set<Cow<'t, [u8]>>>> {
-        match self.main.get::<_, Str, ByteSlice>(txn, main_key::EXACT_WORDS)? {
+        match self.main.remap_types::<Str, ByteSlice>().get(txn, main_key::EXACT_WORDS)? {
             Some(bytes) => Ok(Some(fst::Set::new(bytes)?.map_data(Cow::Borrowed)?)),
             None => Ok(None),
         }
@@ -1301,7 +1403,7 @@ impl Index {
         txn: &mut RwTxn,
         words: &fst::Set<A>,
     ) -> Result<()> {
-        self.main.put::<_, Str, ByteSlice>(
+        self.main.remap_types::<Str, ByteSlice>().put(
             txn,
             main_key::EXACT_WORDS,
             words.as_fst().as_bytes(),
@@ -1313,7 +1415,8 @@ impl Index {
     pub fn exact_attributes<'t>(&self, txn: &'t RoTxn) -> Result<Vec<&'t str>> {
         Ok(self
             .main
-            .get::<_, Str, SerdeBincode<Vec<&str>>>(txn, main_key::EXACT_ATTRIBUTES)?
+            .remap_types::<Str, SerdeBincode<Vec<&str>>>()
+            .get(txn, main_key::EXACT_ATTRIBUTES)?
             .unwrap_or_default())
     }
 
@@ -1326,34 +1429,40 @@ impl Index {
 
     /// Writes the exact attributes to the database.
     pub(crate) fn put_exact_attributes(&self, txn: &mut RwTxn, attrs: &[&str]) -> Result<()> {
-        self.main.put::<_, Str, SerdeBincode<&[&str]>>(txn, main_key::EXACT_ATTRIBUTES, &attrs)?;
+        self.main.remap_types::<Str, SerdeBincode<&[&str]>>().put(
+            txn,
+            main_key::EXACT_ATTRIBUTES,
+            &attrs,
+        )?;
         Ok(())
     }
 
     /// Clears the exact attributes from the store.
     pub(crate) fn delete_exact_attributes(&self, txn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(txn, main_key::EXACT_ATTRIBUTES)
+        self.main.remap_key_type::<Str>().delete(txn, main_key::EXACT_ATTRIBUTES)
     }
 
     pub fn max_values_per_facet(&self, txn: &RoTxn) -> heed::Result<Option<usize>> {
-        self.main.get::<_, Str, OwnedType<usize>>(txn, main_key::MAX_VALUES_PER_FACET)
+        self.main.remap_types::<Str, OwnedType<usize>>().get(txn, main_key::MAX_VALUES_PER_FACET)
     }
 
     pub(crate) fn put_max_values_per_facet(&self, txn: &mut RwTxn, val: usize) -> heed::Result<()> {
-        self.main.put::<_, Str, OwnedType<usize>>(txn, main_key::MAX_VALUES_PER_FACET, &val)
+        self.main.remap_types::<Str, OwnedType<usize>>().put(
+            txn,
+            main_key::MAX_VALUES_PER_FACET,
+            &val,
+        )
     }
 
     pub(crate) fn delete_max_values_per_facet(&self, txn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(txn, main_key::MAX_VALUES_PER_FACET)
+        self.main.remap_key_type::<Str>().delete(txn, main_key::MAX_VALUES_PER_FACET)
     }
 
     pub fn sort_facet_values_by(&self, txn: &RoTxn) -> heed::Result<HashMap<String, OrderBy>> {
         let mut orders = self
             .main
-            .get::<_, Str, SerdeJson<HashMap<String, OrderBy>>>(
-                txn,
-                main_key::SORT_FACET_VALUES_BY,
-            )?
+            .remap_types::<Str, SerdeJson<HashMap<String, OrderBy>>>()
+            .get(txn, main_key::SORT_FACET_VALUES_BY)?
             .unwrap_or_default();
         // Insert the default ordering if it is not already overwritten by the user.
         orders.entry("*".to_string()).or_insert(OrderBy::Lexicographic);
@@ -1365,15 +1474,17 @@ impl Index {
         txn: &mut RwTxn,
         val: &HashMap<String, OrderBy>,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeJson<_>>(txn, main_key::SORT_FACET_VALUES_BY, &val)
+        self.main.remap_types::<Str, SerdeJson<_>>().put(txn, main_key::SORT_FACET_VALUES_BY, &val)
     }
 
     pub(crate) fn delete_sort_facet_values_by(&self, txn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(txn, main_key::SORT_FACET_VALUES_BY)
+        self.main.remap_key_type::<Str>().delete(txn, main_key::SORT_FACET_VALUES_BY)
     }
 
     pub fn pagination_max_total_hits(&self, txn: &RoTxn) -> heed::Result<Option<usize>> {
-        self.main.get::<_, Str, OwnedType<usize>>(txn, main_key::PAGINATION_MAX_TOTAL_HITS)
+        self.main
+            .remap_types::<Str, OwnedType<usize>>()
+            .get(txn, main_key::PAGINATION_MAX_TOTAL_HITS)
     }
 
     pub(crate) fn put_pagination_max_total_hits(
@@ -1381,11 +1492,15 @@ impl Index {
         txn: &mut RwTxn,
         val: usize,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, OwnedType<usize>>(txn, main_key::PAGINATION_MAX_TOTAL_HITS, &val)
+        self.main.remap_types::<Str, OwnedType<usize>>().put(
+            txn,
+            main_key::PAGINATION_MAX_TOTAL_HITS,
+            &val,
+        )
     }
 
     pub(crate) fn delete_pagination_max_total_hits(&self, txn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(txn, main_key::PAGINATION_MAX_TOTAL_HITS)
+        self.main.remap_key_type::<Str>().delete(txn, main_key::PAGINATION_MAX_TOTAL_HITS)
     }
 
     /* script  language docids */

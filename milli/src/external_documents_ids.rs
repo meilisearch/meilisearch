@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use heed::types::{OwnedType, Str};
+use heed::types::Str;
 use heed::{Database, RoIter, RoTxn, RwTxn};
 
 use crate::{DocumentId, BEU32};
@@ -16,10 +16,10 @@ pub struct DocumentOperation {
     pub kind: DocumentOperationKind,
 }
 
-pub struct ExternalDocumentsIds(Database<Str, OwnedType<BEU32>>);
+pub struct ExternalDocumentsIds(Database<Str, BEU32>);
 
 impl ExternalDocumentsIds {
-    pub fn new(db: Database<Str, OwnedType<BEU32>>) -> ExternalDocumentsIds {
+    pub fn new(db: Database<Str, BEU32>) -> ExternalDocumentsIds {
         ExternalDocumentsIds(db)
     }
 
@@ -29,7 +29,7 @@ impl ExternalDocumentsIds {
     }
 
     pub fn get<A: AsRef<str>>(&self, rtxn: &RoTxn, external_id: A) -> heed::Result<Option<u32>> {
-        Ok(self.0.get(rtxn, external_id.as_ref())?.map(|x| x.get()))
+        Ok(self.0.get(rtxn, external_id.as_ref())?)
     }
 
     /// An helper function to debug this type, returns an `HashMap` of both,
@@ -38,7 +38,7 @@ impl ExternalDocumentsIds {
         let mut map = HashMap::default();
         for result in self.0.iter(rtxn)? {
             let (external, internal) = result?;
-            map.insert(external.to_owned(), internal.get());
+            map.insert(external.to_owned(), internal);
         }
         Ok(map)
     }
@@ -55,7 +55,7 @@ impl ExternalDocumentsIds {
         for DocumentOperation { external_id, internal_id, kind } in operations {
             match kind {
                 DocumentOperationKind::Create => {
-                    self.0.put(wtxn, &external_id, &BEU32::new(internal_id))?;
+                    self.0.put(wtxn, &external_id, &internal_id)?;
                 }
                 DocumentOperationKind::Delete => {
                     if !self.0.delete(wtxn, &external_id)? {
@@ -69,7 +69,7 @@ impl ExternalDocumentsIds {
     }
 
     /// Returns an iterator over all the external ids.
-    pub fn iter<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<RoIter<'t, Str, OwnedType<BEU32>>> {
+    pub fn iter<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<RoIter<'t, Str, BEU32>> {
         self.0.iter(rtxn)
     }
 }

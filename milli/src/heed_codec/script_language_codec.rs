@@ -2,29 +2,30 @@ use std::borrow::Cow;
 use std::str;
 
 use charabia::{Language, Script};
+use heed::BoxedError;
 
 pub struct ScriptLanguageCodec;
 
 impl<'a> heed::BytesDecode<'a> for ScriptLanguageCodec {
     type DItem = (Script, Language);
 
-    fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        let sep = bytes.iter().position(|b| *b == 0)?;
+    fn bytes_decode(bytes: &'a [u8]) -> Result<Self::DItem, BoxedError> {
+        let sep = bytes.iter().position(|b| *b == 0).unwrap();
         let (s_bytes, l_bytes) = bytes.split_at(sep);
-        let script = str::from_utf8(s_bytes).ok()?;
+        let script = str::from_utf8(s_bytes)?;
         let script_name = Script::from_name(script);
-        let lan = str::from_utf8(l_bytes).ok()?;
+        let lan = str::from_utf8(l_bytes)?;
         // skip '\0' byte between the two strings.
         let lan_name = Language::from_name(&lan[1..]);
 
-        Some((script_name, lan_name))
+        Ok((script_name, lan_name))
     }
 }
 
 impl<'a> heed::BytesEncode<'a> for ScriptLanguageCodec {
     type EItem = (Script, Language);
 
-    fn bytes_encode((script, lan): &Self::EItem) -> Option<Cow<[u8]>> {
+    fn bytes_encode((script, lan): &Self::EItem) -> Result<Cow<[u8]>, BoxedError> {
         let script_name = script.name().as_bytes();
         let lan_name = lan.name().as_bytes();
 
@@ -33,6 +34,6 @@ impl<'a> heed::BytesEncode<'a> for ScriptLanguageCodec {
         bytes.push(0);
         bytes.extend_from_slice(lan_name);
 
-        Some(Cow::Owned(bytes))
+        Ok(Cow::Owned(bytes))
     }
 }

@@ -1824,7 +1824,7 @@ checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
 [[package]]
 name = "heed"
 version = "0.20.0-alpha.6"
-source = "git+https://github.com/meilisearch/heed?branch=put-current-with-data-codec#2824585c37a6c7c0c5d11fe13c0dad3ebb1a5c4f"
+source = "git+https://github.com/meilisearch/heed?branch=main#321b0d4f2d26ceb504e70b4cb4eac0e0bdb3d796"
 dependencies = [
  "bitflags 2.3.3",
  "bytemuck",
@@ -1842,16 +1842,19 @@ dependencies = [
 [[package]]
 name = "heed-traits"
 version = "0.20.0-alpha.6"
-source = "git+https://github.com/meilisearch/heed?branch=put-current-with-data-codec#2824585c37a6c7c0c5d11fe13c0dad3ebb1a5c4f"
+source = "git+https://github.com/meilisearch/heed?branch=main#321b0d4f2d26ceb504e70b4cb4eac0e0bdb3d796"
 
 [[package]]
 name = "heed-types"
 version = "0.20.0-alpha.6"
-source = "git+https://github.com/meilisearch/heed?branch=put-current-with-data-codec#2824585c37a6c7c0c5d11fe13c0dad3ebb1a5c4f"
+source = "git+https://github.com/meilisearch/heed?branch=main#321b0d4f2d26ceb504e70b4cb4eac0e0bdb3d796"
 dependencies = [
+ "bincode",
  "bytemuck",
  "byteorder",
  "heed-traits",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -2981,7 +2984,7 @@ dependencies = [
 [[package]]
 name = "lmdb-master-sys"
 version = "0.1.0"
-source = "git+https://github.com/meilisearch/heed?branch=put-current-with-data-codec#2824585c37a6c7c0c5d11fe13c0dad3ebb1a5c4f"
+source = "git+https://github.com/meilisearch/heed?branch=main#321b0d4f2d26ceb504e70b4cb4eac0e0bdb3d796"
 dependencies = [
  "cc",
  "doxygen-rs",

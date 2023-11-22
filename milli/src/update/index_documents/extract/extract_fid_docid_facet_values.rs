@@ -6,8 +6,8 @@ use std::io::{self, BufReader};
 use std::mem::size_of;
 use std::result::Result as StdResult;
 
+use bytemuck::bytes_of;
 use grenad::Sorter;
-use heed::zerocopy::AsBytes;
 use heed::BytesEncode;
 use itertools::EitherOrBoth;
 use ordered_float::OrderedFloat;
@@ -20,9 +20,7 @@ use crate::error::InternalError;
 use crate::facet::value_encoding::f64_into_bytes;
 use crate::update::del_add::{DelAdd, KvWriterDelAdd};
 use crate::update::index_documents::{create_writer, writer_into_reader};
-use crate::{
-    CboRoaringBitmapCodec, DocumentId, Error, FieldId, Result, BEU32, MAX_FACET_VALUE_LENGTH,
-};
+use crate::{CboRoaringBitmapCodec, DocumentId, Error, FieldId, Result, MAX_FACET_VALUE_LENGTH};
 
 /// The length of the elements that are always in the buffer when inserting new values.
 const TRUNCATE_SIZE: usize = size_of::<FieldId>() + size_of::<DocumentId>();
@@ -94,7 +92,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
                 strings_key_buffer.extend_from_slice(&field_id.to_be_bytes());
 
                 let document: [u8; 4] = docid_bytes[..4].try_into().ok().unwrap();
-                let document = BEU32::from(document).get();
+                let document = DocumentId::from_be_bytes(document);
 
                 // For the other extraction tasks, prefix the key with the field_id and the document_id
                 numbers_key_buffer.extend_from_slice(docid_bytes);
@@ -323,7 +321,7 @@ where
                     // We insert only the Del part of the Obkv to inform
                     // that we only want to remove all those numbers.
                     let mut obkv = KvWriterDelAdd::memory();
-                    obkv.insert(DelAdd::Deletion, ().as_bytes())?;
+                    obkv.insert(DelAdd::Deletion, bytes_of(&()))?;
                     let bytes = obkv.into_inner()?;
                     fid_docid_facet_numbers_sorter.insert(&key_buffer, bytes)?;
                 }
@@ -336,7 +334,7 @@ where
                     // We insert only the Add part of the Obkv to inform
                     // that we only want to remove all those numbers.
                     let mut obkv = KvWriterDelAdd::memory();
-                    obkv.insert(DelAdd::Addition, ().as_bytes())?;
+                    obkv.insert(DelAdd::Addition, bytes_of(&()))?;
                     let bytes = obkv.into_inner()?;
                     fid_docid_facet_numbers_sorter.insert(&key_buffer, bytes)?;
                 }

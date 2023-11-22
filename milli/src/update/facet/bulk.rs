@@ -3,7 +3,7 @@ use std::io::BufReader;
 
 use grenad::CompressionType;
 use heed::types::ByteSlice;
-use heed::{BytesDecode, BytesEncode, Error, RoTxn, RwTxn};
+use heed::{BytesDecode, BytesEncode, Error, PutFlags, RoTxn, RwTxn};
 use roaring::RoaringBitmap;
 
 use super::{FACET_GROUP_SIZE, FACET_MIN_LEVEL_SIZE};
@@ -146,7 +146,13 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
                 buffer.push(1);
                 // then we extend the buffer with the docids bitmap
                 buffer.extend_from_slice(value);
-                unsafe { database.append(key, &buffer)? };
+                unsafe {
+                    database.put_current_with_options::<ByteSlice>(
+                        PutFlags::APPEND,
+                        key,
+                        &buffer,
+                    )?
+                };
             }
         } else {
             let mut buffer = Vec::new();
@@ -219,8 +225,8 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
 
         let level_0_iter = self
             .db
-            .as_polymorph()
-            .prefix_iter::<_, ByteSlice, ByteSlice>(rtxn, level_0_prefix.as_slice())?
+            .remap_types::<ByteSlice, ByteSlice>()
+            .prefix_iter(rtxn, level_0_prefix.as_slice())?
             .remap_types::<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>();
 
         let mut left_bound: &[u8] = &[];
@@ -308,10 +314,10 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
                 {
                     let key = FacetGroupKey { field_id, level, left_bound };
                     let key = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_encode(&key)
-                        .ok_or(Error::Encoding)?;
+                        .map_err(Error::Encoding)?;
                     let value = FacetGroupValue { size: group_size, bitmap };
                     let value =
-                        FacetGroupValueCodec::bytes_encode(&value).ok_or(Error::Encoding)?;
+                        FacetGroupValueCodec::bytes_encode(&value).map_err(Error::Encoding)?;
                     cur_writer.insert(key, value)?;
                     cur_writer_len += 1;
                 }
@@ -337,9 +343,9 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
             {
                 let key = FacetGroupKey { field_id, level, left_bound };
                 let key = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_encode(&key)
-                    .ok_or(Error::Encoding)?;
+                    .map_err(Error::Encoding)?;
                 let value = FacetGroupValue { size: group_size, bitmap };
-                let value = FacetGroupValueCodec::bytes_encode(&value).ok_or(Error::Encoding)?;
+                let value = FacetGroupValueCodec::bytes_encode(&value).map_err(Error::Encoding)?;
                 cur_writer.insert(key, value)?;
                 cur_writer_len += 1;
             }
