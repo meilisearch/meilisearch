@@ -5,9 +5,11 @@ pub mod service;
 
 use std::fmt::{self, Display};
 
+#[allow(unused)]
 pub use index::{GetAllDocumentsOptions, GetDocumentOptions};
 use meili_snap::json_string;
 use serde::{Deserialize, Serialize};
+#[allow(unused)]
 pub use server::{default_settings, Server};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]

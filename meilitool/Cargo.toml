@@ -1,0 +1,19 @@
+[package]
+name = "meilitool"
+description = "A CLI to edit a Meilisearch database from the command line"
+version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+readme.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = "1.0.75"
+clap = { version = "4.2.1", features = ["derive"] }
+dump = { path = "../dump" }
+file-store = { path = "../file-store" }
+meilisearch-auth = { path = "../meilisearch-auth" }
+meilisearch-types = { path = "../meilisearch-types" }
+time = { version = "0.3.30", features = ["formatting"] }
+uuid = { version = "1.5.0", features = ["v4"], default-features = false }

@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "meilisearch",
+    "meilitool",
     "meilisearch-types",
     "meilisearch-auth",
     "meili-snap",
@@ -18,7 +19,7 @@ members = [
 ]
 
 [workspace.package]
-version = "1.4.1"
+version = "1.5.0"
 authors = ["Quentin de Quelen <quentin@dequelen.me>", "Clément Renault <clement@meilisearch.com>"]
 description = "Meilisearch HTTP server"
 homepage = "https://meilisearch.com"

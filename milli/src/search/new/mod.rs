@@ -434,7 +434,18 @@ pub fn execute_search(
         let mut search = Search::default();
         let docids = match ctx.index.vector_hnsw(ctx.txn)? {
             Some(hnsw) => {
+                if let Some(expected_size) = hnsw.iter().map(|(_, point)| point.len()).next() {
+                    if vector.len() != expected_size {
+                        return Err(UserError::InvalidVectorDimensions {
+                            expected: expected_size,
+                            found: vector.len(),
+                        }
+                        .into());
+                    }
+                }
+
                 let vector = NDotProductPoint::new(vector.clone());
+
                 let neighbors = hnsw.search(&vector, &mut search);
 
                 let mut docids = Vec::new();
