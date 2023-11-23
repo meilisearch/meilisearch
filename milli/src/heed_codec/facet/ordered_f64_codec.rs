@@ -12,10 +12,10 @@ impl<'a> BytesDecode<'a> for OrderedF64Codec {
 
     fn bytes_decode(bytes: &'a [u8]) -> Result<Self::DItem, BoxedError> {
         if bytes.len() < 16 {
-            panic!() // TODO don't panic
+            Err(BoxedError::from("invalid slice length"))
+        } else {
+            bytes[8..].try_into().map(f64::from_be_bytes).map_err(Into::into)
         }
-        let f = bytes[8..].try_into().ok().map(f64::from_be_bytes).unwrap();
-        Ok(f)
     }
 }
 
@@ -26,7 +26,8 @@ impl heed::BytesEncode<'_> for OrderedF64Codec {
         let mut buffer = [0u8; 16];
 
         // write the globally ordered float
-        let bytes = f64_into_bytes(*f).unwrap();
+        let bytes = f64_into_bytes(*f)
+            .ok_or_else(|| BoxedError::from("cannot generate a globally ordered float"))?;
         buffer[..8].copy_from_slice(&bytes[..]);
         // Then the f64 value just to be able to read it back
         let bytes = f.to_be_bytes();

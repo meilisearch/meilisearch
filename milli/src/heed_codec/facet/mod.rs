@@ -63,7 +63,7 @@ where
         v.extend_from_slice(&value.field_id.to_be_bytes());
         v.extend_from_slice(&[value.level]);
 
-        let bound = T::bytes_encode(&value.left_bound).unwrap();
+        let bound = T::bytes_encode(&value.left_bound)?;
         v.extend_from_slice(&bound);
 
         Ok(Cow::Owned(v))

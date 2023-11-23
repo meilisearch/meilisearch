@@ -14,7 +14,7 @@ impl<'a> heed::BytesDecode<'a> for StrBEU32Codec {
         let footer_len = size_of::<u32>();
 
         if bytes.len() < footer_len {
-            panic!() // TODO Do not panic
+            return Err(BoxedError::from("cannot extract footer from bytes"));
         }
 
         let (word, bytes) = bytes.split_at(bytes.len() - footer_len);
@@ -48,13 +48,13 @@ impl<'a> heed::BytesDecode<'a> for StrBEU16Codec {
         let footer_len = size_of::<u16>();
 
         if bytes.len() < footer_len + 1 {
-            panic!() // TODO do not panic
+            return Err(BoxedError::from("cannot extract footer from bytes"));
         }
 
         let (word_plus_nul_byte, bytes) = bytes.split_at(bytes.len() - footer_len);
         let (_, word) = word_plus_nul_byte.split_last().unwrap();
-        let word = str::from_utf8(word).ok().unwrap();
-        let pos = bytes.try_into().map(u16::from_be_bytes).ok().unwrap();
+        let word = str::from_utf8(word)?;
+        let pos = bytes.try_into().map(u16::from_be_bytes)?;
 
         Ok((word, pos))
     }

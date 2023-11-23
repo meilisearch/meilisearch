@@ -64,13 +64,13 @@ impl<'ctx> DatabaseCache<'ctx> {
 
         match cache.get(&cache_key).unwrap() {
             Some(Cow::Borrowed(bytes)) => DC::bytes_decode_owned(bytes)
+                .map(Some)
                 .map_err(heed::Error::Decoding)
-                .map_err(Into::into)
-                .map(Some),
+                .map_err(Into::into),
             Some(Cow::Owned(bytes)) => DC::bytes_decode_owned(bytes)
+                .map(Some)
                 .map_err(heed::Error::Decoding)
-                .map_err(Into::into)
-                .map(Some),
+                .map_err(Into::into),
             None => Ok(None),
         }
     }
@@ -113,13 +113,13 @@ impl<'ctx> DatabaseCache<'ctx> {
 
         match cache.get(&cache_key).unwrap() {
             Some(Cow::Borrowed(bytes)) => DC::bytes_decode_owned(bytes)
+                .map(Some)
                 .map_err(heed::Error::Decoding)
-                .map_err(Into::into)
-                .map(Some),
+                .map_err(Into::into),
             Some(Cow::Owned(bytes)) => DC::bytes_decode_owned(bytes)
+                .map(Some)
                 .map_err(heed::Error::Decoding)
-                .map_err(Into::into)
-                .map(Some),
+                .map_err(Into::into),
             None => Ok(None),
         }
     }

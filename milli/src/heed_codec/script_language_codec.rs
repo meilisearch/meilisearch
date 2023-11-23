@@ -10,7 +10,11 @@ impl<'a> heed::BytesDecode<'a> for ScriptLanguageCodec {
     type DItem = (Script, Language);
 
     fn bytes_decode(bytes: &'a [u8]) -> Result<Self::DItem, BoxedError> {
-        let sep = bytes.iter().position(|b| *b == 0).unwrap();
+        let sep = bytes
+            .iter()
+            .position(|b| *b == 0)
+            .ok_or("cannot find nul byte")
+            .map_err(BoxedError::from)?;
         let (s_bytes, l_bytes) = bytes.split_at(sep);
         let script = str::from_utf8(s_bytes)?;
         let script_name = Script::from_name(script);
