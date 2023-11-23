@@ -486,8 +486,8 @@ pub(crate) mod test_helpers {
 
                 let iter = self
                     .content
-                    .as_polymorph()
-                    .prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(txn, &level_no_prefix)
+                    .remap_types::<ByteSlice, FacetGroupValueCodec>()
+                    .prefix_iter(txn, &level_no_prefix)
                     .unwrap();
                 for el in iter {
                     let (key, value) = el.unwrap();
@@ -501,11 +501,8 @@ pub(crate) mod test_helpers {
                     let start_below = {
                         let mut start_below_iter = self
                             .content
-                            .as_polymorph()
-                            .prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(
-                                txn,
-                                &prefix_start_below,
-                            )
+                            .remap_types::<ByteSlice, FacetGroupValueCodec>()
+                            .prefix_iter(txn, &prefix_start_below)
                             .unwrap();
                         let (key_bytes, _) = start_below_iter.next().unwrap().unwrap();
                         FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(key_bytes).unwrap()
@@ -612,7 +609,7 @@ mod comparison_bench {
                 }
                 let time_spent = timer.elapsed().as_millis();
                 println!("    add {nbr_doc} : {time_spent}ms");
-                txn.abort().unwrap();
+                txn.abort();
             }
         }
     }

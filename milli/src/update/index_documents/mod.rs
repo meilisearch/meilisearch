@@ -701,7 +701,7 @@ mod tests {
     use crate::documents::documents_batch_reader_from_objects;
     use crate::index::tests::TempIndex;
     use crate::search::TermsMatchingStrategy;
-    use crate::{db_snap, Filter, Search, BEU16};
+    use crate::{db_snap, Filter, Search};
 
     #[test]
     fn simple_document_replacement() {
@@ -1743,14 +1743,11 @@ mod tests {
             let colour_green_id = index.fields_ids_map(&rtxn).unwrap().id("colour.green").unwrap();
 
             let bitmap_colour =
-                index.facet_id_exists_docids.get(&rtxn, &BEU16::new(colour_id)).unwrap().unwrap();
+                index.facet_id_exists_docids.get(&rtxn, &colour_id).unwrap().unwrap();
             assert_eq!(bitmap_colour.into_iter().collect::<Vec<_>>(), vec![0, 1, 2, 3, 4, 6, 7]);
 
-            let bitmap_colour_green = index
-                .facet_id_exists_docids
-                .get(&rtxn, &BEU16::new(colour_green_id))
-                .unwrap()
-                .unwrap();
+            let bitmap_colour_green =
+                index.facet_id_exists_docids.get(&rtxn, &colour_green_id).unwrap().unwrap();
             assert_eq!(bitmap_colour_green.into_iter().collect::<Vec<_>>(), vec![6, 7]);
         };
 
@@ -1848,21 +1845,15 @@ mod tests {
                 index.fields_ids_map(&rtxn).unwrap().id("colour.green.blue").unwrap();
 
             let bitmap_null_colour =
-                index.facet_id_is_null_docids.get(&rtxn, &BEU16::new(colour_id)).unwrap().unwrap();
+                index.facet_id_is_null_docids.get(&rtxn, &colour_id).unwrap().unwrap();
             assert_eq!(bitmap_null_colour.into_iter().collect::<Vec<_>>(), vec![0]);
 
-            let bitmap_colour_green = index
-                .facet_id_is_null_docids
-                .get(&rtxn, &BEU16::new(colour_green_id))
-                .unwrap()
-                .unwrap();
+            let bitmap_colour_green =
+                index.facet_id_is_null_docids.get(&rtxn, &colour_green_id).unwrap().unwrap();
             assert_eq!(bitmap_colour_green.into_iter().collect::<Vec<_>>(), vec![2]);
 
-            let bitmap_colour_blue = index
-                .facet_id_is_null_docids
-                .get(&rtxn, &BEU16::new(colour_blue_id))
-                .unwrap()
-                .unwrap();
+            let bitmap_colour_blue =
+                index.facet_id_is_null_docids.get(&rtxn, &colour_blue_id).unwrap().unwrap();
             assert_eq!(bitmap_colour_blue.into_iter().collect::<Vec<_>>(), vec![3]);
         };
 
@@ -1917,21 +1908,15 @@ mod tests {
             let tags_blue_id = index.fields_ids_map(&rtxn).unwrap().id("tags.green.blue").unwrap();
 
             let bitmap_empty_tags =
-                index.facet_id_is_empty_docids.get(&rtxn, &BEU16::new(tags_id)).unwrap().unwrap();
+                index.facet_id_is_empty_docids.get(&rtxn, &tags_id).unwrap().unwrap();
             assert_eq!(bitmap_empty_tags.into_iter().collect::<Vec<_>>(), vec![2, 6, 9]);
 
-            let bitmap_tags_green = index
-                .facet_id_is_empty_docids
-                .get(&rtxn, &BEU16::new(tags_green_id))
-                .unwrap()
-                .unwrap();
+            let bitmap_tags_green =
+                index.facet_id_is_empty_docids.get(&rtxn, &tags_green_id).unwrap().unwrap();
             assert_eq!(bitmap_tags_green.into_iter().collect::<Vec<_>>(), vec![8]);
 
-            let bitmap_tags_blue = index
-                .facet_id_is_empty_docids
-                .get(&rtxn, &BEU16::new(tags_blue_id))
-                .unwrap()
-                .unwrap();
+            let bitmap_tags_blue =
+                index.facet_id_is_empty_docids.get(&rtxn, &tags_blue_id).unwrap().unwrap();
             assert_eq!(bitmap_tags_blue.into_iter().collect::<Vec<_>>(), vec![12]);
         };
 
@@ -2684,7 +2669,7 @@ mod tests {
     }
 
     fn delete_documents<'t>(
-        wtxn: &mut RwTxn<'t, '_>,
+        wtxn: &mut RwTxn<'t>,
         index: &'t TempIndex,
         external_ids: &[&str],
     ) -> Vec<u32> {

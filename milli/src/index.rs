@@ -1594,7 +1594,7 @@ pub(crate) mod tests {
         }
         pub fn add_documents_using_wtxn<'t, R>(
             &'t self,
-            wtxn: &mut RwTxn<'t, '_>,
+            wtxn: &mut RwTxn<'t>,
             documents: DocumentsBatchReader<R>,
         ) -> Result<(), crate::error::Error>
         where
@@ -1638,7 +1638,7 @@ pub(crate) mod tests {
         }
         pub fn update_settings_using_wtxn<'t>(
             &'t self,
-            wtxn: &mut RwTxn<'t, '_>,
+            wtxn: &mut RwTxn<'t>,
             update: impl Fn(&mut Settings),
         ) -> Result<(), crate::error::Error> {
             let mut builder = update::Settings::new(wtxn, &self.inner, &self.indexer_config);
@@ -1649,7 +1649,7 @@ pub(crate) mod tests {
 
         pub fn delete_documents_using_wtxn<'t>(
             &'t self,
-            wtxn: &mut RwTxn<'t, '_>,
+            wtxn: &mut RwTxn<'t>,
             external_document_ids: Vec<String>,
         ) {
             let builder = IndexDocuments::new(

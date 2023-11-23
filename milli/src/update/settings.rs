@@ -1565,7 +1565,7 @@ mod tests {
             })
             .unwrap_err();
         assert!(matches!(error, Error::UserError(UserError::PrimaryKeyCannotBeChanged(_))));
-        wtxn.abort().unwrap();
+        wtxn.abort();
 
         // But if we clear the database...
         let mut wtxn = index.write_txn().unwrap();

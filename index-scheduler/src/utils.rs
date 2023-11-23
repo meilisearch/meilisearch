@@ -337,7 +337,7 @@ impl IndexScheduler {
         let rtxn = self.env.read_txn().unwrap();
         for task in self.all_tasks.iter(&rtxn).unwrap() {
             let (task_id, task) = task.unwrap();
-            let task_id = task_id.get();
+            let task_id = task_id;
 
             let task_index_uid = task.index_uid().map(ToOwned::to_owned);
 
@@ -361,16 +361,13 @@ impl IndexScheduler {
                     .unwrap()
                     .contains(task.uid));
             }
-            let db_enqueued_at = self
-                .enqueued_at
-                .get(&rtxn, &BEI128::new(enqueued_at.unix_timestamp_nanos()))
-                .unwrap()
-                .unwrap();
+            let db_enqueued_at =
+                self.enqueued_at.get(&rtxn, &enqueued_at.unix_timestamp_nanos()).unwrap().unwrap();
             assert!(db_enqueued_at.contains(task_id));
             if let Some(started_at) = started_at {
                 let db_started_at = self
                     .started_at
-                    .get(&rtxn, &BEI128::new(started_at.unix_timestamp_nanos()))
+                    .get(&rtxn, &started_at.unix_timestamp_nanos())
                     .unwrap()
                     .unwrap();
                 assert!(db_started_at.contains(task_id));
@@ -378,7 +375,7 @@ impl IndexScheduler {
             if let Some(finished_at) = finished_at {
                 let db_finished_at = self
                     .finished_at
-                    .get(&rtxn, &BEI128::new(finished_at.unix_timestamp_nanos()))
+                    .get(&rtxn, &finished_at.unix_timestamp_nanos())
                     .unwrap()
                     .unwrap();
                 assert!(db_finished_at.contains(task_id));
