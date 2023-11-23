@@ -1482,7 +1482,6 @@ impl IndexScheduler {
             self.all_tasks.delete(wtxn, &task)?;
         }
         for canceled_by in affected_canceled_by {
-            let canceled_by = canceled_by;
             if let Some(mut tasks) = self.canceled_by.get(wtxn, &canceled_by)? {
                 tasks -= &to_delete_tasks;
                 if tasks.is_empty() {

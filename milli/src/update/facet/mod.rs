@@ -146,7 +146,7 @@ impl<'i> FacetsUpdate<'i> {
         self.index.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
 
         // See self::comparison_bench::benchmark_facet_indexing
-        if self.delta_data.len() >= (self.database.len(wtxn)? as u64 / 50) {
+        if self.delta_data.len() >= (self.database.len(wtxn)? / 50) {
             let field_ids =
                 self.index.faceted_fields_ids(wtxn)?.iter().copied().collect::<Vec<_>>();
             let bulk_update = FacetsUpdateBulk::new(

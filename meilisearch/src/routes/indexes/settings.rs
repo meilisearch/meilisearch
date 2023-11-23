@@ -1,3 +1,5 @@
+#![allow(clippy::redundant_closure_call)]
+
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;

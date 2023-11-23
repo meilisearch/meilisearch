@@ -175,7 +175,7 @@ impl QueryTermSubset {
 
     pub fn use_prefix_db(&self, ctx: &SearchContext) -> Option<Word> {
         let original = ctx.term_interner.get(self.original);
-        let Some(use_prefix_db) = original.zero_typo.use_prefix_db else { return None };
+        let use_prefix_db = original.zero_typo.use_prefix_db?;
         let word = match &self.zero_typo_subset {
             NTypoTermSubset::All => Some(use_prefix_db),
             NTypoTermSubset::Subset { words, phrases: _ } => {

@@ -36,7 +36,7 @@ fn setup_index() -> Index {
 }
 
 fn setup_settings<'t>(
-    wtxn: &mut RwTxn<'t, '_>,
+    wtxn: &mut RwTxn<'t>,
     index: &'t Index,
     primary_key: &str,
     searchable_fields: &[&str],

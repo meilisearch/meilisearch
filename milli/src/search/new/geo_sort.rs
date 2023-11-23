@@ -163,7 +163,7 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
             // computing the distance between two points is expensive thus we cache the result
             documents
                 .sort_by_cached_key(|(_, p)| distance_between_two_points(&self.point, p) as usize);
-            self.cached_sorted_docids.extend(documents.into_iter());
+            self.cached_sorted_docids.extend(documents);
         };
 
         Ok(())

@@ -607,7 +607,8 @@ fn check_sort_criteria(ctx: &SearchContext, sort_criteria: Option<&Vec<AscDesc>>
                     field: field.to_string(),
                     valid_fields,
                     hidden_fields,
-                })?;
+                }
+                .into());
             }
             Member::Geo(_) if !sortable_fields.contains("_geo") => {
                 let (valid_fields, hidden_fields) =
@@ -617,7 +618,8 @@ fn check_sort_criteria(ctx: &SearchContext, sort_criteria: Option<&Vec<AscDesc>>
                     field: "_geo".to_string(),
                     valid_fields,
                     hidden_fields,
-                })?;
+                }
+                .into());
             }
             _ => (),
         }

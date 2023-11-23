@@ -46,7 +46,7 @@ pub async fn multi_search_with_post(
     // Explicitly expect a `(ResponseError, usize)` for the error type rather than `ResponseError` only,
     // so that `?` doesn't work if it doesn't use `with_index`, ensuring that it is not forgotten in case of code
     // changes.
-    let search_results: Result<_, (ResponseError, usize)> = (|| {
+    let search_results: Result<_, (ResponseError, usize)> = {
         async {
             let mut search_results = Vec::with_capacity(queries.len());
             for (query_index, (index_uid, mut query)) in
@@ -88,7 +88,7 @@ pub async fn multi_search_with_post(
             }
             Ok(search_results)
         }
-    })()
+    }
     .await;
 
     if search_results.is_ok() {

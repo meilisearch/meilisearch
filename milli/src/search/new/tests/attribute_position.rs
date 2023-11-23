@@ -141,8 +141,7 @@ fn test_attribute_position_simple() {
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
-    let document_ids_scores: Vec<_> =
-        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    let document_ids_scores: Vec<_> = documents_ids.iter().zip(document_scores).collect();
     insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
 }
 #[test]
@@ -158,8 +157,7 @@ fn test_attribute_position_repeated() {
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
-    let document_ids_scores: Vec<_> =
-        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    let document_ids_scores: Vec<_> = documents_ids.iter().zip(document_scores).collect();
     insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
 }
 
@@ -176,8 +174,7 @@ fn test_attribute_position_different_fields() {
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
-    let document_ids_scores: Vec<_> =
-        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    let document_ids_scores: Vec<_> = documents_ids.iter().zip(document_scores).collect();
     insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
 }
 
@@ -194,7 +191,6 @@ fn test_attribute_position_ngrams() {
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
-    let document_ids_scores: Vec<_> =
-        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    let document_ids_scores: Vec<_> = documents_ids.iter().zip(document_scores).collect();
     insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
 }

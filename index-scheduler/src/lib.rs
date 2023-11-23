@@ -730,7 +730,7 @@ impl IndexScheduler {
         if let Some(canceled_by) = &query.canceled_by {
             let mut all_canceled_tasks = RoaringBitmap::new();
             for cancel_task_uid in canceled_by {
-                if let Some(canceled_by_uid) = self.canceled_by.get(rtxn, &*cancel_task_uid)? {
+                if let Some(canceled_by_uid) = self.canceled_by.get(rtxn, cancel_task_uid)? {
                     all_canceled_tasks |= canceled_by_uid;
                 }
             }
@@ -1509,8 +1509,8 @@ impl<'a> Dump<'a> {
             }
         }
 
-        self.statuses.entry(task.status).or_insert(RoaringBitmap::new()).insert(task.uid);
-        self.kinds.entry(task.kind.as_kind()).or_insert(RoaringBitmap::new()).insert(task.uid);
+        self.statuses.entry(task.status).or_default().insert(task.uid);
+        self.kinds.entry(task.kind.as_kind()).or_default().insert(task.uid);
 
         Ok(task)
     }

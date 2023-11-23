@@ -270,8 +270,8 @@ pub mod test {
             ("aaaa", "", rtok("", "aaaa"), "aaaa"),
             (r#"aa"aa"#, r#""aa"#, rtok("", "aa"), "aa"),
             (r#"aa\"aa"#, r#""#, rtok("", r#"aa\"aa"#), r#"aa"aa"#),
-            (r#"aa\\\aa"#, r#""#, rtok("", r#"aa\\\aa"#), r#"aa\\\aa"#),
-            (r#"aa\\"\aa"#, r#""\aa"#, rtok("", r#"aa\\"#), r#"aa\\"#),
+            (r"aa\\\aa", r#""#, rtok("", r"aa\\\aa"), r"aa\\\aa"),
+            (r#"aa\\"\aa"#, r#""\aa"#, rtok("", r"aa\\"), r"aa\\"),
             (r#"aa\\\"\aa"#, r#""#, rtok("", r#"aa\\\"\aa"#), r#"aa\\"\aa"#),
             (r#"\"\""#, r#""#, rtok("", r#"\"\""#), r#""""#),
         ];
@@ -301,12 +301,12 @@ pub mod test {
         );
         // simple quote
         assert_eq!(
-            unescape(Span::new_extra(r#"Hello \'World\'"#, ""), '\''),
+            unescape(Span::new_extra(r"Hello \'World\'", ""), '\''),
             r#"Hello 'World'"#.to_string()
         );
         assert_eq!(
-            unescape(Span::new_extra(r#"Hello \\\'World\\\'"#, ""), '\''),
-            r#"Hello \\'World\\'"#.to_string()
+            unescape(Span::new_extra(r"Hello \\\'World\\\'", ""), '\''),
+            r"Hello \\'World\\'".to_string()
         );
     }
 
@@ -335,19 +335,19 @@ pub mod test {
             ("\"cha'nnel\"", "cha'nnel", false),
             ("I'm tamo", "I", false),
             // escaped thing but not quote
-            (r#""\\""#, r#"\"#, true),
-            (r#""\\\\\\""#, r#"\\\"#, true),
-            (r#""aa\\aa""#, r#"aa\aa"#, true),
+            (r#""\\""#, r"\", true),
+            (r#""\\\\\\""#, r"\\\", true),
+            (r#""aa\\aa""#, r"aa\aa", true),
             // with double quote
             (r#""Hello \"world\"""#, r#"Hello "world""#, true),
             (r#""Hello \\\"world\\\"""#, r#"Hello \"world\""#, true),
             (r#""I'm \"super\" tamo""#, r#"I'm "super" tamo"#, true),
             (r#""\"\"""#, r#""""#, true),
             // with simple quote
-            (r#"'Hello \'world\''"#, r#"Hello 'world'"#, true),
-            (r#"'Hello \\\'world\\\''"#, r#"Hello \'world\'"#, true),
+            (r"'Hello \'world\''", r#"Hello 'world'"#, true),
+            (r"'Hello \\\'world\\\''", r"Hello \'world\'", true),
             (r#"'I\'m "super" tamo'"#, r#"I'm "super" tamo"#, true),
-            (r#"'\'\''"#, r#"''"#, true),
+            (r"'\'\''", r#"''"#, true),
         ];
 
         for (input, expected, escaped) in test_case {

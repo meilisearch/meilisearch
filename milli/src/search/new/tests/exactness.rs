@@ -478,8 +478,7 @@ fn test_exactness_simple_ordered() {
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
-    let document_ids_scores: Vec<_> =
-        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    let document_ids_scores: Vec<_> = documents_ids.iter().zip(document_scores).collect();
     insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
 
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
@@ -511,8 +510,7 @@ fn test_exactness_simple_reversed() {
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
-    let document_ids_scores: Vec<_> =
-        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    let document_ids_scores: Vec<_> = documents_ids.iter().zip(document_scores).collect();
     insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
 
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
@@ -535,8 +533,7 @@ fn test_exactness_simple_reversed() {
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
-    let document_ids_scores: Vec<_> =
-        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    let document_ids_scores: Vec<_> = documents_ids.iter().zip(document_scores).collect();
     insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
 
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
@@ -566,8 +563,7 @@ fn test_exactness_simple_random() {
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
-    let document_ids_scores: Vec<_> =
-        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    let document_ids_scores: Vec<_> = documents_ids.iter().zip(document_scores).collect();
     insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
 
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
@@ -596,8 +592,7 @@ fn test_exactness_attribute_starts_with_simple() {
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
-    let document_ids_scores: Vec<_> =
-        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    let document_ids_scores: Vec<_> = documents_ids.iter().zip(document_scores).collect();
     insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
 
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
@@ -623,8 +618,7 @@ fn test_exactness_attribute_starts_with_phrase() {
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
-    let document_ids_scores: Vec<_> =
-        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    let document_ids_scores: Vec<_> = documents_ids.iter().zip(document_scores).collect();
     insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
 
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
@@ -644,8 +638,7 @@ fn test_exactness_attribute_starts_with_phrase() {
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
-    let document_ids_scores: Vec<_> =
-        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    let document_ids_scores: Vec<_> = documents_ids.iter().zip(document_scores).collect();
     insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
 
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
@@ -674,8 +667,7 @@ fn test_exactness_all_candidates_with_typo() {
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
-    let document_ids_scores: Vec<_> =
-        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    let document_ids_scores: Vec<_> = documents_ids.iter().zip(document_scores).collect();
     insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
 
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
@@ -711,8 +703,7 @@ fn test_exactness_after_words() {
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
-    let document_ids_scores: Vec<_> =
-        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    let document_ids_scores: Vec<_> = documents_ids.iter().zip(document_scores).collect();
     insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
 
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
@@ -760,8 +751,7 @@ fn test_words_after_exactness() {
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
-    let document_ids_scores: Vec<_> =
-        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    let document_ids_scores: Vec<_> = documents_ids.iter().zip(document_scores).collect();
     insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[19, 9, 18, 8, 17, 16, 6, 7, 15, 5, 14, 4, 13, 3, 12, 2, 1, 11]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
@@ -809,8 +799,7 @@ fn test_proximity_after_exactness() {
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
-    let document_ids_scores: Vec<_> =
-        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    let document_ids_scores: Vec<_> = documents_ids.iter().zip(document_scores).collect();
     insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
 
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 1, 0, 4, 5, 8, 7, 3, 6]");
@@ -847,8 +836,7 @@ fn test_proximity_after_exactness() {
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
-    let document_ids_scores: Vec<_> =
-        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    let document_ids_scores: Vec<_> = documents_ids.iter().zip(document_scores).collect();
     insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1, 2]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
@@ -881,8 +869,7 @@ fn test_exactness_followed_by_typo_prefer_no_typo_prefix() {
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
-    let document_ids_scores: Vec<_> =
-        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    let document_ids_scores: Vec<_> = documents_ids.iter().zip(document_scores).collect();
     insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 1, 0, 4, 3]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
@@ -917,8 +904,7 @@ fn test_typo_followed_by_exactness() {
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
-    let document_ids_scores: Vec<_> =
-        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    let document_ids_scores: Vec<_> = documents_ids.iter().zip(document_scores).collect();
     insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[1, 0, 4, 3]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);

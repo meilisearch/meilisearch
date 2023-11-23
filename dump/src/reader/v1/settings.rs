@@ -56,8 +56,7 @@ pub enum RankingRule {
     Desc(String),
 }
 
-static ASC_DESC_REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"(asc|desc)\(([\w_-]+)\)"#).unwrap());
+static ASC_DESC_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"(asc|desc)\(([\w_-]+)\)").unwrap());
 
 impl FromStr for RankingRule {
     type Err = ();

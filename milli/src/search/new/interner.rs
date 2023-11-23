@@ -228,7 +228,7 @@ impl<T> Ord for Interned<T> {
 
 impl<T> PartialOrd for Interned<T> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.idx.partial_cmp(&other.idx)
+        Some(self.cmp(other))
     }
 }
 
@@ -241,7 +241,7 @@ impl<T> PartialEq for Interned<T> {
 }
 impl<T> Clone for Interned<T> {
     fn clone(&self) -> Self {
-        Self { idx: self.idx, _phantom: PhantomData }
+        *self
     }
 }
 

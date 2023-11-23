@@ -337,8 +337,6 @@ impl IndexScheduler {
         let rtxn = self.env.read_txn().unwrap();
         for task in self.all_tasks.iter(&rtxn).unwrap() {
             let (task_id, task) = task.unwrap();
-            let task_id = task_id;
-
             let task_index_uid = task.index_uid().map(ToOwned::to_owned);
 
             let Task {

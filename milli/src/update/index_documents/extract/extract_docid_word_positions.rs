@@ -309,8 +309,7 @@ fn tokens_from_document<'a>(
                         // if a language has been detected for the token, we update the counter.
                         if let Some(language) = token.language {
                             let script = token.script;
-                            let entry =
-                                script_language_word_count.entry(script).or_insert_with(Vec::new);
+                            let entry = script_language_word_count.entry(script).or_default();
                             match entry.iter_mut().find(|(l, _)| *l == language) {
                                 Some((_, n)) => *n += 1,
                                 None => entry.push((language, 1)),

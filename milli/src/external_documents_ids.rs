@@ -29,7 +29,7 @@ impl ExternalDocumentsIds {
     }
 
     pub fn get<A: AsRef<str>>(&self, rtxn: &RoTxn, external_id: A) -> heed::Result<Option<u32>> {
-        Ok(self.0.get(rtxn, external_id.as_ref())?)
+        self.0.get(rtxn, external_id.as_ref())
     }
 
     /// An helper function to debug this type, returns an `HashMap` of both,
