@@ -52,6 +52,7 @@ pub(crate) fn data_from_obkv_documents(
     dictionary: Option<&[&str]>,
     max_positions_per_attributes: Option<u32>,
     exact_attributes: HashSet<FieldId>,
+    // TODO: add a proximity database deactivation parameter.
 ) -> Result<()> {
     puffin::profile_function!();
 
@@ -150,6 +151,7 @@ pub(crate) fn data_from_obkv_documents(
         });
     }
 
+    // TODO: Skip this part if deactivated
     spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
         docid_word_positions_chunks.clone(),
         indexer,

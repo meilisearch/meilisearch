@@ -127,6 +127,7 @@ pub struct Settings<'a, 't, 'i> {
     max_values_per_facet: Setting<usize>,
     sort_facet_values_by: Setting<HashMap<String, OrderBy>>,
     pagination_max_total_hits: Setting<usize>,
+    // TODO: add a proximity database deactivation attribute.
 }
 
 impl<'a, 't, 'i> Settings<'a, 't, 'i> {
@@ -906,6 +907,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             || synonyms_updated
             || searchable_updated
             || exact_attributes_updated
+        // TODO: reindex if proximity database is activated
         {
             self.reindex(&progress_callback, &should_abort, old_fields_ids_map)?;
         }

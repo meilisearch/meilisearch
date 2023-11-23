@@ -263,6 +263,7 @@ impl<'ctx> SearchContext<'ctx> {
         word2: Interned<String>,
         proximity: u8,
     ) -> Result<Option<RoaringBitmap>> {
+        // TODO: if database is empty, search if the word are in the same attribute instead
         DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
             self.txn,
             (proximity, word1, word2),
@@ -282,6 +283,7 @@ impl<'ctx> SearchContext<'ctx> {
         word2: Interned<String>,
         proximity: u8,
     ) -> Result<Option<u64>> {
+        // TODO: if database is empty, search if the word are in the same attribute instead
         DatabaseCache::get_value::<_, _, CboRoaringBitmapLenCodec>(
             self.txn,
             (proximity, word1, word2),
@@ -301,6 +303,7 @@ impl<'ctx> SearchContext<'ctx> {
         prefix2: Interned<String>,
         proximity: u8,
     ) -> Result<Option<RoaringBitmap>> {
+        // TODO: if database is empty, search if the word are in the same attribute instead
         let docids = match self
             .db_cache
             .word_prefix_pair_proximity_docids
