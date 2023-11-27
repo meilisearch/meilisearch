@@ -37,6 +37,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         snapshots_path: _,
         auth_path: _,
         version_file_path: _,
+        webhook_url: _,
         test_breakpoint_sdr: _,
         planned_failures: _,
         run_loop_iteration: _,

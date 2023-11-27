@@ -2792,6 +2792,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "time",
+ "ureq",
  "uuid 1.5.0",
 ]
 
