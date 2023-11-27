@@ -397,6 +397,7 @@ pub fn configure_data(
         .app_data(web::Data::from(analytics))
         .app_data(
             web::JsonConfig::default()
+                .limit(http_payload_size_limit)
                 .content_type(|mime| mime == mime::APPLICATION_JSON)
                 .error_handler(|err, req: &HttpRequest| match err {
                     JsonPayloadError::ContentType => match req.headers().get(CONTENT_TYPE) {
