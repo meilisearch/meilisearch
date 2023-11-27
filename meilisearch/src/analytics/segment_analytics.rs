@@ -288,6 +288,7 @@ impl From<Opt> for Infos {
             http_addr,
             master_key: _,
             env,
+            task_webhook_url: _,
             max_index_size: _,
             max_task_db_size: _,
             http_payload_size_limit,
