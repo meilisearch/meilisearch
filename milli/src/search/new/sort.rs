@@ -4,7 +4,7 @@ use roaring::RoaringBitmap;
 use super::logger::SearchLogger;
 use super::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait, SearchContext};
 use crate::heed_codec::facet::{FacetGroupKeyCodec, OrderedF64Codec};
-use crate::heed_codec::{ByteSliceRefCodec, StrRefCodec};
+use crate::heed_codec::{BytesRefCodec, StrRefCodec};
 use crate::score_details::{self, ScoreDetails};
 use crate::search::facet::{ascending_facet_sort, descending_facet_sort};
 use crate::{FieldId, Index, Result};
@@ -100,11 +100,11 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
                 let number_db = ctx
                     .index
                     .facet_id_f64_docids
-                    .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>();
+                    .remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>();
                 let string_db = ctx
                     .index
                     .facet_id_string_docids
-                    .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>();
+                    .remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>();
 
                 let (number_iter, string_iter) = if self.is_ascending {
                     let number_iter = ascending_facet_sort(

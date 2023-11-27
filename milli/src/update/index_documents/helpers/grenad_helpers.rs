@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Seek};
 
 use grenad::{CompressionType, Sorter};
-use heed::types::ByteSlice;
+use heed::types::Bytes;
 
 use super::{ClonableMmap, MergeFn};
 use crate::update::index_documents::valid_lmdb_key;
@@ -255,7 +255,7 @@ where
     puffin::profile_function!();
 
     let mut buffer = Vec::new();
-    let database = database.remap_types::<ByteSlice, ByteSlice>();
+    let database = database.remap_types::<Bytes, Bytes>();
 
     let mut merger_iter = sorter.into_stream_merger_iter()?;
     while let Some((key, value)) = merger_iter.next()? {

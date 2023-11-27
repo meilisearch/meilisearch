@@ -532,7 +532,10 @@ pub fn settings(
 
     let faceting = FacetingSettings {
         max_values_per_facet: Setting::Set(
-            index.max_values_per_facet(rtxn)?.unwrap_or(DEFAULT_VALUES_PER_FACET),
+            index
+                .max_values_per_facet(rtxn)?
+                .map(|x| x as usize)
+                .unwrap_or(DEFAULT_VALUES_PER_FACET),
         ),
         sort_facet_values_by: Setting::Set(
             index
@@ -545,7 +548,10 @@ pub fn settings(
 
     let pagination = PaginationSettings {
         max_total_hits: Setting::Set(
-            index.pagination_max_total_hits(rtxn)?.unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS),
+            index
+                .pagination_max_total_hits(rtxn)?
+                .map(|x| x as usize)
+                .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS),
         ),
     };
 

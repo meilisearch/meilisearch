@@ -6,7 +6,7 @@ use std::io::{self, BufReader};
 use bytemuck::allocation::pod_collect_to_vec;
 use charabia::{Language, Script};
 use grenad::MergerBuilder;
-use heed::types::ByteSlice;
+use heed::types::Bytes;
 use heed::{PutFlags, RwTxn};
 use log::error;
 use obkv::{KvReader, KvWriter};
@@ -144,7 +144,7 @@ pub(crate) fn write_typed_chunk_into_index(
                     }
                 }
 
-                let db = index.documents.remap_data_type::<ByteSlice>();
+                let db = index.documents.remap_data_type::<Bytes>();
 
                 if !writer.is_empty() {
                     db.put(wtxn, &docid, &writer.into_inner().unwrap())?;
@@ -293,7 +293,7 @@ pub(crate) fn write_typed_chunk_into_index(
         }
         TypedChunk::FieldIdDocidFacetNumbers(fid_docid_facet_number) => {
             let index_fid_docid_facet_numbers =
-                index.field_id_docid_facet_f64s.remap_types::<ByteSlice, ByteSlice>();
+                index.field_id_docid_facet_f64s.remap_types::<Bytes, Bytes>();
             let mut cursor = fid_docid_facet_number.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
                 let reader = KvReaderDelAdd::new(value);
@@ -313,7 +313,7 @@ pub(crate) fn write_typed_chunk_into_index(
         }
         TypedChunk::FieldIdDocidFacetStrings(fid_docid_facet_string) => {
             let index_fid_docid_facet_strings =
-                index.field_id_docid_facet_strings.remap_types::<ByteSlice, ByteSlice>();
+                index.field_id_docid_facet_strings.remap_types::<Bytes, Bytes>();
             let mut cursor = fid_docid_facet_string.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
                 let reader = KvReaderDelAdd::new(value);
@@ -498,7 +498,7 @@ where
     puffin::profile_function!(format!("number of entries: {}", data.len()));
 
     let mut buffer = Vec::new();
-    let database = database.remap_types::<ByteSlice, ByteSlice>();
+    let database = database.remap_types::<Bytes, Bytes>();
 
     let mut cursor = data.into_cursor()?;
     while let Some((key, value)) = cursor.move_on_next()? {
@@ -556,7 +556,7 @@ where
     }
 
     let mut buffer = Vec::new();
-    let mut database = database.iter_mut(wtxn)?.remap_types::<ByteSlice, ByteSlice>();
+    let mut database = database.iter_mut(wtxn)?.remap_types::<Bytes, Bytes>();
 
     let mut cursor = data.into_cursor()?;
     while let Some((key, value)) = cursor.move_on_next()? {
@@ -571,7 +571,7 @@ where
             let value = serialize_value(value, &mut buffer)?;
             unsafe {
                 // safety: We do not keep a reference to anything that lives inside the database
-                database.put_current_with_options::<ByteSlice>(PutFlags::APPEND, key, value)?
+                database.put_current_with_options::<Bytes>(PutFlags::APPEND, key, value)?
             };
         }
     }

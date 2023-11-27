@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::str;
 
 use grenad::CompressionType;
-use heed::types::ByteSlice;
+use heed::types::Bytes;
 use heed::{BytesDecode, BytesEncode, Database};
 use log::debug;
 
@@ -110,7 +110,7 @@ impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
         }
 
         // We fetch the docids associated to the newly added word prefix fst only.
-        let db = self.word_database.remap_data_type::<ByteSlice>();
+        let db = self.word_database.remap_data_type::<Bytes>();
         let mut buffer = Vec::new();
         for prefix_bytes in new_prefix_fst_words {
             let prefix = str::from_utf8(prefix_bytes.as_bytes()).map_err(|_| {
@@ -119,7 +119,7 @@ impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
 
             // iter over all lines of the DB where the key is prefixed by the current prefix.
             let iter = db
-                .remap_key_type::<ByteSlice>()
+                .remap_key_type::<Bytes>()
                 .prefix_iter(self.wtxn, prefix_bytes.as_bytes())?
                 .remap_key_type::<StrBEU16Codec>();
             for result in iter {

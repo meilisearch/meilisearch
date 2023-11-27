@@ -12,7 +12,7 @@ mod str_beu32_codec;
 mod str_ref;
 mod str_str_u8_codec;
 
-pub use byte_slice_ref::ByteSliceRefCodec;
+pub use byte_slice_ref::BytesRefCodec;
 use heed::BoxedError;
 pub use str_ref::StrRefCodec;
 

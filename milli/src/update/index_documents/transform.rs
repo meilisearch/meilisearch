@@ -247,7 +247,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                 let base_obkv = self
                     .index
                     .documents
-                    .remap_data_type::<heed::types::ByteSlice>()
+                    .remap_data_type::<heed::types::Bytes>()
                     .get(wtxn, &original_key)?
                     .ok_or(InternalError::DatabaseMissingEntry {
                         db_name: db_name::DOCUMENTS,
@@ -501,7 +501,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         let base_obkv = self
             .index
             .documents
-            .remap_data_type::<heed::types::ByteSlice>()
+            .remap_data_type::<heed::types::Bytes>()
             .get(txn, &original_key)?
             .ok_or(InternalError::DatabaseMissingEntry {
                 db_name: db_name::DOCUMENTS,

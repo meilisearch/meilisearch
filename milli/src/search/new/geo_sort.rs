@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::iter::FromIterator;
 
-use heed::types::{ByteSlice, Unit};
+use heed::types::{Bytes, Unit};
 use heed::{RoPrefix, RoTxn};
 use roaring::RoaringBitmap;
 use rstar::RTree;
@@ -34,7 +34,7 @@ fn facet_number_values<'a>(
 
     let iter = index
         .field_id_docid_facet_f64s
-        .remap_key_type::<ByteSlice>()
+        .remap_key_type::<Bytes>()
         .prefix_iter(txn, &key)?
         .remap_key_type();
 

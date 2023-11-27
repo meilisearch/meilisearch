@@ -822,7 +822,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     fn update_max_values_per_facet(&mut self) -> Result<()> {
         match self.max_values_per_facet {
             Setting::Set(max) => {
-                self.index.put_max_values_per_facet(self.wtxn, max)?;
+                self.index.put_max_values_per_facet(self.wtxn, max as u64)?;
             }
             Setting::Reset => {
                 self.index.delete_max_values_per_facet(self.wtxn)?;
@@ -850,7 +850,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     fn update_pagination_max_total_hits(&mut self) -> Result<()> {
         match self.pagination_max_total_hits {
             Setting::Set(max) => {
-                self.index.put_pagination_max_total_hits(self.wtxn, max)?;
+                self.index.put_pagination_max_total_hits(self.wtxn, max as u64)?;
             }
             Setting::Reset => {
                 self.index.delete_pagination_max_total_hits(self.wtxn)?;
@@ -917,7 +917,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 #[cfg(test)]
 mod tests {
     use big_s::S;
-    use heed::types::ByteSlice;
+    use heed::types::Bytes;
     use maplit::{btreemap, btreeset, hashset};
 
     use super::*;
@@ -1130,7 +1130,7 @@ mod tests {
         }
         let count = index
             .facet_id_f64_docids
-            .remap_key_type::<ByteSlice>()
+            .remap_key_type::<Bytes>()
             // The faceted field id is 1u16
             .prefix_iter(&rtxn, &[0, 1, 0])
             .unwrap()
@@ -1151,7 +1151,7 @@ mod tests {
         // Only count the field_id 0 and level 0 facet values.
         let count = index
             .facet_id_f64_docids
-            .remap_key_type::<ByteSlice>()
+            .remap_key_type::<Bytes>()
             .prefix_iter(&rtxn, &[0, 1, 0])
             .unwrap()
             .count();

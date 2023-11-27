@@ -360,6 +360,7 @@ fn prepare_search<'t>(
     let max_total_hits = index
         .pagination_max_total_hits(rtxn)
         .map_err(milli::Error::from)?
+        .map(|x| x as usize)
         .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
 
     search.exhaustive_number_hits(is_finite_pagination);
@@ -586,6 +587,7 @@ pub fn perform_search(
             let max_values_by_facet = index
                 .max_values_per_facet(&rtxn)
                 .map_err(milli::Error::from)?
+                .map(|x| x as usize)
                 .unwrap_or(DEFAULT_VALUES_PER_FACET);
             facet_distribution.max_values_per_facet(max_values_by_facet);
 

@@ -14,7 +14,7 @@ use meilisearch_types::heed::BoxedError;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::keys::KeyId;
 use meilisearch_types::milli;
-use meilisearch_types::milli::heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
+use meilisearch_types::milli::heed::types::{Bytes, DecodeIgnore, SerdeJson};
 use meilisearch_types::milli::heed::{Database, Env, EnvOpenOptions, RwTxn};
 use sha2::Sha256;
 use time::OffsetDateTime;
@@ -32,7 +32,7 @@ const KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME: &str = "keyid-action-index-expirat
 #[derive(Clone)]
 pub struct HeedAuthStore {
     env: Arc<Env>,
-    keys: Database<ByteSlice, SerdeJson<Key>>,
+    keys: Database<Bytes, SerdeJson<Key>>,
     action_keyid_index_expiration: Database<KeyIdActionCodec, SerdeJson<Option<OffsetDateTime>>>,
     should_close_on_drop: bool,
 }
@@ -278,7 +278,7 @@ impl HeedAuthStore {
     fn delete_key_from_inverted_db(&self, wtxn: &mut RwTxn, key: &KeyId) -> Result<()> {
         let mut iter = self
             .action_keyid_index_expiration
-            .remap_types::<ByteSlice, DecodeIgnore>()
+            .remap_types::<Bytes, DecodeIgnore>()
             .prefix_iter_mut(wtxn, key.as_bytes())?;
         while iter.next().transpose()?.is_some() {
             // safety: we don't keep references from inside the LMDB database.

@@ -26,7 +26,7 @@ use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdWordCountCodec, GeoPoint, ObkvCodec,
     OrderBy, Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, BEU16,
-    BEU32,
+    BEU32, BEU64,
 };
 
 /// The HNSW data-structure that we serialize, fill and search in.
@@ -498,7 +498,7 @@ impl Index {
             let i = i as u32;
             let mut key = main_key::VECTOR_HNSW_KEY_PREFIX.as_bytes().to_vec();
             key.extend_from_slice(&i.to_be_bytes());
-            self.main.remap_types::<ByteSlice, ByteSlice>().put(wtxn, &key, chunk)?;
+            self.main.remap_types::<Bytes, Bytes>().put(wtxn, &key, chunk)?;
         }
         Ok(())
     }
@@ -507,7 +507,7 @@ impl Index {
     pub(crate) fn delete_vector_hnsw(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
         let mut iter = self
             .main
-            .remap_types::<ByteSlice, DecodeIgnore>()
+            .remap_types::<Bytes, DecodeIgnore>()
             .prefix_iter_mut(wtxn, main_key::VECTOR_HNSW_KEY_PREFIX.as_bytes())?;
         let mut deleted = false;
         while iter.next().transpose()?.is_some() {
@@ -522,7 +522,7 @@ impl Index {
         let mut slices = Vec::new();
         for result in self
             .main
-            .remap_types::<Str, ByteSlice>()
+            .remap_types::<Str, Bytes>()
             .prefix_iter(rtxn, main_key::VECTOR_HNSW_KEY_PREFIX)?
         {
             let (_, slice) = result?;
@@ -994,7 +994,7 @@ impl Index {
         wtxn: &mut RwTxn,
         fst: &fst::Set<A>,
     ) -> heed::Result<()> {
-        self.main.remap_types::<Str, ByteSlice>().put(
+        self.main.remap_types::<Str, Bytes>().put(
             wtxn,
             main_key::WORDS_FST_KEY,
             fst.as_fst().as_bytes(),
@@ -1003,7 +1003,7 @@ impl Index {
 
     /// Returns the FST which is the words dictionary of the engine.
     pub fn words_fst<'t>(&self, rtxn: &'t RoTxn) -> Result<fst::Set<Cow<'t, [u8]>>> {
-        match self.main.remap_types::<Str, ByteSlice>().get(rtxn, main_key::WORDS_FST_KEY)? {
+        match self.main.remap_types::<Str, Bytes>().get(rtxn, main_key::WORDS_FST_KEY)? {
             Some(bytes) => Ok(fst::Set::new(bytes)?.map_data(Cow::Borrowed)?),
             None => Ok(fst::Set::default().map_data(Cow::Owned)?),
         }
@@ -1016,7 +1016,7 @@ impl Index {
         wtxn: &mut RwTxn,
         fst: &fst::Set<A>,
     ) -> heed::Result<()> {
-        self.main.remap_types::<Str, ByteSlice>().put(
+        self.main.remap_types::<Str, Bytes>().put(
             wtxn,
             main_key::STOP_WORDS_KEY,
             fst.as_fst().as_bytes(),
@@ -1028,7 +1028,7 @@ impl Index {
     }
 
     pub fn stop_words<'t>(&self, rtxn: &'t RoTxn) -> Result<Option<fst::Set<&'t [u8]>>> {
-        match self.main.remap_types::<Str, ByteSlice>().get(rtxn, main_key::STOP_WORDS_KEY)? {
+        match self.main.remap_types::<Str, Bytes>().get(rtxn, main_key::STOP_WORDS_KEY)? {
             Some(bytes) => Ok(Some(fst::Set::new(bytes)?)),
             None => Ok(None),
         }
@@ -1186,7 +1186,7 @@ impl Index {
         wtxn: &mut RwTxn,
         fst: &fst::Set<A>,
     ) -> heed::Result<()> {
-        self.main.remap_types::<Str, ByteSlice>().put(
+        self.main.remap_types::<Str, Bytes>().put(
             wtxn,
             main_key::WORDS_PREFIXES_FST_KEY,
             fst.as_fst().as_bytes(),
@@ -1195,11 +1195,7 @@ impl Index {
 
     /// Returns the FST which is the words prefixes dictionnary of the engine.
     pub fn words_prefixes_fst<'t>(&self, rtxn: &'t RoTxn) -> Result<fst::Set<Cow<'t, [u8]>>> {
-        match self
-            .main
-            .remap_types::<Str, ByteSlice>()
-            .get(rtxn, main_key::WORDS_PREFIXES_FST_KEY)?
-        {
+        match self.main.remap_types::<Str, Bytes>().get(rtxn, main_key::WORDS_PREFIXES_FST_KEY)? {
             Some(bytes) => Ok(fst::Set::new(bytes)?.map_data(Cow::Borrowed)?),
             None => Ok(fst::Set::default().map_data(Cow::Owned)?),
         }
@@ -1325,7 +1321,7 @@ impl Index {
         // It is not possible to put a bool in heed with OwnedType, so we put a u8 instead. We
         // identify 0 as being false, and anything else as true. The absence of a value is true,
         // because by default, we authorize typos.
-        match self.main.remap_types::<Str, OwnedType<u8>>().get(txn, main_key::AUTHORIZE_TYPOS)? {
+        match self.main.remap_types::<Str, U8>().get(txn, main_key::AUTHORIZE_TYPOS)? {
             Some(0) => Ok(false),
             _ => Ok(true),
         }
@@ -1335,11 +1331,7 @@ impl Index {
         // It is not possible to put a bool in heed with OwnedType, so we put a u8 instead. We
         // identify 0 as being false, and anything else as true. The absence of a value is true,
         // because by default, we authorize typos.
-        self.main.remap_types::<Str, OwnedType<u8>>().put(
-            txn,
-            main_key::AUTHORIZE_TYPOS,
-            &(flag as u8),
-        )?;
+        self.main.remap_types::<Str, U8>().put(txn, main_key::AUTHORIZE_TYPOS, &(flag as u8))?;
 
         Ok(())
     }
@@ -1350,7 +1342,7 @@ impl Index {
         // because by default, we authorize typos.
         Ok(self
             .main
-            .remap_types::<Str, OwnedType<u8>>()
+            .remap_types::<Str, U8>()
             .get(txn, main_key::ONE_TYPO_WORD_LEN)?
             .unwrap_or(DEFAULT_MIN_WORD_LEN_ONE_TYPO))
     }
@@ -1359,11 +1351,7 @@ impl Index {
         // It is not possible to put a bool in heed with OwnedType, so we put a u8 instead. We
         // identify 0 as being false, and anything else as true. The absence of a value is true,
         // because by default, we authorize typos.
-        self.main.remap_types::<Str, OwnedType<u8>>().put(
-            txn,
-            main_key::ONE_TYPO_WORD_LEN,
-            &val,
-        )?;
+        self.main.remap_types::<Str, U8>().put(txn, main_key::ONE_TYPO_WORD_LEN, &val)?;
         Ok(())
     }
 
@@ -1373,7 +1361,7 @@ impl Index {
         // because by default, we authorize typos.
         Ok(self
             .main
-            .remap_types::<Str, OwnedType<u8>>()
+            .remap_types::<Str, U8>()
             .get(txn, main_key::TWO_TYPOS_WORD_LEN)?
             .unwrap_or(DEFAULT_MIN_WORD_LEN_TWO_TYPOS))
     }
@@ -1382,17 +1370,13 @@ impl Index {
         // It is not possible to put a bool in heed with OwnedType, so we put a u8 instead. We
         // identify 0 as being false, and anything else as true. The absence of a value is true,
         // because by default, we authorize typos.
-        self.main.remap_types::<Str, OwnedType<u8>>().put(
-            txn,
-            main_key::TWO_TYPOS_WORD_LEN,
-            &val,
-        )?;
+        self.main.remap_types::<Str, U8>().put(txn, main_key::TWO_TYPOS_WORD_LEN, &val)?;
         Ok(())
     }
 
     /// List the words on which typo are not allowed
     pub fn exact_words<'t>(&self, txn: &'t RoTxn) -> Result<Option<fst::Set<Cow<'t, [u8]>>>> {
-        match self.main.remap_types::<Str, ByteSlice>().get(txn, main_key::EXACT_WORDS)? {
+        match self.main.remap_types::<Str, Bytes>().get(txn, main_key::EXACT_WORDS)? {
             Some(bytes) => Ok(Some(fst::Set::new(bytes)?.map_data(Cow::Borrowed)?)),
             None => Ok(None),
         }
@@ -1403,7 +1387,7 @@ impl Index {
         txn: &mut RwTxn,
         words: &fst::Set<A>,
     ) -> Result<()> {
-        self.main.remap_types::<Str, ByteSlice>().put(
+        self.main.remap_types::<Str, Bytes>().put(
             txn,
             main_key::EXACT_WORDS,
             words.as_fst().as_bytes(),
@@ -1442,16 +1426,12 @@ impl Index {
         self.main.remap_key_type::<Str>().delete(txn, main_key::EXACT_ATTRIBUTES)
     }
 
-    pub fn max_values_per_facet(&self, txn: &RoTxn) -> heed::Result<Option<usize>> {
-        self.main.remap_types::<Str, OwnedType<usize>>().get(txn, main_key::MAX_VALUES_PER_FACET)
+    pub fn max_values_per_facet(&self, txn: &RoTxn) -> heed::Result<Option<u64>> {
+        self.main.remap_types::<Str, BEU64>().get(txn, main_key::MAX_VALUES_PER_FACET)
     }
 
-    pub(crate) fn put_max_values_per_facet(&self, txn: &mut RwTxn, val: usize) -> heed::Result<()> {
-        self.main.remap_types::<Str, OwnedType<usize>>().put(
-            txn,
-            main_key::MAX_VALUES_PER_FACET,
-            &val,
-        )
+    pub(crate) fn put_max_values_per_facet(&self, txn: &mut RwTxn, val: u64) -> heed::Result<()> {
+        self.main.remap_types::<Str, BEU64>().put(txn, main_key::MAX_VALUES_PER_FACET, &val)
     }
 
     pub(crate) fn delete_max_values_per_facet(&self, txn: &mut RwTxn) -> heed::Result<bool> {
@@ -1481,22 +1461,16 @@ impl Index {
         self.main.remap_key_type::<Str>().delete(txn, main_key::SORT_FACET_VALUES_BY)
     }
 
-    pub fn pagination_max_total_hits(&self, txn: &RoTxn) -> heed::Result<Option<usize>> {
-        self.main
-            .remap_types::<Str, OwnedType<usize>>()
-            .get(txn, main_key::PAGINATION_MAX_TOTAL_HITS)
+    pub fn pagination_max_total_hits(&self, txn: &RoTxn) -> heed::Result<Option<u64>> {
+        self.main.remap_types::<Str, BEU64>().get(txn, main_key::PAGINATION_MAX_TOTAL_HITS)
     }
 
     pub(crate) fn put_pagination_max_total_hits(
         &self,
         txn: &mut RwTxn,
-        val: usize,
+        val: u64,
     ) -> heed::Result<()> {
-        self.main.remap_types::<Str, OwnedType<usize>>().put(
-            txn,
-            main_key::PAGINATION_MAX_TOTAL_HITS,
-            &val,
-        )
+        self.main.remap_types::<Str, BEU64>().put(txn, main_key::PAGINATION_MAX_TOTAL_HITS, &val)
     }
 
     pub(crate) fn delete_pagination_max_total_hits(&self, txn: &mut RwTxn) -> heed::Result<bool> {

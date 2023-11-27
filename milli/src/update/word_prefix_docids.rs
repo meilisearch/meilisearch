@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use grenad::CompressionType;
-use heed::types::{ByteSlice, Str};
+use heed::types::{Bytes, Str};
 use heed::Database;
 
 use crate::update::del_add::{deladd_serialize_add_side, DelAdd, KvWriterDelAdd};
@@ -93,7 +93,7 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
         }
 
         // We fetch the docids associated to the newly added word prefix fst only.
-        let db = self.word_docids.remap_data_type::<ByteSlice>();
+        let db = self.word_docids.remap_data_type::<Bytes>();
         let mut buffer = Vec::new();
         for prefix in new_prefix_fst_words {
             let prefix = std::str::from_utf8(prefix.as_bytes())?;

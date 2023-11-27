@@ -29,7 +29,7 @@ geoutils = "0.5.1"
 grenad = { version = "0.4.5", default-features = false, features = [
     "rayon", "tempfile"
 ] }
-heed = { git = "https://github.com/meilisearch/heed", branch = "main", default-features = false, features = [
+heed = { version = "0.20.0-alpha.9", default-features = false, features = [
     "serde-json", "serde-bincode", "read-txn-no-tls"
 ] }
 indexmap = { version = "2.0.0", features = ["serde"] }
