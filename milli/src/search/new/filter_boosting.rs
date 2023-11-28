@@ -5,29 +5,26 @@ use super::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait, SearchContext
 use crate::score_details::{self, ScoreDetails};
 use crate::{Filter, Result};
 
-pub struct Boost<Query> {
-    original_expression: String,
+pub struct FilterBoosting<'f, Query> {
+    filter: Filter<'f>,
     original_query: Option<Query>,
     matching: Option<RankingRuleOutput<Query>>,
     non_matching: Option<RankingRuleOutput<Query>>,
 }
 
-impl<Query> Boost<Query> {
-    pub fn new(expression: String) -> Result<Self> {
-        Ok(Self {
-            original_expression: expression,
-            original_query: None,
-            matching: None,
-            non_matching: None,
-        })
+impl<'f, Query> FilterBoosting<'f, Query> {
+    pub fn new(filter: Filter<'f>) -> Result<Self> {
+        Ok(Self { filter, original_query: None, matching: None, non_matching: None })
     }
 }
 
-impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Boost<Query> {
+impl<'ctx, 'f, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query>
+    for FilterBoosting<'f, Query>
+{
     fn id(&self) -> String {
         // TODO improve this
-        let Self { original_expression, .. } = self;
-        format!("boost:{original_expression}")
+        let Self { filter: original_expression, .. } = self;
+        format!("boost:{original_expression:?}")
     }
 
     fn start_iteration(
@@ -37,9 +34,9 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Boost<Quer
         parent_candidates: &RoaringBitmap,
         parent_query: &Query,
     ) -> Result<()> {
-        let universe_matching = match Filter::from_str(&self.original_expression)? {
-            Some(filter) => filter.evaluate(ctx.txn, ctx.index)?,
-            None => RoaringBitmap::default(),
+        let universe_matching = match self.filter.evaluate(ctx.txn, ctx.index) {
+            Ok(documents) => documents,
+            Err(e) => return Err(e), // TODO manage the invalid_search_boosting_filter
         };
         let matching = parent_candidates & universe_matching;
         let non_matching = parent_candidates - &matching;
@@ -49,19 +46,13 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Boost<Quer
         self.matching = Some(RankingRuleOutput {
             query: parent_query.clone(),
             candidates: matching,
-            score: ScoreDetails::Boost(score_details::Boost {
-                filter: self.original_expression.clone(),
-                matching: true,
-            }),
+            score: ScoreDetails::FilterBoosting(score_details::FilterBoosting { matching: true }),
         });
 
         self.non_matching = Some(RankingRuleOutput {
             query: parent_query.clone(),
             candidates: non_matching,
-            score: ScoreDetails::Boost(score_details::Boost {
-                filter: self.original_expression.clone(),
-                matching: false,
-            }),
+            score: ScoreDetails::FilterBoosting(score_details::FilterBoosting { matching: false }),
         });
 
         Ok(())

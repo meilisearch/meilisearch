@@ -116,6 +116,8 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     InvalidVectorsType { document_id: Value, value: Value },
     #[error("{0}")]
     InvalidFilter(String),
+    #[error("{0}")]
+    InvalidBoostingFilter(String),
     #[error("Invalid type for filter subexpression: expected: {}, found: {1}.", .0.join(", "))]
     InvalidFilterExpression(&'static [&'static str], Value),
     #[error("Attribute `{}` is not sortable. {}",

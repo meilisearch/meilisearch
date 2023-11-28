@@ -650,7 +650,7 @@ impl From<RankingRule> for RankingRuleView {
     fn from(value: RankingRule) -> Self {
         match value {
             RankingRule::Words => RankingRuleView::Words,
-            RankingRule::Boost(filter) => RankingRuleView::Boost(filter),
+            RankingRule::FilterBoosting(filter) => RankingRuleView::Boost(filter),
             RankingRule::Typo => RankingRuleView::Typo,
             RankingRule::Proximity => RankingRuleView::Proximity,
             RankingRule::Attribute => RankingRuleView::Attribute,
@@ -665,7 +665,7 @@ impl From<RankingRuleView> for RankingRule {
     fn from(value: RankingRuleView) -> Self {
         match value {
             RankingRuleView::Words => RankingRule::Words,
-            RankingRuleView::Boost(filter) => RankingRule::Boost(filter),
+            RankingRuleView::Boost(filter) => RankingRule::FilterBoosting(filter),
             RankingRuleView::Typo => RankingRule::Typo,
             RankingRuleView::Proximity => RankingRule::Proximity,
             RankingRuleView::Attribute => RankingRule::Attribute,

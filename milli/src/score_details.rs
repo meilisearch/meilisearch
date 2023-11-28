@@ -5,7 +5,7 @@ use crate::distance_between_two_points;
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScoreDetails {
     Words(Words),
-    Boost(Boost),
+    FilterBoosting(FilterBoosting),
     Typo(Typo),
     Proximity(Rank),
     Fid(Rank),
@@ -24,7 +24,7 @@ impl ScoreDetails {
     pub fn rank(&self) -> Option<Rank> {
         match self {
             ScoreDetails::Words(details) => Some(details.rank()),
-            ScoreDetails::Boost(_) => None,
+            ScoreDetails::FilterBoosting(_) => None,
             ScoreDetails::Typo(details) => Some(details.rank()),
             ScoreDetails::Proximity(details) => Some(*details),
             ScoreDetails::Fid(details) => Some(*details),
@@ -62,12 +62,9 @@ impl ScoreDetails {
                     details_map.insert("words".into(), words_details);
                     order += 1;
                 }
-                ScoreDetails::Boost(Boost { filter, matching }) => {
-                    let sort = format!("boost:{}", filter);
-                    let sort_details = serde_json::json!({
-                        "value": matching,
-                    });
-                    details_map.insert(sort, sort_details);
+                ScoreDetails::FilterBoosting(FilterBoosting { matching }) => {
+                    let sort_details = serde_json::json!({ "matching": matching });
+                    details_map.insert("filterBoosting".into(), sort_details);
                     order += 1;
                 }
                 ScoreDetails::Typo(typo) => {
@@ -232,8 +229,7 @@ impl Words {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Boost {
-    pub filter: String,
+pub struct FilterBoosting {
     pub matching: bool,
 }
 

@@ -4,8 +4,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::boost::{Boost, BoostError};
-use crate::{AscDesc, AscDescError, Member};
+use crate::{AscDesc, Member};
 
 #[derive(Error, Debug)]
 pub enum RankingRuleError {
@@ -27,11 +26,11 @@ pub enum RankingRuleError {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum RankingRule {
+    /// Sorted by documents matching the given filter and then documents not matching it.
+    FilterBoosting(String),
     /// Sorted by decreasing number of matched query terms.
     /// Query words at the front of an attribute is considered better than if it was at the back.
     Words,
-    /// Sorted by documents matching the given filter and then documents not matching it.
-    Boost(String),
     /// Sorted by increasing number of typos.
     Typo,
     /// Sorted by increasing distance between matched query terms.
@@ -71,8 +70,8 @@ impl FromStr for RankingRule {
             "attribute" => Ok(RankingRule::Attribute),
             "sort" => Ok(RankingRule::Sort),
             "exactness" => Ok(RankingRule::Exactness),
-            text => match (AscDesc::from_str(text), Boost::from_str(text)) {
-                (Ok(asc_desc), _) => match asc_desc {
+            text => match AscDesc::from_str(text) {
+                Ok(asc_desc) => match asc_desc {
                     AscDesc::Asc(Member::Field(field)) => Ok(RankingRule::Asc(field)),
                     AscDesc::Desc(Member::Field(field)) => Ok(RankingRule::Desc(field)),
                     AscDesc::Asc(Member::Geo(_)) | AscDesc::Desc(Member::Geo(_)) => {
@@ -81,15 +80,7 @@ impl FromStr for RankingRule {
                         })?
                     }
                 },
-                (_, Ok(Boost(filter))) => Ok(RankingRule::Boost(filter)),
-                (
-                    Err(AscDescError::InvalidSyntax { name: asc_desc_name }),
-                    Err(BoostError::InvalidSyntax { name: boost_name }),
-                ) => Err(RankingRuleError::InvalidName {
-                    // TODO improve the error message quality
-                    name: format!("{asc_desc_name} {boost_name}"),
-                }),
-                (Err(asc_desc_error), _) => Err(asc_desc_error.into()),
+                Err(err) => Err(err.into()),
             },
         }
     }
@@ -112,7 +103,7 @@ impl fmt::Display for RankingRule {
 
         match self {
             Words => f.write_str("words"),
-            Boost(filter) => write!(f, "boost:{filter}"),
+            FilterBoosting(_) => write!(f, "filterBoosting"),
             Typo => f.write_str("typo"),
             Proximity => f.write_str("proximity"),
             Attribute => f.write_str("attribute"),

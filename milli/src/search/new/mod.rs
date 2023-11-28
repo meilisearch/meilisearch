@@ -14,8 +14,8 @@ mod ranking_rules;
 mod resolve_query_graph;
 mod small_bitmap;
 
-mod boost;
 mod exact_attribute;
+mod filter_boosting;
 mod sort;
 
 #[cfg(test)]
@@ -23,11 +23,11 @@ mod tests;
 
 use std::collections::HashSet;
 
-use boost::Boost;
 use bucket_sort::{bucket_sort, BucketSortOutput};
 use charabia::TokenizerBuilder;
 use db_cache::DatabaseCache;
 use exact_attribute::ExactAttribute;
+use filter_boosting::FilterBoosting;
 use graph_based_ranking_rule::{Exactness, Fid, Position, Proximity, Typo};
 use heed::RoTxn;
 use instant_distance::Search;
@@ -192,25 +192,29 @@ fn resolve_universe(
 }
 
 /// Return the list of initialised ranking rules to be used for a placeholder search.
-fn get_ranking_rules_for_placeholder_search<'ctx>(
+fn get_ranking_rules_for_placeholder_search<'ctx, 'f: 'ctx>(
     ctx: &SearchContext<'ctx>,
     sort_criteria: &Option<Vec<AscDesc>>,
     geo_strategy: geo_sort::Strategy,
+    boosting_filter: &Option<Filter<'f>>,
 ) -> Result<Vec<BoxRankingRule<'ctx, PlaceholderQuery>>> {
     let mut sort = false;
     let mut sorted_fields = HashSet::new();
     let mut geo_sorted = false;
-    let mut ranking_rules: Vec<BoxRankingRule<PlaceholderQuery>> = vec![];
+    let mut ranking_rules: Vec<BoxRankingRule<_>> = match boosting_filter {
+        Some(filter) => vec![Box::new(FilterBoosting::new(filter.clone())?)],
+        None => Vec::new(),
+    };
     let settings_ranking_rules = ctx.index.criteria(ctx.txn)?;
     for rr in settings_ranking_rules {
         match rr {
             // These rules need a query to have an effect; ignore them in placeholder search
-            crate::RankingRule::Words
+            crate::RankingRule::FilterBoosting(_)
+            | crate::RankingRule::Words
             | crate::RankingRule::Typo
             | crate::RankingRule::Attribute
             | crate::RankingRule::Proximity
             | crate::RankingRule::Exactness => continue,
-            crate::RankingRule::Boost(filter) => ranking_rules.push(Box::new(Boost::new(filter)?)),
             crate::RankingRule::Sort => {
                 if sort {
                     continue;
@@ -245,11 +249,12 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
 }
 
 /// Return the list of initialised ranking rules to be used for a query graph search.
-fn get_ranking_rules_for_query_graph_search<'ctx>(
+fn get_ranking_rules_for_query_graph_search<'ctx, 'f: 'ctx>(
     ctx: &SearchContext<'ctx>,
     sort_criteria: &Option<Vec<AscDesc>>,
     geo_strategy: geo_sort::Strategy,
     terms_matching_strategy: TermsMatchingStrategy,
+    boosting_filter: &Option<Filter<'f>>,
 ) -> Result<Vec<BoxRankingRule<'ctx, QueryGraph>>> {
     // query graph search
     let mut words = false;
@@ -266,7 +271,10 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
         words = true;
     }
 
-    let mut ranking_rules: Vec<BoxRankingRule<QueryGraph>> = vec![];
+    let mut ranking_rules: Vec<BoxRankingRule<QueryGraph>> = match boosting_filter {
+        Some(filter) => vec![Box::new(FilterBoosting::new(filter.clone())?)],
+        None => Vec::new(),
+    };
     let settings_ranking_rules = ctx.index.criteria(ctx.txn)?;
     for rr in settings_ranking_rules {
         // Add Words before any of: typo, proximity, attribute
@@ -290,8 +298,10 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 ranking_rules.push(Box::new(Words::new(terms_matching_strategy)));
                 words = true;
             }
-            crate::RankingRule::Boost(filter) => {
-                ranking_rules.push(Box::new(Boost::new(filter)?));
+            crate::RankingRule::FilterBoosting(_) => {
+                // that is not possible to define the filterBoosting ranking rule by hand,
+                // or by using the seetings. It is always inserted by the engine itself.
+                continue;
             }
             crate::RankingRule::Typo => {
                 if typo {
@@ -413,14 +423,15 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn execute_search(
-    ctx: &mut SearchContext,
+pub fn execute_search<'ctx, 'f: 'ctx>(
+    ctx: &mut SearchContext<'ctx>,
     query: &Option<String>,
     vector: &Option<Vec<f32>>,
     terms_matching_strategy: TermsMatchingStrategy,
     scoring_strategy: ScoringStrategy,
     exhaustive_number_hits: bool,
-    filters: &Option<Filter>,
+    filter: &Option<Filter>,
+    boosting_filter: &Option<Filter<'f>>,
     sort_criteria: &Option<Vec<AscDesc>>,
     geo_strategy: geo_sort::Strategy,
     from: usize,
@@ -429,8 +440,8 @@ pub fn execute_search(
     placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery>,
     query_graph_logger: &mut dyn SearchLogger<QueryGraph>,
 ) -> Result<PartialSearchResult> {
-    let mut universe = if let Some(filters) = filters {
-        filters.evaluate(ctx.txn, ctx.index)?
+    let mut universe = if let Some(filter) = filter {
+        filter.evaluate(ctx.txn, ctx.index)?
     } else {
         ctx.index.documents_ids(ctx.txn)?
     };
@@ -523,6 +534,7 @@ pub fn execute_search(
             sort_criteria,
             geo_strategy,
             terms_matching_strategy,
+            boosting_filter,
         )?;
 
         universe =
@@ -539,8 +551,13 @@ pub fn execute_search(
             query_graph_logger,
         )?
     } else {
-        let ranking_rules =
-            get_ranking_rules_for_placeholder_search(ctx, sort_criteria, geo_strategy)?;
+        let ranking_rules = get_ranking_rules_for_placeholder_search(
+            ctx,
+            sort_criteria,
+            geo_strategy,
+            boosting_filter,
+        )?;
+
         bucket_sort(
             ctx,
             ranking_rules,

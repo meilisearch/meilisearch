@@ -147,7 +147,7 @@ pub fn expected_order(
                     new_groups
                         .extend(group.linear_group_by_key(|d| d.asc_desc_rank).map(Vec::from));
                 }
-                RankingRule::Boost(filter) => {
+                RankingRule::FilterBoosting(filter) => {
                     // move the matching documents first, then the ones that don't match
                     group.sort_by_key(|d| if execute_filter(filter, d).is_some() { 0 } else { 1 });
                     new_groups.extend(

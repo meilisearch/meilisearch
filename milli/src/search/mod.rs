@@ -38,6 +38,7 @@ pub struct Search<'a> {
     vector: Option<Vec<f32>>,
     // this should be linked to the String in the query
     filter: Option<Filter<'a>>,
+    boosting_filter: Option<Filter<'a>>,
     offset: usize,
     limit: usize,
     sort_criteria: Option<Vec<AscDesc>>,
@@ -57,6 +58,7 @@ impl<'a> Search<'a> {
             query: None,
             vector: None,
             filter: None,
+            boosting_filter: None,
             offset: 0,
             limit: 20,
             sort_criteria: None,
@@ -121,6 +123,11 @@ impl<'a> Search<'a> {
         self
     }
 
+    pub fn boosting_filter(&mut self, condition: Filter<'a>) -> &mut Search<'a> {
+        self.boosting_filter = Some(condition);
+        self
+    }
+
     #[cfg(test)]
     pub fn geo_sort_strategy(&mut self, strategy: new::GeoSortStrategy) -> &mut Search<'a> {
         self.geo_strategy = strategy;
@@ -150,6 +157,7 @@ impl<'a> Search<'a> {
                 self.scoring_strategy,
                 self.exhaustive_number_hits,
                 &self.filter,
+                &self.boosting_filter,
                 &self.sort_criteria,
                 self.geo_strategy,
                 self.offset,
@@ -175,6 +183,7 @@ impl fmt::Debug for Search<'_> {
             query,
             vector: _,
             filter,
+            boosting_filter,
             offset,
             limit,
             sort_criteria,
@@ -191,6 +200,7 @@ impl fmt::Debug for Search<'_> {
             .field("query", query)
             .field("vector", &"[...]")
             .field("filter", filter)
+            .field("boosting_filter", boosting_filter)
             .field("offset", offset)
             .field("limit", limit)
             .field("sort_criteria", sort_criteria)
