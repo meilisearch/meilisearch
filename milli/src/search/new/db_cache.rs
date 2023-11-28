@@ -154,7 +154,7 @@ impl<'ctx> SearchContext<'ctx> {
 
     /// Retrieve or insert the given value in the `word_docids` database.
     fn get_db_word_docids(&mut self, word: Interned<String>) -> Result<Option<RoaringBitmap>> {
-        match &self.restricted_fids {
+        match &self.restricted_tolerant_fids {
             Some(restricted_fids) => {
                 let interned = self.word_interner.get(word).as_str();
                 let keys: Vec<_> = restricted_fids.iter().map(|fid| (interned, *fid)).collect();
@@ -182,13 +182,28 @@ impl<'ctx> SearchContext<'ctx> {
         &mut self,
         word: Interned<String>,
     ) -> Result<Option<RoaringBitmap>> {
-        DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
-            self.txn,
-            word,
-            self.word_interner.get(word).as_str(),
-            &mut self.db_cache.exact_word_docids,
-            self.index.exact_word_docids.remap_data_type::<ByteSlice>(),
-        )
+        match &self.restricted_exact_fids {
+            Some(restricted_fids) => {
+                let interned = self.word_interner.get(word).as_str();
+                let keys: Vec<_> = restricted_fids.iter().map(|fid| (interned, *fid)).collect();
+
+                DatabaseCache::get_value_from_keys::<_, _, CboRoaringBitmapCodec>(
+                    self.txn,
+                    word,
+                    &keys[..],
+                    &mut self.db_cache.exact_word_docids,
+                    self.index.word_fid_docids.remap_data_type::<ByteSlice>(),
+                    merge_cbo_roaring_bitmaps,
+                )
+            }
+            None => DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
+                self.txn,
+                word,
+                self.word_interner.get(word).as_str(),
+                &mut self.db_cache.exact_word_docids,
+                self.index.exact_word_docids.remap_data_type::<ByteSlice>(),
+            ),
+        }
     }
 
     pub fn word_prefix_docids(&mut self, prefix: Word) -> Result<Option<RoaringBitmap>> {
@@ -216,7 +231,7 @@ impl<'ctx> SearchContext<'ctx> {
         &mut self,
         prefix: Interned<String>,
     ) -> Result<Option<RoaringBitmap>> {
-        match &self.restricted_fids {
+        match &self.restricted_tolerant_fids {
             Some(restricted_fids) => {
                 let interned = self.word_interner.get(prefix).as_str();
                 let keys: Vec<_> = restricted_fids.iter().map(|fid| (interned, *fid)).collect();
@@ -244,13 +259,28 @@ impl<'ctx> SearchContext<'ctx> {
         &mut self,
         prefix: Interned<String>,
     ) -> Result<Option<RoaringBitmap>> {
-        DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
-            self.txn,
-            prefix,
-            self.word_interner.get(prefix).as_str(),
-            &mut self.db_cache.exact_word_prefix_docids,
-            self.index.exact_word_prefix_docids.remap_data_type::<ByteSlice>(),
-        )
+        match &self.restricted_exact_fids {
+            Some(restricted_fids) => {
+                let interned = self.word_interner.get(prefix).as_str();
+                let keys: Vec<_> = restricted_fids.iter().map(|fid| (interned, *fid)).collect();
+
+                DatabaseCache::get_value_from_keys::<_, _, CboRoaringBitmapCodec>(
+                    self.txn,
+                    prefix,
+                    &keys[..],
+                    &mut self.db_cache.exact_word_prefix_docids,
+                    self.index.word_prefix_fid_docids.remap_data_type::<ByteSlice>(),
+                    merge_cbo_roaring_bitmaps,
+                )
+            }
+            None => DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
+                self.txn,
+                prefix,
+                self.word_interner.get(prefix).as_str(),
+                &mut self.db_cache.exact_word_prefix_docids,
+                self.index.exact_word_prefix_docids.remap_data_type::<ByteSlice>(),
+            ),
+        }
     }
 
     pub fn get_db_word_pair_proximity_docids(
@@ -334,7 +364,9 @@ impl<'ctx> SearchContext<'ctx> {
         fid: u16,
     ) -> Result<Option<RoaringBitmap>> {
         // if the requested fid isn't in the restricted list, return None.
-        if self.restricted_fids.as_ref().map_or(false, |fids| !fids.contains(&fid)) {
+        if self.restricted_tolerant_fids.as_ref().map_or(false, |fids| !fids.contains(&fid))
+            && self.restricted_exact_fids.as_ref().map_or(false, |fids| !fids.contains(&fid))
+        {
             return Ok(None);
         }
 
@@ -353,7 +385,9 @@ impl<'ctx> SearchContext<'ctx> {
         fid: u16,
     ) -> Result<Option<RoaringBitmap>> {
         // if the requested fid isn't in the restricted list, return None.
-        if self.restricted_fids.as_ref().map_or(false, |fids| !fids.contains(&fid)) {
+        if self.restricted_tolerant_fids.as_ref().map_or(false, |fids| !fids.contains(&fid))
+            && self.restricted_exact_fids.as_ref().map_or(false, |fids| !fids.contains(&fid))
+        {
             return Ok(None);
         }
 

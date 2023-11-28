@@ -63,7 +63,8 @@ pub struct SearchContext<'ctx> {
     pub phrase_interner: DedupInterner<Phrase>,
     pub term_interner: Interner<QueryTerm>,
     pub phrase_docids: PhraseDocIdsCache,
-    pub restricted_fids: Option<Vec<u16>>,
+    pub restricted_tolerant_fids: Option<Vec<u16>>,
+    pub restricted_exact_fids: Option<Vec<u16>>,
 }
 
 impl<'ctx> SearchContext<'ctx> {
@@ -76,15 +77,18 @@ impl<'ctx> SearchContext<'ctx> {
             phrase_interner: <_>::default(),
             term_interner: <_>::default(),
             phrase_docids: <_>::default(),
-            restricted_fids: None,
+            restricted_tolerant_fids: None,
+            restricted_exact_fids: None,
         }
     }
 
     pub fn searchable_attributes(&mut self, searchable_attributes: &'ctx [String]) -> Result<()> {
         let fids_map = self.index.fields_ids_map(self.txn)?;
         let searchable_names = self.index.searchable_fields(self.txn)?;
+        let exact_attributes_ids = self.index.exact_attributes_ids(self.txn)?;
 
-        let mut restricted_fids = Vec::new();
+        let mut restricted_exact_fids = Vec::new();
+        let mut restricted_tolerant_fids = Vec::new();
         let mut contains_wildcard = false;
         for field_name in searchable_attributes {
             if field_name == "*" {
@@ -123,10 +127,15 @@ impl<'ctx> SearchContext<'ctx> {
                 }
             };
 
-            restricted_fids.push(fid);
+            if exact_attributes_ids.contains(&fid) {
+                restricted_exact_fids.push(fid);
+            } else {
+                restricted_tolerant_fids.push(fid);
+            };
         }
 
-        self.restricted_fids = (!contains_wildcard).then_some(restricted_fids);
+        self.restricted_exact_fids = (!contains_wildcard).then_some(restricted_exact_fids);
+        self.restricted_tolerant_fids = (!contains_wildcard).then_some(restricted_tolerant_fids);
 
         Ok(())
     }
