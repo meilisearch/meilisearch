@@ -51,7 +51,8 @@ use crate::error::FieldIdMapMissingEntry;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::apply_distinct_rule;
 use crate::{
-    AscDesc, DocumentId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError, BEU32,
+    AscDesc, DocumentId, FieldId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError,
+    BEU32,
 };
 
 /// A structure used throughout the execution of a search query.
@@ -63,8 +64,7 @@ pub struct SearchContext<'ctx> {
     pub phrase_interner: DedupInterner<Phrase>,
     pub term_interner: Interner<QueryTerm>,
     pub phrase_docids: PhraseDocIdsCache,
-    pub restricted_tolerant_fids: Option<Vec<u16>>,
-    pub restricted_exact_fids: Option<Vec<u16>>,
+    pub restricted_fids: Option<RestrictedFids>,
 }
 
 impl<'ctx> SearchContext<'ctx> {
@@ -77,8 +77,7 @@ impl<'ctx> SearchContext<'ctx> {
             phrase_interner: <_>::default(),
             term_interner: <_>::default(),
             phrase_docids: <_>::default(),
-            restricted_tolerant_fids: None,
-            restricted_exact_fids: None,
+            restricted_fids: None,
         }
     }
 
@@ -87,8 +86,7 @@ impl<'ctx> SearchContext<'ctx> {
         let searchable_names = self.index.searchable_fields(self.txn)?;
         let exact_attributes_ids = self.index.exact_attributes_ids(self.txn)?;
 
-        let mut restricted_exact_fids = Vec::new();
-        let mut restricted_tolerant_fids = Vec::new();
+        let mut restricted_fids = RestrictedFids::default();
         let mut contains_wildcard = false;
         for field_name in searchable_attributes {
             if field_name == "*" {
@@ -128,14 +126,13 @@ impl<'ctx> SearchContext<'ctx> {
             };
 
             if exact_attributes_ids.contains(&fid) {
-                restricted_exact_fids.push(fid);
+                restricted_fids.exact.push(fid);
             } else {
-                restricted_tolerant_fids.push(fid);
+                restricted_fids.tolerant.push(fid);
             };
         }
 
-        self.restricted_exact_fids = (!contains_wildcard).then_some(restricted_exact_fids);
-        self.restricted_tolerant_fids = (!contains_wildcard).then_some(restricted_tolerant_fids);
+        self.restricted_fids = (!contains_wildcard).then_some(restricted_fids);
 
         Ok(())
     }
@@ -153,6 +150,18 @@ impl Word {
             Word::Original(word) => *word,
             Word::Derived(word) => *word,
         }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RestrictedFids {
+    pub tolerant: Vec<FieldId>,
+    pub exact: Vec<FieldId>,
+}
+
+impl RestrictedFids {
+    pub fn contains(&self, fid: &FieldId) -> bool {
+        self.tolerant.contains(fid) || self.exact.contains(fid)
     }
 }
 

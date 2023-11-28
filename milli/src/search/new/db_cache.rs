@@ -154,10 +154,11 @@ impl<'ctx> SearchContext<'ctx> {
 
     /// Retrieve or insert the given value in the `word_docids` database.
     fn get_db_word_docids(&mut self, word: Interned<String>) -> Result<Option<RoaringBitmap>> {
-        match &self.restricted_tolerant_fids {
+        match &self.restricted_fids {
             Some(restricted_fids) => {
                 let interned = self.word_interner.get(word).as_str();
-                let keys: Vec<_> = restricted_fids.iter().map(|fid| (interned, *fid)).collect();
+                let keys: Vec<_> =
+                    restricted_fids.tolerant.iter().map(|fid| (interned, *fid)).collect();
 
                 DatabaseCache::get_value_from_keys::<_, _, CboRoaringBitmapCodec>(
                     self.txn,
@@ -182,10 +183,11 @@ impl<'ctx> SearchContext<'ctx> {
         &mut self,
         word: Interned<String>,
     ) -> Result<Option<RoaringBitmap>> {
-        match &self.restricted_exact_fids {
+        match &self.restricted_fids {
             Some(restricted_fids) => {
                 let interned = self.word_interner.get(word).as_str();
-                let keys: Vec<_> = restricted_fids.iter().map(|fid| (interned, *fid)).collect();
+                let keys: Vec<_> =
+                    restricted_fids.exact.iter().map(|fid| (interned, *fid)).collect();
 
                 DatabaseCache::get_value_from_keys::<_, _, CboRoaringBitmapCodec>(
                     self.txn,
@@ -231,10 +233,11 @@ impl<'ctx> SearchContext<'ctx> {
         &mut self,
         prefix: Interned<String>,
     ) -> Result<Option<RoaringBitmap>> {
-        match &self.restricted_tolerant_fids {
+        match &self.restricted_fids {
             Some(restricted_fids) => {
                 let interned = self.word_interner.get(prefix).as_str();
-                let keys: Vec<_> = restricted_fids.iter().map(|fid| (interned, *fid)).collect();
+                let keys: Vec<_> =
+                    restricted_fids.tolerant.iter().map(|fid| (interned, *fid)).collect();
 
                 DatabaseCache::get_value_from_keys::<_, _, CboRoaringBitmapCodec>(
                     self.txn,
@@ -259,10 +262,11 @@ impl<'ctx> SearchContext<'ctx> {
         &mut self,
         prefix: Interned<String>,
     ) -> Result<Option<RoaringBitmap>> {
-        match &self.restricted_exact_fids {
+        match &self.restricted_fids {
             Some(restricted_fids) => {
                 let interned = self.word_interner.get(prefix).as_str();
-                let keys: Vec<_> = restricted_fids.iter().map(|fid| (interned, *fid)).collect();
+                let keys: Vec<_> =
+                    restricted_fids.exact.iter().map(|fid| (interned, *fid)).collect();
 
                 DatabaseCache::get_value_from_keys::<_, _, CboRoaringBitmapCodec>(
                     self.txn,
@@ -364,9 +368,7 @@ impl<'ctx> SearchContext<'ctx> {
         fid: u16,
     ) -> Result<Option<RoaringBitmap>> {
         // if the requested fid isn't in the restricted list, return None.
-        if self.restricted_tolerant_fids.as_ref().map_or(false, |fids| !fids.contains(&fid))
-            && self.restricted_exact_fids.as_ref().map_or(false, |fids| !fids.contains(&fid))
-        {
+        if self.restricted_fids.as_ref().map_or(false, |fids| !fids.contains(&fid)) {
             return Ok(None);
         }
 
@@ -385,9 +387,7 @@ impl<'ctx> SearchContext<'ctx> {
         fid: u16,
     ) -> Result<Option<RoaringBitmap>> {
         // if the requested fid isn't in the restricted list, return None.
-        if self.restricted_tolerant_fids.as_ref().map_or(false, |fids| !fids.contains(&fid))
-            && self.restricted_exact_fids.as_ref().map_or(false, |fids| !fids.contains(&fid))
-        {
+        if self.restricted_fids.as_ref().map_or(false, |fids| !fids.contains(&fid)) {
             return Ok(None);
         }
 
