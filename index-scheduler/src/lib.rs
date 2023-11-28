@@ -1275,7 +1275,8 @@ impl IndexScheduler {
                 let _ = serde_json::to_writer(&mut buffer, &task);
             }
 
-            let _ = ureq::post(url).send_bytes(&buffer);
+            println!("Sending request to {url}");
+            let _ = ureq::post(url).send_bytes(&buffer).unwrap();
         }
 
         Ok(())
