@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::ffi::CStr;
 use std::str;
 
 use charabia::{Language, Script};
@@ -10,17 +11,12 @@ impl<'a> heed::BytesDecode<'a> for ScriptLanguageCodec {
     type DItem = (Script, Language);
 
     fn bytes_decode(bytes: &'a [u8]) -> Result<Self::DItem, BoxedError> {
-        let sep = bytes
-            .iter()
-            .position(|b| *b == 0)
-            .ok_or("cannot find nul byte")
-            .map_err(BoxedError::from)?;
-        let (s_bytes, l_bytes) = bytes.split_at(sep);
-        let script = str::from_utf8(s_bytes)?;
+        let cstr = CStr::from_bytes_until_nul(bytes)?;
+        let script = cstr.to_str()?;
         let script_name = Script::from_name(script);
-        let lan = str::from_utf8(l_bytes)?;
         // skip '\0' byte between the two strings.
-        let lan_name = Language::from_name(&lan[1..]);
+        let lan = str::from_utf8(&bytes[script.len() + 1..])?;
+        let lan_name = Language::from_name(lan);
 
         Ok((script_name, lan_name))
     }

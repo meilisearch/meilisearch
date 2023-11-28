@@ -5,6 +5,8 @@ use std::str;
 
 use heed::BoxedError;
 
+use super::SliceTooShortError;
+
 pub struct StrBEU32Codec;
 
 impl<'a> heed::BytesDecode<'a> for StrBEU32Codec {
@@ -14,7 +16,7 @@ impl<'a> heed::BytesDecode<'a> for StrBEU32Codec {
         let footer_len = size_of::<u32>();
 
         if bytes.len() < footer_len {
-            return Err(BoxedError::from("cannot extract footer from bytes"));
+            return Err(SliceTooShortError.into());
         }
 
         let (word, bytes) = bytes.split_at(bytes.len() - footer_len);
@@ -48,7 +50,7 @@ impl<'a> heed::BytesDecode<'a> for StrBEU16Codec {
         let footer_len = size_of::<u16>();
 
         if bytes.len() < footer_len + 1 {
-            return Err(BoxedError::from("cannot extract footer from bytes"));
+            return Err(SliceTooShortError.into());
         }
 
         let (word_plus_nul_byte, bytes) = bytes.split_at(bytes.len() - footer_len);

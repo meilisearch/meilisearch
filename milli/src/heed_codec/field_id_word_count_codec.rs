@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use heed::BoxedError;
 
+use super::SliceTooShortError;
 use crate::{try_split_array_at, FieldId};
 
 pub struct FieldIdWordCountCodec;
@@ -10,11 +11,9 @@ impl<'a> heed::BytesDecode<'a> for FieldIdWordCountCodec {
     type DItem = (FieldId, u8);
 
     fn bytes_decode(bytes: &'a [u8]) -> Result<Self::DItem, BoxedError> {
-        let (field_id_bytes, bytes) =
-            try_split_array_at(bytes).ok_or("invalid slice length").map_err(BoxedError::from)?;
+        let (field_id_bytes, bytes) = try_split_array_at(bytes).ok_or(SliceTooShortError)?;
         let field_id = u16::from_be_bytes(field_id_bytes);
-        let ([word_count], _nothing) =
-            try_split_array_at(bytes).ok_or("invalid slice length").map_err(BoxedError::from)?;
+        let ([word_count], _nothing) = try_split_array_at(bytes).ok_or(SliceTooShortError)?;
         Ok((field_id, word_count))
     }
 }

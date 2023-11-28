@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 
 use heed::{BoxedError, BytesDecode, BytesEncode};
 
+use crate::heed_codec::SliceTooShortError;
 use crate::{try_split_array_at, DocumentId, FieldId};
 
 pub struct FieldDocIdFacetCodec<C>(PhantomData<C>);
@@ -14,10 +15,10 @@ where
     type DItem = (FieldId, DocumentId, C::DItem);
 
     fn bytes_decode(bytes: &'a [u8]) -> Result<Self::DItem, BoxedError> {
-        let (field_id_bytes, bytes) = try_split_array_at(bytes).unwrap();
+        let (field_id_bytes, bytes) = try_split_array_at(bytes).ok_or(SliceTooShortError)?;
         let field_id = u16::from_be_bytes(field_id_bytes);
 
-        let (document_id_bytes, bytes) = try_split_array_at(bytes).unwrap();
+        let (document_id_bytes, bytes) = try_split_array_at(bytes).ok_or(SliceTooShortError)?;
         let document_id = u32::from_be_bytes(document_id_bytes);
 
         let value = C::bytes_decode(bytes)?;

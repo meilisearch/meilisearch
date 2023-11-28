@@ -15,6 +15,7 @@ mod str_str_u8_codec;
 pub use byte_slice_ref::BytesRefCodec;
 use heed::BoxedError;
 pub use str_ref::StrRefCodec;
+use thiserror::Error;
 
 pub use self::beu16_str_codec::BEU16StrCodec;
 pub use self::beu32_str_codec::BEU32StrCodec;
@@ -34,3 +35,7 @@ pub trait BytesDecodeOwned {
 
     fn bytes_decode_owned(bytes: &[u8]) -> Result<Self::DItem, BoxedError>;
 }
+
+#[derive(Error, Debug)]
+#[error("the slice is too short")]
+pub struct SliceTooShortError;
