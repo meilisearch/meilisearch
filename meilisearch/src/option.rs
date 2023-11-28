@@ -21,6 +21,7 @@ use rustls::RootCertStore;
 use rustls_pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
 use serde::{Deserialize, Serialize};
 use sysinfo::{RefreshKind, System, SystemExt};
+use url::Url;
 
 const POSSIBLE_ENV: [&str; 2] = ["development", "production"];
 
@@ -66,6 +67,10 @@ const DEFAULT_DUMP_DIR: &str = "dumps/";
 const MEILI_MAX_INDEXING_MEMORY: &str = "MEILI_MAX_INDEXING_MEMORY";
 const MEILI_MAX_INDEXING_THREADS: &str = "MEILI_MAX_INDEXING_THREADS";
 const DEFAULT_LOG_EVERY_N: usize = 100_000;
+
+fn parse_url(s: &str) -> Result<Url, url::ParseError> {
+    Url::parse(s)
+}
 
 // Each environment (index and task-db) is taking space in the virtual address space.
 // Ideally, indexes can occupy 2TiB each to avoid having to manually resize them.
@@ -157,7 +162,7 @@ pub struct Opt {
 
     /// Called whenever a task finishes so a third party can be notified.
     #[clap(long, env = MEILI_TASK_WEBHOOK_URL)]
-    pub task_webhook_url: Option<String>,
+    pub task_webhook_url: Option<Url>,
 
     /// Deactivates Meilisearch's built-in telemetry when provided.
     ///
@@ -408,7 +413,7 @@ impl Opt {
         }
         export_to_env_if_not_present(MEILI_ENV, env);
         if let Some(task_webhook_url) = task_webhook_url {
-            export_to_env_if_not_present(MEILI_TASK_WEBHOOK_URL, task_webhook_url);
+            export_to_env_if_not_present(MEILI_TASK_WEBHOOK_URL, task_webhook_url.to_string());
         }
 
         #[cfg(feature = "analytics")]
