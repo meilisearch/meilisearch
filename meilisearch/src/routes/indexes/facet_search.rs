@@ -111,6 +111,7 @@ impl From<FacetSearchQuery> for SearchQuery {
             show_ranking_score: false,
             show_ranking_score_details: false,
             filter,
+            boosting_filter: None,
             sort: None,
             facets: None,
             highlight_pre_tag: DEFAULT_HIGHLIGHT_PRE_TAG(),

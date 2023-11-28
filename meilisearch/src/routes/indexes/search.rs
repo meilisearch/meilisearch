@@ -54,6 +54,8 @@ pub struct SearchQueryGet {
     attributes_to_highlight: Option<CS<String>>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchFilter>)]
     filter: Option<String>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchBoostingFilter>)]
+    boosting_filter: Option<String>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchSort>)]
     sort: Option<String>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowMatchesPosition>)]
@@ -86,6 +88,14 @@ impl From<SearchQueryGet> for SearchQuery {
             None => None,
         };
 
+        let boosting_filter = match other.boosting_filter {
+            Some(f) => match serde_json::from_str(&f) {
+                Ok(v) => Some(v),
+                _ => Some(Value::String(f)),
+            },
+            None => None,
+        };
+
         Self {
             q: other.q,
             vector: other.vector.map(CS::into_inner),
@@ -98,6 +108,7 @@ impl From<SearchQueryGet> for SearchQuery {
             crop_length: other.crop_length.0,
             attributes_to_highlight: other.attributes_to_highlight.map(|o| o.into_iter().collect()),
             filter,
+            boosting_filter,
             sort: other.sort.map(|attr| fix_sort_query_parameters(&attr)),
             show_matches_position: other.show_matches_position.0,
             show_ranking_score: other.show_ranking_score.0,

@@ -71,6 +71,8 @@ pub struct SearchQuery {
     pub show_ranking_score_details: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchBoostingFilter>)]
+    pub boosting_filter: Option<Value>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
     pub sort: Option<Vec<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
@@ -130,6 +132,8 @@ pub struct SearchQueryWithIndex {
     pub show_matches_position: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchBoostingFilter>)]
+    pub boosting_filter: Option<Value>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
     pub sort: Option<Vec<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
@@ -164,6 +168,7 @@ impl SearchQueryWithIndex {
             show_ranking_score_details,
             show_matches_position,
             filter,
+            boosting_filter,
             sort,
             facets,
             highlight_pre_tag,
@@ -189,6 +194,7 @@ impl SearchQueryWithIndex {
                 show_ranking_score_details,
                 show_matches_position,
                 filter,
+                boosting_filter,
                 sort,
                 facets,
                 highlight_pre_tag,
@@ -397,8 +403,14 @@ fn prepare_search<'t>(
     search.limit(limit);
 
     if let Some(ref filter) = query.filter {
-        if let Some(facets) = parse_filter(filter)? {
-            search.filter(facets);
+        if let Some(filter) = parse_filter(filter)? {
+            search.filter(filter);
+        }
+    }
+
+    if let Some(ref boosting_filter) = query.boosting_filter {
+        if let Some(boosting_filter) = parse_filter(boosting_filter)? {
+            search.boosting_filter(boosting_filter);
         }
     }
 

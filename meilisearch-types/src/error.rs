@@ -235,6 +235,7 @@ InvalidSearchCropMarker               , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchFacets                   , InvalidRequest       , BAD_REQUEST ;
 InvalidFacetSearchFacetName           , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchFilter                   , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchBoostingFilter           , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchHighlightPostTag         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchHighlightPreTag          , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchHitsPerPage              , InvalidRequest       , BAD_REQUEST ;
