@@ -753,7 +753,7 @@ impl IndexScheduler {
                     let index = self.index_mapper.index(&rtxn, name)?;
                     let dst = temp_snapshot_dir.path().join("indexes").join(uuid.to_string());
                     fs::create_dir_all(&dst)?;
-                    index.copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)?;
+                    index.copy_to_file(dst.join("data.mdb"), CompactionOption::Enabled)?;
                 }
 
                 drop(rtxn);

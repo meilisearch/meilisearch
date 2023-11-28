@@ -312,7 +312,7 @@ impl Index {
         self.env.info().map_size
     }
 
-    pub fn copy_to_path<P: AsRef<Path>>(&self, path: P, option: CompactionOption) -> Result<File> {
+    pub fn copy_to_file<P: AsRef<Path>>(&self, path: P, option: CompactionOption) -> Result<File> {
         self.env.copy_to_file(path, option).map_err(Into::into)
     }
 
