@@ -54,6 +54,7 @@ impl<'a> heed::BytesDecode<'a> for StrBEU16Codec {
         }
 
         let (word_plus_nul_byte, bytes) = bytes.split_at(bytes.len() - footer_len);
+        // unwrap: we just checked the footer + 1 above.
         let (_, word) = word_plus_nul_byte.split_last().unwrap();
         let word = str::from_utf8(word)?;
         let pos = bytes.try_into().map(u16::from_be_bytes)?;
