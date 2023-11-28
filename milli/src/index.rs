@@ -308,8 +308,8 @@ impl Index {
     ///
     /// This value is the maximum between the map size passed during the opening of the index
     /// and the on-disk size of the index at the time of opening.
-    pub fn map_size(&self) -> Result<usize> {
-        Ok(self.env.info().map_size) // TODO remove Result
+    pub fn map_size(&self) -> usize {
+        self.env.info().map_size
     }
 
     pub fn copy_to_path<P: AsRef<Path>>(&self, path: P, option: CompactionOption) -> Result<File> {
