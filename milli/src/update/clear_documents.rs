@@ -1,15 +1,16 @@
+use heed::RwTxn;
 use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 
 use crate::{FieldDistribution, Index, Result};
 
-pub struct ClearDocuments<'t, 'u, 'i> {
-    wtxn: &'t mut heed::RwTxn<'i, 'u>,
+pub struct ClearDocuments<'t, 'i> {
+    wtxn: &'t mut RwTxn<'i>,
     index: &'i Index,
 }
 
-impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
-    pub fn new(wtxn: &'t mut heed::RwTxn<'i, 'u>, index: &'i Index) -> ClearDocuments<'t, 'u, 'i> {
+impl<'t, 'i> ClearDocuments<'t, 'i> {
+    pub fn new(wtxn: &'t mut RwTxn<'i>, index: &'i Index) -> ClearDocuments<'t, 'i> {
         ClearDocuments { wtxn, index }
     }
 

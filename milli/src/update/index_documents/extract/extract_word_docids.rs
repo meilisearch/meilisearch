@@ -118,7 +118,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         }
 
         let (word, fid) = StrBEU16Codec::bytes_decode(key)
-            .ok_or(SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
+            .map_err(|_| SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
 
         // every words contained in an attribute set to exact must be pushed in the exact_words list.
         if exact_attributes.contains(&fid) {

@@ -7,21 +7,21 @@ use super::{get_first_facet_value, get_highest_level, get_last_facet_value};
 use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
 };
-use crate::heed_codec::ByteSliceRefCodec;
+use crate::heed_codec::BytesRefCodec;
 
 /// See documentationg for [`ascending_facet_sort`](super::ascending_facet_sort).
 ///
 /// This function does the same thing, but in the opposite order.
 pub fn descending_facet_sort<'t>(
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
     candidates: RoaringBitmap,
 ) -> Result<impl Iterator<Item = Result<(RoaringBitmap, &'t [u8])>> + 't> {
     let highest_level = get_highest_level(rtxn, db, field_id)?;
-    if let Some(first_bound) = get_first_facet_value::<ByteSliceRefCodec>(rtxn, db, field_id)? {
+    if let Some(first_bound) = get_first_facet_value::<BytesRefCodec>(rtxn, db, field_id)? {
         let first_key = FacetGroupKey { field_id, level: highest_level, left_bound: first_bound };
-        let last_bound = get_last_facet_value::<ByteSliceRefCodec>(rtxn, db, field_id)?.unwrap();
+        let last_bound = get_last_facet_value::<BytesRefCodec>(rtxn, db, field_id)?.unwrap();
         let last_key = FacetGroupKey { field_id, level: highest_level, left_bound: last_bound };
         let iter = db.rev_range(rtxn, &(first_key..=last_key))?.take(usize::MAX);
         Ok(itertools::Either::Left(DescendingFacetSort {
@@ -37,13 +37,13 @@ pub fn descending_facet_sort<'t>(
 
 struct DescendingFacetSort<'t> {
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
     #[allow(clippy::type_complexity)]
     stack: Vec<(
         RoaringBitmap,
         std::iter::Take<
-            heed::RoRevRange<'t, FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
+            heed::RoRevRange<'t, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
         >,
         Bound<&'t [u8]>,
     )>,
@@ -100,7 +100,7 @@ impl<'t> Iterator for DescendingFacetSort<'t> {
                     *right_bound = Bound::Excluded(left_bound);
                     let iter = match self
                         .db
-                        .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>()
+                        .remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>()
                         .rev_range(self.rtxn, &(Bound::Included(starting_key_below), end_key_kelow))
                     {
                         Ok(iter) => iter,
@@ -123,7 +123,7 @@ mod tests {
     use roaring::RoaringBitmap;
 
     use crate::heed_codec::facet::FacetGroupKeyCodec;
-    use crate::heed_codec::ByteSliceRefCodec;
+    use crate::heed_codec::BytesRefCodec;
     use crate::milli_snap;
     use crate::search::facet::facet_sort_descending::descending_facet_sort;
     use crate::search::facet::tests::{
@@ -144,7 +144,7 @@ mod tests {
             let txn = index.env.read_txn().unwrap();
             let candidates = (200..=300).collect::<RoaringBitmap>();
             let mut results = String::new();
-            let db = index.content.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>();
+            let db = index.content.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>();
             let iter = descending_facet_sort(&txn, db, 0, candidates).unwrap();
             for el in iter {
                 let (docids, _) = el.unwrap();
@@ -167,7 +167,7 @@ mod tests {
             let txn = index.env.read_txn().unwrap();
             let candidates = (200..=300).collect::<RoaringBitmap>();
             let mut results = String::new();
-            let db = index.content.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>();
+            let db = index.content.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>();
             let iter = descending_facet_sort(&txn, db, 0, candidates.clone()).unwrap();
             for el in iter {
                 let (docids, _) = el.unwrap();

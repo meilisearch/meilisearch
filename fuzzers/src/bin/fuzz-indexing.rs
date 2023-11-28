@@ -113,7 +113,7 @@ fn main() {
                             index.documents(&wtxn, res.documents_ids).unwrap();
                             progression.fetch_add(1, Ordering::Relaxed);
                         }
-                        wtxn.abort().unwrap();
+                        wtxn.abort();
                     });
                     if let err @ Err(_) = handle.join() {
                         stop.store(true, Ordering::Relaxed);

@@ -3,7 +3,7 @@ use std::collections::hash_map::Entry;
 use std::hash::Hash;
 
 use fxhash::FxHashMap;
-use heed::types::ByteSlice;
+use heed::types::Bytes;
 use heed::{BytesEncode, Database, RoTxn};
 use roaring::RoaringBitmap;
 
@@ -50,7 +50,7 @@ impl<'ctx> DatabaseCache<'ctx> {
         cache_key: K1,
         db_key: &'v KC::EItem,
         cache: &mut FxHashMap<K1, Option<Cow<'ctx, [u8]>>>,
-        db: Database<KC, ByteSlice>,
+        db: Database<KC, Bytes>,
     ) -> Result<Option<DC::DItem>>
     where
         K1: Copy + Eq + Hash,
@@ -63,12 +63,14 @@ impl<'ctx> DatabaseCache<'ctx> {
         }
 
         match cache.get(&cache_key).unwrap() {
-            Some(Cow::Borrowed(bytes)) => {
-                DC::bytes_decode_owned(bytes).ok_or(heed::Error::Decoding.into()).map(Some)
-            }
-            Some(Cow::Owned(bytes)) => {
-                DC::bytes_decode_owned(bytes).ok_or(heed::Error::Decoding.into()).map(Some)
-            }
+            Some(Cow::Borrowed(bytes)) => DC::bytes_decode_owned(bytes)
+                .map(Some)
+                .map_err(heed::Error::Decoding)
+                .map_err(Into::into),
+            Some(Cow::Owned(bytes)) => DC::bytes_decode_owned(bytes)
+                .map(Some)
+                .map_err(heed::Error::Decoding)
+                .map_err(Into::into),
             None => Ok(None),
         }
     }
@@ -78,7 +80,7 @@ impl<'ctx> DatabaseCache<'ctx> {
         cache_key: K1,
         db_keys: &'v [KC::EItem],
         cache: &mut FxHashMap<K1, Option<Cow<'ctx, [u8]>>>,
-        db: Database<KC, ByteSlice>,
+        db: Database<KC, Bytes>,
         merger: MergeFn,
     ) -> Result<Option<DC::DItem>>
     where
@@ -110,12 +112,14 @@ impl<'ctx> DatabaseCache<'ctx> {
         }
 
         match cache.get(&cache_key).unwrap() {
-            Some(Cow::Borrowed(bytes)) => {
-                DC::bytes_decode_owned(bytes).ok_or(heed::Error::Decoding.into()).map(Some)
-            }
-            Some(Cow::Owned(bytes)) => {
-                DC::bytes_decode_owned(bytes).ok_or(heed::Error::Decoding.into()).map(Some)
-            }
+            Some(Cow::Borrowed(bytes)) => DC::bytes_decode_owned(bytes)
+                .map(Some)
+                .map_err(heed::Error::Decoding)
+                .map_err(Into::into),
+            Some(Cow::Owned(bytes)) => DC::bytes_decode_owned(bytes)
+                .map(Some)
+                .map_err(heed::Error::Decoding)
+                .map_err(Into::into),
             None => Ok(None),
         }
     }
@@ -164,7 +168,7 @@ impl<'ctx> SearchContext<'ctx> {
                     word,
                     &keys[..],
                     &mut self.db_cache.word_docids,
-                    self.index.word_fid_docids.remap_data_type::<ByteSlice>(),
+                    self.index.word_fid_docids.remap_data_type::<Bytes>(),
                     merge_cbo_roaring_bitmaps,
                 )
             }
@@ -173,7 +177,7 @@ impl<'ctx> SearchContext<'ctx> {
                 word,
                 self.word_interner.get(word).as_str(),
                 &mut self.db_cache.word_docids,
-                self.index.word_docids.remap_data_type::<ByteSlice>(),
+                self.index.word_docids.remap_data_type::<Bytes>(),
             ),
         }
     }
@@ -187,7 +191,7 @@ impl<'ctx> SearchContext<'ctx> {
             word,
             self.word_interner.get(word).as_str(),
             &mut self.db_cache.exact_word_docids,
-            self.index.exact_word_docids.remap_data_type::<ByteSlice>(),
+            self.index.exact_word_docids.remap_data_type::<Bytes>(),
         )
     }
 
@@ -226,7 +230,7 @@ impl<'ctx> SearchContext<'ctx> {
                     prefix,
                     &keys[..],
                     &mut self.db_cache.word_prefix_docids,
-                    self.index.word_prefix_fid_docids.remap_data_type::<ByteSlice>(),
+                    self.index.word_prefix_fid_docids.remap_data_type::<Bytes>(),
                     merge_cbo_roaring_bitmaps,
                 )
             }
@@ -235,7 +239,7 @@ impl<'ctx> SearchContext<'ctx> {
                 prefix,
                 self.word_interner.get(prefix).as_str(),
                 &mut self.db_cache.word_prefix_docids,
-                self.index.word_prefix_docids.remap_data_type::<ByteSlice>(),
+                self.index.word_prefix_docids.remap_data_type::<Bytes>(),
             ),
         }
     }
@@ -249,7 +253,7 @@ impl<'ctx> SearchContext<'ctx> {
             prefix,
             self.word_interner.get(prefix).as_str(),
             &mut self.db_cache.exact_word_prefix_docids,
-            self.index.exact_word_prefix_docids.remap_data_type::<ByteSlice>(),
+            self.index.exact_word_prefix_docids.remap_data_type::<Bytes>(),
         )
     }
 
@@ -268,7 +272,7 @@ impl<'ctx> SearchContext<'ctx> {
                 self.word_interner.get(word2).as_str(),
             ),
             &mut self.db_cache.word_pair_proximity_docids,
-            self.index.word_pair_proximity_docids.remap_data_type::<ByteSlice>(),
+            self.index.word_pair_proximity_docids.remap_data_type::<Bytes>(),
         )
     }
 
@@ -287,7 +291,7 @@ impl<'ctx> SearchContext<'ctx> {
                 self.word_interner.get(word2).as_str(),
             ),
             &mut self.db_cache.word_pair_proximity_docids,
-            self.index.word_pair_proximity_docids.remap_data_type::<ByteSlice>(),
+            self.index.word_pair_proximity_docids.remap_data_type::<Bytes>(),
         )
     }
 
@@ -316,7 +320,7 @@ impl<'ctx> SearchContext<'ctx> {
                 let remap_key_type = self
                     .index
                     .word_pair_proximity_docids
-                    .remap_key_type::<ByteSlice>()
+                    .remap_key_type::<Bytes>()
                     .prefix_iter(self.txn, &key)?;
                 for result in remap_key_type {
                     let (_, docids) = result?;
@@ -355,7 +359,7 @@ impl<'ctx> SearchContext<'ctx> {
             (word, fid),
             &(self.word_interner.get(word).as_str(), fid),
             &mut self.db_cache.word_fid_docids,
-            self.index.word_fid_docids.remap_data_type::<ByteSlice>(),
+            self.index.word_fid_docids.remap_data_type::<Bytes>(),
         )
     }
 
@@ -374,7 +378,7 @@ impl<'ctx> SearchContext<'ctx> {
             (word_prefix, fid),
             &(self.word_interner.get(word_prefix).as_str(), fid),
             &mut self.db_cache.word_prefix_fid_docids,
-            self.index.word_prefix_fid_docids.remap_data_type::<ByteSlice>(),
+            self.index.word_prefix_fid_docids.remap_data_type::<Bytes>(),
         )
     }
 
@@ -388,7 +392,7 @@ impl<'ctx> SearchContext<'ctx> {
                 let remap_key_type = self
                     .index
                     .word_fid_docids
-                    .remap_types::<ByteSlice, ByteSlice>()
+                    .remap_types::<Bytes, Bytes>()
                     .prefix_iter(self.txn, &key)?
                     .remap_key_type::<StrBEU16Codec>();
                 for result in remap_key_type {
@@ -414,7 +418,7 @@ impl<'ctx> SearchContext<'ctx> {
                 let remap_key_type = self
                     .index
                     .word_prefix_fid_docids
-                    .remap_types::<ByteSlice, ByteSlice>()
+                    .remap_types::<Bytes, Bytes>()
                     .prefix_iter(self.txn, &key)?
                     .remap_key_type::<StrBEU16Codec>();
                 for result in remap_key_type {
@@ -442,7 +446,7 @@ impl<'ctx> SearchContext<'ctx> {
             (word, position),
             &(self.word_interner.get(word).as_str(), position),
             &mut self.db_cache.word_position_docids,
-            self.index.word_position_docids.remap_data_type::<ByteSlice>(),
+            self.index.word_position_docids.remap_data_type::<Bytes>(),
         )
     }
 
@@ -456,7 +460,7 @@ impl<'ctx> SearchContext<'ctx> {
             (word_prefix, position),
             &(self.word_interner.get(word_prefix).as_str(), position),
             &mut self.db_cache.word_prefix_position_docids,
-            self.index.word_prefix_position_docids.remap_data_type::<ByteSlice>(),
+            self.index.word_prefix_position_docids.remap_data_type::<Bytes>(),
         )
     }
 
@@ -470,7 +474,7 @@ impl<'ctx> SearchContext<'ctx> {
                 let remap_key_type = self
                     .index
                     .word_position_docids
-                    .remap_types::<ByteSlice, ByteSlice>()
+                    .remap_types::<Bytes, Bytes>()
                     .prefix_iter(self.txn, &key)?
                     .remap_key_type::<StrBEU16Codec>();
                 for result in remap_key_type {
@@ -501,7 +505,7 @@ impl<'ctx> SearchContext<'ctx> {
                 let remap_key_type = self
                     .index
                     .word_prefix_position_docids
-                    .remap_types::<ByteSlice, ByteSlice>()
+                    .remap_types::<Bytes, Bytes>()
                     .prefix_iter(self.txn, &key)?
                     .remap_key_type::<StrBEU16Codec>();
                 for result in remap_key_type {

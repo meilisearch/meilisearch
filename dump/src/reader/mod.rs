@@ -13,12 +13,12 @@ use crate::{Result, Version};
 
 mod compat;
 
-pub(self) mod v1;
-pub(self) mod v2;
-pub(self) mod v3;
-pub(self) mod v4;
-pub(self) mod v5;
-pub(self) mod v6;
+mod v1;
+mod v2;
+mod v3;
+mod v4;
+mod v5;
+mod v6;
 
 pub type Document = serde_json::Map<String, serde_json::Value>;
 pub type UpdateFile = dyn Iterator<Item = Result<Document>>;

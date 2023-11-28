@@ -7,8 +7,8 @@ use clap::{Parser, Subcommand};
 use dump::{DumpWriter, IndexMetadata};
 use file_store::FileStore;
 use meilisearch_auth::AuthController;
-use meilisearch_types::heed::types::{OwnedType, SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, EnvOpenOptions, PolyDatabase, RoTxn, RwTxn};
+use meilisearch_types::heed::types::{SerdeJson, Str};
+use meilisearch_types::heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn, Unspecified};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
 use meilisearch_types::milli::{obkv_to_json, BEU32};
 use meilisearch_types::tasks::{Status, Task};
@@ -148,15 +148,17 @@ fn try_opening_poly_database(
     env: &Env,
     rtxn: &RoTxn,
     db_name: &str,
-) -> anyhow::Result<PolyDatabase> {
-    env.open_poly_database(rtxn, Some(db_name))
+) -> anyhow::Result<Database<Unspecified, Unspecified>> {
+    env.database_options()
+        .name(db_name)
+        .open(rtxn)
         .with_context(|| format!("While opening the {db_name:?} poly database"))?
         .with_context(|| format!("Missing the {db_name:?} poly database"))
 }
 
 fn try_clearing_poly_database(
     wtxn: &mut RwTxn,
-    database: PolyDatabase,
+    database: Database<Unspecified, Unspecified>,
     db_name: &str,
 ) -> anyhow::Result<()> {
     database.clear(wtxn).with_context(|| format!("While clearing the {db_name:?} database"))
@@ -212,7 +214,7 @@ fn export_a_dump(
     eprintln!("Successfully dumped {count} keys!");
 
     let rtxn = env.read_txn()?;
-    let all_tasks: Database<OwnedType<BEU32>, SerdeJson<Task>> =
+    let all_tasks: Database<BEU32, SerdeJson<Task>> =
         try_opening_database(&env, &rtxn, "all-tasks")?;
     let index_mapping: Database<Str, UuidCodec> =
         try_opening_database(&env, &rtxn, "index-mapping")?;

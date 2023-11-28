@@ -386,11 +386,11 @@ impl ErrorCode for HeedError {
             HeedError::Mdb(MdbError::Invalid) => Code::InvalidStoreFile,
             HeedError::Io(e) => e.error_code(),
             HeedError::Mdb(_)
-            | HeedError::Encoding
-            | HeedError::Decoding
+            | HeedError::Encoding(_)
+            | HeedError::Decoding(_)
             | HeedError::InvalidDatabaseTyping
             | HeedError::DatabaseClosing
-            | HeedError::BadOpenOptions => Code::Internal,
+            | HeedError::BadOpenOptions { .. } => Code::Internal,
         }
     }
 }

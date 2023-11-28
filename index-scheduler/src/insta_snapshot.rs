@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
 
-use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
+use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, RoTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Details, Task};
@@ -115,7 +115,7 @@ pub fn snapshot_bitmap(r: &RoaringBitmap) -> String {
     snap
 }
 
-pub fn snapshot_all_tasks(rtxn: &RoTxn, db: Database<OwnedType<BEU32>, SerdeJson<Task>>) -> String {
+pub fn snapshot_all_tasks(rtxn: &RoTxn, db: Database<BEU32, SerdeJson<Task>>) -> String {
     let mut snap = String::new();
     let iter = db.iter(rtxn).unwrap();
     for next in iter {
@@ -125,10 +125,7 @@ pub fn snapshot_all_tasks(rtxn: &RoTxn, db: Database<OwnedType<BEU32>, SerdeJson
     snap
 }
 
-pub fn snapshot_date_db(
-    rtxn: &RoTxn,
-    db: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
-) -> String {
+pub fn snapshot_date_db(rtxn: &RoTxn, db: Database<BEI128, CboRoaringBitmapCodec>) -> String {
     let mut snap = String::new();
     let iter = db.iter(rtxn).unwrap();
     for next in iter {
@@ -248,10 +245,7 @@ pub fn snapshot_index_tasks(rtxn: &RoTxn, db: Database<Str, RoaringBitmapCodec>)
     }
     snap
 }
-pub fn snapshot_canceled_by(
-    rtxn: &RoTxn,
-    db: Database<OwnedType<BEU32>, RoaringBitmapCodec>,
-) -> String {
+pub fn snapshot_canceled_by(rtxn: &RoTxn, db: Database<BEU32, RoaringBitmapCodec>) -> String {
     let mut snap = String::new();
     let iter = db.iter(rtxn).unwrap();
     for next in iter {

@@ -3,7 +3,7 @@ use std::io::ErrorKind;
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
-use bstr::ByteSlice;
+use bstr::ByteSlice as _;
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::Deserr;
 use futures::StreamExt;

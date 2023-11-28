@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::str;
 
 use grenad::CompressionType;
-use heed::types::ByteSlice;
+use heed::types::Bytes;
 use heed::{BytesDecode, BytesEncode, Database};
 use log::debug;
 
@@ -17,8 +17,8 @@ use crate::update::index_documents::{
 };
 use crate::{CboRoaringBitmapCodec, Result};
 
-pub struct WordPrefixIntegerDocids<'t, 'u, 'i> {
-    wtxn: &'t mut heed::RwTxn<'i, 'u>,
+pub struct WordPrefixIntegerDocids<'t, 'i> {
+    wtxn: &'t mut heed::RwTxn<'i>,
     prefix_database: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
     word_database: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
     pub(crate) chunk_compression_type: CompressionType,
@@ -27,12 +27,12 @@ pub struct WordPrefixIntegerDocids<'t, 'u, 'i> {
     pub(crate) max_memory: Option<usize>,
 }
 
-impl<'t, 'u, 'i> WordPrefixIntegerDocids<'t, 'u, 'i> {
+impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
     pub fn new(
-        wtxn: &'t mut heed::RwTxn<'i, 'u>,
+        wtxn: &'t mut heed::RwTxn<'i>,
         prefix_database: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
         word_database: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
-    ) -> WordPrefixIntegerDocids<'t, 'u, 'i> {
+    ) -> WordPrefixIntegerDocids<'t, 'i> {
         WordPrefixIntegerDocids {
             wtxn,
             prefix_database,
@@ -72,7 +72,8 @@ impl<'t, 'u, 'i> WordPrefixIntegerDocids<'t, 'u, 'i> {
             let mut current_prefixes: Option<&&[String]> = None;
             let mut prefixes_cache = HashMap::new();
             while let Some((key, data)) = new_word_integer_docids_iter.move_on_next()? {
-                let (word, pos) = StrBEU16Codec::bytes_decode(key).ok_or(heed::Error::Decoding)?;
+                let (word, pos) =
+                    StrBEU16Codec::bytes_decode(key).map_err(heed::Error::Decoding)?;
 
                 current_prefixes = match current_prefixes.take() {
                     Some(prefixes) if word.starts_with(&prefixes[0]) => Some(prefixes),
@@ -109,7 +110,7 @@ impl<'t, 'u, 'i> WordPrefixIntegerDocids<'t, 'u, 'i> {
         }
 
         // We fetch the docids associated to the newly added word prefix fst only.
-        let db = self.word_database.remap_data_type::<ByteSlice>();
+        let db = self.word_database.remap_data_type::<Bytes>();
         let mut buffer = Vec::new();
         for prefix_bytes in new_prefix_fst_words {
             let prefix = str::from_utf8(prefix_bytes.as_bytes()).map_err(|_| {
@@ -118,7 +119,7 @@ impl<'t, 'u, 'i> WordPrefixIntegerDocids<'t, 'u, 'i> {
 
             // iter over all lines of the DB where the key is prefixed by the current prefix.
             let iter = db
-                .remap_key_type::<ByteSlice>()
+                .remap_key_type::<Bytes>()
                 .prefix_iter(self.wtxn, prefix_bytes.as_bytes())?
                 .remap_key_type::<StrBEU16Codec>();
             for result in iter {

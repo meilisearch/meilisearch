@@ -4,7 +4,7 @@ use once_cell::sync::Lazy;
 use crate::common::{Server, Value};
 use crate::json;
 
-pub(self) static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     json!([
         {
             "title": "Shazam!",

@@ -32,7 +32,7 @@ use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::update::{
     IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings as MilliSettings,
 };
-use meilisearch_types::milli::{self, Filter, BEU32};
+use meilisearch_types::milli::{self, Filter};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::{compression, Index, VERSION_FILE_NAME};
@@ -715,7 +715,7 @@ impl IndexScheduler {
 
                 // 2. Snapshot the index-scheduler LMDB env
                 //
-                // When we call copy_to_path, LMDB opens a read transaction by itself,
+                // When we call copy_to_file, LMDB opens a read transaction by itself,
                 // we can't provide our own. It is an issue as we would like to know
                 // the update files to copy but new ones can be enqueued between the copy
                 // of the env and the new transaction we open to retrieve the enqueued tasks.
@@ -728,7 +728,7 @@ impl IndexScheduler {
                 // 2.1 First copy the LMDB env of the index-scheduler
                 let dst = temp_snapshot_dir.path().join("tasks");
                 fs::create_dir_all(&dst)?;
-                self.env.copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)?;
+                self.env.copy_to_file(dst.join("data.mdb"), CompactionOption::Enabled)?;
 
                 // 2.2 Create a read transaction on the index-scheduler
                 let rtxn = self.env.read_txn()?;
@@ -753,7 +753,7 @@ impl IndexScheduler {
                     let index = self.index_mapper.index(&rtxn, name)?;
                     let dst = temp_snapshot_dir.path().join("indexes").join(uuid.to_string());
                     fs::create_dir_all(&dst)?;
-                    index.copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)?;
+                    index.copy_to_file(dst.join("data.mdb"), CompactionOption::Enabled)?;
                 }
 
                 drop(rtxn);
@@ -766,7 +766,7 @@ impl IndexScheduler {
                     .map_size(1024 * 1024 * 1024) // 1 GiB
                     .max_dbs(2)
                     .open(&self.auth_path)?;
-                auth.copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)?;
+                auth.copy_to_file(dst.join("data.mdb"), CompactionOption::Enabled)?;
 
                 // 5. Copy and tarball the flat snapshot
                 // 5.1 Find the original name of the database
@@ -1106,7 +1106,7 @@ impl IndexScheduler {
         for task_id in &index_lhs_task_ids | &index_rhs_task_ids {
             let mut task = self.get_task(wtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
             swap_index_uid_in_task(&mut task, (lhs, rhs));
-            self.all_tasks.put(wtxn, &BEU32::new(task_id), &task)?;
+            self.all_tasks.put(wtxn, &task_id, &task)?;
         }
 
         // 4. remove the task from indexuid = before_name
@@ -1132,7 +1132,7 @@ impl IndexScheduler {
     /// The list of processed tasks.
     fn apply_index_operation<'i>(
         &self,
-        index_wtxn: &mut RwTxn<'i, '_>,
+        index_wtxn: &mut RwTxn<'i>,
         index: &'i Index,
         operation: IndexOperation,
     ) -> Result<Vec<Task>> {
@@ -1479,10 +1479,9 @@ impl IndexScheduler {
         }
 
         for task in to_delete_tasks.iter() {
-            self.all_tasks.delete(wtxn, &BEU32::new(task))?;
+            self.all_tasks.delete(wtxn, &task)?;
         }
         for canceled_by in affected_canceled_by {
-            let canceled_by = BEU32::new(canceled_by);
             if let Some(mut tasks) = self.canceled_by.get(wtxn, &canceled_by)? {
                 tasks -= &to_delete_tasks;
                 if tasks.is_empty() {
@@ -1530,14 +1529,14 @@ impl IndexScheduler {
             task.details = task.details.map(|d| d.to_failed());
             self.update_task(wtxn, &task)?;
         }
-        self.canceled_by.put(wtxn, &BEU32::new(cancel_task_id), &tasks_to_cancel)?;
+        self.canceled_by.put(wtxn, &cancel_task_id, &tasks_to_cancel)?;
 
         Ok(content_files_to_delete)
     }
 }
 
 fn delete_document_by_filter<'a>(
-    wtxn: &mut RwTxn<'a, '_>,
+    wtxn: &mut RwTxn<'a>,
     filter: &serde_json::Value,
     indexer_config: &IndexerConfig,
     must_stop_processing: MustStopProcessing,

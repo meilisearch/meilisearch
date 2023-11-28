@@ -100,8 +100,8 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Setting<T> {
     }
 }
 
-pub struct Settings<'a, 't, 'u, 'i> {
-    wtxn: &'t mut heed::RwTxn<'i, 'u>,
+pub struct Settings<'a, 't, 'i> {
+    wtxn: &'t mut heed::RwTxn<'i>,
     index: &'i Index,
 
     indexer_config: &'a IndexerConfig,
@@ -129,12 +129,12 @@ pub struct Settings<'a, 't, 'u, 'i> {
     pagination_max_total_hits: Setting<usize>,
 }
 
-impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
+impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     pub fn new(
-        wtxn: &'t mut heed::RwTxn<'i, 'u>,
+        wtxn: &'t mut heed::RwTxn<'i>,
         index: &'i Index,
         indexer_config: &'a IndexerConfig,
-    ) -> Settings<'a, 't, 'u, 'i> {
+    ) -> Settings<'a, 't, 'i> {
         Settings {
             wtxn,
             index,
@@ -822,7 +822,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_max_values_per_facet(&mut self) -> Result<()> {
         match self.max_values_per_facet {
             Setting::Set(max) => {
-                self.index.put_max_values_per_facet(self.wtxn, max)?;
+                self.index.put_max_values_per_facet(self.wtxn, max as u64)?;
             }
             Setting::Reset => {
                 self.index.delete_max_values_per_facet(self.wtxn)?;
@@ -850,7 +850,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_pagination_max_total_hits(&mut self) -> Result<()> {
         match self.pagination_max_total_hits {
             Setting::Set(max) => {
-                self.index.put_pagination_max_total_hits(self.wtxn, max)?;
+                self.index.put_pagination_max_total_hits(self.wtxn, max as u64)?;
             }
             Setting::Reset => {
                 self.index.delete_pagination_max_total_hits(self.wtxn)?;
@@ -917,7 +917,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 #[cfg(test)]
 mod tests {
     use big_s::S;
-    use heed::types::ByteSlice;
+    use heed::types::Bytes;
     use maplit::{btreemap, btreeset, hashset};
 
     use super::*;
@@ -1130,7 +1130,7 @@ mod tests {
         }
         let count = index
             .facet_id_f64_docids
-            .remap_key_type::<ByteSlice>()
+            .remap_key_type::<Bytes>()
             // The faceted field id is 1u16
             .prefix_iter(&rtxn, &[0, 1, 0])
             .unwrap()
@@ -1151,7 +1151,7 @@ mod tests {
         // Only count the field_id 0 and level 0 facet values.
         let count = index
             .facet_id_f64_docids
-            .remap_key_type::<ByteSlice>()
+            .remap_key_type::<Bytes>()
             .prefix_iter(&rtxn, &[0, 1, 0])
             .unwrap()
             .count();
@@ -1565,7 +1565,7 @@ mod tests {
             })
             .unwrap_err();
         assert!(matches!(error, Error::UserError(UserError::PrimaryKeyCannotBeChanged(_))));
-        wtxn.abort().unwrap();
+        wtxn.abort();
 
         // But if we clear the database...
         let mut wtxn = index.write_txn().unwrap();

@@ -83,7 +83,7 @@ use std::iter::FromIterator;
 
 use charabia::normalizer::{Normalize, NormalizerOption};
 use grenad::{CompressionType, SortAlgorithm};
-use heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
+use heed::types::{Bytes, DecodeIgnore, SerdeJson};
 use heed::BytesEncode;
 use log::debug;
 use time::OffsetDateTime;
@@ -92,10 +92,10 @@ use self::incremental::FacetsUpdateIncremental;
 use super::FacetsUpdateBulk;
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec};
-use crate::heed_codec::ByteSliceRefCodec;
+use crate::heed_codec::BytesRefCodec;
 use crate::update::index_documents::create_sorter;
 use crate::update::merge_btreeset_string;
-use crate::{BEU16StrCodec, Index, Result, BEU16, MAX_FACET_VALUE_LENGTH};
+use crate::{BEU16StrCodec, Index, Result, MAX_FACET_VALUE_LENGTH};
 
 pub mod bulk;
 pub mod incremental;
@@ -106,7 +106,7 @@ pub mod incremental;
 /// a bulk update method or an incremental update method.
 pub struct FacetsUpdate<'i> {
     index: &'i Index,
-    database: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
+    database: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     facet_type: FacetType,
     delta_data: grenad::Reader<BufReader<File>>,
     group_size: u8,
@@ -120,11 +120,11 @@ impl<'i> FacetsUpdate<'i> {
         delta_data: grenad::Reader<BufReader<File>>,
     ) -> Self {
         let database = match facet_type {
-            FacetType::String => index
-                .facet_id_string_docids
-                .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
+            FacetType::String => {
+                index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>()
+            }
             FacetType::Number => {
-                index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>()
+                index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>()
             }
         };
         Self {
@@ -146,7 +146,7 @@ impl<'i> FacetsUpdate<'i> {
         self.index.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
 
         // See self::comparison_bench::benchmark_facet_indexing
-        if self.delta_data.len() >= (self.database.len(wtxn)? as u64 / 50) {
+        if self.delta_data.len() >= (self.database.len(wtxn)? / 50) {
             let field_ids =
                 self.index.faceted_fields_ids(wtxn)?.iter().copied().collect::<Vec<_>>();
             let bulk_update = FacetsUpdateBulk::new(
@@ -207,8 +207,8 @@ impl<'i> FacetsUpdate<'i> {
                 }
                 let set = BTreeSet::from_iter(std::iter::once(left_bound));
                 let key = (field_id, normalized_facet.as_ref());
-                let key = BEU16StrCodec::bytes_encode(&key).ok_or(heed::Error::Encoding)?;
-                let val = SerdeJson::bytes_encode(&set).ok_or(heed::Error::Encoding)?;
+                let key = BEU16StrCodec::bytes_encode(&key).map_err(heed::Error::Encoding)?;
+                let val = SerdeJson::bytes_encode(&set).map_err(heed::Error::Encoding)?;
                 sorter.insert(key, val)?;
             }
         }
@@ -217,10 +217,11 @@ impl<'i> FacetsUpdate<'i> {
         // as the grenad sorter already merged them for us.
         let mut merger_iter = sorter.into_stream_merger_iter()?;
         while let Some((key_bytes, btreeset_bytes)) = merger_iter.next()? {
-            self.index
-                .facet_id_normalized_string_strings
-                .remap_types::<ByteSlice, ByteSlice>()
-                .put(wtxn, key_bytes, btreeset_bytes)?;
+            self.index.facet_id_normalized_string_strings.remap_types::<Bytes, Bytes>().put(
+                wtxn,
+                key_bytes,
+                btreeset_bytes,
+            )?;
         }
 
         // We compute one FST by string facet
@@ -252,7 +253,7 @@ impl<'i> FacetsUpdate<'i> {
 
         // We write those FSTs in LMDB now
         for (field_id, fst) in text_fsts {
-            self.index.facet_id_string_fst.put(wtxn, &BEU16::new(field_id), &fst)?;
+            self.index.facet_id_string_fst.put(wtxn, &field_id, &fst)?;
         }
 
         Ok(())
@@ -267,7 +268,7 @@ pub(crate) mod test_helpers {
     use std::marker::PhantomData;
     use std::rc::Rc;
 
-    use heed::types::ByteSlice;
+    use heed::types::Bytes;
     use heed::{BytesDecode, BytesEncode, Env, RoTxn, RwTxn};
     use roaring::RoaringBitmap;
 
@@ -275,7 +276,7 @@ pub(crate) mod test_helpers {
     use crate::heed_codec::facet::{
         FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
     };
-    use crate::heed_codec::ByteSliceRefCodec;
+    use crate::heed_codec::BytesRefCodec;
     use crate::search::facet::get_highest_level;
     use crate::snapshot_tests::display_bitmap;
     use crate::update::del_add::{DelAdd, KvWriterDelAdd};
@@ -306,7 +307,7 @@ pub(crate) mod test_helpers {
             BytesEncode<'a> + BytesDecode<'a, DItem = <BoundCodec as BytesEncode<'a>>::EItem>,
     {
         pub env: Env,
-        pub content: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
+        pub content: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
         pub group_size: Cell<u8>,
         pub min_level_size: Cell<u8>,
         pub max_group_size: Cell<u8>,
@@ -454,7 +455,7 @@ pub(crate) mod test_helpers {
                 let left_bound_bytes = BoundCodec::bytes_encode(left_bound).unwrap().into_owned();
                 let key: FacetGroupKey<&[u8]> =
                     FacetGroupKey { field_id: *field_id, level: 0, left_bound: &left_bound_bytes };
-                let key = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_encode(&key).unwrap();
+                let key = FacetGroupKeyCodec::<BytesRefCodec>::bytes_encode(&key).unwrap();
                 let mut inner_writer = KvWriterDelAdd::memory();
                 let value = CboRoaringBitmapCodec::bytes_encode(docids).unwrap();
                 inner_writer.insert(DelAdd::Addition, value).unwrap();
@@ -486,12 +487,12 @@ pub(crate) mod test_helpers {
 
                 let iter = self
                     .content
-                    .as_polymorph()
-                    .prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(txn, &level_no_prefix)
+                    .remap_types::<Bytes, FacetGroupValueCodec>()
+                    .prefix_iter(txn, &level_no_prefix)
                     .unwrap();
                 for el in iter {
                     let (key, value) = el.unwrap();
-                    let key = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(key).unwrap();
+                    let key = FacetGroupKeyCodec::<BytesRefCodec>::bytes_decode(key).unwrap();
 
                     let mut prefix_start_below = vec![];
                     prefix_start_below.extend_from_slice(&field_id.to_be_bytes());
@@ -501,14 +502,11 @@ pub(crate) mod test_helpers {
                     let start_below = {
                         let mut start_below_iter = self
                             .content
-                            .as_polymorph()
-                            .prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(
-                                txn,
-                                &prefix_start_below,
-                            )
+                            .remap_types::<Bytes, FacetGroupValueCodec>()
+                            .prefix_iter(txn, &prefix_start_below)
                             .unwrap();
                         let (key_bytes, _) = start_below_iter.next().unwrap().unwrap();
-                        FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(key_bytes).unwrap()
+                        FacetGroupKeyCodec::<BytesRefCodec>::bytes_decode(key_bytes).unwrap()
                     };
 
                     assert!(value.size > 0);
@@ -612,7 +610,7 @@ mod comparison_bench {
                 }
                 let time_spent = timer.elapsed().as_millis();
                 println!("    add {nbr_doc} : {time_spent}ms");
-                txn.abort().unwrap();
+                txn.abort();
             }
         }
     }

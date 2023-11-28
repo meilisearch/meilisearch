@@ -78,6 +78,7 @@ macro_rules! make_setting_route {
 
                 let body = body.into_inner();
 
+                #[allow(clippy::redundant_closure_call)]
                 $analytics(&body, &req);
 
                 let new_settings = Settings {

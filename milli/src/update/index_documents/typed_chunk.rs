@@ -6,8 +6,8 @@ use std::io::{self, BufReader};
 use bytemuck::allocation::pod_collect_to_vec;
 use charabia::{Language, Script};
 use grenad::MergerBuilder;
-use heed::types::ByteSlice;
-use heed::RwTxn;
+use heed::types::Bytes;
+use heed::{PutFlags, RwTxn};
 use log::error;
 use obkv::{KvReader, KvWriter};
 use ordered_float::OrderedFloat;
@@ -27,9 +27,7 @@ use crate::index::Hnsw;
 use crate::update::del_add::{deladd_serialize_add_side, DelAdd, KvReaderDelAdd};
 use crate::update::facet::FacetsUpdate;
 use crate::update::index_documents::helpers::{as_cloneable_grenad, try_split_array_at};
-use crate::{
-    lat_lng_to_xyz, DocumentId, FieldId, GeoPoint, Index, Result, SerializationError, BEU32,
-};
+use crate::{lat_lng_to_xyz, DocumentId, FieldId, GeoPoint, Index, Result, SerializationError};
 
 pub(crate) enum TypedChunk {
     FieldIdDocidFacetStrings(grenad::Reader<CursorClonableMmap>),
@@ -146,10 +144,10 @@ pub(crate) fn write_typed_chunk_into_index(
                     }
                 }
 
-                let db = index.documents.remap_data_type::<ByteSlice>();
+                let db = index.documents.remap_data_type::<Bytes>();
 
                 if !writer.is_empty() {
-                    db.put(wtxn, &BEU32::new(docid), &writer.into_inner().unwrap())?;
+                    db.put(wtxn, &docid, &writer.into_inner().unwrap())?;
                     operations.push(DocumentOperation {
                         external_id: external_id.to_string(),
                         internal_id: docid,
@@ -157,7 +155,7 @@ pub(crate) fn write_typed_chunk_into_index(
                     });
                     docids.insert(docid);
                 } else {
-                    db.delete(wtxn, &BEU32::new(docid))?;
+                    db.delete(wtxn, &docid)?;
                     operations.push(DocumentOperation {
                         external_id: external_id.to_string(),
                         internal_id: docid,
@@ -295,7 +293,7 @@ pub(crate) fn write_typed_chunk_into_index(
         }
         TypedChunk::FieldIdDocidFacetNumbers(fid_docid_facet_number) => {
             let index_fid_docid_facet_numbers =
-                index.field_id_docid_facet_f64s.remap_types::<ByteSlice, ByteSlice>();
+                index.field_id_docid_facet_f64s.remap_types::<Bytes, Bytes>();
             let mut cursor = fid_docid_facet_number.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
                 let reader = KvReaderDelAdd::new(value);
@@ -315,7 +313,7 @@ pub(crate) fn write_typed_chunk_into_index(
         }
         TypedChunk::FieldIdDocidFacetStrings(fid_docid_facet_string) => {
             let index_fid_docid_facet_strings =
-                index.field_id_docid_facet_strings.remap_types::<ByteSlice, ByteSlice>();
+                index.field_id_docid_facet_strings.remap_types::<Bytes, Bytes>();
             let mut cursor = fid_docid_facet_string.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
                 let reader = KvReaderDelAdd::new(value);
@@ -362,8 +360,8 @@ pub(crate) fn write_typed_chunk_into_index(
             // We extract and store the previous vectors
             if let Some(hnsw) = index.vector_hnsw(wtxn)? {
                 for (pid, point) in hnsw.iter() {
-                    let pid_key = BEU32::new(pid.into_inner());
-                    let docid = index.vector_id_docid.get(wtxn, &pid_key)?.unwrap().get();
+                    let pid_key = pid.into_inner();
+                    let docid = index.vector_id_docid.get(wtxn, &pid_key)?.unwrap();
                     let vector: Vec<_> = point.iter().copied().map(OrderedFloat).collect();
                     vectors_set.insert((docid, vector));
                 }
@@ -424,11 +422,7 @@ pub(crate) fn write_typed_chunk_into_index(
             // Store the vectors in the point-docid relation database
             index.vector_id_docid.clear(wtxn)?;
             for (docid, pid) in docids.into_iter().zip(pids) {
-                index.vector_id_docid.put(
-                    wtxn,
-                    &BEU32::new(pid.into_inner()),
-                    &BEU32::new(docid),
-                )?;
+                index.vector_id_docid.put(wtxn, &pid.into_inner(), &docid)?;
             }
 
             log::debug!("There are {} entries in the HNSW so far", hnsw_length);
@@ -504,7 +498,7 @@ where
     puffin::profile_function!(format!("number of entries: {}", data.len()));
 
     let mut buffer = Vec::new();
-    let database = database.remap_types::<ByteSlice, ByteSlice>();
+    let database = database.remap_types::<Bytes, Bytes>();
 
     let mut cursor = data.into_cursor()?;
     while let Some((key, value)) = cursor.move_on_next()? {
@@ -562,20 +556,23 @@ where
     }
 
     let mut buffer = Vec::new();
-    let mut database = database.iter_mut(wtxn)?.remap_types::<ByteSlice, ByteSlice>();
+    let mut database = database.iter_mut(wtxn)?.remap_types::<Bytes, Bytes>();
 
     let mut cursor = data.into_cursor()?;
     while let Some((key, value)) = cursor.move_on_next()? {
         if valid_lmdb_key(key) {
             debug_assert!(
-                K::bytes_decode(key).is_some(),
+                K::bytes_decode(key).is_ok(),
                 "Couldn't decode key with the database decoder, key length: {} - key bytes: {:x?}",
                 key.len(),
                 &key
             );
             buffer.clear();
             let value = serialize_value(value, &mut buffer)?;
-            unsafe { database.append(key, value)? };
+            unsafe {
+                // safety: We do not keep a reference to anything that lives inside the database
+                database.put_current_with_options::<Bytes>(PutFlags::APPEND, key, value)?
+            };
         }
     }
 
