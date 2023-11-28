@@ -268,21 +268,10 @@ impl Index {
     ) -> heed::Result<()> {
         let mut txn = env.write_txn()?;
         // The db was just created, we update its metadata with the relevant information.
-        if main
-            .remap_types::<Str, SerdeJson<OffsetDateTime>>()
-            .get(&txn, main_key::CREATED_AT_KEY)?
-            .is_none()
-        {
-            main.remap_types::<Str, SerdeJson<OffsetDateTime>>().put(
-                &mut txn,
-                main_key::UPDATED_AT_KEY,
-                &updated_at,
-            )?;
-            main.remap_types::<Str, SerdeJson<OffsetDateTime>>().put(
-                &mut txn,
-                main_key::CREATED_AT_KEY,
-                &created_at,
-            )?;
+        let main = main.remap_types::<Str, SerdeJson<OffsetDateTime>>();
+        if main.get(&txn, main_key::CREATED_AT_KEY)?.is_none() {
+            main.put(&mut txn, main_key::UPDATED_AT_KEY, &updated_at)?;
+            main.put(&mut txn, main_key::CREATED_AT_KEY, &created_at)?;
             txn.commit()?;
         }
         Ok(())
