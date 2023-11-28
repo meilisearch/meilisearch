@@ -46,48 +46,45 @@ pub async fn multi_search_with_post(
     // Explicitly expect a `(ResponseError, usize)` for the error type rather than `ResponseError` only,
     // so that `?` doesn't work if it doesn't use `with_index`, ensuring that it is not forgotten in case of code
     // changes.
-    let search_results: Result<_, (ResponseError, usize)> = {
-        async {
-            let mut search_results = Vec::with_capacity(queries.len());
-            for (query_index, (index_uid, mut query)) in
-                queries.into_iter().map(SearchQueryWithIndex::into_index_query).enumerate()
+    let search_results: Result<_, (ResponseError, usize)> = async {
+        let mut search_results = Vec::with_capacity(queries.len());
+        for (query_index, (index_uid, mut query)) in
+            queries.into_iter().map(SearchQueryWithIndex::into_index_query).enumerate()
+        {
+            debug!("multi-search #{query_index}: called with params: {:?}", query);
+
+            // Check index from API key
+            if !index_scheduler.filters().is_index_authorized(&index_uid) {
+                return Err(AuthenticationError::InvalidToken).with_index(query_index);
+            }
+            // Apply search rules from tenant token
+            if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid)
             {
-                debug!("multi-search #{query_index}: called with params: {:?}", query);
+                add_search_rules(&mut query, search_rules);
+            }
 
-                // Check index from API key
-                if !index_scheduler.filters().is_index_authorized(&index_uid) {
-                    return Err(AuthenticationError::InvalidToken).with_index(query_index);
-                }
-                // Apply search rules from tenant token
-                if let Some(search_rules) =
-                    index_scheduler.filters().get_index_search_rules(&index_uid)
-                {
-                    add_search_rules(&mut query, search_rules);
-                }
+            let index = index_scheduler
+                .index(&index_uid)
+                .map_err(|err| {
+                    let mut err = ResponseError::from(err);
+                    // Patch the HTTP status code to 400 as it defaults to 404 for `index_not_found`, but
+                    // here the resource not found is not part of the URL.
+                    err.code = StatusCode::BAD_REQUEST;
+                    err
+                })
+                .with_index(query_index)?;
 
-                let index = index_scheduler
-                    .index(&index_uid)
-                    .map_err(|err| {
-                        let mut err = ResponseError::from(err);
-                        // Patch the HTTP status code to 400 as it defaults to 404 for `index_not_found`, but
-                        // here the resource not found is not part of the URL.
-                        err.code = StatusCode::BAD_REQUEST;
-                        err
-                    })
+            let search_result =
+                tokio::task::spawn_blocking(move || perform_search(&index, query, features))
+                    .await
                     .with_index(query_index)?;
 
-                let search_result =
-                    tokio::task::spawn_blocking(move || perform_search(&index, query, features))
-                        .await
-                        .with_index(query_index)?;
-
-                search_results.push(SearchResultWithIndex {
-                    index_uid: index_uid.into_inner(),
-                    result: search_result.with_index(query_index)?,
-                });
-            }
-            Ok(search_results)
+            search_results.push(SearchResultWithIndex {
+                index_uid: index_uid.into_inner(),
+                result: search_result.with_index(query_index)?,
+            });
         }
+        Ok(search_results)
     }
     .await;
 
