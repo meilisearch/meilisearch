@@ -73,6 +73,7 @@ async fn test_basic_webhook() {
     .unwrap();
 
     let index = server.index("tamo");
+    // TODO: may be flaky, we're relying on the fact that during the time the first document addition succeed, the two other operations will be received.
     for i in 0..3 {
         let (_, _status) = index.add_documents(json!({ "id": i, "doggo": "bone" }), None).await;
     }
@@ -81,11 +82,16 @@ async fn test_basic_webhook() {
     let jsonl = String::from_utf8(payload).unwrap();
 
     snapshot!(jsonl,
-        @r###"{"uid":0,"enqueuedAt":"2023-11-28T13:43:24.754587Z","startedAt":"2023-11-28T13:43:24.756445Z","finishedAt":"2023-11-28T13:43:24.791527Z","error":null,"canceledBy":null,"details":{"DocumentAdditionOrUpdate":{"received_documents":1,"indexed_documents":1}},"status":"succeeded","kind":{"documentAdditionOrUpdate":{"index_uid":"tamo","primary_key":null,"method":"ReplaceDocuments","content_file":"ca77ac82-4504-4c85-81a5-1a8d68f1a386","documents_count":1,"allow_index_creation":true}}}"###);
+        @r###"
+    {"uid":0,"indexUid":"tamo","status":"succeeded","type":"documentAdditionOrUpdate","canceledBy":null,"details":{"receivedDocuments":1,"indexedDocuments":1},"error":null,"duration":"PT0.027444S","enqueuedAt":"2023-11-28T14:05:37.767678Z","startedAt":"2023-11-28T14:05:37.769519Z","finishedAt":"2023-11-28T14:05:37.796963Z"}
+    "###);
 
     let payload = handle.receiver.recv().await.unwrap();
     let jsonl = String::from_utf8(payload).unwrap();
 
     snapshot!(jsonl,
-        @r###"{"uid":1,"enqueuedAt":"2023-11-28T13:43:24.761498Z","startedAt":"2023-11-28T13:43:24.793989Z","finishedAt":"2023-11-28T13:43:24.814623Z","error":null,"canceledBy":null,"details":{"DocumentAdditionOrUpdate":{"received_documents":1,"indexed_documents":1}},"status":"succeeded","kind":{"documentAdditionOrUpdate":{"index_uid":"tamo","primary_key":null,"method":"ReplaceDocuments","content_file":"c947aefa-7f98-433d-8ce4-5926d8d2ce10","documents_count":1,"allow_index_creation":true}}}{"uid":2,"enqueuedAt":"2023-11-28T13:43:24.76776Z","startedAt":"2023-11-28T13:43:24.793989Z","finishedAt":"2023-11-28T13:43:24.814623Z","error":null,"canceledBy":null,"details":{"DocumentAdditionOrUpdate":{"received_documents":1,"indexed_documents":1}},"status":"succeeded","kind":{"documentAdditionOrUpdate":{"index_uid":"tamo","primary_key":null,"method":"ReplaceDocuments","content_file":"a21d6da6-9322-4827-8c08-f33d2e1b6cae","documents_count":1,"allow_index_creation":true}}}"###);
+        @r###"
+    {"uid":1,"indexUid":"tamo","status":"succeeded","type":"documentAdditionOrUpdate","canceledBy":null,"details":{"receivedDocuments":1,"indexedDocuments":1},"error":null,"duration":"PT0.020221S","enqueuedAt":"2023-11-28T14:05:37.773731Z","startedAt":"2023-11-28T14:05:37.799448Z","finishedAt":"2023-11-28T14:05:37.819669Z"}
+    {"uid":2,"indexUid":"tamo","status":"succeeded","type":"documentAdditionOrUpdate","canceledBy":null,"details":{"receivedDocuments":1,"indexedDocuments":1},"error":null,"duration":"PT0.020221S","enqueuedAt":"2023-11-28T14:05:37.780466Z","startedAt":"2023-11-28T14:05:37.799448Z","finishedAt":"2023-11-28T14:05:37.819669Z"}
+    "###);
 }

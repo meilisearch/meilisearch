@@ -54,6 +54,7 @@ use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
 use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
+use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use puffin::FrameView;
 use roaring::RoaringBitmap;
@@ -1283,7 +1284,8 @@ impl IndexScheduler {
 
             for id in updated {
                 let task = self.get_task(&rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
-                let _ = serde_json::to_writer(&mut buffer, &task);
+                let _ = serde_json::to_writer(&mut buffer, &TaskView::from_task(&task));
+                buffer.push(b'\n');
             }
 
             println!("Sending request to {url}");
