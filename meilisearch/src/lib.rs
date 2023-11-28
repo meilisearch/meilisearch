@@ -228,7 +228,7 @@ fn open_or_create_database_unchecked(
             indexes_path: opt.db_path.join("indexes"),
             snapshots_path: opt.snapshot_dir.clone(),
             dumps_path: opt.dump_dir.clone(),
-            webhook_url: opt.task_webhook_url.clone(),
+            webhook_url: opt.task_webhook_url.as_ref().map(|url| url.to_string()),
             task_db_size: opt.max_task_db_size.get_bytes() as usize,
             index_base_map_size: opt.max_index_size.get_bytes() as usize,
             enable_mdb_writemap: opt.experimental_reduce_indexing_memory_usage,
