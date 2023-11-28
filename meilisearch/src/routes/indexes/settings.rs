@@ -1,5 +1,3 @@
-#![allow(clippy::redundant_closure_call)]
-
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
@@ -80,6 +78,7 @@ macro_rules! make_setting_route {
 
                 let body = body.into_inner();
 
+                #[allow(clippy::redundant_closure_call)]
                 $analytics(&body, &req);
 
                 let new_settings = Settings {
