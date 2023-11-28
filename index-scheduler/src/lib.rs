@@ -1277,7 +1277,6 @@ impl IndexScheduler {
                 buffer.push(b'\n');
             }
 
-            println!("Sending request to {url}");
             let _ = ureq::post(url).send_bytes(&buffer).unwrap();
         }
 
