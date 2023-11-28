@@ -17,6 +17,7 @@ use meilisearch_types::milli;
 use meilisearch_types::milli::heed::types::{Bytes, DecodeIgnore, SerdeJson};
 use meilisearch_types::milli::heed::{Database, Env, EnvOpenOptions, RwTxn};
 use sha2::Sha256;
+use thiserror::Error;
 use time::OffsetDateTime;
 use uuid::fmt::Hyphenated;
 use uuid::Uuid;
@@ -297,13 +298,14 @@ impl<'a> milli::heed::BytesDecode<'a> for KeyIdActionCodec {
     type DItem = (KeyId, Action, Option<&'a [u8]>);
 
     fn bytes_decode(bytes: &'a [u8]) -> StdResult<Self::DItem, BoxedError> {
-        let (key_id_bytes, action_bytes) = try_split_array_at(bytes).unwrap();
-        let (action_bytes, index) = match try_split_array_at(action_bytes).unwrap() {
-            (action, []) => (action, None),
-            (action, index) => (action, Some(index)),
-        };
+        let (key_id_bytes, action_bytes) = try_split_array_at(bytes).ok_or(SliceTooShortError)?;
+        let (&action_byte, index) =
+            match try_split_array_at(action_bytes).ok_or(SliceTooShortError)? {
+                ([action], []) => (action, None),
+                ([action], index) => (action, Some(index)),
+            };
         let key_id = Uuid::from_bytes(*key_id_bytes);
-        let action = Action::from_repr(u8::from_be_bytes(*action_bytes)).unwrap();
+        let action = Action::from_repr(action_byte).ok_or(InvalidActionError { action_byte })?;
 
         Ok((key_id, action, index))
     }
@@ -324,6 +326,16 @@ impl<'a> milli::heed::BytesEncode<'a> for KeyIdActionCodec {
 
         Ok(Cow::Owned(bytes))
     }
+}
+
+#[derive(Error, Debug)]
+#[error("the slice is too short")]
+pub struct SliceTooShortError;
+
+#[derive(Error, Debug)]
+#[error("cannot construct a valid Action from {action_byte}")]
+pub struct InvalidActionError {
+    pub action_byte: u8,
 }
 
 pub fn generate_key_as_hexa(uid: Uuid, master_key: &[u8]) -> String {
