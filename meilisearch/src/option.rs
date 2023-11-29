@@ -70,10 +70,6 @@ const MEILI_MAX_INDEXING_MEMORY: &str = "MEILI_MAX_INDEXING_MEMORY";
 const MEILI_MAX_INDEXING_THREADS: &str = "MEILI_MAX_INDEXING_THREADS";
 const DEFAULT_LOG_EVERY_N: usize = 100_000;
 
-fn parse_url(s: &str) -> Result<Url, url::ParseError> {
-    Url::parse(s)
-}
-
 // Each environment (index and task-db) is taking space in the virtual address space.
 // Ideally, indexes can occupy 2TiB each to avoid having to manually resize them.
 // The actual size of the virtual address space is computed at startup to determine how many 2TiB indexes can be
