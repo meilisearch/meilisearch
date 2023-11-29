@@ -283,28 +283,24 @@ fn send_original_documents_data(
     let original_documents_chunk =
         original_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
 
-    if let Some(vectors_field_id) = vectors_field_id {
-        let documents_chunk_cloned = original_documents_chunk.clone();
-        let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
-        rayon::spawn(move || {
-            let result = extract_vector_points(documents_chunk_cloned, indexer, vectors_field_id);
-            let _ = match result {
-                Ok(ExtractedVectorPoints { manual_vectors, remove_vectors, prompts }) => {
-                    match extract_embeddings(prompts, indexer, embedder) {
-                        Ok(embeddings) => {
-                            lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints {
-                                remove_vectors,
-                                embeddings,
-                                manual_vectors,
-                            }))
-                        }
-                        Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
-                    }
+    let documents_chunk_cloned = original_documents_chunk.clone();
+    let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
+    rayon::spawn(move || {
+        let result = extract_vector_points(documents_chunk_cloned, indexer, vectors_field_id);
+        let _ = match result {
+            Ok(ExtractedVectorPoints { manual_vectors, remove_vectors, prompts }) => {
+                match extract_embeddings(prompts, indexer, embedder) {
+                    Ok(embeddings) => lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints {
+                        remove_vectors,
+                        embeddings,
+                        manual_vectors,
+                    })),
+                    Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
                 }
-                Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
-            };
-        });
-    }
+            }
+            Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
+        };
+    });
 
     // TODO: create a custom internal error
     lmdb_writer_sx.send(Ok(TypedChunk::Documents(original_documents_chunk))).unwrap();

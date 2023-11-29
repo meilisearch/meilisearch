@@ -71,7 +71,7 @@ impl VectorStateDelta {
 pub fn extract_vector_points<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
-    vectors_fid: FieldId,
+    vectors_fid: Option<FieldId>,
 ) -> Result<ExtractedVectorPoints> {
     puffin::profile_function!();
 
@@ -112,7 +112,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
         // lazily get it when needed
         let document_id = || -> Value { from_utf8(external_id_bytes).unwrap().into() };
 
-        let delta = if let Some(value) = obkv.get(vectors_fid) {
+        let delta = if let Some(value) = vectors_fid.and_then(|vectors_fid| obkv.get(vectors_fid)) {
             let vectors_obkv = KvReaderDelAdd::new(value);
             match (vectors_obkv.get(DelAdd::Deletion), vectors_obkv.get(DelAdd::Addition)) {
                 (Some(old), Some(new)) => {
