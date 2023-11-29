@@ -45,7 +45,7 @@ struct WebhookHandle {
 
 async fn create_webhook_server() -> WebhookHandle {
     let mut log_builder = env_logger::Builder::new();
-    log_builder.parse_filters("debug");
+    log_builder.parse_filters("info");
     log_builder.init();
 
     let (sender, receiver) = mpsc::unbounded_channel();
