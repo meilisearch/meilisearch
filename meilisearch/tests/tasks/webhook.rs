@@ -11,6 +11,7 @@ use actix_web::{post, App, HttpResponse, HttpServer};
 use meili_snap::{json_string, snapshot};
 use meilisearch::Opt;
 use tokio::sync::mpsc;
+use url::Url;
 
 use crate::common::{default_settings, Server};
 use crate::json;
@@ -66,7 +67,7 @@ async fn test_basic_webhook() {
 
     let db_path = tempfile::tempdir().unwrap();
     let server = Server::new_with_options(Opt {
-        task_webhook_url: Some(url),
+        task_webhook_url: Some(Url::parse(&url).unwrap()),
         ..default_settings(db_path.path())
     })
     .await

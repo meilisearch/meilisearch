@@ -45,6 +45,8 @@ use dump::{KindDump, TaskDump, UpdateFile};
 pub use error::Error;
 pub use features::RoFeatures;
 use file_store::FileStore;
+use flate2::bufread::GzEncoder;
+use flate2::Compression;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
 use meilisearch_types::heed::byteorder::BE;
@@ -1288,7 +1290,10 @@ impl IndexScheduler {
                 buffer.push(b'\n');
             }
 
-            let _ = ureq::post(url).send_bytes(&buffer).unwrap();
+            let reader = GzEncoder::new(&buffer[..], Compression::default());
+            if let Err(e) = ureq::post(url).set("Content-Encoding", "gzip").send(reader) {
+                log::error!("While sending data to the webhook: {e}");
+            }
         }
 
         Ok(())
