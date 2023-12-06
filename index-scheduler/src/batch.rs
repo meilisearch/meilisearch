@@ -1343,6 +1343,9 @@ impl IndexScheduler {
 
                 for (task, (_, settings)) in tasks.iter_mut().zip(settings) {
                     let checked_settings = settings.clone().check();
+                    if checked_settings.proximity_precision.set().is_some() {
+                        self.features.features().check_proximity_precision()?;
+                    }
                     task.details = Some(Details::SettingsUpdate { settings: Box::new(settings) });
                     apply_settings_to_builder(&checked_settings, &mut builder);
 
