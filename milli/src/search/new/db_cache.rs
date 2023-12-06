@@ -10,6 +10,7 @@ use roaring::RoaringBitmap;
 use super::interner::Interned;
 use super::Word;
 use crate::heed_codec::{BytesDecodeOwned, StrBEU16Codec};
+use crate::proximity::ProximityPrecision;
 use crate::update::{merge_cbo_roaring_bitmaps, MergeFn};
 use crate::{
     CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, Result, SearchContext, U8StrStrCodec,
@@ -263,18 +264,67 @@ impl<'ctx> SearchContext<'ctx> {
         word2: Interned<String>,
         proximity: u8,
     ) -> Result<Option<RoaringBitmap>> {
-        // TODO: if database is empty, search if the word are in the same attribute instead
-        DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
-            self.txn,
-            (proximity, word1, word2),
-            &(
-                proximity,
-                self.word_interner.get(word1).as_str(),
-                self.word_interner.get(word2).as_str(),
-            ),
-            &mut self.db_cache.word_pair_proximity_docids,
-            self.index.word_pair_proximity_docids.remap_data_type::<Bytes>(),
-        )
+        match self.index.proximity_precision(self.txn)?.unwrap_or_default() {
+            ProximityPrecision::AttributeScale => {
+                // Force proximity to 0 because:
+                // in AttributeScale, there are only 2 possible distances:
+                // 1. words in same attribute: in that the DB contains (0, word1, word2)
+                // 2. words in different attributes: no DB entry for these two words.
+                let proximity = 0;
+                let docids = if let Some(docids) =
+                    self.db_cache.word_pair_proximity_docids.get(&(proximity, word1, word2))
+                {
+                    docids
+                        .as_ref()
+                        .map(|d| CboRoaringBitmapCodec::bytes_decode_owned(d))
+                        .transpose()
+                        .map_err(heed::Error::Decoding)?
+                } else {
+                    // Compute the distance at the attribute level and store it in the cache.
+                    let fids = if let Some(fids) = self.index.searchable_fields_ids(self.txn)? {
+                        fids
+                    } else {
+                        self.index.fields_ids_map(self.txn)?.ids().collect()
+                    };
+                    let mut docids = RoaringBitmap::new();
+                    for fid in fids {
+                        // for each field, intersect left word bitmap and right word bitmap,
+                        // then merge the result in a global bitmap before storing it in the cache.
+                        let word1_docids = self.get_db_word_fid_docids(word1, fid)?;
+                        let word2_docids = self.get_db_word_fid_docids(word2, fid)?;
+                        if let (Some(word1_docids), Some(word2_docids)) =
+                            (word1_docids, word2_docids)
+                        {
+                            docids |= word1_docids & word2_docids;
+                        }
+                    }
+                    let encoded = CboRoaringBitmapCodec::bytes_encode(&docids)
+                        .map(Cow::into_owned)
+                        .map(Cow::Owned)
+                        .map(Some)
+                        .map_err(heed::Error::Decoding)?;
+                    self.db_cache
+                        .word_pair_proximity_docids
+                        .insert((proximity, word1, word2), encoded);
+                    Some(docids)
+                };
+
+                Ok(docids)
+            }
+            ProximityPrecision::WordScale => {
+                DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
+                    self.txn,
+                    (proximity, word1, word2),
+                    &(
+                        proximity,
+                        self.word_interner.get(word1).as_str(),
+                        self.word_interner.get(word2).as_str(),
+                    ),
+                    &mut self.db_cache.word_pair_proximity_docids,
+                    self.index.word_pair_proximity_docids.remap_data_type::<Bytes>(),
+                )
+            }
+        }
     }
 
     pub fn get_db_word_pair_proximity_docids_len(
@@ -283,56 +333,95 @@ impl<'ctx> SearchContext<'ctx> {
         word2: Interned<String>,
         proximity: u8,
     ) -> Result<Option<u64>> {
-        // TODO: if database is empty, search if the word are in the same attribute instead
-        DatabaseCache::get_value::<_, _, CboRoaringBitmapLenCodec>(
-            self.txn,
-            (proximity, word1, word2),
-            &(
-                proximity,
-                self.word_interner.get(word1).as_str(),
-                self.word_interner.get(word2).as_str(),
-            ),
-            &mut self.db_cache.word_pair_proximity_docids,
-            self.index.word_pair_proximity_docids.remap_data_type::<Bytes>(),
-        )
+        match self.index.proximity_precision(self.txn)?.unwrap_or_default() {
+            ProximityPrecision::AttributeScale => Ok(self
+                .get_db_word_pair_proximity_docids(word1, word2, proximity)?
+                .map(|d| d.len())),
+            ProximityPrecision::WordScale => {
+                DatabaseCache::get_value::<_, _, CboRoaringBitmapLenCodec>(
+                    self.txn,
+                    (proximity, word1, word2),
+                    &(
+                        proximity,
+                        self.word_interner.get(word1).as_str(),
+                        self.word_interner.get(word2).as_str(),
+                    ),
+                    &mut self.db_cache.word_pair_proximity_docids,
+                    self.index.word_pair_proximity_docids.remap_data_type::<Bytes>(),
+                )
+            }
+        }
     }
 
     pub fn get_db_word_prefix_pair_proximity_docids(
         &mut self,
         word1: Interned<String>,
         prefix2: Interned<String>,
-        proximity: u8,
+        mut proximity: u8,
     ) -> Result<Option<RoaringBitmap>> {
-        // TODO: if database is empty, search if the word are in the same attribute instead
-        let docids = match self
-            .db_cache
-            .word_prefix_pair_proximity_docids
-            .entry((proximity, word1, prefix2))
-        {
-            Entry::Occupied(docids) => docids.get().clone(),
-            Entry::Vacant(entry) => {
-                // compute docids using prefix iter and store the result in the cache.
-                let key = U8StrStrCodec::bytes_encode(&(
-                    proximity,
-                    self.word_interner.get(word1).as_str(),
-                    self.word_interner.get(prefix2).as_str(),
-                ))
-                .unwrap()
-                .into_owned();
-                let mut prefix_docids = RoaringBitmap::new();
-                let remap_key_type = self
-                    .index
-                    .word_pair_proximity_docids
-                    .remap_key_type::<Bytes>()
-                    .prefix_iter(self.txn, &key)?;
-                for result in remap_key_type {
-                    let (_, docids) = result?;
+        let proximity_precision = self.index.proximity_precision(self.txn)?.unwrap_or_default();
+        if proximity_precision == ProximityPrecision::AttributeScale {
+            // Force proximity to 0 because:
+            // in AttributeScale, there are only 2 possible distances:
+            // 1. words in same attribute: in that the DB contains (0, word1, word2)
+            // 2. words in different attributes: no DB entry for these two words.
+            proximity = 0;
+        }
 
-                    prefix_docids |= docids;
+        let docids = if let Some(docids) =
+            self.db_cache.word_prefix_pair_proximity_docids.get(&(proximity, word1, prefix2))
+        {
+            docids.clone()
+        } else {
+            let prefix_docids = match proximity_precision {
+                ProximityPrecision::AttributeScale => {
+                    // Compute the distance at the attribute level and store it in the cache.
+                    let fids = if let Some(fids) = self.index.searchable_fields_ids(self.txn)? {
+                        fids
+                    } else {
+                        self.index.fields_ids_map(self.txn)?.ids().collect()
+                    };
+                    let mut prefix_docids = RoaringBitmap::new();
+                    // for each field, intersect left word bitmap and right word bitmap,
+                    // then merge the result in a global bitmap before storing it in the cache.
+                    for fid in fids {
+                        let word1_docids = self.get_db_word_fid_docids(word1, fid)?;
+                        let prefix2_docids = self.get_db_word_prefix_fid_docids(prefix2, fid)?;
+                        if let (Some(word1_docids), Some(prefix2_docids)) =
+                            (word1_docids, prefix2_docids)
+                        {
+                            prefix_docids |= word1_docids & prefix2_docids;
+                        }
+                    }
+                    prefix_docids
                 }
-                entry.insert(Some(prefix_docids.clone()));
-                Some(prefix_docids)
-            }
+                ProximityPrecision::WordScale => {
+                    // compute docids using prefix iter and store the result in the cache.
+                    let key = U8StrStrCodec::bytes_encode(&(
+                        proximity,
+                        self.word_interner.get(word1).as_str(),
+                        self.word_interner.get(prefix2).as_str(),
+                    ))
+                    .unwrap()
+                    .into_owned();
+                    let mut prefix_docids = RoaringBitmap::new();
+                    let remap_key_type = self
+                        .index
+                        .word_pair_proximity_docids
+                        .remap_key_type::<Bytes>()
+                        .prefix_iter(self.txn, &key)?;
+                    for result in remap_key_type {
+                        let (_, docids) = result?;
+
+                        prefix_docids |= docids;
+                    }
+                    prefix_docids
+                }
+            };
+            self.db_cache
+                .word_prefix_pair_proximity_docids
+                .insert((proximity, word1, prefix2), Some(prefix_docids.clone()));
+            Some(prefix_docids)
         };
         Ok(docids)
     }

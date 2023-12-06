@@ -32,6 +32,7 @@ use super::helpers::{
     MergeFn, MergeableReader,
 };
 use super::{helpers, TypedChunk};
+use crate::proximity::ProximityPrecision;
 use crate::{FieldId, Result};
 
 /// Extract data for each databases from obkv documents in parallel.
@@ -52,7 +53,7 @@ pub(crate) fn data_from_obkv_documents(
     dictionary: Option<&[&str]>,
     max_positions_per_attributes: Option<u32>,
     exact_attributes: HashSet<FieldId>,
-    // TODO: add a proximity database deactivation parameter.
+    proximity_precision: ProximityPrecision,
 ) -> Result<()> {
     puffin::profile_function!();
 
@@ -151,16 +152,17 @@ pub(crate) fn data_from_obkv_documents(
         });
     }
 
-    // TODO: Skip this part if deactivated
-    spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
-        docid_word_positions_chunks.clone(),
-        indexer,
-        lmdb_writer_sx.clone(),
-        extract_word_pair_proximity_docids,
-        merge_deladd_cbo_roaring_bitmaps,
-        TypedChunk::WordPairProximityDocids,
-        "word-pair-proximity-docids",
-    );
+    if proximity_precision == ProximityPrecision::WordScale {
+        spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
+            docid_word_positions_chunks.clone(),
+            indexer,
+            lmdb_writer_sx.clone(),
+            extract_word_pair_proximity_docids,
+            merge_deladd_cbo_roaring_bitmaps,
+            TypedChunk::WordPairProximityDocids,
+            "word-pair-proximity-docids",
+        );
+    }
 
     spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
         docid_word_positions_chunks.clone(),
