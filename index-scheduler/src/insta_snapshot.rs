@@ -15,6 +15,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
 
     let IndexScheduler {
         autobatching_enabled,
+        maximum_number_of_batched_tasks: _,
         must_stop_processing: _,
         processing_tasks,
         file_store,
