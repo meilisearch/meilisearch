@@ -21,6 +21,7 @@ use crate::heed_codec::facet::{
 use crate::heed_codec::{
     BEU16StrCodec, FstSetCodec, ScriptLanguageCodec, StrBEU16Codec, StrRefCodec,
 };
+use crate::proximity::ProximityPrecision;
 use crate::readable_slices::ReadableSlices;
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
@@ -72,6 +73,7 @@ pub mod main_key {
     pub const MAX_VALUES_PER_FACET: &str = "max-values-per-facet";
     pub const SORT_FACET_VALUES_BY: &str = "sort-facet-values-by";
     pub const PAGINATION_MAX_TOTAL_HITS: &str = "pagination-max-total-hits";
+    pub const PROXIMITY_PRECISION: &str = "proximity-precision";
 }
 
 pub mod db_name {
@@ -1464,6 +1466,28 @@ impl Index {
 
     pub(crate) fn delete_pagination_max_total_hits(&self, txn: &mut RwTxn) -> heed::Result<bool> {
         self.main.remap_key_type::<Str>().delete(txn, main_key::PAGINATION_MAX_TOTAL_HITS)
+    }
+
+    pub fn proximity_precision(&self, txn: &RoTxn) -> heed::Result<Option<ProximityPrecision>> {
+        self.main
+            .remap_types::<Str, SerdeBincode<ProximityPrecision>>()
+            .get(txn, main_key::PROXIMITY_PRECISION)
+    }
+
+    pub(crate) fn put_proximity_precision(
+        &self,
+        txn: &mut RwTxn,
+        val: ProximityPrecision,
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, SerdeBincode<ProximityPrecision>>().put(
+            txn,
+            main_key::PROXIMITY_PRECISION,
+            &val,
+        )
+    }
+
+    pub(crate) fn delete_proximity_precision(&self, txn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(txn, main_key::PROXIMITY_PRECISION)
     }
 
     /* script  language docids */

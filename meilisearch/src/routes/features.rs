@@ -48,6 +48,8 @@ pub struct RuntimeTogglableFeatures {
     pub metrics: Option<bool>,
     #[deserr(default)]
     pub export_puffin_reports: Option<bool>,
+    #[deserr(default)]
+    pub proximity_precision: Option<bool>,
 }
 
 async fn patch_features(
@@ -70,6 +72,10 @@ async fn patch_features(
             .0
             .export_puffin_reports
             .unwrap_or(old_features.export_puffin_reports),
+        proximity_precision: new_features
+            .0
+            .proximity_precision
+            .unwrap_or(old_features.proximity_precision),
     };
 
     // explicitly destructure for analytics rather than using the `Serialize` implementation, because
@@ -80,6 +86,7 @@ async fn patch_features(
         vector_store,
         metrics,
         export_puffin_reports,
+        proximity_precision,
     } = new_features;
 
     analytics.publish(
@@ -89,6 +96,7 @@ async fn patch_features(
             "vector_store": vector_store,
             "metrics": metrics,
             "export_puffin_reports": export_puffin_reports,
+            "proximity_precision": proximity_precision,
         }),
         Some(&req),
     );

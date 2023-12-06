@@ -1,5 +1,7 @@
 use std::cmp;
 
+use serde::{Deserialize, Serialize};
+
 use crate::{relative_from_absolute_position, Position};
 
 pub const MAX_DISTANCE: u32 = 4;
@@ -24,4 +26,12 @@ pub fn positions_proximity(lhs: Position, rhs: Position) -> u32 {
 
 pub fn path_proximity(path: &[Position]) -> u32 {
     path.windows(2).map(|w| positions_proximity(w[0], w[1])).sum::<u32>()
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum ProximityPrecision {
+    #[default]
+    WordScale,
+    AttributeScale,
 }

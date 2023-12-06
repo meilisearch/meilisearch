@@ -12,6 +12,7 @@ use super::IndexerConfig;
 use crate::criterion::Criterion;
 use crate::error::UserError;
 use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
+use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::{FieldsIdsMap, Index, OrderBy, Result};
@@ -127,6 +128,7 @@ pub struct Settings<'a, 't, 'i> {
     max_values_per_facet: Setting<usize>,
     sort_facet_values_by: Setting<HashMap<String, OrderBy>>,
     pagination_max_total_hits: Setting<usize>,
+    proximity_precision: Setting<ProximityPrecision>,
 }
 
 impl<'a, 't, 'i> Settings<'a, 't, 'i> {
@@ -158,6 +160,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             max_values_per_facet: Setting::NotSet,
             sort_facet_values_by: Setting::NotSet,
             pagination_max_total_hits: Setting::NotSet,
+            proximity_precision: Setting::NotSet,
             indexer_config,
         }
     }
@@ -330,6 +333,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
     pub fn reset_pagination_max_total_hits(&mut self) {
         self.pagination_max_total_hits = Setting::Reset;
+    }
+
+    pub fn set_proximity_precision(&mut self, value: ProximityPrecision) {
+        self.proximity_precision = Setting::Set(value);
+    }
+
+    pub fn reset_proximity_precision(&mut self) {
+        self.proximity_precision = Setting::Reset;
     }
 
     fn reindex<FP, FA>(
@@ -861,6 +872,24 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(())
     }
 
+    fn update_proximity_precision(&mut self) -> Result<bool> {
+        let changed = match self.proximity_precision {
+            Setting::Set(new) => {
+                let old = self.index.proximity_precision(self.wtxn)?;
+                if old == Some(new) {
+                    false
+                } else {
+                    self.index.put_proximity_precision(self.wtxn, new)?;
+                    true
+                }
+            }
+            Setting::Reset => self.index.delete_proximity_precision(self.wtxn)?,
+            Setting::NotSet => false,
+        };
+
+        Ok(changed)
+    }
+
     pub fn execute<FP, FA>(mut self, progress_callback: FP, should_abort: FA) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
@@ -897,6 +926,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         let synonyms_updated = self.update_synonyms()?;
         let searchable_updated = self.update_searchable()?;
         let exact_attributes_updated = self.update_exact_attributes()?;
+        let proximity_precision = self.update_proximity_precision()?;
 
         if stop_words_updated
             || non_separator_tokens_updated
@@ -906,6 +936,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             || synonyms_updated
             || searchable_updated
             || exact_attributes_updated
+            || proximity_precision
         {
             self.reindex(&progress_callback, &should_abort, old_fields_ids_map)?;
         }
@@ -1731,6 +1762,7 @@ mod tests {
                     max_values_per_facet,
                     sort_facet_values_by,
                     pagination_max_total_hits,
+                    proximity_precision,
                 } = settings;
                 assert!(matches!(searchable_fields, Setting::NotSet));
                 assert!(matches!(displayed_fields, Setting::NotSet));
@@ -1752,6 +1784,7 @@ mod tests {
                 assert!(matches!(max_values_per_facet, Setting::NotSet));
                 assert!(matches!(sort_facet_values_by, Setting::NotSet));
                 assert!(matches!(pagination_max_total_hits, Setting::NotSet));
+                assert!(matches!(proximity_precision, Setting::NotSet));
             })
             .unwrap();
     }

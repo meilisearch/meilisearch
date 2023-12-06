@@ -352,6 +352,7 @@ where
         let dictionary: Option<Vec<_>> =
             dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
         let exact_attributes = self.index.exact_attributes_ids(self.wtxn)?;
+        let proximity_precision = self.index.proximity_precision(self.wtxn)?.unwrap_or_default();
 
         let pool_params = GrenadParameters {
             chunk_compression_type: self.indexer_config.chunk_compression_type,
@@ -392,6 +393,7 @@ where
                     dictionary.as_deref(),
                     max_positions_per_attributes,
                     exact_attributes,
+                    proximity_precision,
                 )
             });
 
