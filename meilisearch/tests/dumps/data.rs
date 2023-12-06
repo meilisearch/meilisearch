@@ -20,6 +20,8 @@ pub enum GetDump {
     RubyGemsWithSettingsV4,
 
     TestV5,
+
+    TestV6WithExperimental,
 }
 
 impl GetDump {
@@ -68,6 +70,10 @@ impl GetDump {
             GetDump::TestV5 => {
                 exist_relative_path!("tests/assets/v5_v0.28.0_test_dump.dump").into()
             }
+            GetDump::TestV6WithExperimental => exist_relative_path!(
+                "tests/assets/v6_v1.6.0_use_deactivated_experimental_setting.dump"
+            )
+            .into(),
         }
     }
 }
