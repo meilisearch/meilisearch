@@ -262,6 +262,7 @@ fn get_ranking_rules_for_vector<'ctx>(
     ctx: &SearchContext<'ctx>,
     sort_criteria: &Option<Vec<AscDesc>>,
     geo_strategy: geo_sort::Strategy,
+    limit_plus_offset: usize,
     target: &[f32],
 ) -> Result<Vec<BoxRankingRule<'ctx, PlaceholderQuery>>> {
     // query graph search
@@ -283,7 +284,12 @@ fn get_ranking_rules_for_vector<'ctx>(
             | crate::Criterion::Exactness => {
                 if !vector {
                     let vector_candidates = ctx.index.documents_ids(ctx.txn)?;
-                    let vector_sort = VectorSort::new(ctx, target.to_vec(), vector_candidates)?;
+                    let vector_sort = VectorSort::new(
+                        ctx,
+                        target.to_vec(),
+                        vector_candidates,
+                        limit_plus_offset,
+                    )?;
                     ranking_rules.push(Box::new(vector_sort));
                     vector = true;
                 }
@@ -509,7 +515,8 @@ pub fn execute_vector_search(
 
     /// FIXME: input universe = universe & documents_with_vectors
     // for now if we're computing embeddings for ALL documents, we can assume that this is just universe
-    let ranking_rules = get_ranking_rules_for_vector(ctx, sort_criteria, geo_strategy, vector)?;
+    let ranking_rules =
+        get_ranking_rules_for_vector(ctx, sort_criteria, geo_strategy, from + length, vector)?;
 
     let mut placeholder_search_logger = logger::DefaultSearchLogger;
     let placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery> =

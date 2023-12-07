@@ -61,6 +61,8 @@ pub enum InternalError {
     AbortedIndexation,
     #[error("The matching words list contains at least one invalid member.")]
     InvalidMatchingWords,
+    #[error(transparent)]
+    ArroyError(#[from] arroy::Error),
 }
 
 #[derive(Error, Debug)]
@@ -188,6 +190,24 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     InvalidPrompt(#[from] crate::prompt::error::NewPromptError),
     #[error("Invalid prompt in for embeddings with name '{0}': {1}")]
     InvalidPromptForEmbeddings(String, crate::prompt::error::NewPromptError),
+}
+
+impl From<arroy::Error> for Error {
+    fn from(value: arroy::Error) -> Self {
+        match value {
+            arroy::Error::Heed(heed) => heed.into(),
+            arroy::Error::Io(io) => io.into(),
+            arroy::Error::InvalidVecDimension { expected, received } => {
+                Error::UserError(UserError::InvalidVectorDimensions { expected, found: received })
+            }
+            arroy::Error::DatabaseFull
+            | arroy::Error::InvalidItemAppend
+            | arroy::Error::UnmatchingDistance { .. }
+            | arroy::Error::MissingMetadata => {
+                Error::InternalError(InternalError::ArroyError(value))
+            }
+        }
+    }
 }
 
 #[derive(Error, Debug)]
