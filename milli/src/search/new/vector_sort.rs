@@ -11,64 +11,31 @@ use crate::index::Hnsw;
 use crate::score_details::{self, ScoreDetails};
 use crate::{Result, SearchContext, SearchLogger, UserError};
 
-pub struct VectorSort<Q: RankingRuleQueryTrait> {
+pub struct VectorSort<'ctx, Q: RankingRuleQueryTrait> {
     query: Option<Q>,
     target: Vec<f32>,
     vector_candidates: RoaringBitmap,
-    scope: nolife::DynBoxScope<SearchFamily>,
+    reader: arroy::Reader<'ctx, arroy::distances::DotProduct>,
+    limit: usize,
 }
 
-type Item<'a> = instant_distance::Item<'a, NDotProductPoint>;
-type SearchFut = Pin<Box<dyn Future<Output = nolife::Never>>>;
-
-struct SearchFamily;
-impl<'a> nolife::Family<'a> for SearchFamily {
-    type Family = Box<dyn Iterator<Item = Item<'a>> + 'a>;
-}
-
-async fn search_scope(
-    mut time_capsule: nolife::TimeCapsule<SearchFamily>,
-    hnsw: Hnsw,
-    target: Vec<f32>,
-) -> nolife::Never {
-    let mut search = instant_distance::Search::default();
-    let it = Box::new(hnsw.search(&NDotProductPoint::new(target), &mut search));
-    let mut it: Box<dyn Iterator<Item = Item>> = it;
-    loop {
-        time_capsule.freeze(&mut it).await;
-    }
-}
-
-impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
+impl<'ctx, Q: RankingRuleQueryTrait> VectorSort<'ctx, Q> {
     pub fn new(
-        ctx: &SearchContext,
+        ctx: &'ctx SearchContext,
         target: Vec<f32>,
         vector_candidates: RoaringBitmap,
+        limit: usize,
     ) -> Result<Self> {
-        let hnsw =
-            ctx.index.vector_hnsw(ctx.txn)?.unwrap_or(Hnsw::builder().build_hnsw(Vec::default()).0);
-
-        if let Some(expected_size) = hnsw.iter().map(|(_, point)| point.len()).next() {
-            if target.len() != expected_size {
-                return Err(UserError::InvalidVectorDimensions {
-                    expected: expected_size,
-                    found: target.len(),
-                }
-                .into());
-            }
-        }
+        /// FIXME? what to do in case of missing metadata
+        let reader = arroy::Reader::open(ctx.txn, 0, ctx.index.vector_arroy)?;
 
         let target_clone = target.clone();
-        let producer = move |time_capsule| -> SearchFut {
-            Box::pin(search_scope(time_capsule, hnsw, target_clone))
-        };
-        let scope = DynBoxScope::new(producer);
 
-        Ok(Self { query: None, target, vector_candidates, scope })
+        Ok(Self { query: None, target, vector_candidates, reader, limit })
     }
 }
 
-impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
+impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<'ctx, Q> {
     fn id(&self) -> String {
         "vector_sort".to_owned()
     }
@@ -108,10 +75,10 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
                 }),
             }));
         }
-
-        let scope = &mut self.scope;
         let target = &self.target;
         let vector_candidates = &self.vector_candidates;
+
+        let result = self.reader.nns_by_vector(ctx.txn, &target, count, search_k, candidates)
 
         scope.enter(|it| {
             for item in it.by_ref() {

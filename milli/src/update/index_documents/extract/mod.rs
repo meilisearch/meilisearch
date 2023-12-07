@@ -312,7 +312,8 @@ fn send_original_documents_data(
                 lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints {
                     remove_vectors,
                     embeddings,
-                    expected_dimension,
+                    /// FIXME: compute an expected dimension from the manual vectors if any
+                    expected_dimension: expected_dimension.unwrap(),
                     manual_vectors,
                 }))
             }
