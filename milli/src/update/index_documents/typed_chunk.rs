@@ -361,13 +361,6 @@ pub(crate) fn write_typed_chunk_into_index(
             embeddings,
             expected_dimension,
         } => {
-            if remove_vectors.is_empty()
-                && manual_vectors.is_empty()
-                && embeddings.as_ref().map_or(true, |e| e.is_empty())
-            {
-                return Ok((RoaringBitmap::new(), is_merged_database));
-            }
-
             /// FIXME: allow customizing distance
             let writers: std::result::Result<Vec<_>, _> = (0..=u8::MAX)
                 .map(|k| {

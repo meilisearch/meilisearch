@@ -295,7 +295,7 @@ fn send_original_documents_data(
         let (embedder, prompt) = embedders.get("default").cloned().unzip();
         let result =
             extract_vector_points(documents_chunk_cloned, indexer, field_id_map, prompt.as_deref());
-        let _ = match result {
+        match result {
             Ok(ExtractedVectorPoints { manual_vectors, remove_vectors, prompts }) => {
                 /// FIXME: support multiple embedders
                 let results = embedder.and_then(|embedder| {
@@ -309,15 +309,25 @@ fn send_original_documents_data(
                 });
                 let (embeddings, expected_dimension) = results.unzip();
                 let expected_dimension = expected_dimension.flatten();
-                lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints {
-                    remove_vectors,
-                    embeddings,
-                    /// FIXME: compute an expected dimension from the manual vectors if any
-                    expected_dimension: expected_dimension.unwrap(),
-                    manual_vectors,
-                }))
+                if !(remove_vectors.is_empty()
+                    && manual_vectors.is_empty()
+                    && embeddings.as_ref().map_or(true, |e| e.is_empty()))
+                {
+                    /// FIXME FIXME FIXME
+                    if expected_dimension.is_some() {
+                        let _ = lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints {
+                            remove_vectors,
+                            embeddings,
+                            /// FIXME: compute an expected dimension from the manual vectors if any
+                            expected_dimension: expected_dimension.unwrap(),
+                            manual_vectors,
+                        }));
+                    }
+                }
             }
-            Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
+            Err(error) => {
+                let _ = lmdb_writer_sx_cloned.send(Err(error));
+            }
         };
     });
 
