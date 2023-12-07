@@ -42,9 +42,7 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
             facet_id_is_empty_docids,
             field_id_docid_facet_f64s,
             field_id_docid_facet_strings,
-            vector_id_docid,
             vector_arroy,
-            docid_vector_ids,
             embedder_category_id: _,
             documents,
         } = self.index;
@@ -86,8 +84,6 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
         field_id_docid_facet_strings.clear(self.wtxn)?;
         // vector
         vector_arroy.clear(self.wtxn)?;
-        vector_id_docid.clear(self.wtxn)?;
-        docid_vector_ids.clear(self.wtxn)?;
 
         documents.clear(self.wtxn)?;
 

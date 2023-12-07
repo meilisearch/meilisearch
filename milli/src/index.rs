@@ -70,7 +70,6 @@ pub mod main_key {
     pub const SORT_FACET_VALUES_BY: &str = "sort-facet-values-by";
     pub const PAGINATION_MAX_TOTAL_HITS: &str = "pagination-max-total-hits";
     pub const PROXIMITY_PRECISION: &str = "proximity-precision";
-    pub const VECTOR_UNAVAILABLE_VECTOR_IDS: &str = "vector-unavailable-vector-ids";
     pub const EMBEDDING_CONFIGS: &str = "embedding_configs";
 }
 
@@ -97,8 +96,6 @@ pub mod db_name {
     pub const FACET_ID_STRING_FST: &str = "facet-id-string-fst";
     pub const FIELD_ID_DOCID_FACET_F64S: &str = "field-id-docid-facet-f64s";
     pub const FIELD_ID_DOCID_FACET_STRINGS: &str = "field-id-docid-facet-strings";
-    pub const VECTOR_ID_DOCID: &str = "vector-id-docids";
-    pub const VECTOR_DOCID_IDS: &str = "vector-docid-ids";
     pub const VECTOR_EMBEDDER_CATEGORY_ID: &str = "vector-embedder-category-id";
     pub const VECTOR_ARROY: &str = "vector-arroy";
     pub const DOCUMENTS: &str = "documents";
@@ -167,16 +164,10 @@ pub struct Index {
     /// Maps the document id, the facet field id and the strings.
     pub field_id_docid_facet_strings: Database<FieldDocIdFacetStringCodec, Str>,
 
-    /// Maps a vector id to its document id.
-    pub vector_id_docid: Database<BEU32, BEU32>,
-    /// Maps a doc id to its vector ids.
-    pub docid_vector_ids: Database<BEU32, CboRoaringBitmapCodec>,
-
     /// Maps an embedder name to its id in the arroy store.
-    pub embedder_category_id: Database<Str, BEU16>,
-
+    pub embedder_category_id: Database<Str, U8>,
     /// Vector store based on arroy™.
-    pub vector_arroy: arroy::Database<arroy::distances::DotProduct>,
+    pub vector_arroy: arroy::Database<arroy::distances::Angular>,
 
     /// Maps the document id to the document as an obkv store.
     pub(crate) documents: Database<BEU32, ObkvCodec>,
@@ -191,7 +182,7 @@ impl Index {
     ) -> Result<Index> {
         use db_name::*;
 
-        options.max_dbs(27);
+        options.max_dbs(25);
 
         let env = options.open(path)?;
         let mut wtxn = env.write_txn()?;
@@ -232,8 +223,6 @@ impl Index {
         let field_id_docid_facet_strings =
             env.create_database(&mut wtxn, Some(FIELD_ID_DOCID_FACET_STRINGS))?;
         // vector stuff
-        let vector_id_docid = env.create_database(&mut wtxn, Some(VECTOR_ID_DOCID))?;
-        let docid_vector_ids = env.create_database(&mut wtxn, Some(VECTOR_DOCID_IDS))?;
         let embedder_category_id =
             env.create_database(&mut wtxn, Some(VECTOR_EMBEDDER_CATEGORY_ID))?;
         let vector_arroy = env.create_database(&mut wtxn, Some(VECTOR_ARROY))?;
@@ -267,9 +256,7 @@ impl Index {
             facet_id_is_empty_docids,
             field_id_docid_facet_f64s,
             field_id_docid_facet_strings,
-            vector_id_docid,
             vector_arroy,
-            docid_vector_ids,
             embedder_category_id,
             documents,
         })
@@ -1514,30 +1501,6 @@ impl Index {
             .main
             .remap_types::<Str, SerdeJson<Vec<(String, EmbeddingConfig)>>>()
             .get(rtxn, main_key::EMBEDDING_CONFIGS)?
-            .unwrap_or_default())
-    }
-
-    pub(crate) fn put_unavailable_vector_ids(
-        &self,
-        wtxn: &mut RwTxn<'_>,
-        unavailable_vector_ids: RoaringBitmap,
-    ) -> heed::Result<()> {
-        self.main.remap_types::<Str, CboRoaringBitmapCodec>().put(
-            wtxn,
-            main_key::VECTOR_UNAVAILABLE_VECTOR_IDS,
-            &unavailable_vector_ids,
-        )
-    }
-
-    pub(crate) fn delete_unavailable_vector_ids(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
-        self.main.remap_key_type::<Str>().delete(wtxn, main_key::VECTOR_UNAVAILABLE_VECTOR_IDS)
-    }
-
-    pub fn unavailable_vector_ids(&self, rtxn: &RoTxn<'_>) -> Result<RoaringBitmap> {
-        Ok(self
-            .main
-            .remap_types::<Str, CboRoaringBitmapCodec>()
-            .get(rtxn, main_key::VECTOR_UNAVAILABLE_VECTOR_IDS)?
             .unwrap_or_default())
     }
 }

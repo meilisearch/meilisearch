@@ -418,7 +418,7 @@ where
             }
 
             // needs to be dropped to avoid channel waiting lock.
-            drop(lmdb_writer_sx)
+            drop(lmdb_writer_sx);
         });
 
         let index_is_empty = self.index.number_of_documents(self.wtxn)? == 0;
@@ -434,6 +434,8 @@ where
         let mut word_fid_docids = None;
         let mut word_docids = None;
         let mut exact_word_docids = None;
+
+        let mut dimension = None;
 
         for result in lmdb_writer_rx {
             if (self.should_abort)() {
@@ -464,6 +466,20 @@ where
                     word_position_docids = Some(cloneable_chunk);
                     TypedChunk::WordPositionDocids(chunk)
                 }
+                TypedChunk::VectorPoints {
+                    expected_dimension,
+                    remove_vectors,
+                    embeddings,
+                    manual_vectors,
+                } => {
+                    dimension = Some(expected_dimension);
+                    TypedChunk::VectorPoints {
+                        remove_vectors,
+                        embeddings,
+                        expected_dimension,
+                        manual_vectors,
+                    }
+                }
                 otherwise => otherwise,
             };
 
@@ -490,15 +506,29 @@ where
             }
         }
 
-        let writer = arroy::Writer::prepare(self.wtxn, self.index.vector_arroy, 0, 0)?;
-        writer.build(self.wtxn, &mut rand::rngs::StdRng::from_entropy(), None)?;
-
         // We write the field distribution into the main database
         self.index.put_field_distribution(self.wtxn, &field_distribution)?;
 
         // We write the primary key field id into the main database
         self.index.put_primary_key(self.wtxn, &primary_key)?;
         let number_of_documents = self.index.number_of_documents(self.wtxn)?;
+
+        if let Some(dimension) = dimension {
+            let wtxn = &mut *self.wtxn;
+            let vector_arroy = self.index.vector_arroy;
+            pool.install(|| {
+                /// FIXME: do for each embedder
+                let mut rng = rand::rngs::StdRng::from_entropy();
+                for k in 0..=u8::MAX {
+                    let writer = arroy::Writer::prepare(wtxn, vector_arroy, k.into(), dimension)?;
+                    if writer.is_empty(wtxn)? {
+                        break;
+                    }
+                    writer.build(wtxn, &mut rng, None)?;
+                }
+                Result::Ok(())
+            })?;
+        }
 
         self.execute_prefix_databases(
             word_docids,
