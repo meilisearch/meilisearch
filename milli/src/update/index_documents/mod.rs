@@ -15,6 +15,7 @@ use crossbeam_channel::{Receiver, Sender};
 use heed::types::Str;
 use heed::Database;
 use log::debug;
+use rand::SeedableRng;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use slice_group_by::GroupBy;
@@ -488,6 +489,9 @@ where
                 });
             }
         }
+
+        let writer = arroy::Writer::prepare(self.wtxn, self.index.vector_arroy, 0, 0)?;
+        writer.build(self.wtxn, &mut rand::rngs::StdRng::from_entropy(), None)?;
 
         // We write the field distribution into the main database
         self.index.put_field_distribution(self.wtxn, &field_distribution)?;

@@ -19,7 +19,6 @@ pub mod heed_codec;
 pub mod index;
 pub mod prompt;
 pub mod proximity;
-mod readable_slices;
 pub mod score_details;
 mod search;
 pub mod update;
