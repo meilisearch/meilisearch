@@ -258,6 +258,9 @@ pub struct IndexSchedulerOptions {
     /// The maximum number of tasks stored in the task queue before starting
     /// to auto schedule task deletions.
     pub max_number_of_tasks: usize,
+    /// If the autobatcher is allowed to automatically batch tasks
+    /// it will only batch this defined number of tasks at once.
+    pub max_number_of_batched_tasks: usize,
     /// The experimental features enabled for this instance.
     pub instance_features: InstanceTogglableFeatures,
 }
@@ -316,6 +319,9 @@ pub struct IndexScheduler {
     /// the finished tasks automatically.
     pub(crate) max_number_of_tasks: usize,
 
+    /// The maximum number of tasks that will be batched together.
+    pub(crate) max_number_of_batched_tasks: usize,
+
     /// A frame to output the indexation profiling files to disk.
     pub(crate) puffin_frame: Arc<puffin::GlobalFrameView>,
 
@@ -373,6 +379,7 @@ impl IndexScheduler {
             wake_up: self.wake_up.clone(),
             autobatching_enabled: self.autobatching_enabled,
             max_number_of_tasks: self.max_number_of_tasks,
+            max_number_of_batched_tasks: self.max_number_of_batched_tasks,
             puffin_frame: self.puffin_frame.clone(),
             snapshots_path: self.snapshots_path.clone(),
             dumps_path: self.dumps_path.clone(),
@@ -471,6 +478,7 @@ impl IndexScheduler {
             puffin_frame: Arc::new(puffin::GlobalFrameView::default()),
             autobatching_enabled: options.autobatching_enabled,
             max_number_of_tasks: options.max_number_of_tasks,
+            max_number_of_batched_tasks: options.max_number_of_batched_tasks,
             dumps_path: options.dumps_path,
             snapshots_path: options.snapshots_path,
             auth_path: options.auth_path,
@@ -1638,6 +1646,7 @@ mod tests {
                 indexer_config,
                 autobatching_enabled: true,
                 max_number_of_tasks: 1_000_000,
+                max_number_of_batched_tasks: usize::MAX,
                 instance_features: Default::default(),
             };
             configuration(&mut options);
