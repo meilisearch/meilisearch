@@ -431,7 +431,6 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 let embedder = Arc::new(
                     Embedder::new(embedder_options.clone())
                         .map_err(crate::vector::Error::from)
-                        .map_err(crate::UserError::from)
                         .map_err(crate::Error::from)?,
                 );
                 Ok((name, (embedder, prompt)))
@@ -976,6 +975,19 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                         Setting::NotSet => Some((name, EmbeddingSettings::default().into())),
                     })
                     .collect();
+
+                self.index.embedder_category_id.clear(self.wtxn)?;
+                for (index, (embedder_name, _)) in new_configs.iter().enumerate() {
+                    self.index.embedder_category_id.put_with_flags(
+                        self.wtxn,
+                        heed::PutFlags::APPEND,
+                        embedder_name,
+                        &index
+                            .try_into()
+                            .map_err(|_| UserError::TooManyEmbedders(new_configs.len()))?,
+                    )?;
+                }
+
                 if new_configs.is_empty() {
                     self.index.delete_embedding_configs(self.wtxn)?;
                 } else {
@@ -1062,7 +1074,7 @@ fn validate_prompt(
     match new {
         Setting::Set(EmbeddingSettings {
             embedder_options,
-            prompt:
+            document_template:
                 Setting::Set(PromptSettings { template: Setting::Set(template), strategy, fallback }),
         }) => {
             // validate
@@ -1072,7 +1084,7 @@ fn validate_prompt(
 
             Ok(Setting::Set(EmbeddingSettings {
                 embedder_options,
-                prompt: Setting::Set(PromptSettings {
+                document_template: Setting::Set(PromptSettings {
                     template: Setting::Set(template),
                     strategy,
                     fallback,

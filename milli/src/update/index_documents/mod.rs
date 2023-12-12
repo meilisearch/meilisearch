@@ -435,7 +435,7 @@ where
         let mut word_docids = None;
         let mut exact_word_docids = None;
 
-        let mut dimension = None;
+        let mut dimension = HashMap::new();
 
         for result in lmdb_writer_rx {
             if (self.should_abort)() {
@@ -471,13 +471,15 @@ where
                     remove_vectors,
                     embeddings,
                     manual_vectors,
+                    embedder_name,
                 } => {
-                    dimension = Some(expected_dimension);
+                    dimension.insert(embedder_name.clone(), expected_dimension);
                     TypedChunk::VectorPoints {
                         remove_vectors,
                         embeddings,
                         expected_dimension,
                         manual_vectors,
+                        embedder_name,
                     }
                 }
                 otherwise => otherwise,
@@ -513,14 +515,22 @@ where
         self.index.put_primary_key(self.wtxn, &primary_key)?;
         let number_of_documents = self.index.number_of_documents(self.wtxn)?;
 
-        if let Some(dimension) = dimension {
+        for (embedder_name, dimension) in dimension {
             let wtxn = &mut *self.wtxn;
             let vector_arroy = self.index.vector_arroy;
+            /// FIXME: unwrap
+            let embedder_index =
+                self.index.embedder_category_id.get(wtxn, &embedder_name)?.unwrap();
             pool.install(|| {
-                /// FIXME: do for each embedder
+                let writer_index = (embedder_index as u16) << 8;
                 let mut rng = rand::rngs::StdRng::from_entropy();
                 for k in 0..=u8::MAX {
-                    let writer = arroy::Writer::prepare(wtxn, vector_arroy, k.into(), dimension)?;
+                    let writer = arroy::Writer::prepare(
+                        wtxn,
+                        vector_arroy,
+                        writer_index | (k as u16),
+                        dimension,
+                    )?;
                     if writer.is_empty(wtxn)? {
                         break;
                     }

@@ -292,43 +292,42 @@ fn send_original_documents_data(
     let documents_chunk_cloned = original_documents_chunk.clone();
     let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
     rayon::spawn(move || {
-        let (embedder, prompt) = embedders.get("default").cloned().unzip();
-        let result =
-            extract_vector_points(documents_chunk_cloned, indexer, field_id_map, prompt.as_deref());
-        match result {
-            Ok(ExtractedVectorPoints { manual_vectors, remove_vectors, prompts }) => {
-                /// FIXME: support multiple embedders
-                let results = embedder.and_then(|embedder| {
-                    match extract_embeddings(prompts, indexer, embedder.clone()) {
+        for (name, (embedder, prompt)) in embedders {
+            let result = extract_vector_points(
+                documents_chunk_cloned.clone(),
+                indexer,
+                &field_id_map,
+                &prompt,
+            );
+            match result {
+                Ok(ExtractedVectorPoints { manual_vectors, remove_vectors, prompts }) => {
+                    let embeddings = match extract_embeddings(prompts, indexer, embedder.clone()) {
                         Ok(results) => Some(results),
                         Err(error) => {
                             let _ = lmdb_writer_sx_cloned.send(Err(error));
                             None
                         }
-                    }
-                });
-                let (embeddings, expected_dimension) = results.unzip();
-                let expected_dimension = expected_dimension.flatten();
-                if !(remove_vectors.is_empty()
-                    && manual_vectors.is_empty()
-                    && embeddings.as_ref().map_or(true, |e| e.is_empty()))
-                {
-                    /// FIXME FIXME FIXME
-                    if expected_dimension.is_some() {
+                    };
+
+                    if !(remove_vectors.is_empty()
+                        && manual_vectors.is_empty()
+                        && embeddings.as_ref().map_or(true, |e| e.is_empty()))
+                    {
                         let _ = lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints {
                             remove_vectors,
                             embeddings,
-                            /// FIXME: compute an expected dimension from the manual vectors if any
-                            expected_dimension: expected_dimension.unwrap(),
+                            expected_dimension: embedder.dimensions(),
                             manual_vectors,
+                            embedder_name: name,
                         }));
                     }
                 }
+
+                Err(error) => {
+                    let _ = lmdb_writer_sx_cloned.send(Err(error));
+                }
             }
-            Err(error) => {
-                let _ = lmdb_writer_sx_cloned.send(Err(error));
-            }
-        };
+        }
     });
 
     // TODO: create a custom internal error

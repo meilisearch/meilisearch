@@ -63,6 +63,8 @@ pub enum InternalError {
     InvalidMatchingWords,
     #[error(transparent)]
     ArroyError(#[from] arroy::Error),
+    #[error(transparent)]
+    VectorEmbeddingError(#[from] crate::vector::Error),
 }
 
 #[derive(Error, Debug)]
@@ -188,8 +190,23 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     MissingDocumentField(#[from] crate::prompt::error::RenderPromptError),
     #[error(transparent)]
     InvalidPrompt(#[from] crate::prompt::error::NewPromptError),
-    #[error("Invalid prompt in for embeddings with name '{0}': {1}")]
+    #[error("Invalid prompt in for embeddings with name '{0}': {1}.")]
     InvalidPromptForEmbeddings(String, crate::prompt::error::NewPromptError),
+    #[error("Too many embedders in the configuration. Found {0}, but limited to 256.")]
+    TooManyEmbedders(usize),
+    #[error("Cannot find embedder with name {0}.")]
+    InvalidEmbedder(String),
+}
+
+impl From<crate::vector::Error> for Error {
+    fn from(value: crate::vector::Error) -> Self {
+        match value.fault() {
+            FaultSource::User => Error::UserError(value.into()),
+            FaultSource::Runtime => Error::InternalError(value.into()),
+            FaultSource::Bug => Error::InternalError(value.into()),
+            FaultSource::Undecided => Error::InternalError(value.into()),
+        }
+    }
 }
 
 impl From<arroy::Error> for Error {

@@ -110,7 +110,6 @@ impl Prompt {
         };
 
         // render template with special object that's OK with `doc.*` and `fields.*`
-        /// FIXME: doesn't work for nested objects e.g. `doc.a.b`
         this.template
             .render(&template_checker::TemplateChecker)
             .map_err(NewPromptError::invalid_fields_in_template)?;
@@ -141,4 +140,81 @@ pub enum PromptFallbackStrategy {
     Skip,
     #[default]
     Error,
+}
+
+#[cfg(test)]
+mod test {
+    use super::Prompt;
+    use crate::error::FaultSource;
+    use crate::prompt::error::{NewPromptError, NewPromptErrorKind};
+
+    #[test]
+    fn default_template() {
+        // does not panic
+        Prompt::default();
+    }
+
+    #[test]
+    fn empty_template() {
+        Prompt::new("".into(), None, None).unwrap();
+    }
+
+    #[test]
+    fn template_ok() {
+        Prompt::new("{{doc.title}}: {{doc.overview}}".into(), None, None).unwrap();
+    }
+
+    #[test]
+    fn template_syntax() {
+        assert!(matches!(
+            Prompt::new("{{doc.title: {{doc.overview}}".into(), None, None),
+            Err(NewPromptError {
+                kind: NewPromptErrorKind::CannotParseTemplate(_),
+                fault: FaultSource::User
+            })
+        ));
+    }
+
+    #[test]
+    fn template_missing_doc() {
+        assert!(matches!(
+            Prompt::new("{{title}}: {{overview}}".into(), None, None),
+            Err(NewPromptError {
+                kind: NewPromptErrorKind::InvalidFieldsInTemplate(_),
+                fault: FaultSource::User
+            })
+        ));
+    }
+
+    #[test]
+    fn template_nested_doc() {
+        Prompt::new("{{doc.actor.firstName}}: {{doc.actor.lastName}}".into(), None, None).unwrap();
+    }
+
+    #[test]
+    fn template_fields() {
+        Prompt::new("{% for field in fields %}{{field}}{% endfor %}".into(), None, None).unwrap();
+    }
+
+    #[test]
+    fn template_fields_ok() {
+        Prompt::new(
+            "{% for field in fields %}{{field.name}}: {{field.value}}{% endfor %}".into(),
+            None,
+            None,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn template_fields_invalid() {
+        assert!(matches!(
+            // intentionally garbled field
+            Prompt::new("{% for field in fields %}{{field.vaelu}} {% endfor %}".into(), None, None),
+            Err(NewPromptError {
+                kind: NewPromptErrorKind::InvalidFieldsInTemplate(_),
+                fault: FaultSource::User
+            })
+        ));
+    }
 }

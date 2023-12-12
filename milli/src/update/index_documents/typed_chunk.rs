@@ -47,6 +47,7 @@ pub(crate) enum TypedChunk {
         embeddings: Option<grenad::Reader<BufReader<File>>>,
         expected_dimension: usize,
         manual_vectors: grenad::Reader<BufReader<File>>,
+        embedder_name: String,
     },
     ScriptLanguageDocids(HashMap<(Script, Language), (RoaringBitmap, RoaringBitmap)>),
 }
@@ -100,8 +101,8 @@ impl TypedChunk {
             TypedChunk::GeoPoints(grenad) => {
                 format!("GeoPoints {{ number_of_entries: {} }}", grenad.len())
             }
-            TypedChunk::VectorPoints{ remove_vectors, manual_vectors, embeddings, expected_dimension } => {
-                format!("VectorPoints {{ remove_vectors: {}, manual_vectors: {}, embeddings: {}, dimension: {} }}", remove_vectors.len(), manual_vectors.len(), embeddings.as_ref().map(|e| e.len()).unwrap_or_default(), expected_dimension)
+            TypedChunk::VectorPoints{ remove_vectors, manual_vectors, embeddings, expected_dimension, embedder_name } => {
+                format!("VectorPoints {{ remove_vectors: {}, manual_vectors: {}, embeddings: {}, dimension: {}, embedder_name: {} }}", remove_vectors.len(), manual_vectors.len(), embeddings.as_ref().map(|e| e.len()).unwrap_or_default(), expected_dimension, embedder_name)
             }
             TypedChunk::ScriptLanguageDocids(sl_map) => {
                 format!("ScriptLanguageDocids {{ number_of_entries: {} }}", sl_map.len())
@@ -360,12 +361,20 @@ pub(crate) fn write_typed_chunk_into_index(
             manual_vectors,
             embeddings,
             expected_dimension,
+            embedder_name,
         } => {
-            /// FIXME: allow customizing distance
+            /// FIXME: unwrap
+            let embedder_index = index.embedder_category_id.get(wtxn, &embedder_name)?.unwrap();
+            let writer_index = (embedder_index as u16) << 8;
+            // FIXME: allow customizing distance
             let writers: std::result::Result<Vec<_>, _> = (0..=u8::MAX)
                 .map(|k| {
-                    /// FIXME: allow customizing index and then do index << 8 + k
-                    arroy::Writer::prepare(wtxn, index.vector_arroy, k.into(), expected_dimension)
+                    arroy::Writer::prepare(
+                        wtxn,
+                        index.vector_arroy,
+                        writer_index | (k as u16),
+                        expected_dimension,
+                    )
                 })
                 .collect();
             let writers = writers?;
@@ -456,7 +465,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 }
             }
 
-            log::debug!("There are 🤷‍♀️ entries in the arroy so far");
+            log::debug!("Finished vector chunk for {}", embedder_name);
         }
         TypedChunk::ScriptLanguageDocids(sl_map) => {
             for (key, (deletion, addition)) in sl_map {

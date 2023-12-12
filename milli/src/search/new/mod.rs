@@ -497,7 +497,7 @@ pub fn execute_vector_search(
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
-    /// FIXME: input universe = universe & documents_with_vectors
+    // FIXME: input universe = universe & documents_with_vectors
     // for now if we're computing embeddings for ALL documents, we can assume that this is just universe
     let ranking_rules = get_ranking_rules_for_vector(
         ctx,

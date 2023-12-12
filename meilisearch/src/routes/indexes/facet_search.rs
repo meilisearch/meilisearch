@@ -14,9 +14,9 @@ use crate::analytics::{Analytics, FacetSearchAggregator};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::search::{
-    add_search_rules, perform_facet_search, MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH,
-    DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
-    DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
+    add_search_rules, perform_facet_search, HybridQuery, MatchingStrategy, SearchQuery,
+    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
 };
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -37,6 +37,8 @@ pub struct FacetSearchQuery {
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
+    #[deserr(default, error = DeserrJsonError<InvalidHybridQuery>)]
+    pub hybrid: Option<HybridQuery>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
@@ -96,6 +98,7 @@ impl From<FacetSearchQuery> for SearchQuery {
             filter,
             matching_strategy,
             attributes_to_search_on,
+            hybrid,
         } = value;
 
         SearchQuery {
@@ -120,6 +123,7 @@ impl From<FacetSearchQuery> for SearchQuery {
             matching_strategy,
             vector: vector.map(VectorQuery::Vector),
             attributes_to_search_on,
+            hybrid,
         }
     }
 }

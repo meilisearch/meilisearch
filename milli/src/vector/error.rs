@@ -65,6 +65,8 @@ pub enum EmbedErrorKind {
     OpenAiTooManyTokens(OpenAiError),
     #[error("received unhandled HTTP status code {0} from OpenAI")]
     OpenAiUnhandledStatusCode(u16),
+    #[error("attempt to embed the following text in a configuration where embeddings must be user provided: {0:?}")]
+    ManualEmbed(String),
 }
 
 impl EmbedError {
@@ -110,6 +112,10 @@ impl EmbedError {
 
     pub(crate) fn openai_unhandled_status_code(code: u16) -> EmbedError {
         Self { kind: EmbedErrorKind::OpenAiUnhandledStatusCode(code), fault: FaultSource::Bug }
+    }
+
+    pub(crate) fn embed_on_manual_embedder(texts: String) -> EmbedError {
+        Self { kind: EmbedErrorKind::ManualEmbed(texts), fault: FaultSource::User }
     }
 }
 
@@ -170,6 +176,13 @@ impl NewEmbedderError {
         Self { kind: NewEmbedderErrorKind::LoadModel(inner), fault: FaultSource::Runtime }
     }
 
+    pub fn hf_could_not_determine_dimension(inner: EmbedError) -> NewEmbedderError {
+        Self {
+            kind: NewEmbedderErrorKind::CouldNotDetermineDimension(inner),
+            fault: FaultSource::Runtime,
+        }
+    }
+
     pub fn openai_initialize_web_client(inner: reqwest::Error) -> Self {
         Self { kind: NewEmbedderErrorKind::InitWebClient(inner), fault: FaultSource::Runtime }
     }
@@ -219,6 +232,8 @@ pub enum NewEmbedderErrorKind {
     NewApiFail(ApiError),
     #[error("fetching file from HG_HUB failed: {0}")]
     ApiGet(ApiError),
+    #[error("could not determine model dimensions: test embedding failed with {0}")]
+    CouldNotDetermineDimension(EmbedError),
     #[error("loading model failed: {0}")]
     LoadModel(candle_core::Error),
     // openai
