@@ -50,6 +50,7 @@ use self::vector_sort::VectorSort;
 use crate::error::FieldIdMapMissingEntry;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::apply_distinct_rule;
+use crate::vector::DistributionShift;
 use crate::{AscDesc, DocumentId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError};
 
 /// A structure used throughout the execution of a search query.
@@ -245,6 +246,7 @@ fn get_ranking_rules_for_vector<'ctx>(
     geo_strategy: geo_sort::Strategy,
     limit_plus_offset: usize,
     target: &[f32],
+    distribution_shift: Option<DistributionShift>,
 ) -> Result<Vec<BoxRankingRule<'ctx, PlaceholderQuery>>> {
     // query graph search
 
@@ -270,6 +272,7 @@ fn get_ranking_rules_for_vector<'ctx>(
                         target.to_vec(),
                         vector_candidates,
                         limit_plus_offset,
+                        distribution_shift,
                     )?;
                     ranking_rules.push(Box::new(vector_sort));
                     vector = true;
@@ -496,8 +499,14 @@ pub fn execute_vector_search(
 
     /// FIXME: input universe = universe & documents_with_vectors
     // for now if we're computing embeddings for ALL documents, we can assume that this is just universe
-    let ranking_rules =
-        get_ranking_rules_for_vector(ctx, sort_criteria, geo_strategy, from + length, vector)?;
+    let ranking_rules = get_ranking_rules_for_vector(
+        ctx,
+        sort_criteria,
+        geo_strategy,
+        from + length,
+        vector,
+        None,
+    )?;
 
     let mut placeholder_search_logger = logger::DefaultSearchLogger;
     let placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery> =

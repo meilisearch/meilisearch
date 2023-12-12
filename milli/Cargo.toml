@@ -36,7 +36,6 @@ heed = { version = "0.20.0-alpha.9", default-features = false, features = [
     "read-txn-no-tls",
 ] }
 indexmap = { version = "2.0.0", features = ["serde"] }
-instant-distance = { version = "0.6.1", features = ["with-serde"] }
 json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
 memmap2 = "0.7.1"
@@ -79,10 +78,11 @@ candle-core = { git = "https://github.com/huggingface/candle.git", version = "0.
 candle-transformers = { git = "https://github.com/huggingface/candle.git", version = "0.3.1" }
 candle-nn = { git = "https://github.com/huggingface/candle.git", version = "0.3.1" }
 tokenizers = { git = "https://github.com/huggingface/tokenizers.git", tag = "v0.14.1", version = "0.14.1" }
-hf-hub = "0.3.2"
+hf-hub = { git = "https://github.com/dureuill/hf-hub.git", branch = "rust_tls", default_features = false, features = [
+    "online",
+] }
 tokio = { version = "1.34.0", features = ["rt"] }
 futures = "0.3.29"
-nolife = { version = "0.3.1" }
 reqwest = { version = "0.11.16", features = [
     "rustls-tls",
     "json",
@@ -102,7 +102,15 @@ meili-snap = { path = "../meili-snap" }
 rand = { version = "0.8.5", features = ["small_rng"] }
 
 [features]
-all-tokenizations = ["charabia/chinese", "charabia/hebrew", "charabia/japanese", "charabia/thai", "charabia/korean", "charabia/greek", "charabia/khmer"]
+all-tokenizations = [
+    "charabia/chinese",
+    "charabia/hebrew",
+    "charabia/japanese",
+    "charabia/thai",
+    "charabia/korean",
+    "charabia/greek",
+    "charabia/khmer",
+]
 
 # Use POSIX semaphores instead of SysV semaphores in LMDB
 # For more information on this feature, see heed's Cargo.toml

@@ -140,3 +140,47 @@ impl Embedder {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy)]
+pub struct DistributionShift {
+    pub current_mean: f32,
+    pub current_sigma: f32,
+}
+
+impl DistributionShift {
+    /// `None` if sigma <= 0.
+    pub fn new(mean: f32, sigma: f32) -> Option<Self> {
+        if sigma <= 0.0 {
+            None
+        } else {
+            Some(Self { current_mean: mean, current_sigma: sigma })
+        }
+    }
+
+    pub fn shift(&self, score: f32) -> f32 {
+        // <https://math.stackexchange.com/a/2894689>
+        // We're somewhat abusively mapping the distribution of distances to a gaussian.
+        // The parameters we're given is the mean and sigma of the native result distribution.
+        // We're using them to retarget the distribution to a gaussian centered on 0.5 with a sigma of 0.4.
+
+        let target_mean = 0.5;
+        let target_sigma = 0.4;
+
+        // a^2 sig1^2 = sig2^2 => a^2 = sig2^2 / sig1^2 => a = sig2 / sig1, assuming a, sig1, and sig2 positive.
+        let factor = target_sigma / self.current_sigma;
+        // a*mu1 + b = mu2 => b = mu2 - a*mu1
+        let offset = target_mean - (factor * self.current_mean);
+
+        let mut score = factor * score + offset;
+
+        // clamp the final score in the ]0, 1] interval.
+        if score <= 0.0 {
+            score = f32::EPSILON;
+        }
+        if score > 1.0 {
+            score = 1.0;
+        }
+
+        score
+    }
+}

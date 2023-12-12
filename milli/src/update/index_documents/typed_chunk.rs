@@ -415,7 +415,7 @@ pub(crate) fn write_typed_chunk_into_index(
 
                     let mut deleted_index = None;
                     for (index, writer) in writers.iter().enumerate() {
-                        let Some(candidate) = writer.item_vector(&wtxn, docid)? else {
+                        let Some(candidate) = writer.item_vector(wtxn, docid)? else {
                             // uses invariant: vectors are packed in the first writers.
                             break;
                         };
@@ -429,7 +429,7 @@ pub(crate) fn write_typed_chunk_into_index(
                     if let Some(deleted_index) = deleted_index {
                         let mut last_index_with_a_vector = None;
                         for (index, writer) in writers.iter().enumerate().skip(deleted_index) {
-                            let Some(candidate) = writer.item_vector(&wtxn, docid)? else {
+                            let Some(candidate) = writer.item_vector(wtxn, docid)? else {
                                 break;
                             };
                             last_index_with_a_vector = Some((index, candidate));

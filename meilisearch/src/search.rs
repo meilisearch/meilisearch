@@ -14,18 +14,14 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
-use meilisearch_types::milli::{
-    dot_product_similarity, FacetValueHit, InternalError, OrderBy, SearchForFacetValues,
-    VectorQuery,
-};
+use meilisearch_types::milli::{FacetValueHit, OrderBy, SearchForFacetValues, VectorQuery};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
 use milli::{
     AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, Index, MatchBounds, MatcherBuilder,
-    SortError, TermsMatchingStrategy, VectorOrArrayOfVectors, DEFAULT_VALUES_PER_FACET,
+    SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
-use ordered_float::OrderedFloat;
 use regex::Regex;
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -550,13 +546,8 @@ pub fn perform_search(
             insert_geo_distance(sort, &mut document);
         }
 
-        let semantic_score = /*match query.vector.as_ref() {
-            Some(vector) => match extract_field("_vectors", &fields_ids_map, obkv)? {
-                Some(vectors) => compute_semantic_score(vector, vectors)?,
-                None => None,
-            },
-            None => None,
-        };*/ None;
+        /// FIXME: remove this or set to value from the score details
+        let semantic_score = None;
 
         let ranking_score =
             query.show_ranking_score.then(|| ScoreDetails::global_score(score.iter()));
@@ -689,18 +680,6 @@ fn insert_geo_distance(sorts: &[String], document: &mut Document) {
     }
 }
 
-fn compute_semantic_score(query: &[f32], vectors: Value) -> milli::Result<Option<f32>> {
-    let vectors = serde_json::from_value(vectors)
-        .map(VectorOrArrayOfVectors::into_array_of_vectors)
-        .map_err(InternalError::SerdeJson)?;
-    Ok(vectors
-        .into_iter()
-        .flatten()
-        .map(|v| OrderedFloat(dot_product_similarity(query, &v)))
-        .max()
-        .map(OrderedFloat::into_inner))
-}
-
 fn compute_formatted_options(
     attr_to_highlight: &HashSet<String>,
     attr_to_crop: &[String],
@@ -826,22 +805,6 @@ fn make_document(
 
     let document = permissive_json_pointer::select_values(&document, displayed_attributes);
     Ok(document)
-}
-
-/// Extract the JSON value under the field name specified
-/// but doesn't support nested objects.
-fn extract_field(
-    field_name: &str,
-    field_ids_map: &FieldsIdsMap,
-    obkv: obkv::KvReaderU16,
-) -> Result<Option<serde_json::Value>, MeilisearchHttpError> {
-    match field_ids_map.id(field_name) {
-        Some(fid) => match obkv.get(fid) {
-            Some(value) => Ok(serde_json::from_slice(value).map(Some)?),
-            None => Ok(None),
-        },
-        None => Ok(None),
-    }
 }
 
 fn format_fields<'a>(
