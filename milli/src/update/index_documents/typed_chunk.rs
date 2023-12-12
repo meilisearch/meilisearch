@@ -22,7 +22,9 @@ use crate::index::db_name::DOCUMENTS;
 use crate::update::del_add::{deladd_serialize_add_side, DelAdd, KvReaderDelAdd};
 use crate::update::facet::FacetsUpdate;
 use crate::update::index_documents::helpers::{as_cloneable_grenad, try_split_array_at};
-use crate::{lat_lng_to_xyz, DocumentId, FieldId, GeoPoint, Index, Result, SerializationError};
+use crate::{
+    lat_lng_to_xyz, DocumentId, FieldId, GeoPoint, Index, InternalError, Result, SerializationError,
+};
 
 pub(crate) enum TypedChunk {
     FieldIdDocidFacetStrings(grenad::Reader<CursorClonableMmap>),
@@ -363,8 +365,9 @@ pub(crate) fn write_typed_chunk_into_index(
             expected_dimension,
             embedder_name,
         } => {
-            /// FIXME: unwrap
-            let embedder_index = index.embedder_category_id.get(wtxn, &embedder_name)?.unwrap();
+            let embedder_index = index.embedder_category_id.get(wtxn, &embedder_name)?.ok_or(
+                InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },
+            )?;
             let writer_index = (embedder_index as u16) << 8;
             // FIXME: allow customizing distance
             let writers: std::result::Result<Vec<_>, _> = (0..=u8::MAX)
@@ -404,7 +407,20 @@ pub(crate) fn write_typed_chunk_into_index(
                             // code error if we somehow got the wrong dimension
                             .unwrap();
 
-                    /// FIXME: detect overflow
+                    if embeddings.embedding_count() > u8::MAX.into() {
+                        let external_docid = if let Ok(Some(Ok(index))) = index
+                            .external_id_of(wtxn, std::iter::once(docid))
+                            .map(|it| it.into_iter().next())
+                        {
+                            index
+                        } else {
+                            format!("internal docid={docid}")
+                        };
+                        return Err(crate::Error::UserError(crate::UserError::TooManyVectors(
+                            external_docid,
+                            embeddings.embedding_count(),
+                        )));
+                    }
                     for (embedding, writer) in embeddings.iter().zip(&writers) {
                         writer.add_item(wtxn, docid, embedding)?;
                     }
@@ -455,7 +471,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 if let Some(value) = vector_deladd_obkv.get(DelAdd::Addition) {
                     let vector = pod_collect_to_vec(value);
 
-                    /// FIXME: detect overflow
+                    // overflow was detected during vector extraction.
                     for writer in &writers {
                         if !writer.contains_item(wtxn, docid)? {
                             writer.add_item(wtxn, docid, &vector)?;

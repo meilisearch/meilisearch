@@ -876,7 +876,31 @@ async fn experimental_feature_vector_store() {
         }))
         .await;
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @"[]");
+    // vector search returns all documents that don't have vectors in the last bucket, like all sorts
+    meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+    [
+      {
+        "title": "Shazam!",
+        "id": "287947"
+      },
+      {
+        "title": "Captain Marvel",
+        "id": "299537"
+      },
+      {
+        "title": "Escape Room",
+        "id": "522681"
+      },
+      {
+        "title": "How to Train Your Dragon: The Hidden World",
+        "id": "166428"
+      },
+      {
+        "title": "Gläss",
+        "id": "450465"
+      }
+    ]
+    "###);
 }
 
 #[cfg(feature = "default")]

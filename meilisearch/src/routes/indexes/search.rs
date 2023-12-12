@@ -235,38 +235,42 @@ pub async fn embed(
     index_scheduler: &IndexScheduler,
     index: &milli::Index,
 ) -> Result<(), ResponseError> {
-    if let Some(VectorQuery::String(prompt)) = query.vector.take() {
-        let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
-        let embedder = index_scheduler.embedders(embedder_configs)?;
+    match query.vector.take() {
+        Some(VectorQuery::String(prompt)) => {
+            let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
+            let embedder = index_scheduler.embedders(embedder_configs)?;
 
-        let embedder_name = if let Some(HybridQuery {
-            semantic_ratio: _,
-            embedder: Some(embedder),
-        }) = &query.hybrid
-        {
-            embedder
-        } else {
-            "default"
-        };
+            let embedder_name =
+                if let Some(HybridQuery { semantic_ratio: _, embedder: Some(embedder) }) =
+                    &query.hybrid
+                {
+                    embedder
+                } else {
+                    "default"
+                };
 
-        let embeddings = embedder
-            .get(embedder_name)
-            .ok_or(milli::UserError::InvalidEmbedder(embedder_name.to_owned()))
-            .map_err(milli::Error::from)?
-            .0
-            .embed(vec![prompt])
-            .await
-            .map_err(milli::vector::Error::from)
-            .map_err(milli::Error::from)?
-            .pop()
-            .expect("No vector returned from embedding");
+            let embeddings = embedder
+                .get(embedder_name)
+                .ok_or(milli::UserError::InvalidEmbedder(embedder_name.to_owned()))
+                .map_err(milli::Error::from)?
+                .0
+                .embed(vec![prompt])
+                .await
+                .map_err(milli::vector::Error::from)
+                .map_err(milli::Error::from)?
+                .pop()
+                .expect("No vector returned from embedding");
 
-        if embeddings.iter().nth(1).is_some() {
-            warn!("Ignoring embeddings past the first one in long search query");
-            query.vector = Some(VectorQuery::Vector(embeddings.iter().next().unwrap().to_vec()));
-        } else {
-            query.vector = Some(VectorQuery::Vector(embeddings.into_inner()));
+            if embeddings.iter().nth(1).is_some() {
+                warn!("Ignoring embeddings past the first one in long search query");
+                query.vector =
+                    Some(VectorQuery::Vector(embeddings.iter().next().unwrap().to_vec()));
+            } else {
+                query.vector = Some(VectorQuery::Vector(embeddings.into_inner()));
+            }
         }
+        Some(vector) => query.vector = Some(vector),
+        None => {}
     };
     Ok(())
 }

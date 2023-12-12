@@ -305,6 +305,7 @@ NoSpaceLeftOnDevice                   , System               , UNPROCESSABLE_ENT
 PayloadTooLarge                       , InvalidRequest       , PAYLOAD_TOO_LARGE ;
 TaskNotFound                          , InvalidRequest       , NOT_FOUND ;
 TooManyOpenFiles                      , System               , UNPROCESSABLE_ENTITY ;
+TooManyVectors                        , InvalidRequest       , BAD_REQUEST ;
 UnretrievableDocument                 , Internal             , BAD_REQUEST ;
 UnretrievableErrorCode                , InvalidRequest       , BAD_REQUEST ;
 UnsupportedMediaType                  , InvalidRequest       , UNSUPPORTED_MEDIA_TYPE ;
@@ -362,7 +363,9 @@ impl ErrorCode for milli::Error {
                     UserError::CriterionError(_) => Code::InvalidSettingsRankingRules,
                     UserError::InvalidGeoField { .. } => Code::InvalidDocumentGeoField,
                     UserError::InvalidVectorDimensions { .. } => Code::InvalidVectorDimensions,
+                    UserError::InvalidVectorsMapType { .. } => Code::InvalidVectorsType,
                     UserError::InvalidVectorsType { .. } => Code::InvalidVectorsType,
+                    UserError::TooManyVectors(_, _) => Code::TooManyVectors,
                     UserError::SortError(_) => Code::InvalidSearchSort,
                     UserError::InvalidMinTypoWordLenSetting(_, _) => {
                         Code::InvalidSettingsTypoTolerance
