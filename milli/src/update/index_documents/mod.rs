@@ -514,16 +514,18 @@ where
         // We write the primary key field id into the main database
         self.index.put_primary_key(self.wtxn, &primary_key)?;
         let number_of_documents = self.index.number_of_documents(self.wtxn)?;
+        let mut rng = rand::rngs::StdRng::from_entropy();
 
         for (embedder_name, dimension) in dimension {
             let wtxn = &mut *self.wtxn;
             let vector_arroy = self.index.vector_arroy;
-            /// FIXME: unwrap
-            let embedder_index =
-                self.index.embedder_category_id.get(wtxn, &embedder_name)?.unwrap();
+
+            let embedder_index = self.index.embedder_category_id.get(wtxn, &embedder_name)?.ok_or(
+                InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },
+            )?;
+
             pool.install(|| {
                 let writer_index = (embedder_index as u16) << 8;
-                let mut rng = rand::rngs::StdRng::from_entropy();
                 for k in 0..=u8::MAX {
                     let writer = arroy::Writer::prepare(
                         wtxn,

@@ -13,7 +13,7 @@ use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
-use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
+use meilisearch_types::milli::score_details::{self, ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::{FacetValueHit, OrderBy, SearchForFacetValues, VectorQuery};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
@@ -562,8 +562,17 @@ pub fn perform_search(
             insert_geo_distance(sort, &mut document);
         }
 
-        /// FIXME: remove this or set to value from the score details
-        let semantic_score = None;
+        let mut semantic_score = None;
+        for details in &score {
+            if let ScoreDetails::Vector(score_details::Vector {
+                target_vector: _,
+                value_similarity: Some((_matching_vector, similarity)),
+            }) = details
+            {
+                semantic_score = Some(*similarity);
+                break;
+            }
+        }
 
         let ranking_score =
             query.show_ranking_score.then(|| ScoreDetails::global_score(score.iter()));
@@ -648,8 +657,10 @@ pub fn perform_search(
         hits: documents,
         hits_info,
         query: query.q.unwrap_or_default(),
-        // FIXME: display input vector
-        vector: None,
+        vector: match query.vector {
+            Some(VectorQuery::Vector(vector)) => Some(vector),
+            _ => None,
+        },
         processing_time_ms: before_search.elapsed().as_millis(),
         facet_distribution,
         facet_stats,

@@ -31,6 +31,10 @@ impl<F> Embeddings<F> {
         Ok(this)
     }
 
+    pub fn embedding_count(&self) -> usize {
+        self.data.len() / self.dimension
+    }
+
     pub fn dimension(&self) -> usize {
         self.dimension
     }

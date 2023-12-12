@@ -77,7 +77,8 @@ async fn import_dump_v1_movie_raw() {
       },
       "pagination": {
         "maxTotalHits": 1000
-      }
+      },
+      "embedders": {}
     }
     "###
     );
@@ -238,7 +239,8 @@ async fn import_dump_v1_movie_with_settings() {
       },
       "pagination": {
         "maxTotalHits": 1000
-      }
+      },
+      "embedders": {}
     }
     "###
     );
@@ -385,7 +387,8 @@ async fn import_dump_v1_rubygems_with_settings() {
       },
       "pagination": {
         "maxTotalHits": 1000
-      }
+      },
+      "embedders": {}
     }
     "###
     );
@@ -518,7 +521,8 @@ async fn import_dump_v2_movie_raw() {
       },
       "pagination": {
         "maxTotalHits": 1000
-      }
+      },
+      "embedders": {}
     }
     "###
     );
@@ -663,7 +667,8 @@ async fn import_dump_v2_movie_with_settings() {
       },
       "pagination": {
         "maxTotalHits": 1000
-      }
+      },
+      "embedders": {}
     }
     "###
     );
@@ -807,7 +812,8 @@ async fn import_dump_v2_rubygems_with_settings() {
       },
       "pagination": {
         "maxTotalHits": 1000
-      }
+      },
+      "embedders": {}
     }
     "###
     );
@@ -940,7 +946,8 @@ async fn import_dump_v3_movie_raw() {
       },
       "pagination": {
         "maxTotalHits": 1000
-      }
+      },
+      "embedders": {}
     }
     "###
     );
@@ -1085,7 +1092,8 @@ async fn import_dump_v3_movie_with_settings() {
       },
       "pagination": {
         "maxTotalHits": 1000
-      }
+      },
+      "embedders": {}
     }
     "###
     );
@@ -1229,7 +1237,8 @@ async fn import_dump_v3_rubygems_with_settings() {
       },
       "pagination": {
         "maxTotalHits": 1000
-      }
+      },
+      "embedders": {}
     }
     "###
     );
@@ -1362,7 +1371,8 @@ async fn import_dump_v4_movie_raw() {
       },
       "pagination": {
         "maxTotalHits": 1000
-      }
+      },
+      "embedders": {}
     }
     "###
     );
@@ -1507,7 +1517,8 @@ async fn import_dump_v4_movie_with_settings() {
       },
       "pagination": {
         "maxTotalHits": 1000
-      }
+      },
+      "embedders": {}
     }
     "###
     );
@@ -1651,7 +1662,8 @@ async fn import_dump_v4_rubygems_with_settings() {
       },
       "pagination": {
         "maxTotalHits": 1000
-      }
+      },
+      "embedders": {}
     }
     "###
     );
@@ -1896,7 +1908,8 @@ async fn import_dump_v6_containing_experimental_features() {
       },
       "pagination": {
         "maxTotalHits": 1000
-      }
+      },
+      "embedders": {}
     }
     "###);
 

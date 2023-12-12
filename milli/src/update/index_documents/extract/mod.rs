@@ -298,6 +298,7 @@ fn send_original_documents_data(
                 indexer,
                 &field_id_map,
                 &prompt,
+                &name,
             );
             match result {
                 Ok(ExtractedVectorPoints { manual_vectors, remove_vectors, prompts }) => {
