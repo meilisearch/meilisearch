@@ -342,7 +342,7 @@ pub struct IndexScheduler {
     /// so that a handle to the index is available from other threads (search) in an optimized manner.
     currently_updating_index: Arc<RwLock<Option<(String, Index)>>>,
 
-    embedders: Arc<RwLock<HashMap<EmbedderOptions, std::sync::Arc<Embedder>>>>,
+    embedders: Arc<RwLock<HashMap<EmbedderOptions, Arc<Embedder>>>>,
 
     // ================= test
     // The next entry is dedicated to the tests.
