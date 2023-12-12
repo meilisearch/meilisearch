@@ -8,7 +8,7 @@ use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
-use meilisearch_types::milli::VectorQuery;
+use meilisearch_types::milli::{self, VectorQuery};
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 
@@ -17,9 +17,9 @@ use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::search::{
-    add_search_rules, perform_search, MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH,
-    DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
-    DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
+    add_search_rules, perform_search, HybridQuery, MatchingStrategy, SearchQuery,
+    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -75,6 +75,10 @@ pub struct SearchQueryGet {
     matching_strategy: MatchingStrategy,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToSearchOn>)]
     pub attributes_to_search_on: Option<CS<String>>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidHybridQuery>)]
+    pub hybrid_embedder: Option<String>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidHybridQuery>)]
+    pub hybrid_semantic_ratio: Option<f32>,
 }
 
 impl From<SearchQueryGet> for SearchQuery {
@@ -85,6 +89,18 @@ impl From<SearchQueryGet> for SearchQuery {
                 _ => Some(Value::String(f)),
             },
             None => None,
+        };
+
+        let hybrid = match (other.hybrid_embedder, other.hybrid_semantic_ratio) {
+            (None, None) => None,
+            (None, Some(semantic_ratio)) => Some(HybridQuery { semantic_ratio, embedder: None }),
+            (Some(embedder), None) => Some(HybridQuery {
+                semantic_ratio: DEFAULT_SEMANTIC_RATIO(),
+                embedder: Some(embedder),
+            }),
+            (Some(embedder), Some(semantic_ratio)) => {
+                Some(HybridQuery { semantic_ratio, embedder: Some(embedder) })
+            }
         };
 
         Self {
@@ -109,6 +125,7 @@ impl From<SearchQueryGet> for SearchQuery {
             crop_marker: other.crop_marker,
             matching_strategy: other.matching_strategy,
             attributes_to_search_on: other.attributes_to_search_on.map(|o| o.into_iter().collect()),
+            hybrid,
         }
     }
 }
@@ -159,6 +176,9 @@ pub async fn search_with_url_query(
 
     let index = index_scheduler.index(&index_uid)?;
     let features = index_scheduler.features();
+
+    embed(&mut query, index_scheduler.get_ref(), &index).await?;
+
     let search_result =
         tokio::task::spawn_blocking(move || perform_search(&index, query, features)).await?;
     if let Ok(ref search_result) = search_result {
@@ -213,22 +233,31 @@ pub async fn search_with_post(
 pub async fn embed(
     query: &mut SearchQuery,
     index_scheduler: &IndexScheduler,
-    index: &meilisearch_types::milli::Index,
+    index: &milli::Index,
 ) -> Result<(), ResponseError> {
     if let Some(VectorQuery::String(prompt)) = query.vector.take() {
         let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
         let embedder = index_scheduler.embedders(embedder_configs)?;
 
-        /// FIXME: add error if no embedder, remove unwrap, support multiple embedders
+        let embedder_name = if let Some(HybridQuery {
+            semantic_ratio: _,
+            embedder: Some(embedder),
+        }) = &query.hybrid
+        {
+            embedder
+        } else {
+            "default"
+        };
+
         let embeddings = embedder
-            .get("default")
-            .unwrap()
+            .get(embedder_name)
+            .ok_or(milli::UserError::InvalidEmbedder(embedder_name.to_owned()))
+            .map_err(milli::Error::from)?
             .0
             .embed(vec![prompt])
             .await
-            .map_err(meilisearch_types::milli::vector::Error::from)
-            .map_err(meilisearch_types::milli::UserError::from)
-            .map_err(meilisearch_types::milli::Error::from)?
+            .map_err(milli::vector::Error::from)
+            .map_err(milli::Error::from)?
             .pop()
             .expect("No vector returned from embedding");
 

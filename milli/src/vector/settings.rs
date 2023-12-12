@@ -15,14 +15,14 @@ pub struct EmbeddingSettings {
     pub embedder_options: Setting<EmbedderSettings>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    pub prompt: Setting<PromptSettings>,
+    pub document_template: Setting<PromptSettings>,
 }
 
 impl EmbeddingSettings {
     pub fn apply(&mut self, new: Self) {
-        let EmbeddingSettings { embedder_options, prompt } = new;
+        let EmbeddingSettings { embedder_options, document_template: prompt } = new;
         self.embedder_options.apply(embedder_options);
-        self.prompt.apply(prompt);
+        self.document_template.apply(prompt);
     }
 }
 
@@ -30,7 +30,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
     fn from(value: EmbeddingConfig) -> Self {
         Self {
             embedder_options: Setting::Set(value.embedder_options.into()),
-            prompt: Setting::Set(value.prompt.into()),
+            document_template: Setting::Set(value.prompt.into()),
         }
     }
 }
@@ -38,7 +38,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
 impl From<EmbeddingSettings> for EmbeddingConfig {
     fn from(value: EmbeddingSettings) -> Self {
         let mut this = Self::default();
-        let EmbeddingSettings { embedder_options, prompt } = value;
+        let EmbeddingSettings { embedder_options, document_template: prompt } = value;
         if let Some(embedder_options) = embedder_options.set() {
             this.embedder_options = embedder_options.into();
         }
@@ -105,6 +105,7 @@ impl From<PromptSettings> for PromptData {
 pub enum EmbedderSettings {
     HuggingFace(Setting<HfEmbedderSettings>),
     OpenAi(Setting<OpenAiEmbedderSettings>),
+    UserProvided(UserProvidedSettings),
 }
 
 impl<E> Deserr<E> for EmbedderSettings
@@ -145,11 +146,17 @@ where
                             location.push_key(&k),
                         )?,
                     ))),
+                    "userProvided" => Ok(EmbedderSettings::UserProvided(
+                        UserProvidedSettings::deserialize_from_value(
+                            v.into_value(),
+                            location.push_key(&k),
+                        )?,
+                    )),
                     other => Err(deserr::take_cf_content(E::error::<V>(
                         None,
                         deserr::ErrorKind::UnknownKey {
                             key: other,
-                            accepted: &["huggingFace", "openAi"],
+                            accepted: &["huggingFace", "openAi", "userProvided"],
                         },
                         location,
                     ))),
@@ -182,6 +189,9 @@ impl From<crate::vector::EmbedderOptions> for EmbedderSettings {
             crate::vector::EmbedderOptions::OpenAi(openai) => {
                 Self::OpenAi(Setting::Set(openai.into()))
             }
+            crate::vector::EmbedderOptions::UserProvided(user_provided) => {
+                Self::UserProvided(user_provided.into())
+            }
         }
     }
 }
@@ -192,9 +202,12 @@ impl From<EmbedderSettings> for crate::vector::EmbedderOptions {
             EmbedderSettings::HuggingFace(Setting::Set(hf)) => Self::HuggingFace(hf.into()),
             EmbedderSettings::HuggingFace(_setting) => Self::HuggingFace(Default::default()),
             EmbedderSettings::OpenAi(Setting::Set(ai)) => Self::OpenAi(ai.into()),
-            EmbedderSettings::OpenAi(_setting) => Self::OpenAi(
-                crate::vector::openai::EmbedderOptions::with_default_model(infer_api_key()),
-            ),
+            EmbedderSettings::OpenAi(_setting) => {
+                Self::OpenAi(crate::vector::openai::EmbedderOptions::with_default_model(None))
+            }
+            EmbedderSettings::UserProvided(user_provided) => {
+                Self::UserProvided(user_provided.into())
+            }
         }
     }
 }
@@ -286,7 +299,7 @@ impl OpenAiEmbedderSettings {
 impl From<crate::vector::openai::EmbedderOptions> for OpenAiEmbedderSettings {
     fn from(value: crate::vector::openai::EmbedderOptions) -> Self {
         Self {
-            api_key: Setting::Set(value.api_key),
+            api_key: value.api_key.map(Setting::Set).unwrap_or(Setting::Reset),
             embedding_model: Setting::Set(value.embedding_model),
         }
     }
@@ -295,14 +308,25 @@ impl From<crate::vector::openai::EmbedderOptions> for OpenAiEmbedderSettings {
 impl From<OpenAiEmbedderSettings> for crate::vector::openai::EmbedderOptions {
     fn from(value: OpenAiEmbedderSettings) -> Self {
         let OpenAiEmbedderSettings { api_key, embedding_model } = value;
-        Self {
-            api_key: api_key.set().unwrap_or_else(infer_api_key),
-            embedding_model: embedding_model.set().unwrap_or_default(),
-        }
+        Self { api_key: api_key.set(), embedding_model: embedding_model.set().unwrap_or_default() }
     }
 }
 
-fn infer_api_key() -> String {
-    /// FIXME: get key from instance options?
-    std::env::var("MEILI_OPENAI_API_KEY").unwrap_or_default()
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[deserr(rename_all = camelCase, deny_unknown_fields)]
+pub struct UserProvidedSettings {
+    pub dimensions: usize,
+}
+
+impl From<UserProvidedSettings> for crate::vector::manual::EmbedderOptions {
+    fn from(value: UserProvidedSettings) -> Self {
+        Self { dimensions: value.dimensions }
+    }
+}
+
+impl From<crate::vector::manual::EmbedderOptions> for UserProvidedSettings {
+    fn from(value: crate::vector::manual::EmbedderOptions) -> Self {
+        Self { dimensions: value.dimensions }
+    }
 }

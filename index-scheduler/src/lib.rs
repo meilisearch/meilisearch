@@ -1361,7 +1361,6 @@ impl IndexScheduler {
                 let embedder = Arc::new(
                     Embedder::new(embedder_options.clone())
                         .map_err(meilisearch_types::milli::vector::Error::from)
-                        .map_err(meilisearch_types::milli::UserError::from)
                         .map_err(meilisearch_types::milli::Error::from)?,
                 );
                 {

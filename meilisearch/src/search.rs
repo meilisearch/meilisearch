@@ -36,6 +36,7 @@ pub const DEFAULT_CROP_LENGTH: fn() -> usize = || 10;
 pub const DEFAULT_CROP_MARKER: fn() -> String = || "…".to_string();
 pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
+pub const DEFAULT_SEMANTIC_RATIO: fn() -> f32 = || 0.5;
 
 #[derive(Debug, Clone, Default, PartialEq, Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
@@ -44,6 +45,8 @@ pub struct SearchQuery {
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<milli::VectorQuery>,
+    #[deserr(default, error = DeserrJsonError<InvalidHybridQuery>)]
+    pub hybrid: Option<HybridQuery>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
@@ -84,6 +87,15 @@ pub struct SearchQuery {
     pub attributes_to_search_on: Option<Vec<String>>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Deserr)]
+#[deserr(error = DeserrJsonError<InvalidHybridQuery>, rename_all = camelCase, deny_unknown_fields)]
+pub struct HybridQuery {
+    #[deserr(default, error = DeserrJsonError<InvalidSemanticRatio>, default = DEFAULT_SEMANTIC_RATIO())]
+    pub semantic_ratio: f32,
+    #[deserr(default, error = DeserrJsonError<InvalidEmbedder>, default)]
+    pub embedder: Option<String>,
+}
+
 impl SearchQuery {
     pub fn is_finite_pagination(&self) -> bool {
         self.page.or(self.hits_per_page).is_some()
@@ -103,6 +115,8 @@ pub struct SearchQueryWithIndex {
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub vector: Option<VectorQuery>,
+    #[deserr(default, error = DeserrJsonError<InvalidHybridQuery>)]
+    pub hybrid: Option<HybridQuery>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
@@ -168,6 +182,7 @@ impl SearchQueryWithIndex {
             crop_marker,
             matching_strategy,
             attributes_to_search_on,
+            hybrid,
         } = self;
         (
             index_uid,
@@ -193,6 +208,7 @@ impl SearchQueryWithIndex {
                 crop_marker,
                 matching_strategy,
                 attributes_to_search_on,
+                hybrid,
                 // do not use ..Default::default() here,
                 // rather add any missing field from `SearchQuery` to `SearchQueryWithIndex`
             },
