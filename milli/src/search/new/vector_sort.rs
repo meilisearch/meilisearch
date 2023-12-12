@@ -35,7 +35,11 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         })
     }
 
-    fn fill_buffer(&mut self, ctx: &mut SearchContext<'_>) -> Result<()> {
+    fn fill_buffer(
+        &mut self,
+        ctx: &mut SearchContext<'_>,
+        vector_candidates: &RoaringBitmap,
+    ) -> Result<()> {
         let readers: std::result::Result<Vec<_>, _> = (0..=u8::MAX)
             .map_while(|k| {
                 arroy::Reader::open(ctx.txn, k.into(), ctx.index.vector_arroy)
@@ -54,13 +58,8 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         let mut results = Vec::new();
 
         for reader in readers.iter() {
-            let nns_by_vector = reader.nns_by_vector(
-                ctx.txn,
-                target,
-                self.limit,
-                None,
-                Some(&self.vector_candidates),
-            )?;
+            let nns_by_vector =
+                reader.nns_by_vector(ctx.txn, target, self.limit, None, Some(vector_candidates))?;
             let vectors: std::result::Result<Vec<_>, _> = nns_by_vector
                 .iter()
                 .map(|(docid, _)| reader.item_vector(ctx.txn, *docid).transpose().unwrap())
@@ -90,8 +89,8 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
         assert!(self.query.is_none());
 
         self.query = Some(query.clone());
-        self.vector_candidates &= universe;
-        self.fill_buffer(ctx)?;
+        let vector_candidates = &self.vector_candidates & universe;
+        self.fill_buffer(ctx, &vector_candidates)?;
         Ok(())
     }
 
@@ -103,9 +102,9 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<Q>>> {
         let query = self.query.as_ref().unwrap().clone();
-        self.vector_candidates &= universe;
+        let vector_candidates = &self.vector_candidates & universe;
 
-        if self.vector_candidates.is_empty() {
+        if vector_candidates.is_empty() {
             return Ok(Some(RankingRuleOutput {
                 query,
                 candidates: universe.clone(),
@@ -117,7 +116,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
         }
 
         for (docid, distance, vector) in self.cached_sorted_docids.by_ref() {
-            if self.vector_candidates.contains(docid) {
+            if vector_candidates.contains(docid) {
                 let score = 1.0 - distance;
                 let score = self
                     .distribution_shift
@@ -136,7 +135,22 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
 
         // if we got out of this loop it means we've exhausted our cache.
         // we need to refill it and run the function again.
-        self.fill_buffer(ctx)?;
+        self.fill_buffer(ctx, &vector_candidates)?;
+
+        // we tried filling the buffer, but it remained empty 😢
+        // it means we don't actually have any document remaining in the universe with a vector.
+        // => exit
+        if self.cached_sorted_docids.len() == 0 {
+            return Ok(Some(RankingRuleOutput {
+                query,
+                candidates: universe.clone(),
+                score: ScoreDetails::Vector(score_details::Vector {
+                    target_vector: self.target.clone(),
+                    value_similarity: None,
+                }),
+            }));
+        }
+
         self.next_bucket(ctx, _logger, universe)
     }
 
