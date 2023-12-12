@@ -10,7 +10,6 @@ use roaring::RoaringBitmap;
 use rstar::RTree;
 use time::OffsetDateTime;
 
-use crate::distance::NDotProductPoint;
 use crate::documents::PrimaryKey;
 use crate::error::{InternalError, UserError};
 use crate::fields_ids_map::FieldsIdsMap;
@@ -29,9 +28,6 @@ use crate::{
     OrderBy, Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, BEU16,
     BEU32, BEU64,
 };
-
-/// The HNSW data-structure that we serialize, fill and search in.
-pub type Hnsw = instant_distance::Hnsw<NDotProductPoint>;
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
 pub const DEFAULT_MIN_WORD_LEN_TWO_TYPOS: u8 = 9;

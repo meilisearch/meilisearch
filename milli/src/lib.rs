@@ -10,7 +10,6 @@ pub mod documents;
 
 mod asc_desc;
 mod criterion;
-pub mod distance;
 mod error;
 mod external_documents_ids;
 pub mod facet;
@@ -33,7 +32,6 @@ use std::convert::{TryFrom, TryInto};
 use std::hash::BuildHasherDefault;
 
 use charabia::normalizer::{CharNormalizer, CompatibilityDecompositionNormalizer};
-pub use distance::dot_product_similarity;
 pub use filter_parser::{Condition, FilterCondition, Span, Token};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;

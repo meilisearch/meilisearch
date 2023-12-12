@@ -5,6 +5,7 @@ use roaring::RoaringBitmap;
 
 use super::ranking_rules::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait};
 use crate::score_details::{self, ScoreDetails};
+use crate::vector::DistributionShift;
 use crate::{DocumentId, Result, SearchContext, SearchLogger};
 
 pub struct VectorSort<Q: RankingRuleQueryTrait> {
@@ -13,6 +14,7 @@ pub struct VectorSort<Q: RankingRuleQueryTrait> {
     vector_candidates: RoaringBitmap,
     cached_sorted_docids: std::vec::IntoIter<(DocumentId, f32, Vec<f32>)>,
     limit: usize,
+    distribution_shift: Option<DistributionShift>,
 }
 
 impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
@@ -21,6 +23,7 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         target: Vec<f32>,
         vector_candidates: RoaringBitmap,
         limit: usize,
+        distribution_shift: Option<DistributionShift>,
     ) -> Result<Self> {
         Ok(Self {
             query: None,
@@ -28,6 +31,7 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
             vector_candidates,
             cached_sorted_docids: Default::default(),
             limit,
+            distribution_shift,
         })
     }
 
@@ -52,7 +56,7 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         for reader in readers.iter() {
             let nns_by_vector = reader.nns_by_vector(
                 ctx.txn,
-                &target,
+                target,
                 self.limit,
                 None,
                 Some(&self.vector_candidates),
@@ -66,6 +70,7 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         }
         results.sort_unstable_by_key(|(_, distance, _)| OrderedFloat(*distance));
         self.cached_sorted_docids = results.into_iter();
+
         Ok(())
     }
 }
@@ -111,14 +116,19 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
             }));
         }
 
-        while let Some((docid, distance, vector)) = self.cached_sorted_docids.next() {
+        for (docid, distance, vector) in self.cached_sorted_docids.by_ref() {
             if self.vector_candidates.contains(docid) {
+                let score = 1.0 - distance;
+                let score = self
+                    .distribution_shift
+                    .map(|distribution| distribution.shift(score))
+                    .unwrap_or(score);
                 return Ok(Some(RankingRuleOutput {
                     query,
                     candidates: RoaringBitmap::from_iter([docid]),
                     score: ScoreDetails::Vector(score_details::Vector {
                         target_vector: self.target.clone(),
-                        value_similarity: Some((vector, 1.0 - distance)),
+                        value_similarity: Some((vector, score)),
                     }),
                 }));
             }
