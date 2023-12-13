@@ -15,16 +15,21 @@ pub struct VectorSort<Q: RankingRuleQueryTrait> {
     cached_sorted_docids: std::vec::IntoIter<(DocumentId, f32, Vec<f32>)>,
     limit: usize,
     distribution_shift: Option<DistributionShift>,
+    embedder_index: u8,
 }
 
 impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
     pub fn new(
-        _ctx: &SearchContext,
+        ctx: &SearchContext,
         target: Vec<f32>,
         vector_candidates: RoaringBitmap,
         limit: usize,
         distribution_shift: Option<DistributionShift>,
+        embedder_name: &str,
     ) -> Result<Self> {
+        /// FIXME: unwrap
+        let embedder_index = ctx.index.embedder_category_id.get(ctx.txn, embedder_name)?.unwrap();
+
         Ok(Self {
             query: None,
             target,
@@ -32,6 +37,7 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
             cached_sorted_docids: Default::default(),
             limit,
             distribution_shift,
+            embedder_index,
         })
     }
 
@@ -40,9 +46,10 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         ctx: &mut SearchContext<'_>,
         vector_candidates: &RoaringBitmap,
     ) -> Result<()> {
+        let writer_index = (self.embedder_index as u16) << 8;
         let readers: std::result::Result<Vec<_>, _> = (0..=u8::MAX)
             .map_while(|k| {
-                arroy::Reader::open(ctx.txn, k.into(), ctx.index.vector_arroy)
+                arroy::Reader::open(ctx.txn, writer_index | (k as u16), ctx.index.vector_arroy)
                     .map(Some)
                     .or_else(|e| match e {
                         arroy::Error::MissingMetadata => Ok(None),

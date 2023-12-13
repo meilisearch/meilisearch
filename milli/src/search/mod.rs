@@ -17,6 +17,7 @@ use self::new::{execute_vector_search, PartialSearchResult};
 use crate::error::UserError;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::score_details::{ScoreDetails, ScoringStrategy};
+use crate::vector::DistributionShift;
 use crate::{
     execute_search, filtered_universe, AscDesc, DefaultSearchLogger, DocumentId, FieldId, Index,
     Result, SearchContext,
@@ -51,6 +52,8 @@ pub struct Search<'a> {
     exhaustive_number_hits: bool,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
+    distribution_shift: Option<DistributionShift>,
+    embedder_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -117,6 +120,8 @@ impl<'a> Search<'a> {
             words_limit: 10,
             rtxn,
             index,
+            distribution_shift: None,
+            embedder_name: None,
         }
     }
 
@@ -183,7 +188,29 @@ impl<'a> Search<'a> {
         self
     }
 
+    pub fn distribution_shift(
+        &mut self,
+        distribution_shift: Option<DistributionShift>,
+    ) -> &mut Search<'a> {
+        self.distribution_shift = distribution_shift;
+        self
+    }
+
+    pub fn embedder_name(&mut self, embedder_name: impl Into<String>) -> &mut Search<'a> {
+        self.embedder_name = Some(embedder_name.into());
+        self
+    }
+
     pub fn execute(&self) -> Result<SearchResult> {
+        let embedder_name;
+        let embedder_name = match &self.embedder_name {
+            Some(embedder_name) => embedder_name,
+            None => {
+                embedder_name = self.index.default_embedding_name(self.rtxn)?;
+                &embedder_name
+            }
+        };
+
         let mut ctx = SearchContext::new(self.index, self.rtxn);
 
         if let Some(searchable_attributes) = self.searchable_attributes {
@@ -202,6 +229,8 @@ impl<'a> Search<'a> {
                     self.geo_strategy,
                     self.offset,
                     self.limit,
+                    self.distribution_shift,
+                    embedder_name,
                 )?,
                 None => execute_search(
                     &mut ctx,
@@ -247,6 +276,8 @@ impl fmt::Debug for Search<'_> {
             exhaustive_number_hits,
             rtxn: _,
             index: _,
+            distribution_shift,
+            embedder_name,
         } = self;
         f.debug_struct("Search")
             .field("query", query)
@@ -260,6 +291,8 @@ impl fmt::Debug for Search<'_> {
             .field("scoring_strategy", scoring_strategy)
             .field("exhaustive_number_hits", exhaustive_number_hits)
             .field("words_limit", words_limit)
+            .field("distribution_shift", distribution_shift)
+            .field("embedder_name", embedder_name)
             .finish()
     }
 }

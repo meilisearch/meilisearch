@@ -14,12 +14,11 @@ use super::IndexerConfig;
 use crate::criterion::Criterion;
 use crate::error::UserError;
 use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
-use crate::prompt::Prompt;
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::vector::settings::{EmbeddingSettings, PromptSettings};
-use crate::vector::{Embedder, EmbeddingConfig};
+use crate::vector::{Embedder, EmbeddingConfig, EmbeddingConfigs};
 use crate::{FieldsIdsMap, Index, OrderBy, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -422,7 +421,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     fn embedders(
         &self,
         embedding_configs: Vec<(String, EmbeddingConfig)>,
-    ) -> Result<HashMap<String, (Arc<Embedder>, Arc<Prompt>)>> {
+    ) -> Result<EmbeddingConfigs> {
         let res: Result<_> = embedding_configs
             .into_iter()
             .map(|(name, EmbeddingConfig { embedder_options, prompt })| {
@@ -436,7 +435,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 Ok((name, (embedder, prompt)))
             })
             .collect();
-        res
+        res.map(EmbeddingConfigs::new)
     }
 
     fn update_displayed(&mut self) -> Result<bool> {

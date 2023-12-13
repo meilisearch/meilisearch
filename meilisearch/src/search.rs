@@ -398,6 +398,10 @@ fn prepare_search<'t>(
         features.check_vector("Passing `vector` as a query parameter")?;
     }
 
+    if let Some(HybridQuery { embedder: Some(embedder), .. }) = &query.hybrid {
+        search.embedder_name(embedder);
+    }
+
     // compute the offset on the limit depending on the pagination mode.
     let (offset, limit) = if is_finite_pagination {
         let limit = query.hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);

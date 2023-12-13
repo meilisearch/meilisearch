@@ -1,5 +1,8 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use self::error::{EmbedError, NewEmbedderError};
-use crate::prompt::PromptData;
+use crate::prompt::{Prompt, PromptData};
 
 pub mod error;
 pub mod hf;
@@ -80,6 +83,44 @@ pub struct EmbeddingConfig {
     pub embedder_options: EmbedderOptions,
     pub prompt: PromptData,
     // TODO: add metrics and anything needed
+}
+
+#[derive(Clone, Default)]
+pub struct EmbeddingConfigs(HashMap<String, (Arc<Embedder>, Arc<Prompt>)>);
+
+impl EmbeddingConfigs {
+    pub fn new(data: HashMap<String, (Arc<Embedder>, Arc<Prompt>)>) -> Self {
+        Self(data)
+    }
+
+    pub fn get(&self, name: &str) -> Option<(Arc<Embedder>, Arc<Prompt>)> {
+        self.0.get(name).cloned()
+    }
+
+    pub fn get_default(&self) -> Option<(Arc<Embedder>, Arc<Prompt>)> {
+        self.get_default_embedder_name().and_then(|default| self.get(&default))
+    }
+
+    pub fn get_default_embedder_name(&self) -> Option<String> {
+        let mut it = self.0.keys();
+        let first_name = it.next();
+        let second_name = it.next();
+        match (first_name, second_name) {
+            (None, _) => None,
+            (Some(first), None) => Some(first.to_owned()),
+            (Some(_), Some(_)) => Some("default".to_owned()),
+        }
+    }
+}
+
+impl IntoIterator for EmbeddingConfigs {
+    type Item = (String, (Arc<Embedder>, Arc<Prompt>));
+
+    type IntoIter = std::collections::hash_map::IntoIter<String, (Arc<Embedder>, Arc<Prompt>)>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
