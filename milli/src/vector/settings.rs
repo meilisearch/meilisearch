@@ -243,8 +243,8 @@ pub struct OpenAiEmbedderSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     pub api_key: Setting<String>,
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
+    #[serde(default, skip_serializing_if = "Setting::is_not_set", rename = "model")]
+    #[deserr(default, rename = "model")]
     pub embedding_model: Setting<crate::vector::openai::EmbeddingModel>,
 }
 
