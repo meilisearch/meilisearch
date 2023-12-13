@@ -35,6 +35,8 @@ pub struct EmbedderOptions {
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub enum EmbeddingModel {
     #[default]
+    #[serde(rename = "text-embedding-ada-002")]
+    #[deserr(rename = "text-embedding-ada-002")]
     TextEmbeddingAda002,
 }
 
