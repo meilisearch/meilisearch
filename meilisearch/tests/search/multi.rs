@@ -72,7 +72,14 @@ async fn simple_search_single_index() {
         "hits": [
           {
             "title": "Gläss",
-            "id": "450465"
+            "id": "450465",
+            "_vectors": {
+              "manual": [
+                -100,
+                340,
+                90
+              ]
+            }
           }
         ],
         "query": "glass",
@@ -86,7 +93,14 @@ async fn simple_search_single_index() {
         "hits": [
           {
             "title": "Captain Marvel",
-            "id": "299537"
+            "id": "299537",
+            "_vectors": {
+              "manual": [
+                1,
+                2,
+                54
+              ]
+            }
           }
         ],
         "query": "captain",
@@ -177,7 +191,14 @@ async fn simple_search_two_indexes() {
         "hits": [
           {
             "title": "Gläss",
-            "id": "450465"
+            "id": "450465",
+            "_vectors": {
+              "manual": [
+                -100,
+                340,
+                90
+              ]
+            }
           }
         ],
         "query": "glass",
@@ -203,7 +224,14 @@ async fn simple_search_two_indexes() {
                 "age": 4
               }
             ],
-            "cattos": "pésti"
+            "cattos": "pésti",
+            "_vectors": {
+              "manual": [
+                1,
+                2,
+                3
+              ]
+            }
           },
           {
             "id": 654,
@@ -218,7 +246,14 @@ async fn simple_search_two_indexes() {
             "cattos": [
               "simba",
               "pestiféré"
-            ]
+            ],
+            "_vectors": {
+              "manual": [
+                1,
+                2,
+                54
+              ]
+            }
           }
         ],
         "query": "pésti",
