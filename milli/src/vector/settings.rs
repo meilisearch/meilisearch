@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::prompt::PromptData;
 use crate::update::Setting;
-use crate::vector::hf::WeightSource;
 use crate::vector::EmbeddingConfig;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
@@ -204,26 +203,13 @@ pub struct HfEmbedderSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     pub revision: Setting<String>,
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    pub weight_source: Setting<WeightSource>,
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    pub normalize_embeddings: Setting<bool>,
 }
 
 impl HfEmbedderSettings {
     pub fn apply(&mut self, new: Self) {
-        let HfEmbedderSettings {
-            model,
-            revision,
-            weight_source,
-            normalize_embeddings: normalize_embedding,
-        } = new;
+        let HfEmbedderSettings { model, revision } = new;
         self.model.apply(model);
         self.revision.apply(revision);
-        self.weight_source.apply(weight_source);
-        self.normalize_embeddings.apply(normalize_embedding);
     }
 }
 
@@ -232,27 +218,19 @@ impl From<crate::vector::hf::EmbedderOptions> for HfEmbedderSettings {
         Self {
             model: Setting::Set(value.model),
             revision: value.revision.map(Setting::Set).unwrap_or(Setting::NotSet),
-            weight_source: Setting::Set(value.weight_source),
-            normalize_embeddings: Setting::Set(value.normalize_embeddings),
         }
     }
 }
 
 impl From<HfEmbedderSettings> for crate::vector::hf::EmbedderOptions {
     fn from(value: HfEmbedderSettings) -> Self {
-        let HfEmbedderSettings { model, revision, weight_source, normalize_embeddings } = value;
+        let HfEmbedderSettings { model, revision } = value;
         let mut this = Self::default();
         if let Some(model) = model.set() {
             this.model = model;
         }
         if let Some(revision) = revision.set() {
             this.revision = Some(revision);
-        }
-        if let Some(weight_source) = weight_source.set() {
-            this.weight_source = weight_source;
-        }
-        if let Some(normalize_embeddings) = normalize_embeddings.set() {
-            this.normalize_embeddings = normalize_embeddings;
         }
         this
     }
