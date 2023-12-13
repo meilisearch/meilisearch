@@ -1,6 +1,6 @@
 use std::mem;
 
-use heed::BytesDecode;
+use heed::{BoxedError, BytesDecode};
 
 use super::{BoRoaringBitmapLenCodec, RoaringBitmapLenCodec};
 use crate::heed_codec::roaring_bitmap::cbo_roaring_bitmap_codec::THRESHOLD;
@@ -11,7 +11,7 @@ pub struct CboRoaringBitmapLenCodec;
 impl BytesDecode<'_> for CboRoaringBitmapLenCodec {
     type DItem = u64;
 
-    fn bytes_decode(bytes: &[u8]) -> Option<Self::DItem> {
+    fn bytes_decode(bytes: &[u8]) -> Result<Self::DItem, BoxedError> {
         if bytes.len() <= THRESHOLD * mem::size_of::<u32>() {
             // If there is threshold or less than threshold integers that can fit into this array
             // of bytes it means that we used the ByteOrder codec serializer.
@@ -27,7 +27,7 @@ impl BytesDecode<'_> for CboRoaringBitmapLenCodec {
 impl BytesDecodeOwned for CboRoaringBitmapLenCodec {
     type DItem = u64;
 
-    fn bytes_decode_owned(bytes: &[u8]) -> Option<Self::DItem> {
+    fn bytes_decode_owned(bytes: &[u8]) -> Result<Self::DItem, BoxedError> {
         Self::bytes_decode(bytes)
     }
 }

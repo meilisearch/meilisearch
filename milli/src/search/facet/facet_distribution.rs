@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ops::ControlFlow;
 use std::{fmt, mem};
 
-use heed::types::ByteSlice;
+use heed::types::Bytes;
 use heed::BytesDecode;
 use indexmap::IndexMap;
 use roaring::RoaringBitmap;
@@ -13,7 +13,7 @@ use crate::facet::FacetType;
 use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec, OrderedF64Codec,
 };
-use crate::heed_codec::{ByteSliceRefCodec, StrRefCodec};
+use crate::heed_codec::{BytesRefCodec, StrRefCodec};
 use crate::search::facet::facet_distribution_iter::{
     count_iterate_over_facet_distribution, lexicographically_iterate_over_facet_distribution,
 };
@@ -105,7 +105,7 @@ impl<'a> FacetDistribution<'a> {
                     key_buffer.truncate(mem::size_of::<FieldId>());
                     key_buffer.extend_from_slice(&docid.to_be_bytes());
                     let iter = db
-                        .remap_key_type::<ByteSlice>()
+                        .remap_key_type::<Bytes>()
                         .prefix_iter(self.rtxn, &key_buffer)?
                         .remap_key_type::<FieldDocIdFacetF64Codec>();
 
@@ -129,7 +129,7 @@ impl<'a> FacetDistribution<'a> {
                     key_buffer.truncate(mem::size_of::<FieldId>());
                     key_buffer.extend_from_slice(&docid.to_be_bytes());
                     let iter = db
-                        .remap_key_type::<ByteSlice>()
+                        .remap_key_type::<Bytes>()
                         .prefix_iter(self.rtxn, &key_buffer)?
                         .remap_key_type::<FieldDocIdFacetStringCodec>();
 
@@ -172,9 +172,7 @@ impl<'a> FacetDistribution<'a> {
 
         search_function(
             self.rtxn,
-            self.index
-                .facet_id_f64_docids
-                .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
+            self.index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>(),
             field_id,
             candidates,
             |facet_key, nbr_docids, _| {
@@ -203,9 +201,7 @@ impl<'a> FacetDistribution<'a> {
 
         search_function(
             self.rtxn,
-            self.index
-                .facet_id_string_docids
-                .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
+            self.index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>(),
             field_id,
             candidates,
             |facet_key, nbr_docids, any_docid| {

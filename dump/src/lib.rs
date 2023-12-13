@@ -267,6 +267,7 @@ pub(crate) mod test {
             dictionary: Setting::NotSet,
             synonyms: Setting::NotSet,
             distinct_attribute: Setting::NotSet,
+            proximity_precision: Setting::NotSet,
             typo_tolerance: Setting::NotSet,
             faceting: Setting::Set(FacetingSettings {
                 max_values_per_facet: Setting::Set(111),

@@ -3,7 +3,7 @@ use std::io::ErrorKind;
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
-use bstr::ByteSlice;
+use bstr::ByteSlice as _;
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::Deserr;
 use futures::StreamExt;
@@ -612,8 +612,8 @@ fn retrieve_document<S: AsRef<str>>(
     let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
 
     let internal_id = index
-        .external_documents_ids(&txn)?
-        .get(doc_id.as_bytes())
+        .external_documents_ids()
+        .get(&txn, doc_id)?
         .ok_or_else(|| MeilisearchHttpError::DocumentNotFound(doc_id.to_string()))?;
 
     let document = index

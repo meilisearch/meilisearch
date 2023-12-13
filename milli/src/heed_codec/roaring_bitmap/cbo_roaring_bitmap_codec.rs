@@ -3,9 +3,11 @@ use std::io;
 use std::mem::size_of;
 
 use byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
+use heed::BoxedError;
 use roaring::RoaringBitmap;
 
 use crate::heed_codec::BytesDecodeOwned;
+use crate::update::del_add::{DelAdd, KvReaderDelAdd};
 
 /// This is the limit where using a byteorder became less size efficient
 /// than using a direct roaring encoding, it is also the point where we are able
@@ -60,12 +62,16 @@ impl CboRoaringBitmapCodec {
     /// if the merged values length is under the threshold, values are directly
     /// serialized in the buffer else a RoaringBitmap is created from the
     /// values and is serialized in the buffer.
-    pub fn merge_into(slices: &[Cow<[u8]>], buffer: &mut Vec<u8>) -> io::Result<()> {
+    pub fn merge_into<I, A>(slices: I, buffer: &mut Vec<u8>) -> io::Result<()>
+    where
+        I: IntoIterator<Item = A>,
+        A: AsRef<[u8]>,
+    {
         let mut roaring = RoaringBitmap::new();
         let mut vec = Vec::new();
 
         for bytes in slices {
-            if bytes.len() <= THRESHOLD * size_of::<u32>() {
+            if bytes.as_ref().len() <= THRESHOLD * size_of::<u32>() {
                 let mut reader = bytes.as_ref();
                 while let Ok(integer) = reader.read_u32::<NativeEndian>() {
                     vec.push(integer);
@@ -85,7 +91,7 @@ impl CboRoaringBitmapCodec {
                 }
             } else {
                 // We can unwrap safely because the vector is sorted upper.
-                let roaring = RoaringBitmap::from_sorted_iter(vec.into_iter()).unwrap();
+                let roaring = RoaringBitmap::from_sorted_iter(vec).unwrap();
                 roaring.serialize_into(buffer)?;
             }
         } else {
@@ -95,31 +101,58 @@ impl CboRoaringBitmapCodec {
 
         Ok(())
     }
+
+    /// Merges a DelAdd delta into a CboRoaringBitmap.
+    pub fn merge_deladd_into<'a>(
+        deladd: KvReaderDelAdd<'_>,
+        previous: &[u8],
+        buffer: &'a mut Vec<u8>,
+    ) -> io::Result<Option<&'a [u8]>> {
+        // Deserialize the bitmap that is already there
+        let mut previous = Self::deserialize_from(previous)?;
+
+        // Remove integers we no more want in the previous bitmap
+        if let Some(value) = deladd.get(DelAdd::Deletion) {
+            previous -= Self::deserialize_from(value)?;
+        }
+
+        // Insert the new integers we want in the previous bitmap
+        if let Some(value) = deladd.get(DelAdd::Addition) {
+            previous |= Self::deserialize_from(value)?;
+        }
+
+        if previous.is_empty() {
+            return Ok(None);
+        }
+
+        Self::serialize_into(&previous, buffer);
+        Ok(Some(&buffer[..]))
+    }
 }
 
 impl heed::BytesDecode<'_> for CboRoaringBitmapCodec {
     type DItem = RoaringBitmap;
 
-    fn bytes_decode(bytes: &[u8]) -> Option<Self::DItem> {
-        Self::deserialize_from(bytes).ok()
+    fn bytes_decode(bytes: &[u8]) -> Result<Self::DItem, BoxedError> {
+        Self::deserialize_from(bytes).map_err(Into::into)
     }
 }
 
 impl BytesDecodeOwned for CboRoaringBitmapCodec {
     type DItem = RoaringBitmap;
 
-    fn bytes_decode_owned(bytes: &[u8]) -> Option<Self::DItem> {
-        Self::deserialize_from(bytes).ok()
+    fn bytes_decode_owned(bytes: &[u8]) -> Result<Self::DItem, BoxedError> {
+        Self::deserialize_from(bytes).map_err(Into::into)
     }
 }
 
 impl heed::BytesEncode<'_> for CboRoaringBitmapCodec {
     type EItem = RoaringBitmap;
 
-    fn bytes_encode(item: &Self::EItem) -> Option<Cow<[u8]>> {
+    fn bytes_encode(item: &Self::EItem) -> Result<Cow<[u8]>, BoxedError> {
         let mut vec = Vec::with_capacity(Self::serialized_size(item));
         Self::serialize_into(item, &mut vec);
-        Some(Cow::Owned(vec))
+        Ok(Cow::Owned(vec))
     }
 }
 

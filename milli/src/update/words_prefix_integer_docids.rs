@@ -2,21 +2,23 @@ use std::collections::{HashMap, HashSet};
 use std::str;
 
 use grenad::CompressionType;
-use heed::types::ByteSlice;
+use heed::types::Bytes;
 use heed::{BytesDecode, BytesEncode, Database};
 use log::debug;
 
 use crate::error::SerializationError;
 use crate::heed_codec::StrBEU16Codec;
 use crate::index::main_key::WORDS_PREFIXES_FST_KEY;
+use crate::update::del_add::{deladd_serialize_add_side, DelAdd, KvWriterDelAdd};
 use crate::update::index_documents::{
-    create_sorter, merge_cbo_roaring_bitmaps, sorter_into_lmdb_database, valid_lmdb_key,
-    CursorClonableMmap, MergeFn,
+    create_sorter, merge_deladd_cbo_roaring_bitmaps,
+    merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, valid_lmdb_key,
+    write_sorter_into_database, CursorClonableMmap, MergeFn,
 };
 use crate::{CboRoaringBitmapCodec, Result};
 
-pub struct WordPrefixIntegerDocids<'t, 'u, 'i> {
-    wtxn: &'t mut heed::RwTxn<'i, 'u>,
+pub struct WordPrefixIntegerDocids<'t, 'i> {
+    wtxn: &'t mut heed::RwTxn<'i>,
     prefix_database: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
     word_database: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
     pub(crate) chunk_compression_type: CompressionType,
@@ -25,12 +27,12 @@ pub struct WordPrefixIntegerDocids<'t, 'u, 'i> {
     pub(crate) max_memory: Option<usize>,
 }
 
-impl<'t, 'u, 'i> WordPrefixIntegerDocids<'t, 'u, 'i> {
+impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
     pub fn new(
-        wtxn: &'t mut heed::RwTxn<'i, 'u>,
+        wtxn: &'t mut heed::RwTxn<'i>,
         prefix_database: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
         word_database: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
-    ) -> WordPrefixIntegerDocids<'t, 'u, 'i> {
+    ) -> WordPrefixIntegerDocids<'t, 'i> {
         WordPrefixIntegerDocids {
             wtxn,
             prefix_database,
@@ -55,7 +57,7 @@ impl<'t, 'u, 'i> WordPrefixIntegerDocids<'t, 'u, 'i> {
 
         let mut prefix_integer_docids_sorter = create_sorter(
             grenad::SortAlgorithm::Unstable,
-            merge_cbo_roaring_bitmaps,
+            merge_deladd_cbo_roaring_bitmaps,
             self.chunk_compression_type,
             self.chunk_compression_level,
             self.max_nb_chunks,
@@ -70,7 +72,8 @@ impl<'t, 'u, 'i> WordPrefixIntegerDocids<'t, 'u, 'i> {
             let mut current_prefixes: Option<&&[String]> = None;
             let mut prefixes_cache = HashMap::new();
             while let Some((key, data)) = new_word_integer_docids_iter.move_on_next()? {
-                let (word, pos) = StrBEU16Codec::bytes_decode(key).ok_or(heed::Error::Decoding)?;
+                let (word, pos) =
+                    StrBEU16Codec::bytes_decode(key).map_err(heed::Error::Decoding)?;
 
                 current_prefixes = match current_prefixes.take() {
                     Some(prefixes) if word.starts_with(&prefixes[0]) => Some(prefixes),
@@ -107,7 +110,8 @@ impl<'t, 'u, 'i> WordPrefixIntegerDocids<'t, 'u, 'i> {
         }
 
         // We fetch the docids associated to the newly added word prefix fst only.
-        let db = self.word_database.remap_data_type::<ByteSlice>();
+        let db = self.word_database.remap_data_type::<Bytes>();
+        let mut buffer = Vec::new();
         for prefix_bytes in new_prefix_fst_words {
             let prefix = str::from_utf8(prefix_bytes.as_bytes()).map_err(|_| {
                 SerializationError::Decoding { db_name: Some(WORDS_PREFIXES_FST_KEY) }
@@ -115,7 +119,7 @@ impl<'t, 'u, 'i> WordPrefixIntegerDocids<'t, 'u, 'i> {
 
             // iter over all lines of the DB where the key is prefixed by the current prefix.
             let iter = db
-                .remap_key_type::<ByteSlice>()
+                .remap_key_type::<Bytes>()
                 .prefix_iter(self.wtxn, prefix_bytes.as_bytes())?
                 .remap_key_type::<StrBEU16Codec>();
             for result in iter {
@@ -123,7 +127,11 @@ impl<'t, 'u, 'i> WordPrefixIntegerDocids<'t, 'u, 'i> {
                 if word.starts_with(prefix) {
                     let key = (prefix, pos);
                     let bytes = StrBEU16Codec::bytes_encode(&key).unwrap();
-                    prefix_integer_docids_sorter.insert(bytes, data)?;
+
+                    buffer.clear();
+                    let mut writer = KvWriterDelAdd::new(&mut buffer);
+                    writer.insert(DelAdd::Addition, data)?;
+                    prefix_integer_docids_sorter.insert(bytes, writer.into_inner()?)?;
                 }
             }
         }
@@ -143,12 +151,16 @@ impl<'t, 'u, 'i> WordPrefixIntegerDocids<'t, 'u, 'i> {
             drop(iter);
         }
 
+        let database_is_empty = self.prefix_database.is_empty(self.wtxn)?;
+
         // We finally write all the word prefix integer docids into the LMDB database.
-        sorter_into_lmdb_database(
-            self.wtxn,
-            *self.prefix_database.as_polymorph(),
+        write_sorter_into_database(
             prefix_integer_docids_sorter,
-            merge_cbo_roaring_bitmaps,
+            &self.prefix_database,
+            self.wtxn,
+            database_is_empty,
+            deladd_serialize_add_side,
+            merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
         )?;
 
         Ok(())
@@ -159,6 +171,7 @@ fn write_prefixes_in_sorter(
     prefixes: &mut HashMap<Vec<u8>, Vec<Vec<u8>>>,
     sorter: &mut grenad::Sorter<MergeFn>,
 ) -> Result<()> {
+    // TODO: Merge before insertion.
     for (key, data_slices) in prefixes.drain() {
         for data in data_slices {
             if valid_lmdb_key(&key) {

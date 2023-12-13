@@ -3,16 +3,17 @@ use std::collections::hash_map::Entry;
 use std::hash::Hash;
 
 use fxhash::FxHashMap;
-use heed::types::ByteSlice;
+use heed::types::Bytes;
 use heed::{BytesEncode, Database, RoTxn};
 use roaring::RoaringBitmap;
 
 use super::interner::Interned;
 use super::Word;
 use crate::heed_codec::{BytesDecodeOwned, StrBEU16Codec};
+use crate::proximity::ProximityPrecision;
 use crate::update::{merge_cbo_roaring_bitmaps, MergeFn};
 use crate::{
-    CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, Result, RoaringBitmapCodec, SearchContext,
+    CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, Result, SearchContext, U8StrStrCodec,
 };
 
 /// A cache storing pointers to values in the LMDB databases.
@@ -25,7 +26,7 @@ pub struct DatabaseCache<'ctx> {
     pub word_pair_proximity_docids:
         FxHashMap<(u8, Interned<String>, Interned<String>), Option<Cow<'ctx, [u8]>>>,
     pub word_prefix_pair_proximity_docids:
-        FxHashMap<(u8, Interned<String>, Interned<String>), Option<Cow<'ctx, [u8]>>>,
+        FxHashMap<(u8, Interned<String>, Interned<String>), Option<RoaringBitmap>>,
     pub prefix_word_pair_proximity_docids:
         FxHashMap<(u8, Interned<String>, Interned<String>), Option<Cow<'ctx, [u8]>>>,
     pub word_docids: FxHashMap<Interned<String>, Option<Cow<'ctx, [u8]>>>,
@@ -50,7 +51,7 @@ impl<'ctx> DatabaseCache<'ctx> {
         cache_key: K1,
         db_key: &'v KC::EItem,
         cache: &mut FxHashMap<K1, Option<Cow<'ctx, [u8]>>>,
-        db: Database<KC, ByteSlice>,
+        db: Database<KC, Bytes>,
     ) -> Result<Option<DC::DItem>>
     where
         K1: Copy + Eq + Hash,
@@ -63,12 +64,14 @@ impl<'ctx> DatabaseCache<'ctx> {
         }
 
         match cache.get(&cache_key).unwrap() {
-            Some(Cow::Borrowed(bytes)) => {
-                DC::bytes_decode_owned(bytes).ok_or(heed::Error::Decoding.into()).map(Some)
-            }
-            Some(Cow::Owned(bytes)) => {
-                DC::bytes_decode_owned(bytes).ok_or(heed::Error::Decoding.into()).map(Some)
-            }
+            Some(Cow::Borrowed(bytes)) => DC::bytes_decode_owned(bytes)
+                .map(Some)
+                .map_err(heed::Error::Decoding)
+                .map_err(Into::into),
+            Some(Cow::Owned(bytes)) => DC::bytes_decode_owned(bytes)
+                .map(Some)
+                .map_err(heed::Error::Decoding)
+                .map_err(Into::into),
             None => Ok(None),
         }
     }
@@ -78,7 +81,7 @@ impl<'ctx> DatabaseCache<'ctx> {
         cache_key: K1,
         db_keys: &'v [KC::EItem],
         cache: &mut FxHashMap<K1, Option<Cow<'ctx, [u8]>>>,
-        db: Database<KC, ByteSlice>,
+        db: Database<KC, Bytes>,
         merger: MergeFn,
     ) -> Result<Option<DC::DItem>>
     where
@@ -110,12 +113,14 @@ impl<'ctx> DatabaseCache<'ctx> {
         }
 
         match cache.get(&cache_key).unwrap() {
-            Some(Cow::Borrowed(bytes)) => {
-                DC::bytes_decode_owned(bytes).ok_or(heed::Error::Decoding.into()).map(Some)
-            }
-            Some(Cow::Owned(bytes)) => {
-                DC::bytes_decode_owned(bytes).ok_or(heed::Error::Decoding.into()).map(Some)
-            }
+            Some(Cow::Borrowed(bytes)) => DC::bytes_decode_owned(bytes)
+                .map(Some)
+                .map_err(heed::Error::Decoding)
+                .map_err(Into::into),
+            Some(Cow::Owned(bytes)) => DC::bytes_decode_owned(bytes)
+                .map(Some)
+                .map_err(heed::Error::Decoding)
+                .map_err(Into::into),
             None => Ok(None),
         }
     }
@@ -165,16 +170,16 @@ impl<'ctx> SearchContext<'ctx> {
                     word,
                     &keys[..],
                     &mut self.db_cache.word_docids,
-                    self.index.word_fid_docids.remap_data_type::<ByteSlice>(),
+                    self.index.word_fid_docids.remap_data_type::<Bytes>(),
                     merge_cbo_roaring_bitmaps,
                 )
             }
-            None => DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
+            None => DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
                 self.txn,
                 word,
                 self.word_interner.get(word).as_str(),
                 &mut self.db_cache.word_docids,
-                self.index.word_docids.remap_data_type::<ByteSlice>(),
+                self.index.word_docids.remap_data_type::<Bytes>(),
             ),
         }
     }
@@ -194,16 +199,16 @@ impl<'ctx> SearchContext<'ctx> {
                     word,
                     &keys[..],
                     &mut self.db_cache.exact_word_docids,
-                    self.index.word_fid_docids.remap_data_type::<ByteSlice>(),
+                    self.index.word_fid_docids.remap_data_type::<Bytes>(),
                     merge_cbo_roaring_bitmaps,
                 )
             }
-            None => DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
+            None => DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
                 self.txn,
                 word,
                 self.word_interner.get(word).as_str(),
                 &mut self.db_cache.exact_word_docids,
-                self.index.exact_word_docids.remap_data_type::<ByteSlice>(),
+                self.index.exact_word_docids.remap_data_type::<Bytes>(),
             ),
         }
     }
@@ -244,16 +249,16 @@ impl<'ctx> SearchContext<'ctx> {
                     prefix,
                     &keys[..],
                     &mut self.db_cache.word_prefix_docids,
-                    self.index.word_prefix_fid_docids.remap_data_type::<ByteSlice>(),
+                    self.index.word_prefix_fid_docids.remap_data_type::<Bytes>(),
                     merge_cbo_roaring_bitmaps,
                 )
             }
-            None => DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
+            None => DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
                 self.txn,
                 prefix,
                 self.word_interner.get(prefix).as_str(),
                 &mut self.db_cache.word_prefix_docids,
-                self.index.word_prefix_docids.remap_data_type::<ByteSlice>(),
+                self.index.word_prefix_docids.remap_data_type::<Bytes>(),
             ),
         }
     }
@@ -273,16 +278,16 @@ impl<'ctx> SearchContext<'ctx> {
                     prefix,
                     &keys[..],
                     &mut self.db_cache.exact_word_prefix_docids,
-                    self.index.word_prefix_fid_docids.remap_data_type::<ByteSlice>(),
+                    self.index.word_prefix_fid_docids.remap_data_type::<Bytes>(),
                     merge_cbo_roaring_bitmaps,
                 )
             }
-            None => DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
+            None => DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
                 self.txn,
                 prefix,
                 self.word_interner.get(prefix).as_str(),
                 &mut self.db_cache.exact_word_prefix_docids,
-                self.index.exact_word_prefix_docids.remap_data_type::<ByteSlice>(),
+                self.index.exact_word_prefix_docids.remap_data_type::<Bytes>(),
             ),
         }
     }
@@ -293,17 +298,67 @@ impl<'ctx> SearchContext<'ctx> {
         word2: Interned<String>,
         proximity: u8,
     ) -> Result<Option<RoaringBitmap>> {
-        DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
-            self.txn,
-            (proximity, word1, word2),
-            &(
-                proximity,
-                self.word_interner.get(word1).as_str(),
-                self.word_interner.get(word2).as_str(),
-            ),
-            &mut self.db_cache.word_pair_proximity_docids,
-            self.index.word_pair_proximity_docids.remap_data_type::<ByteSlice>(),
-        )
+        match self.index.proximity_precision(self.txn)?.unwrap_or_default() {
+            ProximityPrecision::AttributeScale => {
+                // Force proximity to 0 because:
+                // in AttributeScale, there are only 2 possible distances:
+                // 1. words in same attribute: in that the DB contains (0, word1, word2)
+                // 2. words in different attributes: no DB entry for these two words.
+                let proximity = 0;
+                let docids = if let Some(docids) =
+                    self.db_cache.word_pair_proximity_docids.get(&(proximity, word1, word2))
+                {
+                    docids
+                        .as_ref()
+                        .map(|d| CboRoaringBitmapCodec::bytes_decode_owned(d))
+                        .transpose()
+                        .map_err(heed::Error::Decoding)?
+                } else {
+                    // Compute the distance at the attribute level and store it in the cache.
+                    let fids = if let Some(fids) = self.index.searchable_fields_ids(self.txn)? {
+                        fids
+                    } else {
+                        self.index.fields_ids_map(self.txn)?.ids().collect()
+                    };
+                    let mut docids = RoaringBitmap::new();
+                    for fid in fids {
+                        // for each field, intersect left word bitmap and right word bitmap,
+                        // then merge the result in a global bitmap before storing it in the cache.
+                        let word1_docids = self.get_db_word_fid_docids(word1, fid)?;
+                        let word2_docids = self.get_db_word_fid_docids(word2, fid)?;
+                        if let (Some(word1_docids), Some(word2_docids)) =
+                            (word1_docids, word2_docids)
+                        {
+                            docids |= word1_docids & word2_docids;
+                        }
+                    }
+                    let encoded = CboRoaringBitmapCodec::bytes_encode(&docids)
+                        .map(Cow::into_owned)
+                        .map(Cow::Owned)
+                        .map(Some)
+                        .map_err(heed::Error::Decoding)?;
+                    self.db_cache
+                        .word_pair_proximity_docids
+                        .insert((proximity, word1, word2), encoded);
+                    Some(docids)
+                };
+
+                Ok(docids)
+            }
+            ProximityPrecision::WordScale => {
+                DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
+                    self.txn,
+                    (proximity, word1, word2),
+                    &(
+                        proximity,
+                        self.word_interner.get(word1).as_str(),
+                        self.word_interner.get(word2).as_str(),
+                    ),
+                    &mut self.db_cache.word_pair_proximity_docids,
+                    self.index.word_pair_proximity_docids.remap_data_type::<Bytes>(),
+                )
+            }
+        }
     }
 
     pub fn get_db_word_pair_proximity_docids_len(
@@ -312,54 +367,107 @@ impl<'ctx> SearchContext<'ctx> {
         word2: Interned<String>,
         proximity: u8,
     ) -> Result<Option<u64>> {
-        DatabaseCache::get_value::<_, _, CboRoaringBitmapLenCodec>(
-            self.txn,
-            (proximity, word1, word2),
-            &(
-                proximity,
-                self.word_interner.get(word1).as_str(),
-                self.word_interner.get(word2).as_str(),
-            ),
-            &mut self.db_cache.word_pair_proximity_docids,
-            self.index.word_pair_proximity_docids.remap_data_type::<ByteSlice>(),
-        )
+        match self.index.proximity_precision(self.txn)?.unwrap_or_default() {
+            ProximityPrecision::AttributeScale => Ok(self
+                .get_db_word_pair_proximity_docids(word1, word2, proximity)?
+                .map(|d| d.len())),
+            ProximityPrecision::WordScale => {
+                DatabaseCache::get_value::<_, _, CboRoaringBitmapLenCodec>(
+                    self.txn,
+                    (proximity, word1, word2),
+                    &(
+                        proximity,
+                        self.word_interner.get(word1).as_str(),
+                        self.word_interner.get(word2).as_str(),
+                    ),
+                    &mut self.db_cache.word_pair_proximity_docids,
+                    self.index.word_pair_proximity_docids.remap_data_type::<Bytes>(),
+                )
+            }
+        }
     }
 
     pub fn get_db_word_prefix_pair_proximity_docids(
         &mut self,
         word1: Interned<String>,
         prefix2: Interned<String>,
-        proximity: u8,
+        mut proximity: u8,
     ) -> Result<Option<RoaringBitmap>> {
-        DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
-            self.txn,
-            (proximity, word1, prefix2),
-            &(
-                proximity,
-                self.word_interner.get(word1).as_str(),
-                self.word_interner.get(prefix2).as_str(),
-            ),
-            &mut self.db_cache.word_prefix_pair_proximity_docids,
-            self.index.word_prefix_pair_proximity_docids.remap_data_type::<ByteSlice>(),
-        )
+        let proximity_precision = self.index.proximity_precision(self.txn)?.unwrap_or_default();
+        if proximity_precision == ProximityPrecision::AttributeScale {
+            // Force proximity to 0 because:
+            // in AttributeScale, there are only 2 possible distances:
+            // 1. words in same attribute: in that the DB contains (0, word1, word2)
+            // 2. words in different attributes: no DB entry for these two words.
+            proximity = 0;
+        }
+
+        let docids = if let Some(docids) =
+            self.db_cache.word_prefix_pair_proximity_docids.get(&(proximity, word1, prefix2))
+        {
+            docids.clone()
+        } else {
+            let prefix_docids = match proximity_precision {
+                ProximityPrecision::AttributeScale => {
+                    // Compute the distance at the attribute level and store it in the cache.
+                    let fids = if let Some(fids) = self.index.searchable_fields_ids(self.txn)? {
+                        fids
+                    } else {
+                        self.index.fields_ids_map(self.txn)?.ids().collect()
+                    };
+                    let mut prefix_docids = RoaringBitmap::new();
+                    // for each field, intersect left word bitmap and right word bitmap,
+                    // then merge the result in a global bitmap before storing it in the cache.
+                    for fid in fids {
+                        let word1_docids = self.get_db_word_fid_docids(word1, fid)?;
+                        let prefix2_docids = self.get_db_word_prefix_fid_docids(prefix2, fid)?;
+                        if let (Some(word1_docids), Some(prefix2_docids)) =
+                            (word1_docids, prefix2_docids)
+                        {
+                            prefix_docids |= word1_docids & prefix2_docids;
+                        }
+                    }
+                    prefix_docids
+                }
+                ProximityPrecision::WordScale => {
+                    // compute docids using prefix iter and store the result in the cache.
+                    let key = U8StrStrCodec::bytes_encode(&(
+                        proximity,
+                        self.word_interner.get(word1).as_str(),
+                        self.word_interner.get(prefix2).as_str(),
+                    ))
+                    .unwrap()
+                    .into_owned();
+                    let mut prefix_docids = RoaringBitmap::new();
+                    let remap_key_type = self
+                        .index
+                        .word_pair_proximity_docids
+                        .remap_key_type::<Bytes>()
+                        .prefix_iter(self.txn, &key)?;
+                    for result in remap_key_type {
+                        let (_, docids) = result?;
+
+                        prefix_docids |= docids;
+                    }
+                    prefix_docids
+                }
+            };
+            self.db_cache
+                .word_prefix_pair_proximity_docids
+                .insert((proximity, word1, prefix2), Some(prefix_docids.clone()));
+            Some(prefix_docids)
+        };
+        Ok(docids)
     }
+
     pub fn get_db_prefix_word_pair_proximity_docids(
         &mut self,
         left_prefix: Interned<String>,
         right: Interned<String>,
         proximity: u8,
     ) -> Result<Option<RoaringBitmap>> {
-        DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
-            self.txn,
-            (proximity, left_prefix, right),
-            &(
-                proximity,
-                self.word_interner.get(left_prefix).as_str(),
-                self.word_interner.get(right).as_str(),
-            ),
-            &mut self.db_cache.prefix_word_pair_proximity_docids,
-            self.index.prefix_word_pair_proximity_docids.remap_data_type::<ByteSlice>(),
-        )
+        // only accept exact matches on reverted positions
+        self.get_db_word_pair_proximity_docids(left_prefix, right, proximity)
     }
 
     pub fn get_db_word_fid_docids(
@@ -377,7 +485,7 @@ impl<'ctx> SearchContext<'ctx> {
             (word, fid),
             &(self.word_interner.get(word).as_str(), fid),
             &mut self.db_cache.word_fid_docids,
-            self.index.word_fid_docids.remap_data_type::<ByteSlice>(),
+            self.index.word_fid_docids.remap_data_type::<Bytes>(),
         )
     }
 
@@ -396,7 +504,7 @@ impl<'ctx> SearchContext<'ctx> {
             (word_prefix, fid),
             &(self.word_interner.get(word_prefix).as_str(), fid),
             &mut self.db_cache.word_prefix_fid_docids,
-            self.index.word_prefix_fid_docids.remap_data_type::<ByteSlice>(),
+            self.index.word_prefix_fid_docids.remap_data_type::<Bytes>(),
         )
     }
 
@@ -410,7 +518,7 @@ impl<'ctx> SearchContext<'ctx> {
                 let remap_key_type = self
                     .index
                     .word_fid_docids
-                    .remap_types::<ByteSlice, ByteSlice>()
+                    .remap_types::<Bytes, Bytes>()
                     .prefix_iter(self.txn, &key)?
                     .remap_key_type::<StrBEU16Codec>();
                 for result in remap_key_type {
@@ -436,7 +544,7 @@ impl<'ctx> SearchContext<'ctx> {
                 let remap_key_type = self
                     .index
                     .word_prefix_fid_docids
-                    .remap_types::<ByteSlice, ByteSlice>()
+                    .remap_types::<Bytes, Bytes>()
                     .prefix_iter(self.txn, &key)?
                     .remap_key_type::<StrBEU16Codec>();
                 for result in remap_key_type {
@@ -464,7 +572,7 @@ impl<'ctx> SearchContext<'ctx> {
             (word, position),
             &(self.word_interner.get(word).as_str(), position),
             &mut self.db_cache.word_position_docids,
-            self.index.word_position_docids.remap_data_type::<ByteSlice>(),
+            self.index.word_position_docids.remap_data_type::<Bytes>(),
         )
     }
 
@@ -478,7 +586,7 @@ impl<'ctx> SearchContext<'ctx> {
             (word_prefix, position),
             &(self.word_interner.get(word_prefix).as_str(), position),
             &mut self.db_cache.word_prefix_position_docids,
-            self.index.word_prefix_position_docids.remap_data_type::<ByteSlice>(),
+            self.index.word_prefix_position_docids.remap_data_type::<Bytes>(),
         )
     }
 
@@ -492,7 +600,7 @@ impl<'ctx> SearchContext<'ctx> {
                 let remap_key_type = self
                     .index
                     .word_position_docids
-                    .remap_types::<ByteSlice, ByteSlice>()
+                    .remap_types::<Bytes, Bytes>()
                     .prefix_iter(self.txn, &key)?
                     .remap_key_type::<StrBEU16Codec>();
                 for result in remap_key_type {
@@ -523,7 +631,7 @@ impl<'ctx> SearchContext<'ctx> {
                 let remap_key_type = self
                     .index
                     .word_prefix_position_docids
-                    .remap_types::<ByteSlice, ByteSlice>()
+                    .remap_types::<Bytes, Bytes>()
                     .prefix_iter(self.txn, &key)?
                     .remap_key_type::<StrBEU16Codec>();
                 for result in remap_key_type {

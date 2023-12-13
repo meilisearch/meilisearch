@@ -51,6 +51,8 @@ const MEILI_LOG_LEVEL: &str = "MEILI_LOG_LEVEL";
 const MEILI_EXPERIMENTAL_ENABLE_METRICS: &str = "MEILI_EXPERIMENTAL_ENABLE_METRICS";
 const MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE: &str =
     "MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE";
+const MEILI_EXPERIMENTAL_MAX_NUMBER_OF_BATCHED_TASKS: &str =
+    "MEILI_EXPERIMENTAL_MAX_NUMBER_OF_BATCHED_TASKS";
 
 const DEFAULT_CONFIG_FILE_PATH: &str = "./config.toml";
 const DEFAULT_DB_PATH: &str = "./data.ms";
@@ -301,6 +303,11 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_reduce_indexing_memory_usage: bool,
 
+    /// Experimentally reduces the maximum number of tasks that will be processed at once, see: <https://github.com/orgs/meilisearch/discussions/713>
+    #[clap(long, env = MEILI_EXPERIMENTAL_MAX_NUMBER_OF_BATCHED_TASKS, default_value_t = default_limit_batched_tasks())]
+    #[serde(default = "default_limit_batched_tasks")]
+    pub experimental_max_number_of_batched_tasks: usize,
+
     #[serde(flatten)]
     #[clap(flatten)]
     pub indexer_options: IndexerOpts,
@@ -371,6 +378,7 @@ impl Opt {
             max_index_size: _,
             max_task_db_size: _,
             http_payload_size_limit,
+            experimental_max_number_of_batched_tasks,
             ssl_cert_path,
             ssl_key_path,
             ssl_auth_path,
@@ -392,8 +400,8 @@ impl Opt {
             config_file_path: _,
             #[cfg(feature = "analytics")]
             no_analytics,
-            experimental_enable_metrics: enable_metrics_route,
-            experimental_reduce_indexing_memory_usage: reduce_indexing_memory_usage,
+            experimental_enable_metrics,
+            experimental_reduce_indexing_memory_usage,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
         export_to_env_if_not_present(MEILI_HTTP_ADDR, http_addr);
@@ -408,6 +416,10 @@ impl Opt {
         export_to_env_if_not_present(
             MEILI_HTTP_PAYLOAD_SIZE_LIMIT,
             http_payload_size_limit.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_MAX_NUMBER_OF_BATCHED_TASKS,
+            experimental_max_number_of_batched_tasks.to_string(),
         );
         if let Some(ssl_cert_path) = ssl_cert_path {
             export_to_env_if_not_present(MEILI_SSL_CERT_PATH, ssl_cert_path);
@@ -433,11 +445,11 @@ impl Opt {
         export_to_env_if_not_present(MEILI_LOG_LEVEL, log_level.to_string());
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_ENABLE_METRICS,
-            enable_metrics_route.to_string(),
+            experimental_enable_metrics.to_string(),
         );
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE,
-            reduce_indexing_memory_usage.to_string(),
+            experimental_reduce_indexing_memory_usage.to_string(),
         );
         indexer_options.export_to_env();
     }
@@ -725,6 +737,10 @@ fn default_max_task_db_size() -> Byte {
 
 fn default_http_payload_size_limit() -> Byte {
     Byte::from_str(DEFAULT_HTTP_PAYLOAD_SIZE_LIMIT).unwrap()
+}
+
+fn default_limit_batched_tasks() -> usize {
+    usize::MAX
 }
 
 fn default_snapshot_dir() -> PathBuf {

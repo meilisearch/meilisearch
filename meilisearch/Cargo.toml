@@ -39,7 +39,7 @@ byte-unit = { version = "4.0.19", default-features = false, features = [
 bytes = "1.4.0"
 clap = { version = "4.2.1", features = ["derive", "env"] }
 crossbeam-channel = "0.5.8"
-deserr = { version = "0.6.0", features = ["actix-web"]}
+deserr = { version = "0.6.0", features = ["actix-web"] }
 dump = { path = "../dump" }
 either = "1.8.1"
 env_logger = "0.10.0"

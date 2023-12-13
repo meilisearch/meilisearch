@@ -52,7 +52,6 @@ use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::apply_distinct_rule;
 use crate::{
     AscDesc, DocumentId, FieldId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError,
-    BEU32,
 };
 
 /// A structure used throughout the execution of a search query.
@@ -469,8 +468,8 @@ pub fn execute_search(
                 let mut docids = Vec::new();
                 let mut uniq_docids = RoaringBitmap::new();
                 for instant_distance::Item { distance: _, pid, point: _ } in neighbors {
-                    let index = BEU32::new(pid.into_inner());
-                    let docid = ctx.index.vector_id_docid.get(ctx.txn, &index)?.unwrap().get();
+                    let index = pid.into_inner();
+                    let docid = ctx.index.vector_id_docid.get(ctx.txn, &index)?.unwrap();
                     if universe.contains(docid) && uniq_docids.insert(docid) {
                         docids.push(docid);
                         if docids.len() == (from + length) {
@@ -627,7 +626,8 @@ fn check_sort_criteria(ctx: &SearchContext, sort_criteria: Option<&Vec<AscDesc>>
                     field: field.to_string(),
                     valid_fields,
                     hidden_fields,
-                })?;
+                }
+                .into());
             }
             Member::Geo(_) if !sortable_fields.contains("_geo") => {
                 let (valid_fields, hidden_fields) =
@@ -637,7 +637,8 @@ fn check_sort_criteria(ctx: &SearchContext, sort_criteria: Option<&Vec<AscDesc>>
                     field: "_geo".to_string(),
                     valid_fields,
                     hidden_fields,
-                })?;
+                }
+                .into());
             }
             _ => (),
         }

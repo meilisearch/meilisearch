@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::iter::FromIterator;
 
-use heed::types::{ByteSlice, Unit};
+use heed::types::{Bytes, Unit};
 use heed::{RoPrefix, RoTxn};
 use roaring::RoaringBitmap;
 use rstar::RTree;
@@ -34,7 +34,7 @@ fn facet_number_values<'a>(
 
     let iter = index
         .field_id_docid_facet_f64s
-        .remap_key_type::<ByteSlice>()
+        .remap_key_type::<Bytes>()
         .prefix_iter(txn, &key)?
         .remap_key_type();
 
@@ -163,7 +163,7 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
             // computing the distance between two points is expensive thus we cache the result
             documents
                 .sort_by_cached_key(|(_, p)| distance_between_two_points(&self.point, p) as usize);
-            self.cached_sorted_docids.extend(documents.into_iter());
+            self.cached_sorted_docids.extend(documents);
         };
 
         Ok(())

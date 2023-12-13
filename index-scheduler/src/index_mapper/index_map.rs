@@ -1,12 +1,8 @@
-/// the map size to use when we don't succeed in reading it in indexes.
-const DEFAULT_MAP_SIZE: usize = 10 * 1024 * 1024 * 1024; // 10 GiB
-
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::Duration;
 
-use meilisearch_types::heed::flags::Flags;
-use meilisearch_types::heed::{EnvClosingEvent, EnvOpenOptions};
+use meilisearch_types::heed::{EnvClosingEvent, EnvFlags, EnvOpenOptions};
 use meilisearch_types::milli::Index;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -236,7 +232,7 @@ impl IndexMap {
         enable_mdb_writemap: bool,
         map_size_growth: usize,
     ) {
-        let map_size = index.map_size().unwrap_or(DEFAULT_MAP_SIZE) + map_size_growth;
+        let map_size = index.map_size() + map_size_growth;
         let closing_event = index.prepare_for_closing();
         let generation = self.next_generation();
         self.unavailable.insert(
@@ -309,7 +305,7 @@ fn create_or_open_index(
     options.map_size(clamp_to_page_size(map_size));
     options.max_readers(1024);
     if enable_mdb_writemap {
-        unsafe { options.flag(Flags::MdbWriteMap) };
+        unsafe { options.flags(EnvFlags::WRITE_MAP) };
     }
 
     if let Some((created, updated)) = date {
@@ -388,7 +384,7 @@ mod tests {
 
     fn assert_index_size(index: Index, expected: usize) {
         let expected = clamp_to_page_size(expected);
-        let index_map_size = index.map_size().unwrap();
+        let index_map_size = index.map_size();
         assert_eq!(index_map_size, expected);
     }
 }

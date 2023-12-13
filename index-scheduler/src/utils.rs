@@ -3,9 +3,9 @@
 use std::collections::{BTreeSet, HashSet};
 use std::ops::Bound;
 
-use meilisearch_types::heed::types::{DecodeIgnore, OwnedType};
+use meilisearch_types::heed::types::DecodeIgnore;
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
-use meilisearch_types::milli::{CboRoaringBitmapCodec, BEU32};
+use meilisearch_types::milli::CboRoaringBitmapCodec;
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status};
 use roaring::{MultiOps, RoaringBitmap};
 use time::OffsetDateTime;
@@ -18,7 +18,7 @@ impl IndexScheduler {
     }
 
     pub(crate) fn last_task_id(&self, rtxn: &RoTxn) -> Result<Option<TaskId>> {
-        Ok(self.all_tasks.remap_data_type::<DecodeIgnore>().last(rtxn)?.map(|(k, _)| k.get() + 1))
+        Ok(self.all_tasks.remap_data_type::<DecodeIgnore>().last(rtxn)?.map(|(k, _)| k + 1))
     }
 
     pub(crate) fn next_task_id(&self, rtxn: &RoTxn) -> Result<TaskId> {
@@ -26,7 +26,7 @@ impl IndexScheduler {
     }
 
     pub(crate) fn get_task(&self, rtxn: &RoTxn, task_id: TaskId) -> Result<Option<Task>> {
-        Ok(self.all_tasks.get(rtxn, &BEU32::new(task_id))?)
+        Ok(self.all_tasks.get(rtxn, &task_id)?)
     }
 
     /// Convert an iterator to a `Vec` of tasks. The tasks MUST exist or a
@@ -88,7 +88,7 @@ impl IndexScheduler {
             }
         }
 
-        self.all_tasks.put(wtxn, &BEU32::new(task.uid), task)?;
+        self.all_tasks.put(wtxn, &task.uid, task)?;
         Ok(())
     }
 
@@ -169,11 +169,11 @@ impl IndexScheduler {
 
 pub(crate) fn insert_task_datetime(
     wtxn: &mut RwTxn,
-    database: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
+    database: Database<BEI128, CboRoaringBitmapCodec>,
     time: OffsetDateTime,
     task_id: TaskId,
 ) -> Result<()> {
-    let timestamp = BEI128::new(time.unix_timestamp_nanos());
+    let timestamp = time.unix_timestamp_nanos();
     let mut task_ids = database.get(wtxn, &timestamp)?.unwrap_or_default();
     task_ids.insert(task_id);
     database.put(wtxn, &timestamp, &RoaringBitmap::from_iter(task_ids))?;
@@ -182,11 +182,11 @@ pub(crate) fn insert_task_datetime(
 
 pub(crate) fn remove_task_datetime(
     wtxn: &mut RwTxn,
-    database: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
+    database: Database<BEI128, CboRoaringBitmapCodec>,
     time: OffsetDateTime,
     task_id: TaskId,
 ) -> Result<()> {
-    let timestamp = BEI128::new(time.unix_timestamp_nanos());
+    let timestamp = time.unix_timestamp_nanos();
     if let Some(mut existing) = database.get(wtxn, &timestamp)? {
         existing.remove(task_id);
         if existing.is_empty() {
@@ -202,7 +202,7 @@ pub(crate) fn remove_task_datetime(
 pub(crate) fn keep_tasks_within_datetimes(
     rtxn: &RoTxn,
     tasks: &mut RoaringBitmap,
-    database: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
+    database: Database<BEI128, CboRoaringBitmapCodec>,
     after: Option<OffsetDateTime>,
     before: Option<OffsetDateTime>,
 ) -> Result<()> {
@@ -213,8 +213,8 @@ pub(crate) fn keep_tasks_within_datetimes(
         (Some(after), Some(before)) => (Bound::Excluded(*after), Bound::Excluded(*before)),
     };
     let mut collected_task_ids = RoaringBitmap::new();
-    let start = map_bound(start, |b| BEI128::new(b.unix_timestamp_nanos()));
-    let end = map_bound(end, |b| BEI128::new(b.unix_timestamp_nanos()));
+    let start = map_bound(start, |b| b.unix_timestamp_nanos());
+    let end = map_bound(end, |b| b.unix_timestamp_nanos());
     let iter = database.range(rtxn, &(start, end))?;
     for r in iter {
         let (_timestamp, task_ids) = r?;
@@ -337,8 +337,6 @@ impl IndexScheduler {
         let rtxn = self.env.read_txn().unwrap();
         for task in self.all_tasks.iter(&rtxn).unwrap() {
             let (task_id, task) = task.unwrap();
-            let task_id = task_id.get();
-
             let task_index_uid = task.index_uid().map(ToOwned::to_owned);
 
             let Task {
@@ -361,16 +359,13 @@ impl IndexScheduler {
                     .unwrap()
                     .contains(task.uid));
             }
-            let db_enqueued_at = self
-                .enqueued_at
-                .get(&rtxn, &BEI128::new(enqueued_at.unix_timestamp_nanos()))
-                .unwrap()
-                .unwrap();
+            let db_enqueued_at =
+                self.enqueued_at.get(&rtxn, &enqueued_at.unix_timestamp_nanos()).unwrap().unwrap();
             assert!(db_enqueued_at.contains(task_id));
             if let Some(started_at) = started_at {
                 let db_started_at = self
                     .started_at
-                    .get(&rtxn, &BEI128::new(started_at.unix_timestamp_nanos()))
+                    .get(&rtxn, &started_at.unix_timestamp_nanos())
                     .unwrap()
                     .unwrap();
                 assert!(db_started_at.contains(task_id));
@@ -378,7 +373,7 @@ impl IndexScheduler {
             if let Some(finished_at) = finished_at {
                 let db_finished_at = self
                     .finished_at
-                    .get(&rtxn, &BEI128::new(finished_at.unix_timestamp_nanos()))
+                    .get(&rtxn, &finished_at.unix_timestamp_nanos())
                     .unwrap()
                     .unwrap();
                 assert!(db_finished_at.contains(task_id));

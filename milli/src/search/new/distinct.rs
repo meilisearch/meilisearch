@@ -1,4 +1,4 @@
-use heed::types::{ByteSlice, Str, Unit};
+use heed::types::{Bytes, Str, Unit};
 use heed::{Database, RoPrefix, RoTxn};
 use roaring::RoaringBitmap;
 
@@ -8,7 +8,7 @@ const DOCID_SIZE: usize = 4;
 use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetCodec,
 };
-use crate::heed_codec::ByteSliceRefCodec;
+use crate::heed_codec::BytesRefCodec;
 use crate::{Index, Result, SearchContext};
 
 pub struct DistinctOutput {
@@ -71,7 +71,7 @@ pub fn distinct_single_docid(
 
 /// Return all the docids containing the given value in the given field
 fn facet_value_docids(
-    database: Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
+    database: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     txn: &RoTxn,
     field_id: u16,
     facet_value: &[u8],
@@ -87,12 +87,12 @@ fn facet_number_values<'a>(
     field_id: u16,
     index: &Index,
     txn: &'a RoTxn,
-) -> Result<RoPrefix<'a, FieldDocIdFacetCodec<ByteSliceRefCodec>, Unit>> {
+) -> Result<RoPrefix<'a, FieldDocIdFacetCodec<BytesRefCodec>, Unit>> {
     let key = facet_values_prefix_key(field_id, docid);
 
     let iter = index
         .field_id_docid_facet_f64s
-        .remap_key_type::<ByteSlice>()
+        .remap_key_type::<Bytes>()
         .prefix_iter(txn, &key)?
         .remap_key_type();
 
@@ -105,12 +105,12 @@ pub fn facet_string_values<'a>(
     field_id: u16,
     index: &Index,
     txn: &'a RoTxn,
-) -> Result<RoPrefix<'a, FieldDocIdFacetCodec<ByteSliceRefCodec>, Str>> {
+) -> Result<RoPrefix<'a, FieldDocIdFacetCodec<BytesRefCodec>, Str>> {
     let key = facet_values_prefix_key(field_id, docid);
 
     let iter = index
         .field_id_docid_facet_strings
-        .remap_key_type::<ByteSlice>()
+        .remap_key_type::<Bytes>()
         .prefix_iter(txn, &key)?
         .remap_types();
 

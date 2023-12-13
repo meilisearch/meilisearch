@@ -7,7 +7,7 @@ use roaring::RoaringBitmap;
 
 use super::{get_first_facet_value, get_highest_level};
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec};
-use crate::heed_codec::ByteSliceRefCodec;
+use crate::heed_codec::BytesRefCodec;
 use crate::DocumentId;
 
 /// Call the given closure on the facet distribution of the candidate documents.
@@ -23,7 +23,7 @@ use crate::DocumentId;
 /// keep iterating over the different facet values or stop.
 pub fn lexicographically_iterate_over_facet_distribution<'t, CB>(
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
     candidates: &RoaringBitmap,
     callback: CB,
@@ -34,11 +34,11 @@ where
     let mut fd = LexicographicFacetDistribution { rtxn, db, field_id, callback };
     let highest_level = get_highest_level(
         rtxn,
-        db.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
+        db.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>(),
         field_id,
     )?;
 
-    if let Some(first_bound) = get_first_facet_value::<ByteSliceRefCodec>(rtxn, db, field_id)? {
+    if let Some(first_bound) = get_first_facet_value::<BytesRefCodec>(rtxn, db, field_id)? {
         fd.iterate(candidates, highest_level, first_bound, usize::MAX)?;
         Ok(())
     } else {
@@ -48,7 +48,7 @@ where
 
 pub fn count_iterate_over_facet_distribution<'t, CB>(
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
     candidates: &RoaringBitmap,
     mut callback: CB,
@@ -77,11 +77,11 @@ where
     let mut heap = BinaryHeap::new();
     let highest_level = get_highest_level(
         rtxn,
-        db.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
+        db.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>(),
         field_id,
     )?;
 
-    if let Some(first_bound) = get_first_facet_value::<ByteSliceRefCodec>(rtxn, db, field_id)? {
+    if let Some(first_bound) = get_first_facet_value::<BytesRefCodec>(rtxn, db, field_id)? {
         // We first fill the heap with values from the highest level
         let starting_key =
             FacetGroupKey { field_id, level: highest_level, left_bound: first_bound };
@@ -146,7 +146,7 @@ where
     CB: FnMut(&'t [u8], u64, DocumentId) -> Result<ControlFlow<()>>,
 {
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
     callback: CB,
 }

@@ -59,6 +59,7 @@ async fn import_dump_v1_movie_raw() {
       "dictionary": [],
       "synonyms": {},
       "distinctAttribute": null,
+      "proximityPrecision": null,
       "typoTolerance": {
         "enabled": true,
         "minWordSizeForTypos": {
@@ -219,6 +220,7 @@ async fn import_dump_v1_movie_with_settings() {
       "dictionary": [],
       "synonyms": {},
       "distinctAttribute": null,
+      "proximityPrecision": null,
       "typoTolerance": {
         "enabled": true,
         "minWordSizeForTypos": {
@@ -365,6 +367,7 @@ async fn import_dump_v1_rubygems_with_settings() {
       "dictionary": [],
       "synonyms": {},
       "distinctAttribute": null,
+      "proximityPrecision": null,
       "typoTolerance": {
         "enabled": true,
         "minWordSizeForTypos": {
@@ -497,6 +500,7 @@ async fn import_dump_v2_movie_raw() {
       "dictionary": [],
       "synonyms": {},
       "distinctAttribute": null,
+      "proximityPrecision": null,
       "typoTolerance": {
         "enabled": true,
         "minWordSizeForTypos": {
@@ -641,6 +645,7 @@ async fn import_dump_v2_movie_with_settings() {
       "dictionary": [],
       "synonyms": {},
       "distinctAttribute": null,
+      "proximityPrecision": null,
       "typoTolerance": {
         "enabled": true,
         "minWordSizeForTypos": {
@@ -784,6 +789,7 @@ async fn import_dump_v2_rubygems_with_settings() {
       "dictionary": [],
       "synonyms": {},
       "distinctAttribute": null,
+      "proximityPrecision": null,
       "typoTolerance": {
         "enabled": true,
         "minWordSizeForTypos": {
@@ -916,6 +922,7 @@ async fn import_dump_v3_movie_raw() {
       "dictionary": [],
       "synonyms": {},
       "distinctAttribute": null,
+      "proximityPrecision": null,
       "typoTolerance": {
         "enabled": true,
         "minWordSizeForTypos": {
@@ -1060,6 +1067,7 @@ async fn import_dump_v3_movie_with_settings() {
       "dictionary": [],
       "synonyms": {},
       "distinctAttribute": null,
+      "proximityPrecision": null,
       "typoTolerance": {
         "enabled": true,
         "minWordSizeForTypos": {
@@ -1203,6 +1211,7 @@ async fn import_dump_v3_rubygems_with_settings() {
       "dictionary": [],
       "synonyms": {},
       "distinctAttribute": null,
+      "proximityPrecision": null,
       "typoTolerance": {
         "enabled": true,
         "minWordSizeForTypos": {
@@ -1335,6 +1344,7 @@ async fn import_dump_v4_movie_raw() {
       "dictionary": [],
       "synonyms": {},
       "distinctAttribute": null,
+      "proximityPrecision": null,
       "typoTolerance": {
         "enabled": true,
         "minWordSizeForTypos": {
@@ -1479,6 +1489,7 @@ async fn import_dump_v4_movie_with_settings() {
       "dictionary": [],
       "synonyms": {},
       "distinctAttribute": null,
+      "proximityPrecision": null,
       "typoTolerance": {
         "enabled": true,
         "minWordSizeForTypos": {
@@ -1622,6 +1633,7 @@ async fn import_dump_v4_rubygems_with_settings() {
       "dictionary": [],
       "synonyms": {},
       "distinctAttribute": null,
+      "proximityPrecision": null,
       "typoTolerance": {
         "enabled": true,
         "minWordSizeForTypos": {
@@ -1809,4 +1821,109 @@ async fn import_dump_v5() {
     snapshot!(
         json_string!(tasks, { ".results[].details.dumpUid" => "[uid]",  ".results[].duration" => "[duration]" ,  ".results[].startedAt" => "[date]" ,  ".results[].finishedAt" => "[date]"  })
     );
+}
+
+#[actix_rt::test]
+async fn import_dump_v6_containing_experimental_features() {
+    let temp = tempfile::tempdir().unwrap();
+
+    let options = Opt {
+        import_dump: Some(GetDump::TestV6WithExperimental.path()),
+        ..default_settings(temp.path())
+    };
+    let mut server = Server::new_auth_with_options(options, temp).await;
+    server.use_api_key("MASTER_KEY");
+
+    let (indexes, code) = server.list_indexes(None, None).await;
+    assert_eq!(code, 200, "{indexes}");
+
+    assert_eq!(indexes["results"].as_array().unwrap().len(), 1);
+    assert_eq!(indexes["results"][0]["uid"], json!("movies"));
+    assert_eq!(indexes["results"][0]["primaryKey"], json!("id"));
+
+    let (response, code) = server.get_features().await;
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "scoreDetails": false,
+      "vectorStore": false,
+      "metrics": false,
+      "exportPuffinReports": false,
+      "proximityPrecision": false
+    }
+    "###);
+
+    let index = server.index("movies");
+
+    let (response, code) = index.settings().await;
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "displayedAttributes": [
+        "*"
+      ],
+      "searchableAttributes": [
+        "*"
+      ],
+      "filterableAttributes": [],
+      "sortableAttributes": [],
+      "rankingRules": [
+        "words",
+        "typo",
+        "proximity"
+      ],
+      "stopWords": [],
+      "nonSeparatorTokens": [],
+      "separatorTokens": [],
+      "dictionary": [],
+      "synonyms": {},
+      "distinctAttribute": null,
+      "proximityPrecision": "attributeScale",
+      "typoTolerance": {
+        "enabled": true,
+        "minWordSizeForTypos": {
+          "oneTypo": 5,
+          "twoTypos": 9
+        },
+        "disableOnWords": [],
+        "disableOnAttributes": []
+      },
+      "faceting": {
+        "maxValuesPerFacet": 100,
+        "sortFacetValuesBy": {
+          "*": "alpha"
+        }
+      },
+      "pagination": {
+        "maxTotalHits": 1000
+      }
+    }
+    "###);
+
+    // the expected order is [1, 3, 2] instead of [3, 1, 2]
+    // because the attribute scale doesn't make the difference between 1 and 3.
+    index
+        .search(json!({"q": "the soup of day"}), |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 1,
+                "a": "Soup of the day",
+                "b": "many the fish"
+              },
+              {
+                "id": 3,
+                "a": "the Soup of day",
+                "b": "many the fish"
+              },
+              {
+                "id": 2,
+                "a": "Soup of day",
+                "b": "many the lazy fish"
+              }
+            ]
+            "###);
+        })
+        .await;
 }

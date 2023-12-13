@@ -78,6 +78,7 @@ macro_rules! make_setting_route {
 
                 let body = body.into_inner();
 
+                #[allow(clippy::redundant_closure_call)]
                 $analytics(&body, &req);
 
                 let new_settings = Settings {
@@ -435,6 +436,30 @@ make_setting_route!(
 );
 
 make_setting_route!(
+    "/proximity-precision",
+    put,
+    meilisearch_types::settings::ProximityPrecisionView,
+    meilisearch_types::deserr::DeserrJsonError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsProximityPrecision,
+    >,
+    proximity_precision,
+    "proximityPrecision",
+    analytics,
+    |precision: &Option<meilisearch_types::settings::ProximityPrecisionView>, req: &HttpRequest| {
+        use serde_json::json;
+        analytics.publish(
+            "ProximityPrecision Updated".to_string(),
+            json!({
+                "proximity_precision": {
+                    "set": precision.is_some(),
+                }
+            }),
+            Some(req),
+        );
+    }
+);
+
+make_setting_route!(
     "/ranking-rules",
     put,
     Vec<meilisearch_types::settings::RankingRuleView>,
@@ -540,6 +565,7 @@ generate_configure!(
     displayed_attributes,
     searchable_attributes,
     distinct_attribute,
+    proximity_precision,
     stop_words,
     separator_tokens,
     non_separator_tokens,
@@ -592,6 +618,9 @@ pub async fn update_all(
             },
             "distinct_attribute": {
                 "set": new_settings.distinct_attribute.as_ref().set().is_some()
+            },
+            "proximity_precision": {
+                "set": new_settings.proximity_precision.as_ref().set().is_some()
             },
             "typo_tolerance": {
                 "enabled": new_settings.typo_tolerance

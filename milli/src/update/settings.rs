@@ -12,6 +12,7 @@ use super::IndexerConfig;
 use crate::criterion::Criterion;
 use crate::error::UserError;
 use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
+use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::{FieldsIdsMap, Index, OrderBy, Result};
@@ -100,8 +101,8 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Setting<T> {
     }
 }
 
-pub struct Settings<'a, 't, 'u, 'i> {
-    wtxn: &'t mut heed::RwTxn<'i, 'u>,
+pub struct Settings<'a, 't, 'i> {
+    wtxn: &'t mut heed::RwTxn<'i>,
     index: &'i Index,
 
     indexer_config: &'a IndexerConfig,
@@ -127,14 +128,15 @@ pub struct Settings<'a, 't, 'u, 'i> {
     max_values_per_facet: Setting<usize>,
     sort_facet_values_by: Setting<HashMap<String, OrderBy>>,
     pagination_max_total_hits: Setting<usize>,
+    proximity_precision: Setting<ProximityPrecision>,
 }
 
-impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
+impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     pub fn new(
-        wtxn: &'t mut heed::RwTxn<'i, 'u>,
+        wtxn: &'t mut heed::RwTxn<'i>,
         index: &'i Index,
         indexer_config: &'a IndexerConfig,
-    ) -> Settings<'a, 't, 'u, 'i> {
+    ) -> Settings<'a, 't, 'i> {
         Settings {
             wtxn,
             index,
@@ -158,6 +160,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             max_values_per_facet: Setting::NotSet,
             sort_facet_values_by: Setting::NotSet,
             pagination_max_total_hits: Setting::NotSet,
+            proximity_precision: Setting::NotSet,
             indexer_config,
         }
     }
@@ -330,6 +333,14 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
     pub fn reset_pagination_max_total_hits(&mut self) {
         self.pagination_max_total_hits = Setting::Reset;
+    }
+
+    pub fn set_proximity_precision(&mut self, value: ProximityPrecision) {
+        self.proximity_precision = Setting::Set(value);
+    }
+
+    pub fn reset_proximity_precision(&mut self) {
+        self.proximity_precision = Setting::Reset;
     }
 
     fn reindex<FP, FA>(
@@ -822,7 +833,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_max_values_per_facet(&mut self) -> Result<()> {
         match self.max_values_per_facet {
             Setting::Set(max) => {
-                self.index.put_max_values_per_facet(self.wtxn, max)?;
+                self.index.put_max_values_per_facet(self.wtxn, max as u64)?;
             }
             Setting::Reset => {
                 self.index.delete_max_values_per_facet(self.wtxn)?;
@@ -850,7 +861,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_pagination_max_total_hits(&mut self) -> Result<()> {
         match self.pagination_max_total_hits {
             Setting::Set(max) => {
-                self.index.put_pagination_max_total_hits(self.wtxn, max)?;
+                self.index.put_pagination_max_total_hits(self.wtxn, max as u64)?;
             }
             Setting::Reset => {
                 self.index.delete_pagination_max_total_hits(self.wtxn)?;
@@ -859,6 +870,24 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         }
 
         Ok(())
+    }
+
+    fn update_proximity_precision(&mut self) -> Result<bool> {
+        let changed = match self.proximity_precision {
+            Setting::Set(new) => {
+                let old = self.index.proximity_precision(self.wtxn)?;
+                if old == Some(new) {
+                    false
+                } else {
+                    self.index.put_proximity_precision(self.wtxn, new)?;
+                    true
+                }
+            }
+            Setting::Reset => self.index.delete_proximity_precision(self.wtxn)?,
+            Setting::NotSet => false,
+        };
+
+        Ok(changed)
     }
 
     pub fn execute<FP, FA>(mut self, progress_callback: FP, should_abort: FA) -> Result<()>
@@ -897,6 +926,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         let synonyms_updated = self.update_synonyms()?;
         let searchable_updated = self.update_searchable()?;
         let exact_attributes_updated = self.update_exact_attributes()?;
+        let proximity_precision = self.update_proximity_precision()?;
 
         if stop_words_updated
             || non_separator_tokens_updated
@@ -906,6 +936,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             || synonyms_updated
             || searchable_updated
             || exact_attributes_updated
+            || proximity_precision
         {
             self.reindex(&progress_callback, &should_abort, old_fields_ids_map)?;
         }
@@ -917,13 +948,13 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 #[cfg(test)]
 mod tests {
     use big_s::S;
-    use heed::types::ByteSlice;
+    use heed::types::Bytes;
     use maplit::{btreemap, btreeset, hashset};
 
     use super::*;
     use crate::error::Error;
     use crate::index::tests::TempIndex;
-    use crate::update::{ClearDocuments, DeleteDocuments};
+    use crate::update::ClearDocuments;
     use crate::{Criterion, Filter, SearchResult};
 
     #[test]
@@ -1130,7 +1161,7 @@ mod tests {
         }
         let count = index
             .facet_id_f64_docids
-            .remap_key_type::<ByteSlice>()
+            .remap_key_type::<Bytes>()
             // The faceted field id is 1u16
             .prefix_iter(&rtxn, &[0, 1, 0])
             .unwrap()
@@ -1151,7 +1182,7 @@ mod tests {
         // Only count the field_id 0 and level 0 facet values.
         let count = index
             .facet_id_f64_docids
-            .remap_key_type::<ByteSlice>()
+            .remap_key_type::<Bytes>()
             .prefix_iter(&rtxn, &[0, 1, 0])
             .unwrap()
             .count();
@@ -1565,7 +1596,7 @@ mod tests {
             })
             .unwrap_err();
         assert!(matches!(error, Error::UserError(UserError::PrimaryKeyCannotBeChanged(_))));
-        wtxn.abort().unwrap();
+        wtxn.abort();
 
         // But if we clear the database...
         let mut wtxn = index.write_txn().unwrap();
@@ -1731,6 +1762,7 @@ mod tests {
                     max_values_per_facet,
                     sort_facet_values_by,
                     pagination_max_total_hits,
+                    proximity_precision,
                 } = settings;
                 assert!(matches!(searchable_fields, Setting::NotSet));
                 assert!(matches!(displayed_fields, Setting::NotSet));
@@ -1752,6 +1784,7 @@ mod tests {
                 assert!(matches!(max_values_per_facet, Setting::NotSet));
                 assert!(matches!(sort_facet_values_by, Setting::NotSet));
                 assert!(matches!(pagination_max_total_hits, Setting::NotSet));
+                assert!(matches!(proximity_precision, Setting::NotSet));
             })
             .unwrap();
     }
@@ -1768,13 +1801,9 @@ mod tests {
         }
         index.add_documents(documents! { docs }).unwrap();
 
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        (0..5).for_each(|id| {
-            builder.delete_external_id(&id.to_string());
-        });
-        builder.execute().unwrap();
+        index.delete_documents((0..5).map(|id| id.to_string()).collect());
 
+        let mut wtxn = index.write_txn().unwrap();
         index
             .update_settings_using_wtxn(&mut wtxn, |settings| {
                 settings.set_searchable_fields(vec!["id".to_string()]);

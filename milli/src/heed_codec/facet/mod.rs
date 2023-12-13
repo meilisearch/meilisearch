@@ -5,8 +5,8 @@ use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::marker::PhantomData;
 
-use heed::types::{DecodeIgnore, OwnedType};
-use heed::{BytesDecode, BytesEncode};
+use heed::types::DecodeIgnore;
+use heed::{BoxedError, BytesDecode, BytesEncode};
 use roaring::RoaringBitmap;
 
 pub use self::field_doc_id_facet_codec::FieldDocIdFacetCodec;
@@ -18,7 +18,7 @@ pub type FieldDocIdFacetF64Codec = FieldDocIdFacetCodec<OrderedF64Codec>;
 pub type FieldDocIdFacetStringCodec = FieldDocIdFacetCodec<StrRefCodec>;
 pub type FieldDocIdFacetIgnoreCodec = FieldDocIdFacetCodec<DecodeIgnore>;
 
-pub type FieldIdCodec = OwnedType<BEU16>;
+pub type FieldIdCodec = BEU16;
 
 /// Tries to split a slice in half at the given middle point,
 /// `None` if the slice is too short.
@@ -58,7 +58,7 @@ where
 {
     type EItem = FacetGroupKey<T::EItem>;
 
-    fn bytes_encode(value: &'a Self::EItem) -> Option<Cow<'a, [u8]>> {
+    fn bytes_encode(value: &'a Self::EItem) -> Result<Cow<'a, [u8]>, BoxedError> {
         let mut v = vec![];
         v.extend_from_slice(&value.field_id.to_be_bytes());
         v.extend_from_slice(&[value.level]);
@@ -66,7 +66,7 @@ where
         let bound = T::bytes_encode(&value.left_bound)?;
         v.extend_from_slice(&bound);
 
-        Some(Cow::Owned(v))
+        Ok(Cow::Owned(v))
     }
 }
 impl<'a, T> heed::BytesDecode<'a> for FacetGroupKeyCodec<T>
@@ -75,11 +75,11 @@ where
 {
     type DItem = FacetGroupKey<T::DItem>;
 
-    fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        let fid = u16::from_be_bytes(<[u8; 2]>::try_from(&bytes[0..=1]).ok()?);
+    fn bytes_decode(bytes: &'a [u8]) -> Result<Self::DItem, BoxedError> {
+        let fid = u16::from_be_bytes(<[u8; 2]>::try_from(&bytes[0..=1])?);
         let level = bytes[2];
         let bound = T::bytes_decode(&bytes[3..])?;
-        Some(FacetGroupKey { field_id: fid, level, left_bound: bound })
+        Ok(FacetGroupKey { field_id: fid, level, left_bound: bound })
     }
 }
 
@@ -87,17 +87,17 @@ pub struct FacetGroupValueCodec;
 impl<'a> heed::BytesEncode<'a> for FacetGroupValueCodec {
     type EItem = FacetGroupValue;
 
-    fn bytes_encode(value: &'a Self::EItem) -> Option<Cow<'a, [u8]>> {
+    fn bytes_encode(value: &'a Self::EItem) -> Result<Cow<'a, [u8]>, BoxedError> {
         let mut v = vec![value.size];
         CboRoaringBitmapCodec::serialize_into(&value.bitmap, &mut v);
-        Some(Cow::Owned(v))
+        Ok(Cow::Owned(v))
     }
 }
 impl<'a> heed::BytesDecode<'a> for FacetGroupValueCodec {
     type DItem = FacetGroupValue;
-    fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
+    fn bytes_decode(bytes: &'a [u8]) -> Result<Self::DItem, BoxedError> {
         let size = bytes[0];
-        let bitmap = CboRoaringBitmapCodec::deserialize_from(&bytes[1..]).ok()?;
-        Some(FacetGroupValue { size, bitmap })
+        let bitmap = CboRoaringBitmapCodec::deserialize_from(&bytes[1..])?;
+        Ok(FacetGroupValue { size, bitmap })
     }
 }

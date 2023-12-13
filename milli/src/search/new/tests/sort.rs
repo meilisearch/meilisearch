@@ -13,6 +13,7 @@ This module tests the `sort` ranking rule:
 
 use big_s::S;
 use maplit::hashset;
+use meili_snap::insta;
 
 use crate::index::tests::TempIndex;
 use crate::search::new::tests::collect_field_values;

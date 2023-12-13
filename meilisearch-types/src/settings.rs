@@ -8,6 +8,7 @@ use std::str::FromStr;
 
 use deserr::{DeserializeError, Deserr, ErrorKind, MergeWithError, ValuePointerRef};
 use fst::IntoStreamer;
+use milli::proximity::ProximityPrecision;
 use milli::update::Setting;
 use milli::{Criterion, CriterionError, Index, DEFAULT_VALUES_PER_FACET};
 use serde::{Deserialize, Serialize, Serializer};
@@ -186,6 +187,9 @@ pub struct Settings<T> {
     #[deserr(default, error = DeserrJsonError<InvalidSettingsDistinctAttribute>)]
     pub distinct_attribute: Setting<String>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsProximityPrecision>)]
+    pub proximity_precision: Setting<ProximityPrecisionView>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsTypoTolerance>)]
     pub typo_tolerance: Setting<TypoSettings>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
@@ -214,6 +218,7 @@ impl Settings<Checked> {
             separator_tokens: Setting::Reset,
             dictionary: Setting::Reset,
             distinct_attribute: Setting::Reset,
+            proximity_precision: Setting::Reset,
             typo_tolerance: Setting::Reset,
             faceting: Setting::Reset,
             pagination: Setting::Reset,
@@ -234,6 +239,7 @@ impl Settings<Checked> {
             dictionary,
             synonyms,
             distinct_attribute,
+            proximity_precision,
             typo_tolerance,
             faceting,
             pagination,
@@ -252,6 +258,7 @@ impl Settings<Checked> {
             dictionary,
             synonyms,
             distinct_attribute,
+            proximity_precision,
             typo_tolerance,
             faceting,
             pagination,
@@ -296,6 +303,7 @@ impl Settings<Unchecked> {
             separator_tokens: self.separator_tokens,
             dictionary: self.dictionary,
             distinct_attribute: self.distinct_attribute,
+            proximity_precision: self.proximity_precision,
             typo_tolerance: self.typo_tolerance,
             faceting: self.faceting,
             pagination: self.pagination,
@@ -387,6 +395,12 @@ pub fn apply_settings_to_builder(
     match settings.distinct_attribute {
         Setting::Set(ref attr) => builder.set_distinct_field(attr.clone()),
         Setting::Reset => builder.reset_distinct_field(),
+        Setting::NotSet => (),
+    }
+
+    match settings.proximity_precision {
+        Setting::Set(ref precision) => builder.set_proximity_precision((*precision).into()),
+        Setting::Reset => builder.reset_proximity_precision(),
         Setting::NotSet => (),
     }
 
@@ -509,6 +523,8 @@ pub fn settings(
 
     let distinct_field = index.distinct_field(rtxn)?.map(String::from);
 
+    let proximity_precision = index.proximity_precision(rtxn)?.map(ProximityPrecisionView::from);
+
     let synonyms = index.user_defined_synonyms(rtxn)?;
 
     let min_typo_word_len = MinWordSizeTyposSetting {
@@ -532,7 +548,10 @@ pub fn settings(
 
     let faceting = FacetingSettings {
         max_values_per_facet: Setting::Set(
-            index.max_values_per_facet(rtxn)?.unwrap_or(DEFAULT_VALUES_PER_FACET),
+            index
+                .max_values_per_facet(rtxn)?
+                .map(|x| x as usize)
+                .unwrap_or(DEFAULT_VALUES_PER_FACET),
         ),
         sort_facet_values_by: Setting::Set(
             index
@@ -545,7 +564,10 @@ pub fn settings(
 
     let pagination = PaginationSettings {
         max_total_hits: Setting::Set(
-            index.pagination_max_total_hits(rtxn)?.unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS),
+            index
+                .pagination_max_total_hits(rtxn)?
+                .map(|x| x as usize)
+                .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS),
         ),
     };
 
@@ -567,6 +589,10 @@ pub fn settings(
         dictionary: Setting::Set(dictionary),
         distinct_attribute: match distinct_field {
             Some(field) => Setting::Set(field),
+            None => Setting::Reset,
+        },
+        proximity_precision: match proximity_precision {
+            Some(precision) => Setting::Set(precision),
             None => Setting::Reset,
         },
         synonyms: Setting::Set(synonyms),
@@ -673,6 +699,31 @@ impl From<RankingRuleView> for Criterion {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserr, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[deserr(error = DeserrJsonError<InvalidSettingsProximityPrecision>, rename_all = camelCase, deny_unknown_fields)]
+pub enum ProximityPrecisionView {
+    WordScale,
+    AttributeScale,
+}
+
+impl From<ProximityPrecision> for ProximityPrecisionView {
+    fn from(value: ProximityPrecision) -> Self {
+        match value {
+            ProximityPrecision::WordScale => ProximityPrecisionView::WordScale,
+            ProximityPrecision::AttributeScale => ProximityPrecisionView::AttributeScale,
+        }
+    }
+}
+impl From<ProximityPrecisionView> for ProximityPrecision {
+    fn from(value: ProximityPrecisionView) -> Self {
+        match value {
+            ProximityPrecisionView::WordScale => ProximityPrecision::WordScale,
+            ProximityPrecisionView::AttributeScale => ProximityPrecision::AttributeScale,
+        }
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod test {
     use super::*;
@@ -692,6 +743,7 @@ pub(crate) mod test {
             dictionary: Setting::NotSet,
             synonyms: Setting::NotSet,
             distinct_attribute: Setting::NotSet,
+            proximity_precision: Setting::NotSet,
             typo_tolerance: Setting::NotSet,
             faceting: Setting::NotSet,
             pagination: Setting::NotSet,
@@ -716,6 +768,7 @@ pub(crate) mod test {
             dictionary: Setting::NotSet,
             synonyms: Setting::NotSet,
             distinct_attribute: Setting::NotSet,
+            proximity_precision: Setting::NotSet,
             typo_tolerance: Setting::NotSet,
             faceting: Setting::NotSet,
             pagination: Setting::NotSet,

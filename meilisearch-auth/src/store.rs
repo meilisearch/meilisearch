@@ -4,17 +4,20 @@ use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
 use std::fs::create_dir_all;
 use std::path::Path;
+use std::result::Result as StdResult;
 use std::str;
 use std::str::FromStr;
 use std::sync::Arc;
 
 use hmac::{Hmac, Mac};
+use meilisearch_types::heed::BoxedError;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::keys::KeyId;
 use meilisearch_types::milli;
-use meilisearch_types::milli::heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
+use meilisearch_types::milli::heed::types::{Bytes, DecodeIgnore, SerdeJson};
 use meilisearch_types::milli::heed::{Database, Env, EnvOpenOptions, RwTxn};
 use sha2::Sha256;
+use thiserror::Error;
 use time::OffsetDateTime;
 use uuid::fmt::Hyphenated;
 use uuid::Uuid;
@@ -30,7 +33,7 @@ const KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME: &str = "keyid-action-index-expirat
 #[derive(Clone)]
 pub struct HeedAuthStore {
     env: Arc<Env>,
-    keys: Database<ByteSlice, SerdeJson<Key>>,
+    keys: Database<Bytes, SerdeJson<Key>>,
     action_keyid_index_expiration: Database<KeyIdActionCodec, SerdeJson<Option<OffsetDateTime>>>,
     should_close_on_drop: bool,
 }
@@ -276,7 +279,7 @@ impl HeedAuthStore {
     fn delete_key_from_inverted_db(&self, wtxn: &mut RwTxn, key: &KeyId) -> Result<()> {
         let mut iter = self
             .action_keyid_index_expiration
-            .remap_types::<ByteSlice, DecodeIgnore>()
+            .remap_types::<Bytes, DecodeIgnore>()
             .prefix_iter_mut(wtxn, key.as_bytes())?;
         while iter.next().transpose()?.is_some() {
             // safety: we don't keep references from inside the LMDB database.
@@ -294,23 +297,24 @@ pub struct KeyIdActionCodec;
 impl<'a> milli::heed::BytesDecode<'a> for KeyIdActionCodec {
     type DItem = (KeyId, Action, Option<&'a [u8]>);
 
-    fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        let (key_id_bytes, action_bytes) = try_split_array_at(bytes)?;
-        let (action_bytes, index) = match try_split_array_at(action_bytes)? {
-            (action, []) => (action, None),
-            (action, index) => (action, Some(index)),
-        };
+    fn bytes_decode(bytes: &'a [u8]) -> StdResult<Self::DItem, BoxedError> {
+        let (key_id_bytes, action_bytes) = try_split_array_at(bytes).ok_or(SliceTooShortError)?;
+        let (&action_byte, index) =
+            match try_split_array_at(action_bytes).ok_or(SliceTooShortError)? {
+                ([action], []) => (action, None),
+                ([action], index) => (action, Some(index)),
+            };
         let key_id = Uuid::from_bytes(*key_id_bytes);
-        let action = Action::from_repr(u8::from_be_bytes(*action_bytes))?;
+        let action = Action::from_repr(action_byte).ok_or(InvalidActionError { action_byte })?;
 
-        Some((key_id, action, index))
+        Ok((key_id, action, index))
     }
 }
 
 impl<'a> milli::heed::BytesEncode<'a> for KeyIdActionCodec {
     type EItem = (&'a KeyId, &'a Action, Option<&'a [u8]>);
 
-    fn bytes_encode((key_id, action, index): &Self::EItem) -> Option<Cow<[u8]>> {
+    fn bytes_encode((key_id, action, index): &Self::EItem) -> StdResult<Cow<[u8]>, BoxedError> {
         let mut bytes = Vec::new();
 
         bytes.extend_from_slice(key_id.as_bytes());
@@ -320,8 +324,18 @@ impl<'a> milli::heed::BytesEncode<'a> for KeyIdActionCodec {
             bytes.extend_from_slice(index);
         }
 
-        Some(Cow::Owned(bytes))
+        Ok(Cow::Owned(bytes))
     }
+}
+
+#[derive(Error, Debug)]
+#[error("the slice is too short")]
+pub struct SliceTooShortError;
+
+#[derive(Error, Debug)]
+#[error("cannot construct a valid Action from {action_byte}")]
+pub struct InvalidActionError {
+    pub action_byte: u8,
 }
 
 pub fn generate_key_as_hexa(uid: Uuid, master_key: &[u8]) -> String {

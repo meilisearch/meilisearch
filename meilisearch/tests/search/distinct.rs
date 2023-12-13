@@ -4,7 +4,7 @@ use once_cell::sync::Lazy;
 use crate::common::{Server, Value};
 use crate::json;
 
-pub(self) static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     json!([
       {
         "id": 1,
@@ -107,8 +107,8 @@ pub(self) static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     ])
 });
 
-pub(self) static DOCUMENT_PRIMARY_KEY: &str = "id";
-pub(self) static DOCUMENT_DISTINCT_KEY: &str = "product_id";
+static DOCUMENT_PRIMARY_KEY: &str = "id";
+static DOCUMENT_DISTINCT_KEY: &str = "product_id";
 
 /// testing: https://github.com/meilisearch/meilisearch/issues/4078
 #[actix_rt::test]

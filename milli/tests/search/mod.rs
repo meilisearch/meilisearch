@@ -88,9 +88,11 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
 
 pub fn internal_to_external_ids(index: &Index, internal_ids: &[DocumentId]) -> Vec<String> {
     let rtxn = index.read_txn().unwrap();
-    let docid_map = index.external_documents_ids(&rtxn).unwrap();
-    let docid_map: std::collections::HashMap<_, _> =
-        EXTERNAL_DOCUMENTS_IDS.iter().map(|id| (docid_map.get(id).unwrap(), id)).collect();
+    let docid_map = index.external_documents_ids();
+    let docid_map: std::collections::HashMap<_, _> = EXTERNAL_DOCUMENTS_IDS
+        .iter()
+        .map(|id| (docid_map.get(&rtxn, id).unwrap().unwrap(), id))
+        .collect();
     internal_ids.iter().map(|id| docid_map.get(id).unwrap().to_string()).collect()
 }
 

@@ -7,6 +7,7 @@ pub struct RuntimeTogglableFeatures {
     pub vector_store: bool,
     pub metrics: bool,
     pub export_puffin_reports: bool,
+    pub proximity_precision: bool,
 }
 
 #[derive(Default, Debug, Clone, Copy)]

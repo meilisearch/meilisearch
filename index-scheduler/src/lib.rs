@@ -47,8 +47,9 @@ pub use features::RoFeatures;
 use file_store::FileStore;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
-use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
-use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn};
+use meilisearch_types::heed::byteorder::BE;
+use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str, I128};
+use meilisearch_types::heed::{self, Database, Env, PutFlags, RoTxn, RwTxn};
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
@@ -64,8 +65,7 @@ use uuid::Uuid;
 use crate::index_mapper::IndexMapper;
 use crate::utils::{check_index_swap_validity, clamp_to_page_size};
 
-pub(crate) type BEI128 =
-    meilisearch_types::heed::zerocopy::I128<meilisearch_types::heed::byteorder::BE>;
+pub(crate) type BEI128 = I128<BE>;
 
 /// Defines a subset of tasks to be retrieved from the [`IndexScheduler`].
 ///
@@ -258,6 +258,9 @@ pub struct IndexSchedulerOptions {
     /// The maximum number of tasks stored in the task queue before starting
     /// to auto schedule task deletions.
     pub max_number_of_tasks: usize,
+    /// If the autobatcher is allowed to automatically batch tasks
+    /// it will only batch this defined number of tasks at once.
+    pub max_number_of_batched_tasks: usize,
     /// The experimental features enabled for this instance.
     pub instance_features: InstanceTogglableFeatures,
 }
@@ -278,7 +281,7 @@ pub struct IndexScheduler {
     pub(crate) file_store: FileStore,
 
     // The main database, it contains all the tasks accessible by their Id.
-    pub(crate) all_tasks: Database<OwnedType<BEU32>, SerdeJson<Task>>,
+    pub(crate) all_tasks: Database<BEU32, SerdeJson<Task>>,
 
     /// All the tasks ids grouped by their status.
     // TODO we should not be able to serialize a `Status::Processing` in this database.
@@ -289,16 +292,16 @@ pub struct IndexScheduler {
     pub(crate) index_tasks: Database<Str, RoaringBitmapCodec>,
 
     /// Store the tasks that were canceled by a task uid
-    pub(crate) canceled_by: Database<OwnedType<BEU32>, RoaringBitmapCodec>,
+    pub(crate) canceled_by: Database<BEU32, RoaringBitmapCodec>,
 
     /// Store the task ids of tasks which were enqueued at a specific date
-    pub(crate) enqueued_at: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
+    pub(crate) enqueued_at: Database<BEI128, CboRoaringBitmapCodec>,
 
     /// Store the task ids of finished tasks which started being processed at a specific date
-    pub(crate) started_at: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
+    pub(crate) started_at: Database<BEI128, CboRoaringBitmapCodec>,
 
     /// Store the task ids of tasks which finished at a specific date
-    pub(crate) finished_at: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
+    pub(crate) finished_at: Database<BEI128, CboRoaringBitmapCodec>,
 
     /// In charge of creating, opening, storing and returning indexes.
     pub(crate) index_mapper: IndexMapper,
@@ -315,6 +318,9 @@ pub struct IndexScheduler {
     /// The max number of tasks allowed before the scheduler starts to delete
     /// the finished tasks automatically.
     pub(crate) max_number_of_tasks: usize,
+
+    /// The maximum number of tasks that will be batched together.
+    pub(crate) max_number_of_batched_tasks: usize,
 
     /// A frame to output the indexation profiling files to disk.
     pub(crate) puffin_frame: Arc<puffin::GlobalFrameView>,
@@ -373,6 +379,7 @@ impl IndexScheduler {
             wake_up: self.wake_up.clone(),
             autobatching_enabled: self.autobatching_enabled,
             max_number_of_tasks: self.max_number_of_tasks,
+            max_number_of_batched_tasks: self.max_number_of_batched_tasks,
             puffin_frame: self.puffin_frame.clone(),
             snapshots_path: self.snapshots_path.clone(),
             dumps_path: self.dumps_path.clone(),
@@ -471,6 +478,7 @@ impl IndexScheduler {
             puffin_frame: Arc::new(puffin::GlobalFrameView::default()),
             autobatching_enabled: options.autobatching_enabled,
             max_number_of_tasks: options.max_number_of_tasks,
+            max_number_of_batched_tasks: options.max_number_of_batched_tasks,
             dumps_path: options.dumps_path,
             snapshots_path: options.snapshots_path,
             auth_path: options.auth_path,
@@ -730,9 +738,7 @@ impl IndexScheduler {
         if let Some(canceled_by) = &query.canceled_by {
             let mut all_canceled_tasks = RoaringBitmap::new();
             for cancel_task_uid in canceled_by {
-                if let Some(canceled_by_uid) =
-                    self.canceled_by.get(rtxn, &BEU32::new(*cancel_task_uid))?
-                {
+                if let Some(canceled_by_uid) = self.canceled_by.get(rtxn, cancel_task_uid)? {
                     all_canceled_tasks |= canceled_by_uid;
                 }
             }
@@ -983,7 +989,7 @@ impl IndexScheduler {
 
         // if the task doesn't delete anything and 50% of the task queue is full, we must refuse to enqueue the incomming task
         if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } if !tasks.is_empty())
-            && (self.env.non_free_pages_size()? * 100) / self.env.map_size()? as u64 > 50
+            && (self.env.non_free_pages_size()? * 100) / self.env.info().map_size as u64 > 50
         {
             return Err(Error::NoSpaceLeftInTaskQueue);
         }
@@ -1009,7 +1015,7 @@ impl IndexScheduler {
         // Get rid of the mutability.
         let task = task;
 
-        self.all_tasks.append(&mut wtxn, &BEU32::new(task.uid), &task)?;
+        self.all_tasks.put_with_flags(&mut wtxn, PutFlags::APPEND, &task.uid, &task)?;
 
         for index in task.indexes() {
             self.update_index(&mut wtxn, index, |bitmap| {
@@ -1183,10 +1189,11 @@ impl IndexScheduler {
             // If we have an abortion error we must stop the tick here and re-schedule tasks.
             Err(Error::Milli(milli::Error::InternalError(
                 milli::InternalError::AbortedIndexation,
-            ))) => {
+            )))
+            | Err(Error::AbortedTask) => {
                 #[cfg(test)]
                 self.breakpoint(Breakpoint::AbortedIndexation);
-                wtxn.abort().map_err(Error::HeedTransaction)?;
+                wtxn.abort();
 
                 // We make sure that we don't call `stop_processing` on the `processing_tasks`,
                 // this is because we want to let the next tick call `create_next_batch` and keep
@@ -1207,7 +1214,7 @@ impl IndexScheduler {
                 let index_uid = index_uid.unwrap();
                 // fixme: handle error more gracefully? not sure when this could happen
                 self.index_mapper.resize_index(&wtxn, &index_uid)?;
-                wtxn.abort().map_err(Error::HeedTransaction)?;
+                wtxn.abort();
 
                 return Ok(TickOutcome::TickAgain(0));
             }
@@ -1353,7 +1360,7 @@ impl IndexScheduler {
 
 pub struct Dump<'a> {
     index_scheduler: &'a IndexScheduler,
-    wtxn: RwTxn<'a, 'a>,
+    wtxn: RwTxn<'a>,
 
     indexes: HashMap<String, RoaringBitmap>,
     statuses: HashMap<Status, RoaringBitmap>,
@@ -1468,7 +1475,7 @@ impl<'a> Dump<'a> {
             },
         };
 
-        self.index_scheduler.all_tasks.put(&mut self.wtxn, &BEU32::new(task.uid), &task)?;
+        self.index_scheduler.all_tasks.put(&mut self.wtxn, &task.uid, &task)?;
 
         for index in task.indexes() {
             match self.indexes.get_mut(index) {
@@ -1510,8 +1517,8 @@ impl<'a> Dump<'a> {
             }
         }
 
-        self.statuses.entry(task.status).or_insert(RoaringBitmap::new()).insert(task.uid);
-        self.kinds.entry(task.kind.as_kind()).or_insert(RoaringBitmap::new()).insert(task.uid);
+        self.statuses.entry(task.status).or_default().insert(task.uid);
+        self.kinds.entry(task.kind.as_kind()).or_default().insert(task.uid);
 
         Ok(task)
     }
@@ -1639,6 +1646,7 @@ mod tests {
                 indexer_config,
                 autobatching_enabled: true,
                 max_number_of_tasks: 1_000_000,
+                max_number_of_batched_tasks: usize::MAX,
                 instance_features: Default::default(),
             };
             configuration(&mut options);
@@ -4338,5 +4346,27 @@ mod tests {
           }
         }
         "###);
+    }
+
+    #[test]
+    fn cancel_processing_dump() {
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        let dump_creation = KindWithContent::DumpCreation { keys: Vec::new(), instance_uid: None };
+        let dump_cancellation = KindWithContent::TaskCancelation {
+            query: "cancel dump".to_owned(),
+            tasks: RoaringBitmap::from_iter([0]),
+        };
+        let _ = index_scheduler.register(dump_creation).unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_dump_register");
+        handle.advance_till([Start, BatchCreated, InsideProcessBatch]);
+
+        let _ = index_scheduler.register(dump_cancellation).unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "cancel_registered");
+
+        snapshot!(format!("{:?}", handle.advance()), @"AbortedIndexation");
+
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "cancel_processed");
     }
 }

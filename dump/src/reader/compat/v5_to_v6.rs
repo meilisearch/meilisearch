@@ -345,6 +345,7 @@ impl<T> From<v5::Settings<T>> for v6::Settings<v6::Unchecked> {
             dictionary: v6::Setting::NotSet,
             synonyms: settings.synonyms.into(),
             distinct_attribute: settings.distinct_attribute.into(),
+            proximity_precision: v6::Setting::NotSet,
             typo_tolerance: match settings.typo_tolerance {
                 v5::Setting::Set(typo) => v6::Setting::Set(v6::TypoTolerance {
                     enabled: typo.enabled.into(),

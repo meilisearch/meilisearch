@@ -108,6 +108,8 @@ pub enum Error {
     TaskDeletionWithEmptyQuery,
     #[error("Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.")]
     TaskCancelationWithEmptyQuery,
+    #[error("Aborted task")]
+    AbortedTask,
 
     #[error(transparent)]
     Dump(#[from] dump::Error),
@@ -175,6 +177,7 @@ impl Error {
             | Error::TaskNotFound(_)
             | Error::TaskDeletionWithEmptyQuery
             | Error::TaskCancelationWithEmptyQuery
+            | Error::AbortedTask
             | Error::Dump(_)
             | Error::Heed(_)
             | Error::Milli(_)
@@ -235,6 +238,9 @@ impl ErrorCode for Error {
             Error::CorruptedDump => Code::Internal,
             Error::TaskDatabaseUpdate(_) => Code::Internal,
             Error::CreateBatch(_) => Code::Internal,
+
+            // This one should never be seen by the end user
+            Error::AbortedTask => Code::Internal,
 
             #[cfg(test)]
             Error::PlannedFailure => Code::Internal,

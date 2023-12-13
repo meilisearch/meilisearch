@@ -5,7 +5,7 @@ use super::{get_first_facet_value, get_highest_level};
 use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
 };
-use crate::heed_codec::ByteSliceRefCodec;
+use crate::heed_codec::BytesRefCodec;
 
 /// Return an iterator which iterates over the given candidate documents in
 /// ascending order of their facet value for the given field id.
@@ -13,7 +13,7 @@ use crate::heed_codec::ByteSliceRefCodec;
 /// The documents returned by the iterator are grouped by the facet values that
 /// determined their rank. For example, given the documents:
 ///
-/// ```ignore
+/// ```text
 /// 0: { "colour": ["blue", "green"] }
 /// 1: { "colour": ["blue", "red"] }
 /// 2: { "colour": ["orange", "red"] }
@@ -22,7 +22,7 @@ use crate::heed_codec::ByteSliceRefCodec;
 /// ```
 /// Then calling the function on the candidates `[0, 2, 3, 4]` will return an iterator
 /// over the following elements:
-/// ```ignore
+/// ```text
 /// [0, 4]  // corresponds to all the documents within the candidates that have the facet value "blue"
 /// [3]     // same for "green"
 /// [2]     // same for "orange"
@@ -31,12 +31,12 @@ use crate::heed_codec::ByteSliceRefCodec;
 /// Note that once a document id is returned by the iterator, it is never returned again.
 pub fn ascending_facet_sort<'t>(
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
     candidates: RoaringBitmap,
 ) -> Result<impl Iterator<Item = Result<(RoaringBitmap, &'t [u8])>> + 't> {
     let highest_level = get_highest_level(rtxn, db, field_id)?;
-    if let Some(first_bound) = get_first_facet_value::<ByteSliceRefCodec>(rtxn, db, field_id)? {
+    if let Some(first_bound) = get_first_facet_value::<BytesRefCodec>(rtxn, db, field_id)? {
         let first_key = FacetGroupKey { field_id, level: highest_level, left_bound: first_bound };
         let iter = db.range(rtxn, &(first_key..)).unwrap().take(usize::MAX);
 
@@ -53,14 +53,12 @@ pub fn ascending_facet_sort<'t>(
 
 struct AscendingFacetSort<'t, 'e> {
     rtxn: &'t heed::RoTxn<'e>,
-    db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
     #[allow(clippy::type_complexity)]
     stack: Vec<(
         RoaringBitmap,
-        std::iter::Take<
-            heed::RoRange<'t, FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
-        >,
+        std::iter::Take<heed::RoRange<'t, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>>,
     )>,
 }
 

@@ -234,6 +234,7 @@ fn open_or_create_database_unchecked(
             indexer_config: (&opt.indexer_options).try_into()?,
             autobatching_enabled: true,
             max_number_of_tasks: 1_000_000,
+            max_number_of_batched_tasks: opt.experimental_max_number_of_batched_tasks,
             index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().get_bytes() as usize,
             index_count: DEFAULT_INDEX_COUNT,
             instance_features,
@@ -362,7 +363,7 @@ fn import_dump(
                 update_method: IndexDocumentsMethod::ReplaceDocuments,
                 ..Default::default()
             },
-            |indexing_step| log::debug!("update: {:?}", indexing_step),
+            |indexing_step| log::trace!("update: {:?}", indexing_step),
             || false,
         )?;
 
@@ -397,6 +398,7 @@ pub fn configure_data(
         .app_data(web::Data::from(analytics))
         .app_data(
             web::JsonConfig::default()
+                .limit(http_payload_size_limit)
                 .content_type(|mime| mime == mime::APPLICATION_JSON)
                 .error_handler(|err, req: &HttpRequest| match err {
                     JsonPayloadError::ContentType => match req.headers().get(CONTENT_TYPE) {
