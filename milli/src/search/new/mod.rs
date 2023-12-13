@@ -266,6 +266,7 @@ fn get_ranking_rules_for_vector<'ctx>(
     limit_plus_offset: usize,
     target: &[f32],
     distribution_shift: Option<DistributionShift>,
+    embedder_name: &str,
 ) -> Result<Vec<BoxRankingRule<'ctx, PlaceholderQuery>>> {
     // query graph search
 
@@ -292,6 +293,7 @@ fn get_ranking_rules_for_vector<'ctx>(
                         vector_candidates,
                         limit_plus_offset,
                         distribution_shift,
+                        embedder_name,
                     )?;
                     ranking_rules.push(Box::new(vector_sort));
                     vector = true;
@@ -513,6 +515,8 @@ pub fn execute_vector_search(
     geo_strategy: geo_sort::Strategy,
     from: usize,
     length: usize,
+    distribution_shift: Option<DistributionShift>,
+    embedder_name: &str,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
@@ -524,7 +528,8 @@ pub fn execute_vector_search(
         geo_strategy,
         from + length,
         vector,
-        None,
+        distribution_shift,
+        embedder_name,
     )?;
 
     let mut placeholder_search_logger = logger::DefaultSearchLogger;

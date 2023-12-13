@@ -52,7 +52,7 @@ use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str, I128};
 use meilisearch_types::heed::{self, Database, Env, PutFlags, RoTxn, RwTxn};
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::update::IndexerConfig;
-use meilisearch_types::milli::vector::{Embedder, EmbedderOptions};
+use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
 use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use puffin::FrameView;
@@ -1339,11 +1339,10 @@ impl IndexScheduler {
     }
 
     // TODO: consider using a type alias or a struct embedder/template
-    #[allow(clippy::type_complexity)]
     pub fn embedders(
         &self,
         embedding_configs: Vec<(String, milli::vector::EmbeddingConfig)>,
-    ) -> Result<HashMap<String, (Arc<milli::vector::Embedder>, Arc<milli::prompt::Prompt>)>> {
+    ) -> Result<EmbeddingConfigs> {
         let res: Result<_> = embedding_configs
             .into_iter()
             .map(|(name, milli::vector::EmbeddingConfig { embedder_options, prompt })| {
@@ -1370,7 +1369,7 @@ impl IndexScheduler {
                 Ok((name, (embedder, prompt)))
             })
             .collect();
-        res
+        res.map(EmbeddingConfigs::new)
     }
 
     /// Blocks the thread until the test handle asks to progress to/through this breakpoint.

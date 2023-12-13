@@ -238,22 +238,28 @@ pub async fn embed(
     match query.vector.take() {
         Some(VectorQuery::String(prompt)) => {
             let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
-            let embedder = index_scheduler.embedders(embedder_configs)?;
+            let embedders = index_scheduler.embedders(embedder_configs)?;
 
             let embedder_name =
                 if let Some(HybridQuery { semantic_ratio: _, embedder: Some(embedder) }) =
                     &query.hybrid
                 {
-                    embedder
+                    Some(embedder)
                 } else {
-                    "default"
+                    None
                 };
 
-            let embeddings = embedder
-                .get(embedder_name)
-                .ok_or(milli::UserError::InvalidEmbedder(embedder_name.to_owned()))
+            let embedder = if let Some(embedder_name) = embedder_name {
+                embedders.get(embedder_name)
+            } else {
+                embedders.get_default()
+            };
+
+            let embedder = embedder
+                .ok_or(milli::UserError::InvalidEmbedder("default".to_owned()))
                 .map_err(milli::Error::from)?
-                .0
+                .0;
+            let embeddings = embedder
                 .embed(vec![prompt])
                 .await
                 .map_err(milli::vector::Error::from)

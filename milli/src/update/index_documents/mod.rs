@@ -9,7 +9,6 @@ use std::io::{Cursor, Read, Seek};
 use std::iter::FromIterator;
 use std::num::NonZeroU32;
 use std::result::Result as StdResult;
-use std::sync::Arc;
 
 use crossbeam_channel::{Receiver, Sender};
 use heed::types::Str;
@@ -34,12 +33,11 @@ use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
 use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
-use crate::prompt::Prompt;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
-use crate::vector::Embedder;
+use crate::vector::EmbeddingConfigs;
 use crate::{CboRoaringBitmapCodec, Index, Result};
 
 static MERGED_DATABASE_COUNT: usize = 7;
@@ -82,7 +80,7 @@ pub struct IndexDocuments<'t, 'i, 'a, FP, FA> {
     should_abort: FA,
     added_documents: u64,
     deleted_documents: u64,
-    embedders: HashMap<String, (Arc<Embedder>, Arc<Prompt>)>,
+    embedders: EmbeddingConfigs,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -173,10 +171,7 @@ where
         Ok((self, Ok(indexed_documents)))
     }
 
-    pub fn with_embedders(
-        mut self,
-        embedders: HashMap<String, (Arc<Embedder>, Arc<Prompt>)>,
-    ) -> Self {
+    pub fn with_embedders(mut self, embedders: EmbeddingConfigs) -> Self {
         self.embedders = embedders;
         self
     }

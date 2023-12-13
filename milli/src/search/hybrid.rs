@@ -218,6 +218,8 @@ impl<'a> Search<'a> {
             exhaustive_number_hits: self.exhaustive_number_hits,
             rtxn: self.rtxn,
             index: self.index,
+            distribution_shift: self.distribution_shift,
+            embedder_name: self.embedder_name.clone(),
         };
 
         let vector_query = search.vector.take();
@@ -265,6 +267,15 @@ impl<'a> Search<'a> {
         vector: &[f32],
         keyword_results: &SearchResult,
     ) -> Result<PartialSearchResult> {
+        let embedder_name;
+        let embedder_name = match &self.embedder_name {
+            Some(embedder_name) => embedder_name,
+            None => {
+                embedder_name = self.index.default_embedding_name(self.rtxn)?;
+                &embedder_name
+            }
+        };
+
         let mut ctx = SearchContext::new(self.index, self.rtxn);
 
         if let Some(searchable_attributes) = self.searchable_attributes {
@@ -282,6 +293,8 @@ impl<'a> Search<'a> {
             self.geo_strategy,
             0,
             self.limit + self.offset,
+            self.distribution_shift,
+            embedder_name,
         )
     }
 

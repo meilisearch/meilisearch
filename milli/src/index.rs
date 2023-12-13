@@ -1499,6 +1499,14 @@ impl Index {
             .get(rtxn, main_key::EMBEDDING_CONFIGS)?
             .unwrap_or_default())
     }
+
+    pub fn default_embedding_name(&self, rtxn: &RoTxn<'_>) -> Result<String> {
+        let configs = self.embedding_configs(rtxn)?;
+        Ok(match configs.as_slice() {
+            [(ref first_name, _)] => first_name.clone(),
+            _ => "default".to_owned(),
+        })
+    }
 }
 
 #[cfg(test)]

@@ -9,10 +9,9 @@ mod extract_word_docids;
 mod extract_word_pair_proximity_docids;
 mod extract_word_position_docids;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::BufReader;
-use std::sync::Arc;
 
 use crossbeam_channel::Sender;
 use log::debug;
@@ -35,9 +34,8 @@ use super::helpers::{
     MergeFn, MergeableReader,
 };
 use super::{helpers, TypedChunk};
-use crate::prompt::Prompt;
 use crate::proximity::ProximityPrecision;
-use crate::vector::Embedder;
+use crate::vector::EmbeddingConfigs;
 use crate::{FieldId, FieldsIdsMap, Result};
 
 /// Extract data for each databases from obkv documents in parallel.
@@ -59,7 +57,7 @@ pub(crate) fn data_from_obkv_documents(
     max_positions_per_attributes: Option<u32>,
     exact_attributes: HashSet<FieldId>,
     proximity_precision: ProximityPrecision,
-    embedders: HashMap<String, (Arc<Embedder>, Arc<Prompt>)>,
+    embedders: EmbeddingConfigs,
 ) -> Result<()> {
     puffin::profile_function!();
 
@@ -284,7 +282,7 @@ fn send_original_documents_data(
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     field_id_map: FieldsIdsMap,
-    embedders: HashMap<String, (Arc<Embedder>, Arc<Prompt>)>,
+    embedders: EmbeddingConfigs,
 ) -> Result<()> {
     let original_documents_chunk =
         original_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
