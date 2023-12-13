@@ -1073,11 +1073,10 @@ fn validate_prompt(
     match new {
         Setting::Set(EmbeddingSettings {
             embedder_options,
-            document_template:
-                Setting::Set(PromptSettings { template: Setting::Set(template), strategy, fallback }),
+            document_template: Setting::Set(PromptSettings { template: Setting::Set(template) }),
         }) => {
             // validate
-            let template = crate::prompt::Prompt::new(template, None, None)
+            let template = crate::prompt::Prompt::new(template)
                 .map(|prompt| crate::prompt::PromptData::from(prompt).template)
                 .map_err(|inner| UserError::InvalidPromptForEmbeddings(name.to_owned(), inner))?;
 
@@ -1085,8 +1084,6 @@ fn validate_prompt(
                 embedder_options,
                 document_template: Setting::Set(PromptSettings {
                     template: Setting::Set(template),
-                    strategy,
-                    fallback,
                 }),
             }))
         }

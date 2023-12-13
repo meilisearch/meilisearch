@@ -16,20 +16,16 @@ use crate::FieldsIdsMap;
 pub struct Prompt {
     template: liquid::Template,
     template_text: String,
-    strategy: PromptFallbackStrategy,
-    fallback: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PromptData {
     pub template: String,
-    pub strategy: PromptFallbackStrategy,
-    pub fallback: String,
 }
 
 impl From<Prompt> for PromptData {
     fn from(value: Prompt) -> Self {
-        Self { template: value.template_text, strategy: value.strategy, fallback: value.fallback }
+        Self { template: value.template_text }
     }
 }
 
@@ -37,19 +33,14 @@ impl TryFrom<PromptData> for Prompt {
     type Error = NewPromptError;
 
     fn try_from(value: PromptData) -> Result<Self, Self::Error> {
-        Prompt::new(value.template, Some(value.strategy), Some(value.fallback))
+        Prompt::new(value.template)
     }
 }
 
 impl Clone for Prompt {
     fn clone(&self) -> Self {
         let template_text = self.template_text.clone();
-        Self {
-            template: new_template(&template_text).unwrap(),
-            template_text,
-            strategy: self.strategy,
-            fallback: self.fallback.clone(),
-        }
+        Self { template: new_template(&template_text).unwrap(), template_text }
     }
 }
 
@@ -67,37 +58,20 @@ fn default_template_text() -> &'static str {
     {% endfor %}"
 }
 
-fn default_fallback() -> &'static str {
-    "<MISSING>"
-}
-
 impl Default for Prompt {
     fn default() -> Self {
-        Self {
-            template: default_template(),
-            template_text: default_template_text().into(),
-            strategy: Default::default(),
-            fallback: default_fallback().into(),
-        }
+        Self { template: default_template(), template_text: default_template_text().into() }
     }
 }
 
 impl Default for PromptData {
     fn default() -> Self {
-        Self {
-            template: default_template_text().into(),
-            strategy: Default::default(),
-            fallback: default_fallback().into(),
-        }
+        Self { template: default_template_text().into() }
     }
 }
 
 impl Prompt {
-    pub fn new(
-        template: String,
-        strategy: Option<PromptFallbackStrategy>,
-        fallback: Option<String>,
-    ) -> Result<Self, NewPromptError> {
+    pub fn new(template: String) -> Result<Self, NewPromptError> {
         let this = Self {
             template: liquid::ParserBuilder::with_stdlib()
                 .build()
@@ -105,8 +79,6 @@ impl Prompt {
                 .parse(&template)
                 .map_err(NewPromptError::cannot_parse_template)?,
             template_text: template,
-            strategy: strategy.unwrap_or_default(),
-            fallback: fallback.unwrap_or_default(),
         };
 
         // render template with special object that's OK with `doc.*` and `fields.*`
@@ -130,18 +102,6 @@ impl Prompt {
     }
 }
 
-#[derive(
-    Debug, Default, Clone, PartialEq, Eq, Copy, serde::Serialize, serde::Deserialize, deserr::Deserr,
-)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-#[deserr(rename_all = camelCase, deny_unknown_fields)]
-pub enum PromptFallbackStrategy {
-    Fallback,
-    Skip,
-    #[default]
-    Error,
-}
-
 #[cfg(test)]
 mod test {
     use super::Prompt;
@@ -156,18 +116,18 @@ mod test {
 
     #[test]
     fn empty_template() {
-        Prompt::new("".into(), None, None).unwrap();
+        Prompt::new("".into()).unwrap();
     }
 
     #[test]
     fn template_ok() {
-        Prompt::new("{{doc.title}}: {{doc.overview}}".into(), None, None).unwrap();
+        Prompt::new("{{doc.title}}: {{doc.overview}}".into()).unwrap();
     }
 
     #[test]
     fn template_syntax() {
         assert!(matches!(
-            Prompt::new("{{doc.title: {{doc.overview}}".into(), None, None),
+            Prompt::new("{{doc.title: {{doc.overview}}".into()),
             Err(NewPromptError {
                 kind: NewPromptErrorKind::CannotParseTemplate(_),
                 fault: FaultSource::User
@@ -178,7 +138,7 @@ mod test {
     #[test]
     fn template_missing_doc() {
         assert!(matches!(
-            Prompt::new("{{title}}: {{overview}}".into(), None, None),
+            Prompt::new("{{title}}: {{overview}}".into()),
             Err(NewPromptError {
                 kind: NewPromptErrorKind::InvalidFieldsInTemplate(_),
                 fault: FaultSource::User
@@ -188,29 +148,25 @@ mod test {
 
     #[test]
     fn template_nested_doc() {
-        Prompt::new("{{doc.actor.firstName}}: {{doc.actor.lastName}}".into(), None, None).unwrap();
+        Prompt::new("{{doc.actor.firstName}}: {{doc.actor.lastName}}".into()).unwrap();
     }
 
     #[test]
     fn template_fields() {
-        Prompt::new("{% for field in fields %}{{field}}{% endfor %}".into(), None, None).unwrap();
+        Prompt::new("{% for field in fields %}{{field}}{% endfor %}".into()).unwrap();
     }
 
     #[test]
     fn template_fields_ok() {
-        Prompt::new(
-            "{% for field in fields %}{{field.name}}: {{field.value}}{% endfor %}".into(),
-            None,
-            None,
-        )
-        .unwrap();
+        Prompt::new("{% for field in fields %}{{field.name}}: {{field.value}}{% endfor %}".into())
+            .unwrap();
     }
 
     #[test]
     fn template_fields_invalid() {
         assert!(matches!(
             // intentionally garbled field
-            Prompt::new("{% for field in fields %}{{field.vaelu}} {% endfor %}".into(), None, None),
+            Prompt::new("{% for field in fields %}{{field.vaelu}} {% endfor %}".into()),
             Err(NewPromptError {
                 kind: NewPromptErrorKind::InvalidFieldsInTemplate(_),
                 fault: FaultSource::User
