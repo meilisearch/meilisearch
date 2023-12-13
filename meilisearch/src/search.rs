@@ -90,6 +90,7 @@ pub struct SearchQuery {
 #[derive(Debug, Clone, Default, PartialEq, Deserr)]
 #[deserr(error = DeserrJsonError<InvalidHybridQuery>, rename_all = camelCase, deny_unknown_fields)]
 pub struct HybridQuery {
+    /// TODO validate that sementic ratio is between 0.0 and 1,0
     #[deserr(default, error = DeserrJsonError<InvalidSemanticRatio>, default = DEFAULT_SEMANTIC_RATIO())]
     pub semantic_ratio: f32,
     #[deserr(default, error = DeserrJsonError<InvalidEmbedder>, default)]
@@ -452,6 +453,9 @@ pub fn perform_search(
     let (search, is_finite_pagination, max_total_hits, offset) =
         prepare_search(index, &rtxn, &query, features)?;
 
+    /// TODO: Change if-cond to query.hybrid.is_some
+    /// + < 1.0 or remove q
+    /// + > 0.0 or remove vector
     let milli::SearchResult { documents_ids, matching_words, candidates, document_scores, .. } =
         if query.q.is_some() && query.vector.is_some() {
             search.execute_hybrid()?
