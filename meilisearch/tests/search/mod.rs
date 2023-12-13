@@ -6,6 +6,7 @@ mod errors;
 mod facet_search;
 mod formatted;
 mod geo;
+mod hybrid;
 mod multi;
 mod pagination;
 mod restrict_searchable;
