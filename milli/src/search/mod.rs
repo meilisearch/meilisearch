@@ -50,6 +50,7 @@ pub struct Search<'a> {
     scoring_strategy: ScoringStrategy,
     words_limit: usize,
     exhaustive_number_hits: bool,
+    /// TODO: Add semantic ratio or pass it directly to execute_hybrid()
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
     distribution_shift: Option<DistributionShift>,

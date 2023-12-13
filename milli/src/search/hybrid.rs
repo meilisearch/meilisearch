@@ -252,6 +252,7 @@ impl<'a> Search<'a> {
             // can unwrap because we returned already if there was no vector query
             self.vector_results_for_keyword(search.vector.as_ref().unwrap(), &keyword_results)?;
 
+        /// TODO apply sementic ratio
         let keyword_results =
             CombinedSearchResult::new(keyword_results, vector_results_for_keyword);
         let vector_results = CombinedSearchResult::new(vector_results, keyword_results_for_vector);
