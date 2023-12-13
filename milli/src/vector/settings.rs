@@ -1,7 +1,7 @@
 use deserr::Deserr;
 use serde::{Deserialize, Serialize};
 
-use crate::prompt::{PromptData, PromptFallbackStrategy};
+use crate::prompt::PromptData;
 use crate::update::Setting;
 use crate::vector::hf::WeightSource;
 use crate::vector::EmbeddingConfig;
@@ -56,45 +56,27 @@ pub struct PromptSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     pub template: Setting<String>,
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    pub strategy: Setting<PromptFallbackStrategy>,
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    pub fallback: Setting<String>,
 }
 
 impl PromptSettings {
     pub fn apply(&mut self, new: Self) {
-        let PromptSettings { template, strategy, fallback } = new;
+        let PromptSettings { template } = new;
         self.template.apply(template);
-        self.strategy.apply(strategy);
-        self.fallback.apply(fallback);
     }
 }
 
 impl From<PromptData> for PromptSettings {
     fn from(value: PromptData) -> Self {
-        Self {
-            template: Setting::Set(value.template),
-            strategy: Setting::Set(value.strategy),
-            fallback: Setting::Set(value.fallback),
-        }
+        Self { template: Setting::Set(value.template) }
     }
 }
 
 impl From<PromptSettings> for PromptData {
     fn from(value: PromptSettings) -> Self {
         let mut this = PromptData::default();
-        let PromptSettings { template, strategy, fallback } = value;
+        let PromptSettings { template } = value;
         if let Some(template) = template.set() {
             this.template = template;
-        }
-        if let Some(strategy) = strategy.set() {
-            this.strategy = strategy;
-        }
-        if let Some(fallback) = fallback.set() {
-            this.fallback = fallback;
         }
         this
     }
