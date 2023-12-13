@@ -27,8 +27,11 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         distribution_shift: Option<DistributionShift>,
         embedder_name: &str,
     ) -> Result<Self> {
-        /// FIXME: unwrap
-        let embedder_index = ctx.index.embedder_category_id.get(ctx.txn, embedder_name)?.unwrap();
+        let embedder_index = ctx
+            .index
+            .embedder_category_id
+            .get(ctx.txn, embedder_name)?
+            .ok_or_else(|| crate::UserError::InvalidEmbedder(embedder_name.to_owned()))?;
 
         Ok(Self {
             query: None,

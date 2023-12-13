@@ -750,6 +750,8 @@ fn execute_word_prefix_docids(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use big_s::S;
     use fst::IntoStreamer;
     use heed::RwTxn;
@@ -759,6 +761,7 @@ mod tests {
     use crate::documents::documents_batch_reader_from_objects;
     use crate::index::tests::TempIndex;
     use crate::search::TermsMatchingStrategy;
+    use crate::update::Setting;
     use crate::{db_snap, Filter, Search};
 
     #[test]
@@ -2550,13 +2553,34 @@ mod tests {
     /// Vectors must be of the same length.
     #[test]
     fn test_multiple_vectors() {
+        use crate::vector::settings::{EmbedderSettings, EmbeddingSettings};
         let index = TempIndex::new();
 
-        index.add_documents(documents!([{"id": 0, "_vectors": [[0, 1, 2], [3, 4, 5]] }])).unwrap();
-        index.add_documents(documents!([{"id": 1, "_vectors": [6, 7, 8] }])).unwrap();
+        index
+            .update_settings(|settings| {
+                let mut embedders = BTreeMap::default();
+                embedders.insert(
+                    "manual".to_string(),
+                    Setting::Set(EmbeddingSettings {
+                        embedder_options: Setting::Set(EmbedderSettings::UserProvided(
+                            crate::vector::settings::UserProvidedSettings { dimensions: 3 },
+                        )),
+                        document_template: Setting::NotSet,
+                    }),
+                );
+                settings.set_embedder_settings(embedders);
+            })
+            .unwrap();
+
         index
             .add_documents(
-                documents!([{"id": 2, "_vectors": [[9, 10, 11], [12, 13, 14], [15, 16, 17]] }]),
+                documents!([{"id": 0, "_vectors": { "manual": [[0, 1, 2], [3, 4, 5]] } }]),
+            )
+            .unwrap();
+        index.add_documents(documents!([{"id": 1, "_vectors": { "manual": [6, 7, 8] }}])).unwrap();
+        index
+            .add_documents(
+                documents!([{"id": 2, "_vectors": { "manual": [[9, 10, 11], [12, 13, 14], [15, 16, 17]] }}]),
             )
             .unwrap();
 
