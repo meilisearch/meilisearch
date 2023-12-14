@@ -335,3 +335,35 @@ async fn exactness_ranking_rule_order() {
         })
         .await;
 }
+
+#[actix_rt::test]
+async fn search_on_exact_field() {
+    let server = Server::new().await;
+    let index = index_with_documents(
+        &server,
+        &json!([
+        {
+            "title": "Captain Marvel",
+            "exact": "Captain Marivel",
+            "id": "1",
+        },
+        {
+            "title": "Captain Marivel",
+            "exact": "Captain the Marvel",
+            "id": "2",
+        }]),
+    )
+    .await;
+
+    let (response, code) =
+        index.update_settings_typo_tolerance(json!({ "disableOnAttributes": ["exact"] })).await;
+    assert_eq!(202, code, "{:?}", response);
+    index.wait_task(1).await;
+    // Searching on an exact attribute should only return the document matching without typo.
+    index
+        .search(json!({"q": "Marvel", "attributesToSearchOn": ["exact"]}), |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(response["hits"].as_array().unwrap().len(), @"1");
+        })
+        .await;
+}

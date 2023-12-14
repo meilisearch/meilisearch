@@ -468,7 +468,7 @@ checksum = "8c3c1a368f70d6cf7302d78f8f7093da241fb8e8807c05cc9e51a125895a6d5b"
 
 [[package]]
 name = "benchmarks"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1269,7 +1269,7 @@ dependencies = [
 
 [[package]]
 name = "dump"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "anyhow",
  "big_s",
@@ -1486,7 +1486,7 @@ dependencies = [
 
 [[package]]
 name = "file-store"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "faux",
  "tempfile",
@@ -1508,7 +1508,7 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "insta",
  "nom",
@@ -1539,7 +1539,7 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "criterion",
  "serde_json",
@@ -1657,7 +1657,7 @@ dependencies = [
 
 [[package]]
 name = "fuzzers"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "arbitrary",
  "clap",
@@ -2457,7 +2457,7 @@ dependencies = [
 
 [[package]]
 name = "index-scheduler"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "anyhow",
  "big_s",
@@ -2654,7 +2654,7 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "criterion",
  "serde_json",
@@ -3083,7 +3083,7 @@ checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
 
 [[package]]
 name = "meili-snap"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "insta",
  "md5",
@@ -3092,7 +3092,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "actix-cors",
  "actix-http",
@@ -3182,7 +3182,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-auth"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "base64 0.21.2",
  "enum-iterator",
@@ -3201,7 +3201,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-types"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -3231,7 +3231,7 @@ dependencies = [
 
 [[package]]
 name = "meilitool"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -3269,7 +3269,7 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "big_s",
  "bimap",
@@ -3592,7 +3592,7 @@ checksum = "9b2a4787296e9989611394c33f193f676704af1686e70b8f8033ab5ba9a35a94"
 
 [[package]]
 name = "permissive-json-pointer"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "big_s",
  "serde_json",
