@@ -4,7 +4,7 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 
 use super::error::{EmbedError, NewEmbedderError};
-use super::{Embedding, Embeddings};
+use super::{DistributionShift, Embedding, Embeddings};
 
 #[derive(Debug)]
 pub struct Embedder {
@@ -63,6 +63,14 @@ impl EmbeddingModel {
         match name {
             "text-embedding-ada-002" => Some(EmbeddingModel::TextEmbeddingAda002),
             _ => None,
+        }
+    }
+
+    fn distribution(&self) -> Option<DistributionShift> {
+        match self {
+            EmbeddingModel::TextEmbeddingAda002 => {
+                Some(DistributionShift { current_mean: 0.90, current_sigma: 0.08 })
+            }
         }
     }
 }
@@ -325,6 +333,10 @@ impl Embedder {
 
     pub fn dimensions(&self) -> usize {
         self.options.embedding_model.dimensions()
+    }
+
+    pub fn distribution(&self) -> Option<DistributionShift> {
+        self.options.embedding_model.distribution()
     }
 }
 

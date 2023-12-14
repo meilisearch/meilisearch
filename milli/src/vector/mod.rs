@@ -202,6 +202,14 @@ impl Embedder {
             Embedder::UserProvided(embedder) => embedder.dimensions(),
         }
     }
+
+    pub fn distribution(&self) -> Option<DistributionShift> {
+        match self {
+            Embedder::HuggingFace(embedder) => embedder.distribution(),
+            Embedder::OpenAi(embedder) => embedder.distribution(),
+            Embedder::UserProvided(_embedder) => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

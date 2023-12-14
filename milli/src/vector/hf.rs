@@ -7,7 +7,7 @@ use hf_hub::{Repo, RepoType};
 use tokenizers::{PaddingParams, Tokenizer};
 
 pub use super::error::{EmbedError, Error, NewEmbedderError};
-use super::{Embedding, Embeddings};
+use super::{DistributionShift, Embedding, Embeddings};
 
 #[derive(
     Debug,
@@ -183,5 +183,13 @@ impl Embedder {
 
     pub fn dimensions(&self) -> usize {
         self.dimensions
+    }
+
+    pub fn distribution(&self) -> Option<DistributionShift> {
+        if self.options.model == "BAAI/bge-base-en-v1.5" {
+            Some(DistributionShift { current_mean: 0.85, current_sigma: 0.1 })
+        } else {
+            None
+        }
     }
 }

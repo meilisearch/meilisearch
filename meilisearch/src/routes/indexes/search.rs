@@ -9,6 +9,7 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli;
+use meilisearch_types::milli::vector::DistributionShift;
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 
@@ -200,10 +201,11 @@ pub async fn search_with_url_query(
     let index = index_scheduler.index(&index_uid)?;
     let features = index_scheduler.features();
 
-    embed(&mut query, index_scheduler.get_ref(), &index).await?;
+    let distribution = embed(&mut query, index_scheduler.get_ref(), &index).await?;
 
     let search_result =
-        tokio::task::spawn_blocking(move || perform_search(&index, query, features)).await?;
+        tokio::task::spawn_blocking(move || perform_search(&index, query, features, distribution))
+            .await?;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
@@ -238,10 +240,11 @@ pub async fn search_with_post(
 
     let features = index_scheduler.features();
 
-    embed(&mut query, index_scheduler.get_ref(), &index).await?;
+    let distribution = embed(&mut query, index_scheduler.get_ref(), &index).await?;
 
     let search_result =
-        tokio::task::spawn_blocking(move || perform_search(&index, query, features)).await?;
+        tokio::task::spawn_blocking(move || perform_search(&index, query, features, distribution))
+            .await?;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
@@ -257,39 +260,74 @@ pub async fn embed(
     query: &mut SearchQuery,
     index_scheduler: &IndexScheduler,
     index: &milli::Index,
-) -> Result<(), ResponseError> {
-    if let (None, Some(q), Some(HybridQuery { semantic_ratio: _, embedder })) =
-        (&query.vector, &query.q, &query.hybrid)
-    {
-        let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
-        let embedders = index_scheduler.embedders(embedder_configs)?;
+) -> Result<Option<DistributionShift>, ResponseError> {
+    match (&query.hybrid, &query.vector, &query.q) {
+        (Some(HybridQuery { semantic_ratio: _, embedder }), None, Some(q))
+            if !q.trim().is_empty() =>
+        {
+            let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
+            let embedders = index_scheduler.embedders(embedder_configs)?;
 
-        let embedder = if let Some(embedder_name) = embedder {
-            embedders.get(embedder_name)
-        } else {
-            embedders.get_default()
-        };
+            let embedder = if let Some(embedder_name) = embedder {
+                embedders.get(embedder_name)
+            } else {
+                embedders.get_default()
+            };
 
-        let embedder = embedder
-            .ok_or(milli::UserError::InvalidEmbedder("default".to_owned()))
-            .map_err(milli::Error::from)?
-            .0;
-        let embeddings = embedder
-            .embed(vec![q.to_owned()])
-            .await
-            .map_err(milli::vector::Error::from)
-            .map_err(milli::Error::from)?
-            .pop()
-            .expect("No vector returned from embedding");
+            let embedder = embedder
+                .ok_or(milli::UserError::InvalidEmbedder("default".to_owned()))
+                .map_err(milli::Error::from)?
+                .0;
 
-        if embeddings.iter().nth(1).is_some() {
-            warn!("Ignoring embeddings past the first one in long search query");
-            query.vector = Some(embeddings.iter().next().unwrap().to_vec());
-        } else {
-            query.vector = Some(embeddings.into_inner());
+            let distribution = embedder.distribution();
+
+            let embeddings = embedder
+                .embed(vec![q.to_owned()])
+                .await
+                .map_err(milli::vector::Error::from)
+                .map_err(milli::Error::from)?
+                .pop()
+                .expect("No vector returned from embedding");
+
+            if embeddings.iter().nth(1).is_some() {
+                warn!("Ignoring embeddings past the first one in long search query");
+                query.vector = Some(embeddings.iter().next().unwrap().to_vec());
+            } else {
+                query.vector = Some(embeddings.into_inner());
+            }
+            Ok(distribution)
         }
+        (Some(hybrid), vector, _) => {
+            let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
+            let embedders = index_scheduler.embedders(embedder_configs)?;
+
+            let embedder = if let Some(embedder_name) = &hybrid.embedder {
+                embedders.get(embedder_name)
+            } else {
+                embedders.get_default()
+            };
+
+            let embedder = embedder
+                .ok_or(milli::UserError::InvalidEmbedder("default".to_owned()))
+                .map_err(milli::Error::from)?
+                .0;
+
+            if let Some(vector) = vector {
+                if vector.len() != embedder.dimensions() {
+                    return Err(meilisearch_types::milli::Error::UserError(
+                        meilisearch_types::milli::UserError::InvalidVectorDimensions {
+                            expected: embedder.dimensions(),
+                            found: vector.len(),
+                        },
+                    )
+                    .into());
+                }
+            }
+
+            Ok(embedder.distribution())
+        }
+        _ => Ok(None),
     }
-    Ok(())
 }
 
 #[cfg(test)]

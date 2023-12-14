@@ -154,6 +154,15 @@ impl<'a> Search<'a> {
         self
     }
 
+    pub fn execute_for_candidates(&self, has_vector_search: bool) -> Result<RoaringBitmap> {
+        if has_vector_search {
+            let ctx = SearchContext::new(self.index, self.rtxn);
+            filtered_universe(&ctx, &self.filter)
+        } else {
+            Ok(self.execute()?.candidates)
+        }
+    }
+
     pub fn execute(&self) -> Result<SearchResult> {
         let embedder_name;
         let embedder_name = match &self.embedder_name {
@@ -297,11 +306,16 @@ pub struct SearchForFacetValues<'a> {
     query: Option<String>,
     facet: String,
     search_query: Search<'a>,
+    is_hybrid: bool,
 }
 
 impl<'a> SearchForFacetValues<'a> {
-    pub fn new(facet: String, search_query: Search<'a>) -> SearchForFacetValues<'a> {
-        SearchForFacetValues { query: None, facet, search_query }
+    pub fn new(
+        facet: String,
+        search_query: Search<'a>,
+        is_hybrid: bool,
+    ) -> SearchForFacetValues<'a> {
+        SearchForFacetValues { query: None, facet, search_query, is_hybrid }
     }
 
     pub fn query(&mut self, query: impl Into<String>) -> &mut Self {
@@ -351,7 +365,9 @@ impl<'a> SearchForFacetValues<'a> {
             None => return Ok(vec![]),
         };
 
-        let search_candidates = self.search_query.execute()?.candidates;
+        let search_candidates = self
+            .search_query
+            .execute_for_candidates(self.is_hybrid || self.search_query.vector.is_some())?;
 
         match self.query.as_ref() {
             Some(query) => {
