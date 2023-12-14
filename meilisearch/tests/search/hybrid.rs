@@ -1,4 +1,4 @@
-use meili_snap::{json_string, snapshot};
+use meili_snap::snapshot;
 use once_cell::sync::Lazy;
 
 use crate::common::index::Index;

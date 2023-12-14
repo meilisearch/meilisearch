@@ -1,49 +1,37 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
 
 use itertools::Itertools;
 use roaring::RoaringBitmap;
 
-use super::new::{execute_vector_search, PartialSearchResult};
 use crate::score_details::{ScoreDetails, ScoreValue, ScoringStrategy};
-use crate::{
-    execute_search, DefaultSearchLogger, MatchingWords, Result, Search, SearchContext, SearchResult,
-};
+use crate::{MatchingWords, Result, Search, SearchResult};
 
-struct CombinedSearchResult {
+struct ScoreWithRatioResult {
     matching_words: MatchingWords,
     candidates: RoaringBitmap,
-    document_scores: Vec<(u32, CombinedScore)>,
+    document_scores: Vec<(u32, ScoreWithRatio)>,
 }
 
-type CombinedScore = (Vec<ScoreDetails>, Option<Vec<ScoreDetails>>);
+type ScoreWithRatio = (Vec<ScoreDetails>, f32);
 
-fn compare_scores(left: &CombinedScore, right: &CombinedScore) -> Ordering {
-    let mut left_main_it = ScoreDetails::score_values(left.0.iter());
-    let mut left_sub_it =
-        ScoreDetails::score_values(left.1.as_ref().map(|x| x.iter()).into_iter().flatten());
-
-    let mut right_main_it = ScoreDetails::score_values(right.0.iter());
-    let mut right_sub_it =
-        ScoreDetails::score_values(right.1.as_ref().map(|x| x.iter()).into_iter().flatten());
-
-    let mut left_main = left_main_it.next();
-    let mut left_sub = left_sub_it.next();
-    let mut right_main = right_main_it.next();
-    let mut right_sub = right_sub_it.next();
+fn compare_scores(
+    &(ref left_scores, left_ratio): &ScoreWithRatio,
+    &(ref right_scores, right_ratio): &ScoreWithRatio,
+) -> Ordering {
+    let mut left_it = ScoreDetails::score_values(left_scores.iter());
+    let mut right_it = ScoreDetails::score_values(right_scores.iter());
 
     loop {
-        let left =
-            take_best_score(&mut left_main, &mut left_sub, &mut left_main_it, &mut left_sub_it);
-
-        let right =
-            take_best_score(&mut right_main, &mut right_sub, &mut right_main_it, &mut right_sub_it);
+        let left = left_it.next();
+        let right = right_it.next();
 
         match (left, right) {
             (None, None) => return Ordering::Equal,
             (None, Some(_)) => return Ordering::Less,
             (Some(_), None) => return Ordering::Greater,
             (Some(ScoreValue::Score(left)), Some(ScoreValue::Score(right))) => {
+                let left = left * left_ratio as f64;
+                let right = right * right_ratio as f64;
                 if (left - right).abs() <= f64::EPSILON {
                     continue;
                 }
@@ -72,94 +60,17 @@ fn compare_scores(left: &CombinedScore, right: &CombinedScore) -> Ordering {
     }
 }
 
-fn take_best_score<'a>(
-    main_score: &mut Option<ScoreValue<'a>>,
-    sub_score: &mut Option<ScoreValue<'a>>,
-    main_it: &mut impl Iterator<Item = ScoreValue<'a>>,
-    sub_it: &mut impl Iterator<Item = ScoreValue<'a>>,
-) -> Option<ScoreValue<'a>> {
-    match (*main_score, *sub_score) {
-        (Some(main), None) => {
-            *main_score = main_it.next();
-            Some(main)
-        }
-        (None, Some(sub)) => {
-            *sub_score = sub_it.next();
-            Some(sub)
-        }
-        (main @ Some(ScoreValue::Score(main_f)), sub @ Some(ScoreValue::Score(sub_v))) => {
-            // take max, both advance
-            *main_score = main_it.next();
-            *sub_score = sub_it.next();
-            if main_f >= sub_v {
-                main
-            } else {
-                sub
-            }
-        }
-        (main @ Some(ScoreValue::Score(_)), _) => {
-            *main_score = main_it.next();
-            main
-        }
-        (_, sub @ Some(ScoreValue::Score(_))) => {
-            *sub_score = sub_it.next();
-            sub
-        }
-        (main @ Some(ScoreValue::GeoSort(main_geo)), sub @ Some(ScoreValue::GeoSort(sub_geo))) => {
-            // take best advance both
-            *main_score = main_it.next();
-            *sub_score = sub_it.next();
-            if main_geo >= sub_geo {
-                main
-            } else {
-                sub
-            }
-        }
-        (main @ Some(ScoreValue::Sort(main_sort)), sub @ Some(ScoreValue::Sort(sub_sort))) => {
-            // take best advance both
-            *main_score = main_it.next();
-            *sub_score = sub_it.next();
-            if main_sort >= sub_sort {
-                main
-            } else {
-                sub
-            }
-        }
-        (
-            Some(ScoreValue::GeoSort(_) | ScoreValue::Sort(_)),
-            Some(ScoreValue::GeoSort(_) | ScoreValue::Sort(_)),
-        ) => None,
-
-        (None, None) => None,
-    }
-}
-
-impl CombinedSearchResult {
-    fn new(main_results: SearchResult, ancillary_results: PartialSearchResult) -> Self {
-        let mut docid_scores = HashMap::new();
-        for (docid, score) in
-            main_results.documents_ids.iter().zip(main_results.document_scores.into_iter())
-        {
-            docid_scores.insert(*docid, (score, None));
-        }
-
-        for (docid, score) in ancillary_results
+impl ScoreWithRatioResult {
+    fn new(results: SearchResult, ratio: f32) -> Self {
+        let document_scores = results
             .documents_ids
-            .iter()
-            .zip(ancillary_results.document_scores.into_iter())
-        {
-            docid_scores
-                .entry(*docid)
-                .and_modify(|(_main_score, ancillary_score)| *ancillary_score = Some(score));
-        }
-
-        let mut document_scores: Vec<_> = docid_scores.into_iter().collect();
-
-        document_scores.sort_by(|(_, left), (_, right)| compare_scores(left, right).reverse());
+            .into_iter()
+            .zip(results.document_scores.into_iter().map(|scores| (scores, ratio)))
+            .collect();
 
         Self {
-            matching_words: main_results.matching_words,
-            candidates: main_results.candidates,
+            matching_words: results.matching_words,
+            candidates: results.candidates,
             document_scores,
         }
     }
@@ -200,7 +111,7 @@ impl CombinedSearchResult {
 }
 
 impl<'a> Search<'a> {
-    pub fn execute_hybrid(&self) -> Result<SearchResult> {
+    pub fn execute_hybrid(&self, semantic_ratio: f32) -> Result<SearchResult> {
         // TODO: find classier way to achieve that than to reset vector and query params
         // create separate keyword and semantic searches
         let mut search = Search {
@@ -223,8 +134,6 @@ impl<'a> Search<'a> {
         };
 
         let vector_query = search.vector.take();
-        let keyword_query = self.query.as_deref();
-
         let keyword_results = search.execute()?;
 
         // skip semantic search if we don't have a vector query (placeholder search)
@@ -233,7 +142,7 @@ impl<'a> Search<'a> {
         };
 
         // completely skip semantic search if the results of the keyword search are good enough
-        if self.results_good_enough(&keyword_results) {
+        if self.results_good_enough(&keyword_results, semantic_ratio) {
             return Ok(keyword_results);
         }
 
@@ -243,94 +152,18 @@ impl<'a> Search<'a> {
         // TODO: would be better to have two distinct functions at this point
         let vector_results = search.execute()?;
 
-        // Compute keyword scores for vector_results
-        let keyword_results_for_vector =
-            self.keyword_results_for_vector(keyword_query, &vector_results)?;
-
-        // compute vector scores for keyword_results
-        let vector_results_for_keyword =
-            // can unwrap because we returned already if there was no vector query
-            self.vector_results_for_keyword(search.vector.as_ref().unwrap(), &keyword_results)?;
-
-        /// TODO apply sementic ratio
-        let keyword_results =
-            CombinedSearchResult::new(keyword_results, vector_results_for_keyword);
-        let vector_results = CombinedSearchResult::new(vector_results, keyword_results_for_vector);
+        let keyword_results = ScoreWithRatioResult::new(keyword_results, 1.0 - semantic_ratio);
+        let vector_results = ScoreWithRatioResult::new(vector_results, semantic_ratio);
 
         let merge_results =
-            CombinedSearchResult::merge(vector_results, keyword_results, self.offset, self.limit);
+            ScoreWithRatioResult::merge(vector_results, keyword_results, self.offset, self.limit);
         assert!(merge_results.documents_ids.len() <= self.limit);
         Ok(merge_results)
     }
 
-    fn vector_results_for_keyword(
-        &self,
-        vector: &[f32],
-        keyword_results: &SearchResult,
-    ) -> Result<PartialSearchResult> {
-        let embedder_name;
-        let embedder_name = match &self.embedder_name {
-            Some(embedder_name) => embedder_name,
-            None => {
-                embedder_name = self.index.default_embedding_name(self.rtxn)?;
-                &embedder_name
-            }
-        };
-
-        let mut ctx = SearchContext::new(self.index, self.rtxn);
-
-        if let Some(searchable_attributes) = self.searchable_attributes {
-            ctx.searchable_attributes(searchable_attributes)?;
-        }
-
-        let universe = keyword_results.documents_ids.iter().collect();
-
-        execute_vector_search(
-            &mut ctx,
-            vector,
-            ScoringStrategy::Detailed,
-            universe,
-            &self.sort_criteria,
-            self.geo_strategy,
-            0,
-            self.limit + self.offset,
-            self.distribution_shift,
-            embedder_name,
-        )
-    }
-
-    fn keyword_results_for_vector(
-        &self,
-        query: Option<&str>,
-        vector_results: &SearchResult,
-    ) -> Result<PartialSearchResult> {
-        let mut ctx = SearchContext::new(self.index, self.rtxn);
-
-        if let Some(searchable_attributes) = self.searchable_attributes {
-            ctx.searchable_attributes(searchable_attributes)?;
-        }
-
-        let universe = vector_results.documents_ids.iter().collect();
-
-        execute_search(
-            &mut ctx,
-            query,
-            self.terms_matching_strategy,
-            ScoringStrategy::Detailed,
-            self.exhaustive_number_hits,
-            universe,
-            &self.sort_criteria,
-            self.geo_strategy,
-            0,
-            self.limit + self.offset,
-            Some(self.words_limit),
-            &mut DefaultSearchLogger,
-            &mut DefaultSearchLogger,
-        )
-    }
-
-    fn results_good_enough(&self, keyword_results: &SearchResult) -> bool {
-        const GOOD_ENOUGH_SCORE: f64 = 0.9;
+    fn results_good_enough(&self, keyword_results: &SearchResult, semantic_ratio: f32) -> bool {
+        // A result is good enough if its keyword score is > 0.9 with a semantic ratio of 0.5 => 0.9 * 0.5
+        const GOOD_ENOUGH_SCORE: f64 = 0.45;
 
         // 1. we check that we got a sufficient number of results
         if keyword_results.document_scores.len() < self.limit + self.offset {
@@ -341,7 +174,7 @@ impl<'a> Search<'a> {
         // we need to check all results because due to sort like rules, they're not necessarily in relevancy order
         for score in &keyword_results.document_scores {
             let score = ScoreDetails::global_score(score.iter());
-            if score < GOOD_ENOUGH_SCORE {
+            if score * ((1.0 - semantic_ratio) as f64) < GOOD_ENOUGH_SCORE {
                 return false;
             }
         }

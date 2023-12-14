@@ -7,7 +7,6 @@ use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
-use meilisearch_types::milli::VectorQuery;
 use serde_json::Value;
 
 use crate::analytics::{Analytics, FacetSearchAggregator};
@@ -121,7 +120,7 @@ impl From<FacetSearchQuery> for SearchQuery {
             highlight_post_tag: DEFAULT_HIGHLIGHT_POST_TAG(),
             crop_marker: DEFAULT_CROP_MARKER(),
             matching_strategy,
-            vector: vector.map(VectorQuery::Vector),
+            vector,
             attributes_to_search_on,
             hybrid,
         }

@@ -7,14 +7,13 @@ use deserr::Deserr;
 use either::Either;
 use index_scheduler::RoFeatures;
 use indexmap::IndexMap;
-use log::warn;
 use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::score_details::{self, ScoreDetails, ScoringStrategy};
-use meilisearch_types::milli::{FacetValueHit, OrderBy, SearchForFacetValues, VectorQuery};
+use meilisearch_types::milli::{FacetValueHit, OrderBy, SearchForFacetValues};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
@@ -44,7 +43,7 @@ pub struct SearchQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
-    pub vector: Option<milli::VectorQuery>,
+    pub vector: Option<Vec<f32>>,
     #[deserr(default, error = DeserrJsonError<InvalidHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
@@ -105,6 +104,8 @@ impl std::convert::TryFrom<f32> for SemanticRatio {
     type Error = InvalidSearchSemanticRatio;
 
     fn try_from(f: f32) -> Result<Self, Self::Error> {
+        // the suggested "fix" is: `!(0.0..=1.0).contains(&f)`` which is allegedly less readable
+        #[allow(clippy::manual_range_contains)]
         if f > 1.0 || f < 0.0 {
             Err(InvalidSearchSemanticRatio)
         } else {
@@ -139,7 +140,7 @@ pub struct SearchQueryWithIndex {
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
-    pub vector: Option<VectorQuery>,
+    pub vector: Option<Vec<f32>>,
     #[deserr(default, error = DeserrJsonError<InvalidHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
@@ -376,8 +377,16 @@ fn prepare_search<'t>(
 ) -> Result<(milli::Search<'t>, bool, usize, usize), MeilisearchHttpError> {
     let mut search = index.search(rtxn);
 
-    if query.vector.is_some() && query.q.is_some() {
-        warn!("Attempting hybrid search");
+    if query.vector.is_some() {
+        features.check_vector("Passing `vector` as a query parameter")?;
+    }
+
+    if query.hybrid.is_some() {
+        features.check_vector("Passing `hybrid` as a query parameter")?;
+    }
+
+    if query.hybrid.is_none() && query.q.is_some() && query.vector.is_some() {
+        return Err(MeilisearchHttpError::MissingSearchHybrid);
     }
 
     if let Some(ref vector) = query.vector {
@@ -385,14 +394,9 @@ fn prepare_search<'t>(
             // If semantic ratio is 0.0, only the query search will impact the search results,
             // skip the vector
             Some(hybrid) if *hybrid.semantic_ratio == 0.0 => (),
-            _otherwise => match vector {
-                VectorQuery::Vector(vector) => {
-                    search.vector(vector.clone());
-                }
-                VectorQuery::String(_) => {
-                    panic!("Failed while preparing search; caller did not generate embedding for query")
-                }
-            },
+            _otherwise => {
+                search.vector(vector.clone());
+            }
         }
     }
 
@@ -429,10 +433,6 @@ fn prepare_search<'t>(
 
     if query.show_ranking_score_details {
         features.check_score_details()?;
-    }
-
-    if query.vector.is_some() {
-        features.check_vector("Passing `vector` as a query parameter")?;
     }
 
     if let Some(HybridQuery { embedder: Some(embedder), .. }) = &query.hybrid {
@@ -492,7 +492,7 @@ pub fn perform_search(
     let milli::SearchResult { documents_ids, matching_words, candidates, document_scores, .. } =
         match &query.hybrid {
             Some(hybrid) => match *hybrid.semantic_ratio {
-                0.0 | 1.0 => search.execute()?,
+                ratio if ratio == 0.0 || ratio == 1.0 => search.execute()?,
                 ratio => search.execute_hybrid(ratio)?,
             },
             None => search.execute()?,
@@ -700,10 +700,7 @@ pub fn perform_search(
         hits: documents,
         hits_info,
         query: query.q.unwrap_or_default(),
-        vector: match query.vector {
-            Some(VectorQuery::Vector(vector)) => Some(vector),
-            _ => None,
-        },
+        vector: query.vector,
         processing_time_ms: before_search.elapsed().as_millis(),
         facet_distribution,
         facet_stats,
