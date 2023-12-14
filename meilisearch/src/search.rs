@@ -100,6 +100,7 @@ pub struct HybridQuery {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Deserr)]
 #[deserr(try_from(f32) = TryFrom::try_from -> InvalidSearchSemanticRatio)]
 pub struct SemanticRatio(f32);
+
 impl std::convert::TryFrom<f32> for SemanticRatio {
     type Error = InvalidSearchSemanticRatio;
 
@@ -383,7 +384,9 @@ fn prepare_search<'t>(
     }
 
     if let Some(ref query) = query.q {
+        // if !matches!(query.hybrid, query.) {
         search.query(query);
+        // }
     }
 
     if let Some(ref searchable) = query.attributes_to_search_on {

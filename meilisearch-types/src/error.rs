@@ -463,7 +463,7 @@ impl fmt::Display for deserr_codes::InvalidSearchSemanticRatio {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "the value of `semanticRatio` is invalid, expected a value between `0.0` and `1.0`."
+            "the value of `semanticRatio` is invalid, expected a float between `0.0` and `1.0`."
         )
     }
 }

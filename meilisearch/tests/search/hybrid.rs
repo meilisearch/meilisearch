@@ -68,7 +68,7 @@ async fn simple_search() {
         )
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_semanticScore":0.99029034},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_semanticScore":0.97434163},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_semanticScore":0.9472136}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_semanticScore":0.97434163},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_semanticScore":0.99029034},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_semanticScore":0.9472136}]"###);
 
     let (response, code) = index
         .search_post(
@@ -92,7 +92,7 @@ async fn invalid_semantic_ratio() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Invalid value at `.hybrid.semanticRatio`: the value of `semanticRatio` is invalid, expected a value between `0.0` and `1.0`.",
+      "message": "Invalid value at `.hybrid.semanticRatio`: the value of `semanticRatio` is invalid, expected a float between `0.0` and `1.0`.",
       "code": "invalid_search_semantic_ratio",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_semantic_ratio"
@@ -107,7 +107,7 @@ async fn invalid_semantic_ratio() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Invalid value at `.hybrid.semanticRatio`: the value of `semanticRatio` is invalid, expected a value between `0.0` and `1.0`.",
+      "message": "Invalid value at `.hybrid.semanticRatio`: the value of `semanticRatio` is invalid, expected a float between `0.0` and `1.0`.",
       "code": "invalid_search_semantic_ratio",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_semantic_ratio"
@@ -125,7 +125,7 @@ async fn invalid_semantic_ratio() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Invalid value type for parameter `hybridSemanticRatio`: expected a string, but found a string: `1.2`",
+      "message": "Invalid value in parameter `hybridSemanticRatio`: the value of `semanticRatio` is invalid, expected a float between `0.0` and `1.0`.",
       "code": "invalid_search_semantic_ratio",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_semantic_ratio"
@@ -143,7 +143,7 @@ async fn invalid_semantic_ratio() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Invalid value type for parameter `hybridSemanticRatio`: expected a string, but found a string: `-0.2`",
+      "message": "Invalid value in parameter `hybridSemanticRatio`: the value of `semanticRatio` is invalid, expected a float between `0.0` and `1.0`.",
       "code": "invalid_search_semantic_ratio",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_semantic_ratio"
