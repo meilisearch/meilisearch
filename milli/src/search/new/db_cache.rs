@@ -299,9 +299,9 @@ impl<'ctx> SearchContext<'ctx> {
         proximity: u8,
     ) -> Result<Option<RoaringBitmap>> {
         match self.index.proximity_precision(self.txn)?.unwrap_or_default() {
-            ProximityPrecision::AttributeScale => {
+            ProximityPrecision::ByAttribute => {
                 // Force proximity to 0 because:
-                // in AttributeScale, there are only 2 possible distances:
+                // in ByAttribute, there are only 2 possible distances:
                 // 1. words in same attribute: in that the DB contains (0, word1, word2)
                 // 2. words in different attributes: no DB entry for these two words.
                 let proximity = 0;
@@ -345,19 +345,17 @@ impl<'ctx> SearchContext<'ctx> {
 
                 Ok(docids)
             }
-            ProximityPrecision::WordScale => {
-                DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
-                    self.txn,
-                    (proximity, word1, word2),
-                    &(
-                        proximity,
-                        self.word_interner.get(word1).as_str(),
-                        self.word_interner.get(word2).as_str(),
-                    ),
-                    &mut self.db_cache.word_pair_proximity_docids,
-                    self.index.word_pair_proximity_docids.remap_data_type::<Bytes>(),
-                )
-            }
+            ProximityPrecision::ByWord => DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
+                self.txn,
+                (proximity, word1, word2),
+                &(
+                    proximity,
+                    self.word_interner.get(word1).as_str(),
+                    self.word_interner.get(word2).as_str(),
+                ),
+                &mut self.db_cache.word_pair_proximity_docids,
+                self.index.word_pair_proximity_docids.remap_data_type::<Bytes>(),
+            ),
         }
     }
 
@@ -368,10 +366,10 @@ impl<'ctx> SearchContext<'ctx> {
         proximity: u8,
     ) -> Result<Option<u64>> {
         match self.index.proximity_precision(self.txn)?.unwrap_or_default() {
-            ProximityPrecision::AttributeScale => Ok(self
+            ProximityPrecision::ByAttribute => Ok(self
                 .get_db_word_pair_proximity_docids(word1, word2, proximity)?
                 .map(|d| d.len())),
-            ProximityPrecision::WordScale => {
+            ProximityPrecision::ByWord => {
                 DatabaseCache::get_value::<_, _, CboRoaringBitmapLenCodec>(
                     self.txn,
                     (proximity, word1, word2),
@@ -394,9 +392,9 @@ impl<'ctx> SearchContext<'ctx> {
         mut proximity: u8,
     ) -> Result<Option<RoaringBitmap>> {
         let proximity_precision = self.index.proximity_precision(self.txn)?.unwrap_or_default();
-        if proximity_precision == ProximityPrecision::AttributeScale {
+        if proximity_precision == ProximityPrecision::ByAttribute {
             // Force proximity to 0 because:
-            // in AttributeScale, there are only 2 possible distances:
+            // in ByAttribute, there are only 2 possible distances:
             // 1. words in same attribute: in that the DB contains (0, word1, word2)
             // 2. words in different attributes: no DB entry for these two words.
             proximity = 0;
@@ -408,7 +406,7 @@ impl<'ctx> SearchContext<'ctx> {
             docids.clone()
         } else {
             let prefix_docids = match proximity_precision {
-                ProximityPrecision::AttributeScale => {
+                ProximityPrecision::ByAttribute => {
                     // Compute the distance at the attribute level and store it in the cache.
                     let fids = if let Some(fids) = self.index.searchable_fields_ids(self.txn)? {
                         fids
@@ -429,7 +427,7 @@ impl<'ctx> SearchContext<'ctx> {
                     }
                     prefix_docids
                 }
-                ProximityPrecision::WordScale => {
+                ProximityPrecision::ByWord => {
                     // compute docids using prefix iter and store the result in the cache.
                     let key = U8StrStrCodec::bytes_encode(&(
                         proximity,

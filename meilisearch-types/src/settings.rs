@@ -703,23 +703,23 @@ impl From<RankingRuleView> for Criterion {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(error = DeserrJsonError<InvalidSettingsProximityPrecision>, rename_all = camelCase, deny_unknown_fields)]
 pub enum ProximityPrecisionView {
-    WordScale,
-    AttributeScale,
+    ByWord,
+    ByAttribute,
 }
 
 impl From<ProximityPrecision> for ProximityPrecisionView {
     fn from(value: ProximityPrecision) -> Self {
         match value {
-            ProximityPrecision::WordScale => ProximityPrecisionView::WordScale,
-            ProximityPrecision::AttributeScale => ProximityPrecisionView::AttributeScale,
+            ProximityPrecision::ByWord => ProximityPrecisionView::ByWord,
+            ProximityPrecision::ByAttribute => ProximityPrecisionView::ByAttribute,
         }
     }
 }
 impl From<ProximityPrecisionView> for ProximityPrecision {
     fn from(value: ProximityPrecisionView) -> Self {
         match value {
-            ProximityPrecisionView::WordScale => ProximityPrecision::WordScale,
-            ProximityPrecisionView::AttributeScale => ProximityPrecision::AttributeScale,
+            ProximityPrecisionView::ByWord => ProximityPrecision::ByWord,
+            ProximityPrecisionView::ByAttribute => ProximityPrecision::ByAttribute,
         }
     }
 }

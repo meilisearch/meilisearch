@@ -1877,7 +1877,7 @@ async fn import_dump_v6_containing_experimental_features() {
       "dictionary": [],
       "synonyms": {},
       "distinctAttribute": null,
-      "proximityPrecision": "attributeScale",
+      "proximityPrecision": "byAttribute",
       "typoTolerance": {
         "enabled": true,
         "minWordSizeForTypos": {

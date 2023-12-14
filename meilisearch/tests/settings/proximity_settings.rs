@@ -34,7 +34,7 @@ async fn attribute_scale_search() {
 
     let (response, code) = index
         .update_settings(json!({
-            "proximityPrecision": "attributeScale",
+            "proximityPrecision": "byAttribute",
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
@@ -107,7 +107,7 @@ async fn attribute_scale_phrase_search() {
 
     let (_response, _code) = index
         .update_settings(json!({
-            "proximityPrecision": "attributeScale",
+            "proximityPrecision": "byAttribute",
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
@@ -176,7 +176,7 @@ async fn word_scale_set_and_reset() {
     // Set and reset the setting ensuring the swap between the 2 settings is applied.
     let (_response, _code) = index
         .update_settings(json!({
-            "proximityPrecision": "attributeScale",
+            "proximityPrecision": "byAttribute",
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
@@ -184,7 +184,7 @@ async fn word_scale_set_and_reset() {
 
     let (_response, _code) = index
         .update_settings(json!({
-            "proximityPrecision": "wordScale",
+            "proximityPrecision": "byWord",
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
@@ -290,7 +290,7 @@ async fn attribute_scale_default_ranking_rules() {
 
     let (response, code) = index
         .update_settings(json!({
-            "proximityPrecision": "attributeScale"
+            "proximityPrecision": "byAttribute"
         }))
         .await;
     assert_eq!("202", code.as_str(), "{:?}", response);
