@@ -27,11 +27,11 @@ async fn index_with_documents<'a>(server: &'a Server, documents: &Value) -> Inde
         )
         .await;
     assert_eq!(202, code, "{:?}", response);
-    index.wait_task(0).await;
+    index.wait_task(response.uid()).await;
 
     let (response, code) = index.add_documents(documents.clone(), None).await;
     assert_eq!(202, code, "{:?}", response);
-    index.wait_task(1).await;
+    index.wait_task(response.uid()).await;
     index
 }
 
@@ -68,7 +68,7 @@ async fn simple_search() {
         )
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_semanticScore":0.97434163},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_semanticScore":0.99029034},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_semanticScore":0.9472136}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]}},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]}},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]}}]"###);
 
     let (response, code) = index
         .search_post(

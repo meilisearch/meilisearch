@@ -75,12 +75,15 @@ pub async fn multi_search_with_post(
                 })
                 .with_index(query_index)?;
 
-            embed(&mut query, index_scheduler.get_ref(), &index).await.with_index(query_index)?;
+            let distribution = embed(&mut query, index_scheduler.get_ref(), &index)
+                .await
+                .with_index(query_index)?;
 
-            let search_result =
-                tokio::task::spawn_blocking(move || perform_search(&index, query, features))
-                    .await
-                    .with_index(query_index)?;
+            let search_result = tokio::task::spawn_blocking(move || {
+                perform_search(&index, query, features, distribution)
+            })
+            .await
+            .with_index(query_index)?;
 
             search_results.push(SearchResultWithIndex {
                 index_uid: index_uid.into_inner(),

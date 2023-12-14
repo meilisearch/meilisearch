@@ -13,6 +13,7 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::score_details::{self, ScoreDetails, ScoringStrategy};
+use meilisearch_types::milli::vector::DistributionShift;
 use meilisearch_types::milli::{FacetValueHit, OrderBy, SearchForFacetValues};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
@@ -90,15 +91,21 @@ pub struct SearchQuery {
 #[deserr(error = DeserrJsonError<InvalidHybridQuery>, rename_all = camelCase, deny_unknown_fields)]
 pub struct HybridQuery {
     /// TODO validate that sementic ratio is between 0.0 and 1,0
-    #[deserr(default, error = DeserrJsonError<InvalidSearchSemanticRatio>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchSemanticRatio>, default)]
     pub semantic_ratio: SemanticRatio,
     #[deserr(default, error = DeserrJsonError<InvalidEmbedder>, default)]
     pub embedder: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Deserr)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserr)]
 #[deserr(try_from(f32) = TryFrom::try_from -> InvalidSearchSemanticRatio)]
 pub struct SemanticRatio(f32);
+
+impl Default for SemanticRatio {
+    fn default() -> Self {
+        DEFAULT_SEMANTIC_RATIO()
+    }
+}
 
 impl std::convert::TryFrom<f32> for SemanticRatio {
     type Error = InvalidSearchSemanticRatio;
@@ -374,6 +381,7 @@ fn prepare_search<'t>(
     rtxn: &'t RoTxn,
     query: &'t SearchQuery,
     features: RoFeatures,
+    distribution: Option<DistributionShift>,
 ) -> Result<(milli::Search<'t>, bool, usize, usize), MeilisearchHttpError> {
     let mut search = index.search(rtxn);
 
@@ -388,6 +396,8 @@ fn prepare_search<'t>(
     if query.hybrid.is_none() && query.q.is_some() && query.vector.is_some() {
         return Err(MeilisearchHttpError::MissingSearchHybrid);
     }
+
+    search.distribution_shift(distribution);
 
     if let Some(ref vector) = query.vector {
         match &query.hybrid {
@@ -482,12 +492,13 @@ pub fn perform_search(
     index: &Index,
     query: SearchQuery,
     features: RoFeatures,
+    distribution: Option<DistributionShift>,
 ) -> Result<SearchResult, MeilisearchHttpError> {
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
 
     let (search, is_finite_pagination, max_total_hits, offset) =
-        prepare_search(index, &rtxn, &query, features)?;
+        prepare_search(index, &rtxn, &query, features, distribution)?;
 
     let milli::SearchResult { documents_ids, matching_words, candidates, document_scores, .. } =
         match &query.hybrid {
@@ -718,8 +729,9 @@ pub fn perform_facet_search(
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
 
-    let (search, _, _, _) = prepare_search(index, &rtxn, &search_query, features)?;
-    let mut facet_search = SearchForFacetValues::new(facet_name, search);
+    let (search, _, _, _) = prepare_search(index, &rtxn, &search_query, features, None)?;
+    let mut facet_search =
+        SearchForFacetValues::new(facet_name, search, search_query.hybrid.is_some());
     if let Some(facet_query) = &facet_query {
         facet_search.query(facet_query);
     }
