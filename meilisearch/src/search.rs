@@ -113,6 +113,14 @@ impl std::convert::TryFrom<f32> for SemanticRatio {
     }
 }
 
+impl std::ops::Deref for SemanticRatio {
+    type Target = f32;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl SearchQuery {
     pub fn is_finite_pagination(&self) -> bool {
         self.page.or(self.hits_per_page).is_some()
@@ -373,20 +381,30 @@ fn prepare_search<'t>(
     }
 
     if let Some(ref vector) = query.vector {
-        match vector {
-            VectorQuery::Vector(vector) => {
-                search.vector(vector.clone());
-            }
-            VectorQuery::String(_) => {
-                panic!("Failed while preparing search; caller did not generate embedding for query")
-            }
+        match &query.hybrid {
+            // If semantic ratio is 0.0, only the query search will impact the search results,
+            // skip the vector
+            Some(hybrid) if *hybrid.semantic_ratio == 0.0 => (),
+            _otherwise => match vector {
+                VectorQuery::Vector(vector) => {
+                    search.vector(vector.clone());
+                }
+                VectorQuery::String(_) => {
+                    panic!("Failed while preparing search; caller did not generate embedding for query")
+                }
+            },
         }
     }
 
-    if let Some(ref query) = query.q {
-        // if !matches!(query.hybrid, query.) {
-        search.query(query);
-        // }
+    if let Some(ref q) = query.q {
+        match &query.hybrid {
+            // If semantic ratio is 1.0, only the vector search will impact the search results,
+            // skip the query
+            Some(hybrid) if *hybrid.semantic_ratio == 1.0 => (),
+            _otherwise => {
+                search.query(q);
+            }
+        }
     }
 
     if let Some(ref searchable) = query.attributes_to_search_on {
@@ -471,12 +489,12 @@ pub fn perform_search(
     let (search, is_finite_pagination, max_total_hits, offset) =
         prepare_search(index, &rtxn, &query, features)?;
 
-    /// TODO: Change if-cond to query.hybrid.is_some
-    /// + < 1.0 or remove q
-    /// + > 0.0 or remove vector
     let milli::SearchResult { documents_ids, matching_words, candidates, document_scores, .. } =
-        match query.hybrid {
-            Some(_) => search.execute_hybrid()?,
+        match &query.hybrid {
+            Some(hybrid) => match *hybrid.semantic_ratio {
+                0.0 | 1.0 => search.execute()?,
+                ratio => search.execute_hybrid(ratio)?,
+            },
             None => search.execute()?,
         };
 
