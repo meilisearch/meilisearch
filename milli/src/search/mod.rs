@@ -3,7 +3,6 @@ use std::ops::ControlFlow;
 
 use charabia::normalizer::NormalizerOption;
 use charabia::Normalize;
-use deserr::{DeserializeError, Deserr, Sequence};
 use fst::automaton::{Automaton, Str};
 use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
@@ -55,53 +54,6 @@ pub struct Search<'a> {
     index: &'a Index,
     distribution_shift: Option<DistributionShift>,
     embedder_name: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum VectorQuery {
-    Vector(Vec<f32>),
-    String(String),
-}
-
-impl<E> Deserr<E> for VectorQuery
-where
-    E: DeserializeError,
-{
-    fn deserialize_from_value<V: deserr::IntoValue>(
-        value: deserr::Value<V>,
-        location: deserr::ValuePointerRef,
-    ) -> std::result::Result<Self, E> {
-        match value {
-            deserr::Value::String(s) => Ok(VectorQuery::String(s)),
-            deserr::Value::Sequence(seq) => {
-                let v: std::result::Result<Vec<f32>, _> = seq
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, v)| match v.into_value() {
-                        deserr::Value::Float(f) => Ok(f as f32),
-                        deserr::Value::Integer(i) => Ok(i as f32),
-                        v => Err(deserr::take_cf_content(E::error::<V>(
-                            None,
-                            deserr::ErrorKind::IncorrectValueKind {
-                                actual: v,
-                                accepted: &[deserr::ValueKind::Float, deserr::ValueKind::Integer],
-                            },
-                            location.push_index(index),
-                        ))),
-                    })
-                    .collect();
-                Ok(VectorQuery::Vector(v?))
-            }
-            _ => Err(deserr::take_cf_content(E::error::<V>(
-                None,
-                deserr::ErrorKind::IncorrectValueKind {
-                    actual: value,
-                    accepted: &[deserr::ValueKind::String, deserr::ValueKind::Sequence],
-                },
-                location,
-            ))),
-        }
-    }
 }
 
 impl<'a> Search<'a> {

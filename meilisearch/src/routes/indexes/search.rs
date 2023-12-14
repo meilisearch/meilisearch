@@ -8,7 +8,7 @@ use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
-use meilisearch_types::milli::{self, VectorQuery};
+use meilisearch_types::milli;
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 
@@ -128,7 +128,7 @@ impl From<SearchQueryGet> for SearchQuery {
 
         Self {
             q: other.q,
-            vector: other.vector.map(CS::into_inner).map(VectorQuery::Vector),
+            vector: other.vector.map(CS::into_inner),
             offset: other.offset.0,
             limit: other.limit.0,
             page: other.page.as_deref().copied(),
@@ -258,49 +258,37 @@ pub async fn embed(
     index_scheduler: &IndexScheduler,
     index: &milli::Index,
 ) -> Result<(), ResponseError> {
-    match query.vector.take() {
-        Some(VectorQuery::String(prompt)) => {
-            let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
-            let embedders = index_scheduler.embedders(embedder_configs)?;
+    if let (None, Some(q), Some(HybridQuery { semantic_ratio: _, embedder })) =
+        (&query.vector, &query.q, &query.hybrid)
+    {
+        let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
+        let embedders = index_scheduler.embedders(embedder_configs)?;
 
-            let embedder_name =
-                if let Some(HybridQuery { semantic_ratio: _, embedder: Some(embedder) }) =
-                    &query.hybrid
-                {
-                    Some(embedder)
-                } else {
-                    None
-                };
+        let embedder = if let Some(embedder_name) = embedder {
+            embedders.get(embedder_name)
+        } else {
+            embedders.get_default()
+        };
 
-            let embedder = if let Some(embedder_name) = embedder_name {
-                embedders.get(embedder_name)
-            } else {
-                embedders.get_default()
-            };
+        let embedder = embedder
+            .ok_or(milli::UserError::InvalidEmbedder("default".to_owned()))
+            .map_err(milli::Error::from)?
+            .0;
+        let embeddings = embedder
+            .embed(vec![q.to_owned()])
+            .await
+            .map_err(milli::vector::Error::from)
+            .map_err(milli::Error::from)?
+            .pop()
+            .expect("No vector returned from embedding");
 
-            let embedder = embedder
-                .ok_or(milli::UserError::InvalidEmbedder("default".to_owned()))
-                .map_err(milli::Error::from)?
-                .0;
-            let embeddings = embedder
-                .embed(vec![prompt])
-                .await
-                .map_err(milli::vector::Error::from)
-                .map_err(milli::Error::from)?
-                .pop()
-                .expect("No vector returned from embedding");
-
-            if embeddings.iter().nth(1).is_some() {
-                warn!("Ignoring embeddings past the first one in long search query");
-                query.vector =
-                    Some(VectorQuery::Vector(embeddings.iter().next().unwrap().to_vec()));
-            } else {
-                query.vector = Some(VectorQuery::Vector(embeddings.into_inner()));
-            }
+        if embeddings.iter().nth(1).is_some() {
+            warn!("Ignoring embeddings past the first one in long search query");
+            query.vector = Some(embeddings.iter().next().unwrap().to_vec());
+        } else {
+            query.vector = Some(embeddings.into_inner());
         }
-        Some(vector) => query.vector = Some(vector),
-        None => {}
-    };
+    }
     Ok(())
 }
 

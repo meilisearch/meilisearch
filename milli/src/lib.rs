@@ -59,7 +59,7 @@ pub use self::index::Index;
 pub use self::search::{
     FacetDistribution, FacetValueHit, Filter, FormatOptions, MatchBounds, MatcherBuilder,
     MatchingWords, OrderBy, Search, SearchForFacetValues, SearchResult, TermsMatchingStrategy,
-    VectorQuery, DEFAULT_VALUES_PER_FACET,
+    DEFAULT_VALUES_PER_FACET,
 };
 
 pub type Result<T> = std::result::Result<T, error::Error>;
