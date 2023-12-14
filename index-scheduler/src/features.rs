@@ -81,19 +81,6 @@ impl RoFeatures {
             .into())
         }
     }
-
-    pub fn check_proximity_precision(&self) -> Result<()> {
-        if self.runtime.proximity_precision {
-            Ok(())
-        } else {
-            Err(FeatureNotEnabledError {
-                disabled_action: "Using `proximityPrecision` index setting",
-                feature: "proximity precision",
-                issue_link: "https://github.com/orgs/meilisearch/discussions/710",
-            }
-            .into())
-        }
-    }
 }
 
 impl FeatureData {

@@ -21,8 +21,7 @@ async fn experimental_features() {
       "scoreDetails": false,
       "vectorStore": false,
       "metrics": false,
-      "exportPuffinReports": false,
-      "proximityPrecision": false
+      "exportPuffinReports": false
     }
     "###);
 
@@ -34,8 +33,7 @@ async fn experimental_features() {
       "scoreDetails": false,
       "vectorStore": true,
       "metrics": false,
-      "exportPuffinReports": false,
-      "proximityPrecision": false
+      "exportPuffinReports": false
     }
     "###);
 
@@ -47,8 +45,7 @@ async fn experimental_features() {
       "scoreDetails": false,
       "vectorStore": true,
       "metrics": false,
-      "exportPuffinReports": false,
-      "proximityPrecision": false
+      "exportPuffinReports": false
     }
     "###);
 
@@ -61,8 +58,7 @@ async fn experimental_features() {
       "scoreDetails": false,
       "vectorStore": true,
       "metrics": false,
-      "exportPuffinReports": false,
-      "proximityPrecision": false
+      "exportPuffinReports": false
     }
     "###);
 
@@ -75,8 +71,7 @@ async fn experimental_features() {
       "scoreDetails": false,
       "vectorStore": true,
       "metrics": false,
-      "exportPuffinReports": false,
-      "proximityPrecision": false
+      "exportPuffinReports": false
     }
     "###);
 }
@@ -96,8 +91,7 @@ async fn experimental_feature_metrics() {
       "scoreDetails": false,
       "vectorStore": false,
       "metrics": true,
-      "exportPuffinReports": false,
-      "proximityPrecision": false
+      "exportPuffinReports": false
     }
     "###);
 
@@ -152,7 +146,7 @@ async fn errors() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Unknown field `NotAFeature`: expected one of `scoreDetails`, `vectorStore`, `metrics`, `exportPuffinReports`, `proximityPrecision`",
+      "message": "Unknown field `NotAFeature`: expected one of `scoreDetails`, `vectorStore`, `metrics`, `exportPuffinReports`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"

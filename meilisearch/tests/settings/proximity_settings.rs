@@ -27,17 +27,6 @@ static DOCUMENTS: Lazy<crate::common::Value> = Lazy::new(|| {
 #[actix_rt::test]
 async fn attribute_scale_search() {
     let server = Server::new().await;
-    let (response, code) = server.set_features(json!({"proximityPrecision": true})).await;
-    meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "scoreDetails": false,
-      "vectorStore": false,
-      "metrics": false,
-      "exportPuffinReports": false,
-      "proximityPrecision": true
-    }
-    "###);
     let index = server.index("test");
 
     index.add_documents(DOCUMENTS.clone(), None).await;
@@ -111,17 +100,6 @@ async fn attribute_scale_search() {
 #[actix_rt::test]
 async fn attribute_scale_phrase_search() {
     let server = Server::new().await;
-    let (response, code) = server.set_features(json!({"proximityPrecision": true})).await;
-    meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "scoreDetails": false,
-      "vectorStore": false,
-      "metrics": false,
-      "exportPuffinReports": false,
-      "proximityPrecision": true
-    }
-    "###);
     let index = server.index("test");
 
     index.add_documents(DOCUMENTS.clone(), None).await;
@@ -190,17 +168,6 @@ async fn attribute_scale_phrase_search() {
 #[actix_rt::test]
 async fn word_scale_set_and_reset() {
     let server = Server::new().await;
-    let (response, code) = server.set_features(json!({"proximityPrecision": true})).await;
-    meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "scoreDetails": false,
-      "vectorStore": false,
-      "metrics": false,
-      "exportPuffinReports": false,
-      "proximityPrecision": true
-    }
-    "###);
     let index = server.index("test");
 
     index.add_documents(DOCUMENTS.clone(), None).await;
@@ -316,17 +283,6 @@ async fn word_scale_set_and_reset() {
 #[actix_rt::test]
 async fn attribute_scale_default_ranking_rules() {
     let server = Server::new().await;
-    let (response, code) = server.set_features(json!({"proximityPrecision": true})).await;
-    meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "scoreDetails": false,
-      "vectorStore": false,
-      "metrics": false,
-      "exportPuffinReports": false,
-      "proximityPrecision": true
-    }
-    "###);
     let index = server.index("test");
 
     index.add_documents(DOCUMENTS.clone(), None).await;
