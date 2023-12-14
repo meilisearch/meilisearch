@@ -36,7 +36,7 @@ pub const DEFAULT_CROP_LENGTH: fn() -> usize = || 10;
 pub const DEFAULT_CROP_MARKER: fn() -> String = || "…".to_string();
 pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
-pub const DEFAULT_SEMANTIC_RATIO: fn() -> f32 = || 0.5;
+pub const DEFAULT_SEMANTIC_RATIO: fn() -> SemanticRatio = || SemanticRatio(0.5);
 
 #[derive(Debug, Clone, Default, PartialEq, Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
@@ -91,10 +91,25 @@ pub struct SearchQuery {
 #[deserr(error = DeserrJsonError<InvalidHybridQuery>, rename_all = camelCase, deny_unknown_fields)]
 pub struct HybridQuery {
     /// TODO validate that sementic ratio is between 0.0 and 1,0
-    #[deserr(default, error = DeserrJsonError<InvalidSemanticRatio>, default = DEFAULT_SEMANTIC_RATIO())]
-    pub semantic_ratio: f32,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchSemanticRatio>)]
+    pub semantic_ratio: SemanticRatio,
     #[deserr(default, error = DeserrJsonError<InvalidEmbedder>, default)]
     pub embedder: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Deserr)]
+#[deserr(try_from(f32) = TryFrom::try_from -> InvalidSearchSemanticRatio)]
+pub struct SemanticRatio(f32);
+impl std::convert::TryFrom<f32> for SemanticRatio {
+    type Error = InvalidSearchSemanticRatio;
+
+    fn try_from(f: f32) -> Result<Self, Self::Error> {
+        if f > 1.0 || f < 0.0 {
+            Err(InvalidSearchSemanticRatio)
+        } else {
+            Ok(SemanticRatio(f))
+        }
+    }
 }
 
 impl SearchQuery {
@@ -457,10 +472,9 @@ pub fn perform_search(
     /// + < 1.0 or remove q
     /// + > 0.0 or remove vector
     let milli::SearchResult { documents_ids, matching_words, candidates, document_scores, .. } =
-        if query.q.is_some() && query.vector.is_some() {
-            search.execute_hybrid()?
-        } else {
-            search.execute()?
+        match query.hybrid {
+            Some(_) => search.execute_hybrid()?,
+            None => search.execute()?,
         };
 
     let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();

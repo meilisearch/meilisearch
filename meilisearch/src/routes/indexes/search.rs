@@ -17,7 +17,7 @@ use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::search::{
-    add_search_rules, perform_search, HybridQuery, MatchingStrategy, SearchQuery,
+    add_search_rules, perform_search, HybridQuery, MatchingStrategy, SearchQuery, SemanticRatio,
     DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
     DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
@@ -75,10 +75,10 @@ pub struct SearchQueryGet {
     matching_strategy: MatchingStrategy,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToSearchOn>)]
     pub attributes_to_search_on: Option<CS<String>>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidHybridQuery>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidEmbedder>)]
     pub hybrid_embedder: Option<String>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidHybridQuery>)]
-    pub hybrid_semantic_ratio: Option<f32>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchSemanticRatio>)]
+    pub hybrid_semantic_ratio: Option<SemanticRatio>,
 }
 
 impl From<SearchQueryGet> for SearchQuery {
