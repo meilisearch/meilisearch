@@ -78,7 +78,28 @@ pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidEmbedder>)]
     pub hybrid_embedder: Option<String>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchSemanticRatio>)]
-    pub hybrid_semantic_ratio: Option<SemanticRatio>,
+    pub hybrid_semantic_ratio: Option<SemanticRatioGet>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, deserr::Deserr)]
+#[deserr(try_from(String) = TryFrom::try_from -> InvalidSearchSemanticRatio)]
+pub struct SemanticRatioGet(SemanticRatio);
+
+impl std::convert::TryFrom<String> for SemanticRatioGet {
+    type Error = InvalidSearchSemanticRatio;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        let f: f32 = s.parse().map_err(|_| InvalidSearchSemanticRatio)?;
+        Ok(SemanticRatioGet(SemanticRatio::try_from(f)?))
+    }
+}
+
+impl std::ops::Deref for SemanticRatioGet {
+    type Target = SemanticRatio;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl From<SearchQueryGet> for SearchQuery {
@@ -93,13 +114,15 @@ impl From<SearchQueryGet> for SearchQuery {
 
         let hybrid = match (other.hybrid_embedder, other.hybrid_semantic_ratio) {
             (None, None) => None,
-            (None, Some(semantic_ratio)) => Some(HybridQuery { semantic_ratio, embedder: None }),
+            (None, Some(semantic_ratio)) => {
+                Some(HybridQuery { semantic_ratio: *semantic_ratio, embedder: None })
+            }
             (Some(embedder), None) => Some(HybridQuery {
                 semantic_ratio: DEFAULT_SEMANTIC_RATIO(),
                 embedder: Some(embedder),
             }),
             (Some(embedder), Some(semantic_ratio)) => {
-                Some(HybridQuery { semantic_ratio, embedder: Some(embedder) })
+                Some(HybridQuery { semantic_ratio: *semantic_ratio, embedder: Some(embedder) })
             }
         };
 
