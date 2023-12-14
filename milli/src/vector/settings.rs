@@ -157,7 +157,7 @@ where
 
 impl Default for EmbedderSettings {
     fn default() -> Self {
-        Self::HuggingFace(Default::default())
+        Self::OpenAi(Default::default())
     }
 }
 
