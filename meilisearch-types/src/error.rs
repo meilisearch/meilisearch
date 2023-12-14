@@ -235,7 +235,7 @@ InvalidSearchAttributesToRetrieve     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchCropLength               , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchCropMarker               , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchFacets                   , InvalidRequest       , BAD_REQUEST ;
-InvalidSemanticRatio                  , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchSemanticRatio                  , InvalidRequest       , BAD_REQUEST ;
 InvalidFacetSearchFacetName           , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchFilter                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchHighlightPostTag         , InvalidRequest       , BAD_REQUEST ;
@@ -456,6 +456,15 @@ pub struct DeserrParseIntError(pub String);
 impl fmt::Display for DeserrParseIntError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "could not parse `{}` as a positive integer", self.0)
+    }
+}
+
+impl fmt::Display for deserr_codes::InvalidSearchSemanticRatio {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "the value of `semanticRatio` is invalid, expected a value between `0.0` and `1.0`."
+        )
     }
 }
 
