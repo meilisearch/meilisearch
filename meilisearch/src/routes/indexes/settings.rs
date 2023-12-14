@@ -7,6 +7,7 @@ use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::facet_values_sort::FacetValuesSort;
 use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::milli::update::Setting;
 use meilisearch_types::settings::{settings, RankingRuleView, Settings, Unchecked};
 use meilisearch_types::tasks::KindWithContent;
 use serde_json::json;
@@ -545,6 +546,67 @@ make_setting_route!(
     }
 );
 
+make_setting_route!(
+    "/embedders",
+    patch,
+    std::collections::BTreeMap<String, Setting<meilisearch_types::milli::vector::settings::EmbeddingSettings>>,
+    meilisearch_types::deserr::DeserrJsonError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsEmbedders,
+    >,
+    embedders,
+    "embedders",
+    analytics,
+    |setting: &Option<std::collections::BTreeMap<String, Setting<meilisearch_types::milli::vector::settings::EmbeddingSettings>>>, req: &HttpRequest| {
+
+
+        analytics.publish(
+            "Embedders Updated".to_string(),
+            serde_json::json!({"embedders": crate::routes::indexes::settings::embedder_analytics(setting.as_ref())}),
+            Some(req),
+        );
+    }
+);
+
+fn embedder_analytics(
+    setting: Option<
+        &std::collections::BTreeMap<
+            String,
+            Setting<meilisearch_types::milli::vector::settings::EmbeddingSettings>,
+        >,
+    >,
+) -> serde_json::Value {
+    let mut sources = std::collections::HashSet::new();
+
+    if let Some(s) = &setting {
+        for source in s
+            .values()
+            .filter_map(|config| config.clone().set())
+            .filter_map(|config| config.embedder_options.set())
+        {
+            use meilisearch_types::milli::vector::settings::EmbedderSettings;
+            match source {
+                EmbedderSettings::OpenAi(_) => sources.insert("openAi"),
+                EmbedderSettings::HuggingFace(_) => sources.insert("huggingFace"),
+                EmbedderSettings::UserProvided(_) => sources.insert("userProvided"),
+            };
+        }
+    };
+
+    let document_template_used = setting.as_ref().map(|map| {
+        map.values()
+            .filter_map(|config| config.clone().set())
+            .any(|config| config.document_template.set().is_some())
+    });
+
+    json!(
+        {
+            "total": setting.as_ref().map(|s| s.len()),
+            "sources": sources,
+            "document_template_used": document_template_used,
+        }
+    )
+}
+
 macro_rules! generate_configure {
     ($($mod:ident),*) => {
         pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -574,7 +636,8 @@ generate_configure!(
     ranking_rules,
     typo_tolerance,
     pagination,
-    faceting
+    faceting,
+    embedders
 );
 
 pub async fn update_all(
@@ -681,6 +744,7 @@ pub async fn update_all(
             "synonyms": {
                 "total": new_settings.synonyms.as_ref().set().map(|synonyms| synonyms.len()),
             },
+            "embedders": crate::routes::indexes::settings::embedder_analytics(new_settings.embedders.as_ref().set())
         }),
         Some(&req),
     );

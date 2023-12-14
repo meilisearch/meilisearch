@@ -1202,6 +1202,10 @@ impl IndexScheduler {
 
                 let config = IndexDocumentsConfig { update_method: method, ..Default::default() };
 
+                let embedder_configs = index.embedding_configs(index_wtxn)?;
+                // TODO: consider Arc'ing the map too (we only need read access + we'll be cloning it multiple times, so really makes sense)
+                let embedders = self.embedders(embedder_configs)?;
+
                 let mut builder = milli::update::IndexDocuments::new(
                     index_wtxn,
                     index,
@@ -1219,6 +1223,8 @@ impl IndexScheduler {
                                 .map_err(milli::Error::from)?;
                             let (new_builder, user_result) = builder.add_documents(reader)?;
                             builder = new_builder;
+
+                            builder = builder.with_embedders(embedders.clone());
 
                             let received_documents =
                                 if let Some(Details::DocumentAdditionOrUpdate {
@@ -1345,6 +1351,9 @@ impl IndexScheduler {
 
                 for (task, (_, settings)) in tasks.iter_mut().zip(settings) {
                     let checked_settings = settings.clone().check();
+                    if matches!(checked_settings.embedders, milli::update::Setting::Set(_)) {
+                        self.features().check_vector("Passing `embedders` in settings")?
+                    }
                     if checked_settings.proximity_precision.set().is_some() {
                         self.features.features().check_proximity_precision()?;
                     }

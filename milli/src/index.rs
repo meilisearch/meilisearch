@@ -10,7 +10,6 @@ use roaring::RoaringBitmap;
 use rstar::RTree;
 use time::OffsetDateTime;
 
-use crate::distance::NDotProductPoint;
 use crate::documents::PrimaryKey;
 use crate::error::{InternalError, UserError};
 use crate::fields_ids_map::FieldsIdsMap;
@@ -22,16 +21,13 @@ use crate::heed_codec::{
     BEU16StrCodec, FstSetCodec, ScriptLanguageCodec, StrBEU16Codec, StrRefCodec,
 };
 use crate::proximity::ProximityPrecision;
-use crate::readable_slices::ReadableSlices;
+use crate::vector::EmbeddingConfig;
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdWordCountCodec, GeoPoint, ObkvCodec,
     OrderBy, Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, BEU16,
     BEU32, BEU64,
 };
-
-/// The HNSW data-structure that we serialize, fill and search in.
-pub type Hnsw = instant_distance::Hnsw<NDotProductPoint>;
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
 pub const DEFAULT_MIN_WORD_LEN_TWO_TYPOS: u8 = 9;
@@ -48,10 +44,6 @@ pub mod main_key {
     pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
     pub const GEO_FACETED_DOCUMENTS_IDS_KEY: &str = "geo-faceted-documents-ids";
     pub const GEO_RTREE_KEY: &str = "geo-rtree";
-    /// The prefix of the key that is used to store the, potential big, HNSW structure.
-    /// It is concatenated with a big-endian encoded number (non-human readable).
-    /// e.g. vector-hnsw0x0032.
-    pub const VECTOR_HNSW_KEY_PREFIX: &str = "vector-hnsw";
     pub const PRIMARY_KEY_KEY: &str = "primary-key";
     pub const SEARCHABLE_FIELDS_KEY: &str = "searchable-fields";
     pub const USER_DEFINED_SEARCHABLE_FIELDS_KEY: &str = "user-defined-searchable-fields";
@@ -74,6 +66,7 @@ pub mod main_key {
     pub const SORT_FACET_VALUES_BY: &str = "sort-facet-values-by";
     pub const PAGINATION_MAX_TOTAL_HITS: &str = "pagination-max-total-hits";
     pub const PROXIMITY_PRECISION: &str = "proximity-precision";
+    pub const EMBEDDING_CONFIGS: &str = "embedding_configs";
 }
 
 pub mod db_name {
@@ -99,7 +92,8 @@ pub mod db_name {
     pub const FACET_ID_STRING_FST: &str = "facet-id-string-fst";
     pub const FIELD_ID_DOCID_FACET_F64S: &str = "field-id-docid-facet-f64s";
     pub const FIELD_ID_DOCID_FACET_STRINGS: &str = "field-id-docid-facet-strings";
-    pub const VECTOR_ID_DOCID: &str = "vector-id-docids";
+    pub const VECTOR_EMBEDDER_CATEGORY_ID: &str = "vector-embedder-category-id";
+    pub const VECTOR_ARROY: &str = "vector-arroy";
     pub const DOCUMENTS: &str = "documents";
     pub const SCRIPT_LANGUAGE_DOCIDS: &str = "script_language_docids";
 }
@@ -166,8 +160,10 @@ pub struct Index {
     /// Maps the document id, the facet field id and the strings.
     pub field_id_docid_facet_strings: Database<FieldDocIdFacetStringCodec, Str>,
 
-    /// Maps a vector id to the document id that have it.
-    pub vector_id_docid: Database<BEU32, BEU32>,
+    /// Maps an embedder name to its id in the arroy store.
+    pub embedder_category_id: Database<Str, U8>,
+    /// Vector store based on arroy™.
+    pub vector_arroy: arroy::Database<arroy::distances::Angular>,
 
     /// Maps the document id to the document as an obkv store.
     pub(crate) documents: Database<BEU32, ObkvCodec>,
@@ -182,7 +178,7 @@ impl Index {
     ) -> Result<Index> {
         use db_name::*;
 
-        options.max_dbs(24);
+        options.max_dbs(25);
 
         let env = options.open(path)?;
         let mut wtxn = env.write_txn()?;
@@ -222,7 +218,11 @@ impl Index {
             env.create_database(&mut wtxn, Some(FIELD_ID_DOCID_FACET_F64S))?;
         let field_id_docid_facet_strings =
             env.create_database(&mut wtxn, Some(FIELD_ID_DOCID_FACET_STRINGS))?;
-        let vector_id_docid = env.create_database(&mut wtxn, Some(VECTOR_ID_DOCID))?;
+        // vector stuff
+        let embedder_category_id =
+            env.create_database(&mut wtxn, Some(VECTOR_EMBEDDER_CATEGORY_ID))?;
+        let vector_arroy = env.create_database(&mut wtxn, Some(VECTOR_ARROY))?;
+
         let documents = env.create_database(&mut wtxn, Some(DOCUMENTS))?;
         wtxn.commit()?;
 
@@ -252,7 +252,8 @@ impl Index {
             facet_id_is_empty_docids,
             field_id_docid_facet_f64s,
             field_id_docid_facet_strings,
-            vector_id_docid,
+            vector_arroy,
+            embedder_category_id,
             documents,
         })
     }
@@ -475,63 +476,6 @@ impl Index {
             None => Ok(RoaringBitmap::new()),
         }
     }
-
-    /* vector HNSW */
-
-    /// Writes the provided `hnsw`.
-    pub(crate) fn put_vector_hnsw(&self, wtxn: &mut RwTxn, hnsw: &Hnsw) -> heed::Result<()> {
-        // We must delete all the chunks before we write the new HNSW chunks.
-        self.delete_vector_hnsw(wtxn)?;
-
-        let chunk_size = 1024 * 1024 * (1024 + 512); // 1.5 GiB
-        let bytes = bincode::serialize(hnsw).map_err(Into::into).map_err(heed::Error::Encoding)?;
-        for (i, chunk) in bytes.chunks(chunk_size).enumerate() {
-            let i = i as u32;
-            let mut key = main_key::VECTOR_HNSW_KEY_PREFIX.as_bytes().to_vec();
-            key.extend_from_slice(&i.to_be_bytes());
-            self.main.remap_types::<Bytes, Bytes>().put(wtxn, &key, chunk)?;
-        }
-        Ok(())
-    }
-
-    /// Delete the `hnsw`.
-    pub(crate) fn delete_vector_hnsw(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        let mut iter = self
-            .main
-            .remap_types::<Bytes, DecodeIgnore>()
-            .prefix_iter_mut(wtxn, main_key::VECTOR_HNSW_KEY_PREFIX.as_bytes())?;
-        let mut deleted = false;
-        while iter.next().transpose()?.is_some() {
-            // We do not keep a reference to the key or the value.
-            unsafe { deleted |= iter.del_current()? };
-        }
-        Ok(deleted)
-    }
-
-    /// Returns the `hnsw`.
-    pub fn vector_hnsw(&self, rtxn: &RoTxn) -> Result<Option<Hnsw>> {
-        let mut slices = Vec::new();
-        for result in self
-            .main
-            .remap_types::<Str, Bytes>()
-            .prefix_iter(rtxn, main_key::VECTOR_HNSW_KEY_PREFIX)?
-        {
-            let (_, slice) = result?;
-            slices.push(slice);
-        }
-
-        if slices.is_empty() {
-            Ok(None)
-        } else {
-            let readable_slices: ReadableSlices<_> = slices.into_iter().collect();
-            Ok(Some(
-                bincode::deserialize_from(readable_slices)
-                    .map_err(Into::into)
-                    .map_err(heed::Error::Decoding)?,
-            ))
-        }
-    }
-
     /* field distribution */
 
     /// Writes the field distribution which associates every field name with
@@ -1527,6 +1471,41 @@ impl Index {
         }
 
         Ok(script_language)
+    }
+
+    pub(crate) fn put_embedding_configs(
+        &self,
+        wtxn: &mut RwTxn<'_>,
+        configs: Vec<(String, EmbeddingConfig)>,
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, SerdeJson<Vec<(String, EmbeddingConfig)>>>().put(
+            wtxn,
+            main_key::EMBEDDING_CONFIGS,
+            &configs,
+        )
+    }
+
+    pub(crate) fn delete_embedding_configs(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::EMBEDDING_CONFIGS)
+    }
+
+    pub fn embedding_configs(
+        &self,
+        rtxn: &RoTxn<'_>,
+    ) -> Result<Vec<(String, crate::vector::EmbeddingConfig)>> {
+        Ok(self
+            .main
+            .remap_types::<Str, SerdeJson<Vec<(String, EmbeddingConfig)>>>()
+            .get(rtxn, main_key::EMBEDDING_CONFIGS)?
+            .unwrap_or_default())
+    }
+
+    pub fn default_embedding_name(&self, rtxn: &RoTxn<'_>) -> Result<String> {
+        let configs = self.embedding_configs(rtxn)?;
+        Ok(match configs.as_slice() {
+            [(ref first_name, _)] => first_name.clone(),
+            _ => "default".to_owned(),
+        })
     }
 }
 

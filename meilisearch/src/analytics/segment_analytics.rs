@@ -36,7 +36,7 @@ use crate::routes::{create_all_stats, Stats};
 use crate::search::{
     FacetSearchResult, MatchingStrategy, SearchQuery, SearchQueryWithIndex, SearchResult,
     DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
-    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
+    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::Opt;
 
@@ -586,6 +586,11 @@ pub struct SearchAggregator {
     // vector
     // The maximum number of floats in a vector request
     max_vector_size: usize,
+    // Whether the semantic ratio passed to a hybrid search equals the default ratio.
+    semantic_ratio: bool,
+    // Whether a non-default embedder was specified
+    embedder: bool,
+    hybrid: bool,
 
     // every time a search is done, we increment the counter linked to the used settings
     matching_strategy: HashMap<String, usize>,
@@ -639,6 +644,7 @@ impl SearchAggregator {
             crop_marker,
             matching_strategy,
             attributes_to_search_on,
+            hybrid,
         } = query;
 
         let mut ret = Self::default();
@@ -712,6 +718,12 @@ impl SearchAggregator {
         ret.show_ranking_score = *show_ranking_score;
         ret.show_ranking_score_details = *show_ranking_score_details;
 
+        if let Some(hybrid) = hybrid {
+            ret.semantic_ratio = hybrid.semantic_ratio != DEFAULT_SEMANTIC_RATIO();
+            ret.embedder = hybrid.embedder.is_some();
+            ret.hybrid = true;
+        }
+
         ret
     }
 
@@ -765,6 +777,9 @@ impl SearchAggregator {
             facets_total_number_of_facets,
             show_ranking_score,
             show_ranking_score_details,
+            semantic_ratio,
+            embedder,
+            hybrid,
         } = other;
 
         if self.timestamp.is_none() {
@@ -810,6 +825,9 @@ impl SearchAggregator {
 
         // vector
         self.max_vector_size = self.max_vector_size.max(max_vector_size);
+        self.semantic_ratio |= semantic_ratio;
+        self.hybrid |= hybrid;
+        self.embedder |= embedder;
 
         // pagination
         self.max_limit = self.max_limit.max(max_limit);
@@ -878,6 +896,9 @@ impl SearchAggregator {
             facets_total_number_of_facets,
             show_ranking_score,
             show_ranking_score_details,
+            semantic_ratio,
+            embedder,
+            hybrid,
         } = self;
 
         if total_received == 0 {
@@ -916,6 +937,11 @@ impl SearchAggregator {
                 },
                 "vector": {
                     "max_vector_size": max_vector_size,
+                },
+                "hybrid": {
+                    "enabled": hybrid,
+                    "semantic_ratio": semantic_ratio,
+                    "embedder": embedder,
                 },
                 "pagination": {
                    "max_limit": max_limit,
@@ -1012,6 +1038,7 @@ impl MultiSearchAggregator {
                     crop_marker: _,
                     matching_strategy: _,
                     attributes_to_search_on: _,
+                    hybrid: _,
                 } = query;
 
                 index_uid.as_str()
@@ -1158,6 +1185,7 @@ impl FacetSearchAggregator {
             filter,
             matching_strategy,
             attributes_to_search_on,
+            hybrid,
         } = query;
 
         let mut ret = Self::default();
@@ -1171,7 +1199,8 @@ impl FacetSearchAggregator {
             || vector.is_some()
             || filter.is_some()
             || *matching_strategy != MatchingStrategy::default()
-            || attributes_to_search_on.is_some();
+            || attributes_to_search_on.is_some()
+            || hybrid.is_some();
 
         ret
     }

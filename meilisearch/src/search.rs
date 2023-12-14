@@ -7,24 +7,21 @@ use deserr::Deserr;
 use either::Either;
 use index_scheduler::RoFeatures;
 use indexmap::IndexMap;
-use log::warn;
 use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
-use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
-use meilisearch_types::milli::{
-    dot_product_similarity, FacetValueHit, InternalError, OrderBy, SearchForFacetValues,
-};
+use meilisearch_types::milli::score_details::{self, ScoreDetails, ScoringStrategy};
+use meilisearch_types::milli::vector::DistributionShift;
+use meilisearch_types::milli::{FacetValueHit, OrderBy, SearchForFacetValues};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
 use milli::{
     AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, Index, MatchBounds, MatcherBuilder,
-    SortError, TermsMatchingStrategy, VectorOrArrayOfVectors, DEFAULT_VALUES_PER_FACET,
+    SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
-use ordered_float::OrderedFloat;
 use regex::Regex;
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -39,6 +36,7 @@ pub const DEFAULT_CROP_LENGTH: fn() -> usize = || 10;
 pub const DEFAULT_CROP_MARKER: fn() -> String = || "…".to_string();
 pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
+pub const DEFAULT_SEMANTIC_RATIO: fn() -> SemanticRatio = || SemanticRatio(0.5);
 
 #[derive(Debug, Clone, Default, PartialEq, Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
@@ -47,6 +45,8 @@ pub struct SearchQuery {
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
+    #[deserr(default, error = DeserrJsonError<InvalidHybridQuery>)]
+    pub hybrid: Option<HybridQuery>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
@@ -87,6 +87,48 @@ pub struct SearchQuery {
     pub attributes_to_search_on: Option<Vec<String>>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Deserr)]
+#[deserr(error = DeserrJsonError<InvalidHybridQuery>, rename_all = camelCase, deny_unknown_fields)]
+pub struct HybridQuery {
+    /// TODO validate that sementic ratio is between 0.0 and 1,0
+    #[deserr(default, error = DeserrJsonError<InvalidSearchSemanticRatio>, default)]
+    pub semantic_ratio: SemanticRatio,
+    #[deserr(default, error = DeserrJsonError<InvalidEmbedder>, default)]
+    pub embedder: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Deserr)]
+#[deserr(try_from(f32) = TryFrom::try_from -> InvalidSearchSemanticRatio)]
+pub struct SemanticRatio(f32);
+
+impl Default for SemanticRatio {
+    fn default() -> Self {
+        DEFAULT_SEMANTIC_RATIO()
+    }
+}
+
+impl std::convert::TryFrom<f32> for SemanticRatio {
+    type Error = InvalidSearchSemanticRatio;
+
+    fn try_from(f: f32) -> Result<Self, Self::Error> {
+        // the suggested "fix" is: `!(0.0..=1.0).contains(&f)`` which is allegedly less readable
+        #[allow(clippy::manual_range_contains)]
+        if f > 1.0 || f < 0.0 {
+            Err(InvalidSearchSemanticRatio)
+        } else {
+            Ok(SemanticRatio(f))
+        }
+    }
+}
+
+impl std::ops::Deref for SemanticRatio {
+    type Target = f32;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl SearchQuery {
     pub fn is_finite_pagination(&self) -> bool {
         self.page.or(self.hits_per_page).is_some()
@@ -106,6 +148,8 @@ pub struct SearchQueryWithIndex {
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub vector: Option<Vec<f32>>,
+    #[deserr(default, error = DeserrJsonError<InvalidHybridQuery>)]
+    pub hybrid: Option<HybridQuery>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
@@ -171,6 +215,7 @@ impl SearchQueryWithIndex {
             crop_marker,
             matching_strategy,
             attributes_to_search_on,
+            hybrid,
         } = self;
         (
             index_uid,
@@ -196,6 +241,7 @@ impl SearchQueryWithIndex {
                 crop_marker,
                 matching_strategy,
                 attributes_to_search_on,
+                hybrid,
                 // do not use ..Default::default() here,
                 // rather add any missing field from `SearchQuery` to `SearchQueryWithIndex`
             },
@@ -335,19 +381,44 @@ fn prepare_search<'t>(
     rtxn: &'t RoTxn,
     query: &'t SearchQuery,
     features: RoFeatures,
+    distribution: Option<DistributionShift>,
 ) -> Result<(milli::Search<'t>, bool, usize, usize), MeilisearchHttpError> {
     let mut search = index.search(rtxn);
 
-    if query.vector.is_some() && query.q.is_some() {
-        warn!("Ignoring the query string `q` when used with the `vector` parameter.");
+    if query.vector.is_some() {
+        features.check_vector("Passing `vector` as a query parameter")?;
     }
+
+    if query.hybrid.is_some() {
+        features.check_vector("Passing `hybrid` as a query parameter")?;
+    }
+
+    if query.hybrid.is_none() && query.q.is_some() && query.vector.is_some() {
+        return Err(MeilisearchHttpError::MissingSearchHybrid);
+    }
+
+    search.distribution_shift(distribution);
 
     if let Some(ref vector) = query.vector {
-        search.vector(vector.clone());
+        match &query.hybrid {
+            // If semantic ratio is 0.0, only the query search will impact the search results,
+            // skip the vector
+            Some(hybrid) if *hybrid.semantic_ratio == 0.0 => (),
+            _otherwise => {
+                search.vector(vector.clone());
+            }
+        }
     }
 
-    if let Some(ref query) = query.q {
-        search.query(query);
+    if let Some(ref q) = query.q {
+        match &query.hybrid {
+            // If semantic ratio is 1.0, only the vector search will impact the search results,
+            // skip the query
+            Some(hybrid) if *hybrid.semantic_ratio == 1.0 => (),
+            _otherwise => {
+                search.query(q);
+            }
+        }
     }
 
     if let Some(ref searchable) = query.attributes_to_search_on {
@@ -374,8 +445,8 @@ fn prepare_search<'t>(
         features.check_score_details()?;
     }
 
-    if query.vector.is_some() {
-        features.check_vector()?;
+    if let Some(HybridQuery { embedder: Some(embedder), .. }) = &query.hybrid {
+        search.embedder_name(embedder);
     }
 
     // compute the offset on the limit depending on the pagination mode.
@@ -421,15 +492,22 @@ pub fn perform_search(
     index: &Index,
     query: SearchQuery,
     features: RoFeatures,
+    distribution: Option<DistributionShift>,
 ) -> Result<SearchResult, MeilisearchHttpError> {
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
 
     let (search, is_finite_pagination, max_total_hits, offset) =
-        prepare_search(index, &rtxn, &query, features)?;
+        prepare_search(index, &rtxn, &query, features, distribution)?;
 
     let milli::SearchResult { documents_ids, matching_words, candidates, document_scores, .. } =
-        search.execute()?;
+        match &query.hybrid {
+            Some(hybrid) => match *hybrid.semantic_ratio {
+                ratio if ratio == 0.0 || ratio == 1.0 => search.execute()?,
+                ratio => search.execute_hybrid(ratio)?,
+            },
+            None => search.execute()?,
+        };
 
     let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
@@ -538,13 +616,17 @@ pub fn perform_search(
             insert_geo_distance(sort, &mut document);
         }
 
-        let semantic_score = match query.vector.as_ref() {
-            Some(vector) => match extract_field("_vectors", &fields_ids_map, obkv)? {
-                Some(vectors) => compute_semantic_score(vector, vectors)?,
-                None => None,
-            },
-            None => None,
-        };
+        let mut semantic_score = None;
+        for details in &score {
+            if let ScoreDetails::Vector(score_details::Vector {
+                target_vector: _,
+                value_similarity: Some((_matching_vector, similarity)),
+            }) = details
+            {
+                semantic_score = Some(*similarity);
+                break;
+            }
+        }
 
         let ranking_score =
             query.show_ranking_score.then(|| ScoreDetails::global_score(score.iter()));
@@ -647,8 +729,9 @@ pub fn perform_facet_search(
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
 
-    let (search, _, _, _) = prepare_search(index, &rtxn, &search_query, features)?;
-    let mut facet_search = SearchForFacetValues::new(facet_name, search);
+    let (search, _, _, _) = prepare_search(index, &rtxn, &search_query, features, None)?;
+    let mut facet_search =
+        SearchForFacetValues::new(facet_name, search, search_query.hybrid.is_some());
     if let Some(facet_query) = &facet_query {
         facet_search.query(facet_query);
     }
@@ -674,18 +757,6 @@ fn insert_geo_distance(sorts: &[String], document: &mut Document) {
             document.insert("_geoDistance".to_string(), json!(distance.round() as usize));
         }
     }
-}
-
-fn compute_semantic_score(query: &[f32], vectors: Value) -> milli::Result<Option<f32>> {
-    let vectors = serde_json::from_value(vectors)
-        .map(VectorOrArrayOfVectors::into_array_of_vectors)
-        .map_err(InternalError::SerdeJson)?;
-    Ok(vectors
-        .into_iter()
-        .flatten()
-        .map(|v| OrderedFloat(dot_product_similarity(query, &v)))
-        .max()
-        .map(OrderedFloat::into_inner))
 }
 
 fn compute_formatted_options(
@@ -813,22 +884,6 @@ fn make_document(
 
     let document = permissive_json_pointer::select_values(&document, displayed_attributes);
     Ok(document)
-}
-
-/// Extract the JSON value under the field name specified
-/// but doesn't support nested objects.
-fn extract_field(
-    field_name: &str,
-    field_ids_map: &FieldsIdsMap,
-    obkv: obkv::KvReaderU16,
-) -> Result<Option<serde_json::Value>, MeilisearchHttpError> {
-    match field_ids_map.id(field_name) {
-        Some(fid) => match obkv.get(fid) {
-            Some(value) => Ok(serde_json::from_slice(value).map(Some)?),
-            None => Ok(None),
-        },
-        None => Ok(None),
-    }
 }
 
 fn format_fields<'a>(

@@ -6,6 +6,7 @@ mod errors;
 mod facet_search;
 mod formatted;
 mod geo;
+mod hybrid;
 mod multi;
 mod pagination;
 mod restrict_searchable;
@@ -20,22 +21,27 @@ static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
         {
             "title": "Shazam!",
             "id": "287947",
+            "_vectors": { "manual": [1, 2, 3]},
         },
         {
             "title": "Captain Marvel",
             "id": "299537",
+            "_vectors": { "manual": [1, 2, 54] },
         },
         {
             "title": "Escape Room",
             "id": "522681",
+            "_vectors": { "manual": [10, -23, 32] },
         },
         {
             "title": "How to Train Your Dragon: The Hidden World",
             "id": "166428",
+            "_vectors": { "manual": [-100, 231, 32] },
         },
         {
             "title": "Gläss",
             "id": "450465",
+            "_vectors": { "manual": [-100, 340, 90] },
         }
     ])
 });
@@ -57,6 +63,7 @@ static NESTED_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
                 },
             ],
             "cattos": "pésti",
+            "_vectors": { "manual": [1, 2, 3]},
         },
         {
             "id": 654,
@@ -69,12 +76,14 @@ static NESTED_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
                 },
             ],
             "cattos": ["simba", "pestiféré"],
+            "_vectors": { "manual": [1, 2, 54] },
         },
         {
             "id": 750,
             "father": "romain",
             "mother": "michelle",
             "cattos": ["enigma"],
+            "_vectors": { "manual": [10, 23, 32] },
         },
         {
             "id": 951,
@@ -91,6 +100,7 @@ static NESTED_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
                 },
             ],
             "cattos": ["moumoute", "gomez"],
+            "_vectors": { "manual": [10, 23, 32] },
         },
     ])
 });
@@ -802,6 +812,13 @@ async fn experimental_feature_score_details() {
                   {
                     "title": "How to Train Your Dragon: The Hidden World",
                     "id": "166428",
+                    "_vectors": {
+                      "manual": [
+                        -100,
+                        231,
+                        32
+                      ]
+                    },
                     "_rankingScoreDetails": {
                       "words": {
                         "order": 0,
@@ -823,7 +840,7 @@ async fn experimental_feature_score_details() {
                         "order": 3,
                         "attributeRankingOrderScore": 1.0,
                         "queryWordDistanceScore": 0.8095238095238095,
-                        "score": 0.9365079365079364
+                        "score": 0.9727891156462584
                       },
                       "exactness": {
                         "order": 4,
@@ -871,12 +888,91 @@ async fn experimental_feature_vector_store() {
     meili_snap::snapshot!(response["vectorStore"], @"true");
 
     let (response, code) = index
+        .update_settings(json!({"embedders": {
+            "manual": {
+                "source": {
+                    "userProvided": {"dimensions": 3}
+                }
+            }
+        }}))
+        .await;
+
+    meili_snap::snapshot!(code, @"202 Accepted");
+    let response = index.wait_task(response.uid()).await;
+
+    meili_snap::snapshot!(meili_snap::json_string!(response["status"]), @"\"succeeded\"");
+
+    let (response, code) = index
         .search_post(json!({
             "vector": [1.0, 2.0, 3.0],
         }))
         .await;
+
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @"[]");
+    // vector search returns all documents that don't have vectors in the last bucket, like all sorts
+    meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+    [
+      {
+        "title": "Shazam!",
+        "id": "287947",
+        "_vectors": {
+          "manual": [
+            1,
+            2,
+            3
+          ]
+        },
+        "_semanticScore": 1.0
+      },
+      {
+        "title": "Captain Marvel",
+        "id": "299537",
+        "_vectors": {
+          "manual": [
+            1,
+            2,
+            54
+          ]
+        },
+        "_semanticScore": 0.9129112
+      },
+      {
+        "title": "Gläss",
+        "id": "450465",
+        "_vectors": {
+          "manual": [
+            -100,
+            340,
+            90
+          ]
+        },
+        "_semanticScore": 0.8106413
+      },
+      {
+        "title": "How to Train Your Dragon: The Hidden World",
+        "id": "166428",
+        "_vectors": {
+          "manual": [
+            -100,
+            231,
+            32
+          ]
+        },
+        "_semanticScore": 0.74120104
+      },
+      {
+        "title": "Escape Room",
+        "id": "522681",
+        "_vectors": {
+          "manual": [
+            10,
+            -23,
+            32
+          ]
+        }
+      }
+    ]
+    "###);
 }
 
 #[cfg(feature = "default")]
@@ -1126,7 +1222,14 @@ async fn simple_search_with_strange_synonyms() {
             [
               {
                 "title": "How to Train Your Dragon: The Hidden World",
-                "id": "166428"
+                "id": "166428",
+                "_vectors": {
+                  "manual": [
+                    -100,
+                    231,
+                    32
+                  ]
+                }
               }
             ]
             "###);
@@ -1140,7 +1243,14 @@ async fn simple_search_with_strange_synonyms() {
             [
               {
                 "title": "How to Train Your Dragon: The Hidden World",
-                "id": "166428"
+                "id": "166428",
+                "_vectors": {
+                  "manual": [
+                    -100,
+                    231,
+                    32
+                  ]
+                }
               }
             ]
             "###);
@@ -1154,7 +1264,14 @@ async fn simple_search_with_strange_synonyms() {
             [
               {
                 "title": "How to Train Your Dragon: The Hidden World",
-                "id": "166428"
+                "id": "166428",
+                "_vectors": {
+                  "manual": [
+                    -100,
+                    231,
+                    32
+                  ]
+                }
               }
             ]
             "###);

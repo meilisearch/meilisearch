@@ -16,6 +16,7 @@ mod small_bitmap;
 
 mod exact_attribute;
 mod sort;
+mod vector_sort;
 
 #[cfg(test)]
 mod tests;
@@ -28,7 +29,6 @@ use db_cache::DatabaseCache;
 use exact_attribute::ExactAttribute;
 use graph_based_ranking_rule::{Exactness, Fid, Position, Proximity, Typo};
 use heed::RoTxn;
-use instant_distance::Search;
 use interner::{DedupInterner, Interner};
 pub use logger::visual::VisualSearchLogger;
 pub use logger::{DefaultSearchLogger, SearchLogger};
@@ -46,10 +46,11 @@ use self::geo_sort::GeoSort;
 pub use self::geo_sort::Strategy as GeoSortStrategy;
 use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
-use crate::distance::NDotProductPoint;
+use self::vector_sort::VectorSort;
 use crate::error::FieldIdMapMissingEntry;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::apply_distinct_rule;
+use crate::vector::DistributionShift;
 use crate::{
     AscDesc, DocumentId, FieldId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError,
 };
@@ -258,6 +259,80 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
     Ok(ranking_rules)
 }
 
+fn get_ranking_rules_for_vector<'ctx>(
+    ctx: &SearchContext<'ctx>,
+    sort_criteria: &Option<Vec<AscDesc>>,
+    geo_strategy: geo_sort::Strategy,
+    limit_plus_offset: usize,
+    target: &[f32],
+    distribution_shift: Option<DistributionShift>,
+    embedder_name: &str,
+) -> Result<Vec<BoxRankingRule<'ctx, PlaceholderQuery>>> {
+    // query graph search
+
+    let mut sort = false;
+    let mut sorted_fields = HashSet::new();
+    let mut geo_sorted = false;
+
+    let mut vector = false;
+    let mut ranking_rules: Vec<BoxRankingRule<PlaceholderQuery>> = vec![];
+
+    let settings_ranking_rules = ctx.index.criteria(ctx.txn)?;
+    for rr in settings_ranking_rules {
+        match rr {
+            crate::Criterion::Words
+            | crate::Criterion::Typo
+            | crate::Criterion::Proximity
+            | crate::Criterion::Attribute
+            | crate::Criterion::Exactness => {
+                if !vector {
+                    let vector_candidates = ctx.index.documents_ids(ctx.txn)?;
+                    let vector_sort = VectorSort::new(
+                        ctx,
+                        target.to_vec(),
+                        vector_candidates,
+                        limit_plus_offset,
+                        distribution_shift,
+                        embedder_name,
+                    )?;
+                    ranking_rules.push(Box::new(vector_sort));
+                    vector = true;
+                }
+            }
+            crate::Criterion::Sort => {
+                if sort {
+                    continue;
+                }
+                resolve_sort_criteria(
+                    sort_criteria,
+                    ctx,
+                    &mut ranking_rules,
+                    &mut sorted_fields,
+                    &mut geo_sorted,
+                    geo_strategy,
+                )?;
+                sort = true;
+            }
+            crate::Criterion::Asc(field_name) => {
+                if sorted_fields.contains(&field_name) {
+                    continue;
+                }
+                sorted_fields.insert(field_name.clone());
+                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, true)?));
+            }
+            crate::Criterion::Desc(field_name) => {
+                if sorted_fields.contains(&field_name) {
+                    continue;
+                }
+                sorted_fields.insert(field_name.clone());
+                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, false)?));
+            }
+        }
+    }
+
+    Ok(ranking_rules)
+}
+
 /// Return the list of initialised ranking rules to be used for a query graph search.
 fn get_ranking_rules_for_query_graph_search<'ctx>(
     ctx: &SearchContext<'ctx>,
@@ -422,15 +497,72 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
     Ok(())
 }
 
+pub fn filtered_universe(ctx: &SearchContext, filters: &Option<Filter>) -> Result<RoaringBitmap> {
+    Ok(if let Some(filters) = filters {
+        filters.evaluate(ctx.txn, ctx.index)?
+    } else {
+        ctx.index.documents_ids(ctx.txn)?
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn execute_vector_search(
+    ctx: &mut SearchContext,
+    vector: &[f32],
+    scoring_strategy: ScoringStrategy,
+    universe: RoaringBitmap,
+    sort_criteria: &Option<Vec<AscDesc>>,
+    geo_strategy: geo_sort::Strategy,
+    from: usize,
+    length: usize,
+    distribution_shift: Option<DistributionShift>,
+    embedder_name: &str,
+) -> Result<PartialSearchResult> {
+    check_sort_criteria(ctx, sort_criteria.as_ref())?;
+
+    // FIXME: input universe = universe & documents_with_vectors
+    // for now if we're computing embeddings for ALL documents, we can assume that this is just universe
+    let ranking_rules = get_ranking_rules_for_vector(
+        ctx,
+        sort_criteria,
+        geo_strategy,
+        from + length,
+        vector,
+        distribution_shift,
+        embedder_name,
+    )?;
+
+    let mut placeholder_search_logger = logger::DefaultSearchLogger;
+    let placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery> =
+        &mut placeholder_search_logger;
+
+    let BucketSortOutput { docids, scores, all_candidates } = bucket_sort(
+        ctx,
+        ranking_rules,
+        &PlaceholderQuery,
+        &universe,
+        from,
+        length,
+        scoring_strategy,
+        placeholder_search_logger,
+    )?;
+
+    Ok(PartialSearchResult {
+        candidates: all_candidates,
+        document_scores: scores,
+        documents_ids: docids,
+        located_query_terms: None,
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn execute_search(
     ctx: &mut SearchContext,
-    query: &Option<String>,
-    vector: &Option<Vec<f32>>,
+    query: Option<&str>,
     terms_matching_strategy: TermsMatchingStrategy,
     scoring_strategy: ScoringStrategy,
     exhaustive_number_hits: bool,
-    filters: &Option<Filter>,
+    mut universe: RoaringBitmap,
     sort_criteria: &Option<Vec<AscDesc>>,
     geo_strategy: geo_sort::Strategy,
     from: usize,
@@ -439,59 +571,7 @@ pub fn execute_search(
     placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery>,
     query_graph_logger: &mut dyn SearchLogger<QueryGraph>,
 ) -> Result<PartialSearchResult> {
-    let mut universe = if let Some(filters) = filters {
-        filters.evaluate(ctx.txn, ctx.index)?
-    } else {
-        ctx.index.documents_ids(ctx.txn)?
-    };
-
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
-
-    if let Some(vector) = vector {
-        let mut search = Search::default();
-        let docids = match ctx.index.vector_hnsw(ctx.txn)? {
-            Some(hnsw) => {
-                if let Some(expected_size) = hnsw.iter().map(|(_, point)| point.len()).next() {
-                    if vector.len() != expected_size {
-                        return Err(UserError::InvalidVectorDimensions {
-                            expected: expected_size,
-                            found: vector.len(),
-                        }
-                        .into());
-                    }
-                }
-
-                let vector = NDotProductPoint::new(vector.clone());
-
-                let neighbors = hnsw.search(&vector, &mut search);
-
-                let mut docids = Vec::new();
-                let mut uniq_docids = RoaringBitmap::new();
-                for instant_distance::Item { distance: _, pid, point: _ } in neighbors {
-                    let index = pid.into_inner();
-                    let docid = ctx.index.vector_id_docid.get(ctx.txn, &index)?.unwrap();
-                    if universe.contains(docid) && uniq_docids.insert(docid) {
-                        docids.push(docid);
-                        if docids.len() == (from + length) {
-                            break;
-                        }
-                    }
-                }
-
-                // return the nearest documents that are also part of the candidates
-                // along with a dummy list of scores that are useless in this context.
-                docids.into_iter().skip(from).take(length).collect()
-            }
-            None => Vec::new(),
-        };
-
-        return Ok(PartialSearchResult {
-            candidates: universe,
-            document_scores: vec![Vec::new(); docids.len()],
-            documents_ids: docids,
-            located_query_terms: None,
-        });
-    }
 
     let mut located_query_terms = None;
     let query_terms = if let Some(query) = query {
@@ -546,7 +626,7 @@ pub fn execute_search(
             terms_matching_strategy,
         )?;
 
-        universe =
+        universe &=
             resolve_universe(ctx, &universe, &graph, terms_matching_strategy, query_graph_logger)?;
 
         bucket_sort(

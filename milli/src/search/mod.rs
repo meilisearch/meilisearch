@@ -12,12 +12,14 @@ use roaring::bitmap::RoaringBitmap;
 
 pub use self::facet::{FacetDistribution, Filter, OrderBy, DEFAULT_VALUES_PER_FACET};
 pub use self::new::matches::{FormatOptions, MatchBounds, MatcherBuilder, MatchingWords};
-use self::new::PartialSearchResult;
+use self::new::{execute_vector_search, PartialSearchResult};
 use crate::error::UserError;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::score_details::{ScoreDetails, ScoringStrategy};
+use crate::vector::DistributionShift;
 use crate::{
-    execute_search, AscDesc, DefaultSearchLogger, DocumentId, FieldId, Index, Result, SearchContext,
+    execute_search, filtered_universe, AscDesc, DefaultSearchLogger, DocumentId, FieldId, Index,
+    Result, SearchContext,
 };
 
 // Building these factories is not free.
@@ -30,6 +32,7 @@ const MAX_NUMBER_OF_FACETS: usize = 100;
 
 pub mod facet;
 mod fst_utils;
+pub mod hybrid;
 pub mod new;
 
 pub struct Search<'a> {
@@ -46,8 +49,11 @@ pub struct Search<'a> {
     scoring_strategy: ScoringStrategy,
     words_limit: usize,
     exhaustive_number_hits: bool,
+    /// TODO: Add semantic ratio or pass it directly to execute_hybrid()
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
+    distribution_shift: Option<DistributionShift>,
+    embedder_name: Option<String>,
 }
 
 impl<'a> Search<'a> {
@@ -67,6 +73,8 @@ impl<'a> Search<'a> {
             words_limit: 10,
             rtxn,
             index,
+            distribution_shift: None,
+            embedder_name: None,
         }
     }
 
@@ -75,8 +83,8 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn vector(&mut self, vector: impl Into<Vec<f32>>) -> &mut Search<'a> {
-        self.vector = Some(vector.into());
+    pub fn vector(&mut self, vector: Vec<f32>) -> &mut Search<'a> {
+        self.vector = Some(vector);
         self
     }
 
@@ -133,30 +141,75 @@ impl<'a> Search<'a> {
         self
     }
 
+    pub fn distribution_shift(
+        &mut self,
+        distribution_shift: Option<DistributionShift>,
+    ) -> &mut Search<'a> {
+        self.distribution_shift = distribution_shift;
+        self
+    }
+
+    pub fn embedder_name(&mut self, embedder_name: impl Into<String>) -> &mut Search<'a> {
+        self.embedder_name = Some(embedder_name.into());
+        self
+    }
+
+    pub fn execute_for_candidates(&self, has_vector_search: bool) -> Result<RoaringBitmap> {
+        if has_vector_search {
+            let ctx = SearchContext::new(self.index, self.rtxn);
+            filtered_universe(&ctx, &self.filter)
+        } else {
+            Ok(self.execute()?.candidates)
+        }
+    }
+
     pub fn execute(&self) -> Result<SearchResult> {
+        let embedder_name;
+        let embedder_name = match &self.embedder_name {
+            Some(embedder_name) => embedder_name,
+            None => {
+                embedder_name = self.index.default_embedding_name(self.rtxn)?;
+                &embedder_name
+            }
+        };
+
         let mut ctx = SearchContext::new(self.index, self.rtxn);
 
         if let Some(searchable_attributes) = self.searchable_attributes {
             ctx.searchable_attributes(searchable_attributes)?;
         }
 
+        let universe = filtered_universe(&ctx, &self.filter)?;
         let PartialSearchResult { located_query_terms, candidates, documents_ids, document_scores } =
-            execute_search(
-                &mut ctx,
-                &self.query,
-                &self.vector,
-                self.terms_matching_strategy,
-                self.scoring_strategy,
-                self.exhaustive_number_hits,
-                &self.filter,
-                &self.sort_criteria,
-                self.geo_strategy,
-                self.offset,
-                self.limit,
-                Some(self.words_limit),
-                &mut DefaultSearchLogger,
-                &mut DefaultSearchLogger,
-            )?;
+            match self.vector.as_ref() {
+                Some(vector) => execute_vector_search(
+                    &mut ctx,
+                    vector,
+                    self.scoring_strategy,
+                    universe,
+                    &self.sort_criteria,
+                    self.geo_strategy,
+                    self.offset,
+                    self.limit,
+                    self.distribution_shift,
+                    embedder_name,
+                )?,
+                None => execute_search(
+                    &mut ctx,
+                    self.query.as_deref(),
+                    self.terms_matching_strategy,
+                    self.scoring_strategy,
+                    self.exhaustive_number_hits,
+                    universe,
+                    &self.sort_criteria,
+                    self.geo_strategy,
+                    self.offset,
+                    self.limit,
+                    Some(self.words_limit),
+                    &mut DefaultSearchLogger,
+                    &mut DefaultSearchLogger,
+                )?,
+            };
 
         // consume context and located_query_terms to build MatchingWords.
         let matching_words = match located_query_terms {
@@ -185,6 +238,8 @@ impl fmt::Debug for Search<'_> {
             exhaustive_number_hits,
             rtxn: _,
             index: _,
+            distribution_shift,
+            embedder_name,
         } = self;
         f.debug_struct("Search")
             .field("query", query)
@@ -198,6 +253,8 @@ impl fmt::Debug for Search<'_> {
             .field("scoring_strategy", scoring_strategy)
             .field("exhaustive_number_hits", exhaustive_number_hits)
             .field("words_limit", words_limit)
+            .field("distribution_shift", distribution_shift)
+            .field("embedder_name", embedder_name)
             .finish()
     }
 }
@@ -249,11 +306,16 @@ pub struct SearchForFacetValues<'a> {
     query: Option<String>,
     facet: String,
     search_query: Search<'a>,
+    is_hybrid: bool,
 }
 
 impl<'a> SearchForFacetValues<'a> {
-    pub fn new(facet: String, search_query: Search<'a>) -> SearchForFacetValues<'a> {
-        SearchForFacetValues { query: None, facet, search_query }
+    pub fn new(
+        facet: String,
+        search_query: Search<'a>,
+        is_hybrid: bool,
+    ) -> SearchForFacetValues<'a> {
+        SearchForFacetValues { query: None, facet, search_query, is_hybrid }
     }
 
     pub fn query(&mut self, query: impl Into<String>) -> &mut Self {
@@ -303,7 +365,9 @@ impl<'a> SearchForFacetValues<'a> {
             None => return Ok(vec![]),
         };
 
-        let search_candidates = self.search_query.execute()?.candidates;
+        let search_candidates = self
+            .search_query
+            .execute_for_candidates(self.is_hybrid || self.search_query.vector.is_some())?;
 
         match self.query.as_ref() {
             Some(query) => {

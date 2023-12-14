@@ -10,18 +10,18 @@ pub mod documents;
 
 mod asc_desc;
 mod criterion;
-pub mod distance;
 mod error;
 mod external_documents_ids;
 pub mod facet;
 mod fields_ids_map;
 pub mod heed_codec;
 pub mod index;
+pub mod prompt;
 pub mod proximity;
-mod readable_slices;
 pub mod score_details;
 mod search;
 pub mod update;
+pub mod vector;
 
 #[cfg(test)]
 #[macro_use]
@@ -32,13 +32,12 @@ use std::convert::{TryFrom, TryInto};
 use std::hash::BuildHasherDefault;
 
 use charabia::normalizer::{CharNormalizer, CompatibilityDecompositionNormalizer};
-pub use distance::dot_product_similarity;
 pub use filter_parser::{Condition, FilterCondition, Span, Token};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
 pub use search::new::{
-    execute_search, DefaultSearchLogger, GeoSortStrategy, SearchContext, SearchLogger,
-    VisualSearchLogger,
+    execute_search, filtered_universe, DefaultSearchLogger, GeoSortStrategy, SearchContext,
+    SearchLogger, VisualSearchLogger,
 };
 use serde_json::Value;
 pub use {charabia as tokenizer, heed};

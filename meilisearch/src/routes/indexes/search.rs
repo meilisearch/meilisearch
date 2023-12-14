@@ -2,12 +2,14 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use index_scheduler::IndexScheduler;
-use log::debug;
+use log::{debug, warn};
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::milli;
+use meilisearch_types::milli::vector::DistributionShift;
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 
@@ -16,9 +18,9 @@ use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::search::{
-    add_search_rules, perform_search, MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH,
-    DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
-    DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
+    add_search_rules, perform_search, HybridQuery, MatchingStrategy, SearchQuery, SemanticRatio,
+    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -74,6 +76,31 @@ pub struct SearchQueryGet {
     matching_strategy: MatchingStrategy,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToSearchOn>)]
     pub attributes_to_search_on: Option<CS<String>>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidEmbedder>)]
+    pub hybrid_embedder: Option<String>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchSemanticRatio>)]
+    pub hybrid_semantic_ratio: Option<SemanticRatioGet>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, deserr::Deserr)]
+#[deserr(try_from(String) = TryFrom::try_from -> InvalidSearchSemanticRatio)]
+pub struct SemanticRatioGet(SemanticRatio);
+
+impl std::convert::TryFrom<String> for SemanticRatioGet {
+    type Error = InvalidSearchSemanticRatio;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        let f: f32 = s.parse().map_err(|_| InvalidSearchSemanticRatio)?;
+        Ok(SemanticRatioGet(SemanticRatio::try_from(f)?))
+    }
+}
+
+impl std::ops::Deref for SemanticRatioGet {
+    type Target = SemanticRatio;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl From<SearchQueryGet> for SearchQuery {
@@ -84,6 +111,20 @@ impl From<SearchQueryGet> for SearchQuery {
                 _ => Some(Value::String(f)),
             },
             None => None,
+        };
+
+        let hybrid = match (other.hybrid_embedder, other.hybrid_semantic_ratio) {
+            (None, None) => None,
+            (None, Some(semantic_ratio)) => {
+                Some(HybridQuery { semantic_ratio: *semantic_ratio, embedder: None })
+            }
+            (Some(embedder), None) => Some(HybridQuery {
+                semantic_ratio: DEFAULT_SEMANTIC_RATIO(),
+                embedder: Some(embedder),
+            }),
+            (Some(embedder), Some(semantic_ratio)) => {
+                Some(HybridQuery { semantic_ratio: *semantic_ratio, embedder: Some(embedder) })
+            }
         };
 
         Self {
@@ -108,6 +149,7 @@ impl From<SearchQueryGet> for SearchQuery {
             crop_marker: other.crop_marker,
             matching_strategy: other.matching_strategy,
             attributes_to_search_on: other.attributes_to_search_on.map(|o| o.into_iter().collect()),
+            hybrid,
         }
     }
 }
@@ -158,8 +200,12 @@ pub async fn search_with_url_query(
 
     let index = index_scheduler.index(&index_uid)?;
     let features = index_scheduler.features();
+
+    let distribution = embed(&mut query, index_scheduler.get_ref(), &index).await?;
+
     let search_result =
-        tokio::task::spawn_blocking(move || perform_search(&index, query, features)).await?;
+        tokio::task::spawn_blocking(move || perform_search(&index, query, features, distribution))
+            .await?;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
@@ -193,8 +239,12 @@ pub async fn search_with_post(
     let index = index_scheduler.index(&index_uid)?;
 
     let features = index_scheduler.features();
+
+    let distribution = embed(&mut query, index_scheduler.get_ref(), &index).await?;
+
     let search_result =
-        tokio::task::spawn_blocking(move || perform_search(&index, query, features)).await?;
+        tokio::task::spawn_blocking(move || perform_search(&index, query, features, distribution))
+            .await?;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
@@ -204,6 +254,80 @@ pub async fn search_with_post(
 
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))
+}
+
+pub async fn embed(
+    query: &mut SearchQuery,
+    index_scheduler: &IndexScheduler,
+    index: &milli::Index,
+) -> Result<Option<DistributionShift>, ResponseError> {
+    match (&query.hybrid, &query.vector, &query.q) {
+        (Some(HybridQuery { semantic_ratio: _, embedder }), None, Some(q))
+            if !q.trim().is_empty() =>
+        {
+            let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
+            let embedders = index_scheduler.embedders(embedder_configs)?;
+
+            let embedder = if let Some(embedder_name) = embedder {
+                embedders.get(embedder_name)
+            } else {
+                embedders.get_default()
+            };
+
+            let embedder = embedder
+                .ok_or(milli::UserError::InvalidEmbedder("default".to_owned()))
+                .map_err(milli::Error::from)?
+                .0;
+
+            let distribution = embedder.distribution();
+
+            let embeddings = embedder
+                .embed(vec![q.to_owned()])
+                .await
+                .map_err(milli::vector::Error::from)
+                .map_err(milli::Error::from)?
+                .pop()
+                .expect("No vector returned from embedding");
+
+            if embeddings.iter().nth(1).is_some() {
+                warn!("Ignoring embeddings past the first one in long search query");
+                query.vector = Some(embeddings.iter().next().unwrap().to_vec());
+            } else {
+                query.vector = Some(embeddings.into_inner());
+            }
+            Ok(distribution)
+        }
+        (Some(hybrid), vector, _) => {
+            let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
+            let embedders = index_scheduler.embedders(embedder_configs)?;
+
+            let embedder = if let Some(embedder_name) = &hybrid.embedder {
+                embedders.get(embedder_name)
+            } else {
+                embedders.get_default()
+            };
+
+            let embedder = embedder
+                .ok_or(milli::UserError::InvalidEmbedder("default".to_owned()))
+                .map_err(milli::Error::from)?
+                .0;
+
+            if let Some(vector) = vector {
+                if vector.len() != embedder.dimensions() {
+                    return Err(meilisearch_types::milli::Error::UserError(
+                        meilisearch_types::milli::UserError::InvalidVectorDimensions {
+                            expected: embedder.dimensions(),
+                            found: vector.len(),
+                        },
+                    )
+                    .into());
+                }
+            }
+
+            Ok(embedder.distribution())
+        }
+        _ => Ok(None),
+    }
 }
 
 #[cfg(test)]
