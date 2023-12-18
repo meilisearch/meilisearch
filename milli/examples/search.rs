@@ -5,8 +5,8 @@ use std::time::Instant;
 
 use heed::EnvOpenOptions;
 use milli::{
-    execute_search, DefaultSearchLogger, GeoSortStrategy, Index, SearchContext, SearchLogger,
-    TermsMatchingStrategy,
+    execute_search, filtered_universe, DefaultSearchLogger, GeoSortStrategy, Index, SearchContext,
+    SearchLogger, TermsMatchingStrategy,
 };
 
 #[global_allocator]
@@ -49,14 +49,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             let start = Instant::now();
 
             let mut ctx = SearchContext::new(&index, &txn);
+            let universe = filtered_universe(&ctx, &None)?;
+
             let docs = execute_search(
                 &mut ctx,
-                &(!query.trim().is_empty()).then(|| query.trim().to_owned()),
-                &None,
+                (!query.trim().is_empty()).then(|| query.trim()),
                 TermsMatchingStrategy::Last,
                 milli::score_details::ScoringStrategy::Skip,
                 false,
-                &None,
+                universe,
                 &None,
                 GeoSortStrategy::default(),
                 0,

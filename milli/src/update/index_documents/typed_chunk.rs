@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::{self, BufReader};
@@ -8,9 +8,7 @@ use charabia::{Language, Script};
 use grenad::MergerBuilder;
 use heed::types::Bytes;
 use heed::{PutFlags, RwTxn};
-use log::error;
 use obkv::{KvReader, KvWriter};
-use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 
 use super::helpers::{
@@ -18,16 +16,15 @@ use super::helpers::{
     valid_lmdb_key, CursorClonableMmap,
 };
 use super::{ClonableMmap, MergeFn};
-use crate::distance::NDotProductPoint;
-use crate::error::UserError;
 use crate::external_documents_ids::{DocumentOperation, DocumentOperationKind};
 use crate::facet::FacetType;
 use crate::index::db_name::DOCUMENTS;
-use crate::index::Hnsw;
 use crate::update::del_add::{deladd_serialize_add_side, DelAdd, KvReaderDelAdd};
 use crate::update::facet::FacetsUpdate;
 use crate::update::index_documents::helpers::{as_cloneable_grenad, try_split_array_at};
-use crate::{lat_lng_to_xyz, DocumentId, FieldId, GeoPoint, Index, Result, SerializationError};
+use crate::{
+    lat_lng_to_xyz, DocumentId, FieldId, GeoPoint, Index, InternalError, Result, SerializationError,
+};
 
 pub(crate) enum TypedChunk {
     FieldIdDocidFacetStrings(grenad::Reader<CursorClonableMmap>),
@@ -47,7 +44,13 @@ pub(crate) enum TypedChunk {
     FieldIdFacetIsNullDocids(grenad::Reader<BufReader<File>>),
     FieldIdFacetIsEmptyDocids(grenad::Reader<BufReader<File>>),
     GeoPoints(grenad::Reader<BufReader<File>>),
-    VectorPoints(grenad::Reader<BufReader<File>>),
+    VectorPoints {
+        remove_vectors: grenad::Reader<BufReader<File>>,
+        embeddings: Option<grenad::Reader<BufReader<File>>>,
+        expected_dimension: usize,
+        manual_vectors: grenad::Reader<BufReader<File>>,
+        embedder_name: String,
+    },
     ScriptLanguageDocids(HashMap<(Script, Language), (RoaringBitmap, RoaringBitmap)>),
 }
 
@@ -100,8 +103,8 @@ impl TypedChunk {
             TypedChunk::GeoPoints(grenad) => {
                 format!("GeoPoints {{ number_of_entries: {} }}", grenad.len())
             }
-            TypedChunk::VectorPoints(grenad) => {
-                format!("VectorPoints {{ number_of_entries: {} }}", grenad.len())
+            TypedChunk::VectorPoints{ remove_vectors, manual_vectors, embeddings, expected_dimension, embedder_name } => {
+                format!("VectorPoints {{ remove_vectors: {}, manual_vectors: {}, embeddings: {}, dimension: {}, embedder_name: {} }}", remove_vectors.len(), manual_vectors.len(), embeddings.as_ref().map(|e| e.len()).unwrap_or_default(), expected_dimension, embedder_name)
             }
             TypedChunk::ScriptLanguageDocids(sl_map) => {
                 format!("ScriptLanguageDocids {{ number_of_entries: {} }}", sl_map.len())
@@ -355,19 +358,77 @@ pub(crate) fn write_typed_chunk_into_index(
             index.put_geo_rtree(wtxn, &rtree)?;
             index.put_geo_faceted_documents_ids(wtxn, &geo_faceted_docids)?;
         }
-        TypedChunk::VectorPoints(vector_points) => {
-            let mut vectors_set = HashSet::new();
-            // We extract and store the previous vectors
-            if let Some(hnsw) = index.vector_hnsw(wtxn)? {
-                for (pid, point) in hnsw.iter() {
-                    let pid_key = pid.into_inner();
-                    let docid = index.vector_id_docid.get(wtxn, &pid_key)?.unwrap();
-                    let vector: Vec<_> = point.iter().copied().map(OrderedFloat).collect();
-                    vectors_set.insert((docid, vector));
+        TypedChunk::VectorPoints {
+            remove_vectors,
+            manual_vectors,
+            embeddings,
+            expected_dimension,
+            embedder_name,
+        } => {
+            let embedder_index = index.embedder_category_id.get(wtxn, &embedder_name)?.ok_or(
+                InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },
+            )?;
+            let writer_index = (embedder_index as u16) << 8;
+            // FIXME: allow customizing distance
+            let writers: std::result::Result<Vec<_>, _> = (0..=u8::MAX)
+                .map(|k| {
+                    arroy::Writer::prepare(
+                        wtxn,
+                        index.vector_arroy,
+                        writer_index | (k as u16),
+                        expected_dimension,
+                    )
+                })
+                .collect();
+            let writers = writers?;
+
+            // remove vectors for docids we want them removed
+            let mut cursor = remove_vectors.into_cursor()?;
+            while let Some((key, _)) = cursor.move_on_next()? {
+                let docid = key.try_into().map(DocumentId::from_be_bytes).unwrap();
+
+                for writer in &writers {
+                    // Uses invariant: vectors are packed in the first writers.
+                    if !writer.del_item(wtxn, docid)? {
+                        break;
+                    }
                 }
             }
 
-            let mut cursor = vector_points.into_cursor()?;
+            // add generated embeddings
+            if let Some(embeddings) = embeddings {
+                let mut cursor = embeddings.into_cursor()?;
+                while let Some((key, value)) = cursor.move_on_next()? {
+                    let docid = key.try_into().map(DocumentId::from_be_bytes).unwrap();
+                    let data = pod_collect_to_vec(value);
+                    // it is a code error to have embeddings and not expected_dimension
+                    let embeddings =
+                        crate::vector::Embeddings::from_inner(data, expected_dimension)
+                            // code error if we somehow got the wrong dimension
+                            .unwrap();
+
+                    if embeddings.embedding_count() > u8::MAX.into() {
+                        let external_docid = if let Ok(Some(Ok(index))) = index
+                            .external_id_of(wtxn, std::iter::once(docid))
+                            .map(|it| it.into_iter().next())
+                        {
+                            index
+                        } else {
+                            format!("internal docid={docid}")
+                        };
+                        return Err(crate::Error::UserError(crate::UserError::TooManyVectors(
+                            external_docid,
+                            embeddings.embedding_count(),
+                        )));
+                    }
+                    for (embedding, writer) in embeddings.iter().zip(&writers) {
+                        writer.add_item(wtxn, docid, embedding)?;
+                    }
+                }
+            }
+
+            // perform the manual diff
+            let mut cursor = manual_vectors.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
                 // convert the key back to a u32 (4 bytes)
                 let (left, _index) = try_split_array_at(key).unwrap();
@@ -375,58 +436,52 @@ pub(crate) fn write_typed_chunk_into_index(
 
                 let vector_deladd_obkv = KvReaderDelAdd::new(value);
                 if let Some(value) = vector_deladd_obkv.get(DelAdd::Deletion) {
-                    // convert the vector back to a Vec<f32>
-                    let vector = pod_collect_to_vec(value).into_iter().map(OrderedFloat).collect();
-                    let key = (docid, vector);
-                    if !vectors_set.remove(&key) {
-                        error!("Unable to delete the vector: {:?}", key.1);
+                    let vector: Vec<f32> = pod_collect_to_vec(value);
+
+                    let mut deleted_index = None;
+                    for (index, writer) in writers.iter().enumerate() {
+                        let Some(candidate) = writer.item_vector(wtxn, docid)? else {
+                            // uses invariant: vectors are packed in the first writers.
+                            break;
+                        };
+                        if candidate == vector {
+                            writer.del_item(wtxn, docid)?;
+                            deleted_index = Some(index);
+                        }
+                    }
+
+                    // 🥲 enforce invariant: vectors are packed in the first writers.
+                    if let Some(deleted_index) = deleted_index {
+                        let mut last_index_with_a_vector = None;
+                        for (index, writer) in writers.iter().enumerate().skip(deleted_index) {
+                            let Some(candidate) = writer.item_vector(wtxn, docid)? else {
+                                break;
+                            };
+                            last_index_with_a_vector = Some((index, candidate));
+                        }
+                        if let Some((last_index, vector)) = last_index_with_a_vector {
+                            // unwrap: computed the index from the list of writers
+                            let writer = writers.get(last_index).unwrap();
+                            writer.del_item(wtxn, docid)?;
+                            writers.get(deleted_index).unwrap().add_item(wtxn, docid, &vector)?;
+                        }
                     }
                 }
+
                 if let Some(value) = vector_deladd_obkv.get(DelAdd::Addition) {
-                    // convert the vector back to a Vec<f32>
-                    let vector = pod_collect_to_vec(value).into_iter().map(OrderedFloat).collect();
-                    vectors_set.insert((docid, vector));
-                }
-            }
+                    let vector = pod_collect_to_vec(value);
 
-            // Extract the most common vector dimension
-            let expected_dimension_size = {
-                let mut dims = HashMap::new();
-                vectors_set.iter().for_each(|(_, v)| *dims.entry(v.len()).or_insert(0) += 1);
-                dims.into_iter().max_by_key(|(_, count)| *count).map(|(len, _)| len)
-            };
-
-            // Ensure that the vector lengths are correct and
-            // prepare the vectors before inserting them in the HNSW.
-            let mut points = Vec::new();
-            let mut docids = Vec::new();
-            for (docid, vector) in vectors_set {
-                if expected_dimension_size.map_or(false, |expected| expected != vector.len()) {
-                    return Err(UserError::InvalidVectorDimensions {
-                        expected: expected_dimension_size.unwrap_or(vector.len()),
-                        found: vector.len(),
+                    // overflow was detected during vector extraction.
+                    for writer in &writers {
+                        if !writer.contains_item(wtxn, docid)? {
+                            writer.add_item(wtxn, docid, &vector)?;
+                            break;
+                        }
                     }
-                    .into());
-                } else {
-                    let vector = vector.into_iter().map(OrderedFloat::into_inner).collect();
-                    points.push(NDotProductPoint::new(vector));
-                    docids.push(docid);
                 }
             }
 
-            let hnsw_length = points.len();
-            let (new_hnsw, pids) = Hnsw::builder().build_hnsw(points);
-
-            assert_eq!(docids.len(), pids.len());
-
-            // Store the vectors in the point-docid relation database
-            index.vector_id_docid.clear(wtxn)?;
-            for (docid, pid) in docids.into_iter().zip(pids) {
-                index.vector_id_docid.put(wtxn, &pid.into_inner(), &docid)?;
-            }
-
-            log::debug!("There are {} entries in the HNSW so far", hnsw_length);
-            index.put_vector_hnsw(wtxn, &new_hnsw)?;
+            log::debug!("Finished vector chunk for {}", embedder_name);
         }
         TypedChunk::ScriptLanguageDocids(sl_map) => {
             for (key, (deletion, addition)) in sl_map {

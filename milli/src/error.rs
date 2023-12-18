@@ -61,6 +61,10 @@ pub enum InternalError {
     AbortedIndexation,
     #[error("The matching words list contains at least one invalid member.")]
     InvalidMatchingWords,
+    #[error(transparent)]
+    ArroyError(#[from] arroy::Error),
+    #[error(transparent)]
+    VectorEmbeddingError(#[from] crate::vector::Error),
 }
 
 #[derive(Error, Debug)]
@@ -110,8 +114,10 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     InvalidGeoField(#[from] GeoError),
     #[error("Invalid vector dimensions: expected: `{}`, found: `{}`.", .expected, .found)]
     InvalidVectorDimensions { expected: usize, found: usize },
-    #[error("The `_vectors` field in the document with the id: `{document_id}` is not an array. Was expecting an array of floats or an array of arrays of floats but instead got `{value}`.")]
-    InvalidVectorsType { document_id: Value, value: Value },
+    #[error("The `_vectors.{subfield}` field in the document with id: `{document_id}` is not an array. Was expecting an array of floats or an array of arrays of floats but instead got `{value}`.")]
+    InvalidVectorsType { document_id: Value, value: Value, subfield: String },
+    #[error("The `_vectors` field in the document with id: `{document_id}` is not an object. Was expecting an object with a key for each embedder with manually provided vectors, but instead got `{value}`")]
+    InvalidVectorsMapType { document_id: Value, value: Value },
     #[error("{0}")]
     InvalidFilter(String),
     #[error("Invalid type for filter subexpression: expected: {}, found: {1}.", .0.join(", "))]
@@ -180,6 +186,49 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     UnknownInternalDocumentId { document_id: DocumentId },
     #[error("`minWordSizeForTypos` setting is invalid. `oneTypo` and `twoTypos` fields should be between `0` and `255`, and `twoTypos` should be greater or equals to `oneTypo` but found `oneTypo: {0}` and twoTypos: {1}`.")]
     InvalidMinTypoWordLenSetting(u8, u8),
+    #[error(transparent)]
+    VectorEmbeddingError(#[from] crate::vector::Error),
+    #[error(transparent)]
+    MissingDocumentField(#[from] crate::prompt::error::RenderPromptError),
+    #[error(transparent)]
+    InvalidPrompt(#[from] crate::prompt::error::NewPromptError),
+    #[error("Invalid prompt in for embeddings with name '{0}': {1}.")]
+    InvalidPromptForEmbeddings(String, crate::prompt::error::NewPromptError),
+    #[error("Too many embedders in the configuration. Found {0}, but limited to 256.")]
+    TooManyEmbedders(usize),
+    #[error("Cannot find embedder with name {0}.")]
+    InvalidEmbedder(String),
+    #[error("Too many vectors for document with id {0}: found {1}, but limited to 256.")]
+    TooManyVectors(String, usize),
+}
+
+impl From<crate::vector::Error> for Error {
+    fn from(value: crate::vector::Error) -> Self {
+        match value.fault() {
+            FaultSource::User => Error::UserError(value.into()),
+            FaultSource::Runtime => Error::InternalError(value.into()),
+            FaultSource::Bug => Error::InternalError(value.into()),
+            FaultSource::Undecided => Error::InternalError(value.into()),
+        }
+    }
+}
+
+impl From<arroy::Error> for Error {
+    fn from(value: arroy::Error) -> Self {
+        match value {
+            arroy::Error::Heed(heed) => heed.into(),
+            arroy::Error::Io(io) => io.into(),
+            arroy::Error::InvalidVecDimension { expected, received } => {
+                Error::UserError(UserError::InvalidVectorDimensions { expected, found: received })
+            }
+            arroy::Error::DatabaseFull
+            | arroy::Error::InvalidItemAppend
+            | arroy::Error::UnmatchingDistance { .. }
+            | arroy::Error::MissingMetadata => {
+                Error::InternalError(InternalError::ArroyError(value))
+            }
+        }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -333,6 +382,26 @@ impl From<HeedError> for Error {
             HeedError::DatabaseClosing => InternalError(DatabaseClosing),
             HeedError::BadOpenOptions { .. } => UserError(InvalidLmdbOpenOptions),
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum FaultSource {
+    User,
+    Runtime,
+    Bug,
+    Undecided,
+}
+
+impl std::fmt::Display for FaultSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            FaultSource::User => "user error",
+            FaultSource::Runtime => "runtime error",
+            FaultSource::Bug => "coding error",
+            FaultSource::Undecided => "error",
+        };
+        f.write_str(s)
     }
 }
 

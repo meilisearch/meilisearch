@@ -51,6 +51,8 @@ pub enum MeilisearchHttpError {
     DocumentFormat(#[from] DocumentFormatError),
     #[error(transparent)]
     Join(#[from] JoinError),
+    #[error("Invalid request: missing `hybrid` parameter when both `q` and `vector` are present.")]
+    MissingSearchHybrid,
 }
 
 impl ErrorCode for MeilisearchHttpError {
@@ -74,6 +76,7 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::FileStore(_) => Code::Internal,
             MeilisearchHttpError::DocumentFormat(e) => e.error_code(),
             MeilisearchHttpError::Join(_) => Code::Internal,
+            MeilisearchHttpError::MissingSearchHybrid => Code::MissingSearchHybrid,
         }
     }
 }

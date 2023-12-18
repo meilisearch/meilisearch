@@ -222,6 +222,8 @@ InvalidVectorsType                    , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentId                     , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentLimit                  , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentOffset                 , InvalidRequest       , BAD_REQUEST ;
+InvalidEmbedder                       , InvalidRequest       , BAD_REQUEST ;
+InvalidHybridQuery                    , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexLimit                     , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexOffset                    , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexPrimaryKey                , InvalidRequest       , BAD_REQUEST ;
@@ -233,6 +235,7 @@ InvalidSearchAttributesToRetrieve     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchCropLength               , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchCropMarker               , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchFacets                   , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchSemanticRatio            , InvalidRequest       , BAD_REQUEST ;
 InvalidFacetSearchFacetName           , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchFilter                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchHighlightPostTag         , InvalidRequest       , BAD_REQUEST ;
@@ -256,6 +259,7 @@ InvalidSettingsProximityPrecision     , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFaceting               , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFilterableAttributes   , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsPagination             , InvalidRequest       , BAD_REQUEST ;
+InvalidSettingsEmbedders              , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsRankingRules           , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsSearchableAttributes   , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsSortableAttributes     , InvalidRequest       , BAD_REQUEST ;
@@ -295,15 +299,18 @@ MissingFacetSearchFacetName           , InvalidRequest       , BAD_REQUEST ;
 MissingIndexUid                       , InvalidRequest       , BAD_REQUEST ;
 MissingMasterKey                      , Auth                 , UNAUTHORIZED ;
 MissingPayload                        , InvalidRequest       , BAD_REQUEST ;
+MissingSearchHybrid                   , InvalidRequest       , BAD_REQUEST ;
 MissingSwapIndexes                    , InvalidRequest       , BAD_REQUEST ;
 MissingTaskFilters                    , InvalidRequest       , BAD_REQUEST ;
 NoSpaceLeftOnDevice                   , System               , UNPROCESSABLE_ENTITY;
 PayloadTooLarge                       , InvalidRequest       , PAYLOAD_TOO_LARGE ;
 TaskNotFound                          , InvalidRequest       , NOT_FOUND ;
 TooManyOpenFiles                      , System               , UNPROCESSABLE_ENTITY ;
+TooManyVectors                        , InvalidRequest       , BAD_REQUEST ;
 UnretrievableDocument                 , Internal             , BAD_REQUEST ;
 UnretrievableErrorCode                , InvalidRequest       , BAD_REQUEST ;
-UnsupportedMediaType                  , InvalidRequest       , UNSUPPORTED_MEDIA_TYPE
+UnsupportedMediaType                  , InvalidRequest       , UNSUPPORTED_MEDIA_TYPE ;
+VectorEmbeddingError                  , InvalidRequest       , BAD_REQUEST
 }
 
 impl ErrorCode for JoinError {
@@ -336,6 +343,10 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidDocumentId { .. } | UserError::TooManyDocumentIds { .. } => {
                         Code::InvalidDocumentId
                     }
+                    UserError::MissingDocumentField(_) => Code::InvalidDocumentFields,
+                    UserError::InvalidPrompt(_) => Code::InvalidSettingsEmbedders,
+                    UserError::TooManyEmbedders(_) => Code::InvalidSettingsEmbedders,
+                    UserError::InvalidPromptForEmbeddings(..) => Code::InvalidSettingsEmbedders,
                     UserError::NoPrimaryKeyCandidateFound => Code::IndexPrimaryKeyNoCandidateFound,
                     UserError::MultiplePrimaryKeyCandidatesFound { .. } => {
                         Code::IndexPrimaryKeyMultipleCandidatesFound
@@ -353,11 +364,15 @@ impl ErrorCode for milli::Error {
                     UserError::CriterionError(_) => Code::InvalidSettingsRankingRules,
                     UserError::InvalidGeoField { .. } => Code::InvalidDocumentGeoField,
                     UserError::InvalidVectorDimensions { .. } => Code::InvalidVectorDimensions,
+                    UserError::InvalidVectorsMapType { .. } => Code::InvalidVectorsType,
                     UserError::InvalidVectorsType { .. } => Code::InvalidVectorsType,
+                    UserError::TooManyVectors(_, _) => Code::TooManyVectors,
                     UserError::SortError(_) => Code::InvalidSearchSort,
                     UserError::InvalidMinTypoWordLenSetting(_, _) => {
                         Code::InvalidSettingsTypoTolerance
                     }
+                    UserError::InvalidEmbedder(_) => Code::InvalidEmbedder,
+                    UserError::VectorEmbeddingError(_) => Code::VectorEmbeddingError,
                 }
             }
         }
@@ -442,6 +457,15 @@ pub struct DeserrParseIntError(pub String);
 impl fmt::Display for DeserrParseIntError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "could not parse `{}` as a positive integer", self.0)
+    }
+}
+
+impl fmt::Display for deserr_codes::InvalidSearchSemanticRatio {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "the value of `semanticRatio` is invalid, expected a float between `0.0` and `1.0`."
+        )
     }
 }
 

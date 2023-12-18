@@ -1,9 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::convert::TryInto;
 use std::result::Result as StdResult;
+use std::sync::Arc;
 
 use charabia::{Normalize, Tokenizer, TokenizerBuilder};
 use deserr::{DeserializeError, Deserr};
-use itertools::Itertools;
+use itertools::{EitherOrBoth, Itertools};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use time::OffsetDateTime;
 
@@ -15,6 +17,8 @@ use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
+use crate::vector::settings::{EmbeddingSettings, PromptSettings};
+use crate::vector::{Embedder, EmbeddingConfig, EmbeddingConfigs};
 use crate::{FieldsIdsMap, Index, OrderBy, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -73,6 +77,13 @@ impl<T> Setting<T> {
             otherwise => otherwise,
         }
     }
+
+    pub fn apply(&mut self, new: Self) {
+        if let Setting::NotSet = new {
+            return;
+        }
+        *self = new;
+    }
 }
 
 impl<T: Serialize> Serialize for Setting<T> {
@@ -129,6 +140,7 @@ pub struct Settings<'a, 't, 'i> {
     sort_facet_values_by: Setting<HashMap<String, OrderBy>>,
     pagination_max_total_hits: Setting<usize>,
     proximity_precision: Setting<ProximityPrecision>,
+    embedder_settings: Setting<BTreeMap<String, Setting<EmbeddingSettings>>>,
 }
 
 impl<'a, 't, 'i> Settings<'a, 't, 'i> {
@@ -161,6 +173,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             sort_facet_values_by: Setting::NotSet,
             pagination_max_total_hits: Setting::NotSet,
             proximity_precision: Setting::NotSet,
+            embedder_settings: Setting::NotSet,
             indexer_config,
         }
     }
@@ -343,6 +356,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.proximity_precision = Setting::Reset;
     }
 
+    pub fn set_embedder_settings(&mut self, value: BTreeMap<String, Setting<EmbeddingSettings>>) {
+        self.embedder_settings = Setting::Set(value);
+    }
+
+    pub fn reset_embedder_settings(&mut self) {
+        self.embedder_settings = Setting::Reset;
+    }
+
     fn reindex<FP, FA>(
         &mut self,
         progress_callback: &FP,
@@ -377,6 +398,9 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             fields_ids_map,
         )?;
 
+        let embedder_configs = self.index.embedding_configs(self.wtxn)?;
+        let embedders = self.embedders(embedder_configs)?;
+
         // We index the generated `TransformOutput` which must contain
         // all the documents with fields in the newly defined searchable order.
         let indexing_builder = IndexDocuments::new(
@@ -387,9 +411,31 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             &progress_callback,
             &should_abort,
         )?;
+
+        let indexing_builder = indexing_builder.with_embedders(embedders);
         indexing_builder.execute_raw(output)?;
 
         Ok(())
+    }
+
+    fn embedders(
+        &self,
+        embedding_configs: Vec<(String, EmbeddingConfig)>,
+    ) -> Result<EmbeddingConfigs> {
+        let res: Result<_> = embedding_configs
+            .into_iter()
+            .map(|(name, EmbeddingConfig { embedder_options, prompt })| {
+                let prompt = Arc::new(prompt.try_into().map_err(crate::Error::from)?);
+
+                let embedder = Arc::new(
+                    Embedder::new(embedder_options.clone())
+                        .map_err(crate::vector::Error::from)
+                        .map_err(crate::Error::from)?,
+                );
+                Ok((name, (embedder, prompt)))
+            })
+            .collect();
+        res.map(EmbeddingConfigs::new)
     }
 
     fn update_displayed(&mut self) -> Result<bool> {
@@ -890,6 +936,73 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(changed)
     }
 
+    fn update_embedding_configs(&mut self) -> Result<bool> {
+        let update = match std::mem::take(&mut self.embedder_settings) {
+            Setting::Set(configs) => {
+                let mut changed = false;
+                let old_configs = self.index.embedding_configs(self.wtxn)?;
+                let old_configs: BTreeMap<String, Setting<EmbeddingSettings>> =
+                    old_configs.into_iter().map(|(k, v)| (k, Setting::Set(v.into()))).collect();
+
+                let mut new_configs = BTreeMap::new();
+                for joined in old_configs
+                    .into_iter()
+                    .merge_join_by(configs.into_iter(), |(left, _), (right, _)| left.cmp(right))
+                {
+                    match joined {
+                        EitherOrBoth::Both((name, mut old), (_, new)) => {
+                            old.apply(new);
+                            let new = validate_prompt(&name, old)?;
+                            changed = true;
+                            new_configs.insert(name, new);
+                        }
+                        EitherOrBoth::Left((name, setting)) => {
+                            new_configs.insert(name, setting);
+                        }
+                        EitherOrBoth::Right((name, setting)) => {
+                            let setting = validate_prompt(&name, setting)?;
+                            changed = true;
+                            new_configs.insert(name, setting);
+                        }
+                    }
+                }
+                let new_configs: Vec<(String, EmbeddingConfig)> = new_configs
+                    .into_iter()
+                    .filter_map(|(name, setting)| match setting {
+                        Setting::Set(value) => Some((name, value.into())),
+                        Setting::Reset => None,
+                        Setting::NotSet => Some((name, EmbeddingSettings::default().into())),
+                    })
+                    .collect();
+
+                self.index.embedder_category_id.clear(self.wtxn)?;
+                for (index, (embedder_name, _)) in new_configs.iter().enumerate() {
+                    self.index.embedder_category_id.put_with_flags(
+                        self.wtxn,
+                        heed::PutFlags::APPEND,
+                        embedder_name,
+                        &index
+                            .try_into()
+                            .map_err(|_| UserError::TooManyEmbedders(new_configs.len()))?,
+                    )?;
+                }
+
+                if new_configs.is_empty() {
+                    self.index.delete_embedding_configs(self.wtxn)?;
+                } else {
+                    self.index.put_embedding_configs(self.wtxn, new_configs)?;
+                }
+                changed
+            }
+            Setting::Reset => {
+                self.index.delete_embedding_configs(self.wtxn)?;
+                true
+            }
+            Setting::NotSet => false,
+        };
+        Ok(update)
+    }
+
     pub fn execute<FP, FA>(mut self, progress_callback: FP, should_abort: FA) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
@@ -927,6 +1040,13 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         let searchable_updated = self.update_searchable()?;
         let exact_attributes_updated = self.update_exact_attributes()?;
         let proximity_precision = self.update_proximity_precision()?;
+        // TODO: very rough approximation of the needs for reindexing where any change will result in
+        // a full reindexing.
+        // What can be done instead:
+        // 1. Only change the distance on a distance change
+        // 2. Only change the name -> embedder mapping on a name change
+        // 3. Keep the old vectors but reattempt indexing on a prompt change: only actually changed prompt will need embedding + storage
+        let embedding_configs_updated = self.update_embedding_configs()?;
 
         if stop_words_updated
             || non_separator_tokens_updated
@@ -937,11 +1057,37 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             || searchable_updated
             || exact_attributes_updated
             || proximity_precision
+            || embedding_configs_updated
         {
             self.reindex(&progress_callback, &should_abort, old_fields_ids_map)?;
         }
 
         Ok(())
+    }
+}
+
+fn validate_prompt(
+    name: &str,
+    new: Setting<EmbeddingSettings>,
+) -> Result<Setting<EmbeddingSettings>> {
+    match new {
+        Setting::Set(EmbeddingSettings {
+            embedder_options,
+            document_template: Setting::Set(PromptSettings { template: Setting::Set(template) }),
+        }) => {
+            // validate
+            let template = crate::prompt::Prompt::new(template)
+                .map(|prompt| crate::prompt::PromptData::from(prompt).template)
+                .map_err(|inner| UserError::InvalidPromptForEmbeddings(name.to_owned(), inner))?;
+
+            Ok(Setting::Set(EmbeddingSettings {
+                embedder_options,
+                document_template: Setting::Set(PromptSettings {
+                    template: Setting::Set(template),
+                }),
+            }))
+        }
+        new => Ok(new),
     }
 }
 
@@ -1763,6 +1909,7 @@ mod tests {
                     sort_facet_values_by,
                     pagination_max_total_hits,
                     proximity_precision,
+                    embedder_settings,
                 } = settings;
                 assert!(matches!(searchable_fields, Setting::NotSet));
                 assert!(matches!(displayed_fields, Setting::NotSet));
@@ -1785,6 +1932,7 @@ mod tests {
                 assert!(matches!(sort_facet_values_by, Setting::NotSet));
                 assert!(matches!(pagination_max_total_hits, Setting::NotSet));
                 assert!(matches!(proximity_precision, Setting::NotSet));
+                assert!(matches!(embedder_settings, Setting::NotSet));
             })
             .unwrap();
     }

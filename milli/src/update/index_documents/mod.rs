@@ -4,7 +4,7 @@ mod helpers;
 mod transform;
 mod typed_chunk;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::{Cursor, Read, Seek};
 use std::iter::FromIterator;
 use std::num::NonZeroU32;
@@ -14,6 +14,7 @@ use crossbeam_channel::{Receiver, Sender};
 use heed::types::Str;
 use heed::Database;
 use log::debug;
+use rand::SeedableRng;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use slice_group_by::GroupBy;
@@ -36,6 +37,7 @@ pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
+use crate::vector::EmbeddingConfigs;
 use crate::{CboRoaringBitmapCodec, Index, Result};
 
 static MERGED_DATABASE_COUNT: usize = 7;
@@ -78,6 +80,7 @@ pub struct IndexDocuments<'t, 'i, 'a, FP, FA> {
     should_abort: FA,
     added_documents: u64,
     deleted_documents: u64,
+    embedders: EmbeddingConfigs,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -121,6 +124,7 @@ where
             index,
             added_documents: 0,
             deleted_documents: 0,
+            embedders: Default::default(),
         })
     }
 
@@ -165,6 +169,11 @@ where
         self.added_documents += indexed_documents;
 
         Ok((self, Ok(indexed_documents)))
+    }
+
+    pub fn with_embedders(mut self, embedders: EmbeddingConfigs) -> Self {
+        self.embedders = embedders;
+        self
     }
 
     /// Remove a batch of documents from the current builder.
@@ -322,17 +331,18 @@ where
         // get filterable fields for facet databases
         let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
         // get the fid of the `_geo.lat` and `_geo.lng` fields.
-        let geo_fields_ids = match self.index.fields_ids_map(self.wtxn)?.id("_geo") {
+        let mut field_id_map = self.index.fields_ids_map(self.wtxn)?;
+
+        // self.index.fields_ids_map($a)? ==>> field_id_map
+        let geo_fields_ids = match field_id_map.id("_geo") {
             Some(gfid) => {
                 let is_sortable = self.index.sortable_fields_ids(self.wtxn)?.contains(&gfid);
                 let is_filterable = self.index.filterable_fields_ids(self.wtxn)?.contains(&gfid);
                 // if `_geo` is faceted then we get the `lat` and `lng`
                 if is_sortable || is_filterable {
-                    let field_ids = self
-                        .index
-                        .fields_ids_map(self.wtxn)?
+                    let field_ids = field_id_map
                         .insert("_geo.lat")
-                        .zip(self.index.fields_ids_map(self.wtxn)?.insert("_geo.lng"))
+                        .zip(field_id_map.insert("_geo.lng"))
                         .ok_or(UserError::AttributeLimitReached)?;
                     Some(field_ids)
                 } else {
@@ -341,8 +351,6 @@ where
             }
             None => None,
         };
-        // get the fid of the `_vectors` field.
-        let vectors_field_id = self.index.fields_ids_map(self.wtxn)?.id("_vectors");
 
         let stop_words = self.index.stop_words(self.wtxn)?;
         let separators = self.index.allowed_separators(self.wtxn)?;
@@ -363,6 +371,8 @@ where
         let documents_chunk_size =
             self.indexer_config.documents_chunk_size.unwrap_or(1024 * 1024 * 4); // 4MiB
         let max_positions_per_attributes = self.indexer_config.max_positions_per_attributes;
+
+        let cloned_embedder = self.embedders.clone();
 
         // Run extraction pipeline in parallel.
         pool.install(|| {
@@ -387,13 +397,14 @@ where
                     faceted_fields,
                     primary_key_id,
                     geo_fields_ids,
-                    vectors_field_id,
+                    field_id_map,
                     stop_words,
                     separators.as_deref(),
                     dictionary.as_deref(),
                     max_positions_per_attributes,
                     exact_attributes,
                     proximity_precision,
+                    cloned_embedder,
                 )
             });
 
@@ -402,7 +413,7 @@ where
             }
 
             // needs to be dropped to avoid channel waiting lock.
-            drop(lmdb_writer_sx)
+            drop(lmdb_writer_sx);
         });
 
         let index_is_empty = self.index.number_of_documents(self.wtxn)? == 0;
@@ -418,6 +429,8 @@ where
         let mut word_fid_docids = None;
         let mut word_docids = None;
         let mut exact_word_docids = None;
+
+        let mut dimension = HashMap::new();
 
         for result in lmdb_writer_rx {
             if (self.should_abort)() {
@@ -447,6 +460,22 @@ where
                     let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
                     word_position_docids = Some(cloneable_chunk);
                     TypedChunk::WordPositionDocids(chunk)
+                }
+                TypedChunk::VectorPoints {
+                    expected_dimension,
+                    remove_vectors,
+                    embeddings,
+                    manual_vectors,
+                    embedder_name,
+                } => {
+                    dimension.insert(embedder_name.clone(), expected_dimension);
+                    TypedChunk::VectorPoints {
+                        remove_vectors,
+                        embeddings,
+                        expected_dimension,
+                        manual_vectors,
+                        embedder_name,
+                    }
                 }
                 otherwise => otherwise,
             };
@@ -480,6 +509,33 @@ where
         // We write the primary key field id into the main database
         self.index.put_primary_key(self.wtxn, &primary_key)?;
         let number_of_documents = self.index.number_of_documents(self.wtxn)?;
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+
+        for (embedder_name, dimension) in dimension {
+            let wtxn = &mut *self.wtxn;
+            let vector_arroy = self.index.vector_arroy;
+
+            let embedder_index = self.index.embedder_category_id.get(wtxn, &embedder_name)?.ok_or(
+                InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },
+            )?;
+
+            pool.install(|| {
+                let writer_index = (embedder_index as u16) << 8;
+                for k in 0..=u8::MAX {
+                    let writer = arroy::Writer::prepare(
+                        wtxn,
+                        vector_arroy,
+                        writer_index | (k as u16),
+                        dimension,
+                    )?;
+                    if writer.is_empty(wtxn)? {
+                        break;
+                    }
+                    writer.build(wtxn, &mut rng, None)?;
+                }
+                Result::Ok(())
+            })?;
+        }
 
         self.execute_prefix_databases(
             word_docids,
@@ -694,6 +750,8 @@ fn execute_word_prefix_docids(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use big_s::S;
     use fst::IntoStreamer;
     use heed::RwTxn;
@@ -703,6 +761,7 @@ mod tests {
     use crate::documents::documents_batch_reader_from_objects;
     use crate::index::tests::TempIndex;
     use crate::search::TermsMatchingStrategy;
+    use crate::update::Setting;
     use crate::{db_snap, Filter, Search};
 
     #[test]
@@ -2494,18 +2553,39 @@ mod tests {
     /// Vectors must be of the same length.
     #[test]
     fn test_multiple_vectors() {
+        use crate::vector::settings::{EmbedderSettings, EmbeddingSettings};
         let index = TempIndex::new();
 
-        index.add_documents(documents!([{"id": 0, "_vectors": [[0, 1, 2], [3, 4, 5]] }])).unwrap();
-        index.add_documents(documents!([{"id": 1, "_vectors": [6, 7, 8] }])).unwrap();
+        index
+            .update_settings(|settings| {
+                let mut embedders = BTreeMap::default();
+                embedders.insert(
+                    "manual".to_string(),
+                    Setting::Set(EmbeddingSettings {
+                        embedder_options: Setting::Set(EmbedderSettings::UserProvided(
+                            crate::vector::settings::UserProvidedSettings { dimensions: 3 },
+                        )),
+                        document_template: Setting::NotSet,
+                    }),
+                );
+                settings.set_embedder_settings(embedders);
+            })
+            .unwrap();
+
         index
             .add_documents(
-                documents!([{"id": 2, "_vectors": [[9, 10, 11], [12, 13, 14], [15, 16, 17]] }]),
+                documents!([{"id": 0, "_vectors": { "manual": [[0, 1, 2], [3, 4, 5]] } }]),
+            )
+            .unwrap();
+        index.add_documents(documents!([{"id": 1, "_vectors": { "manual": [6, 7, 8] }}])).unwrap();
+        index
+            .add_documents(
+                documents!([{"id": 2, "_vectors": { "manual": [[9, 10, 11], [12, 13, 14], [15, 16, 17]] }}]),
             )
             .unwrap();
 
         let rtxn = index.read_txn().unwrap();
-        let res = index.search(&rtxn).vector([0.0, 1.0, 2.0]).execute().unwrap();
+        let res = index.search(&rtxn).vector([0.0, 1.0, 2.0].to_vec()).execute().unwrap();
         assert_eq!(res.documents_ids.len(), 3);
     }
 

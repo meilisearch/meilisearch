@@ -276,6 +276,7 @@ pub(crate) mod test {
                 ),
             }),
             pagination: Setting::NotSet,
+            embedders: Setting::NotSet,
             _kind: std::marker::PhantomData,
         };
         settings.check()

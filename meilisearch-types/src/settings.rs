@@ -199,6 +199,10 @@ pub struct Settings<T> {
     #[deserr(default, error = DeserrJsonError<InvalidSettingsPagination>)]
     pub pagination: Setting<PaginationSettings>,
 
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsEmbedders>)]
+    pub embedders: Setting<BTreeMap<String, Setting<milli::vector::settings::EmbeddingSettings>>>,
+
     #[serde(skip)]
     #[deserr(skip)]
     pub _kind: PhantomData<T>,
@@ -222,6 +226,7 @@ impl Settings<Checked> {
             typo_tolerance: Setting::Reset,
             faceting: Setting::Reset,
             pagination: Setting::Reset,
+            embedders: Setting::Reset,
             _kind: PhantomData,
         }
     }
@@ -243,6 +248,7 @@ impl Settings<Checked> {
             typo_tolerance,
             faceting,
             pagination,
+            embedders,
             ..
         } = self;
 
@@ -262,6 +268,7 @@ impl Settings<Checked> {
             typo_tolerance,
             faceting,
             pagination,
+            embedders,
             _kind: PhantomData,
         }
     }
@@ -307,6 +314,7 @@ impl Settings<Unchecked> {
             typo_tolerance: self.typo_tolerance,
             faceting: self.faceting,
             pagination: self.pagination,
+            embedders: self.embedders,
             _kind: PhantomData,
         }
     }
@@ -490,6 +498,12 @@ pub fn apply_settings_to_builder(
         Setting::Reset => builder.reset_pagination_max_total_hits(),
         Setting::NotSet => (),
     }
+
+    match settings.embedders.clone() {
+        Setting::Set(value) => builder.set_embedder_settings(value),
+        Setting::Reset => builder.reset_embedder_settings(),
+        Setting::NotSet => (),
+    }
 }
 
 pub fn settings(
@@ -571,6 +585,12 @@ pub fn settings(
         ),
     };
 
+    let embedders = index
+        .embedding_configs(rtxn)?
+        .into_iter()
+        .map(|(name, config)| (name, Setting::Set(config.into())))
+        .collect();
+
     Ok(Settings {
         displayed_attributes: match displayed_attributes {
             Some(attrs) => Setting::Set(attrs),
@@ -599,6 +619,7 @@ pub fn settings(
         typo_tolerance: Setting::Set(typo_tolerance),
         faceting: Setting::Set(faceting),
         pagination: Setting::Set(pagination),
+        embedders: Setting::Set(embedders),
         _kind: PhantomData,
     })
 }
@@ -747,6 +768,7 @@ pub(crate) mod test {
             typo_tolerance: Setting::NotSet,
             faceting: Setting::NotSet,
             pagination: Setting::NotSet,
+            embedders: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 
@@ -772,6 +794,7 @@ pub(crate) mod test {
             typo_tolerance: Setting::NotSet,
             faceting: Setting::NotSet,
             pagination: Setting::NotSet,
+            embedders: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 

@@ -378,6 +378,7 @@ impl<T> From<v5::Settings<T>> for v6::Settings<v6::Unchecked> {
                 v5::Setting::Reset => v6::Setting::Reset,
                 v5::Setting::NotSet => v6::Setting::NotSet,
             },
+            embedders: v6::Setting::NotSet,
             _kind: std::marker::PhantomData,
         }
     }
