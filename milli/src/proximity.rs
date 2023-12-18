@@ -32,6 +32,6 @@ pub fn path_proximity(path: &[Position]) -> u32 {
 #[serde(rename_all = "camelCase")]
 pub enum ProximityPrecision {
     #[default]
-    WordScale,
-    AttributeScale,
+    ByWord,
+    ByAttribute,
 }

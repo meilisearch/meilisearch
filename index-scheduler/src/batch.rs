@@ -1354,9 +1354,6 @@ impl IndexScheduler {
                     if matches!(checked_settings.embedders, milli::update::Setting::Set(_)) {
                         self.features().check_vector("Passing `embedders` in settings")?
                     }
-                    if checked_settings.proximity_precision.set().is_some() {
-                        self.features.features().check_proximity_precision()?;
-                    }
                     task.details = Some(Details::SettingsUpdate { settings: Box::new(settings) });
                     apply_settings_to_builder(&checked_settings, &mut builder);
 

@@ -453,6 +453,7 @@ make_setting_route!(
             json!({
                 "proximity_precision": {
                     "set": precision.is_some(),
+                    "value": precision,
                 }
             }),
             Some(req),

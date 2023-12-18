@@ -157,7 +157,7 @@ pub(crate) fn data_from_obkv_documents(
         });
     }
 
-    if proximity_precision == ProximityPrecision::WordScale {
+    if proximity_precision == ProximityPrecision::ByWord {
         spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
             docid_word_positions_chunks.clone(),
             indexer,
