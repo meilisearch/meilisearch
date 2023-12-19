@@ -245,7 +245,10 @@ pub struct IndexSchedulerOptions {
     pub snapshots_path: PathBuf,
     /// The path to the folder containing the dumps.
     pub dumps_path: PathBuf,
+    /// The URL on which we must send the tasks statuses
     pub webhook_url: Option<String>,
+    /// The value we will send into the Authorization HTTP header on the webhook URL
+    pub webhook_authorization_header: Option<String>,
     /// The maximum size, in bytes, of the task index.
     pub task_db_size: usize,
     /// The size, in bytes, with which a meilisearch index is opened the first time of each meilisearch index.
@@ -330,6 +333,8 @@ pub struct IndexScheduler {
 
     /// The webhook url we should send tasks to after processing every batches.
     pub(crate) webhook_url: Option<String>,
+    /// The Authorization header to send to the webhook URL.
+    pub(crate) webhook_authorization_header: Option<String>,
 
     /// A frame to output the indexation profiling files to disk.
     pub(crate) puffin_frame: Arc<puffin::GlobalFrameView>,
@@ -397,6 +402,7 @@ impl IndexScheduler {
             auth_path: self.auth_path.clone(),
             version_file_path: self.version_file_path.clone(),
             webhook_url: self.webhook_url.clone(),
+            webhook_authorization_header: self.webhook_authorization_header.clone(),
             currently_updating_index: self.currently_updating_index.clone(),
             embedders: self.embedders.clone(),
             #[cfg(test)]
@@ -497,6 +503,7 @@ impl IndexScheduler {
             auth_path: options.auth_path,
             version_file_path: options.version_file_path,
             webhook_url: options.webhook_url,
+            webhook_authorization_header: options.webhook_authorization_header,
             currently_updating_index: Arc::new(RwLock::new(None)),
             embedders: Default::default(),
 
@@ -1338,8 +1345,15 @@ impl IndexScheduler {
                 written: 0,
             };
 
+            // let reader = GzEncoder::new(BufReader::new(task_reader), Compression::default());
             let reader = GzEncoder::new(BufReader::new(task_reader), Compression::default());
-            if let Err(e) = ureq::post(url).set("Content-Encoding", "gzip").send(reader) {
+            let request = ureq::post(url).set("Content-Encoding", "gzip");
+            let request = match &self.webhook_authorization_header {
+                Some(header) => request.set("Authorization", header),
+                None => request,
+            };
+
+            if let Err(e) = request.send(reader) {
                 log::error!("While sending data to the webhook: {e}");
             }
         }
@@ -1761,6 +1775,7 @@ mod tests {
                 snapshots_path: tempdir.path().join("snapshots"),
                 dumps_path: tempdir.path().join("dumps"),
                 webhook_url: None,
+                webhook_authorization_header: None,
                 task_db_size: 1000 * 1000, // 1 MB, we don't use MiB on purpose.
                 index_base_map_size: 1000 * 1000, // 1 MB, we don't use MiB on purpose.
                 enable_mdb_writemap: false,
