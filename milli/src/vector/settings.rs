@@ -228,6 +228,12 @@ impl From<HfEmbedderSettings> for crate::vector::hf::EmbedderOptions {
         let mut this = Self::default();
         if let Some(model) = model.set() {
             this.model = model;
+            // Reset the revision if we are setting the model.
+            // This allows the following:
+            // "huggingFace": {} -> default model with default revision
+            // "huggingFace": { "model": "name-of-the-default-model" } -> default model without a revision
+            // "huggingFace": { "model": "some-other-model" } -> most importantly, other model without a revision
+            this.revision = None;
         }
         if let Some(revision) = revision.set() {
             this.revision = Some(revision);
