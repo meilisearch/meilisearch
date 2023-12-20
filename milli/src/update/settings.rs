@@ -78,11 +78,19 @@ impl<T> Setting<T> {
         }
     }
 
-    pub fn apply(&mut self, new: Self) {
+    /// Returns `true` if applying the new setting changed this setting
+    pub fn apply(&mut self, new: Self) -> bool
+    where
+        T: PartialEq + Eq,
+    {
         if let Setting::NotSet = new {
-            return;
+            return false;
+        }
+        if self == &new {
+            return false;
         }
         *self = new;
+        true
     }
 }
 
