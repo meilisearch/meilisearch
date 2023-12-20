@@ -67,12 +67,12 @@ pub fn check_set<T>(
 }
 
 impl EmbeddingSettings {
-    pub const SOURCE: &str = "source";
-    pub const MODEL: &str = "model";
-    pub const REVISION: &str = "revision";
-    pub const API_KEY: &str = "apiKey";
-    pub const DIMENSIONS: &str = "dimensions";
-    pub const DOCUMENT_TEMPLATE: &str = "documentTemplate";
+    pub const SOURCE: &'static str = "source";
+    pub const MODEL: &'static str = "model";
+    pub const REVISION: &'static str = "revision";
+    pub const API_KEY: &'static str = "apiKey";
+    pub const DIMENSIONS: &'static str = "dimensions";
+    pub const DOCUMENT_TEMPLATE: &'static str = "documentTemplate";
 
     pub fn allowed_sources_for_field(field: &'static str) -> &'static [EmbedderSource] {
         match field {
