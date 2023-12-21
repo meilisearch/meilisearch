@@ -90,7 +90,10 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
 
-                let new_settings = new_settings.validate()?;
+                let new_settings = $crate::routes::indexes::settings::validate_settings(
+                    new_settings,
+                    &index_scheduler,
+                )?;
 
                 let allow_index_creation =
                     index_scheduler.filters().allow_index_creation(&index_uid);
@@ -653,7 +656,7 @@ pub async fn update_all(
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let new_settings = body.into_inner();
-    let new_settings = new_settings.validate()?;
+    let new_settings = validate_settings(new_settings, &index_scheduler)?;
 
     analytics.publish(
         "Settings Updated".to_string(),
@@ -802,4 +805,14 @@ pub async fn delete_all(
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
+}
+
+fn validate_settings(
+    settings: Settings<Unchecked>,
+    index_scheduler: &IndexScheduler,
+) -> Result<Settings<Unchecked>, ResponseError> {
+    if matches!(settings.embedders, Setting::Set(_)) {
+        index_scheduler.features().check_vector("Passing `embedders` in settings")?
+    }
+    Ok(settings.validate()?)
 }

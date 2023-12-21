@@ -1351,9 +1351,6 @@ impl IndexScheduler {
 
                 for (task, (_, settings)) in tasks.iter_mut().zip(settings) {
                     let checked_settings = settings.clone().check();
-                    if matches!(checked_settings.embedders, milli::update::Setting::Set(_)) {
-                        self.features().check_vector("Passing `embedders` in settings")?
-                    }
                     task.details = Some(Details::SettingsUpdate { settings: Box::new(settings) });
                     apply_settings_to_builder(&checked_settings, &mut builder);
 
