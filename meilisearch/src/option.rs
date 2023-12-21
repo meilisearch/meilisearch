@@ -21,6 +21,7 @@ use rustls::RootCertStore;
 use rustls_pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
 use serde::{Deserialize, Serialize};
 use sysinfo::{RefreshKind, System, SystemExt};
+use url::Url;
 
 const POSSIBLE_ENV: [&str; 2] = ["development", "production"];
 
@@ -28,6 +29,8 @@ const MEILI_DB_PATH: &str = "MEILI_DB_PATH";
 const MEILI_HTTP_ADDR: &str = "MEILI_HTTP_ADDR";
 const MEILI_MASTER_KEY: &str = "MEILI_MASTER_KEY";
 const MEILI_ENV: &str = "MEILI_ENV";
+const MEILI_TASK_WEBHOOK_URL: &str = "MEILI_TASK_WEBHOOK_URL";
+const MEILI_TASK_WEBHOOK_AUTHORIZATION_HEADER: &str = "MEILI_TASK_WEBHOOK_AUTHORIZATION_HEADER";
 #[cfg(feature = "analytics")]
 const MEILI_NO_ANALYTICS: &str = "MEILI_NO_ANALYTICS";
 const MEILI_HTTP_PAYLOAD_SIZE_LIMIT: &str = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT";
@@ -155,6 +158,14 @@ pub struct Opt {
     #[clap(long, env = MEILI_ENV, default_value_t = default_env(), value_parser = POSSIBLE_ENV)]
     #[serde(default = "default_env")]
     pub env: String,
+
+    /// Called whenever a task finishes so a third party can be notified.
+    #[clap(long, env = MEILI_TASK_WEBHOOK_URL)]
+    pub task_webhook_url: Option<Url>,
+
+    /// The Authorization header to send on the webhook URL whenever a task finishes so a third party can be notified.
+    #[clap(long, env = MEILI_TASK_WEBHOOK_AUTHORIZATION_HEADER)]
+    pub task_webhook_authorization_header: Option<String>,
 
     /// Deactivates Meilisearch's built-in telemetry when provided.
     ///
@@ -375,6 +386,8 @@ impl Opt {
             http_addr,
             master_key,
             env,
+            task_webhook_url,
+            task_webhook_authorization_header,
             max_index_size: _,
             max_task_db_size: _,
             http_payload_size_limit,
@@ -409,6 +422,16 @@ impl Opt {
             export_to_env_if_not_present(MEILI_MASTER_KEY, master_key);
         }
         export_to_env_if_not_present(MEILI_ENV, env);
+        if let Some(task_webhook_url) = task_webhook_url {
+            export_to_env_if_not_present(MEILI_TASK_WEBHOOK_URL, task_webhook_url.to_string());
+        }
+        if let Some(task_webhook_authorization_header) = task_webhook_authorization_header {
+            export_to_env_if_not_present(
+                MEILI_TASK_WEBHOOK_AUTHORIZATION_HEADER,
+                task_webhook_authorization_header,
+            );
+        }
+
         #[cfg(feature = "analytics")]
         {
             export_to_env_if_not_present(MEILI_NO_ANALYTICS, no_analytics.to_string());
