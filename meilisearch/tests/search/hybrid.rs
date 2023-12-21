@@ -21,9 +21,9 @@ async fn index_with_documents<'a>(server: &'a Server, documents: &Value) -> Inde
     "###);
 
     let (response, code) = index
-        .update_settings(
-            json!({ "embedders": {"default": {"source": {"userProvided": {"dimensions": 2}}}} }),
-        )
+        .update_settings(json!({ "embedders": {"default": {
+                "source": "userProvided",
+                "dimensions": 2}}} ))
         .await;
     assert_eq!(202, code, "{:?}", response);
     index.wait_task(response.uid()).await;

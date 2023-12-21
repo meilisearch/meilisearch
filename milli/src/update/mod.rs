@@ -8,7 +8,7 @@ pub use self::index_documents::{
     MergeFn,
 };
 pub use self::indexer_config::IndexerConfig;
-pub use self::settings::{Setting, Settings};
+pub use self::settings::{validate_embedding_settings, Setting, Settings};
 pub use self::update_step::UpdateIndexingStep;
 pub use self::word_prefix_docids::WordPrefixDocids;
 pub use self::words_prefix_integer_docids::WordPrefixIntegerDocids;

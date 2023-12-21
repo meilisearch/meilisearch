@@ -344,7 +344,10 @@ impl ErrorCode for milli::Error {
                         Code::InvalidDocumentId
                     }
                     UserError::MissingDocumentField(_) => Code::InvalidDocumentFields,
-                    UserError::InvalidPrompt(_) => Code::InvalidSettingsEmbedders,
+                    UserError::InvalidFieldForSource { .. }
+                    | UserError::MissingFieldForSource { .. }
+                    | UserError::InvalidOpenAiModel { .. }
+                    | UserError::InvalidPrompt(_) => Code::InvalidSettingsEmbedders,
                     UserError::TooManyEmbedders(_) => Code::InvalidSettingsEmbedders,
                     UserError::InvalidPromptForEmbeddings(..) => Code::InvalidSettingsEmbedders,
                     UserError::NoPrimaryKeyCandidateFound => Code::IndexPrimaryKeyNoCandidateFound,

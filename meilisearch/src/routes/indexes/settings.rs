@@ -90,6 +90,8 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
 
+                let new_settings = new_settings.validate()?;
+
                 let allow_index_creation =
                     index_scheduler.filters().allow_index_creation(&index_uid);
 
@@ -582,13 +584,13 @@ fn embedder_analytics(
         for source in s
             .values()
             .filter_map(|config| config.clone().set())
-            .filter_map(|config| config.embedder_options.set())
+            .filter_map(|config| config.source.set())
         {
-            use meilisearch_types::milli::vector::settings::EmbedderSettings;
+            use meilisearch_types::milli::vector::settings::EmbedderSource;
             match source {
-                EmbedderSettings::OpenAi(_) => sources.insert("openAi"),
-                EmbedderSettings::HuggingFace(_) => sources.insert("huggingFace"),
-                EmbedderSettings::UserProvided(_) => sources.insert("userProvided"),
+                EmbedderSource::OpenAi => sources.insert("openAi"),
+                EmbedderSource::HuggingFace => sources.insert("huggingFace"),
+                EmbedderSource::UserProvided => sources.insert("userProvided"),
             };
         }
     };
@@ -651,6 +653,7 @@ pub async fn update_all(
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let new_settings = body.into_inner();
+    let new_settings = new_settings.validate()?;
 
     analytics.publish(
         "Settings Updated".to_string(),

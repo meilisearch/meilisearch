@@ -192,7 +192,7 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     MissingDocumentField(#[from] crate::prompt::error::RenderPromptError),
     #[error(transparent)]
     InvalidPrompt(#[from] crate::prompt::error::NewPromptError),
-    #[error("Invalid prompt in for embeddings with name '{0}': {1}.")]
+    #[error("`.embedders.{0}.documentTemplate`: Invalid template: {1}.")]
     InvalidPromptForEmbeddings(String, crate::prompt::error::NewPromptError),
     #[error("Too many embedders in the configuration. Found {0}, but limited to 256.")]
     TooManyEmbedders(usize),
@@ -200,6 +200,33 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     InvalidEmbedder(String),
     #[error("Too many vectors for document with id {0}: found {1}, but limited to 256.")]
     TooManyVectors(String, usize),
+    #[error("`.embedders.{embedder_name}`: Field `{field}` unavailable for source `{source_}` (only available for sources: {}). Available fields: {}",
+        allowed_sources_for_field
+         .iter()
+         .map(|accepted| format!("`{}`", accepted))
+         .collect::<Vec<String>>()
+         .join(", "),
+        allowed_fields_for_source
+         .iter()
+         .map(|accepted| format!("`{}`", accepted))
+         .collect::<Vec<String>>()
+         .join(", ")
+    )]
+    InvalidFieldForSource {
+        embedder_name: String,
+        source_: crate::vector::settings::EmbedderSource,
+        field: &'static str,
+        allowed_fields_for_source: &'static [&'static str],
+        allowed_sources_for_field: &'static [crate::vector::settings::EmbedderSource],
+    },
+    #[error("`.embedders.{embedder_name}.model`: Invalid model `{model}` for OpenAI. Supported models: {:?}", crate::vector::openai::EmbeddingModel::supported_models())]
+    InvalidOpenAiModel { embedder_name: String, model: String },
+    #[error("`.embedders.{embedder_name}`: Missing field `{field}` (note: this field is mandatory for source {source_})")]
+    MissingFieldForSource {
+        field: &'static str,
+        source_: crate::vector::settings::EmbedderSource,
+        embedder_name: String,
+    },
 }
 
 impl From<crate::vector::Error> for Error {

@@ -890,13 +890,21 @@ async fn experimental_feature_vector_store() {
     let (response, code) = index
         .update_settings(json!({"embedders": {
             "manual": {
-                "source": {
-                    "userProvided": {"dimensions": 3}
-                }
+                "source": "userProvided",
+                "dimensions": 3,
             }
         }}))
         .await;
 
+    meili_snap::snapshot!(response, @r###"
+    {
+      "taskUid": 1,
+      "indexUid": "test",
+      "status": "enqueued",
+      "type": "settingsUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
     meili_snap::snapshot!(code, @"202 Accepted");
     let response = index.wait_task(response.uid()).await;
 
