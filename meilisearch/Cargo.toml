@@ -153,5 +153,5 @@ greek = ["meilisearch-types/greek"]
 khmer = ["meilisearch-types/khmer"]
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.11/build.zip"
-sha1 = "83cd44ed1e5f97ecb581dc9f958a63f4ccc982d9"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.12/build.zip"
+sha1 = "acfe9a018c93eb0604ea87ee87bff7df5474e18e"
