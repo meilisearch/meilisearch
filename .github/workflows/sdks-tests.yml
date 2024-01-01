@@ -50,7 +50,7 @@ jobs:
         with:
           repository: meilisearch/meilisearch-dotnet
       - name: Setup .NET Core
-        uses: actions/setup-dotnet@v3
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "6.0.x"
       - name: Install dependencies
