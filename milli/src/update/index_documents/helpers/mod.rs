@@ -16,7 +16,7 @@ pub use merge_functions::{
     keep_first, keep_latest_obkv, merge_btreeset_string, merge_cbo_roaring_bitmaps,
     merge_deladd_cbo_roaring_bitmaps, merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
     merge_roaring_bitmaps, obkvs_keep_last_addition_merge_deletions,
-    obkvs_merge_additions_and_deletions, serialize_roaring_bitmap, MergeFn,
+    obkvs_merge_additions_and_deletions, MergeFn,
 };
 
 use crate::MAX_WORD_LENGTH;
