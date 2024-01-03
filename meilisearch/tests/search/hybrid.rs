@@ -56,6 +56,15 @@ static SIMPLE_SEARCH_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     }])
 });
 
+static SINGLE_DOCUMENT: Lazy<Value> = Lazy::new(|| {
+    json!([{
+            "title": "Shazam!",
+            "desc": "a Captain Marvel ersatz",
+            "id": "1",
+            "_vectors": {"default": [1.0, 3.0]},
+    }])
+});
+
 #[actix_rt::test]
 async fn simple_search() {
     let server = Server::new().await;
@@ -148,4 +157,19 @@ async fn invalid_semantic_ratio() {
       "link": "https://docs.meilisearch.com/errors#invalid_search_semantic_ratio"
     }
     "###);
+}
+
+#[actix_rt::test]
+async fn single_document() {
+    let server = Server::new().await;
+    let index = index_with_documents(&server, &SINGLE_DOCUMENT).await;
+
+    let (response, code) = index
+    .search_post(
+        json!({"vector": [1.0, 3.0], "hybrid": {"semanticRatio": 1.0}, "showRankingScore": true}),
+    )
+    .await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(response["hits"][0], @r###"{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":1.0,"_semanticScore":1.0}"###);
 }
