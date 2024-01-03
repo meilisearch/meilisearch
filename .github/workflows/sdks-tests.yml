@@ -22,7 +22,7 @@ jobs:
     outputs:
       docker-image: ${{ steps.define-image.outputs.docker-image }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Define the Docker image we need to use
         id: define-image
         run: |
@@ -46,11 +46,11 @@ jobs:
       MEILISEARCH_VERSION: ${{ needs.define-docker-image.outputs.docker-image }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: meilisearch/meilisearch-dotnet
       - name: Setup .NET Core
-        uses: actions/setup-dotnet@v3
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "6.0.x"
       - name: Install dependencies
@@ -75,12 +75,12 @@ jobs:
         ports:
           - '7700:7700'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: meilisearch/meilisearch-dart
       - uses: dart-lang/setup-dart@v1
         with:
-          sdk: 3.1.1
+          sdk: 'latest'
       - name: Install dependencies
         run: dart pub get
       - name: Run integration tests
@@ -100,10 +100,10 @@ jobs:
           - '7700:7700'
     steps:
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: stable
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: meilisearch/meilisearch-go
       - name: Get dependencies
@@ -129,11 +129,11 @@ jobs:
         ports:
           - '7700:7700'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: meilisearch/meilisearch-java
       - name: Set up Java
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           java-version: 8
           distribution: 'zulu'
@@ -156,7 +156,7 @@ jobs:
         ports:
           - '7700:7700'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: meilisearch/meilisearch-js
       - name: Setup node
@@ -191,7 +191,7 @@ jobs:
         ports:
           - '7700:7700'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: meilisearch/meilisearch-php
       - name: Install PHP
@@ -220,11 +220,11 @@ jobs:
         ports:
           - '7700:7700'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: meilisearch/meilisearch-python
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
       - name: Install pipenv
         uses: dschep/install-pipenv-action@v1
       - name: Install dependencies
@@ -245,7 +245,7 @@ jobs:
         ports:
           - '7700:7700'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: meilisearch/meilisearch-ruby
       - name: Set up Ruby 3
@@ -270,7 +270,7 @@ jobs:
         ports:
           - '7700:7700'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: meilisearch/meilisearch-rust
       - name: Build
@@ -291,7 +291,7 @@ jobs:
         ports:
           - '7700:7700'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: meilisearch/meilisearch-swift
       - name: Run tests
@@ -314,7 +314,7 @@ jobs:
         ports:
           - '7700:7700'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: meilisearch/meilisearch-js-plugins
       - name: Setup node
@@ -345,7 +345,7 @@ jobs:
         ports:
           - '7700:7700'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: meilisearch/meilisearch-rails
       - name: Set up Ruby 3
@@ -369,7 +369,7 @@ jobs:
         ports:
           - '7700:7700'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: meilisearch/meilisearch-symfony
       - name: Install PHP
