@@ -383,7 +383,7 @@ dependencies = [
 [[package]]
 name = "arroy"
 version = "0.1.0"
-source = "git+https://github.com/meilisearch/arroy.git#4f193fd534acd357b65bfe9eec4b3fed8ece2007"
+source = "git+https://github.com/meilisearch/arroy.git#d372648212e561a4845077cdb9239423d78655a2"
 dependencies = [
  "bytemuck",
  "byteorder",
