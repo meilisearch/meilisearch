@@ -137,3 +137,6 @@ greek = ["charabia/greek"]
 
 # allow khmer specialized tokenization
 khmer = ["charabia/khmer"]
+
+# allow CUDA support
+cuda = ["candle-core/cuda"]

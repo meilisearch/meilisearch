@@ -70,7 +70,7 @@ impl std::fmt::Debug for Embedder {
 
 impl Embedder {
     pub fn new(options: EmbedderOptions) -> std::result::Result<Self, NewEmbedderError> {
-        let device = candle_core::Device::Cpu;
+        let device = candle_core::Device::cuda_if_available(0).unwrap();
         let repo = match options.revision.clone() {
             Some(revision) => Repo::with_revision(options.model.clone(), RepoType::Model, revision),
             None => Repo::model(options.model.clone()),
