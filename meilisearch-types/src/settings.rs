@@ -37,17 +37,6 @@ where
     .serialize(s)
 }
 
-fn serialize_with_default<T, S>(field: &Setting<T>, s: S) -> std::result::Result<S::Ok, S::Error>
-where
-    T: Default + Serialize,
-    S: Serializer,
-{
-    match field {
-        Setting::Set(value) => value.serialize(s),
-        Setting::Reset | Setting::NotSet => T::default().serialize(s),
-    }
-}
-
 #[derive(Clone, Default, Debug, Serialize, PartialEq, Eq)]
 pub struct Checked;
 
@@ -197,11 +186,7 @@ pub struct Settings<T> {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsDistinctAttribute>)]
     pub distinct_attribute: Setting<String>,
-    #[serde(
-        default,
-        serialize_with = "serialize_with_default",
-        skip_serializing_if = "Setting::is_not_set"
-    )]
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsProximityPrecision>)]
     pub proximity_precision: Setting<ProximityPrecisionView>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
@@ -641,10 +626,7 @@ pub fn settings(
             Some(field) => Setting::Set(field),
             None => Setting::Reset,
         },
-        proximity_precision: match proximity_precision {
-            Some(precision) => Setting::Set(precision),
-            None => Setting::Reset,
-        },
+        proximity_precision: Setting::Set(proximity_precision.unwrap_or_default()),
         synonyms: Setting::Set(synonyms),
         typo_tolerance: Setting::Set(typo_tolerance),
         faceting: Setting::Set(faceting),
