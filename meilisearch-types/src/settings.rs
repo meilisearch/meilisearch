@@ -626,10 +626,7 @@ pub fn settings(
             Some(field) => Setting::Set(field),
             None => Setting::Reset,
         },
-        proximity_precision: match proximity_precision {
-            Some(precision) => Setting::Set(precision),
-            None => Setting::Reset,
-        },
+        proximity_precision: Setting::Set(proximity_precision.unwrap_or_default()),
         synonyms: Setting::Set(synonyms),
         typo_tolerance: Setting::Set(typo_tolerance),
         faceting: Setting::Set(faceting),
@@ -735,10 +732,11 @@ impl From<RankingRuleView> for Criterion {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserr, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Deserr, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(error = DeserrJsonError<InvalidSettingsProximityPrecision>, rename_all = camelCase, deny_unknown_fields)]
 pub enum ProximityPrecisionView {
+    #[default]
     ByWord,
     ByAttribute,
 }

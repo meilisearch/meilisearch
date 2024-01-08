@@ -84,6 +84,7 @@ async fn get_settings() {
         })
     );
     assert_eq!(settings["embedders"], json!({}));
+    assert_eq!(settings["proximityPrecision"], json!("byWord"));
 }
 
 #[actix_rt::test]
