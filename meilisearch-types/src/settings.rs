@@ -37,6 +37,17 @@ where
     .serialize(s)
 }
 
+fn serialize_with_default<T, S>(field: &Setting<T>, s: S) -> std::result::Result<S::Ok, S::Error>
+where
+    T: Default + Serialize,
+    S: Serializer,
+{
+    match field {
+        Setting::Set(value) => value.serialize(s),
+        Setting::Reset | Setting::NotSet => T::default().serialize(s),
+    }
+}
+
 #[derive(Clone, Default, Debug, Serialize, PartialEq, Eq)]
 pub struct Checked;
 
@@ -186,7 +197,11 @@ pub struct Settings<T> {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsDistinctAttribute>)]
     pub distinct_attribute: Setting<String>,
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[serde(
+        default,
+        serialize_with = "serialize_with_default",
+        skip_serializing_if = "Setting::is_not_set"
+    )]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsProximityPrecision>)]
     pub proximity_precision: Setting<ProximityPrecisionView>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
@@ -735,10 +750,11 @@ impl From<RankingRuleView> for Criterion {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserr, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Deserr, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(error = DeserrJsonError<InvalidSettingsProximityPrecision>, rename_all = camelCase, deny_unknown_fields)]
 pub enum ProximityPrecisionView {
+    #[default]
     ByWord,
     ByAttribute,
 }
