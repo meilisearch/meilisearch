@@ -82,7 +82,7 @@ jobs:
           args: --locked --release --all
 
   test-all-features:
-    name: Tests all features
+    name: Tests almost all features
     runs-on: ubuntu-latest
     container:
       # Use ubuntu-18.04 to compile with glibc 2.27, which are the production expectations
@@ -98,16 +98,12 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - name: Run cargo build with all features
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --workspace --locked --release --all-features
-      - name: Run cargo test with all features
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --workspace --locked --release --all-features
+      - name: Run cargo build with almost all features
+        run: |
+          cargo build --workspace --locked --release --features "$(cargo xtask list-features --exclude-feature cuda)"
+      - name: Run cargo test with almost all features
+        run: |
+          cargo test --workspace --locked --release --features "$(cargo xtask list-features --exclude-feature cuda)"
 
   test-disabled-tokenization:
     name: Test disabled tokenization
