@@ -1,0 +1,15 @@
+[package]
+name = "xtask"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+homepage.workspace = true
+readme.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cargo_metadata = "0.18.1"
+clap = { version = "4.4.14", features = ["derive"] }
