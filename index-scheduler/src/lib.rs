@@ -351,10 +351,6 @@ pub struct IndexScheduler {
     /// The path to the version file of Meilisearch.
     pub(crate) version_file_path: PathBuf,
 
-    /// A few types of long running batches of tasks that act on a single index set this field
-    /// so that a handle to the index is available from other threads (search) in an optimized manner.
-    currently_updating_index: Arc<RwLock<Option<(String, Index)>>>,
-
     embedders: Arc<RwLock<HashMap<EmbedderOptions, Arc<Embedder>>>>,
 
     // ================= test
@@ -403,7 +399,6 @@ impl IndexScheduler {
             version_file_path: self.version_file_path.clone(),
             webhook_url: self.webhook_url.clone(),
             webhook_authorization_header: self.webhook_authorization_header.clone(),
-            currently_updating_index: self.currently_updating_index.clone(),
             embedders: self.embedders.clone(),
             #[cfg(test)]
             test_breakpoint_sdr: self.test_breakpoint_sdr.clone(),
@@ -504,7 +499,6 @@ impl IndexScheduler {
             version_file_path: options.version_file_path,
             webhook_url: options.webhook_url,
             webhook_authorization_header: options.webhook_authorization_header,
-            currently_updating_index: Arc::new(RwLock::new(None)),
             embedders: Default::default(),
 
             #[cfg(test)]
@@ -688,13 +682,6 @@ impl IndexScheduler {
     /// If you need to fetch information from or perform an action on all indexes,
     /// see the `try_for_each_index` function.
     pub fn index(&self, name: &str) -> Result<Index> {
-        if let Some((current_name, current_index)) =
-            self.currently_updating_index.read().unwrap().as_ref()
-        {
-            if current_name == name {
-                return Ok(current_index.clone());
-            }
-        }
         let rtxn = self.env.read_txn()?;
         self.index_mapper.index(&rtxn, name)
     }
@@ -1175,7 +1162,7 @@ impl IndexScheduler {
         };
 
         // Reset the currently updating index to relinquish the index handle
-        *self.currently_updating_index.write().unwrap() = None;
+        self.index_mapper.set_currently_updating_index(None);
 
         #[cfg(test)]
         self.maybe_fail(tests::FailureLocation::AcquiringWtxn)?;

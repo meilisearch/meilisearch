@@ -69,6 +69,10 @@ pub struct IndexMapper {
     /// Whether we open a meilisearch index with the MDB_WRITEMAP option or not.
     enable_mdb_writemap: bool,
     pub indexer_config: Arc<IndexerConfig>,
+
+    /// A few types of long running batches of tasks that act on a single index set this field
+    /// so that a handle to the index is available from other threads (search) in an optimized manner.
+    currently_updating_index: Arc<RwLock<Option<(String, Index)>>>,
 }
 
 /// Whether the index is available for use or is forbidden to be inserted back in the index map
@@ -151,6 +155,7 @@ impl IndexMapper {
             index_growth_amount,
             enable_mdb_writemap,
             indexer_config: Arc::new(indexer_config),
+            currently_updating_index: Default::default(),
         })
     }
 
@@ -303,6 +308,14 @@ impl IndexMapper {
 
     /// Return an index, may open it if it wasn't already opened.
     pub fn index(&self, rtxn: &RoTxn, name: &str) -> Result<Index> {
+        if let Some((current_name, current_index)) =
+            self.currently_updating_index.read().unwrap().as_ref()
+        {
+            if current_name == name {
+                return Ok(current_index.clone());
+            }
+        }
+
         let uuid = self
             .index_mapping
             .get(rtxn, name)?
@@ -473,5 +486,9 @@ impl IndexMapper {
 
     pub fn indexer_config(&self) -> &IndexerConfig {
         &self.indexer_config
+    }
+
+    pub fn set_currently_updating_index(&self, index: Option<(String, Index)>) {
+        *self.currently_updating_index.write().unwrap() = index;
     }
 }
