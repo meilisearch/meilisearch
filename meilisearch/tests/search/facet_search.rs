@@ -106,6 +106,24 @@ async fn more_advanced_facet_search() {
 }
 
 #[actix_rt::test]
+async fn simple_facet_search_with_max_values() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = DOCUMENTS.clone();
+    index.update_settings_faceting(json!({ "maxValuesPerFacet": 1 })).await;
+    index.update_settings_filterable_attributes(json!(["genres"])).await;
+    index.add_documents(documents, None).await;
+    index.wait_task(2).await;
+
+    let (response, code) =
+        index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
+
+    assert_eq!(code, 200, "{}", response);
+    assert_eq!(dbg!(response)["facetHits"].as_array().unwrap().len(), 1);
+}
+
+#[actix_rt::test]
 async fn non_filterable_facet_search_error() {
     let server = Server::new().await;
     let index = server.index("test");

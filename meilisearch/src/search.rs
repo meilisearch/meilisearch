@@ -735,6 +735,9 @@ pub fn perform_facet_search(
     if let Some(facet_query) = &facet_query {
         facet_search.query(facet_query);
     }
+    if let Some(max_facets) = index.max_values_per_facet(&rtxn)? {
+        facet_search.max_values(max_facets as usize);
+    }
 
     Ok(FacetSearchResult {
         facet_hits: facet_search.execute()?,
