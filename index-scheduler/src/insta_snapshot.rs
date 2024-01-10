@@ -42,7 +42,6 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         test_breakpoint_sdr: _,
         planned_failures: _,
         run_loop_iteration: _,
-        currently_updating_index: _,
         embedders: _,
     } = scheduler;
 
