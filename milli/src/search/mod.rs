@@ -27,8 +27,8 @@ static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
 static LEVDIST1: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(1, true));
 static LEVDIST2: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(2, true));
 
-/// The maximum number of facets returned by the facet search route.
-const MAX_NUMBER_OF_FACETS: usize = 100;
+/// The maximum number of values per facet returned by the facet search route.
+const DEFAULT_MAX_NUMBER_OF_VALUES_PER_FACET: usize = 100;
 
 pub mod facet;
 mod fst_utils;
@@ -306,6 +306,7 @@ pub struct SearchForFacetValues<'a> {
     query: Option<String>,
     facet: String,
     search_query: Search<'a>,
+    max_values: usize,
     is_hybrid: bool,
 }
 
@@ -315,11 +316,22 @@ impl<'a> SearchForFacetValues<'a> {
         search_query: Search<'a>,
         is_hybrid: bool,
     ) -> SearchForFacetValues<'a> {
-        SearchForFacetValues { query: None, facet, search_query, is_hybrid }
+        SearchForFacetValues {
+            query: None,
+            facet,
+            search_query,
+            max_values: DEFAULT_MAX_NUMBER_OF_VALUES_PER_FACET,
+            is_hybrid,
+        }
     }
 
     pub fn query(&mut self, query: impl Into<String>) -> &mut Self {
         self.query = Some(query.into());
+        self
+    }
+
+    pub fn max_values(&mut self, max: usize) -> &mut Self {
+        self.max_values = max;
         self
     }
 
@@ -462,7 +474,7 @@ impl<'a> SearchForFacetValues<'a> {
                             .unwrap_or_else(|| left_bound.to_string());
                         results.push(FacetValueHit { value, count });
                     }
-                    if results.len() >= MAX_NUMBER_OF_FACETS {
+                    if results.len() >= self.max_values {
                         break;
                     }
                 }
@@ -507,7 +519,7 @@ impl<'a> SearchForFacetValues<'a> {
                     .unwrap_or_else(|| query.to_string());
                 results.push(FacetValueHit { value, count });
             }
-            if results.len() >= MAX_NUMBER_OF_FACETS {
+            if results.len() >= self.max_values {
                 return Ok(ControlFlow::Break(()));
             }
         }
