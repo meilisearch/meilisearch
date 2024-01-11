@@ -897,6 +897,14 @@ fn format_fields<'a>(
     let mut matches_position = compute_matches.then(BTreeMap::new);
     let mut document = document.clone();
 
+    // reduce the formated option list to the attributes that should be formatted,
+    // instead of all the attribute to display.
+    let formating_fields_options: Vec<_> = formatted_options
+        .iter()
+        .filter(|(_, option)| option.should_format())
+        .map(|(fid, option)| (field_ids_map.name(*fid).unwrap(), option))
+        .collect();
+
     // select the attributes to retrieve
     let displayable_names =
         displayable_ids.iter().map(|&fid| field_ids_map.name(fid).expect("Missing field name"));
@@ -905,13 +913,15 @@ fn format_fields<'a>(
         // to the value and merge them together. eg. If a user said he wanted to highlight `doggo`
         // and crop `doggo.name`. `doggo.name` needs to be highlighted + cropped while `doggo.age` is only
         // highlighted.
-        let format = formatted_options
+        // Warn: The time to compute the `format` list scales with the number of field to format;
+        // cummulated with `map_leaf_values` that iterates over all the nested fields, it gives a quadratic complexity:
+        // `d*f` where `d` is the total number of field to display and `f` the total number of field to format.
+        let format = formating_fields_options
             .iter()
-            .filter(|(field, _option)| {
-                let name = field_ids_map.name(**field).unwrap();
+            .filter(|(name, _option)| {
                 milli::is_faceted_by(name, key) || milli::is_faceted_by(key, name)
             })
-            .map(|(_, option)| *option)
+            .map(|(_, option)| **option)
             .reduce(|acc, option| acc.merge(option));
         let mut infos = Vec::new();
 
@@ -941,6 +951,11 @@ fn format_value<'a>(
     infos: &mut Vec<MatchBounds>,
     compute_matches: bool,
 ) -> Value {
+    // early skip recursive function if nothing needs to be changed.
+    if !format_options.as_ref().map_or(false, FormatOptions::should_format) && !compute_matches {
+        return value;
+    }
+
     match value {
         Value::String(old_string) => {
             let mut matcher = builder.build(&old_string);
