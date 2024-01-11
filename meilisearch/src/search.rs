@@ -951,11 +951,6 @@ fn format_value<'a>(
     infos: &mut Vec<MatchBounds>,
     compute_matches: bool,
 ) -> Value {
-    // early skip recursive function if nothing needs to be changed.
-    if !format_options.as_ref().map_or(false, FormatOptions::should_format) && !compute_matches {
-        return value;
-    }
-
     match value {
         Value::String(old_string) => {
             let mut matcher = builder.build(&old_string);
@@ -1023,7 +1018,7 @@ fn format_value<'a>(
                     let value = matcher.format(format_options);
                     Value::String(value.into_owned())
                 }
-                None => Value::Number(number),
+                None => Value::String(s),
             }
         }
         value => value,
