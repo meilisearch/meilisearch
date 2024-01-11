@@ -897,9 +897,9 @@ fn format_fields<'a>(
     let mut matches_position = compute_matches.then(BTreeMap::new);
     let mut document = document.clone();
 
-    // reduce the formated option list to the attributes that should be formatted,
-    // instead of all the attribute to display.
-    let formating_fields_options: Vec<_> = formatted_options
+    // reduce the formatted option list to the attributes that should be formatted,
+    // instead of all the attributes to display.
+    let formatting_fields_options: Vec<_> = formatted_options
         .iter()
         .filter(|(_, option)| option.should_format())
         .map(|(fid, option)| (field_ids_map.name(*fid).unwrap(), option))
@@ -913,10 +913,10 @@ fn format_fields<'a>(
         // to the value and merge them together. eg. If a user said he wanted to highlight `doggo`
         // and crop `doggo.name`. `doggo.name` needs to be highlighted + cropped while `doggo.age` is only
         // highlighted.
-        // Warn: The time to compute the `format` list scales with the number of field to format;
-        // cummulated with `map_leaf_values` that iterates over all the nested fields, it gives a quadratic complexity:
-        // `d*f` where `d` is the total number of field to display and `f` the total number of field to format.
-        let format = formating_fields_options
+        // Warn: The time to compute the format list scales with the number of fields to format;
+        // cumulated with map_leaf_values that iterates over all the nested fields, it gives a quadratic complexity:
+        // d*f where d is the total number of fields to display and f is the total number of fields to format.
+        let format = formatting_fields_options
             .iter()
             .filter(|(name, _option)| {
                 milli::is_faceted_by(name, key) || milli::is_faceted_by(key, name)
