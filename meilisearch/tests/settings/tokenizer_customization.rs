@@ -94,7 +94,7 @@ async fn set_and_search() {
                 "id": 1,
                 "content": "Mac & cheese",
                 "_formatted": {
-                  "id": "1",
+                  "id": 1,
                   "content": "Mac <em>&</em> cheese"
                 }
               },
@@ -102,7 +102,7 @@ async fn set_and_search() {
                 "id": 3,
                 "content": "Mac&sep&&sepcheese",
                 "_formatted": {
-                  "id": "3",
+                  "id": 3,
                   "content": "Mac&sep<em>&</em>&sepcheese"
                 }
               }
@@ -254,7 +254,7 @@ async fn advanced_synergies() {
                 "id": 1,
                 "content": "J.R.R. Tolkien",
                 "_formatted": {
-                  "id": "1",
+                  "id": 1,
                   "content": "<em>J.R.R.</em> Tolkien"
                 }
               },
@@ -262,7 +262,7 @@ async fn advanced_synergies() {
                 "id": 2,
                 "content": "J. R. R. Tolkien",
                 "_formatted": {
-                  "id": "2",
+                  "id": 2,
                   "content": "<em>J. R. R.</em> Tolkien"
                 }
               },
@@ -270,7 +270,7 @@ async fn advanced_synergies() {
                 "id": 3,
                 "content": "jrr Tolkien",
                 "_formatted": {
-                  "id": "3",
+                  "id": 3,
                   "content": "<em>jrr</em> Tolkien"
                 }
               }
