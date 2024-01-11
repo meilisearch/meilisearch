@@ -191,6 +191,7 @@ fn resolve_maximally_reduced_query_graph(
     Ok(docids)
 }
 
+#[logging_timer::time]
 fn resolve_universe(
     ctx: &mut SearchContext,
     initial_universe: &RoaringBitmap,
@@ -556,6 +557,7 @@ pub fn execute_vector_search(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[logging_timer::time]
 pub fn execute_search(
     ctx: &mut SearchContext,
     query: Option<&str>,
