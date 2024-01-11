@@ -72,7 +72,7 @@ impl<'m> MatcherBuilder<'m> {
     }
 }
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct FormatOptions {
     pub highlight: bool,
     pub crop: Option<usize>,
@@ -81,6 +81,10 @@ pub struct FormatOptions {
 impl FormatOptions {
     pub fn merge(self, other: Self) -> Self {
         Self { highlight: self.highlight || other.highlight, crop: self.crop.or(other.crop) }
+    }
+
+    pub fn should_format(&self) -> bool {
+        self.highlight || self.crop.is_some()
     }
 }
 

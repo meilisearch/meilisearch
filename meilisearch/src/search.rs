@@ -900,6 +900,14 @@ fn format_fields<'a>(
     let mut matches_position = compute_matches.then(BTreeMap::new);
     let mut document = document.clone();
 
+    // reduce the formatted option list to the attributes that should be formatted,
+    // instead of all the attributes to display.
+    let formatting_fields_options: Vec<_> = formatted_options
+        .iter()
+        .filter(|(_, option)| option.should_format())
+        .map(|(fid, option)| (field_ids_map.name(*fid).unwrap(), option))
+        .collect();
+
     // select the attributes to retrieve
     let displayable_names =
         displayable_ids.iter().map(|&fid| field_ids_map.name(fid).expect("Missing field name"));
@@ -908,13 +916,15 @@ fn format_fields<'a>(
         // to the value and merge them together. eg. If a user said he wanted to highlight `doggo`
         // and crop `doggo.name`. `doggo.name` needs to be highlighted + cropped while `doggo.age` is only
         // highlighted.
-        let format = formatted_options
+        // Warn: The time to compute the format list scales with the number of fields to format;
+        // cumulated with map_leaf_values that iterates over all the nested fields, it gives a quadratic complexity:
+        // d*f where d is the total number of fields to display and f is the total number of fields to format.
+        let format = formatting_fields_options
             .iter()
-            .filter(|(field, _option)| {
-                let name = field_ids_map.name(**field).unwrap();
+            .filter(|(name, _option)| {
                 milli::is_faceted_by(name, key) || milli::is_faceted_by(key, name)
             })
-            .map(|(_, option)| *option)
+            .map(|(_, option)| **option)
             .reduce(|acc, option| acc.merge(option));
         let mut infos = Vec::new();
 
@@ -1011,7 +1021,7 @@ fn format_value<'a>(
                     let value = matcher.format(format_options);
                     Value::String(value.into_owned())
                 }
-                None => Value::Number(number),
+                None => Value::String(s),
             }
         }
         value => value,
