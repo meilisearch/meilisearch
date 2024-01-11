@@ -54,7 +54,7 @@ async fn get_settings() {
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     let settings = response.as_object().unwrap();
-    assert_eq!(settings.keys().len(), 16);
+    assert_eq!(settings.keys().len(), 15);
     assert_eq!(settings["displayedAttributes"], json!(["*"]));
     assert_eq!(settings["searchableAttributes"], json!(["*"]));
     assert_eq!(settings["filterableAttributes"], json!([]));
@@ -83,7 +83,6 @@ async fn get_settings() {
             "maxTotalHits": 1000,
         })
     );
-    assert_eq!(settings["embedders"], json!({}));
     assert_eq!(settings["proximityPrecision"], json!("byWord"));
 }
 
