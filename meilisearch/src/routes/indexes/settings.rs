@@ -458,7 +458,7 @@ make_setting_route!(
             json!({
                 "proximity_precision": {
                     "set": precision.is_some(),
-                    "value": precision,
+                    "value": precision.unwrap_or_default(),
                 }
             }),
             Some(req),
@@ -690,7 +690,8 @@ pub async fn update_all(
                 "set": new_settings.distinct_attribute.as_ref().set().is_some()
             },
             "proximity_precision": {
-                "set": new_settings.proximity_precision.as_ref().set().is_some()
+                "set": new_settings.proximity_precision.as_ref().set().is_some(),
+                "value": new_settings.proximity_precision.as_ref().set().copied().unwrap_or_default()
             },
             "typo_tolerance": {
                 "enabled": new_settings.typo_tolerance
