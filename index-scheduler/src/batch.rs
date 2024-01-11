@@ -60,7 +60,7 @@ pub(crate) enum Batch {
         /// The list of tasks that were processing when this task cancelation appeared.
         previous_processing_tasks: RoaringBitmap,
     },
-    TaskDeletion(Task),
+    TaskDeletions(Vec<Task>),
     SnapshotCreation(Vec<Task>),
     Dump(Task),
     IndexOperation {
@@ -146,13 +146,12 @@ impl Batch {
     pub fn ids(&self) -> Vec<TaskId> {
         match self {
             Batch::TaskCancelation { task, .. }
-            | Batch::TaskDeletion(task)
             | Batch::Dump(task)
             | Batch::IndexCreation { task, .. }
             | Batch::IndexUpdate { task, .. } => vec![task.uid],
-            Batch::SnapshotCreation(tasks) | Batch::IndexDeletion { tasks, .. } => {
-                tasks.iter().map(|task| task.uid).collect()
-            }
+            Batch::SnapshotCreation(tasks)
+            | Batch::TaskDeletions(tasks)
+            | Batch::IndexDeletion { tasks, .. } => tasks.iter().map(|task| task.uid).collect(),
             Batch::IndexOperation { op, .. } => match op {
                 IndexOperation::DocumentOperation { tasks, .. }
                 | IndexOperation::Settings { tasks, .. }
@@ -180,7 +179,7 @@ impl Batch {
         use Batch::*;
         match self {
             TaskCancelation { .. }
-            | TaskDeletion(_)
+            | TaskDeletions(_)
             | SnapshotCreation(_)
             | Dump(_)
             | IndexSwap { .. } => None,
@@ -199,7 +198,7 @@ impl fmt::Display for Batch {
         let tasks = self.ids();
         match self {
             Batch::TaskCancelation { .. } => f.write_str("TaskCancelation")?,
-            Batch::TaskDeletion(_) => f.write_str("TaskDeletion")?,
+            Batch::TaskDeletions(_) => f.write_str("TaskDeletion")?,
             Batch::SnapshotCreation(_) => f.write_str("SnapshotCreation")?,
             Batch::Dump(_) => f.write_str("Dump")?,
             Batch::IndexOperation { op, .. } => write!(f, "{op}")?,
@@ -539,9 +538,9 @@ impl IndexScheduler {
 
         // 2. we get the next task to delete
         let to_delete = self.get_kind(rtxn, Kind::TaskDeletion)? & enqueued;
-        if let Some(task_id) = to_delete.min() {
-            let task = self.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
-            return Ok(Some(Batch::TaskDeletion(task)));
+        if !to_delete.is_empty() {
+            let tasks = self.get_existing_tasks(rtxn, to_delete)?;
+            return Ok(Some(Batch::TaskDeletions(tasks)));
         }
 
         // 3. we batch the snapshot.
@@ -681,31 +680,43 @@ impl IndexScheduler {
 
                 Ok(vec![task])
             }
-            Batch::TaskDeletion(mut task) => {
+            Batch::TaskDeletions(mut tasks) => {
                 // 1. Retrieve the tasks that matched the query at enqueue-time.
-                let matched_tasks =
+                let mut matched_tasks = RoaringBitmap::new();
+
+                for task in tasks.iter() {
                     if let KindWithContent::TaskDeletion { tasks, query: _ } = &task.kind {
-                        tasks
+                        matched_tasks |= tasks;
                     } else {
+                        unreachable!()
+                    }
+                }
+
+                let mut wtxn = self.env.write_txn()?;
+                let mut deleted_tasks = self.delete_matched_tasks(&mut wtxn, &matched_tasks)?;
+                wtxn.commit()?;
+
+                for task in tasks.iter_mut() {
+                    task.status = Status::Succeeded;
+                    let KindWithContent::TaskDeletion { tasks, query: _ } = &task.kind else {
                         unreachable!()
                     };
 
-                let mut wtxn = self.env.write_txn()?;
-                let deleted_tasks_count = self.delete_matched_tasks(&mut wtxn, matched_tasks)?;
+                    let deleted_tasks_count = deleted_tasks.intersection_len(tasks);
+                    deleted_tasks -= tasks;
 
-                task.status = Status::Succeeded;
-                match &mut task.details {
-                    Some(Details::TaskDeletion {
-                        matched_tasks: _,
-                        deleted_tasks,
-                        original_filter: _,
-                    }) => {
-                        *deleted_tasks = Some(deleted_tasks_count);
+                    match &mut task.details {
+                        Some(Details::TaskDeletion {
+                            matched_tasks: _,
+                            deleted_tasks,
+                            original_filter: _,
+                        }) => {
+                            *deleted_tasks = Some(deleted_tasks_count);
+                        }
+                        _ => unreachable!(),
                     }
-                    _ => unreachable!(),
                 }
-                wtxn.commit()?;
-                Ok(vec![task])
+                Ok(tasks)
             }
             Batch::SnapshotCreation(mut tasks) => {
                 fs::create_dir_all(&self.snapshots_path)?;
@@ -1438,7 +1449,11 @@ impl IndexScheduler {
     /// Delete each given task from all the databases (if it is deleteable).
     ///
     /// Return the number of tasks that were actually deleted.
-    fn delete_matched_tasks(&self, wtxn: &mut RwTxn, matched_tasks: &RoaringBitmap) -> Result<u64> {
+    fn delete_matched_tasks(
+        &self,
+        wtxn: &mut RwTxn,
+        matched_tasks: &RoaringBitmap,
+    ) -> Result<RoaringBitmap> {
         // 1. Remove from this list the tasks that we are not allowed to delete
         let enqueued_tasks = self.get_status(wtxn, Status::Enqueued)?;
         let processing_tasks = &self.processing_tasks.read().unwrap().processing.clone();
@@ -1503,7 +1518,7 @@ impl IndexScheduler {
             }
         }
 
-        Ok(to_delete_tasks.len())
+        Ok(to_delete_tasks)
     }
 
     /// Cancel each given task from all the databases (if it is cancelable).

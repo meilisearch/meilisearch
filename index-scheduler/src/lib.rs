@@ -2158,10 +2158,7 @@ mod tests {
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
-        for _ in 0..2 {
-            handle.advance_one_successful_batch();
-            index_scheduler.assert_internally_consistent();
-        }
+        handle.advance_one_successful_batch();
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "task_deletion_processed");
     }
