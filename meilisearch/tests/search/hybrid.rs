@@ -21,9 +21,9 @@ async fn index_with_documents<'a>(server: &'a Server, documents: &Value) -> Inde
     "###);
 
     let (response, code) = index
-        .update_settings(
-            json!({ "embedders": {"default": {"source": {"userProvided": {"dimensions": 2}}}} }),
-        )
+        .update_settings(json!({ "embedders": {"default": {
+                "source": "userProvided",
+                "dimensions": 2}}} ))
         .await;
     assert_eq!(202, code, "{:?}", response);
     index.wait_task(response.uid()).await;
@@ -53,6 +53,15 @@ static SIMPLE_SEARCH_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
         "desc": "a Shazam ersatz",
         "id": "3",
         "_vectors": {"default": [2.0, 3.0]},
+    }])
+});
+
+static SINGLE_DOCUMENT: Lazy<Value> = Lazy::new(|| {
+    json!([{
+            "title": "Shazam!",
+            "desc": "a Captain Marvel ersatz",
+            "id": "1",
+            "_vectors": {"default": [1.0, 3.0]},
     }])
 });
 
@@ -148,4 +157,19 @@ async fn invalid_semantic_ratio() {
       "link": "https://docs.meilisearch.com/errors#invalid_search_semantic_ratio"
     }
     "###);
+}
+
+#[actix_rt::test]
+async fn single_document() {
+    let server = Server::new().await;
+    let index = index_with_documents(&server, &SINGLE_DOCUMENT).await;
+
+    let (response, code) = index
+    .search_post(
+        json!({"vector": [1.0, 3.0], "hybrid": {"semanticRatio": 1.0}, "showRankingScore": true}),
+    )
+    .await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(response["hits"][0], @r###"{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":1.0,"_semanticScore":1.0}"###);
 }

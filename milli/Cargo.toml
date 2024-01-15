@@ -77,7 +77,7 @@ csv = "1.2.1"
 candle-core = { git = "https://github.com/huggingface/candle.git", version = "0.3.1" }
 candle-transformers = { git = "https://github.com/huggingface/candle.git", version = "0.3.1" }
 candle-nn = { git = "https://github.com/huggingface/candle.git", version = "0.3.1" }
-tokenizers = { git = "https://github.com/huggingface/tokenizers.git", tag = "v0.14.1", version = "0.14.1" }
+tokenizers = { git = "https://github.com/huggingface/tokenizers.git", tag = "v0.14.1", version = "0.14.1", default_features = false, features = ["onig"] }
 hf-hub = { git = "https://github.com/dureuill/hf-hub.git", branch = "rust_tls", default_features = false, features = [
     "online",
 ] }

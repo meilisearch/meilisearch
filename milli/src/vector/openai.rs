@@ -34,6 +34,9 @@ pub struct EmbedderOptions {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub enum EmbeddingModel {
+    // # WARNING
+    //
+    // If ever adding a model, make sure to add it to the list of supported models below.
     #[default]
     #[serde(rename = "text-embedding-ada-002")]
     #[deserr(rename = "text-embedding-ada-002")]
@@ -41,6 +44,10 @@ pub enum EmbeddingModel {
 }
 
 impl EmbeddingModel {
+    pub fn supported_models() -> &'static [&'static str] {
+        &["text-embedding-ada-002"]
+    }
+
     pub fn max_token(&self) -> usize {
         match self {
             EmbeddingModel::TextEmbeddingAda002 => 8191,
@@ -59,7 +66,7 @@ impl EmbeddingModel {
         }
     }
 
-    pub fn from_name(name: &'static str) -> Option<Self> {
+    pub fn from_name(name: &str) -> Option<Self> {
         match name {
             "text-embedding-ada-002" => Some(EmbeddingModel::TextEmbeddingAda002),
             _ => None,

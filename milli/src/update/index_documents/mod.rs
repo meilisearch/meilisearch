@@ -2553,7 +2553,7 @@ mod tests {
     /// Vectors must be of the same length.
     #[test]
     fn test_multiple_vectors() {
-        use crate::vector::settings::{EmbedderSettings, EmbeddingSettings};
+        use crate::vector::settings::EmbeddingSettings;
         let index = TempIndex::new();
 
         index
@@ -2562,9 +2562,11 @@ mod tests {
                 embedders.insert(
                     "manual".to_string(),
                     Setting::Set(EmbeddingSettings {
-                        embedder_options: Setting::Set(EmbedderSettings::UserProvided(
-                            crate::vector::settings::UserProvidedSettings { dimensions: 3 },
-                        )),
+                        source: Setting::Set(crate::vector::settings::EmbedderSource::UserProvided),
+                        model: Setting::NotSet,
+                        revision: Setting::NotSet,
+                        api_key: Setting::NotSet,
+                        dimensions: Setting::Set(3),
                         document_template: Setting::NotSet,
                     }),
                 );
@@ -2579,10 +2581,10 @@ mod tests {
             .unwrap();
         index.add_documents(documents!([{"id": 1, "_vectors": { "manual": [6, 7, 8] }}])).unwrap();
         index
-            .add_documents(
-                documents!([{"id": 2, "_vectors": { "manual": [[9, 10, 11], [12, 13, 14], [15, 16, 17]] }}]),
-            )
-            .unwrap();
+               .add_documents(
+                   documents!([{"id": 2, "_vectors": { "manual": [[9, 10, 11], [12, 13, 14], [15, 16, 17]] }}]),
+               )
+               .unwrap();
 
         let rtxn = index.read_txn().unwrap();
         let res = index.search(&rtxn).vector([0.0, 1.0, 2.0].to_vec()).execute().unwrap();

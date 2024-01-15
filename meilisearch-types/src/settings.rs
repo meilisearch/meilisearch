@@ -318,6 +318,21 @@ impl Settings<Unchecked> {
             _kind: PhantomData,
         }
     }
+
+    pub fn validate(self) -> Result<Self, milli::Error> {
+        self.validate_embedding_settings()
+    }
+
+    fn validate_embedding_settings(mut self) -> Result<Self, milli::Error> {
+        let Setting::Set(mut configs) = self.embedders else { return Ok(self) };
+        for (name, config) in configs.iter_mut() {
+            let config_to_check = std::mem::take(config);
+            let checked_config = milli::update::validate_embedding_settings(config_to_check, name)?;
+            *config = checked_config
+        }
+        self.embedders = Setting::Set(configs);
+        Ok(self)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -585,11 +600,12 @@ pub fn settings(
         ),
     };
 
-    let embedders = index
+    let embedders: BTreeMap<_, _> = index
         .embedding_configs(rtxn)?
         .into_iter()
         .map(|(name, config)| (name, Setting::Set(config.into())))
         .collect();
+    let embedders = if embedders.is_empty() { Setting::NotSet } else { Setting::Set(embedders) };
 
     Ok(Settings {
         displayed_attributes: match displayed_attributes {
@@ -611,15 +627,12 @@ pub fn settings(
             Some(field) => Setting::Set(field),
             None => Setting::Reset,
         },
-        proximity_precision: match proximity_precision {
-            Some(precision) => Setting::Set(precision),
-            None => Setting::Reset,
-        },
+        proximity_precision: Setting::Set(proximity_precision.unwrap_or_default()),
         synonyms: Setting::Set(synonyms),
         typo_tolerance: Setting::Set(typo_tolerance),
         faceting: Setting::Set(faceting),
         pagination: Setting::Set(pagination),
-        embedders: Setting::Set(embedders),
+        embedders,
         _kind: PhantomData,
     })
 }
@@ -720,10 +733,11 @@ impl From<RankingRuleView> for Criterion {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserr, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Deserr, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(error = DeserrJsonError<InvalidSettingsProximityPrecision>, rename_all = camelCase, deny_unknown_fields)]
 pub enum ProximityPrecisionView {
+    #[default]
     ByWord,
     ByAttribute,
 }

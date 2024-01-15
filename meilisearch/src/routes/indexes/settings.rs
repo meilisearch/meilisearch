@@ -90,6 +90,11 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
 
+                let new_settings = $crate::routes::indexes::settings::validate_settings(
+                    new_settings,
+                    &index_scheduler,
+                )?;
+
                 let allow_index_creation =
                     index_scheduler.filters().allow_index_creation(&index_uid);
 
@@ -453,7 +458,7 @@ make_setting_route!(
             json!({
                 "proximity_precision": {
                     "set": precision.is_some(),
-                    "value": precision,
+                    "value": precision.unwrap_or_default(),
                 }
             }),
             Some(req),
@@ -582,13 +587,13 @@ fn embedder_analytics(
         for source in s
             .values()
             .filter_map(|config| config.clone().set())
-            .filter_map(|config| config.embedder_options.set())
+            .filter_map(|config| config.source.set())
         {
-            use meilisearch_types::milli::vector::settings::EmbedderSettings;
+            use meilisearch_types::milli::vector::settings::EmbedderSource;
             match source {
-                EmbedderSettings::OpenAi(_) => sources.insert("openAi"),
-                EmbedderSettings::HuggingFace(_) => sources.insert("huggingFace"),
-                EmbedderSettings::UserProvided(_) => sources.insert("userProvided"),
+                EmbedderSource::OpenAi => sources.insert("openAi"),
+                EmbedderSource::HuggingFace => sources.insert("huggingFace"),
+                EmbedderSource::UserProvided => sources.insert("userProvided"),
             };
         }
     };
@@ -651,6 +656,7 @@ pub async fn update_all(
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let new_settings = body.into_inner();
+    let new_settings = validate_settings(new_settings, &index_scheduler)?;
 
     analytics.publish(
         "Settings Updated".to_string(),
@@ -684,7 +690,8 @@ pub async fn update_all(
                 "set": new_settings.distinct_attribute.as_ref().set().is_some()
             },
             "proximity_precision": {
-                "set": new_settings.proximity_precision.as_ref().set().is_some()
+                "set": new_settings.proximity_precision.as_ref().set().is_some(),
+                "value": new_settings.proximity_precision.as_ref().set().copied().unwrap_or_default()
             },
             "typo_tolerance": {
                 "enabled": new_settings.typo_tolerance
@@ -799,4 +806,14 @@ pub async fn delete_all(
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
+}
+
+fn validate_settings(
+    settings: Settings<Unchecked>,
+    index_scheduler: &IndexScheduler,
+) -> Result<Settings<Unchecked>, ResponseError> {
+    if matches!(settings.embedders, Setting::Set(_)) {
+        index_scheduler.features().check_vector("Passing `embedders` in settings")?
+    }
+    Ok(settings.validate()?)
 }

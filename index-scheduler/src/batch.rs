@@ -936,8 +936,8 @@ impl IndexScheduler {
                 };
 
                 // the index operation can take a long time, so save this handle to make it available to the search for the duration of the tick
-                *self.currently_updating_index.write().unwrap() =
-                    Some((index_uid.clone(), index.clone()));
+                self.index_mapper
+                    .set_currently_updating_index(Some((index_uid.clone(), index.clone())));
 
                 let mut index_wtxn = index.write_txn()?;
                 let tasks = self.apply_index_operation(&mut index_wtxn, &index, op)?;
@@ -1351,9 +1351,6 @@ impl IndexScheduler {
 
                 for (task, (_, settings)) in tasks.iter_mut().zip(settings) {
                     let checked_settings = settings.clone().check();
-                    if matches!(checked_settings.embedders, milli::update::Setting::Set(_)) {
-                        self.features().check_vector("Passing `embedders` in settings")?
-                    }
                     task.details = Some(Details::SettingsUpdate { settings: Box::new(settings) });
                     apply_settings_to_builder(&checked_settings, &mut builder);
 

@@ -34,6 +34,7 @@ pub type TaskId = u32;
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
+use std::io::{self, BufReader, Read};
 use std::ops::{Bound, RangeBounds};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -45,6 +46,8 @@ use dump::{KindDump, TaskDump, UpdateFile};
 pub use error::Error;
 pub use features::RoFeatures;
 use file_store::FileStore;
+use flate2::bufread::GzEncoder;
+use flate2::Compression;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
 use meilisearch_types::heed::byteorder::BE;
@@ -54,6 +57,7 @@ use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
 use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
+use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use puffin::FrameView;
 use roaring::RoaringBitmap;
@@ -170,8 +174,8 @@ impl ProcessingTasks {
     }
 
     /// Set the processing tasks to an empty list
-    fn stop_processing(&mut self) {
-        self.processing = RoaringBitmap::new();
+    fn stop_processing(&mut self) -> RoaringBitmap {
+        std::mem::take(&mut self.processing)
     }
 
     /// Returns `true` if there, at least, is one task that is currently processing that we must stop.
@@ -241,6 +245,10 @@ pub struct IndexSchedulerOptions {
     pub snapshots_path: PathBuf,
     /// The path to the folder containing the dumps.
     pub dumps_path: PathBuf,
+    /// The URL on which we must send the tasks statuses
+    pub webhook_url: Option<String>,
+    /// The value we will send into the Authorization HTTP header on the webhook URL
+    pub webhook_authorization_header: Option<String>,
     /// The maximum size, in bytes, of the task index.
     pub task_db_size: usize,
     /// The size, in bytes, with which a meilisearch index is opened the first time of each meilisearch index.
@@ -323,6 +331,11 @@ pub struct IndexScheduler {
     /// The maximum number of tasks that will be batched together.
     pub(crate) max_number_of_batched_tasks: usize,
 
+    /// The webhook url we should send tasks to after processing every batches.
+    pub(crate) webhook_url: Option<String>,
+    /// The Authorization header to send to the webhook URL.
+    pub(crate) webhook_authorization_header: Option<String>,
+
     /// A frame to output the indexation profiling files to disk.
     pub(crate) puffin_frame: Arc<puffin::GlobalFrameView>,
 
@@ -337,10 +350,6 @@ pub struct IndexScheduler {
 
     /// The path to the version file of Meilisearch.
     pub(crate) version_file_path: PathBuf,
-
-    /// A few types of long running batches of tasks that act on a single index set this field
-    /// so that a handle to the index is available from other threads (search) in an optimized manner.
-    currently_updating_index: Arc<RwLock<Option<(String, Index)>>>,
 
     embedders: Arc<RwLock<HashMap<EmbedderOptions, Arc<Embedder>>>>,
 
@@ -388,7 +397,8 @@ impl IndexScheduler {
             dumps_path: self.dumps_path.clone(),
             auth_path: self.auth_path.clone(),
             version_file_path: self.version_file_path.clone(),
-            currently_updating_index: self.currently_updating_index.clone(),
+            webhook_url: self.webhook_url.clone(),
+            webhook_authorization_header: self.webhook_authorization_header.clone(),
             embedders: self.embedders.clone(),
             #[cfg(test)]
             test_breakpoint_sdr: self.test_breakpoint_sdr.clone(),
@@ -487,7 +497,8 @@ impl IndexScheduler {
             snapshots_path: options.snapshots_path,
             auth_path: options.auth_path,
             version_file_path: options.version_file_path,
-            currently_updating_index: Arc::new(RwLock::new(None)),
+            webhook_url: options.webhook_url,
+            webhook_authorization_header: options.webhook_authorization_header,
             embedders: Default::default(),
 
             #[cfg(test)]
@@ -671,13 +682,6 @@ impl IndexScheduler {
     /// If you need to fetch information from or perform an action on all indexes,
     /// see the `try_for_each_index` function.
     pub fn index(&self, name: &str) -> Result<Index> {
-        if let Some((current_name, current_index)) =
-            self.currently_updating_index.read().unwrap().as_ref()
-        {
-            if current_name == name {
-                return Ok(current_index.clone());
-            }
-        }
         let rtxn = self.env.read_txn()?;
         self.index_mapper.index(&rtxn, name)
     }
@@ -1158,7 +1162,7 @@ impl IndexScheduler {
         };
 
         // Reset the currently updating index to relinquish the index handle
-        *self.currently_updating_index.write().unwrap() = None;
+        self.index_mapper.set_currently_updating_index(None);
 
         #[cfg(test)]
         self.maybe_fail(tests::FailureLocation::AcquiringWtxn)?;
@@ -1251,17 +1255,97 @@ impl IndexScheduler {
             }
         }
 
-        self.processing_tasks.write().unwrap().stop_processing();
+        let processed = self.processing_tasks.write().unwrap().stop_processing();
 
         #[cfg(test)]
         self.maybe_fail(tests::FailureLocation::CommittingWtxn)?;
 
         wtxn.commit().map_err(Error::HeedTransaction)?;
 
+        // We shouldn't crash the tick function if we can't send data to the webhook.
+        let _ = self.notify_webhook(&processed);
+
         #[cfg(test)]
         self.breakpoint(Breakpoint::AfterProcessing);
 
         Ok(TickOutcome::TickAgain(processed_tasks))
+    }
+
+    /// Once the tasks changes have been commited we must send all the tasks that were updated to our webhook if there is one.
+    fn notify_webhook(&self, updated: &RoaringBitmap) -> Result<()> {
+        if let Some(ref url) = self.webhook_url {
+            struct TaskReader<'a, 'b> {
+                rtxn: &'a RoTxn<'a>,
+                index_scheduler: &'a IndexScheduler,
+                tasks: &'b mut roaring::bitmap::Iter<'b>,
+                buffer: Vec<u8>,
+                written: usize,
+            }
+
+            impl<'a, 'b> Read for TaskReader<'a, 'b> {
+                fn read(&mut self, mut buf: &mut [u8]) -> std::io::Result<usize> {
+                    if self.buffer.is_empty() {
+                        match self.tasks.next() {
+                            None => return Ok(0),
+                            Some(task_id) => {
+                                let task = self
+                                    .index_scheduler
+                                    .get_task(self.rtxn, task_id)
+                                    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
+                                    .ok_or_else(|| {
+                                        io::Error::new(
+                                            io::ErrorKind::Other,
+                                            Error::CorruptedTaskQueue,
+                                        )
+                                    })?;
+
+                                serde_json::to_writer(
+                                    &mut self.buffer,
+                                    &TaskView::from_task(&task),
+                                )?;
+                                self.buffer.push(b'\n');
+                            }
+                        }
+                    }
+
+                    let mut to_write = &self.buffer[self.written..];
+                    let wrote = io::copy(&mut to_write, &mut buf)?;
+                    self.written += wrote as usize;
+
+                    // we wrote everything and must refresh our buffer on the next call
+                    if self.written == self.buffer.len() {
+                        self.written = 0;
+                        self.buffer.clear();
+                    }
+
+                    Ok(wrote as usize)
+                }
+            }
+
+            let rtxn = self.env.read_txn()?;
+
+            let task_reader = TaskReader {
+                rtxn: &rtxn,
+                index_scheduler: self,
+                tasks: &mut updated.into_iter(),
+                buffer: Vec::with_capacity(50), // on average a task is around ~100 bytes
+                written: 0,
+            };
+
+            // let reader = GzEncoder::new(BufReader::new(task_reader), Compression::default());
+            let reader = GzEncoder::new(BufReader::new(task_reader), Compression::default());
+            let request = ureq::post(url).set("Content-Encoding", "gzip");
+            let request = match &self.webhook_authorization_header {
+                Some(header) => request.set("Authorization", header),
+                None => request,
+            };
+
+            if let Err(e) = request.send(reader) {
+                log::error!("While sending data to the webhook: {e}");
+            }
+        }
+
+        Ok(())
     }
 
     /// Register a task to cleanup the task queue if needed
@@ -1677,6 +1761,8 @@ mod tests {
                 indexes_path: tempdir.path().join("indexes"),
                 snapshots_path: tempdir.path().join("snapshots"),
                 dumps_path: tempdir.path().join("dumps"),
+                webhook_url: None,
+                webhook_authorization_header: None,
                 task_db_size: 1000 * 1000, // 1 MB, we don't use MiB on purpose.
                 index_base_map_size: 1000 * 1000, // 1 MB, we don't use MiB on purpose.
                 enable_mdb_writemap: false,

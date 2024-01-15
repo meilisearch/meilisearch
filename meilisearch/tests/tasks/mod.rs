@@ -1,4 +1,5 @@
 mod errors;
+mod webhook;
 
 use meili_snap::insta::assert_json_snapshot;
 use time::format_description::well_known::Rfc3339;
