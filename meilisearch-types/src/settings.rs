@@ -600,11 +600,12 @@ pub fn settings(
         ),
     };
 
-    let embedders = index
+    let embedders: BTreeMap<_, _> = index
         .embedding_configs(rtxn)?
         .into_iter()
         .map(|(name, config)| (name, Setting::Set(config.into())))
         .collect();
+    let embedders = if embedders.is_empty() { Setting::NotSet } else { Setting::Set(embedders) };
 
     Ok(Settings {
         displayed_attributes: match displayed_attributes {
@@ -631,7 +632,7 @@ pub fn settings(
         typo_tolerance: Setting::Set(typo_tolerance),
         faceting: Setting::Set(faceting),
         pagination: Setting::Set(pagination),
-        embedders: Setting::Set(embedders),
+        embedders,
         _kind: PhantomData,
     })
 }
