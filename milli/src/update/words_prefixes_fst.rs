@@ -15,7 +15,7 @@ pub struct WordsPrefixesFst<'t, 'i> {
 
 impl<'t, 'i> WordsPrefixesFst<'t, 'i> {
     pub fn new(wtxn: &'t mut RwTxn<'i>, index: &'i Index) -> WordsPrefixesFst<'t, 'i> {
-        WordsPrefixesFst { wtxn, index, threshold: 100, max_prefix_length: 4 }
+        WordsPrefixesFst { wtxn, index, threshold: 500, max_prefix_length: 3 }
     }
 
     /// Set the number of words required to make a prefix be part of the words prefixes
