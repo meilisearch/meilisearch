@@ -372,8 +372,7 @@ pub(crate) fn write_typed_chunk_into_index(
             // FIXME: allow customizing distance
             let writers: std::result::Result<Vec<_>, _> = (0..=u8::MAX)
                 .map(|k| {
-                    arroy::Writer::prepare(
-                        wtxn,
+                    arroy::Writer::new(
                         index.vector_arroy,
                         writer_index | (k as u16),
                         expected_dimension,

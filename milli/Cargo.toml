@@ -89,7 +89,7 @@ reqwest = { version = "0.11.23", features = [
 ], default-features = false }
 tiktoken-rs = "0.5.8"
 liquid = "0.26.4"
-arroy = { git = "https://github.com/meilisearch/arroy.git", version = "0.1.0" }
+arroy = "0.2.0"
 rand = "0.8.5"
 
 [dev-dependencies]

@@ -251,6 +251,7 @@ impl From<arroy::Error> for Error {
             arroy::Error::DatabaseFull
             | arroy::Error::InvalidItemAppend
             | arroy::Error::UnmatchingDistance { .. }
+            | arroy::Error::MissingNode
             | arroy::Error::MissingMetadata => {
                 Error::InternalError(InternalError::ArroyError(value))
             }
