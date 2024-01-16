@@ -20,7 +20,7 @@ use rustls::server::{
 use rustls::RootCertStore;
 use rustls_pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
 use serde::{Deserialize, Serialize};
-use sysinfo::{RefreshKind, System};
+use sysinfo::{MemoryRefreshKind, RefreshKind, System};
 use url::Url;
 
 const POSSIBLE_ENV: [&str; 2] = ["development", "production"];
@@ -633,8 +633,8 @@ impl MaxMemory {
 
 /// Returns the total amount of bytes available or `None` if this system isn't supported.
 fn total_memory_bytes() -> Option<u64> {
-    if System::IS_SUPPORTED {
-        let memory_kind = RefreshKind::new().with_memory();
+    if sysinfo::IS_SUPPORTED_SYSTEM {
+        let memory_kind = RefreshKind::new().with_memory(MemoryRefreshKind::new().with_ram());
         let mut system = System::new_with_specifics(memory_kind);
         system.refresh_memory();
         Some(system.total_memory())
