@@ -31,6 +31,7 @@ impl ResponseError {
     }
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Deserialize, Debug, Clone, Copy)]
 #[cfg_attr(test, derive(serde::Serialize))]
 pub enum Code {
