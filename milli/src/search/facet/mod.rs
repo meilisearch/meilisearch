@@ -142,7 +142,7 @@ pub(crate) mod tests {
         let mut txn = index.env.write_txn().unwrap();
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
 
-        for (_i, key) in std::iter::from_fn(|| Some(rng.gen_range(0..256))).take(128).enumerate() {
+        for key in std::iter::from_fn(|| Some(rng.gen_range(0..256))).take(128) {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(key);
             bitmap.insert(key + 100);
@@ -172,7 +172,7 @@ pub(crate) mod tests {
         let keys =
             std::iter::from_fn(|| Some(rng.gen_range(0..256))).take(128).collect::<Vec<u32>>();
         for fid in 0..2 {
-            for (_i, &key) in keys.iter().enumerate() {
+            for &key in &keys {
                 let mut bitmap = RoaringBitmap::new();
                 bitmap.insert(key);
                 bitmap.insert(key + 100);
@@ -207,7 +207,7 @@ pub(crate) mod tests {
         let keys =
             std::iter::from_fn(|| Some(rng.gen_range(0..256))).take(128).collect::<Vec<u32>>();
         for fid in 0..2 {
-            for (_i, &key) in keys.iter().enumerate() {
+            for &key in &keys {
                 let mut bitmap = RoaringBitmap::new();
                 bitmap.insert(key);
                 bitmap.insert(key + 100);

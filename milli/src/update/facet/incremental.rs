@@ -751,7 +751,7 @@ mod tests {
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
         keys.shuffle(&mut rng);
 
-        for (_i, key) in keys.into_iter().enumerate() {
+        for key in keys {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(key);
             index.insert(&mut txn, 0, &(key as f64), &bitmap);
@@ -770,7 +770,7 @@ mod tests {
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
         keys.shuffle(&mut rng);
 
-        for (_i, key) in keys.into_iter().enumerate() {
+        for key in keys {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(key);
             bitmap.insert(rng.gen_range(256..512));
