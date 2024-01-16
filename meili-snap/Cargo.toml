@@ -11,6 +11,6 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-insta = { version = "^1.29.0", features = ["json", "redactions"] }
+insta = { version = "^1.34.0", features = ["json", "redactions"] }
 md5 = "0.7.0"
-once_cell = "1.17"
+once_cell = "1.19"
