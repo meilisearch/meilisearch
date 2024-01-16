@@ -149,7 +149,7 @@ dependencies = [
  "impl-more",
  "pin-project-lite",
  "rustls 0.21.6",
- "rustls-webpki 0.101.7",
+ "rustls-webpki",
  "tokio",
  "tokio-rustls 0.23.4",
  "tokio-util",
@@ -3579,8 +3579,8 @@ dependencies = [
  "rayon",
  "regex",
  "reqwest",
- "rustls 0.22.2",
- "rustls-pemfile 2.0.0",
+ "rustls 0.20.9",
+ "rustls-pemfile",
  "segment",
  "serde",
  "serde_json",
@@ -4598,7 +4598,7 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "rustls 0.21.6",
- "rustls-pemfile 1.0.4",
+ "rustls-pemfile",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -4747,22 +4747,8 @@ checksum = "1d1feddffcfcc0b33f5c6ce9a29e341e4cd59c3f78e7ee45f4a40c038b1d6cbb"
 dependencies = [
  "log",
  "ring 0.16.20",
- "rustls-webpki 0.101.7",
+ "rustls-webpki",
  "sct",
-]
-
-[[package]]
-name = "rustls"
-version = "0.22.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e87c9956bd9807afa1f77e0f7594af32566e830e088a5576d27c5b6f30f49d41"
-dependencies = [
- "log",
- "ring 0.17.3",
- "rustls-pki-types",
- "rustls-webpki 0.102.1",
- "subtle",
- "zeroize",
 ]
 
 [[package]]
@@ -4775,39 +4761,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustls-pemfile"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35e4980fa29e4c4b212ffb3db068a564cbf560e51d3944b7c88bd8bf5bec64f4"
-dependencies = [
- "base64 0.21.7",
- "rustls-pki-types",
-]
-
-[[package]]
-name = "rustls-pki-types"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e9d979b3ce68192e42760c7810125eb6cf2ea10efae545a156063e61f314e2a"
-
-[[package]]
 name = "rustls-webpki"
 version = "0.101.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b6275d1ee7a1cd780b64aca7726599a1dbc893b1e64144529e55c3c2f745765"
 dependencies = [
  "ring 0.17.3",
- "untrusted 0.9.0",
-]
-
-[[package]]
-name = "rustls-webpki"
-version = "0.102.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef4ca26037c909dedb327b48c3327d0ba91d3dd3c4e05dad328f210ffb68e95b"
-dependencies = [
- "ring 0.17.3",
- "rustls-pki-types",
  "untrusted 0.9.0",
 ]
 
@@ -5692,7 +5651,7 @@ dependencies = [
  "log",
  "once_cell",
  "rustls 0.21.6",
- "rustls-webpki 0.101.7",
+ "rustls-webpki",
  "serde",
  "serde_json",
  "socks",
@@ -6293,12 +6252,6 @@ dependencies = [
  "syn 2.0.48",
  "synstructure",
 ]
-
-[[package]]
-name = "zeroize"
-version = "1.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "525b4ec142c6b68a2d10f01f7bbf6755599ca3f81ea53b8431b7dd348f5fdb2d"
 
 [[package]]
 name = "zerotrie"
