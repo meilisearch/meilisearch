@@ -13,7 +13,7 @@ license.workspace = true
 [dependencies]
 anyhow = "1.0.79"
 flate2 = "1.0.28"
-http = "1.0.0"
+http = "0.2.11"
 log = "0.4.20"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }

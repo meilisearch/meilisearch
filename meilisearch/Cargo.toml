@@ -48,7 +48,7 @@ flate2 = "1.0.28"
 fst = "0.4.7"
 futures = "0.3.30"
 futures-util = "0.3.30"
-http = "1.0.0"
+http = "0.2.11"
 index-scheduler = { path = "../index-scheduler" }
 indexmap = { version = "2.1.0", features = ["serde"] }
 is-terminal = "0.4.10"
