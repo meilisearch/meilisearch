@@ -5,12 +5,13 @@ mod transform;
 mod typed_chunk;
 
 use std::collections::{HashMap, HashSet};
-use std::io::{Cursor, Read, Seek};
+use std::io::{Read, Seek};
 use std::iter::FromIterator;
 use std::num::NonZeroU32;
 use std::result::Result as StdResult;
 
 use crossbeam_channel::{Receiver, Sender};
+use grenad::{Merger, MergerBuilder};
 use heed::types::Str;
 use heed::Database;
 use log::debug;
@@ -351,11 +352,7 @@ where
 
         let stop_words = self.index.stop_words(self.wtxn)?;
         let separators = self.index.allowed_separators(self.wtxn)?;
-        let separators: Option<Vec<_>> =
-            separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
         let dictionary = self.index.dictionary(self.wtxn)?;
-        let dictionary: Option<Vec<_>> =
-            dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
         let exact_attributes = self.index.exact_attributes_ids(self.wtxn)?;
         let proximity_precision = self.index.proximity_precision(self.wtxn)?.unwrap_or_default();
 
@@ -389,47 +386,53 @@ where
 
         // Run extraction pipeline in parallel.
         pool.install(|| {
-            puffin::profile_scope!("extract_and_send_grenad_chunks");
-            // split obkv file into several chunks
-            let original_chunk_iter =
-                grenad_obkv_into_chunks(original_documents, pool_params, documents_chunk_size);
+            let stop_words = stop_words.map(|sw| sw.map_data(Vec::from).unwrap());
+            rayon::spawn(move || {
+                puffin::profile_scope!("extract_and_send_grenad_chunks");
+                // split obkv file into several chunks
+                let original_chunk_iter =
+                    grenad_obkv_into_chunks(original_documents, pool_params, documents_chunk_size);
 
-            // split obkv file into several chunks
-            let flattened_chunk_iter =
-                grenad_obkv_into_chunks(flattened_documents, pool_params, documents_chunk_size);
+                // split obkv file into several chunks
+                let flattened_chunk_iter =
+                    grenad_obkv_into_chunks(flattened_documents, pool_params, documents_chunk_size);
 
-            let result = original_chunk_iter.and_then(|original_chunk| {
-                let flattened_chunk = flattened_chunk_iter?;
-                // extract all databases from the chunked obkv douments
-                extract::data_from_obkv_documents(
-                    original_chunk,
-                    flattened_chunk,
-                    pool_params,
-                    lmdb_writer_sx.clone(),
-                    searchable_fields,
-                    faceted_fields,
-                    primary_key_id,
-                    geo_fields_ids,
-                    field_id_map,
-                    stop_words,
-                    separators.as_deref(),
-                    dictionary.as_deref(),
-                    max_positions_per_attributes,
-                    exact_attributes,
-                    proximity_precision,
-                    cloned_embedder,
-                )
+                let separators: Option<Vec<_>> =
+                    separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
+                let dictionary: Option<Vec<_>> =
+                    dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
+                let result = original_chunk_iter.and_then(|original_chunk| {
+                    let flattened_chunk = flattened_chunk_iter?;
+                    // extract all databases from the chunked obkv douments
+                    extract::data_from_obkv_documents(
+                        original_chunk,
+                        flattened_chunk,
+                        pool_params,
+                        lmdb_writer_sx.clone(),
+                        searchable_fields,
+                        faceted_fields,
+                        primary_key_id,
+                        geo_fields_ids,
+                        field_id_map,
+                        stop_words,
+                        separators.as_deref(),
+                        dictionary.as_deref(),
+                        max_positions_per_attributes,
+                        exact_attributes,
+                        proximity_precision,
+                        cloned_embedder,
+                    )
+                });
+
+                if let Err(e) = result {
+                    let _ = lmdb_writer_sx.send(Err(e));
+                }
+
+                // needs to be dropped to avoid channel waiting lock.
+                drop(lmdb_writer_sx);
             });
-
-            if let Err(e) = result {
-                let _ = lmdb_writer_sx.send(Err(e));
-            }
-
-            // needs to be dropped to avoid channel waiting lock.
-            drop(lmdb_writer_sx);
         });
 
-        let index_is_empty = self.index.number_of_documents(self.wtxn)? == 0;
         let mut final_documents_ids = RoaringBitmap::new();
 
         let mut databases_seen = 0;
@@ -457,12 +460,21 @@ where
                     word_fid_docids_reader,
                 } => {
                     let cloneable_chunk = unsafe { as_cloneable_grenad(&word_docids_reader)? };
-                    word_docids = Some(cloneable_chunk);
+                    let word_docids = word_docids.get_or_insert_with(|| {
+                        MergerBuilder::new(merge_deladd_cbo_roaring_bitmaps as MergeFn)
+                    });
+                    word_docids.push(cloneable_chunk.into_cursor()?);
                     let cloneable_chunk =
                         unsafe { as_cloneable_grenad(&exact_word_docids_reader)? };
-                    exact_word_docids = Some(cloneable_chunk);
+                    let exact_word_docids = exact_word_docids.get_or_insert_with(|| {
+                        MergerBuilder::new(merge_deladd_cbo_roaring_bitmaps as MergeFn)
+                    });
+                    exact_word_docids.push(cloneable_chunk.into_cursor()?);
                     let cloneable_chunk = unsafe { as_cloneable_grenad(&word_fid_docids_reader)? };
-                    word_fid_docids = Some(cloneable_chunk);
+                    let word_fid_docids = word_fid_docids.get_or_insert_with(|| {
+                        MergerBuilder::new(merge_deladd_cbo_roaring_bitmaps as MergeFn)
+                    });
+                    word_fid_docids.push(cloneable_chunk.into_cursor()?);
                     TypedChunk::WordDocids {
                         word_docids_reader,
                         exact_word_docids_reader,
@@ -471,7 +483,10 @@ where
                 }
                 TypedChunk::WordPositionDocids(chunk) => {
                     let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
-                    word_position_docids = Some(cloneable_chunk);
+                    let word_position_docids = word_position_docids.get_or_insert_with(|| {
+                        MergerBuilder::new(merge_deladd_cbo_roaring_bitmaps as MergeFn)
+                    });
+                    word_position_docids.push(cloneable_chunk.into_cursor()?);
                     TypedChunk::WordPositionDocids(chunk)
                 }
                 TypedChunk::VectorPoints {
@@ -551,10 +566,10 @@ where
         }
 
         self.execute_prefix_databases(
-            word_docids,
-            exact_word_docids,
-            word_position_docids,
-            word_fid_docids,
+            word_docids.map(MergerBuilder::build),
+            exact_word_docids.map(MergerBuilder::build),
+            word_position_docids.map(MergerBuilder::build),
+            word_fid_docids.map(MergerBuilder::build),
         )?;
 
         Ok(number_of_documents)
@@ -563,10 +578,10 @@ where
     #[logging_timer::time("IndexDocuments::{}")]
     pub fn execute_prefix_databases(
         self,
-        word_docids: Option<grenad::Reader<CursorClonableMmap>>,
-        exact_word_docids: Option<grenad::Reader<CursorClonableMmap>>,
-        word_position_docids: Option<grenad::Reader<CursorClonableMmap>>,
-        word_fid_docids: Option<grenad::Reader<CursorClonableMmap>>,
+        word_docids: Option<Merger<CursorClonableMmap, MergeFn>>,
+        exact_word_docids: Option<Merger<CursorClonableMmap, MergeFn>>,
+        word_position_docids: Option<Merger<CursorClonableMmap, MergeFn>>,
+        word_fid_docids: Option<Merger<CursorClonableMmap, MergeFn>>,
     ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
@@ -741,7 +756,7 @@ where
 #[allow(clippy::too_many_arguments)]
 fn execute_word_prefix_docids(
     txn: &mut heed::RwTxn,
-    reader: grenad::Reader<Cursor<ClonableMmap>>,
+    merger: Merger<CursorClonableMmap, MergeFn>,
     word_docids_db: Database<Str, CboRoaringBitmapCodec>,
     word_prefix_docids_db: Database<Str, CboRoaringBitmapCodec>,
     indexer_config: &IndexerConfig,
@@ -751,13 +766,12 @@ fn execute_word_prefix_docids(
 ) -> Result<()> {
     puffin::profile_function!();
 
-    let cursor = reader.into_cursor()?;
     let mut builder = WordPrefixDocids::new(txn, word_docids_db, word_prefix_docids_db);
     builder.chunk_compression_type = indexer_config.chunk_compression_type;
     builder.chunk_compression_level = indexer_config.chunk_compression_level;
     builder.max_nb_chunks = indexer_config.max_nb_chunks;
     builder.max_memory = indexer_config.max_memory;
-    builder.execute(cursor, new_prefix_fst_words, common_prefix_fst_words, del_prefix_fst_words)?;
+    builder.execute(merger, new_prefix_fst_words, common_prefix_fst_words, del_prefix_fst_words)?;
     Ok(())
 }
 

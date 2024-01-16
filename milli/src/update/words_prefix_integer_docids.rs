@@ -47,7 +47,7 @@ impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
     #[logging_timer::time("WordPrefixIntegerDocids::{}")]
     pub fn execute(
         self,
-        new_word_integer_docids: grenad::Reader<CursorClonableMmap>,
+        new_word_integer_docids: grenad::Merger<CursorClonableMmap, MergeFn>,
         new_prefix_fst_words: &[String],
         common_prefix_fst_words: &[&[String]],
         del_prefix_fst_words: &HashSet<Vec<u8>>,
@@ -64,14 +64,14 @@ impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
             self.max_memory,
         );
 
-        let mut new_word_integer_docids_iter = new_word_integer_docids.into_cursor()?;
-
         if !common_prefix_fst_words.is_empty() {
             // We fetch all the new common prefixes between the previous and new prefix fst.
             let mut buffer = Vec::new();
             let mut current_prefixes: Option<&&[String]> = None;
             let mut prefixes_cache = HashMap::new();
-            while let Some((key, data)) = new_word_integer_docids_iter.move_on_next()? {
+            let mut new_word_integer_docids_iter =
+                new_word_integer_docids.into_stream_merger_iter()?;
+            while let Some((key, data)) = new_word_integer_docids_iter.next()? {
                 let (word, pos) =
                     StrBEU16Codec::bytes_decode(key).map_err(heed::Error::Decoding)?;
 
