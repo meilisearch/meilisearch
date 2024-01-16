@@ -66,6 +66,10 @@ jobs:
       - uses: actions/checkout@v3
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.7.1
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
       - name: Run cargo check without any default features
         uses: actions-rs/cargo@v1
         with:
