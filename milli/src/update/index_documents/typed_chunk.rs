@@ -7,7 +7,7 @@ use bytemuck::allocation::pod_collect_to_vec;
 use charabia::{Language, Script};
 use grenad::MergerBuilder;
 use heed::types::Bytes;
-use heed::{PutFlags, RwTxn};
+use heed::RwTxn;
 use obkv::{KvReader, KvWriter};
 use roaring::RoaringBitmap;
 
@@ -119,7 +119,6 @@ pub(crate) fn write_typed_chunk_into_index(
     typed_chunk: TypedChunk,
     index: &Index,
     wtxn: &mut RwTxn,
-    index_is_empty: bool,
 ) -> Result<(RoaringBitmap, bool)> {
     puffin::profile_function!(typed_chunk.to_debug_string());
 
@@ -172,11 +171,10 @@ pub(crate) fn write_typed_chunk_into_index(
             index.put_documents_ids(wtxn, &docids)?;
         }
         TypedChunk::FieldIdWordCountDocids(fid_word_count_docids_iter) => {
-            append_entries_into_database(
+            write_entries_into_database(
                 fid_word_count_docids_iter,
                 &index.field_id_word_count_docids,
                 wtxn,
-                index_is_empty,
                 deladd_serialize_add_side,
                 merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
@@ -188,31 +186,28 @@ pub(crate) fn write_typed_chunk_into_index(
             word_fid_docids_reader,
         } => {
             let word_docids_iter = unsafe { as_cloneable_grenad(&word_docids_reader) }?;
-            append_entries_into_database(
+            write_entries_into_database(
                 word_docids_iter.clone(),
                 &index.word_docids,
                 wtxn,
-                index_is_empty,
                 deladd_serialize_add_side,
                 merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
 
             let exact_word_docids_iter = unsafe { as_cloneable_grenad(&exact_word_docids_reader) }?;
-            append_entries_into_database(
+            write_entries_into_database(
                 exact_word_docids_iter.clone(),
                 &index.exact_word_docids,
                 wtxn,
-                index_is_empty,
                 deladd_serialize_add_side,
                 merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
 
             let word_fid_docids_iter = unsafe { as_cloneable_grenad(&word_fid_docids_reader) }?;
-            append_entries_into_database(
+            write_entries_into_database(
                 word_fid_docids_iter,
                 &index.word_fid_docids,
                 wtxn,
-                index_is_empty,
                 deladd_serialize_add_side,
                 merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
@@ -230,11 +225,10 @@ pub(crate) fn write_typed_chunk_into_index(
             is_merged_database = true;
         }
         TypedChunk::WordPositionDocids(word_position_docids_iter) => {
-            append_entries_into_database(
+            write_entries_into_database(
                 word_position_docids_iter,
                 &index.word_position_docids,
                 wtxn,
-                index_is_empty,
                 deladd_serialize_add_side,
                 merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
@@ -251,44 +245,40 @@ pub(crate) fn write_typed_chunk_into_index(
             is_merged_database = true;
         }
         TypedChunk::FieldIdFacetExistsDocids(facet_id_exists_docids) => {
-            append_entries_into_database(
+            write_entries_into_database(
                 facet_id_exists_docids,
                 &index.facet_id_exists_docids,
                 wtxn,
-                index_is_empty,
                 deladd_serialize_add_side,
                 merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
             is_merged_database = true;
         }
         TypedChunk::FieldIdFacetIsNullDocids(facet_id_is_null_docids) => {
-            append_entries_into_database(
+            write_entries_into_database(
                 facet_id_is_null_docids,
                 &index.facet_id_is_null_docids,
                 wtxn,
-                index_is_empty,
                 deladd_serialize_add_side,
                 merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
             is_merged_database = true;
         }
         TypedChunk::FieldIdFacetIsEmptyDocids(facet_id_is_empty_docids) => {
-            append_entries_into_database(
+            write_entries_into_database(
                 facet_id_is_empty_docids,
                 &index.facet_id_is_empty_docids,
                 wtxn,
-                index_is_empty,
                 deladd_serialize_add_side,
                 merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
             is_merged_database = true;
         }
         TypedChunk::WordPairProximityDocids(word_pair_proximity_docids_iter) => {
-            append_entries_into_database(
+            write_entries_into_database(
                 word_pair_proximity_docids_iter,
                 &index.word_pair_proximity_docids,
                 wtxn,
-                index_is_empty,
                 deladd_serialize_add_side,
                 merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
@@ -541,7 +531,6 @@ fn write_entries_into_database<R, K, V, FS, FM>(
     data: grenad::Reader<R>,
     database: &heed::Database<K, V>,
     wtxn: &mut RwTxn,
-    index_is_empty: bool,
     serialize_value: FS,
     merge_values: FM,
 ) -> Result<()>
@@ -559,13 +548,9 @@ where
     while let Some((key, value)) = cursor.move_on_next()? {
         if valid_lmdb_key(key) {
             buffer.clear();
-            let value = if index_is_empty {
-                Some(serialize_value(value, &mut buffer)?)
-            } else {
-                match database.get(wtxn, key)? {
-                    Some(prev_value) => merge_values(value, prev_value, &mut buffer)?,
-                    None => Some(serialize_value(value, &mut buffer)?),
-                }
+            let value = match database.get(wtxn, key)? {
+                Some(prev_value) => merge_values(value, prev_value, &mut buffer)?,
+                None => Some(serialize_value(value, &mut buffer)?),
             };
             match value {
                 Some(value) => database.put(wtxn, key, value)?,
@@ -573,61 +558,6 @@ where
                     database.delete(wtxn, key)?;
                 }
             }
-        }
-    }
-
-    Ok(())
-}
-
-/// Write provided entries in database using serialize_value function.
-/// merge_values function is used if an entry already exist in the database.
-/// All provided entries must be ordered.
-/// If the index is not empty, write_entries_into_database is called instead.
-fn append_entries_into_database<R, K, V, FS, FM>(
-    data: grenad::Reader<R>,
-    database: &heed::Database<K, V>,
-    wtxn: &mut RwTxn,
-    index_is_empty: bool,
-    serialize_value: FS,
-    merge_values: FM,
-) -> Result<()>
-where
-    R: io::Read + io::Seek,
-    FS: for<'a> Fn(&'a [u8], &'a mut Vec<u8>) -> Result<&'a [u8]>,
-    FM: for<'a> Fn(&[u8], &[u8], &'a mut Vec<u8>) -> Result<Option<&'a [u8]>>,
-    K: for<'a> heed::BytesDecode<'a>,
-{
-    puffin::profile_function!(format!("number of entries: {}", data.len()));
-
-    if !index_is_empty {
-        return write_entries_into_database(
-            data,
-            database,
-            wtxn,
-            false,
-            serialize_value,
-            merge_values,
-        );
-    }
-
-    let mut buffer = Vec::new();
-    let mut database = database.iter_mut(wtxn)?.remap_types::<Bytes, Bytes>();
-
-    let mut cursor = data.into_cursor()?;
-    while let Some((key, value)) = cursor.move_on_next()? {
-        if valid_lmdb_key(key) {
-            debug_assert!(
-                K::bytes_decode(key).is_ok(),
-                "Couldn't decode key with the database decoder, key length: {} - key bytes: {:x?}",
-                key.len(),
-                &key
-            );
-            buffer.clear();
-            let value = serialize_value(value, &mut buffer)?;
-            unsafe {
-                // safety: We do not keep a reference to anything that lives inside the database
-                database.put_current_with_options::<Bytes>(PutFlags::APPEND, key, value)?
-            };
         }
     }
 

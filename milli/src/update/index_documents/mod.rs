@@ -494,7 +494,7 @@ where
             };
 
             let (docids, is_merged_database) =
-                write_typed_chunk_into_index(typed_chunk, self.index, self.wtxn, index_is_empty)?;
+                write_typed_chunk_into_index(typed_chunk, self.index, self.wtxn)?;
             if !docids.is_empty() {
                 final_documents_ids |= docids;
                 let documents_seen_count = final_documents_ids.len();
