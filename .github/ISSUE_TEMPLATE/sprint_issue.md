@@ -37,4 +37,6 @@ Related spec: WIP
   - [ ] global `/settings` route configurated in the [`update_all` function](https://github.com/meilisearch/meilisearch/blob/5204c0b60b384cbc79621b6b2176fca086069e8e/meilisearch/src/routes/indexes/settings.rs#L655-L751)
 - [ ] Ensure the dump serializing is consistent with the `/settings` route serializing, e.g., enums case can be different (`camelCase` in route and `PascalCase` in the dump)
 
+## Impacted teams
+
 <!---Ping the related teams. Ask for the engine manager if any hesitation-->
