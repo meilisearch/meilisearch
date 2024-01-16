@@ -41,7 +41,7 @@ levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
 memmap2 = "0.7.1"
 obkv = "0.2.1"
 once_cell = "1.19.0"
-ordered-float = "3.9.2"
+ordered-float = "4.2.0"
 rand_pcg = { version = "0.3.1", features = ["serde1"] }
 rayon = "1.8.0"
 roaring = "0.10.2"
