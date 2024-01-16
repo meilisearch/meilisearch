@@ -20,7 +20,7 @@ use rustls::server::{
 use rustls::RootCertStore;
 use rustls_pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
 use serde::{Deserialize, Serialize};
-use sysinfo::{RefreshKind, System, SystemExt};
+use sysinfo::{RefreshKind, System};
 use url::Url;
 
 const POSSIBLE_ENV: [&str; 2] = ["development", "production"];
