@@ -37,7 +37,7 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
             let reader = KvReaderDelAdd::new(obkv.get(primary_key_id).unwrap());
             let document_id =
                 reader.get(DelAdd::Deletion).or(reader.get(DelAdd::Addition)).unwrap();
-            serde_json::from_slice(&document_id).unwrap()
+            serde_json::from_slice(document_id).unwrap()
         };
 
         // first we get the two fields
