@@ -18,7 +18,7 @@ use segment::message::{Identify, Track, User};
 use segment::{AutoBatcher, Batcher, HttpClient};
 use serde::Serialize;
 use serde_json::{json, Value};
-use sysinfo::{DiskExt, System, SystemExt};
+use sysinfo::{Disks, System};
 use time::OffsetDateTime;
 use tokio::select;
 use tokio::sync::mpsc::{self, Receiver, Sender};
@@ -386,16 +386,17 @@ impl Segment {
     fn compute_traits(opt: &Opt, stats: Stats) -> Value {
         static FIRST_START_TIMESTAMP: Lazy<Instant> = Lazy::new(Instant::now);
         static SYSTEM: Lazy<Value> = Lazy::new(|| {
+            let disks = Disks::new_with_refreshed_list();
             let mut sys = System::new_all();
             sys.refresh_all();
-            let kernel_version =
-                sys.kernel_version().and_then(|k| k.split_once('-').map(|(k, _)| k.to_string()));
+            let kernel_version = System::kernel_version()
+                .and_then(|k| k.split_once('-').map(|(k, _)| k.to_string()));
             json!({
-                    "distribution": sys.name(),
+                    "distribution": System::name(),
                     "kernel_version": kernel_version,
                     "cores": sys.cpus().len(),
                     "ram_size": sys.total_memory(),
-                    "disk_size": sys.disks().iter().map(|disk| disk.total_space()).max(),
+                    "disk_size": disks.iter().map(|disk| disk.total_space()).max(),
                     "server_provider": std::env::var("MEILI_SERVER_PROVIDER").ok(),
             })
         });

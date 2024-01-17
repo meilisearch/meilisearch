@@ -181,7 +181,7 @@ mod tests {
             get_simple_string_index_with_multiple_field_ids(),
             get_random_looking_string_index_with_multiple_field_ids(),
         ];
-        for (_i, index) in indexes.iter().enumerate() {
+        for index in indexes {
             let txn = index.env.read_txn().unwrap();
             let candidates = RoaringBitmap::new();
             let mut results = String::new();
@@ -212,7 +212,7 @@ mod tests {
             get_simple_string_index_with_multiple_field_ids(),
             get_random_looking_string_index_with_multiple_field_ids(),
         ];
-        for (_i, index) in indexes.iter().enumerate() {
+        for index in indexes {
             let txn = index.env.read_txn().unwrap();
             let candidates = RoaringBitmap::new();
             let mut results = String::new();

@@ -372,8 +372,7 @@ pub(crate) fn write_typed_chunk_into_index(
             // FIXME: allow customizing distance
             let writers: std::result::Result<Vec<_>, _> = (0..=u8::MAX)
                 .map(|k| {
-                    arroy::Writer::prepare(
-                        wtxn,
+                    arroy::Writer::new(
                         index.vector_arroy,
                         writer_index | (k as u16),
                         expected_dimension,
@@ -407,7 +406,7 @@ pub(crate) fn write_typed_chunk_into_index(
                             // code error if we somehow got the wrong dimension
                             .unwrap();
 
-                    if embeddings.embedding_count() > u8::MAX.into() {
+                    if embeddings.embedding_count() > usize::from(u8::MAX) {
                         let external_docid = if let Ok(Some(Ok(index))) = index
                             .external_id_of(wtxn, std::iter::once(docid))
                             .map(|it| it.into_iter().next())

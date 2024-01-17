@@ -14,14 +14,14 @@ license.workspace = true
 [dependencies]
 bimap = { version = "0.6.3", features = ["serde"] }
 bincode = "1.3.3"
-bstr = "1.4.0"
-bytemuck = { version = "1.13.1", features = ["extern_crate_alloc"] }
-byteorder = "1.4.3"
+bstr = "1.9.0"
+bytemuck = { version = "1.14.0", features = ["extern_crate_alloc"] }
+byteorder = "1.5.0"
 charabia = { version = "0.8.5", default-features = false }
 concat-arrays = "0.1.2"
-crossbeam-channel = "0.5.8"
-deserr = "0.6.0"
-either = { version = "1.8.1", features = ["serde"] }
+crossbeam-channel = "0.5.11"
+deserr = "0.6.1"
+either = { version = "1.9.0", features = ["serde"] }
 flatten-serde-json = { path = "../flatten-serde-json" }
 fst = "0.4.7"
 fxhash = "0.2.1"
@@ -35,32 +35,32 @@ heed = { version = "0.20.0-alpha.9", default-features = false, features = [
     "serde-bincode",
     "read-txn-no-tls",
 ] }
-indexmap = { version = "2.0.0", features = ["serde"] }
+indexmap = { version = "2.1.0", features = ["serde"] }
 json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
 memmap2 = "0.7.1"
-obkv = "0.2.0"
-once_cell = "1.17.1"
-ordered-float = "3.6.0"
+obkv = "0.2.1"
+once_cell = "1.19.0"
+ordered-float = "4.2.0"
 rand_pcg = { version = "0.3.1", features = ["serde1"] }
-rayon = "1.7.0"
-roaring = "0.10.1"
+rayon = "1.8.0"
+roaring = "0.10.2"
 rstar = { version = "0.11.0", features = ["serde"] }
-serde = { version = "1.0.160", features = ["derive"] }
-serde_json = { version = "1.0.95", features = ["preserve_order"] }
-slice-group-by = "0.3.0"
+serde = { version = "1.0.195", features = ["derive"] }
+serde_json = { version = "1.0.111", features = ["preserve_order"] }
+slice-group-by = "0.3.1"
 smallstr = { version = "0.3.0", features = ["serde"] }
-smallvec = "1.10.0"
+smallvec = "1.12.0"
 smartstring = "1.0.1"
-tempfile = "3.5.0"
-thiserror = "1.0.40"
-time = { version = "0.3.20", features = [
+tempfile = "3.9.0"
+thiserror = "1.0.56"
+time = { version = "0.3.31", features = [
     "serde-well-known",
     "formatting",
     "parsing",
     "macros",
 ] }
-uuid = { version = "1.3.1", features = ["v4"] }
+uuid = { version = "1.6.1", features = ["v4"] }
 
 filter-parser = { path = "../filter-parser" }
 
@@ -71,9 +71,9 @@ itertools = "0.11.0"
 puffin = "0.16.0"
 
 # logging
-log = "0.4.17"
+log = "0.4.20"
 logging_timer = "1.1.0"
-csv = "1.2.1"
+csv = "1.3.0"
 candle-core = { git = "https://github.com/huggingface/candle.git", version = "0.3.1" }
 candle-transformers = { git = "https://github.com/huggingface/candle.git", version = "0.3.1" }
 candle-nn = { git = "https://github.com/huggingface/candle.git", version = "0.3.1" }
@@ -81,21 +81,21 @@ tokenizers = { git = "https://github.com/huggingface/tokenizers.git", tag = "v0.
 hf-hub = { git = "https://github.com/dureuill/hf-hub.git", branch = "rust_tls", default_features = false, features = [
     "online",
 ] }
-tokio = { version = "1.34.0", features = ["rt"] }
-futures = "0.3.29"
-reqwest = { version = "0.11.16", features = [
+tokio = { version = "1.35.1", features = ["rt"] }
+futures = "0.3.30"
+reqwest = { version = "0.11.23", features = [
     "rustls-tls",
     "json",
 ], default-features = false }
-tiktoken-rs = "0.5.7"
+tiktoken-rs = "0.5.8"
 liquid = "0.26.4"
-arroy = { git = "https://github.com/meilisearch/arroy.git", version = "0.1.0" }
+arroy = "0.2.0"
 rand = "0.8.5"
 
 [dev-dependencies]
-mimalloc = { version = "0.1.37", default-features = false }
+mimalloc = { version = "0.1.39", default-features = false }
 big_s = "1.0.2"
-insta = "1.29.0"
+insta = "1.34.0"
 maplit = "1.0.2"
 md5 = "0.7.0"
 meili-snap = { path = "../meili-snap" }

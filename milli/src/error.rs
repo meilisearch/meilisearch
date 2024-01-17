@@ -172,7 +172,7 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     TooManyDocumentIds { primary_key: String, document: Object },
     #[error("The primary key inference failed as the engine did not find any field ending with `id` in its name. Please specify the primary key manually using the `primaryKey` query parameter.")]
     NoPrimaryKeyCandidateFound,
-    #[error("The primary key inference failed as the engine found {} fields ending with `id` in their names: '{}' and '{}'. Please specify the primary key manually using the `primaryKey` query parameter.", .candidates.len(), .candidates.get(0).unwrap(), .candidates.get(1).unwrap())]
+    #[error("The primary key inference failed as the engine found {} fields ending with `id` in their names: '{}' and '{}'. Please specify the primary key manually using the `primaryKey` query parameter.", .candidates.len(), .candidates.first().unwrap(), .candidates.get(1).unwrap())]
     MultiplePrimaryKeyCandidatesFound { candidates: Vec<String> },
     #[error("There is no more space left on the device. Consider increasing the size of the disk/partition.")]
     NoSpaceLeftOnDevice,
@@ -251,6 +251,7 @@ impl From<arroy::Error> for Error {
             arroy::Error::DatabaseFull
             | arroy::Error::InvalidItemAppend
             | arroy::Error::UnmatchingDistance { .. }
+            | arroy::Error::MissingNode
             | arroy::Error::MissingMetadata => {
                 Error::InternalError(InternalError::ArroyError(value))
             }

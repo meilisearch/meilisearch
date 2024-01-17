@@ -95,6 +95,7 @@ impl fmt::Display for ErrorType {
     }
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum Code {
     // index related error

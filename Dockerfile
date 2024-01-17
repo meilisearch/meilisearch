@@ -1,5 +1,5 @@
 # Compile
-FROM    rust:1.71.1-alpine3.18 AS compiler
+FROM    rust:1.75.0-alpine3.18 AS compiler
 
 RUN     apk add -q --update-cache --no-cache build-base openssl-dev
 
