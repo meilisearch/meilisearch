@@ -1760,6 +1760,181 @@ async fn add_documents_invalid_geo_field() {
       "finishedAt": "[date]"
     }
     "###);
+
+    // The three next tests are related to #4333
+
+    // _geo has a lat and lng but set to `null`
+    let documents = json!([
+        {
+            "id": "12",
+            "_geo": { "lng": null, "lat": 67}
+        }
+    ]);
+
+    let (response, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let response = index.wait_task(response.uid()).await;
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 14,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Could not parse longitude in the document with the id: `12`. Was expecting a finite number but instead got `null`.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo has a lat and lng but set to `null`
+    let documents = json!([
+        {
+            "id": "12",
+            "_geo": { "lng": 35, "lat": null }
+        }
+    ]);
+
+    let (response, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let response = index.wait_task(response.uid()).await;
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 15,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Could not parse latitude in the document with the id: `12`. Was expecting a finite number but instead got `null`.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo has a lat and lng but set to `null`
+    let documents = json!([
+        {
+            "id": "13",
+            "_geo": { "lng": null, "lat": null }
+        }
+    ]);
+
+    let (response, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let response = index.wait_task(response.uid()).await;
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 16,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Could not parse latitude nor longitude in the document with the id: `13`. Was expecting finite numbers but instead got `null` and `null`.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+}
+
+// Related to #4333
+#[actix_rt::test]
+async fn add_invalid_geo_and_then_settings() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index.create(Some("id")).await;
+
+    // _geo is not an object
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "lat": null, "lng": null },
+        }
+    ]);
+    let (ret, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let ret = index.wait_task(ret.uid()).await;
+    snapshot!(ret, @r###"
+    {
+      "uid": 1,
+      "indexUid": "test",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let (ret, code) = index.update_settings(json!({"sortableAttributes": ["_geo"]})).await;
+    snapshot!(code, @"202 Accepted");
+    let ret = index.wait_task(ret.uid()).await;
+    snapshot!(ret, @r###"
+    {
+      "uid": 2,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "sortableAttributes": [
+          "_geo"
+        ]
+      },
+      "error": {
+        "message": "Could not parse latitude in the document with the id: `\"11\"`. Was expecting a finite number but instead got `null`.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
 }
 
 #[actix_rt::test]
