@@ -37,6 +37,12 @@ Related spec: WIP
   - [ ] global `/settings` route configurated in the [`update_all` function](https://github.com/meilisearch/meilisearch/blob/5204c0b60b384cbc79621b6b2176fca086069e8e/meilisearch/src/routes/indexes/settings.rs#L655-L751)
 - [ ] Ensure the dump serializing is consistent with the `/settings` route serializing, e.g., enums case can be different (`camelCase` in route and `PascalCase` in the dump)
 
+#### Special cases when adding a setting for an experimental feature
+
+- [ ] ⚠️ API stability: The setting does not appear on the main settings route when the feature has never been enabled (e.g. mark it `Unset` when returned from the index in this situation. See [an example](https://github.com/meilisearch/meilisearch/blob/7a89abd2a025606a42f8b219e539117eb2eb029f/meilisearch-types/src/settings.rs#L608))
+- [ ] The setting cannot be set when the feature is disabled, either by the main settings route or the subroute (see [`validate_settings` function](https://github.com/meilisearch/meilisearch/blob/7a89abd2a025606a42f8b219e539117eb2eb029f/meilisearch/src/routes/indexes/settings.rs#L811))
+- [ ] If possible, the setting is reset when the feature is disabled (hard if it requires reindexing)
+
 ## Impacted teams
 
 <!---Ping the related teams. Ask for the engine manager if any hesitation-->
