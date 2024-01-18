@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::io::Read;
 
 use crate::entry::{
-    Entry, NewCallsite, NewSpan, NewThread, ResourceId, SpanClose, SpanEnter, SpanExit, SpanId,
+    Entry, MemoryStats, NewCallsite, NewSpan, NewThread, ResourceId, SpanClose, SpanEnter,
+    SpanExit, SpanId,
 };
 use crate::{Error, TraceReader};
 
@@ -28,7 +29,7 @@ pub fn print_trace<R: Read>(trace: TraceReader<R>) -> Result<(), Error> {
             Entry::NewSpan(span) => {
                 spans.insert(span.id, (span, SpanStatus::Outside));
             }
-            Entry::SpanEnter(SpanEnter { id, time }) => {
+            Entry::SpanEnter(SpanEnter { id, time, memory }) => {
                 let (span, status) = spans.get_mut(&id).unwrap();
 
                 let SpanStatus::Outside = status else {
@@ -39,14 +40,23 @@ pub fn print_trace<R: Read>(trace: TraceReader<R>) -> Result<(), Error> {
 
                 let span = *span;
 
-                println!(
-                    "[{}]{}::{} <-",
-                    print_thread(&threads, span.thread_id),
-                    print_backtrace(&spans, &calls, &span),
-                    print_span(&calls, &span)
-                );
+                match memory {
+                    Some(stats) => println!(
+                        "[{}]{}::{} ({}) <-",
+                        print_thread(&threads, span.thread_id),
+                        print_backtrace(&spans, &calls, &span),
+                        print_span(&calls, &span),
+                        print_memory(stats),
+                    ),
+                    None => println!(
+                        "[{}]{}::{} <-",
+                        print_thread(&threads, span.thread_id),
+                        print_backtrace(&spans, &calls, &span),
+                        print_span(&calls, &span),
+                    ),
+                }
             }
-            Entry::SpanExit(SpanExit { id, time }) => {
+            Entry::SpanExit(SpanExit { id, time, memory }) => {
                 let (span, status) = spans.get_mut(&id).unwrap();
 
                 let SpanStatus::Inside(begin) = status else {
@@ -58,13 +68,23 @@ pub fn print_trace<R: Read>(trace: TraceReader<R>) -> Result<(), Error> {
 
                 let span = *span;
 
-                println!(
-                    "[{}]{}::{} -> {}",
-                    print_thread(&threads, span.thread_id),
-                    print_backtrace(&spans, &calls, &span),
-                    print_span(&calls, &span),
-                    print_duration(time - begin),
-                )
+                match memory {
+                    Some(stats) => println!(
+                        "[{}]{}::{} ({}) -> {}",
+                        print_thread(&threads, span.thread_id),
+                        print_backtrace(&spans, &calls, &span),
+                        print_span(&calls, &span),
+                        print_memory(stats),
+                        print_duration(time - begin),
+                    ),
+                    None => println!(
+                        "[{}]{}::{} -> {}",
+                        print_thread(&threads, span.thread_id),
+                        print_backtrace(&spans, &calls, &span),
+                        print_span(&calls, &span),
+                        print_duration(time - begin),
+                    ),
+                }
             }
             Entry::SpanClose(SpanClose { id, time: _ }) => {
                 spans.remove(&id);
@@ -125,4 +145,8 @@ fn print_duration(duration: std::time::Duration) -> String {
     } else {
         format!("{}d", duration.as_secs_f64() / 3600.0 / 24.0)
     }
+}
+
+fn print_memory(memory: MemoryStats) -> String {
+    // Format only the total allocations in GiB, MiB, KiB, Bytes
 }

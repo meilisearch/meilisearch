@@ -5,10 +5,11 @@ use fxprof_processed_profile::{
     MarkerFieldFormat, MarkerLocation, MarkerSchema, MarkerSchemaField, Profile, ProfilerMarker,
     ReferenceTimestamp, SamplingInterval, StringHandle, Timestamp,
 };
+use once_cell::unsync::Lazy;
 use serde_json::json;
 
 use crate::entry::{
-    Entry, NewCallsite, NewSpan, ResourceId, SpanClose, SpanEnter, SpanExit, SpanId,
+    Entry, MemoryStats, NewCallsite, NewSpan, ResourceId, SpanClose, SpanEnter, SpanExit, SpanId,
 };
 use crate::{Error, TraceReader};
 
@@ -33,6 +34,16 @@ pub fn to_firefox_profile<R: std::io::Read>(
     let subcategory = profile.add_subcategory(category, "subcategory");
 
     // TODO kero: add counters profile.add_counters + last_memory_value
+    let mut current_memory = MemoryStats::default();
+    let mut allocations_counter = Lazy::new(|| {
+        profile.add_counter(main, "mimmalloc", "Memory", "Amount of allocation calls")
+    });
+    let mut deallocations_counter = Lazy::new(|| {
+        profile.add_counter(main, "mimmalloc", "Memory", "Amount of deallocation calls")
+    });
+    let mut reallocations_counter = Lazy::new(|| {
+        profile.add_counter(main, "mimmalloc", "Memory", "Amount of reallocation calls")
+    });
 
     for entry in trace {
         let entry = entry?;
@@ -56,7 +67,7 @@ pub fn to_firefox_profile<R: std::io::Read>(
             Entry::NewSpan(span) => {
                 spans.insert(span.id, (span, SpanStatus::Outside));
             }
-            Entry::SpanEnter(SpanEnter { id, time }) => {
+            Entry::SpanEnter(SpanEnter { id, time, memory }) => {
                 let (_span, status) = spans.get_mut(&id).unwrap();
 
                 let SpanStatus::Outside = status else {
@@ -67,16 +78,41 @@ pub fn to_firefox_profile<R: std::io::Read>(
 
                 last_timestamp = Timestamp::from_nanos_since_reference(time.as_nanos() as u64);
 
-                /* TODO kero: compute delta and update them
-                profile.add_counter_sample(
-                    counter,
-                    timestamp,
-                    value_delta,
-                    number_of_operations_delta,
-                )
-                */
+                if let Some(stats) = memory {
+                    let MemoryStats {
+                        allocations,
+                        deallocations,
+                        reallocations,
+                        bytes_allocated,
+                        bytes_deallocated,
+                        bytes_reallocated,
+                    } = current_memory - stats;
+
+                    profile.add_counter_sample(
+                        *allocations_counter,
+                        last_timestamp,
+                        bytes_allocated as f64,
+                        allocations.try_into().unwrap(),
+                    );
+
+                    profile.add_counter_sample(
+                        *deallocations_counter,
+                        last_timestamp,
+                        bytes_deallocated as f64,
+                        deallocations.try_into().unwrap(),
+                    );
+
+                    profile.add_counter_sample(
+                        *reallocations_counter,
+                        last_timestamp,
+                        bytes_reallocated as f64,
+                        reallocations.try_into().unwrap(),
+                    );
+
+                    current_memory = stats;
+                }
             }
-            Entry::SpanExit(SpanExit { id, time }) => {
+            Entry::SpanExit(SpanExit { id, time, memory }) => {
                 let (span, status) = spans.get_mut(&id).unwrap();
 
                 let SpanStatus::Inside(begin) = status else {
@@ -108,14 +144,39 @@ pub fn to_firefox_profile<R: std::io::Read>(
                     1,
                 );
 
-                /* TODO kero: compute delta and update them
-                profile.add_counter_sample(
-                    counter,
-                    timestamp,
-                    value_delta,
-                    number_of_operations_delta,
-                )
-                */
+                if let Some(stats) = memory {
+                    let MemoryStats {
+                        allocations,
+                        deallocations,
+                        reallocations,
+                        bytes_allocated,
+                        bytes_deallocated,
+                        bytes_reallocated,
+                    } = current_memory - stats;
+
+                    profile.add_counter_sample(
+                        *allocations_counter,
+                        last_timestamp,
+                        bytes_allocated as f64,
+                        allocations.try_into().unwrap(),
+                    );
+
+                    profile.add_counter_sample(
+                        *deallocations_counter,
+                        last_timestamp,
+                        bytes_deallocated as f64,
+                        deallocations.try_into().unwrap(),
+                    );
+
+                    profile.add_counter_sample(
+                        *reallocations_counter,
+                        last_timestamp,
+                        bytes_reallocated as f64,
+                        reallocations.try_into().unwrap(),
+                    );
+
+                    current_memory = stats;
+                }
 
                 let (callsite, _) = calls.get(&span.call_id).unwrap();
 
