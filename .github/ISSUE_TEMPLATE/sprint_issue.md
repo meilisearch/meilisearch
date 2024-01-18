@@ -46,3 +46,4 @@ Related spec: WIP
 ## Impacted teams
 
 <!---Ping the related teams. Ask for the engine manager if any hesitation-->
+<!---@meilisearch/docs-team when there is any API change, e.g. settings addition-->
