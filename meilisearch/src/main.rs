@@ -14,12 +14,18 @@ use is_terminal::IsTerminal;
 use meilisearch::analytics::Analytics;
 use meilisearch::{analytics, create_app, prototype_name, setup_meilisearch, Opt};
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
+use mimalloc::MiMalloc;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::Layer;
 
+#[cfg(not(feature = "stats_alloc"))]
 #[global_allocator]
-static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+static ALLOC: MiMalloc = MiMalloc;
+
+#[cfg(feature = "stats_alloc")]
+#[global_allocator]
+static ALLOC: stats_alloc::StatsAlloc<MiMalloc> = stats_alloc::StatsAlloc::new(MiMalloc);
 
 /// does all the setup before meilisearch is launched
 fn setup(opt: &Opt) -> anyhow::Result<()> {
