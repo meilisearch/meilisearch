@@ -3669,6 +3669,7 @@ dependencies = [
  "siphasher 1.0.0",
  "slice-group-by",
  "static-files",
+ "stats_alloc",
  "sysinfo",
  "tar",
  "temp-env",
@@ -5230,6 +5231,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
+name = "stats_alloc"
+version = "0.1.10"
+source = "git+https://github.com/Kerollmops/stats_alloc?branch=stable-const-fn-trait#6f83c52160c7d0550fdf770e1f73d239b0ff9a97"
+
+[[package]]
 name = "strsim"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5706,8 +5712,10 @@ version = "0.1.0"
 dependencies = [
  "color-spantrace",
  "fxprof-processed-profile",
+ "once_cell",
  "serde",
  "serde_json",
+ "stats_alloc",
  "tracing",
  "tracing-error",
  "tracing-subscriber",

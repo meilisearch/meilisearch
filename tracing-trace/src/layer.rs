@@ -1,9 +1,11 @@
+use std::alloc::{GlobalAlloc, System};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::Write;
 use std::ops::ControlFlow;
 use std::sync::RwLock;
 
+use stats_alloc::StatsAlloc;
 use tracing::span::{Attributes, Id as TracingId};
 use tracing::{Metadata, Subscriber};
 use tracing_subscriber::layer::Context;
@@ -15,21 +17,37 @@ use crate::entry::{
 use crate::{Error, Trace};
 
 /// Layer that measures the time spent in spans.
-pub struct TraceLayer {
+pub struct TraceLayer<A: GlobalAlloc + 'static = System> {
     sender: std::sync::mpsc::Sender<Entry>,
     callsites: RwLock<HashMap<OpaqueIdentifier, ResourceId>>,
     start_time: std::time::Instant,
-    // TODO: kero add handle to allocator stats here
+    memory_allocator: Option<&'static StatsAlloc<A>>,
 }
 
 impl<W: Write> Trace<W> {
-    pub fn new(writer: W) -> (Self, TraceLayer) {
+    pub fn new(writer: W) -> (Self, TraceLayer<System>) {
         let (sender, receiver) = std::sync::mpsc::channel();
         let trace = Trace { writer, receiver };
         let layer = TraceLayer {
             sender,
             callsites: Default::default(),
             start_time: std::time::Instant::now(),
+            memory_allocator: None,
+        };
+        (trace, layer)
+    }
+
+    pub fn with_stats_alloc<A: GlobalAlloc>(
+        writer: W,
+        stats_alloc: &'static StatsAlloc<A>,
+    ) -> (Self, TraceLayer<A>) {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let trace = Trace { writer, receiver };
+        let layer = TraceLayer {
+            sender,
+            callsites: Default::default(),
+            start_time: std::time::Instant::now(),
+            memory_allocator: Some(stats_alloc),
         };
         (trace, layer)
     }
@@ -137,13 +155,19 @@ where
     }
 
     fn on_enter(&self, id: &TracingId, _ctx: Context<'_, S>) {
-        // TODO kero: add memory here
-        self.send(Entry::SpanEnter(SpanEnter { id: id.into(), time: self.elapsed() }))
+        self.send(Entry::SpanEnter(SpanEnter {
+            id: id.into(),
+            time: self.elapsed(),
+            memory: self.memory_allocator.map(|ma| ma.stats().into()),
+        }))
     }
 
     fn on_exit(&self, id: &TracingId, _ctx: Context<'_, S>) {
-        // TODO kero: add memory here
-        self.send(Entry::SpanExit(SpanExit { id: id.into(), time: self.elapsed() }))
+        self.send(Entry::SpanExit(SpanExit {
+            id: id.into(),
+            time: self.elapsed(),
+            memory: self.memory_allocator.map(|ma| ma.stats().into()),
+        }))
     }
 
     fn on_close(&self, id: TracingId, _ctx: Context<'_, S>) {

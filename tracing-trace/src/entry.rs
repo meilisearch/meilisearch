@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::ops::Sub;
 
 use serde::{Deserialize, Serialize};
 use tracing::span::Id as TracingId;
@@ -64,12 +65,14 @@ pub struct NewThread {
 pub struct SpanEnter {
     pub id: SpanId,
     pub time: std::time::Duration,
+    pub memory: Option<MemoryStats>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct SpanExit {
     pub id: SpanId,
     pub time: std::time::Duration,
+    pub memory: Option<MemoryStats>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -84,6 +87,55 @@ pub struct NewSpan {
 pub struct SpanClose {
     pub id: SpanId,
     pub time: std::time::Duration,
+}
+
+/// A struct with a lot of memory allocation stats akin
+/// to the `stats_alloc::Stats` one but implements the
+/// `Serialize/Deserialize` serde traits.
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+pub struct MemoryStats {
+    pub allocations: usize,
+    pub deallocations: usize,
+    pub reallocations: usize,
+    pub bytes_allocated: usize,
+    pub bytes_deallocated: usize,
+    pub bytes_reallocated: isize,
+}
+
+impl From<stats_alloc::Stats> for MemoryStats {
+    fn from(stats: stats_alloc::Stats) -> Self {
+        let stats_alloc::Stats {
+            allocations,
+            deallocations,
+            reallocations,
+            bytes_allocated,
+            bytes_deallocated,
+            bytes_reallocated,
+        } = stats;
+        MemoryStats {
+            allocations,
+            deallocations,
+            reallocations,
+            bytes_allocated,
+            bytes_deallocated,
+            bytes_reallocated,
+        }
+    }
+}
+
+impl Sub for MemoryStats {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self::Output {
+        Self {
+            allocations: self.allocations - other.allocations,
+            deallocations: self.deallocations - other.deallocations,
+            reallocations: self.reallocations - other.reallocations,
+            bytes_allocated: self.bytes_allocated - other.bytes_allocated,
+            bytes_deallocated: self.bytes_deallocated - other.bytes_deallocated,
+            bytes_reallocated: self.bytes_reallocated - other.bytes_reallocated,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]

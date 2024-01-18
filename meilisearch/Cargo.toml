@@ -108,6 +108,7 @@ url = { version = "2.5.0", features = ["serde"] }
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 tracing-trace = { version = "0.1.0", path = "../tracing-trace" }
+stats_alloc = { git = "https://github.com/Kerollmops/stats_alloc", branch = "stable-const-fn-trait", optional = true }
 
 [dev-dependencies]
 actix-rt = "2.9.0"
@@ -136,7 +137,7 @@ vergen = { version = "7.5.1", default-features = false, features = ["git"] }
 zip = { version = "0.6.6", optional = true }
 
 [features]
-default = ["analytics", "meilisearch-types/all-tokenizations", "mini-dashboard"]
+default = ["stats_alloc", "analytics", "meilisearch-types/all-tokenizations", "mini-dashboard"]
 analytics = ["segment"]
 mini-dashboard = [
     "actix-web-static-files",
