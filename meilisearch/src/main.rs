@@ -35,8 +35,10 @@ fn setup(opt: &Opt) -> anyhow::Result<()> {
 
     let file = std::fs::File::create(&trace_file)
         .with_context(|| format!("could not create trace file at '{}'", trace_file))?;
-    // TODO kero: Pass the allocator stats to Trace here
+    #[cfg(not(feature = "stats_alloc"))]
     let (mut trace, layer) = tracing_trace::Trace::new(file);
+    #[cfg(feature = "stats_alloc")]
+    let (mut trace, layer) = tracing_trace::Trace::with_stats_alloc(file, &ALLOC);
 
     let subscriber = tracing_subscriber::registry()
         .with(

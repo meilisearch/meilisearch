@@ -83,7 +83,7 @@ enum OpaqueIdentifier {
     Call(tracing::callsite::Identifier),
 }
 
-impl TraceLayer {
+impl<A: GlobalAlloc> TraceLayer<A> {
     fn resource_id(&self, opaque: OpaqueIdentifier) -> Option<ResourceId> {
         self.callsites.read().unwrap().get(&opaque).copied()
     }
@@ -132,9 +132,10 @@ impl TraceLayer {
     }
 }
 
-impl<S> Layer<S> for TraceLayer
+impl<S, A> Layer<S> for TraceLayer<A>
 where
     S: Subscriber,
+    A: GlobalAlloc,
 {
     fn on_new_span(&self, attrs: &Attributes<'_>, id: &TracingId, _ctx: Context<'_, S>) {
         let call_id = self
