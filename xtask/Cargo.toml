@@ -2,7 +2,7 @@
 name = "xtask"
 version.workspace = true
 authors.workspace = true
-description.workspace = true
+description = "Workspace automation tool following the xtask pattern <https://github.com/matklad/cargo-xtask>"
 homepage.workspace = true
 readme.workspace = true
 edition.workspace = true

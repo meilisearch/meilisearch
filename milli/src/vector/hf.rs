@@ -70,7 +70,13 @@ impl std::fmt::Debug for Embedder {
 
 impl Embedder {
     pub fn new(options: EmbedderOptions) -> std::result::Result<Self, NewEmbedderError> {
-        let device = candle_core::Device::cuda_if_available(0).unwrap();
+        let device = match candle_core::Device::cuda_if_available(0) {
+            Ok(device) => device,
+            Err(error) => {
+                log::warn!("could not initialize CUDA device for Hugging Face embedder, defaulting to CPU: {}", error);
+                candle_core::Device::Cpu
+            }
+        };
         let repo = match options.revision.clone() {
             Some(revision) => Repo::with_revision(options.model.clone(), RepoType::Model, revision),
             None => Repo::model(options.model.clone()),

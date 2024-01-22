@@ -138,5 +138,5 @@ greek = ["charabia/greek"]
 # allow khmer specialized tokenization
 khmer = ["charabia/khmer"]
 
-# allow CUDA support
+# allow CUDA support, see <https://github.com/meilisearch/meilisearch/issues/4306>
 cuda = ["candle-core/cuda"]
