@@ -75,6 +75,12 @@ If you get a "Too many open files" error you might want to increase the open fil
 ulimit -Sn 3000
 ```
 
+#### Build tools
+
+Meilisearch follows the [cargo xtask](https://github.com/matklad/cargo-xtask) workflow to provide some build tools.
+
+Run `cargo xtask --help` from the root of the repository to find out what is available.
+
 ## Git Guidelines
 
 ### Git Branches

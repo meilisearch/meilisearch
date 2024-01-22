@@ -16,6 +16,7 @@ members = [
     "json-depth-checker",
     "benchmarks",
     "fuzzers",
+    "xtask",
 ]
 
 [workspace.package]
