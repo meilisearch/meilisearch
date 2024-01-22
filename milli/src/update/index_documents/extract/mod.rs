@@ -15,7 +15,6 @@ use std::io::BufReader;
 
 use crossbeam_channel::Sender;
 use rayon::prelude::*;
-use tracing::debug;
 
 use self::extract_docid_word_positions::extract_docid_word_positions;
 use self::extract_facet_number_docids::extract_facet_number_docids;
@@ -29,10 +28,7 @@ use self::extract_vector_points::{
 use self::extract_word_docids::extract_word_docids;
 use self::extract_word_pair_proximity_docids::extract_word_pair_proximity_docids;
 use self::extract_word_position_docids::extract_word_position_docids;
-use super::helpers::{
-    as_cloneable_grenad, merge_deladd_cbo_roaring_bitmaps, CursorClonableMmap, GrenadParameters,
-    MergeFn, MergeableReader,
-};
+use super::helpers::{as_cloneable_grenad, CursorClonableMmap, GrenadParameters};
 use super::{helpers, TypedChunk};
 use crate::proximity::ProximityPrecision;
 use crate::vector::EmbeddingConfigs;
@@ -52,7 +48,7 @@ pub(crate) fn data_from_obkv_documents(
     primary_key_id: FieldId,
     geo_fields_ids: Option<(FieldId, FieldId)>,
     field_id_map: FieldsIdsMap,
-    stop_words: Option<fst::Set<&[u8]>>,
+    stop_words: Option<fst::Set<Vec<u8>>>,
     allowed_separators: Option<&[&str]>,
     dictionary: Option<&[&str]>,
     max_positions_per_attributes: Option<u32>,
@@ -62,201 +58,154 @@ pub(crate) fn data_from_obkv_documents(
 ) -> Result<()> {
     puffin::profile_function!();
 
-    original_obkv_chunks
-        .par_bridge()
-        .map(|original_documents_chunk| {
-            send_original_documents_data(
-                original_documents_chunk,
-                indexer,
-                lmdb_writer_sx.clone(),
-                field_id_map.clone(),
-                embedders.clone(),
-            )
-        })
-        .collect::<Result<()>>()?;
-
-    #[allow(clippy::type_complexity)]
-    let result: Result<(Vec<_>, (Vec<_>, (Vec<_>, (Vec<_>, (Vec<_>, Vec<_>)))))> =
-        flattened_obkv_chunks
-            .par_bridge()
-            .map(|flattened_obkv_chunks| {
-                send_and_extract_flattened_documents_data(
-                    flattened_obkv_chunks,
-                    indexer,
-                    lmdb_writer_sx.clone(),
-                    &searchable_fields,
-                    &faceted_fields,
-                    primary_key_id,
-                    geo_fields_ids,
-                    &stop_words,
-                    &allowed_separators,
-                    &dictionary,
-                    max_positions_per_attributes,
-                )
-            })
-            .collect();
-
-    let (
-        docid_word_positions_chunks,
-        (
-            fid_docid_facet_numbers_chunks,
-            (
-                fid_docid_facet_strings_chunks,
-                (
-                    facet_is_null_docids_chunks,
-                    (facet_is_empty_docids_chunks, facet_exists_docids_chunks),
-                ),
-            ),
-        ),
-    ) = result?;
-
-    // merge facet_exists_docids and send them as a typed chunk
-    {
-        let lmdb_writer_sx = lmdb_writer_sx.clone();
-        rayon::spawn(move || {
-            debug!(database = "facet-id-exists-docids", "merge");
-            match facet_exists_docids_chunks.merge(merge_deladd_cbo_roaring_bitmaps, &indexer) {
-                Ok(reader) => {
-                    let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetExistsDocids(reader)));
-                }
-                Err(e) => {
-                    let _ = lmdb_writer_sx.send(Err(e));
-                }
-            }
-        });
-    }
-
-    // merge facet_is_null_docids and send them as a typed chunk
-    {
-        let lmdb_writer_sx = lmdb_writer_sx.clone();
-        rayon::spawn(move || {
-            debug!(database = "facet-id-is-null-docids", "merge");
-            match facet_is_null_docids_chunks.merge(merge_deladd_cbo_roaring_bitmaps, &indexer) {
-                Ok(reader) => {
-                    let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetIsNullDocids(reader)));
-                }
-                Err(e) => {
-                    let _ = lmdb_writer_sx.send(Err(e));
-                }
-            }
-        });
-    }
-
-    // merge facet_is_empty_docids and send them as a typed chunk
-    {
-        let lmdb_writer_sx = lmdb_writer_sx.clone();
-        rayon::spawn(move || {
-            debug!(database = "facet-id-is-empty-docids", "merge");
-            match facet_is_empty_docids_chunks.merge(merge_deladd_cbo_roaring_bitmaps, &indexer) {
-                Ok(reader) => {
-                    let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetIsEmptyDocids(reader)));
-                }
-                Err(e) => {
-                    let _ = lmdb_writer_sx.send(Err(e));
-                }
-            }
-        });
-    }
-
-    if proximity_precision == ProximityPrecision::ByWord {
-        spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
-            docid_word_positions_chunks.clone(),
-            indexer,
-            lmdb_writer_sx.clone(),
-            extract_word_pair_proximity_docids,
-            merge_deladd_cbo_roaring_bitmaps,
-            TypedChunk::WordPairProximityDocids,
-            "word-pair-proximity-docids",
-        );
-    }
-
-    spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
-        docid_word_positions_chunks.clone(),
-        indexer,
-        lmdb_writer_sx.clone(),
-        extract_fid_word_count_docids,
-        merge_deladd_cbo_roaring_bitmaps,
-        TypedChunk::FieldIdWordCountDocids,
-        "field-id-wordcount-docids",
-    );
-
-    spawn_extraction_task::<
-        _,
-        _,
-        Vec<(
-            grenad::Reader<BufReader<File>>,
-            grenad::Reader<BufReader<File>>,
-            grenad::Reader<BufReader<File>>,
-        )>,
-    >(
-        docid_word_positions_chunks.clone(),
-        indexer,
-        lmdb_writer_sx.clone(),
-        move |doc_word_pos, indexer| extract_word_docids(doc_word_pos, indexer, &exact_attributes),
-        merge_deladd_cbo_roaring_bitmaps,
-        |(word_docids_reader, exact_word_docids_reader, word_fid_docids_reader)| {
-            TypedChunk::WordDocids {
-                word_docids_reader,
-                exact_word_docids_reader,
-                word_fid_docids_reader,
-            }
+    let (original_pipeline_result, flattened_pipeline_result): (Result<_>, Result<_>) = rayon::join(
+        || {
+            original_obkv_chunks
+                .par_bridge()
+                .map(|original_documents_chunk| {
+                    send_original_documents_data(
+                        original_documents_chunk,
+                        indexer,
+                        lmdb_writer_sx.clone(),
+                        field_id_map.clone(),
+                        embedders.clone(),
+                    )
+                })
+                .collect::<Result<()>>()
         },
-        "word-docids",
+        || {
+            flattened_obkv_chunks
+                .par_bridge()
+                .map(|flattened_obkv_chunks| {
+                    send_and_extract_flattened_documents_data(
+                        flattened_obkv_chunks,
+                        indexer,
+                        lmdb_writer_sx.clone(),
+                        &searchable_fields,
+                        &faceted_fields,
+                        primary_key_id,
+                        geo_fields_ids,
+                        &stop_words,
+                        &allowed_separators,
+                        &dictionary,
+                        max_positions_per_attributes,
+                    )
+                })
+                .map(|result| {
+                    if let Ok((
+                        ref docid_word_positions_chunk,
+                        (ref fid_docid_facet_numbers_chunk, ref fid_docid_facet_strings_chunk),
+                    )) = result
+                    {
+                        run_extraction_task::<_, _, grenad::Reader<BufReader<File>>>(
+                            docid_word_positions_chunk.clone(),
+                            indexer,
+                            lmdb_writer_sx.clone(),
+                            extract_fid_word_count_docids,
+                            TypedChunk::FieldIdWordCountDocids,
+                            "field-id-wordcount-docids",
+                        );
+
+                        let exact_attributes = exact_attributes.clone();
+                        run_extraction_task::<
+                            _,
+                            _,
+                            (
+                                grenad::Reader<BufReader<File>>,
+                                grenad::Reader<BufReader<File>>,
+                                grenad::Reader<BufReader<File>>,
+                            ),
+                        >(
+                            docid_word_positions_chunk.clone(),
+                            indexer,
+                            lmdb_writer_sx.clone(),
+                            move |doc_word_pos, indexer| {
+                                extract_word_docids(doc_word_pos, indexer, &exact_attributes)
+                            },
+                            |(
+                                word_docids_reader,
+                                exact_word_docids_reader,
+                                word_fid_docids_reader,
+                            )| {
+                                TypedChunk::WordDocids {
+                                    word_docids_reader,
+                                    exact_word_docids_reader,
+                                    word_fid_docids_reader,
+                                }
+                            },
+                            "word-docids",
+                        );
+
+                        run_extraction_task::<_, _, grenad::Reader<BufReader<File>>>(
+                            docid_word_positions_chunk.clone(),
+                            indexer,
+                            lmdb_writer_sx.clone(),
+                            extract_word_position_docids,
+                            TypedChunk::WordPositionDocids,
+                            "word-position-docids",
+                        );
+
+                        run_extraction_task::<
+                            _,
+                            _,
+                            (grenad::Reader<BufReader<File>>, grenad::Reader<BufReader<File>>),
+                        >(
+                            fid_docid_facet_strings_chunk.clone(),
+                            indexer,
+                            lmdb_writer_sx.clone(),
+                            extract_facet_string_docids,
+                            TypedChunk::FieldIdFacetStringDocids,
+                            "field-id-facet-string-docids",
+                        );
+
+                        run_extraction_task::<_, _, grenad::Reader<BufReader<File>>>(
+                            fid_docid_facet_numbers_chunk.clone(),
+                            indexer,
+                            lmdb_writer_sx.clone(),
+                            extract_facet_number_docids,
+                            TypedChunk::FieldIdFacetNumberDocids,
+                            "field-id-facet-number-docids",
+                        );
+
+                        if proximity_precision == ProximityPrecision::ByWord {
+                            run_extraction_task::<_, _, grenad::Reader<BufReader<File>>>(
+                                docid_word_positions_chunk.clone(),
+                                indexer,
+                                lmdb_writer_sx.clone(),
+                                extract_word_pair_proximity_docids,
+                                TypedChunk::WordPairProximityDocids,
+                                "word-pair-proximity-docids",
+                            );
+                        }
+                    }
+
+                    Ok(())
+                })
+                .collect::<Result<()>>()
+        },
     );
 
-    spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
-        docid_word_positions_chunks.clone(),
-        indexer,
-        lmdb_writer_sx.clone(),
-        extract_word_position_docids,
-        merge_deladd_cbo_roaring_bitmaps,
-        TypedChunk::WordPositionDocids,
-        "word-position-docids",
-    );
-
-    spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
-        fid_docid_facet_strings_chunks,
-        indexer,
-        lmdb_writer_sx.clone(),
-        extract_facet_string_docids,
-        merge_deladd_cbo_roaring_bitmaps,
-        TypedChunk::FieldIdFacetStringDocids,
-        "field-id-facet-string-docids",
-    );
-
-    spawn_extraction_task::<_, _, Vec<grenad::Reader<BufReader<File>>>>(
-        fid_docid_facet_numbers_chunks,
-        indexer,
-        lmdb_writer_sx,
-        extract_facet_number_docids,
-        merge_deladd_cbo_roaring_bitmaps,
-        TypedChunk::FieldIdFacetNumberDocids,
-        "field-id-facet-number-docids",
-    );
-
-    Ok(())
+    original_pipeline_result.and(flattened_pipeline_result)
 }
 
 /// Spawn a new task to extract data for a specific DB using extract_fn.
 /// Generated grenad chunks are merged using the merge_fn.
 /// The result of merged chunks is serialized as TypedChunk using the serialize_fn
 /// and sent into lmdb_writer_sx.
-fn spawn_extraction_task<FE, FS, M>(
-    chunks: Vec<grenad::Reader<CursorClonableMmap>>,
+fn run_extraction_task<FE, FS, M>(
+    chunk: grenad::Reader<CursorClonableMmap>,
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     extract_fn: FE,
-    merge_fn: MergeFn,
     serialize_fn: FS,
     name: &'static str,
 ) where
-    FE: Fn(grenad::Reader<CursorClonableMmap>, GrenadParameters) -> Result<M::Output>
+    FE: Fn(grenad::Reader<CursorClonableMmap>, GrenadParameters) -> Result<M>
         + Sync
         + Send
         + 'static,
-    FS: Fn(M::Output) -> TypedChunk + Sync + Send + 'static,
-    M: MergeableReader + FromParallelIterator<M::Output> + Send + 'static,
-    M::Output: Send,
+    FS: Fn(M) -> TypedChunk + Sync + Send + 'static,
+    M: Send,
 {
     let current_span = tracing::Span::current();
 
@@ -264,25 +213,16 @@ fn spawn_extraction_task<FE, FS, M>(
         let child_span =
             tracing::trace_span!(target: "", parent: &current_span, "extract_multiple_chunks");
         let _entered = child_span.enter();
-        puffin::profile_scope!("extract_multiple_chunksdexing::details, ", name);
-        let chunks: Result<M> =
-            chunks.into_par_iter().map(|chunk| extract_fn(chunk, indexer)).collect();
-        let current_span = tracing::Span::current();
-
-        rayon::spawn(move || match chunks {
-            Ok(chunks) => {
-                let child_span = tracing::trace_span!(target: "", parent: &current_span, "merge_multiple_chunks");
-                let _entered = child_span.enter();
-                debug!(database = name, "merge");
-                puffin::profile_scope!("merge_multiple_chunks", name);
-                let reader = chunks.merge(merge_fn, &indexer);
-                let _ = lmdb_writer_sx.send(reader.map(serialize_fn));
+        puffin::profile_scope!("extract_multiple_chunks", name);
+        match extract_fn(chunk, indexer) {
+            Ok(chunk) => {
+                let _ = lmdb_writer_sx.send(Ok(serialize_fn(chunk)));
             }
             Err(e) => {
                 let _ = lmdb_writer_sx.send(Err(e));
             }
-        })
-    });
+        }
+    })
 }
 
 /// Extract chunked data and send it into lmdb_writer_sx sender:
@@ -340,7 +280,7 @@ fn send_original_documents_data(
     });
 
     // TODO: create a custom internal error
-    lmdb_writer_sx.send(Ok(TypedChunk::Documents(original_documents_chunk))).unwrap();
+    drop(lmdb_writer_sx.send(Ok(TypedChunk::Documents(original_documents_chunk))));
     Ok(())
 }
 
@@ -360,22 +300,13 @@ fn send_and_extract_flattened_documents_data(
     faceted_fields: &HashSet<FieldId>,
     primary_key_id: FieldId,
     geo_fields_ids: Option<(FieldId, FieldId)>,
-    stop_words: &Option<fst::Set<&[u8]>>,
+    stop_words: &Option<fst::Set<Vec<u8>>>,
     allowed_separators: &Option<&[&str]>,
     dictionary: &Option<&[&str]>,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<(
     grenad::Reader<CursorClonableMmap>,
-    (
-        grenad::Reader<CursorClonableMmap>,
-        (
-            grenad::Reader<CursorClonableMmap>,
-            (
-                grenad::Reader<BufReader<File>>,
-                (grenad::Reader<BufReader<File>>, grenad::Reader<BufReader<File>>),
-            ),
-        ),
-    ),
+    (grenad::Reader<CursorClonableMmap>, grenad::Reader<CursorClonableMmap>),
 )> {
     let flattened_documents_chunk =
         flattened_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
@@ -446,16 +377,17 @@ fn send_and_extract_flattened_documents_data(
                     fid_docid_facet_strings_chunk.clone(),
                 )));
 
-                Ok((
-                    fid_docid_facet_numbers_chunk,
-                    (
-                        fid_docid_facet_strings_chunk,
-                        (
-                            fid_facet_is_null_docids_chunk,
-                            (fid_facet_is_empty_docids_chunk, fid_facet_exists_docids_chunk),
-                        ),
-                    ),
-                ))
+                let _ = lmdb_writer_sx
+                    .send(Ok(TypedChunk::FieldIdFacetIsNullDocids(fid_facet_is_null_docids_chunk)));
+
+                let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetIsEmptyDocids(
+                    fid_facet_is_empty_docids_chunk,
+                )));
+
+                let _ = lmdb_writer_sx
+                    .send(Ok(TypedChunk::FieldIdFacetExistsDocids(fid_facet_exists_docids_chunk)));
+
+                Ok((fid_docid_facet_numbers_chunk, fid_docid_facet_strings_chunk))
             },
         );
 
