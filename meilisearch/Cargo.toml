@@ -137,7 +137,7 @@ vergen = { version = "7.5.1", default-features = false, features = ["git"] }
 zip = { version = "0.6.6", optional = true }
 
 [features]
-default = ["stats_alloc", "analytics", "meilisearch-types/all-tokenizations", "mini-dashboard"]
+default = ["analytics", "meilisearch-types/all-tokenizations", "mini-dashboard"]
 analytics = ["segment"]
 mini-dashboard = [
     "actix-web-static-files",
