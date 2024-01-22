@@ -313,9 +313,6 @@ where
             }
         };
 
-        let original_documents = grenad::Reader::new(original_documents)?;
-        let flattened_documents = grenad::Reader::new(flattened_documents)?;
-
         // create LMDB writer channel
         let (lmdb_writer_sx, lmdb_writer_rx): (
             Sender<Result<TypedChunk>>,
@@ -368,8 +365,24 @@ where
             max_memory: self.indexer_config.max_memory,
             max_nb_chunks: self.indexer_config.max_nb_chunks, // default value, may be chosen.
         };
-        let documents_chunk_size =
-            self.indexer_config.documents_chunk_size.unwrap_or(1024 * 1024 * 4); // 4MiB
+        let documents_chunk_size = match self.indexer_config.documents_chunk_size {
+            Some(chunk_size) => chunk_size,
+            None => {
+                let default_chunk_size = 1024 * 1024 * 4; // 4MiB
+                let min_chunk_size = 1024 * 512; // 512KiB
+
+                // compute the chunk size from the number of available threads and the inputed data size.
+                let total_size = flattened_documents.metadata().map(|m| m.len());
+                let current_num_threads = pool.current_num_threads();
+                total_size
+                    .map_or(default_chunk_size, |size| (size as usize) / current_num_threads)
+                    .max(min_chunk_size)
+            }
+        };
+
+        let original_documents = grenad::Reader::new(original_documents)?;
+        let flattened_documents = grenad::Reader::new(flattened_documents)?;
+
         let max_positions_per_attributes = self.indexer_config.max_positions_per_attributes;
 
         let cloned_embedder = self.embedders.clone();
