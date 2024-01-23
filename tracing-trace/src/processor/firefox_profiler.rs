@@ -5,7 +5,6 @@ use fxprof_processed_profile::{
     MarkerFieldFormat, MarkerLocation, MarkerSchema, MarkerSchemaField, Profile, ProfilerMarker,
     ReferenceTimestamp, SamplingInterval, StringHandle, Timestamp,
 };
-use once_cell::unsync::Lazy;
 use serde_json::json;
 
 use crate::entry::{
@@ -33,17 +32,19 @@ pub fn to_firefox_profile<R: std::io::Read>(
     let category = profile.add_category("general", fxprof_processed_profile::CategoryColor::Blue);
     let subcategory = profile.add_subcategory(category, "subcategory");
 
-    // TODO kero: add counters profile.add_counters + last_memory_value
     let mut current_memory = MemoryStats::default();
-    let mut allocations_counter = Lazy::new(|| {
+    let init_allocations = |profile: &mut Profile| {
         profile.add_counter(main, "mimmalloc", "Memory", "Amount of allocation calls")
-    });
-    let mut deallocations_counter = Lazy::new(|| {
+    };
+    let init_deallocations = |profile: &mut Profile| {
         profile.add_counter(main, "mimmalloc", "Memory", "Amount of deallocation calls")
-    });
-    let mut reallocations_counter = Lazy::new(|| {
+    };
+    let init_reallocations = |profile: &mut Profile| {
         profile.add_counter(main, "mimmalloc", "Memory", "Amount of reallocation calls")
-    });
+    };
+    let mut allocations_counter = None;
+    let mut deallocations_counter = None;
+    let mut reallocations_counter = None;
 
     for entry in trace {
         let entry = entry?;
@@ -88,22 +89,28 @@ pub fn to_firefox_profile<R: std::io::Read>(
                         bytes_reallocated,
                     } = current_memory - stats;
 
+                    let counter =
+                        *allocations_counter.get_or_insert_with(|| init_allocations(&mut profile));
                     profile.add_counter_sample(
-                        *allocations_counter,
+                        counter,
                         last_timestamp,
                         bytes_allocated as f64,
                         allocations.try_into().unwrap(),
                     );
 
+                    let counter = *deallocations_counter
+                        .get_or_insert_with(|| init_deallocations(&mut profile));
                     profile.add_counter_sample(
-                        *deallocations_counter,
+                        counter,
                         last_timestamp,
                         bytes_deallocated as f64,
                         deallocations.try_into().unwrap(),
                     );
 
+                    let counter = *reallocations_counter
+                        .get_or_insert_with(|| init_reallocations(&mut profile));
                     profile.add_counter_sample(
-                        *reallocations_counter,
+                        counter,
                         last_timestamp,
                         bytes_reallocated as f64,
                         reallocations.try_into().unwrap(),
@@ -154,22 +161,28 @@ pub fn to_firefox_profile<R: std::io::Read>(
                         bytes_reallocated,
                     } = current_memory - stats;
 
+                    let counter =
+                        *allocations_counter.get_or_insert_with(|| init_allocations(&mut profile));
                     profile.add_counter_sample(
-                        *allocations_counter,
+                        counter,
                         last_timestamp,
                         bytes_allocated as f64,
                         allocations.try_into().unwrap(),
                     );
 
+                    let counter = *deallocations_counter
+                        .get_or_insert_with(|| init_deallocations(&mut profile));
                     profile.add_counter_sample(
-                        *deallocations_counter,
+                        counter,
                         last_timestamp,
                         bytes_deallocated as f64,
                         deallocations.try_into().unwrap(),
                     );
 
+                    let counter = *reallocations_counter
+                        .get_or_insert_with(|| init_reallocations(&mut profile));
                     profile.add_counter_sample(
-                        *reallocations_counter,
+                        counter,
                         last_timestamp,
                         bytes_reallocated as f64,
                         reallocations.try_into().unwrap(),
