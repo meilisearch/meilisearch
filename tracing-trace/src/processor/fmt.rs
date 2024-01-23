@@ -147,6 +147,24 @@ fn print_duration(duration: std::time::Duration) -> String {
     }
 }
 
+/// Format only the allocated bytes, deallocated bytes and reallocated bytes in GiB, MiB, KiB, Bytes.
 fn print_memory(memory: MemoryStats) -> String {
-    // Format only the total allocations in GiB, MiB, KiB, Bytes
+    use byte_unit::Byte;
+
+    let allocated_bytes = Byte::from_bytes(memory.bytes_allocated.try_into().unwrap());
+    let deallocated_bytes = Byte::from_bytes(memory.bytes_deallocated.try_into().unwrap());
+
+    let reallocated_sign = if memory.bytes_reallocated < 0 { "-" } else { "" };
+    let reallocated_bytes =
+        Byte::from_bytes(memory.bytes_reallocated.abs_diff(0).try_into().unwrap());
+
+    let adjusted_allocated_bytes = allocated_bytes.get_appropriate_unit(true);
+    let adjusted_deallocated_bytes = deallocated_bytes.get_appropriate_unit(true);
+    let adjusted_reallocated_bytes = reallocated_bytes.get_appropriate_unit(true);
+
+    format!(
+        "Allocated {adjusted_allocated_bytes:.2}, \
+        Deallocated {adjusted_deallocated_bytes:.2}, \
+        Reallocated {reallocated_sign}{adjusted_reallocated_bytes:.2}"
+    )
 }
