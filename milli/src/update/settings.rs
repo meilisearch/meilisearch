@@ -372,6 +372,11 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.embedder_settings = Setting::Reset;
     }
 
+    #[tracing::instrument(
+        level = "trace"
+        skip(self, progress_callback, should_abort, old_fields_ids_map),
+        target = "indexing::documents"
+    )]
     fn reindex<FP, FA>(
         &mut self,
         progress_callback: &FP,

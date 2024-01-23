@@ -115,6 +115,7 @@ impl TypedChunk {
 
 /// Write typed chunk in the corresponding LMDB database of the provided index.
 /// Return new documents seen.
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::write_db")]
 pub(crate) fn write_typed_chunk_into_index(
     typed_chunk: TypedChunk,
     index: &Index,
@@ -126,6 +127,8 @@ pub(crate) fn write_typed_chunk_into_index(
     let mut is_merged_database = false;
     match typed_chunk {
         TypedChunk::Documents(obkv_documents_iter) => {
+            let span = tracing::trace_span!(target: "indexing::write_db", "documents");
+            let _entered = span.enter();
             let mut operations: Vec<DocumentOperation> = Default::default();
 
             let mut docids = index.documents_ids(wtxn)?;
@@ -172,6 +175,9 @@ pub(crate) fn write_typed_chunk_into_index(
             index.put_documents_ids(wtxn, &docids)?;
         }
         TypedChunk::FieldIdWordCountDocids(fid_word_count_docids_iter) => {
+            let span =
+                tracing::trace_span!(target: "indexing::write_db", "field_id_word_count_docids");
+            let _entered = span.enter();
             append_entries_into_database(
                 fid_word_count_docids_iter,
                 &index.field_id_word_count_docids,
@@ -187,6 +193,8 @@ pub(crate) fn write_typed_chunk_into_index(
             exact_word_docids_reader,
             word_fid_docids_reader,
         } => {
+            let span = tracing::trace_span!(target: "indexing::write_db", "word_docids");
+            let _entered = span.enter();
             let word_docids_iter = unsafe { as_cloneable_grenad(&word_docids_reader) }?;
             append_entries_into_database(
                 word_docids_iter.clone(),
@@ -230,6 +238,8 @@ pub(crate) fn write_typed_chunk_into_index(
             is_merged_database = true;
         }
         TypedChunk::WordPositionDocids(word_position_docids_iter) => {
+            let span = tracing::trace_span!(target: "indexing::write_db", "word_position_docids");
+            let _entered = span.enter();
             append_entries_into_database(
                 word_position_docids_iter,
                 &index.word_position_docids,
@@ -241,16 +251,25 @@ pub(crate) fn write_typed_chunk_into_index(
             is_merged_database = true;
         }
         TypedChunk::FieldIdFacetNumberDocids(facet_id_number_docids_iter) => {
+            let span =
+                tracing::trace_span!(target: "indexing::write_db","field_id_facet_number_docids");
+            let _entered = span.enter();
             let indexer = FacetsUpdate::new(index, FacetType::Number, facet_id_number_docids_iter);
             indexer.execute(wtxn)?;
             is_merged_database = true;
         }
         TypedChunk::FieldIdFacetStringDocids(facet_id_string_docids_iter) => {
+            let span =
+                tracing::trace_span!(target: "indexing::write_db", "field_id_facet_string_docids");
+            let _entered = span.enter();
             let indexer = FacetsUpdate::new(index, FacetType::String, facet_id_string_docids_iter);
             indexer.execute(wtxn)?;
             is_merged_database = true;
         }
         TypedChunk::FieldIdFacetExistsDocids(facet_id_exists_docids) => {
+            let span =
+                tracing::trace_span!(target: "indexing::write_db", "field_id_facet_exists_docids");
+            let _entered = span.enter();
             append_entries_into_database(
                 facet_id_exists_docids,
                 &index.facet_id_exists_docids,
@@ -262,6 +281,9 @@ pub(crate) fn write_typed_chunk_into_index(
             is_merged_database = true;
         }
         TypedChunk::FieldIdFacetIsNullDocids(facet_id_is_null_docids) => {
+            let span =
+                tracing::trace_span!(target: "indexing::write_db", "field_id_facet_is_null_docids");
+            let _entered = span.enter();
             append_entries_into_database(
                 facet_id_is_null_docids,
                 &index.facet_id_is_null_docids,
@@ -273,6 +295,8 @@ pub(crate) fn write_typed_chunk_into_index(
             is_merged_database = true;
         }
         TypedChunk::FieldIdFacetIsEmptyDocids(facet_id_is_empty_docids) => {
+            let span = tracing::trace_span!(target: "profile::indexing::write_db", "field_id_facet_is_empty_docids");
+            let _entered = span.enter();
             append_entries_into_database(
                 facet_id_is_empty_docids,
                 &index.facet_id_is_empty_docids,
@@ -284,6 +308,9 @@ pub(crate) fn write_typed_chunk_into_index(
             is_merged_database = true;
         }
         TypedChunk::WordPairProximityDocids(word_pair_proximity_docids_iter) => {
+            let span =
+                tracing::trace_span!(target: "indexing::write_db", "word_pair_proximity_docids");
+            let _entered = span.enter();
             append_entries_into_database(
                 word_pair_proximity_docids_iter,
                 &index.word_pair_proximity_docids,
@@ -295,6 +322,9 @@ pub(crate) fn write_typed_chunk_into_index(
             is_merged_database = true;
         }
         TypedChunk::FieldIdDocidFacetNumbers(fid_docid_facet_number) => {
+            let span =
+                tracing::trace_span!(target: "indexing::write_db", "field_id_docid_facet_numbers");
+            let _entered = span.enter();
             let index_fid_docid_facet_numbers =
                 index.field_id_docid_facet_f64s.remap_types::<Bytes, Bytes>();
             let mut cursor = fid_docid_facet_number.into_cursor()?;
@@ -315,6 +345,9 @@ pub(crate) fn write_typed_chunk_into_index(
             }
         }
         TypedChunk::FieldIdDocidFacetStrings(fid_docid_facet_string) => {
+            let span =
+                tracing::trace_span!(target: "indexing::write_db", "field_id_docid_facet_strings");
+            let _entered = span.enter();
             let index_fid_docid_facet_strings =
                 index.field_id_docid_facet_strings.remap_types::<Bytes, Bytes>();
             let mut cursor = fid_docid_facet_string.into_cursor()?;
@@ -335,6 +368,8 @@ pub(crate) fn write_typed_chunk_into_index(
             }
         }
         TypedChunk::GeoPoints(geo_points) => {
+            let span = tracing::trace_span!(target: "indexing::write_db", "geo_points");
+            let _entered = span.enter();
             let mut rtree = index.geo_rtree(wtxn)?.unwrap_or_default();
             let mut geo_faceted_docids = index.geo_faceted_documents_ids(wtxn)?;
 
@@ -365,6 +400,8 @@ pub(crate) fn write_typed_chunk_into_index(
             expected_dimension,
             embedder_name,
         } => {
+            let span = tracing::trace_span!(target: "indexing::write_db", "vector_points");
+            let _entered = span.enter();
             let embedder_index = index.embedder_category_id.get(wtxn, &embedder_name)?.ok_or(
                 InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },
             )?;
@@ -483,6 +520,8 @@ pub(crate) fn write_typed_chunk_into_index(
             log::debug!("Finished vector chunk for {}", embedder_name);
         }
         TypedChunk::ScriptLanguageDocids(sl_map) => {
+            let span = tracing::trace_span!(target: "indexing::write_db", "script_language_docids");
+            let _entered = span.enter();
             for (key, (deletion, addition)) in sl_map {
                 let mut db_key_exists = false;
                 let final_value = match index.script_language_docids.get(wtxn, &key)? {
@@ -536,6 +575,7 @@ fn merge_word_docids_reader_into_fst(
 
 /// Write provided entries in database using serialize_value function.
 /// merge_values function is used if an entry already exist in the database.
+#[tracing::instrument(skip_all, target = "indexing::write_db")]
 fn write_entries_into_database<R, K, V, FS, FM>(
     data: grenad::Reader<R>,
     database: &heed::Database<K, V>,
@@ -582,6 +622,7 @@ where
 /// merge_values function is used if an entry already exist in the database.
 /// All provided entries must be ordered.
 /// If the index is not empty, write_entries_into_database is called instead.
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::write_db")]
 fn append_entries_into_database<R, K, V, FS, FM>(
     data: grenad::Reader<R>,
     database: &heed::Database<K, V>,

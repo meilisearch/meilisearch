@@ -16,7 +16,7 @@ use crate::Result;
 ///
 /// Returns a grenad reader with the list of extracted facet numbers and
 /// documents ids from the given chunk of docid facet number positions.
-#[logging_timer::time]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 pub fn extract_facet_number_docids<R: io::Read + io::Seek>(
     fid_docid_facet_number: grenad::Reader<R>,
     indexer: GrenadParameters,

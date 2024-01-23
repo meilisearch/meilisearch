@@ -91,6 +91,7 @@ tiktoken-rs = "0.5.8"
 liquid = "0.26.4"
 arroy = "0.2.0"
 rand = "0.8.5"
+tracing = "0.1.40"
 
 [dev-dependencies]
 mimalloc = { version = "0.1.39", default-features = false }
@@ -102,15 +103,7 @@ meili-snap = { path = "../meili-snap" }
 rand = { version = "0.8.5", features = ["small_rng"] }
 
 [features]
-all-tokenizations = [
-    "charabia/chinese",
-    "charabia/hebrew",
-    "charabia/japanese",
-    "charabia/thai",
-    "charabia/korean",
-    "charabia/greek",
-    "charabia/khmer",
-]
+all-tokenizations = ["charabia/chinese", "charabia/hebrew", "charabia/japanese", "charabia/thai", "charabia/korean", "charabia/greek", "charabia/khmer"]
 
 # Use POSIX semaphores instead of SysV semaphores in LMDB
 # For more information on this feature, see heed's Cargo.toml

@@ -19,7 +19,7 @@ const MAX_COUNTED_WORDS: usize = 30;
 ///
 /// Returns a grenad reader with the list of extracted field id word counts
 /// and documents ids from the given chunk of docid word positions.
-#[logging_timer::time]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 pub fn extract_fid_word_count_docids<R: io::Read + io::Seek>(
     docid_word_positions: grenad::Reader<R>,
     indexer: GrenadParameters,
