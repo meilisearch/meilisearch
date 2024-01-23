@@ -57,13 +57,13 @@ fn setup(opt: &Opt) -> anyhow::Result<()> {
             ),
         );
 
-    std::thread::spawn(move || {
+    tokio::task::spawn(async move {
         loop {
-            trace.flush().unwrap();
-            match trace.receive() {
-                Ok(ControlFlow::Continue(_)) => continue,
-                Ok(ControlFlow::Break(_)) => break,
-                Err(_) => todo!(),
+            match tokio::time::timeout(std::time::Duration::from_secs(1), trace.receive()).await {
+                Ok(Ok(ControlFlow::Continue(()))) => continue,
+                Ok(Ok(ControlFlow::Break(_))) => break,
+                Ok(Err(_)) => todo!(),
+                Err(_) => trace.flush().unwrap(),
             }
         }
         while trace.try_receive().is_ok() {}
