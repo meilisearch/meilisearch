@@ -88,6 +88,52 @@ async fn simple_search() {
 }
 
 #[actix_rt::test]
+async fn highlighter() {
+    let server = Server::new().await;
+    let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
+
+    let (response, code) = index
+        .search_post(json!({"q": "Captain Marvel", "vector": [1.0, 1.0],
+            "hybrid": {"semanticRatio": 0.2},
+            "attributesToHighlight": [
+                     "desc"
+                   ],
+                   "highlightPreTag": "**BEGIN**",
+                   "highlightPostTag": "**END**"
+        }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_formatted":{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":["2.0","3.0"]}}},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_formatted":{"title":"Shazam!","desc":"a **BEGIN**Captain**END** **BEGIN**Marvel**END** ersatz","id":"1","_vectors":{"default":["1.0","3.0"]}}},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_formatted":{"title":"Captain Planet","desc":"He's not part of the **BEGIN**Marvel**END** Cinematic Universe","id":"2","_vectors":{"default":["1.0","2.0"]}}}]"###);
+
+    let (response, code) = index
+        .search_post(json!({"q": "Captain Marvel", "vector": [1.0, 1.0],
+            "hybrid": {"semanticRatio": 0.8},
+            "attributesToHighlight": [
+                     "desc"
+                   ],
+                   "highlightPreTag": "**BEGIN**",
+                   "highlightPostTag": "**END**"
+        }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_formatted":{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":["2.0","3.0"]}},"_semanticScore":0.99029034},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_formatted":{"title":"Captain Planet","desc":"He's not part of the **BEGIN**Marvel**END** Cinematic Universe","id":"2","_vectors":{"default":["1.0","2.0"]}},"_semanticScore":0.97434163},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_formatted":{"title":"Shazam!","desc":"a **BEGIN**Captain**END** **BEGIN**Marvel**END** ersatz","id":"1","_vectors":{"default":["1.0","3.0"]}},"_semanticScore":0.9472136}]"###);
+
+    // no highlighting on full semantic
+    let (response, code) = index
+        .search_post(json!({"q": "Captain Marvel", "vector": [1.0, 1.0],
+            "hybrid": {"semanticRatio": 1.0},
+            "attributesToHighlight": [
+                     "desc"
+                   ],
+                   "highlightPreTag": "**BEGIN**",
+                   "highlightPostTag": "**END**"
+        }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_formatted":{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":["2.0","3.0"]}},"_semanticScore":0.99029034},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_formatted":{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":["1.0","2.0"]}},"_semanticScore":0.97434163},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_formatted":{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":["1.0","3.0"]}}}]"###);
+}
+
+#[actix_rt::test]
 async fn invalid_semantic_ratio() {
     let server = Server::new().await;
     let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
