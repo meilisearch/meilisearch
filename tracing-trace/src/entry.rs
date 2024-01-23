@@ -33,6 +33,9 @@ pub enum Entry {
 
     /// A call ended
     SpanClose(SpanClose),
+
+    /// An event occurred
+    Event(Event),
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -70,6 +73,15 @@ pub struct SpanEnter {
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct SpanExit {
     pub id: SpanId,
+    pub time: std::time::Duration,
+    pub memory: Option<MemoryStats>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct Event {
+    pub call_id: ResourceId,
+    pub thread_id: ResourceId,
+    pub parent_id: Option<SpanId>,
     pub time: std::time::Duration,
     pub memory: Option<MemoryStats>,
 }

@@ -8,7 +8,8 @@ use fxprof_processed_profile::{
 use serde_json::json;
 
 use crate::entry::{
-    Entry, MemoryStats, NewCallsite, NewSpan, ResourceId, SpanClose, SpanEnter, SpanExit, SpanId,
+    Entry, Event, MemoryStats, NewCallsite, NewSpan, ResourceId, SpanClose, SpanEnter, SpanExit,
+    SpanId,
 };
 use crate::{Error, TraceReader};
 
@@ -32,7 +33,7 @@ pub fn to_firefox_profile<R: std::io::Read>(
     let category = profile.add_category("general", fxprof_processed_profile::CategoryColor::Blue);
     let subcategory = profile.add_subcategory(category, "subcategory");
 
-    let mut current_memory = MemoryStats::default();
+    let mut last_memory = MemoryStats::default();
 
     let mut memory_counters = None;
 
@@ -75,7 +76,7 @@ pub fn to_firefox_profile<R: std::io::Read>(
                     memory,
                     last_timestamp,
                     &mut memory_counters,
-                    &mut current_memory,
+                    &mut last_memory,
                 );
             }
             Entry::SpanExit(SpanExit { id, time, memory }) => {
@@ -117,7 +118,7 @@ pub fn to_firefox_profile<R: std::io::Read>(
                     memory,
                     last_timestamp,
                     &mut memory_counters,
-                    &mut current_memory,
+                    &mut last_memory,
                 );
 
                 let (callsite, _) = calls.get(&span.call_id).unwrap();
@@ -137,9 +138,58 @@ pub fn to_firefox_profile<R: std::io::Read>(
                     frames.iter().rev().cloned(),
                 )
             }
+            Entry::Event(event) => {
+                let span = event
+                    .parent_id
+                    .as_ref()
+                    .and_then(|parent_id| spans.get(parent_id))
+                    .and_then(|(span, status)| match status {
+                        SpanStatus::Outside => None,
+                        SpanStatus::Inside { .. } => Some(span),
+                    })
+                    .copied();
+                let timestamp = to_timestamp(event.time);
+
+                let thread_handle = threads.get(&event.thread_id).unwrap();
+
+                let frames = span
+                    .map(|span| make_frames(span, &spans, &calls, subcategory))
+                    .unwrap_or_default();
+
+                profile.add_sample(
+                    *thread_handle,
+                    timestamp,
+                    frames.iter().rev().cloned(),
+                    CpuDelta::ZERO,
+                    1,
+                );
+
+                let memory_delta = add_memory_samples(
+                    &mut profile,
+                    main,
+                    event.memory,
+                    last_timestamp,
+                    &mut memory_counters,
+                    &mut last_memory,
+                );
+
+                let (callsite, _) = calls.get(&event.call_id).unwrap();
+
+                let marker = EventMarker { callsite, event: &event, memory_delta };
+
+                profile.add_marker_with_stack(
+                    *thread_handle,
+                    &callsite.name,
+                    marker,
+                    fxprof_processed_profile::MarkerTiming::Instant(timestamp),
+                    frames.iter().rev().cloned(),
+                );
+
+                last_timestamp = timestamp;
+            }
             Entry::SpanClose(SpanClose { id, time }) => {
                 spans.remove(&id);
-                last_timestamp = Timestamp::from_nanos_since_reference(time.as_nanos() as u64);
+                last_timestamp = to_timestamp(time);
             }
         }
     }
@@ -166,9 +216,9 @@ fn add_memory_samples(
     last_timestamp: Timestamp,
     memory_counters: &mut Option<MemoryCounterHandles>,
     last_memory: &mut MemoryStats,
-) {
+) -> Option<MemoryStats> {
     let Some(stats) = memory else {
-        return;
+        return None;
     };
 
     let memory_counters =
@@ -181,7 +231,9 @@ fn add_memory_samples(
         stats.operations().checked_sub(last_memory.operations()).unwrap_or_default() as u32,
     );
 
+    let delta = stats.checked_sub(*last_memory);
     *last_memory = stats;
+    delta
 }
 
 fn to_timestamp(time: std::time::Duration) -> Timestamp {
@@ -329,6 +381,136 @@ impl<'a> ProfilerMarker for SpanMarker<'a> {
             "line": line,
             "module_path": module_path,
             "span_id": span_id,
+            "thread_id": thread_id,
+        });
+
+        if let Some(MemoryStats {
+            allocations,
+            deallocations,
+            reallocations,
+            bytes_allocated,
+            bytes_deallocated,
+            bytes_reallocated,
+        }) = self.memory_delta
+        {
+            value["allocations"] = json!(allocations);
+            value["deallocations"] = json!(deallocations);
+            value["reallocations"] = json!(reallocations);
+            value["allocated_bytes"] = json!(bytes_allocated);
+            value["deallocated_bytes"] = json!(bytes_deallocated);
+            value["reallocated_bytes"] = json!(bytes_reallocated);
+        }
+
+        value
+    }
+}
+
+struct EventMarker<'a> {
+    event: &'a Event,
+    callsite: &'a NewCallsite,
+    memory_delta: Option<MemoryStats>,
+}
+
+impl<'a> ProfilerMarker for EventMarker<'a> {
+    const MARKER_TYPE_NAME: &'static str = "tracing-event";
+
+    fn schema() -> MarkerSchema {
+        let fields = vec![
+            MarkerSchemaField::Dynamic(MarkerDynamicField {
+                key: "filename",
+                label: "File name",
+                format: MarkerFieldFormat::FilePath,
+                searchable: true,
+            }),
+            MarkerSchemaField::Dynamic(MarkerDynamicField {
+                key: "line",
+                label: "Line",
+                format: MarkerFieldFormat::Integer,
+                searchable: true,
+            }),
+            MarkerSchemaField::Dynamic(MarkerDynamicField {
+                key: "module_path",
+                label: "Module path",
+                format: MarkerFieldFormat::String,
+                searchable: true,
+            }),
+            MarkerSchemaField::Dynamic(MarkerDynamicField {
+                key: "parent_span_id",
+                label: "Parent Span ID",
+                format: MarkerFieldFormat::Integer,
+                searchable: true,
+            }),
+            MarkerSchemaField::Dynamic(MarkerDynamicField {
+                key: "thread_id",
+                label: "Thread ID",
+                format: MarkerFieldFormat::Integer,
+                searchable: true,
+            }),
+            MarkerSchemaField::Dynamic(MarkerDynamicField {
+                key: "allocations",
+                label: "Number of allocation operations since last measure",
+                format: MarkerFieldFormat::Integer,
+                searchable: false,
+            }),
+            MarkerSchemaField::Dynamic(MarkerDynamicField {
+                key: "deallocations",
+                label: "Number of deallocation operations since last measure",
+                format: MarkerFieldFormat::Integer,
+                searchable: false,
+            }),
+            MarkerSchemaField::Dynamic(MarkerDynamicField {
+                key: "reallocations",
+                label: "Number of reallocation operations since last measure",
+                format: MarkerFieldFormat::Integer,
+                searchable: false,
+            }),
+            MarkerSchemaField::Dynamic(MarkerDynamicField {
+                key: "allocated_bytes",
+                label: "Number of allocated bytes since last measure",
+                format: MarkerFieldFormat::Bytes,
+                searchable: false,
+            }),
+            MarkerSchemaField::Dynamic(MarkerDynamicField {
+                key: "deallocated_bytes",
+                label: "Number of deallocated bytes since last measure",
+                format: MarkerFieldFormat::Bytes,
+                searchable: false,
+            }),
+            MarkerSchemaField::Dynamic(MarkerDynamicField {
+                key: "reallocated_bytes",
+                label: "Number of reallocated bytes since last measure",
+                format: MarkerFieldFormat::Bytes,
+                searchable: false,
+            }),
+        ];
+
+        MarkerSchema {
+            type_name: Self::MARKER_TYPE_NAME,
+            locations: vec![
+                MarkerLocation::MarkerTable,
+                MarkerLocation::MarkerChart,
+                MarkerLocation::TimelineOverview,
+            ],
+            chart_label: None,
+            tooltip_label: Some("{marker.name} - {marker.data.filename}:{marker.data.line}"),
+            table_label: Some("{marker.data.filename}:{marker.data.line}"),
+            fields,
+        }
+    }
+
+    fn json_marker_data(&self) -> serde_json::Value {
+        let filename = self.callsite.file.as_deref();
+        let line = self.callsite.line;
+        let module_path = self.callsite.module_path.as_deref();
+        let span_id = self.event.parent_id;
+        let thread_id = self.event.thread_id;
+
+        let mut value = json!({
+            "type": Self::MARKER_TYPE_NAME,
+            "filename": filename,
+            "line": line,
+            "module_path": module_path,
+            "parent_span_id": span_id,
             "thread_id": thread_id,
         });
 
