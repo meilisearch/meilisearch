@@ -5710,9 +5710,9 @@ dependencies = [
 name = "tracing-trace"
 version = "0.1.0"
 dependencies = [
+ "byte-unit",
  "color-spantrace",
  "fxprof-processed-profile",
- "once_cell",
  "serde",
  "serde_json",
  "stats_alloc",
