@@ -19,7 +19,7 @@ use crate::{Error, Trace};
 
 /// Layer that measures the time spent in spans.
 pub struct TraceLayer<A: GlobalAlloc + 'static = System> {
-    sender: std::sync::mpsc::Sender<Entry>,
+    sender: tokio::sync::mpsc::UnboundedSender<Entry>,
     callsites: RwLock<HashMap<OpaqueIdentifier, ResourceId>>,
     start_time: std::time::Instant,
     memory_allocator: Option<&'static StatsAlloc<A>>,
@@ -27,7 +27,7 @@ pub struct TraceLayer<A: GlobalAlloc + 'static = System> {
 
 impl<W: Write> Trace<W> {
     pub fn new(writer: W) -> (Self, TraceLayer<System>) {
-        let (sender, receiver) = std::sync::mpsc::channel();
+        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
         let trace = Trace { writer, receiver };
         let layer = TraceLayer {
             sender,
@@ -42,7 +42,7 @@ impl<W: Write> Trace<W> {
         writer: W,
         stats_alloc: &'static StatsAlloc<A>,
     ) -> (Self, TraceLayer<A>) {
-        let (sender, receiver) = std::sync::mpsc::channel();
+        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
         let trace = Trace { writer, receiver };
         let layer = TraceLayer {
             sender,
@@ -53,8 +53,17 @@ impl<W: Write> Trace<W> {
         (trace, layer)
     }
 
-    pub fn receive(&mut self) -> Result<ControlFlow<(), ()>, Error> {
-        let Ok(entry) = self.receiver.recv() else {
+    pub async fn receive(&mut self) -> Result<ControlFlow<(), ()>, Error> {
+        let Some(entry) = self.receiver.recv().await else {
+            return Ok(ControlFlow::Break(()));
+        };
+        self.write(entry)?;
+        Ok(ControlFlow::Continue(()))
+    }
+
+    /// Panics if called from an asynchronous context
+    pub fn blocking_receive(&mut self) -> Result<ControlFlow<(), ()>, Error> {
+        let Some(entry) = self.receiver.blocking_recv() else {
             return Ok(ControlFlow::Break(()));
         };
         self.write(entry)?;
