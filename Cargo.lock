@@ -3840,6 +3840,7 @@ dependencies = [
  "time",
  "tokenizers",
  "tokio",
+ "tracing",
  "uuid",
 ]
 

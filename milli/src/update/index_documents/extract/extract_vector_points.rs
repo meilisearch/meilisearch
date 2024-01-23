@@ -67,7 +67,7 @@ impl VectorStateDelta {
 /// Extracts the embedding vector contained in each document under the `_vectors` field.
 ///
 /// Returns the generated grenad reader containing the docid as key associated to the Vec<f32>
-#[logging_timer::time]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 pub fn extract_vector_points<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,

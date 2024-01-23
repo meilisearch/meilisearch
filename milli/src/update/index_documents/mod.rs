@@ -134,6 +134,7 @@ where
     /// return an error and not the `IndexDocuments` struct as it is invalid to use it afterward.
     ///
     /// Returns the number of documents added to the builder.
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents")]
     pub fn add_documents<R: Read + Seek>(
         mut self,
         reader: DocumentsBatchReader<R>,
@@ -179,6 +180,7 @@ where
     /// Remove a batch of documents from the current builder.
     ///
     /// Returns the number of documents deleted from the builder.
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents")]
     pub fn remove_documents(
         mut self,
         to_delete: Vec<String>,
@@ -214,6 +216,7 @@ where
     /// - No batching using the standards `remove_documents` and `add_documents` took place
     ///
     /// TODO: make it impossible to call `remove_documents` or `add_documents` on an instance that calls this function.
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::details")]
     pub fn remove_documents_from_db_no_batch(
         mut self,
         to_delete: &RoaringBitmap,
@@ -237,7 +240,12 @@ where
         Ok((self, deleted_documents))
     }
 
-    #[logging_timer::time("IndexDocuments::{}")]
+    #[tracing::instrument(
+        level = "trace"
+        skip_all,
+        target = "indexing::documents",
+        name = "index_documents"
+    )]
     pub fn execute(mut self) -> Result<DocumentAdditionResult> {
         puffin::profile_function!();
 
@@ -273,7 +281,12 @@ where
     }
 
     /// Returns the total number of documents in the index after the update.
-    #[logging_timer::time("IndexDocuments::{}")]
+    #[tracing::instrument(
+        level = "trace",
+        skip_all,
+        target = "profile::indexing::details",
+        name = "index_documents_raw"
+    )]
     pub fn execute_raw(self, output: TransformOutput) -> Result<u64>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
@@ -374,8 +387,12 @@ where
 
         let cloned_embedder = self.embedders.clone();
 
+        let current_span = tracing::Span::current();
+
         // Run extraction pipeline in parallel.
         pool.install(|| {
+            let child_span = tracing::trace_span!(target: "indexing::details", parent: &current_span, "extract_and_send_grenad_chunks");
+            let _enter = child_span.enter();
             puffin::profile_scope!("extract_and_send_grenad_chunks");
             // split obkv file into several chunks
             let original_chunk_iter =
@@ -543,7 +560,12 @@ where
         Ok(number_of_documents)
     }
 
-    #[logging_timer::time("IndexDocuments::{}")]
+    #[tracing::instrument(
+        level = "trace",
+        skip_all,
+        target = "indexing::prefix",
+        name = "index_documents_prefix_databases"
+    )]
     pub fn execute_prefix_databases(
         self,
         word_docids: Option<grenad::Reader<CursorClonableMmap>>,
@@ -598,6 +620,8 @@ where
         let del_prefix_fst_words;
 
         {
+            let span = tracing::trace_span!(target: "indexing::details", "compute_prefix_diffs");
+            let _entered = span.enter();
             puffin::profile_scope!("compute_prefix_diffs");
 
             current_prefix_fst = self.index.words_prefixes_fst(self.wtxn)?;
@@ -722,6 +746,12 @@ where
 
 /// Run the word prefix docids update operation.
 #[allow(clippy::too_many_arguments)]
+#[tracing::instrument(
+    level = "trace",
+    skip_all,
+    target = "indexing::prefix",
+    name = "index_documents_word_prefix_docids"
+)]
 fn execute_word_prefix_docids(
     txn: &mut heed::RwTxn,
     reader: grenad::Reader<Cursor<ClonableMmap>>,

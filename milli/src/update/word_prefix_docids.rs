@@ -39,7 +39,12 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
         }
     }
 
-    #[logging_timer::time("WordPrefixDocids::{}")]
+    #[tracing::instrument(
+        level = "trace",
+        skip_all,
+        target = "indexing::prefix",
+        name = "word_prefix_docids"
+    )]
     pub fn execute(
         self,
         mut new_word_docids_iter: grenad::ReaderCursor<CursorClonableMmap>,

@@ -41,6 +41,7 @@ use crate::{FieldId, FieldsIdsMap, Result};
 /// Extract data for each databases from obkv documents in parallel.
 /// Send data in grenad file over provided Sender.
 #[allow(clippy::too_many_arguments)]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 pub(crate) fn data_from_obkv_documents(
     original_obkv_chunks: impl Iterator<Item = Result<grenad::Reader<BufReader<File>>>> + Send,
     flattened_obkv_chunks: impl Iterator<Item = Result<grenad::Reader<BufReader<File>>>> + Send,
@@ -257,12 +258,20 @@ fn spawn_extraction_task<FE, FS, M>(
     M: MergeableReader + FromParallelIterator<M::Output> + Send + 'static,
     M::Output: Send,
 {
+    let current_span = tracing::Span::current();
+
     rayon::spawn(move || {
+        let child_span = tracing::trace_span!(target: "indexing::details", parent: &current_span, "extract_multiple_chunks");
+        let _entered = child_span.enter();
         puffin::profile_scope!("extract_multiple_chunks", name);
         let chunks: Result<M> =
             chunks.into_par_iter().map(|chunk| extract_fn(chunk, indexer)).collect();
+        let current_span = tracing::Span::current();
+
         rayon::spawn(move || match chunks {
             Ok(chunks) => {
+                let child_span = tracing::trace_span!(target: "indexing::details", parent: &current_span, "merge_multiple_chunks");
+                let _entered = child_span.enter();
                 debug!("merge {} database", name);
                 puffin::profile_scope!("merge_multiple_chunks", name);
                 let reader = chunks.merge(merge_fn, &indexer);

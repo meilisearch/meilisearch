@@ -13,7 +13,7 @@ use crate::{FieldId, InternalError, Result};
 /// Extracts the geographical coordinates contained in each document under the `_geo` field.
 ///
 /// Returns the generated grenad reader containing the docid as key associated to the (latitude, longitude)
-#[logging_timer::time]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 pub fn extract_geo_points<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
