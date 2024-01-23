@@ -12,7 +12,8 @@ use tracing_subscriber::layer::Context;
 use tracing_subscriber::Layer;
 
 use crate::entry::{
-    Entry, NewCallsite, NewSpan, NewThread, ResourceId, SpanClose, SpanEnter, SpanExit, SpanId,
+    Entry, Event, MemoryStats, NewCallsite, NewSpan, NewThread, ResourceId, SpanClose, SpanEnter,
+    SpanExit, SpanId,
 };
 use crate::{Error, Trace};
 
@@ -98,6 +99,10 @@ impl<A: GlobalAlloc> TraceLayer<A> {
         self.start_time.elapsed()
     }
 
+    fn memory_stats(&self) -> Option<MemoryStats> {
+        self.memory_allocator.map(|ma| ma.stats().into())
+    }
+
     fn send(&self, entry: Entry) {
         // we never care that the other end hanged on us
         let _ = self.sender.send(entry);
@@ -159,7 +164,7 @@ where
         self.send(Entry::SpanEnter(SpanEnter {
             id: id.into(),
             time: self.elapsed(),
-            memory: self.memory_allocator.map(|ma| ma.stats().into()),
+            memory: self.memory_stats(),
         }))
     }
 
@@ -167,7 +172,31 @@ where
         self.send(Entry::SpanExit(SpanExit {
             id: id.into(),
             time: self.elapsed(),
-            memory: self.memory_allocator.map(|ma| ma.stats().into()),
+            memory: self.memory_stats(),
+        }))
+    }
+
+    fn on_event(&self, event: &tracing::Event<'_>, _ctx: Context<'_, S>) {
+        let call_id = self
+            .resource_id(OpaqueIdentifier::Call(event.metadata().callsite()))
+            .unwrap_or_else(|| self.register_callsite(event.metadata()));
+
+        let thread_id = self
+            .resource_id(OpaqueIdentifier::Thread(std::thread::current().id()))
+            .unwrap_or_else(|| self.register_thread());
+
+        let parent_id = event
+            .parent()
+            .cloned()
+            .or_else(|| tracing::Span::current().id())
+            .map(|id| SpanId::from(&id));
+
+        self.send(Entry::Event(Event {
+            call_id,
+            thread_id,
+            parent_id,
+            time: self.elapsed(),
+            memory: self.memory_stats(),
         }))
     }
 
