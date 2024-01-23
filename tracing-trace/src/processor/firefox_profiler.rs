@@ -148,20 +148,14 @@ pub fn to_firefox_profile<R: std::io::Read>(
 }
 
 struct MemoryCounterHandles {
-    allocations: CounterHandle,
-    deallocations: CounterHandle,
-    reallocations: CounterHandle,
+    usage: CounterHandle,
 }
 
 impl MemoryCounterHandles {
     fn new(profile: &mut Profile, main: ProcessHandle) -> Self {
-        let allocations =
-            profile.add_counter(main, "mimmalloc", "Memory", "Amount of allocated memory");
-        let deallocations =
-            profile.add_counter(main, "mimmalloc", "Memory", "Amount of deallocated memory");
-        let reallocations =
-            profile.add_counter(main, "mimmalloc", "Memory", "Amount of reallocated memory");
-        Self { allocations, deallocations, reallocations }
+        let usage =
+            profile.add_counter(main, "mimmalloc", "Memory", "Amount of memory currently in use");
+        Self { usage }
     }
 }
 
@@ -171,23 +165,9 @@ fn add_memory_samples(
     memory: Option<MemoryStats>,
     last_timestamp: Timestamp,
     memory_counters: &mut Option<MemoryCounterHandles>,
-    current_memory: &mut MemoryStats,
+    last_memory: &mut MemoryStats,
 ) {
     let Some(stats) = memory else {
-        return;
-    };
-
-    let Some(MemoryStats {
-        allocations,
-        deallocations,
-        reallocations,
-        bytes_allocated,
-        bytes_deallocated,
-        bytes_reallocated,
-    }) = stats.checked_sub(*current_memory)
-    else {
-        // since spans are recorded out-of-order it is possible they are not always monotonic.
-        // We ignore spans that made no difference.
         return;
     };
 
@@ -195,27 +175,13 @@ fn add_memory_samples(
         memory_counters.get_or_insert_with(|| MemoryCounterHandles::new(profile, main));
 
     profile.add_counter_sample(
-        memory_counters.allocations,
+        memory_counters.usage,
         last_timestamp,
-        bytes_allocated as f64,
-        allocations.try_into().unwrap(),
+        stats.usage() as f64 - last_memory.usage() as f64,
+        stats.operations().checked_sub(last_memory.operations()).unwrap_or_default() as u32,
     );
 
-    profile.add_counter_sample(
-        memory_counters.deallocations,
-        last_timestamp,
-        bytes_deallocated as f64,
-        deallocations.try_into().unwrap(),
-    );
-
-    profile.add_counter_sample(
-        memory_counters.reallocations,
-        last_timestamp,
-        bytes_reallocated as f64,
-        reallocations.try_into().unwrap(),
-    );
-
-    *current_memory = stats;
+    *last_memory = stats;
 }
 
 fn to_timestamp(time: std::time::Duration) -> Timestamp {
@@ -378,9 +344,9 @@ impl<'a> ProfilerMarker for SpanMarker<'a> {
             value["allocations"] = json!(allocations);
             value["deallocations"] = json!(deallocations);
             value["reallocations"] = json!(reallocations);
-            value["bytes_allocated"] = json!(bytes_allocated);
-            value["bytes_deallocated"] = json!(bytes_deallocated);
-            value["bytes_reallocated"] = json!(bytes_reallocated);
+            value["allocated_bytes"] = json!(bytes_allocated);
+            value["deallocated_bytes"] = json!(bytes_deallocated);
+            value["reallocated_bytes"] = json!(bytes_reallocated);
         }
 
         value

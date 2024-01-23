@@ -133,6 +133,14 @@ impl MemoryStats {
             bytes_reallocated: self.bytes_reallocated.checked_sub(other.bytes_reallocated)?,
         })
     }
+
+    pub fn usage(&self) -> isize {
+        (self.bytes_allocated - self.bytes_deallocated) as isize + self.bytes_reallocated
+    }
+
+    pub fn operations(&self) -> usize {
+        self.allocations + self.deallocations + self.reallocations
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
