@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use fxprof_processed_profile::{
-    CategoryPairHandle, CpuDelta, Frame, FrameFlags, FrameInfo, MarkerDynamicField,
-    MarkerFieldFormat, MarkerLocation, MarkerSchema, MarkerSchemaField, Profile, ProfilerMarker,
-    ReferenceTimestamp, SamplingInterval, StringHandle, Timestamp,
+    CategoryPairHandle, CounterHandle, CpuDelta, Frame, FrameFlags, FrameInfo, MarkerDynamicField,
+    MarkerFieldFormat, MarkerLocation, MarkerSchema, MarkerSchemaField, ProcessHandle, Profile,
+    ProfilerMarker, ReferenceTimestamp, SamplingInterval, StringHandle, Timestamp,
 };
 use serde_json::json;
 
@@ -33,18 +33,8 @@ pub fn to_firefox_profile<R: std::io::Read>(
     let subcategory = profile.add_subcategory(category, "subcategory");
 
     let mut current_memory = MemoryStats::default();
-    let init_allocations = |profile: &mut Profile| {
-        profile.add_counter(main, "mimmalloc", "Memory", "Amount of allocation calls")
-    };
-    let init_deallocations = |profile: &mut Profile| {
-        profile.add_counter(main, "mimmalloc", "Memory", "Amount of deallocation calls")
-    };
-    let init_reallocations = |profile: &mut Profile| {
-        profile.add_counter(main, "mimmalloc", "Memory", "Amount of reallocation calls")
-    };
-    let mut allocations_counter = None;
-    let mut deallocations_counter = None;
-    let mut reallocations_counter = None;
+
+    let mut memory_counters = None;
 
     for entry in trace {
         let entry = entry?;
@@ -75,59 +65,29 @@ pub fn to_firefox_profile<R: std::io::Read>(
                     continue;
                 };
 
-                *status = SpanStatus::Inside(time);
+                *status = SpanStatus::Inside { time, memory };
 
                 last_timestamp = Timestamp::from_nanos_since_reference(time.as_nanos() as u64);
 
-                if let Some(stats) = memory {
-                    let MemoryStats {
-                        allocations,
-                        deallocations,
-                        reallocations,
-                        bytes_allocated,
-                        bytes_deallocated,
-                        bytes_reallocated,
-                    } = current_memory - stats;
-
-                    let counter =
-                        *allocations_counter.get_or_insert_with(|| init_allocations(&mut profile));
-                    profile.add_counter_sample(
-                        counter,
-                        last_timestamp,
-                        bytes_allocated as f64,
-                        allocations.try_into().unwrap(),
-                    );
-
-                    let counter = *deallocations_counter
-                        .get_or_insert_with(|| init_deallocations(&mut profile));
-                    profile.add_counter_sample(
-                        counter,
-                        last_timestamp,
-                        bytes_deallocated as f64,
-                        deallocations.try_into().unwrap(),
-                    );
-
-                    let counter = *reallocations_counter
-                        .get_or_insert_with(|| init_reallocations(&mut profile));
-                    profile.add_counter_sample(
-                        counter,
-                        last_timestamp,
-                        bytes_reallocated as f64,
-                        reallocations.try_into().unwrap(),
-                    );
-
-                    current_memory = stats;
-                }
+                add_memory_samples(
+                    &mut profile,
+                    main,
+                    memory,
+                    last_timestamp,
+                    &mut memory_counters,
+                    &mut current_memory,
+                );
             }
             Entry::SpanExit(SpanExit { id, time, memory }) => {
                 let (span, status) = spans.get_mut(&id).unwrap();
 
-                let SpanStatus::Inside(begin) = status else {
+                let SpanStatus::Inside { time: begin, memory: begin_memory } = status else {
                     continue;
                 };
                 last_timestamp = Timestamp::from_nanos_since_reference(time.as_nanos() as u64);
 
                 let begin = *begin;
+                let begin_memory = *begin_memory;
 
                 *status = SpanStatus::Outside;
 
@@ -151,49 +111,20 @@ pub fn to_firefox_profile<R: std::io::Read>(
                     1,
                 );
 
-                if let Some(stats) = memory {
-                    let MemoryStats {
-                        allocations,
-                        deallocations,
-                        reallocations,
-                        bytes_allocated,
-                        bytes_deallocated,
-                        bytes_reallocated,
-                    } = current_memory - stats;
-
-                    let counter =
-                        *allocations_counter.get_or_insert_with(|| init_allocations(&mut profile));
-                    profile.add_counter_sample(
-                        counter,
-                        last_timestamp,
-                        bytes_allocated as f64,
-                        allocations.try_into().unwrap(),
-                    );
-
-                    let counter = *deallocations_counter
-                        .get_or_insert_with(|| init_deallocations(&mut profile));
-                    profile.add_counter_sample(
-                        counter,
-                        last_timestamp,
-                        bytes_deallocated as f64,
-                        deallocations.try_into().unwrap(),
-                    );
-
-                    let counter = *reallocations_counter
-                        .get_or_insert_with(|| init_reallocations(&mut profile));
-                    profile.add_counter_sample(
-                        counter,
-                        last_timestamp,
-                        bytes_reallocated as f64,
-                        reallocations.try_into().unwrap(),
-                    );
-
-                    current_memory = stats;
-                }
+                add_memory_samples(
+                    &mut profile,
+                    main,
+                    memory,
+                    last_timestamp,
+                    &mut memory_counters,
+                    &mut current_memory,
+                );
 
                 let (callsite, _) = calls.get(&span.call_id).unwrap();
 
-                let marker = SpanMarker { callsite, span: &span };
+                let memory_delta =
+                    begin_memory.zip(memory).and_then(|(begin, end)| end.checked_sub(begin));
+                let marker = SpanMarker { callsite, span: &span, memory_delta };
 
                 profile.add_marker_with_stack(
                     *thread_handle,
@@ -214,6 +145,77 @@ pub fn to_firefox_profile<R: std::io::Read>(
     }
 
     Ok(profile)
+}
+
+struct MemoryCounterHandles {
+    allocations: CounterHandle,
+    deallocations: CounterHandle,
+    reallocations: CounterHandle,
+}
+
+impl MemoryCounterHandles {
+    fn new(profile: &mut Profile, main: ProcessHandle) -> Self {
+        let allocations =
+            profile.add_counter(main, "mimmalloc", "Memory", "Amount of allocated memory");
+        let deallocations =
+            profile.add_counter(main, "mimmalloc", "Memory", "Amount of deallocated memory");
+        let reallocations =
+            profile.add_counter(main, "mimmalloc", "Memory", "Amount of reallocated memory");
+        Self { allocations, deallocations, reallocations }
+    }
+}
+
+fn add_memory_samples(
+    profile: &mut Profile,
+    main: ProcessHandle,
+    memory: Option<MemoryStats>,
+    last_timestamp: Timestamp,
+    memory_counters: &mut Option<MemoryCounterHandles>,
+    current_memory: &mut MemoryStats,
+) {
+    let Some(stats) = memory else {
+        return;
+    };
+
+    let Some(MemoryStats {
+        allocations,
+        deallocations,
+        reallocations,
+        bytes_allocated,
+        bytes_deallocated,
+        bytes_reallocated,
+    }) = stats.checked_sub(*current_memory)
+    else {
+        // since spans are recorded out-of-order it is possible they are not always monotonic.
+        // We ignore spans that made no difference.
+        return;
+    };
+
+    let memory_counters =
+        memory_counters.get_or_insert_with(|| MemoryCounterHandles::new(profile, main));
+
+    profile.add_counter_sample(
+        memory_counters.allocations,
+        last_timestamp,
+        bytes_allocated as f64,
+        allocations.try_into().unwrap(),
+    );
+
+    profile.add_counter_sample(
+        memory_counters.deallocations,
+        last_timestamp,
+        bytes_deallocated as f64,
+        deallocations.try_into().unwrap(),
+    );
+
+    profile.add_counter_sample(
+        memory_counters.reallocations,
+        last_timestamp,
+        bytes_reallocated as f64,
+        reallocations.try_into().unwrap(),
+    );
+
+    *current_memory = stats;
 }
 
 fn to_timestamp(time: std::time::Duration) -> Timestamp {
@@ -252,12 +254,13 @@ fn make_frame(
 #[derive(Debug, Clone, Copy)]
 enum SpanStatus {
     Outside,
-    Inside(std::time::Duration),
+    Inside { time: std::time::Duration, memory: Option<MemoryStats> },
 }
 
 struct SpanMarker<'a> {
     span: &'a NewSpan,
     callsite: &'a NewCallsite,
+    memory_delta: Option<MemoryStats>,
 }
 
 impl<'a> ProfilerMarker for SpanMarker<'a> {
@@ -295,6 +298,42 @@ impl<'a> ProfilerMarker for SpanMarker<'a> {
                 format: MarkerFieldFormat::Integer,
                 searchable: true,
             }),
+            MarkerSchemaField::Dynamic(MarkerDynamicField {
+                key: "allocations",
+                label: "Number of allocation operations while this function was executing",
+                format: MarkerFieldFormat::Integer,
+                searchable: false,
+            }),
+            MarkerSchemaField::Dynamic(MarkerDynamicField {
+                key: "deallocations",
+                label: "Number of deallocation operations while this function was executing",
+                format: MarkerFieldFormat::Integer,
+                searchable: false,
+            }),
+            MarkerSchemaField::Dynamic(MarkerDynamicField {
+                key: "reallocations",
+                label: "Number of reallocation operations while this function was executing",
+                format: MarkerFieldFormat::Integer,
+                searchable: false,
+            }),
+            MarkerSchemaField::Dynamic(MarkerDynamicField {
+                key: "allocated_bytes",
+                label: "Number of allocated bytes while this function was executing",
+                format: MarkerFieldFormat::Bytes,
+                searchable: false,
+            }),
+            MarkerSchemaField::Dynamic(MarkerDynamicField {
+                key: "deallocated_bytes",
+                label: "Number of deallocated bytes while this function was executing",
+                format: MarkerFieldFormat::Bytes,
+                searchable: false,
+            }),
+            MarkerSchemaField::Dynamic(MarkerDynamicField {
+                key: "reallocated_bytes",
+                label: "Number of reallocated bytes while this function was executing",
+                format: MarkerFieldFormat::Bytes,
+                searchable: false,
+            }),
         ];
 
         MarkerSchema {
@@ -317,13 +356,33 @@ impl<'a> ProfilerMarker for SpanMarker<'a> {
         let module_path = self.callsite.module_path.as_deref();
         let span_id = self.span.id;
         let thread_id = self.span.thread_id;
-        json!({
+
+        let mut value = json!({
             "type": Self::MARKER_TYPE_NAME,
             "filename": filename,
             "line": line,
             "module_path": module_path,
             "span_id": span_id,
             "thread_id": thread_id,
-        })
+        });
+
+        if let Some(MemoryStats {
+            allocations,
+            deallocations,
+            reallocations,
+            bytes_allocated,
+            bytes_deallocated,
+            bytes_reallocated,
+        }) = self.memory_delta
+        {
+            value["allocations"] = json!(allocations);
+            value["deallocations"] = json!(deallocations);
+            value["reallocations"] = json!(reallocations);
+            value["bytes_allocated"] = json!(bytes_allocated);
+            value["bytes_deallocated"] = json!(bytes_deallocated);
+            value["bytes_reallocated"] = json!(bytes_reallocated);
+        }
+
+        value
     }
 }

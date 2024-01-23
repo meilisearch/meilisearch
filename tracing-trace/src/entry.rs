@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::ops::Sub;
 
 use serde::{Deserialize, Serialize};
 use tracing::span::Id as TracingId;
@@ -123,18 +122,16 @@ impl From<stats_alloc::Stats> for MemoryStats {
     }
 }
 
-impl Sub for MemoryStats {
-    type Output = Self;
-
-    fn sub(self, other: Self) -> Self::Output {
-        Self {
-            allocations: self.allocations - other.allocations,
-            deallocations: self.deallocations - other.deallocations,
-            reallocations: self.reallocations - other.reallocations,
-            bytes_allocated: self.bytes_allocated - other.bytes_allocated,
-            bytes_deallocated: self.bytes_deallocated - other.bytes_deallocated,
-            bytes_reallocated: self.bytes_reallocated - other.bytes_reallocated,
-        }
+impl MemoryStats {
+    pub fn checked_sub(self, other: Self) -> Option<Self> {
+        Some(Self {
+            allocations: self.allocations.checked_sub(other.allocations)?,
+            deallocations: self.deallocations.checked_sub(other.deallocations)?,
+            reallocations: self.reallocations.checked_sub(other.reallocations)?,
+            bytes_allocated: self.bytes_allocated.checked_sub(other.bytes_allocated)?,
+            bytes_deallocated: self.bytes_deallocated.checked_sub(other.bytes_deallocated)?,
+            bytes_reallocated: self.bytes_reallocated.checked_sub(other.bytes_reallocated)?,
+        })
     }
 }
 
