@@ -1,31 +1,69 @@
 use std::env;
 use std::io::{stderr, Write};
+use std::ops::ControlFlow;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use actix_web::http::KeepAlive;
 use actix_web::web::Data;
 use actix_web::HttpServer;
+use anyhow::Context;
 use index_scheduler::IndexScheduler;
 use is_terminal::IsTerminal;
 use meilisearch::analytics::Analytics;
 use meilisearch::{analytics, create_app, prototype_name, setup_meilisearch, Opt};
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use tracing_subscriber::layer::SubscriberExt as _;
+use tracing_subscriber::Layer;
 
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 /// does all the setup before meilisearch is launched
 fn setup(opt: &Opt) -> anyhow::Result<()> {
-    let mut log_builder = env_logger::Builder::new();
-    let log_filters = format!(
-        "{},h2=warn,hyper=warn,tokio_util=warn,tracing=warn,rustls=warn,mio=warn,reqwest=warn",
-        opt.log_level
-    );
-    log_builder.parse_filters(&log_filters);
+    let now = time::OffsetDateTime::now_utc();
+    let format = time::format_description::parse("[year]-[month]-[day]_[hour]:[minute]:[second]")?;
+    let trace_file = format!("{}-indexing-trace.json", now.format(&format)?);
 
-    log_builder.init();
+    let file = std::fs::File::create(&trace_file)
+        .with_context(|| format!("could not create trace file at '{}'", trace_file))?;
+    // TODO kero: Pass the allocator stats to Trace here
+    let (mut trace, layer) = tracing_trace::Trace::new(file);
+
+    let subscriber = tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_line_number(true)
+                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
+                .with_filter(
+                    tracing_subscriber::filter::LevelFilter::from_str(&opt.log_level.to_string())
+                        .unwrap(),
+                ),
+        )
+        .with(
+            layer.with_filter(
+                tracing_subscriber::filter::Targets::new()
+                    .with_target("indexing::", tracing::Level::TRACE),
+            ),
+        );
+
+    std::thread::spawn(move || {
+        loop {
+            trace.flush().unwrap();
+            match trace.receive() {
+                Ok(ControlFlow::Continue(_)) => continue,
+                Ok(ControlFlow::Break(_)) => break,
+                Err(_) => todo!(),
+            }
+        }
+        while trace.try_receive().is_ok() {}
+        trace.flush().unwrap();
+    });
+
+    // set the subscriber as the default for the application
+    tracing::subscriber::set_global_default(subscriber).unwrap();
 
     Ok(())
 }
