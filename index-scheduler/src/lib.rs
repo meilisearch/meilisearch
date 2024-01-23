@@ -1193,7 +1193,7 @@ impl IndexScheduler {
                         log::error!("Failure to delete the content files associated with task {}. Error: {e}", task.uid);
                     }
                 }
-                log::info!("A batch of tasks was successfully completed.");
+                tracing::info!("A batch of tasks was successfully completed.");
             }
             // If we have an abortion error we must stop the tick here and re-schedule tasks.
             Err(Error::Milli(milli::Error::InternalError(
