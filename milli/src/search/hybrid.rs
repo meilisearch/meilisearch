@@ -102,7 +102,7 @@ impl ScoreWithRatioResult {
         }
 
         SearchResult {
-            matching_words: left.matching_words,
+            matching_words: right.matching_words,
             candidates: left.candidates | right.candidates,
             documents_ids,
             document_scores,
