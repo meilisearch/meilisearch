@@ -18,4 +18,5 @@ byte-unit = { version = "4.0.19", default-features = false, features = [
     "std",
     "serde",
 ] }
+tokio = { version = "1.35.1", features = ["sync"] }
 

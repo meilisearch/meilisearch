@@ -5716,6 +5716,7 @@ dependencies = [
  "serde",
  "serde_json",
  "stats_alloc",
+ "tokio",
  "tracing",
  "tracing-error",
  "tracing-subscriber",

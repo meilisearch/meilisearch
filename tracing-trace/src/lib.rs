@@ -11,7 +11,7 @@ pub use error::Error;
 
 pub struct Trace<W: Write> {
     writer: W,
-    receiver: std::sync::mpsc::Receiver<Entry>,
+    receiver: tokio::sync::mpsc::UnboundedReceiver<Entry>,
 }
 
 pub struct TraceReader<R: Read> {
