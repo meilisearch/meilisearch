@@ -1,6 +1,8 @@
 use std::ffi::OsString;
 use std::io::Write;
 
+use serde_json::json;
+
 fn main() {
     let input_file = std::env::args_os().nth(1).expect("missing <INPUT> file");
     let input =
@@ -11,6 +13,9 @@ fn main() {
     output_file.push("callstats-");
     output_file.push(input_file);
     let mut output_file = std::io::BufWriter::new(std::fs::File::create(output_file).unwrap());
-    serde_json::to_writer(&mut output_file, &profile).unwrap();
+    for (key, value) in profile {
+        serde_json::to_writer(&mut output_file, &json!({key: value})).unwrap();
+        writeln!(&mut output_file).unwrap();
+    }
     output_file.flush().unwrap();
 }
