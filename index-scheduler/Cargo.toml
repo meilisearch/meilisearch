@@ -45,4 +45,3 @@ big_s = "1.0.2"
 crossbeam = "0.8.4"
 insta = { version = "1.34.0", features = ["json", "redactions"] }
 meili-snap = { path = "../meili-snap" }
-nelson = { git = "https://github.com/meilisearch/nelson.git", rev = "675f13885548fb415ead8fbb447e9e6d9314000a" }
