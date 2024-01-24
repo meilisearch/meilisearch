@@ -2907,7 +2907,6 @@ dependencies = [
  "meili-snap",
  "meilisearch-auth",
  "meilisearch-types",
- "nelson",
  "page_size 0.5.0",
  "puffin",
  "roaring",
@@ -3920,11 +3919,6 @@ dependencies = [
  "quote",
  "syn 2.0.48",
 ]
-
-[[package]]
-name = "nelson"
-version = "0.1.0"
-source = "git+https://github.com/meilisearch/nelson.git?rev=675f13885548fb415ead8fbb447e9e6d9314000a#675f13885548fb415ead8fbb447e9e6d9314000a"
 
 [[package]]
 name = "nom"
