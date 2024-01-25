@@ -123,6 +123,8 @@ pub(crate) fn write_typed_chunk_into_index(
 ) -> Result<(RoaringBitmap, bool)> {
     puffin::profile_function!(typed_chunk.to_debug_string());
 
+    log::debug!("Received a chunk to process: {}", typed_chunk.to_debug_string());
+
     let mut is_merged_database = false;
     match typed_chunk {
         TypedChunk::Documents(obkv_documents_iter) => {
