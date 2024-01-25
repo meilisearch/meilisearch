@@ -34,9 +34,7 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
         // since we only need the primary key when we throw an error
         // we create this getter to lazily get it when needed
         let document_id = || -> Value {
-            let reader = KvReaderDelAdd::new(obkv.get(primary_key_id).unwrap());
-            let document_id =
-                reader.get(DelAdd::Deletion).or(reader.get(DelAdd::Addition)).unwrap();
+            let document_id = obkv.get(primary_key_id).unwrap();
             serde_json::from_slice(document_id).unwrap()
         };
 
