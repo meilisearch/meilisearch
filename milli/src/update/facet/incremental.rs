@@ -61,6 +61,7 @@ impl FacetsUpdateIncremental {
         }
     }
 
+    #[logging_timer::time("FacetsUpdateIncremental::{}")]
     pub fn execute(self, wtxn: &mut RwTxn) -> crate::Result<()> {
         let mut cursor = self.delta_data.into_cursor()?;
         while let Some((key, value)) = cursor.move_on_next()? {
