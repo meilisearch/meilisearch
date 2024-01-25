@@ -76,26 +76,18 @@ pub const FACET_MAX_GROUP_SIZE: u8 = 8;
 pub const FACET_GROUP_SIZE: u8 = 4;
 pub const FACET_MIN_LEVEL_SIZE: u8 = 5;
 
-use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::BufReader;
-use std::iter::FromIterator;
 
-use charabia::normalizer::{Normalize, NormalizerOption};
-use grenad::{CompressionType, SortAlgorithm};
-use heed::types::{Bytes, DecodeIgnore, SerdeJson};
-use heed::BytesEncode;
 use log::debug;
 use time::OffsetDateTime;
 
 use self::incremental::FacetsUpdateIncremental;
 use super::FacetsUpdateBulk;
 use crate::facet::FacetType;
-use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec};
+use crate::heed_codec::facet::{FacetGroupKeyCodec, FacetGroupValueCodec};
 use crate::heed_codec::BytesRefCodec;
-use crate::update::index_documents::create_sorter;
-use crate::update::merge_btreeset_string;
-use crate::{BEU16StrCodec, Index, Result, MAX_FACET_VALUE_LENGTH};
+use crate::{Index, Result};
 
 pub mod bulk;
 pub mod incremental;
