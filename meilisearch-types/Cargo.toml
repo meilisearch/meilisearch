@@ -54,3 +54,5 @@ thai = ["milli/thai"]
 greek = ["milli/greek"]
 # allow khmer specialized tokenization
 khmer = ["milli/khmer"]
+# allow vietnamese specialized tokenization
+vietnamese = ["milli/vietnamese"]

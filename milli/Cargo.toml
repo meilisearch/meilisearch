@@ -102,7 +102,16 @@ meili-snap = { path = "../meili-snap" }
 rand = { version = "0.8.5", features = ["small_rng"] }
 
 [features]
-all-tokenizations = ["charabia/chinese", "charabia/hebrew", "charabia/japanese", "charabia/thai", "charabia/korean", "charabia/greek", "charabia/khmer"]
+all-tokenizations = [
+    "charabia/chinese",
+    "charabia/hebrew",
+    "charabia/japanese",
+    "charabia/thai",
+    "charabia/korean",
+    "charabia/greek",
+    "charabia/khmer",
+    "charabia/vietnamese",
+]
 
 # Use POSIX semaphores instead of SysV semaphores in LMDB
 # For more information on this feature, see heed's Cargo.toml
@@ -129,6 +138,8 @@ greek = ["charabia/greek"]
 
 # allow khmer specialized tokenization
 khmer = ["charabia/khmer"]
+
+vietnamese = ["charabia/vietnamese"]
 
 # allow CUDA support, see <https://github.com/meilisearch/meilisearch/issues/4306>
 cuda = ["candle-core/cuda"]
