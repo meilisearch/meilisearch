@@ -16,7 +16,8 @@ use meilisearch::{analytics, create_app, prototype_name, setup_meilisearch, LogR
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
 use mimalloc::MiMalloc;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
-use tracing_subscriber::layer::SubscriberExt as _;
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber::layer::{Filter, SubscriberExt as _};
 use tracing_subscriber::Layer;
 
 #[cfg(not(feature = "stats_alloc"))]
@@ -27,8 +28,9 @@ static ALLOC: MiMalloc = MiMalloc;
 #[global_allocator]
 static ALLOC: stats_alloc::StatsAlloc<MiMalloc> = stats_alloc::StatsAlloc::new(MiMalloc);
 
-fn f<S>() -> Option<Box<dyn Layer<S> + Send + Sync>> {
-    None
+fn default_layer<S: tracing::Subscriber>(
+) -> tracing_subscriber::filter::Filtered<Option<Box<dyn Layer<S> + Send + Sync>>, LevelFilter, S> {
+    None.with_filter(tracing_subscriber::filter::LevelFilter::OFF)
 }
 
 /// does all the setup before meilisearch is launched
@@ -44,11 +46,11 @@ fn setup(opt: &Opt) -> anyhow::Result<LogRouteHandle> {
     #[cfg(feature = "stats_alloc")]
     let (mut trace, layer) = tracing_trace::Trace::with_stats_alloc(file, &ALLOC);
 
-    let (route_layer, route_layer_handle) = tracing_subscriber::reload::Layer::new(f());
+    let (route_layer, route_layer_handle) = tracing_subscriber::reload::Layer::new(default_layer());
     let route_layer: tracing_subscriber::reload::Layer<_, _> = route_layer;
 
     let subscriber = tracing_subscriber::registry()
-        .with(route_layer.boxed())
+        .with(route_layer)
         .with(
             tracing_subscriber::fmt::layer()
                 .with_line_number(true)
