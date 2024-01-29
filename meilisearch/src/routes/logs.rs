@@ -115,15 +115,15 @@ pub async fn get_logs(
 
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
 
-    let subscriber = tracing_subscriber::registry().with(
-        tracing_subscriber::fmt::layer()
-            .with_line_number(true)
-            .with_writer(move || LogWriter { sender: sender.clone() })
-            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
-            .with_filter(
-                tracing_subscriber::filter::LevelFilter::from_str(&opt.level.to_string()).unwrap(),
-            ),
-    );
+    let layer = tracing_subscriber::fmt::layer()
+        .with_line_number(true)
+        .with_writer(move || LogWriter { sender: sender.clone() })
+        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
+        .with_filter(
+            tracing_subscriber::filter::LevelFilter::from_str(&opt.level.to_string()).unwrap(),
+        );
+
+    let subscriber = tracing_subscriber::registry().with(layer);
     // .with(
     //     layer.with_filter(
     //         tracing_subscriber::filter::Targets::new()

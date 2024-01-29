@@ -27,6 +27,10 @@ static ALLOC: MiMalloc = MiMalloc;
 #[global_allocator]
 static ALLOC: stats_alloc::StatsAlloc<MiMalloc> = stats_alloc::StatsAlloc::new(MiMalloc);
 
+fn f<S: Sized>() -> Option<Box<dyn Layer<S>>> {
+    None
+}
+
 /// does all the setup before meilisearch is launched
 fn setup(opt: &Opt) -> anyhow::Result<()> {
     let now = time::OffsetDateTime::now_utc();
@@ -40,7 +44,12 @@ fn setup(opt: &Opt) -> anyhow::Result<()> {
     #[cfg(feature = "stats_alloc")]
     let (mut trace, layer) = tracing_trace::Trace::with_stats_alloc(file, &ALLOC);
 
+    // let (route_layer, route_layer_handle) = tracing_subscriber::reload::Layer::new(vec![]);
+    let (route_layer, route_layer_handle) = tracing_subscriber::reload::Layer::new(f());
+    let route_layer: tracing_subscriber::reload::Layer<_, _> = route_layer;
+
     let subscriber = tracing_subscriber::registry()
+        .with(route_layer)
         .with(
             tracing_subscriber::fmt::layer()
                 .with_line_number(true)
