@@ -339,9 +339,7 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     embedder: Arc<Embedder>,
 ) -> Result<grenad::Reader<BufReader<File>>> {
-    let rt = tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build()?;
-
-    let n_chunks = embedder.chunk_count_hint(); // chunk level parellelism
+    let n_chunks = embedder.chunk_count_hint(); // chunk level parallelism
     let n_vectors_per_chunk = embedder.prompt_count_in_chunk_hint(); // number of vectors in a single chunk
 
     // docid, state with embedding
@@ -375,11 +373,8 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
         current_chunk_ids.push(docid);
 
         if chunks.len() == chunks.capacity() {
-            let chunked_embeds = rt
-                .block_on(
-                    embedder
-                        .embed_chunks(std::mem::replace(&mut chunks, Vec::with_capacity(n_chunks))),
-                )
+            let chunked_embeds = embedder
+                .embed_chunks(std::mem::replace(&mut chunks, Vec::with_capacity(n_chunks)))
                 .map_err(crate::vector::Error::from)
                 .map_err(crate::Error::from)?;
 
@@ -396,8 +391,8 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
 
     // send last chunk
     if !chunks.is_empty() {
-        let chunked_embeds = rt
-            .block_on(embedder.embed_chunks(std::mem::take(&mut chunks)))
+        let chunked_embeds = embedder
+            .embed_chunks(std::mem::take(&mut chunks))
             .map_err(crate::vector::Error::from)
             .map_err(crate::Error::from)?;
         for (docid, embeddings) in chunks_ids
@@ -410,13 +405,15 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
     }
 
     if !current_chunk.is_empty() {
-        let embeds = rt
-            .block_on(embedder.embed(std::mem::take(&mut current_chunk)))
+        let embeds = embedder
+            .embed_chunks(vec![std::mem::take(&mut current_chunk)])
             .map_err(crate::vector::Error::from)
             .map_err(crate::Error::from)?;
 
-        for (docid, embeddings) in current_chunk_ids.iter().zip(embeds.iter()) {
-            state_writer.insert(docid.to_be_bytes(), cast_slice(embeddings.as_inner()))?;
+        if let Some(embeds) = embeds.first() {
+            for (docid, embeddings) in current_chunk_ids.iter().zip(embeds.iter()) {
+                state_writer.insert(docid.to_be_bytes(), cast_slice(embeddings.as_inner()))?;
+            }
         }
     }
 
