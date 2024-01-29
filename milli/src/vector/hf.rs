@@ -145,7 +145,8 @@ impl Embedder {
         let token_ids = tokens
             .iter()
             .map(|tokens| {
-                let tokens = tokens.get_ids().to_vec();
+                let mut tokens = tokens.get_ids().to_vec();
+                tokens.truncate(512);
                 Tensor::new(tokens.as_slice(), &self.model.device).map_err(EmbedError::tensor_shape)
             })
             .collect::<Result<Vec<_>, EmbedError>>()?;
