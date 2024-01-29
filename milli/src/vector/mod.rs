@@ -163,18 +163,24 @@ impl Embedder {
     ) -> std::result::Result<Vec<Embeddings<f32>>, EmbedError> {
         match self {
             Embedder::HuggingFace(embedder) => embedder.embed(texts),
-            Embedder::OpenAi(embedder) => embedder.embed(texts).await,
+            Embedder::OpenAi(embedder) => {
+                let client = embedder.new_client()?;
+                embedder.embed(texts, &client).await
+            }
             Embedder::UserProvided(embedder) => embedder.embed(texts),
         }
     }
 
-    pub async fn embed_chunks(
+    /// # Panics
+    ///
+    /// - if called from an asynchronous context
+    pub fn embed_chunks(
         &self,
         text_chunks: Vec<Vec<String>>,
     ) -> std::result::Result<Vec<Vec<Embeddings<f32>>>, EmbedError> {
         match self {
             Embedder::HuggingFace(embedder) => embedder.embed_chunks(text_chunks),
-            Embedder::OpenAi(embedder) => embedder.embed_chunks(text_chunks).await,
+            Embedder::OpenAi(embedder) => embedder.embed_chunks(text_chunks),
             Embedder::UserProvided(embedder) => embedder.embed_chunks(text_chunks),
         }
     }
