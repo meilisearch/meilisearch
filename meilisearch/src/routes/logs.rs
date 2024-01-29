@@ -99,7 +99,7 @@ impl futures_util::Stream for LogStreamer {
     }
 }
 
-pub fn make_subscriber<
+pub fn make_layer<
     S: tracing::Subscriber + for<'span> tracing_subscriber::registry::LookupSpan<'span>,
 >(
     opt: &GetLogs,
@@ -108,10 +108,7 @@ pub fn make_subscriber<
     let fmt_layer = tracing_subscriber::fmt::layer()
         .with_line_number(true)
         .with_writer(move || LogWriter { sender: sender.clone() })
-        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
-        .with_filter(
-            tracing_subscriber::filter::LevelFilter::from_str(&opt.level.to_string()).unwrap(),
-        );
+        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE);
     // let subscriber = tracing_subscriber::registry().with(fmt_layer);
 
     Box::new(fmt_layer) as Box<dyn Layer<S> + Send + Sync>
@@ -144,12 +141,15 @@ pub async fn get_logs(
 
     let mut was_available = false;
 
-    logs.modify(|layer| match layer {
+    logs.modify(|layer| match layer.inner_mut() {
         None => {
             was_available = true;
-            // there is already someone getting logs
-            let subscriber = make_subscriber(&opt, sender);
-            *layer = Some(subscriber)
+            *layer.filter_mut() =
+                tracing_subscriber::filter::LevelFilter::from_str(&opt.level.to_string()).unwrap();
+            // there is no one getting logs
+            let new_layer = make_layer(&opt, sender);
+
+            *layer.inner_mut() = Some(new_layer)
         }
         Some(_) => {
             // there is already someone getting logs
