@@ -86,10 +86,17 @@ fn is_empty_db(db_path: impl AsRef<Path>) -> bool {
     }
 }
 
+/// The handle used to update the logs at runtime. Must be accessible from the `main.rs` and the `route/logs.rs`.
+pub type LogRouteHandle =
+    tracing_subscriber::reload::Handle<Option<LogRouteType>, tracing_subscriber::Registry>;
+pub type LogRouteType =
+    Box<dyn tracing_subscriber::Layer<tracing_subscriber::Registry> + Sync + Send>;
+
 pub fn create_app(
     index_scheduler: Data<IndexScheduler>,
     auth_controller: Data<AuthController>,
     opt: Opt,
+    logs: LogRouteHandle,
     analytics: Arc<dyn Analytics>,
     enable_dashboard: bool,
 ) -> actix_web::App<
@@ -108,6 +115,7 @@ pub fn create_app(
                 index_scheduler.clone(),
                 auth_controller.clone(),
                 &opt,
+                logs,
                 analytics.clone(),
             )
         })
@@ -391,6 +399,7 @@ pub fn configure_data(
     index_scheduler: Data<IndexScheduler>,
     auth: Data<AuthController>,
     opt: &Opt,
+    logs: LogRouteHandle,
     analytics: Arc<dyn Analytics>,
 ) {
     let http_payload_size_limit = opt.http_payload_size_limit.get_bytes() as usize;
@@ -398,6 +407,7 @@ pub fn configure_data(
         .app_data(index_scheduler)
         .app_data(auth)
         .app_data(web::Data::from(analytics))
+        .app_data(web::Data::new(logs))
         .app_data(
             web::JsonConfig::default()
                 .limit(http_payload_size_limit)

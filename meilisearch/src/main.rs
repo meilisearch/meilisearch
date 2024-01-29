@@ -12,7 +12,7 @@ use anyhow::Context;
 use index_scheduler::IndexScheduler;
 use is_terminal::IsTerminal;
 use meilisearch::analytics::Analytics;
-use meilisearch::{analytics, create_app, prototype_name, setup_meilisearch, Opt};
+use meilisearch::{analytics, create_app, prototype_name, setup_meilisearch, LogRouteHandle, Opt};
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
 use mimalloc::MiMalloc;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
@@ -27,12 +27,12 @@ static ALLOC: MiMalloc = MiMalloc;
 #[global_allocator]
 static ALLOC: stats_alloc::StatsAlloc<MiMalloc> = stats_alloc::StatsAlloc::new(MiMalloc);
 
-fn f<S: Sized>() -> Option<Box<dyn Layer<S>>> {
+fn f<S>() -> Option<Box<dyn Layer<S> + Send + Sync>> {
     None
 }
 
 /// does all the setup before meilisearch is launched
-fn setup(opt: &Opt) -> anyhow::Result<()> {
+fn setup(opt: &Opt) -> anyhow::Result<LogRouteHandle> {
     let now = time::OffsetDateTime::now_utc();
     let format = time::format_description::parse("[year]-[month]-[day]_[hour]:[minute]:[second]")?;
     let trace_file = format!("{}-indexing-trace.json", now.format(&format)?);
@@ -44,12 +44,11 @@ fn setup(opt: &Opt) -> anyhow::Result<()> {
     #[cfg(feature = "stats_alloc")]
     let (mut trace, layer) = tracing_trace::Trace::with_stats_alloc(file, &ALLOC);
 
-    // let (route_layer, route_layer_handle) = tracing_subscriber::reload::Layer::new(vec![]);
     let (route_layer, route_layer_handle) = tracing_subscriber::reload::Layer::new(f());
     let route_layer: tracing_subscriber::reload::Layer<_, _> = route_layer;
 
     let subscriber = tracing_subscriber::registry()
-        .with(route_layer)
+        .with(route_layer.boxed())
         .with(
             tracing_subscriber::fmt::layer()
                 .with_line_number(true)
@@ -82,7 +81,7 @@ fn setup(opt: &Opt) -> anyhow::Result<()> {
     // set the subscriber as the default for the application
     tracing::subscriber::set_global_default(subscriber).unwrap();
 
-    Ok(())
+    Ok(route_layer_handle)
 }
 
 #[actix_web::main]
@@ -94,7 +93,7 @@ async fn main() -> anyhow::Result<()> {
         "The `experimental-reduce-indexing-memory-usage` flag is not supported on Windows"
     );
 
-    setup(&opt)?;
+    let log_handle = setup(&opt)?;
 
     match (opt.env.as_ref(), &opt.master_key) {
         ("production", Some(master_key)) if master_key.len() < MASTER_KEY_MIN_SIZE => {
@@ -132,7 +131,7 @@ async fn main() -> anyhow::Result<()> {
 
     print_launch_resume(&opt, analytics.clone(), config_read_from);
 
-    run_http(index_scheduler, auth_controller, opt, analytics).await?;
+    run_http(index_scheduler, auth_controller, opt, log_handle, analytics).await?;
 
     Ok(())
 }
@@ -141,6 +140,7 @@ async fn run_http(
     index_scheduler: Arc<IndexScheduler>,
     auth_controller: Arc<AuthController>,
     opt: Opt,
+    logs: LogRouteHandle,
     analytics: Arc<dyn Analytics>,
 ) -> anyhow::Result<()> {
     let enable_dashboard = &opt.env == "development";
@@ -153,6 +153,7 @@ async fn run_http(
             index_scheduler.clone(),
             auth_controller.clone(),
             opt.clone(),
+            logs.clone(),
             analytics.clone(),
             enable_dashboard,
         )

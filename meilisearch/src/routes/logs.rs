@@ -13,14 +13,15 @@ use meilisearch_auth::AuthController;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
-use tokio::pin;
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self, UnboundedSender};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Layer;
 
+use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::{LogRouteHandle, LogRouteType};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(SeqHandler(get_logs))));
@@ -73,9 +74,6 @@ impl Write for LogWriter {
 
 struct LogStreamer {
     receiver: mpsc::UnboundedReceiver<Vec<u8>>,
-    // We just need to hold the guard until the struct is dropped
-    #[allow(unused)]
-    subscriber: tracing::subscriber::DefaultGuard,
 }
 
 impl futures_util::Stream for LogStreamer {
@@ -101,8 +99,27 @@ impl futures_util::Stream for LogStreamer {
     }
 }
 
+pub fn make_subscriber<
+    S: tracing::Subscriber + for<'span> tracing_subscriber::registry::LookupSpan<'span>,
+>(
+    opt: &GetLogs,
+    sender: UnboundedSender<Vec<u8>>,
+) -> Box<dyn Layer<S> + Send + Sync> {
+    let fmt_layer = tracing_subscriber::fmt::layer()
+        .with_line_number(true)
+        .with_writer(move || LogWriter { sender: sender.clone() })
+        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
+        .with_filter(
+            tracing_subscriber::filter::LevelFilter::from_str(&opt.level.to_string()).unwrap(),
+        );
+    // let subscriber = tracing_subscriber::registry().with(fmt_layer);
+
+    Box::new(fmt_layer) as Box<dyn Layer<S> + Send + Sync>
+}
+
 pub async fn get_logs(
     _auth_controller: GuardedData<ActionPolicy<{ actions::METRICS_ALL }>, Data<AuthController>>,
+    logs: Data<LogRouteHandle>,
     body: AwebJson<GetLogs, DeserrJsonError>,
     _req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
@@ -115,23 +132,35 @@ pub async fn get_logs(
 
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
 
-    let layer = tracing_subscriber::fmt::layer()
-        .with_line_number(true)
-        .with_writer(move || LogWriter { sender: sender.clone() })
-        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
-        .with_filter(
-            tracing_subscriber::filter::LevelFilter::from_str(&opt.level.to_string()).unwrap(),
-        );
+    // let fmt_layer = tracing_subscriber::fmt::layer()
+    //     .with_line_number(true)
+    //     .with_writer(move || LogWriter { sender: sender.clone() })
+    //     .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
+    //     .with_filter(
+    //         tracing_subscriber::filter::LevelFilter::from_str(&opt.level.to_string()).unwrap(),
+    //     );
+    // let subscriber = tracing_subscriber::registry().with(fmt_layer);
+    // let subscriber = Box::new(subscriber) as Box<dyn Layer<S> + Send + Sync>;
 
-    let subscriber = tracing_subscriber::registry().with(layer);
-    // .with(
-    //     layer.with_filter(
-    //         tracing_subscriber::filter::Targets::new()
-    //             .with_target("indexing::", tracing::Level::TRACE),
-    //     ),
-    // );
+    let mut was_available = false;
 
-    let subscriber = tracing::subscriber::set_default(subscriber);
+    logs.modify(|layer| match layer {
+        None => {
+            was_available = true;
+            // there is already someone getting logs
+            let subscriber = make_subscriber(&opt, sender);
+            *layer = Some(subscriber)
+        }
+        Some(_) => {
+            // there is already someone getting logs
+            was_available = false;
+        }
+    })
+    .unwrap();
 
-    Ok(HttpResponse::Ok().streaming(LogStreamer { receiver, subscriber }))
+    if was_available {
+        Ok(HttpResponse::Ok().streaming(LogStreamer { receiver }))
+    } else {
+        Err(MeilisearchHttpError::AlreadyUsedLogRoute.into())
+    }
 }
