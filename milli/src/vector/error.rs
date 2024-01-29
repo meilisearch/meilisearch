@@ -67,6 +67,10 @@ pub enum EmbedErrorKind {
     OpenAiUnhandledStatusCode(u16),
     #[error("attempt to embed the following text in a configuration where embeddings must be user provided: {0:?}")]
     ManualEmbed(String),
+    #[error("could not initialize asynchronous runtime: {0}")]
+    OpenAiRuntimeInit(std::io::Error),
+    #[error("initializing web client for sending embedding requests failed: {0}")]
+    InitWebClient(reqwest::Error),
 }
 
 impl EmbedError {
@@ -116,6 +120,14 @@ impl EmbedError {
 
     pub(crate) fn embed_on_manual_embedder(texts: String) -> EmbedError {
         Self { kind: EmbedErrorKind::ManualEmbed(texts), fault: FaultSource::User }
+    }
+
+    pub(crate) fn openai_runtime_init(inner: std::io::Error) -> EmbedError {
+        Self { kind: EmbedErrorKind::OpenAiRuntimeInit(inner), fault: FaultSource::Runtime }
+    }
+
+    pub fn openai_initialize_web_client(inner: reqwest::Error) -> Self {
+        Self { kind: EmbedErrorKind::InitWebClient(inner), fault: FaultSource::Runtime }
     }
 }
 
@@ -183,10 +195,6 @@ impl NewEmbedderError {
         }
     }
 
-    pub fn openai_initialize_web_client(inner: reqwest::Error) -> Self {
-        Self { kind: NewEmbedderErrorKind::InitWebClient(inner), fault: FaultSource::Runtime }
-    }
-
     pub fn openai_invalid_api_key_format(inner: reqwest::header::InvalidHeaderValue) -> Self {
         Self { kind: NewEmbedderErrorKind::InvalidApiKeyFormat(inner), fault: FaultSource::User }
     }
@@ -237,8 +245,6 @@ pub enum NewEmbedderErrorKind {
     #[error("loading model failed: {0}")]
     LoadModel(candle_core::Error),
     // openai
-    #[error("initializing web client for sending embedding requests failed: {0}")]
-    InitWebClient(reqwest::Error),
     #[error("The API key passed to Authorization error was in an invalid format: {0}")]
     InvalidApiKeyFormat(reqwest::header::InvalidHeaderValue),
 }
