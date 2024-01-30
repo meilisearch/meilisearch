@@ -99,6 +99,16 @@ impl futures_util::Stream for LogStreamer {
     }
 }
 
+impl LogStreamer {
+    pub fn into_stream(self) -> impl futures_util::Stream<Item = Result<Bytes, ResponseError>> {
+        futures_util::stream::unfold(self, move |mut this| async move {
+            let vec = this.receiver.recv().await;
+
+            vec.map(From::from).map(Ok).map(|a| (a, this))
+        })
+    }
+}
+
 pub fn make_layer<
     S: tracing::Subscriber + for<'span> tracing_subscriber::registry::LookupSpan<'span>,
 >(
@@ -159,7 +169,7 @@ pub async fn get_logs(
     .unwrap();
 
     if was_available {
-        Ok(HttpResponse::Ok().streaming(LogStreamer { receiver }))
+        Ok(HttpResponse::Ok().streaming(LogStreamer { receiver }.into_stream()))
     } else {
         Err(MeilisearchHttpError::AlreadyUsedLogRoute.into())
     }
