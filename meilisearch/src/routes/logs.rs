@@ -13,8 +13,6 @@ use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use tokio::sync::mpsc::{self, UnboundedSender};
-use tracing::instrument::WithSubscriber;
-use tracing_subscriber::filter::Targets;
 use tracing_subscriber::Layer;
 
 use crate::error::MeilisearchHttpError;
@@ -24,7 +22,11 @@ use crate::extractors::sequential_extractor::SeqHandler;
 use crate::LogRouteHandle;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("").route(web::post().to(SeqHandler(get_logs))));
+    cfg.service(
+        web::resource("")
+            .route(web::post().to(SeqHandler(get_logs)))
+            .route(web::delete().to(SeqHandler(cancel_logs))),
+    );
 }
 
 #[derive(Debug, Default, Clone, Copy, Deserr)]
@@ -188,4 +190,16 @@ pub async fn get_logs(
     } else {
         Err(MeilisearchHttpError::AlreadyUsedLogRoute.into())
     }
+}
+
+pub async fn cancel_logs(
+    _auth_controller: GuardedData<ActionPolicy<{ actions::METRICS_ALL }>, Data<AuthController>>,
+    logs: Data<LogRouteHandle>,
+    _req: HttpRequest,
+) -> Result<HttpResponse, ResponseError> {
+    if let Err(e) = logs.modify(|layer| *layer.inner_mut() = None) {
+        tracing::error!("Could not free the logs route: {e}");
+    }
+
+    Ok(HttpResponse::NoContent().finish())
 }
