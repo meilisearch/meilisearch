@@ -208,6 +208,9 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
                     if let Some(api_key) = api_key.set() {
                         options.api_key = Some(api_key);
                     }
+                    if let Some(dimensions) = dimensions.set() {
+                        options.dimensions = Some(dimensions);
+                    }
                     this.embedder_options = super::EmbedderOptions::OpenAi(options);
                 }
                 EmbedderSource::HuggingFace => {
