@@ -12,7 +12,9 @@ use anyhow::Context;
 use index_scheduler::IndexScheduler;
 use is_terminal::IsTerminal;
 use meilisearch::analytics::Analytics;
-use meilisearch::{analytics, create_app, prototype_name, setup_meilisearch, LogRouteHandle, Opt};
+use meilisearch::{
+    analytics, create_app, prototype_name, setup_meilisearch, LogRouteHandle, LogRouteType, Opt,
+};
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
 use mimalloc::MiMalloc;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
@@ -28,9 +30,8 @@ static ALLOC: MiMalloc = MiMalloc;
 #[global_allocator]
 static ALLOC: stats_alloc::StatsAlloc<MiMalloc> = stats_alloc::StatsAlloc::new(MiMalloc);
 
-fn default_layer<S: tracing::Subscriber>(
-) -> tracing_subscriber::filter::Filtered<Option<Box<dyn Layer<S> + Send + Sync>>, LevelFilter, S> {
-    None.with_filter(tracing_subscriber::filter::LevelFilter::OFF)
+fn default_layer() -> LogRouteType {
+    None.with_filter(tracing_subscriber::filter::Targets::new().with_target("", LevelFilter::OFF))
 }
 
 /// does all the setup before meilisearch is launched
