@@ -2,6 +2,7 @@ use std::fmt;
 use std::io::Write;
 use std::ops::ControlFlow;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use actix_web::web::{Bytes, Data};
 use actix_web::{web, HttpRequest, HttpResponse};
@@ -13,6 +14,7 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tracing::instrument::WithSubscriber;
+use tracing_subscriber::filter::Targets;
 use tracing_subscriber::Layer;
 
 use crate::error::MeilisearchHttpError;
@@ -48,7 +50,7 @@ pub enum LogMode {
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct GetLogs {
     #[deserr(default, error = DeserrJsonError<BadRequest>)]
-    pub level: LogLevel,
+    pub target: String,
 
     #[deserr(default, error = DeserrJsonError<BadRequest>)]
     pub mode: LogMode,
@@ -70,6 +72,12 @@ struct LogWriter {
     sender: mpsc::UnboundedSender<Vec<u8>>,
 }
 
+impl Drop for LogWriter {
+    fn drop(&mut self) {
+        println!("hello");
+    }
+}
+
 impl Write for LogWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.sender.send(buf.to_vec()).map_err(std::io::Error::other)?;
@@ -83,6 +91,17 @@ impl Write for LogWriter {
 
 struct LogStreamer {
     receiver: mpsc::UnboundedReceiver<Vec<u8>>,
+    /// We need to keep an handle on the logs to make it available again when the streamer is dropped
+    logs: Arc<LogRouteHandle>,
+}
+
+impl Drop for LogStreamer {
+    fn drop(&mut self) {
+        println!("log streamer being dropped");
+        if let Err(e) = self.logs.modify(|layer| *layer.inner_mut() = None) {
+            tracing::error!("Could not free the logs route: {e}");
+        }
+    }
 }
 
 impl LogStreamer {
@@ -142,23 +161,7 @@ pub async fn get_logs(
     _req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
     let opt = body.into_inner();
-
-    // #[cfg(not(feature = "stats_alloc"))]
-    // let (mut trace, layer) = tracing_trace::Trace::new(file);
-    // #[cfg(feature = "stats_alloc")]
-    // let (mut trace, layer) = tracing_trace::Trace::with_stats_alloc(file, &ALLOC);
-
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
-
-    // let fmt_layer = tracing_subscriber::fmt::layer()
-    //     .with_line_number(true)
-    //     .with_writer(move || LogWriter { sender: sender.clone() })
-    //     .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
-    //     .with_filter(
-    //         tracing_subscriber::filter::LevelFilter::from_str(&opt.level.to_string()).unwrap(),
-    //     );
-    // let subscriber = tracing_subscriber::registry().with(fmt_layer);
-    // let subscriber = Box::new(subscriber) as Box<dyn Layer<S> + Send + Sync>;
 
     let mut was_available = false;
 
@@ -166,26 +169,8 @@ pub async fn get_logs(
         None => {
             // there is no one getting logs
             was_available = true;
-            match opt.mode {
-                LogMode::Fmt => {
-                    *layer.filter_mut() =
-                        tracing_subscriber::filter::LevelFilter::from_str(&opt.level.to_string())
-                            .unwrap();
-                }
-                LogMode::Profile => {
-                    *layer.filter_mut() =
-                        tracing_subscriber::filter::LevelFilter::from_str(&opt.level.to_string())
-                            .unwrap();
-                    // *layer.filter_mut() = tracing_subscriber::filter::Targets::new()
-                    //     .with_target("indexing::", tracing::Level::TRACE)
-                    //     .with_filter(
-                    //         tracing_subscriber::filter::LevelFilter::from_str(
-                    //             &opt.level.to_string(),
-                    //         )
-                    //         .unwrap(),
-                    //     )
-                }
-            }
+            *layer.filter_mut() =
+                tracing_subscriber::filter::Targets::from_str(&opt.target).unwrap();
             let new_layer = make_layer(&opt, sender);
 
             *layer.inner_mut() = Some(new_layer)
@@ -198,7 +183,8 @@ pub async fn get_logs(
     .unwrap();
 
     if was_available {
-        Ok(HttpResponse::Ok().streaming(LogStreamer { receiver }.into_stream()))
+        Ok(HttpResponse::Ok()
+            .streaming(LogStreamer { receiver, logs: logs.into_inner() }.into_stream()))
     } else {
         Err(MeilisearchHttpError::AlreadyUsedLogRoute.into())
     }

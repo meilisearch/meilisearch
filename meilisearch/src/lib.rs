@@ -39,6 +39,7 @@ use meilisearch_types::versioning::{check_version_file, create_version_file};
 use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
 pub use option::Opt;
 use option::ScheduleSnapshot;
+use tracing_subscriber::filter::Targets;
 
 use crate::error::MeilisearchHttpError;
 
@@ -89,9 +90,10 @@ fn is_empty_db(db_path: impl AsRef<Path>) -> bool {
 /// The handle used to update the logs at runtime. Must be accessible from the `main.rs` and the `route/logs.rs`.
 pub type LogRouteHandle =
     tracing_subscriber::reload::Handle<LogRouteType, tracing_subscriber::Registry>;
+
 pub type LogRouteType = tracing_subscriber::filter::Filtered<
     Option<Box<dyn tracing_subscriber::Layer<tracing_subscriber::Registry> + Send + Sync>>,
-    tracing_subscriber::filter::LevelFilter,
+    Targets,
     tracing_subscriber::Registry,
 >;
 
