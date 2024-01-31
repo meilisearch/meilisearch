@@ -74,7 +74,7 @@ fn on_panic(info: &std::panic::PanicInfo) {
 
 fn main() {
     let (mut trace, profiling_layer) =
-        tracing_trace::Trace::new(std::fs::File::create("trace.json").unwrap());
+        tracing_trace::TraceWriter::new(std::fs::File::create("trace.json").unwrap());
 
     let subscriber = tracing_subscriber::registry()
         // any number of other subscriber layers may be added before or

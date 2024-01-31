@@ -9,9 +9,23 @@ pub mod processor;
 
 pub use error::Error;
 
-pub struct Trace<W: Write> {
+pub struct TraceWriter<W: Write> {
     writer: W,
     receiver: tokio::sync::mpsc::UnboundedReceiver<Entry>,
+}
+
+pub struct Trace {
+    receiver: tokio::sync::mpsc::UnboundedReceiver<Entry>,
+}
+
+impl Trace {
+    pub fn into_receiver(self) -> tokio::sync::mpsc::UnboundedReceiver<Entry> {
+        self.receiver
+    }
+
+    pub fn into_writer<W: Write>(self, writer: W) -> TraceWriter<W> {
+        TraceWriter { writer, receiver: self.receiver }
+    }
 }
 
 pub struct TraceReader<R: Read> {
