@@ -42,7 +42,6 @@ crossbeam-channel = "0.5.11"
 deserr = { version = "0.6.1", features = ["actix-web"] }
 dump = { path = "../dump" }
 either = "1.9.0"
-env_logger = "0.10.1"
 file-store = { path = "../file-store" }
 flate2 = "1.0.28"
 fst = "0.4.7"

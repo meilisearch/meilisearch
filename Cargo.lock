@@ -3620,7 +3620,6 @@ dependencies = [
  "deserr",
  "dump",
  "either",
- "env_logger",
  "file-store",
  "flate2",
  "fst",

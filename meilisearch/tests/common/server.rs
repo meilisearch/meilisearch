@@ -13,6 +13,8 @@ use meilisearch::{analytics, create_app, setup_meilisearch};
 use once_cell::sync::Lazy;
 use tempfile::TempDir;
 use tokio::time::sleep;
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber::Layer;
 
 use super::index::Index;
 use super::service::Service;
@@ -81,10 +83,16 @@ impl Server {
         Response = ServiceResponse<impl MessageBody>,
         Error = actix_web::Error,
     > {
+        let (_route_layer, route_layer_handle) =
+            tracing_subscriber::reload::Layer::new(None.with_filter(
+                tracing_subscriber::filter::Targets::new().with_target("", LevelFilter::OFF),
+            ));
+
         actix_web::test::init_service(create_app(
             self.service.index_scheduler.clone().into(),
             self.service.auth.clone().into(),
             self.service.options.clone(),
+            route_layer_handle,
             analytics::MockAnalytics::new(&self.service.options),
             true,
         ))
