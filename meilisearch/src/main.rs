@@ -1,6 +1,5 @@
 use std::env;
 use std::io::{stderr, Write};
-use std::ops::ControlFlow;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -8,7 +7,6 @@ use std::sync::Arc;
 use actix_web::http::KeepAlive;
 use actix_web::web::Data;
 use actix_web::HttpServer;
-use anyhow::Context;
 use index_scheduler::IndexScheduler;
 use is_terminal::IsTerminal;
 use meilisearch::analytics::Analytics;
@@ -19,7 +17,7 @@ use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE}
 use mimalloc::MiMalloc;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use tracing::level_filters::LevelFilter;
-use tracing_subscriber::layer::{Filter, SubscriberExt as _};
+use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::Layer;
 
 #[cfg(not(feature = "stats_alloc"))]
