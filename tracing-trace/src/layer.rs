@@ -15,7 +15,7 @@ use crate::entry::{
     Entry, Event, MemoryStats, NewCallsite, NewSpan, NewThread, ResourceId, SpanClose, SpanEnter,
     SpanExit, SpanId,
 };
-use crate::{Error, Trace};
+use crate::{Error, Trace, TraceWriter};
 
 /// Layer that measures the time spent in spans.
 pub struct TraceLayer<A: GlobalAlloc + 'static = System> {
@@ -25,10 +25,10 @@ pub struct TraceLayer<A: GlobalAlloc + 'static = System> {
     memory_allocator: Option<&'static StatsAlloc<A>>,
 }
 
-impl<W: Write> Trace<W> {
-    pub fn new(writer: W) -> (Self, TraceLayer<System>) {
+impl Trace {
+    pub fn new() -> (Self, TraceLayer<System>) {
         let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
-        let trace = Trace { writer, receiver };
+        let trace = Trace { receiver };
         let layer = TraceLayer {
             sender,
             callsites: Default::default(),
@@ -39,11 +39,10 @@ impl<W: Write> Trace<W> {
     }
 
     pub fn with_stats_alloc<A: GlobalAlloc>(
-        writer: W,
         stats_alloc: &'static StatsAlloc<A>,
     ) -> (Self, TraceLayer<A>) {
         let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
-        let trace = Trace { writer, receiver };
+        let trace = Trace { receiver };
         let layer = TraceLayer {
             sender,
             callsites: Default::default(),
@@ -51,6 +50,21 @@ impl<W: Write> Trace<W> {
             memory_allocator: Some(stats_alloc),
         };
         (trace, layer)
+    }
+}
+
+impl<W: Write> TraceWriter<W> {
+    pub fn new(writer: W) -> (Self, TraceLayer<System>) {
+        let (trace, layer) = Trace::new();
+        (trace.into_writer(writer), layer)
+    }
+
+    pub fn with_stats_alloc<A: GlobalAlloc>(
+        writer: W,
+        stats_alloc: &'static StatsAlloc<A>,
+    ) -> (Self, TraceLayer<A>) {
+        let (trace, layer) = Trace::with_stats_alloc(stats_alloc);
+        (trace.into_writer(writer), layer)
     }
 
     pub async fn receive(&mut self) -> Result<ControlFlow<(), ()>, Error> {
