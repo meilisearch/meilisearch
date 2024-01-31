@@ -36,50 +36,18 @@ fn default_layer() -> LogRouteType {
 
 /// does all the setup before meilisearch is launched
 fn setup(opt: &Opt) -> anyhow::Result<LogRouteHandle> {
-    let now = time::OffsetDateTime::now_utc();
-    let format = time::format_description::parse("[year]-[month]-[day]_[hour]:[minute]:[second]")?;
-    let trace_file = format!("{}-indexing-trace.json", now.format(&format)?);
-
-    let file = std::fs::File::create(&trace_file)
-        .with_context(|| format!("could not create trace file at '{}'", trace_file))?;
-    #[cfg(not(feature = "stats_alloc"))]
-    let (mut trace, layer) = tracing_trace::Trace::new(file);
-    #[cfg(feature = "stats_alloc")]
-    let (mut trace, layer) = tracing_trace::Trace::with_stats_alloc(file, &ALLOC);
-
     let (route_layer, route_layer_handle) = tracing_subscriber::reload::Layer::new(default_layer());
     let route_layer: tracing_subscriber::reload::Layer<_, _> = route_layer;
 
-    let subscriber = tracing_subscriber::registry()
-        .with(route_layer)
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_line_number(true)
-                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
-                .with_filter(
-                    tracing_subscriber::filter::LevelFilter::from_str(&opt.log_level.to_string())
-                        .unwrap(),
-                ),
-        )
-        .with(
-            layer.with_filter(
-                tracing_subscriber::filter::Targets::new()
-                    .with_target("indexing::", tracing::Level::TRACE),
+    let subscriber = tracing_subscriber::registry().with(route_layer).with(
+        tracing_subscriber::fmt::layer()
+            .with_line_number(true)
+            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
+            .with_filter(
+                tracing_subscriber::filter::LevelFilter::from_str(&opt.log_level.to_string())
+                    .unwrap(),
             ),
-        );
-
-    tokio::task::spawn(async move {
-        loop {
-            match tokio::time::timeout(std::time::Duration::from_secs(1), trace.receive()).await {
-                Ok(Ok(ControlFlow::Continue(()))) => continue,
-                Ok(Ok(ControlFlow::Break(_))) => break,
-                Ok(Err(_)) => todo!(),
-                Err(_) => trace.flush().unwrap(),
-            }
-        }
-        while trace.try_receive().is_ok() {}
-        trace.flush().unwrap();
-    });
+    );
 
     // set the subscriber as the default for the application
     tracing::subscriber::set_global_default(subscriber).unwrap();
