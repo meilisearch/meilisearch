@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::entry::{Entry, NewCallsite, SpanClose, SpanEnter, SpanExit};
 use crate::{Error, TraceReader};
@@ -12,10 +12,10 @@ enum SpanStatus {
     Inside(std::time::Duration),
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct CallStats {
-    nb: usize,
-    ns: u64,
+    pub nb: usize,
+    pub ns: u64,
 }
 
 pub fn to_call_stats<R: std::io::Read>(
