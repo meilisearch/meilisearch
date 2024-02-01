@@ -43,7 +43,7 @@ jobs:
           toolchain: nightly
           override: true
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.7.1
+        uses: Swatinem/rust-cache@v2.7.3
       - name: Run cargo check without any default features
         uses: actions-rs/cargo@v1
         with:
@@ -65,7 +65,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.7.1
+        uses: Swatinem/rust-cache@v2.7.3
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
@@ -149,7 +149,7 @@ jobs:
           toolchain: stable
           override: true
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.7.1
+        uses: Swatinem/rust-cache@v2.7.3
       - name: Run tests in debug
         uses: actions-rs/cargo@v1
         with:
@@ -168,7 +168,7 @@ jobs:
           override: true
           components: clippy
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.7.1
+        uses: Swatinem/rust-cache@v2.7.3
       - name: Run cargo clippy
         uses: actions-rs/cargo@v1
         with:
@@ -187,7 +187,7 @@ jobs:
           override: true
           components: rustfmt
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.7.1
+        uses: Swatinem/rust-cache@v2.7.3
       - name: Run cargo fmt
         # Since we never ran the `build.rs` script in the benchmark directory we are missing one auto-generated import file.
         # Since we want to trigger (and fail) this action as fast as possible, instead of building the benchmark crate
