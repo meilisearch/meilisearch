@@ -5,6 +5,7 @@ mod documents;
 mod dumps;
 mod features;
 mod index;
+mod logs;
 mod search;
 mod settings;
 mod snapshot;
