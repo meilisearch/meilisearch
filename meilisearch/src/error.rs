@@ -61,7 +61,6 @@ impl ErrorCode for MeilisearchHttpError {
     fn error_code(&self) -> Code {
         match self {
             MeilisearchHttpError::MissingContentType(_) => Code::MissingContentType,
-            /// TODO: TAMO: create a new error code
             MeilisearchHttpError::AlreadyUsedLogRoute => Code::BadRequest,
             MeilisearchHttpError::CsvDelimiterWithWrongContentType(_) => Code::InvalidContentType,
             MeilisearchHttpError::MissingPayload(_) => Code::MissingPayload,
