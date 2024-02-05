@@ -70,6 +70,8 @@ get_os() {
 get_C_library(){
   if ldd --version | grep -i glibc; then
     c_lib='glibc'
+  elif ldd --version | grep -i eglibc; then
+    c_lib='eglibc'
   elif ldd --version | grep -i musl; then
     c_library_failure_usage
   elif ldd --version | grep -i bionic; then
@@ -122,9 +124,10 @@ not_available_failure_usage() {
 }
 
 c_library_failure_usage() {
-    printf "$RED%s\n$DEFAULT" 'ERROR: Meilisearch binary is not compatible with the current C library your system is using.'
+    printf "$RED%s\n$DEFAULT" 'ERROR: Meilisearch is designed to work with certain C libraries, such as glibc. Ensure that your system uses a compatible C library environment.'
     echo ''
-    echo 'Meilisearch is designed to work with certain C libraries, such as glibc. Ensure that your system uses a compatible C library environment.'
+    echo 'However, you can easily compile the binary from the source files or using the docker image'
+    echo 'Follow the steps at the page ("Source" tab): https://www.meilisearch.com/docs/learn/getting_started/installation#local-installation'
 }
 
 fetch_release_failure_usage() {
