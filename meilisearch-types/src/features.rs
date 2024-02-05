@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub struct RuntimeTogglableFeatures {
     pub vector_store: bool,
     pub metrics: bool,
+    pub logs_route: bool,
     pub export_puffin_reports: bool,
 }
 
