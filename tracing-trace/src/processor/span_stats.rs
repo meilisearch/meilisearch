@@ -14,8 +14,8 @@ enum SpanStatus {
 
 #[derive(Serialize, Deserialize)]
 pub struct CallStats {
-    pub nb: usize,
-    pub ns: u64,
+    pub call_count: usize,
+    pub time: u64,
 }
 
 pub fn to_call_stats<R: std::io::Read>(
@@ -75,5 +75,5 @@ fn site_to_string(call_site: NewCallsite) -> String {
 fn calls_to_stats(calls: Vec<Duration>) -> CallStats {
     let nb = calls.len();
     let sum: Duration = calls.iter().sum();
-    CallStats { nb, ns: sum.as_nanos() as u64 }
+    CallStats { call_count: nb, time: sum.as_nanos() as u64 }
 }
