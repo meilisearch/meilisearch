@@ -68,9 +68,9 @@ get_os() {
 # Gets the C lib the system is using by setting the $c_lib variable.
 # Returns 0 in case of success, 1 otherwise.
 get_C_library(){
-  if ldd --version | grep -i glibc;then
+  if ldd --version | grep -i glibc; then
     c_lib='glibc'
-  elif ldd --version | grep -i musl;then
+  elif ldd --version | grep -i musl; then
     c_library_failure_usage
   elif ldd --version | grep -i bionic; then
     c_library_failure_usage
