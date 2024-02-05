@@ -1,19 +1,21 @@
-use std::fmt;
+use std::convert::Infallible;
 use std::io::Write;
+use std::ops::ControlFlow;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
 
 use actix_web::web::{Bytes, Data};
-use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web::{web, HttpResponse};
 use deserr::actix_web::AwebJson;
-use deserr::Deserr;
+use deserr::{DeserializeError, Deserr, ErrorKind, MergeWithError, ValuePointerRef};
 use futures_util::Stream;
 use meilisearch_auth::AuthController;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{Code, ResponseError};
 use tokio::sync::mpsc::{self};
+use tracing_subscriber::filter::Targets;
 use tracing_subscriber::Layer;
 
 use crate::error::MeilisearchHttpError;
@@ -32,53 +34,65 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 #[derive(Debug, Default, Clone, Copy, Deserr)]
 #[deserr(rename_all = lowercase)]
-pub enum LogLevel {
-    Error,
-    Warn,
-    #[default]
-    Info,
-    Debug,
-    Trace,
-}
-
-#[derive(Debug, Default, Clone, Copy, Deserr)]
-#[deserr(rename_all = lowercase)]
 pub enum LogMode {
     #[default]
     Fmt,
     Profile,
 }
 
-#[derive(Debug, Deserr)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-pub struct GetLogs {
-    #[deserr(default, error = DeserrJsonError<BadRequest>)]
-    pub target: String,
+/// Simple wrapper around the `Targets` from `tracing_subscriber` to implement `MergeWithError` on it.
+#[derive(Clone, Debug)]
+struct MyTargets(Targets);
 
-    #[deserr(default, error = DeserrJsonError<BadRequest>)]
-    pub mode: LogMode,
+/// Simple wrapper around the `ParseError` from `tracing_subscriber` to implement `MergeWithError` on it.
+#[derive(Debug, thiserror::Error)]
+enum MyParseError {
+    #[error(transparent)]
+    ParseError(#[from] tracing_subscriber::filter::ParseError),
+    #[error(
+        "Empty string is not a valid target. If you want to get no logs use `OFF`. Usage: `info`, `info:meilisearch`, or you can write multiple filters in one target: `index_scheduler=info,milli=trace`"
+    )]
+    Example,
 }
 
-impl fmt::Display for LogLevel {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            LogLevel::Error => f.write_str("error"),
-            LogLevel::Warn => f.write_str("warn"),
-            LogLevel::Info => f.write_str("info"),
-            LogLevel::Debug => f.write_str("debug"),
-            LogLevel::Trace => f.write_str("trace"),
+impl FromStr for MyTargets {
+    type Err = MyParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.is_empty() {
+            Err(MyParseError::Example)
+        } else {
+            Ok(MyTargets(Targets::from_str(s).map_err(MyParseError::ParseError)?))
         }
     }
 }
 
-struct LogWriter {
-    sender: mpsc::UnboundedSender<Vec<u8>>,
+impl MergeWithError<MyParseError> for DeserrJsonError<BadRequest> {
+    fn merge(
+        _self_: Option<Self>,
+        other: MyParseError,
+        merge_location: ValuePointerRef,
+    ) -> ControlFlow<Self, Self> {
+        Self::error::<Infallible>(
+            None,
+            ErrorKind::Unexpected { msg: other.to_string() },
+            merge_location,
+        )
+    }
 }
 
-impl Drop for LogWriter {
-    fn drop(&mut self) {
-        println!("hello");
-    }
+#[derive(Debug, Deserr)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+pub struct GetLogs {
+    #[deserr(default = "info".parse().unwrap(), try_from(&String) = MyTargets::from_str -> DeserrJsonError<BadRequest>)]
+    target: MyTargets,
+
+    #[deserr(default, error = DeserrJsonError<BadRequest>)]
+    mode: LogMode,
+}
+
+struct LogWriter {
+    sender: mpsc::UnboundedSender<Vec<u8>>,
 }
 
 impl Write for LogWriter {
@@ -99,7 +113,6 @@ struct HandleGuard {
 
 impl Drop for HandleGuard {
     fn drop(&mut self) {
-        println!("log streamer being dropped");
         if let Err(e) = self.logs.modify(|layer| *layer.inner_mut() = None) {
             tracing::error!("Could not free the logs route: {e}");
         }
@@ -203,7 +216,6 @@ pub async fn get_logs(
     _auth_controller: GuardedData<ActionPolicy<{ actions::METRICS_ALL }>, Data<AuthController>>,
     logs: Data<LogRouteHandle>,
     body: AwebJson<GetLogs, DeserrJsonError>,
-    _req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
     let opt = body.into_inner();
 
@@ -212,8 +224,7 @@ pub async fn get_logs(
     logs.modify(|layer| match layer.inner_mut() {
         None => {
             // there is no one getting logs
-            *layer.filter_mut() =
-                tracing_subscriber::filter::Targets::from_str(&opt.target).unwrap();
+            *layer.filter_mut() = opt.target.0.clone();
             let (new_layer, new_stream) = make_layer(&opt, logs.clone());
 
             *layer.inner_mut() = Some(new_layer);
@@ -235,7 +246,6 @@ pub async fn get_logs(
 pub async fn cancel_logs(
     _auth_controller: GuardedData<ActionPolicy<{ actions::METRICS_ALL }>, Data<AuthController>>,
     logs: Data<LogRouteHandle>,
-    _req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
     if let Err(e) = logs.modify(|layer| *layer.inner_mut() = None) {
         tracing::error!("Could not free the logs route: {e}");
