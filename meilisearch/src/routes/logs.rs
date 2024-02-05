@@ -213,7 +213,7 @@ fn entry_stream(
 }
 
 pub async fn get_logs(
-    index_scheduler: GuardedData<ActionPolicy<{ actions::METRICS_ALL }>, Data<IndexScheduler>>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, Data<IndexScheduler>>,
     logs: Data<LogRouteHandle>,
     body: AwebJson<GetLogs, DeserrJsonError>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -245,7 +245,7 @@ pub async fn get_logs(
 }
 
 pub async fn cancel_logs(
-    index_scheduler: GuardedData<ActionPolicy<{ actions::METRICS_ALL }>, Data<IndexScheduler>>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, Data<IndexScheduler>>,
     logs: Data<LogRouteHandle>,
 ) -> Result<HttpResponse, ResponseError> {
     index_scheduler.features().check_logs_route()?;
