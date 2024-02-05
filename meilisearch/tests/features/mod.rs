@@ -20,6 +20,7 @@ async fn experimental_features() {
     {
       "vectorStore": false,
       "metrics": false,
+      "logsRoute": false,
       "exportPuffinReports": false
     }
     "###);
@@ -31,6 +32,7 @@ async fn experimental_features() {
     {
       "vectorStore": true,
       "metrics": false,
+      "logsRoute": false,
       "exportPuffinReports": false
     }
     "###);
@@ -42,6 +44,7 @@ async fn experimental_features() {
     {
       "vectorStore": true,
       "metrics": false,
+      "logsRoute": false,
       "exportPuffinReports": false
     }
     "###);
@@ -54,6 +57,7 @@ async fn experimental_features() {
     {
       "vectorStore": true,
       "metrics": false,
+      "logsRoute": false,
       "exportPuffinReports": false
     }
     "###);
@@ -66,6 +70,7 @@ async fn experimental_features() {
     {
       "vectorStore": true,
       "metrics": false,
+      "logsRoute": false,
       "exportPuffinReports": false
     }
     "###);
@@ -85,6 +90,7 @@ async fn experimental_feature_metrics() {
     {
       "vectorStore": false,
       "metrics": true,
+      "logsRoute": false,
       "exportPuffinReports": false
     }
     "###);
@@ -140,7 +146,7 @@ async fn errors() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Unknown field `NotAFeature`: expected one of `vectorStore`, `metrics`, `exportPuffinReports`",
+      "message": "Unknown field `NotAFeature`: expected one of `vectorStore`, `metrics`, `logsRoute`, `exportPuffinReports`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
