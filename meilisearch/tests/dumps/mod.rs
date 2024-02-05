@@ -1848,6 +1848,7 @@ async fn import_dump_v6_containing_experimental_features() {
       "scoreDetails": false,
       "vectorStore": false,
       "metrics": false,
+      "logsRoute": false,
       "exportPuffinReports": false
     }
     "###);

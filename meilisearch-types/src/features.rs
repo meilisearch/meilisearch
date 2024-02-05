@@ -13,4 +13,5 @@ pub struct RuntimeTogglableFeatures {
 #[derive(Default, Debug, Clone, Copy)]
 pub struct InstanceTogglableFeatures {
     pub metrics: bool,
+    pub logs_route: bool,
 }

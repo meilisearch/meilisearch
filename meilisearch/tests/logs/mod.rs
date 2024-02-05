@@ -16,8 +16,12 @@ use crate::json;
 #[actix_web::test]
 async fn basic_test_log_route() {
     let db_path = tempfile::tempdir().unwrap();
-    let server =
-        Server::new_with_options(Opt { ..default_settings(db_path.path()) }).await.unwrap();
+    let server = Server::new_with_options(Opt {
+        experimental_enable_logs_route: true,
+        ..default_settings(db_path.path())
+    })
+    .await
+    .unwrap();
 
     let (route_layer, route_layer_handle) =
         tracing_subscriber::reload::Layer::new(None.with_filter(

@@ -16,6 +16,7 @@ async fn index_with_documents<'a>(server: &'a Server, documents: &Value) -> Inde
       "scoreDetails": false,
       "vectorStore": true,
       "metrics": false,
+      "logsRoute": false,
       "exportPuffinReports": false
     }
     "###);

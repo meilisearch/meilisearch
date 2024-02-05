@@ -96,3 +96,30 @@ async fn logs_bad_mode() {
     }
     "###);
 }
+
+#[actix_rt::test]
+async fn logs_without_enabling_the_route() {
+    let server = Server::new().await;
+
+    let (response, code) = server.service.post("/logs", json!({})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "getting logs through the `/logs` route requires enabling the `logs route` experimental feature. See https://github.com/meilisearch/product/discussions/625",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "###);
+
+    let (response, code) = server.service.delete("/logs").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "getting logs through the `/logs` route requires enabling the `logs route` experimental feature. See https://github.com/meilisearch/product/discussions/625",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "###);
+}

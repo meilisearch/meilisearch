@@ -61,8 +61,8 @@ impl RoFeatures {
             Ok(())
         } else {
             Err(FeatureNotEnabledError {
-                disabled_action: "Getting logs",
-                feature: "logsRoute",
+                disabled_action: "getting logs through the `/logs` route",
+                feature: "logs route",
                 /// Update the discussion link
                 issue_link: "https://github.com/meilisearch/product/discussions/625",
             }
@@ -108,6 +108,7 @@ impl FeatureData {
             runtime_features_db.get(&txn, EXPERIMENTAL_FEATURES)?.unwrap_or_default();
         let runtime = Arc::new(RwLock::new(RuntimeTogglableFeatures {
             metrics: instance_features.metrics || persisted_features.metrics,
+            logs_route: instance_features.logs_route || persisted_features.logs_route,
             ..persisted_features
         }));
 

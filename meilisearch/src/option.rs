@@ -538,7 +538,10 @@ impl Opt {
     }
 
     pub(crate) fn to_instance_features(&self) -> InstanceTogglableFeatures {
-        InstanceTogglableFeatures { metrics: self.experimental_enable_metrics }
+        InstanceTogglableFeatures {
+            metrics: self.experimental_enable_metrics,
+            logs_route: self.experimental_enable_logs_route,
+        }
     }
 }
 
