@@ -10,7 +10,7 @@ use actix_web::{web, HttpResponse};
 use deserr::actix_web::AwebJson;
 use deserr::{DeserializeError, Deserr, ErrorKind, MergeWithError, ValuePointerRef};
 use futures_util::Stream;
-use meilisearch_auth::AuthController;
+use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{Code, ResponseError};
@@ -213,12 +213,13 @@ fn entry_stream(
 }
 
 pub async fn get_logs(
-    _auth_controller: GuardedData<ActionPolicy<{ actions::METRICS_ALL }>, Data<AuthController>>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::METRICS_ALL }>, Data<IndexScheduler>>,
     logs: Data<LogRouteHandle>,
     body: AwebJson<GetLogs, DeserrJsonError>,
 ) -> Result<HttpResponse, ResponseError> {
-    let opt = body.into_inner();
+    index_scheduler.features().check_logs_route()?;
 
+    let opt = body.into_inner();
     let mut stream = None;
 
     logs.modify(|layer| match layer.inner_mut() {
@@ -244,9 +245,11 @@ pub async fn get_logs(
 }
 
 pub async fn cancel_logs(
-    _auth_controller: GuardedData<ActionPolicy<{ actions::METRICS_ALL }>, Data<AuthController>>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::METRICS_ALL }>, Data<IndexScheduler>>,
     logs: Data<LogRouteHandle>,
 ) -> Result<HttpResponse, ResponseError> {
+    index_scheduler.features().check_logs_route()?;
+
     if let Err(e) = logs.modify(|layer| *layer.inner_mut() = None) {
         tracing::error!("Could not free the logs route: {e}");
     }

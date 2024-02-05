@@ -47,6 +47,8 @@ pub struct RuntimeTogglableFeatures {
     #[deserr(default)]
     pub metrics: Option<bool>,
     #[deserr(default)]
+    pub logs_route: Option<bool>,
+    #[deserr(default)]
     pub export_puffin_reports: Option<bool>,
 }
 
@@ -66,6 +68,7 @@ async fn patch_features(
         score_details: new_features.0.score_details.unwrap_or(old_features.score_details),
         vector_store: new_features.0.vector_store.unwrap_or(old_features.vector_store),
         metrics: new_features.0.metrics.unwrap_or(old_features.metrics),
+        logs_route: new_features.0.logs_route.unwrap_or(old_features.logs_route),
         export_puffin_reports: new_features
             .0
             .export_puffin_reports
@@ -79,6 +82,7 @@ async fn patch_features(
         score_details,
         vector_store,
         metrics,
+        logs_route,
         export_puffin_reports,
     } = new_features;
 
@@ -88,6 +92,7 @@ async fn patch_features(
             "score_details": score_details,
             "vector_store": vector_store,
             "metrics": metrics,
+            "logs_route": logs_route,
             "export_puffin_reports": export_puffin_reports,
         }),
         Some(&req),

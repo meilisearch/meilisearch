@@ -56,6 +56,20 @@ impl RoFeatures {
         }
     }
 
+    pub fn check_logs_route(&self) -> Result<()> {
+        if self.runtime.logs_route {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action: "Getting logs",
+                feature: "logsRoute",
+                /// Update the discussion link
+                issue_link: "https://github.com/meilisearch/product/discussions/625",
+            }
+            .into())
+        }
+    }
+
     pub fn check_vector(&self, disabled_action: &'static str) -> Result<()> {
         if self.runtime.vector_store {
             Ok(())

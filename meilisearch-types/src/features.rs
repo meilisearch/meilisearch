@@ -6,6 +6,7 @@ pub struct RuntimeTogglableFeatures {
     pub score_details: bool,
     pub vector_store: bool,
     pub metrics: bool,
+    pub logs_route: bool,
     pub export_puffin_reports: bool,
 }
 
