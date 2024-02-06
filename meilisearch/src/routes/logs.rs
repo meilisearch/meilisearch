@@ -186,6 +186,10 @@ fn entry_stream(
                 };
 
                 if count == 0 {
+                    if !bytes.is_empty() {
+                        break;
+                    }
+
                     // channel closed, exit
                     return None;
                 }
