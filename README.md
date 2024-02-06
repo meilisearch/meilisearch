@@ -41,10 +41,10 @@ Meilisearch helps you shape a delightful search experience in a snap, offering f
 ## ✨ Features
 
 - **Search-as-you-type:** find search results in less than 50 milliseconds
-- **[Typo tolerance](https://www.meilisearch.com/docs/learn/getting_started/customizing_relevancy?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features#typo-tolerance):** get relevant matches even when queries contain typos and misspellings
+- **[Typo tolerance](https://www.meilisearch.com/docs/learn/configuration/typo_tolerance?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features):** get relevant matches even when queries contain typos and misspellings
 - **[Filtering](https://www.meilisearch.com/docs/learn/fine_tuning_results/filtering?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features) and [faceted search](https://www.meilisearch.com/docs/learn/fine_tuning_results/faceted_search?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features):** enhance your users' search experience with custom filters and build a faceted search interface in a few lines of code
 - **[Sorting](https://www.meilisearch.com/docs/learn/fine_tuning_results/sorting?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features):** sort results based on price, date, or pretty much anything else your users need
-- **[Synonym support](https://www.meilisearch.com/docs/learn/getting_started/customizing_relevancy?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features#synonyms):** configure synonyms to include more relevant content in your search results
+- **[Synonym support](https://www.meilisearch.com/docs/learn/configuration/synonyms?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features):** configure synonyms to include more relevant content in your search results
 - **[Geosearch](https://www.meilisearch.com/docs/learn/fine_tuning_results/geosearch?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features):** filter and sort documents based on geographic data
 - **[Extensive language support](https://www.meilisearch.com/docs/learn/what_is_meilisearch/language?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features):** search datasets in any language, with optimized support for Chinese, Japanese, Hebrew, and languages using the Latin alphabet
 - **[Security management](https://www.meilisearch.com/docs/learn/security/master_api_keys?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features):** control which users can access what data with API keys that allow fine-grained permissions handling
@@ -60,8 +60,6 @@ You can consult Meilisearch's documentation at [https://www.meilisearch.com/docs
 ## 🚀 Getting started
 
 For basic instructions on how to set up Meilisearch, add documents to an index, and search for documents, take a look at our [Quick Start](https://www.meilisearch.com/docs/learn/getting_started/quick_start?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=get-started) guide.
-
-You may also want to check out [Meilisearch 101](https://www.meilisearch.com/docs/learn/getting_started/filtering_and_sorting?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=get-started) for an introduction to some of Meilisearch's most popular features.
 
 ## ⚡ Supercharge your Meilisearch experience
 
@@ -101,7 +99,7 @@ Meilisearch is a search engine created by [Meili](https://www.welcometothejungle
 
 - For feature requests, please visit our [product repository](https://github.com/meilisearch/product/discussions)
 - Found a bug? Open an [issue](https://github.com/meilisearch/meilisearch/issues)!
-- Want to be part of our Discord community? [Join us!](https://discord.gg/meilisearch)
+- Want to be part of our Discord community? [Join us!](https://discord.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=contact)
 
 Thank you for your support!
 
