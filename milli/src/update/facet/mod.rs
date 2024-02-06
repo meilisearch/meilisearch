@@ -85,8 +85,8 @@ use charabia::normalizer::{Normalize, NormalizerOption};
 use grenad::{CompressionType, SortAlgorithm};
 use heed::types::{Bytes, DecodeIgnore, SerdeJson};
 use heed::BytesEncode;
-use log::debug;
 use time::OffsetDateTime;
+use tracing::debug;
 
 use self::incremental::FacetsUpdateIncremental;
 use super::FacetsUpdateBulk;

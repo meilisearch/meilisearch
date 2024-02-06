@@ -4,7 +4,7 @@ use std::str;
 use grenad::CompressionType;
 use heed::types::Bytes;
 use heed::{BytesDecode, BytesEncode, Database};
-use log::debug;
+use tracing::debug;
 
 use crate::error::SerializationError;
 use crate::heed_codec::StrBEU16Codec;

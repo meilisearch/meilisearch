@@ -73,7 +73,7 @@ impl Embedder {
         let device = match candle_core::Device::cuda_if_available(0) {
             Ok(device) => device,
             Err(error) => {
-                log::warn!("could not initialize CUDA device for Hugging Face embedder, defaulting to CPU: {}", error);
+                tracing::warn!("could not initialize CUDA device for Hugging Face embedder, defaulting to CPU: {}", error);
                 candle_core::Device::Cpu
             }
         };

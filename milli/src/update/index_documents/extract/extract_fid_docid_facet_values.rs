@@ -431,7 +431,7 @@ fn extract_facet_values(value: &Value, geo_field: bool) -> FilterableValues {
                     if let Ok(float) = original.parse() {
                         output_numbers.push(float);
                     } else {
-                        log::warn!(
+                        tracing::warn!(
                             "Internal error, could not parse a geofield that has been validated. Please open an issue."
                         )
                     }
