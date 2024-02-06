@@ -99,7 +99,7 @@ Meilisearch is a search engine created by [Meili](https://www.welcometothejungle
 
 - For feature requests, please visit our [product repository](https://github.com/meilisearch/product/discussions)
 - Found a bug? Open an [issue](https://github.com/meilisearch/meilisearch/issues)!
-- Want to be part of our Discord community? [Join us!](https://discord.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=feedback)
+- Want to be part of our Discord community? [Join us!](https://discord.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=contact)
 
 Thank you for your support!
 
