@@ -13,7 +13,6 @@ async fn index_with_documents<'a>(server: &'a Server, documents: &Value) -> Inde
     meili_snap::snapshot!(code, @"200 OK");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "scoreDetails": false,
       "vectorStore": true,
       "metrics": false,
       "exportPuffinReports": false
