@@ -14,7 +14,7 @@ use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{Code, ResponseError};
-use tokio::sync::mpsc::{self};
+use tokio::sync::mpsc;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::Layer;
 

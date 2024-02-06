@@ -13,10 +13,11 @@ serde_json = "1.0.111"
 tracing = "0.1.40"
 tracing-error = "0.2.0"
 tracing-subscriber = "0.3.18"
-stats_alloc = { git = "https://github.com/Kerollmops/stats_alloc", branch = "stable-const-fn-trait" }
 byte-unit = { version = "4.0.19", default-features = false, features = [
     "std",
     "serde",
 ] }
 tokio = { version = "1.35.1", features = ["sync"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+procfs = { version = "0.16.0", default-features = false }

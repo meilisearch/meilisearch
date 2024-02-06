@@ -20,13 +20,8 @@ use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::Layer;
 
-#[cfg(not(feature = "stats_alloc"))]
 #[global_allocator]
 static ALLOC: MiMalloc = MiMalloc;
-
-#[cfg(feature = "stats_alloc")]
-#[global_allocator]
-static ALLOC: stats_alloc::StatsAlloc<MiMalloc> = stats_alloc::StatsAlloc::new(MiMalloc);
 
 fn default_layer() -> LogRouteType {
     None.with_filter(tracing_subscriber::filter::Targets::new().with_target("", LevelFilter::OFF))
