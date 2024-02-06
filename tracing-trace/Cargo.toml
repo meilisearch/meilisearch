@@ -19,5 +19,5 @@ byte-unit = { version = "4.0.19", default-features = false, features = [
 ] }
 tokio = { version = "1.35.1", features = ["sync"] }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-procfs = { version = "0.16.0", default-features = false }
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+libproc = "0.14.2"

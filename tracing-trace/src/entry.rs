@@ -100,46 +100,29 @@ pub struct SpanClose {
     pub time: std::time::Duration,
 }
 
-/// A struct with a lot of memory allocation stats akin
-/// to the `procfs::Process::StatsM` one plus the OOM score.
-///
-/// Note that all the values are in bytes not in pages.
+/// A struct with a memory allocation stat.
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
 pub struct MemoryStats {
     /// Resident set size, measured in bytes.
     /// (same as VmRSS in /proc/<pid>/status).
     pub resident: u64,
-    /// Number of resident shared bytes (i.e., backed by a file).
-    /// (same as RssFile+RssShmem in /proc/<pid>/status).
-    pub shared: u64,
-    /// The current score that the kernel gives to this process
-    /// for the purpose of selecting a process for the OOM-killer
-    ///
-    /// A higher score means that the process is more likely to be selected
-    /// by the OOM-killer. The basis for this score is the amount of memory used
-    /// by the process, plus other factors.
-    ///
-    /// (Since linux 2.6.11)
-    pub oom_score: u32,
 }
 
 impl MemoryStats {
-    #[cfg(target_os = "linux")]
-    pub fn fetch() -> procfs::ProcResult<Self> {
-        let process = procfs::process::Process::myself().unwrap();
-        let procfs::process::StatM { resident, shared, .. } = process.statm()?;
-        let oom_score = process.oom_score()?;
-        let page_size = procfs::page_size();
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pub fn fetch() -> Option<Self> {
+        use libproc::libproc::pid_rusage::{pidrusage, RUsageInfoV0};
 
-        Ok(MemoryStats { resident: resident * page_size, shared: shared * page_size, oom_score })
+        match pidrusage(std::process::id() as i32) {
+            Ok(RUsageInfoV0 { ri_resident_size, .. }) => {
+                Some(MemoryStats { resident: ri_resident_size })
+            }
+            Err(_) => None, /* ignoring error to avoid spamming */
+        }
     }
 
     pub fn checked_sub(self, other: Self) -> Option<Self> {
-        Some(Self {
-            resident: self.resident.checked_sub(other.resident)?,
-            shared: self.shared.checked_sub(other.shared)?,
-            oom_score: self.oom_score.checked_sub(other.oom_score)?,
-        })
+        Some(Self { resident: self.resident.checked_sub(other.resident)? })
     }
 }
 

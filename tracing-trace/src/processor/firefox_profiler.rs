@@ -322,18 +322,6 @@ impl<'a> ProfilerMarker for SpanMarker<'a> {
                 format: MarkerFieldFormat::Bytes,
                 searchable: false,
             }),
-            MarkerSchemaField::Dynamic(MarkerDynamicField {
-                key: "shared",
-                label: "Number of resident shared pages (i.e., backed by a file) while this function was executing",
-                format: MarkerFieldFormat::Bytes,
-                searchable: false,
-            }),
-            MarkerSchemaField::Dynamic(MarkerDynamicField {
-                key: "oom_score",
-                label: "The current score that the kernel gives to this process for the purpose of selecting a process for the OOM-killer while this function was executing",
-                format: MarkerFieldFormat::Integer,
-                searchable: false,
-            }),
         ];
 
         MarkerSchema {
@@ -366,10 +354,8 @@ impl<'a> ProfilerMarker for SpanMarker<'a> {
             "thread_id": thread_id,
         });
 
-        if let Some(MemoryStats { resident, shared, oom_score }) = self.memory_delta {
+        if let Some(MemoryStats { resident }) = self.memory_delta {
             value["resident"] = json!(resident);
-            value["shared"] = json!(shared);
-            value["oom_score"] = json!(oom_score);
         }
 
         value
@@ -423,18 +409,6 @@ impl<'a> ProfilerMarker for EventMarker<'a> {
                 format: MarkerFieldFormat::Bytes,
                 searchable: false,
             }),
-            MarkerSchemaField::Dynamic(MarkerDynamicField {
-                key: "shared",
-                label: "Number of resident shared pages (i.e., backed by a file) while this function was executing",
-                format: MarkerFieldFormat::Bytes,
-                searchable: false,
-            }),
-            MarkerSchemaField::Dynamic(MarkerDynamicField {
-                key: "oom_score",
-                label: "The current score that the kernel gives to this process for the purpose of selecting a process for the OOM-killer while this function was executing",
-                format: MarkerFieldFormat::Integer,
-                searchable: false,
-            }),
         ];
 
         MarkerSchema {
@@ -467,10 +441,8 @@ impl<'a> ProfilerMarker for EventMarker<'a> {
             "thread_id": thread_id,
         });
 
-        if let Some(MemoryStats { resident, shared, oom_score }) = self.memory_delta {
+        if let Some(MemoryStats { resident }) = self.memory_delta {
             value["resident"] = json!(resident);
-            value["shared"] = json!(shared);
-            value["oom_score"] = json!(oom_score);
         }
 
         value
