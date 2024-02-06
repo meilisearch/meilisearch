@@ -101,57 +101,45 @@ pub struct SpanClose {
 }
 
 /// A struct with a lot of memory allocation stats akin
-/// to the `stats_alloc::Stats` one but implements the
-/// `Serialize/Deserialize` serde traits.
+/// to the `procfs::Process::StatsM` one plus the OOM score.
+///
+/// Note that all the values are in bytes not in pages.
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
 pub struct MemoryStats {
-    pub allocations: usize,
-    pub deallocations: usize,
-    pub reallocations: usize,
-    pub bytes_allocated: usize,
-    pub bytes_deallocated: usize,
-    pub bytes_reallocated: isize,
-}
-
-impl From<stats_alloc::Stats> for MemoryStats {
-    fn from(stats: stats_alloc::Stats) -> Self {
-        let stats_alloc::Stats {
-            allocations,
-            deallocations,
-            reallocations,
-            bytes_allocated,
-            bytes_deallocated,
-            bytes_reallocated,
-        } = stats;
-        MemoryStats {
-            allocations,
-            deallocations,
-            reallocations,
-            bytes_allocated,
-            bytes_deallocated,
-            bytes_reallocated,
-        }
-    }
+    /// Resident set size, measured in bytes.
+    /// (same as VmRSS in /proc/<pid>/status).
+    pub resident: u64,
+    /// Number of resident shared bytes (i.e., backed by a file).
+    /// (same as RssFile+RssShmem in /proc/<pid>/status).
+    pub shared: u64,
+    /// The current score that the kernel gives to this process
+    /// for the purpose of selecting a process for the OOM-killer
+    ///
+    /// A higher score means that the process is more likely to be selected
+    /// by the OOM-killer. The basis for this score is the amount of memory used
+    /// by the process, plus other factors.
+    ///
+    /// (Since linux 2.6.11)
+    pub oom_score: u32,
 }
 
 impl MemoryStats {
+    #[cfg(target_os = "linux")]
+    pub fn fetch() -> procfs::ProcResult<Self> {
+        let process = procfs::process::Process::myself().unwrap();
+        let procfs::process::StatM { resident, shared, .. } = process.statm()?;
+        let oom_score = process.oom_score()?;
+        let page_size = procfs::page_size();
+
+        Ok(MemoryStats { resident: resident * page_size, shared: shared * page_size, oom_score })
+    }
+
     pub fn checked_sub(self, other: Self) -> Option<Self> {
         Some(Self {
-            allocations: self.allocations.checked_sub(other.allocations)?,
-            deallocations: self.deallocations.checked_sub(other.deallocations)?,
-            reallocations: self.reallocations.checked_sub(other.reallocations)?,
-            bytes_allocated: self.bytes_allocated.checked_sub(other.bytes_allocated)?,
-            bytes_deallocated: self.bytes_deallocated.checked_sub(other.bytes_deallocated)?,
-            bytes_reallocated: self.bytes_reallocated.checked_sub(other.bytes_reallocated)?,
+            resident: self.resident.checked_sub(other.resident)?,
+            shared: self.shared.checked_sub(other.shared)?,
+            oom_score: self.oom_score.checked_sub(other.oom_score)?,
         })
-    }
-
-    pub fn usage(&self) -> isize {
-        (self.bytes_allocated - self.bytes_deallocated) as isize + self.bytes_reallocated
-    }
-
-    pub fn operations(&self) -> usize {
-        self.allocations + self.deallocations + self.reallocations
     }
 }
 

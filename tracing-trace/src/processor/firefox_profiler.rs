@@ -227,8 +227,8 @@ fn add_memory_samples(
     profile.add_counter_sample(
         memory_counters.usage,
         last_timestamp,
-        stats.usage() as f64 - last_memory.usage() as f64,
-        stats.operations().checked_sub(last_memory.operations()).unwrap_or_default() as u32,
+        stats.resident as f64 - last_memory.resident as f64,
+        0,
     );
 
     let delta = stats.checked_sub(*last_memory);
@@ -317,39 +317,21 @@ impl<'a> ProfilerMarker for SpanMarker<'a> {
                 searchable: true,
             }),
             MarkerSchemaField::Dynamic(MarkerDynamicField {
-                key: "allocations",
-                label: "Number of allocation operations while this function was executing",
-                format: MarkerFieldFormat::Integer,
-                searchable: false,
-            }),
-            MarkerSchemaField::Dynamic(MarkerDynamicField {
-                key: "deallocations",
-                label: "Number of deallocation operations while this function was executing",
-                format: MarkerFieldFormat::Integer,
-                searchable: false,
-            }),
-            MarkerSchemaField::Dynamic(MarkerDynamicField {
-                key: "reallocations",
-                label: "Number of reallocation operations while this function was executing",
-                format: MarkerFieldFormat::Integer,
-                searchable: false,
-            }),
-            MarkerSchemaField::Dynamic(MarkerDynamicField {
-                key: "allocated_bytes",
-                label: "Number of allocated bytes while this function was executing",
+                key: "resident",
+                label: "Resident set size, measured in bytes while this function was executing",
                 format: MarkerFieldFormat::Bytes,
                 searchable: false,
             }),
             MarkerSchemaField::Dynamic(MarkerDynamicField {
-                key: "deallocated_bytes",
-                label: "Number of deallocated bytes while this function was executing",
+                key: "shared",
+                label: "Number of resident shared pages (i.e., backed by a file) while this function was executing",
                 format: MarkerFieldFormat::Bytes,
                 searchable: false,
             }),
             MarkerSchemaField::Dynamic(MarkerDynamicField {
-                key: "reallocated_bytes",
-                label: "Number of reallocated bytes while this function was executing",
-                format: MarkerFieldFormat::Bytes,
+                key: "oom_score",
+                label: "The current score that the kernel gives to this process for the purpose of selecting a process for the OOM-killer while this function was executing",
+                format: MarkerFieldFormat::Integer,
                 searchable: false,
             }),
         ];
@@ -384,21 +366,10 @@ impl<'a> ProfilerMarker for SpanMarker<'a> {
             "thread_id": thread_id,
         });
 
-        if let Some(MemoryStats {
-            allocations,
-            deallocations,
-            reallocations,
-            bytes_allocated,
-            bytes_deallocated,
-            bytes_reallocated,
-        }) = self.memory_delta
-        {
-            value["allocations"] = json!(allocations);
-            value["deallocations"] = json!(deallocations);
-            value["reallocations"] = json!(reallocations);
-            value["allocated_bytes"] = json!(bytes_allocated);
-            value["deallocated_bytes"] = json!(bytes_deallocated);
-            value["reallocated_bytes"] = json!(bytes_reallocated);
+        if let Some(MemoryStats { resident, shared, oom_score }) = self.memory_delta {
+            value["resident"] = json!(resident);
+            value["shared"] = json!(shared);
+            value["oom_score"] = json!(oom_score);
         }
 
         value
@@ -447,39 +418,21 @@ impl<'a> ProfilerMarker for EventMarker<'a> {
                 searchable: true,
             }),
             MarkerSchemaField::Dynamic(MarkerDynamicField {
-                key: "allocations",
-                label: "Number of allocation operations since last measure",
-                format: MarkerFieldFormat::Integer,
-                searchable: false,
-            }),
-            MarkerSchemaField::Dynamic(MarkerDynamicField {
-                key: "deallocations",
-                label: "Number of deallocation operations since last measure",
-                format: MarkerFieldFormat::Integer,
-                searchable: false,
-            }),
-            MarkerSchemaField::Dynamic(MarkerDynamicField {
-                key: "reallocations",
-                label: "Number of reallocation operations since last measure",
-                format: MarkerFieldFormat::Integer,
-                searchable: false,
-            }),
-            MarkerSchemaField::Dynamic(MarkerDynamicField {
-                key: "allocated_bytes",
-                label: "Number of allocated bytes since last measure",
+                key: "resident",
+                label: "Resident set size, measured in bytes while this function was executing",
                 format: MarkerFieldFormat::Bytes,
                 searchable: false,
             }),
             MarkerSchemaField::Dynamic(MarkerDynamicField {
-                key: "deallocated_bytes",
-                label: "Number of deallocated bytes since last measure",
+                key: "shared",
+                label: "Number of resident shared pages (i.e., backed by a file) while this function was executing",
                 format: MarkerFieldFormat::Bytes,
                 searchable: false,
             }),
             MarkerSchemaField::Dynamic(MarkerDynamicField {
-                key: "reallocated_bytes",
-                label: "Number of reallocated bytes since last measure",
-                format: MarkerFieldFormat::Bytes,
+                key: "oom_score",
+                label: "The current score that the kernel gives to this process for the purpose of selecting a process for the OOM-killer while this function was executing",
+                format: MarkerFieldFormat::Integer,
                 searchable: false,
             }),
         ];
@@ -514,21 +467,10 @@ impl<'a> ProfilerMarker for EventMarker<'a> {
             "thread_id": thread_id,
         });
 
-        if let Some(MemoryStats {
-            allocations,
-            deallocations,
-            reallocations,
-            bytes_allocated,
-            bytes_deallocated,
-            bytes_reallocated,
-        }) = self.memory_delta
-        {
-            value["allocations"] = json!(allocations);
-            value["deallocations"] = json!(deallocations);
-            value["reallocations"] = json!(reallocations);
-            value["allocated_bytes"] = json!(bytes_allocated);
-            value["deallocated_bytes"] = json!(bytes_deallocated);
-            value["reallocated_bytes"] = json!(bytes_reallocated);
+        if let Some(MemoryStats { resident, shared, oom_score }) = self.memory_delta {
+            value["resident"] = json!(resident);
+            value["shared"] = json!(shared);
+            value["oom_score"] = json!(oom_score);
         }
 
         value

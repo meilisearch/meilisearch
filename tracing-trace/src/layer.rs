@@ -1,11 +1,9 @@
-use std::alloc::{GlobalAlloc, System};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::Write;
 use std::ops::ControlFlow;
 use std::sync::RwLock;
 
-use stats_alloc::StatsAlloc;
 use tracing::span::{Attributes, Id as TracingId};
 use tracing::{Metadata, Subscriber};
 use tracing_subscriber::layer::Context;
@@ -18,52 +16,28 @@ use crate::entry::{
 use crate::{Error, Trace, TraceWriter};
 
 /// Layer that measures the time spent in spans.
-pub struct TraceLayer<A: GlobalAlloc + 'static = System> {
+pub struct TraceLayer {
     sender: tokio::sync::mpsc::UnboundedSender<Entry>,
     callsites: RwLock<HashMap<OpaqueIdentifier, ResourceId>>,
     start_time: std::time::Instant,
-    memory_allocator: Option<&'static StatsAlloc<A>>,
 }
 
 impl Trace {
-    pub fn new() -> (Self, TraceLayer<System>) {
+    pub fn new() -> (Self, TraceLayer) {
         let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
         let trace = Trace { receiver };
         let layer = TraceLayer {
             sender,
             callsites: Default::default(),
             start_time: std::time::Instant::now(),
-            memory_allocator: None,
-        };
-        (trace, layer)
-    }
-
-    pub fn with_stats_alloc<A: GlobalAlloc>(
-        stats_alloc: &'static StatsAlloc<A>,
-    ) -> (Self, TraceLayer<A>) {
-        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
-        let trace = Trace { receiver };
-        let layer = TraceLayer {
-            sender,
-            callsites: Default::default(),
-            start_time: std::time::Instant::now(),
-            memory_allocator: Some(stats_alloc),
         };
         (trace, layer)
     }
 }
 
 impl<W: Write> TraceWriter<W> {
-    pub fn new(writer: W) -> (Self, TraceLayer<System>) {
+    pub fn new(writer: W) -> (Self, TraceLayer) {
         let (trace, layer) = Trace::new();
-        (trace.into_writer(writer), layer)
-    }
-
-    pub fn with_stats_alloc<A: GlobalAlloc>(
-        writer: W,
-        stats_alloc: &'static StatsAlloc<A>,
-    ) -> (Self, TraceLayer<A>) {
-        let (trace, layer) = Trace::with_stats_alloc(stats_alloc);
         (trace.into_writer(writer), layer)
     }
 
@@ -107,7 +81,7 @@ enum OpaqueIdentifier {
     Call(tracing::callsite::Identifier),
 }
 
-impl<A: GlobalAlloc> TraceLayer<A> {
+impl TraceLayer {
     fn resource_id(&self, opaque: OpaqueIdentifier) -> Option<ResourceId> {
         self.callsites.read().unwrap().get(&opaque).copied()
     }
@@ -122,8 +96,14 @@ impl<A: GlobalAlloc> TraceLayer<A> {
         self.start_time.elapsed()
     }
 
+    #[cfg(target_os = "linux")]
     fn memory_stats(&self) -> Option<MemoryStats> {
-        self.memory_allocator.map(|ma| ma.stats().into())
+        Some(MemoryStats::fetch().unwrap())
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn memory_stats(&self) -> Option<MemoryStats> {
+        None
     }
 
     fn send(&self, entry: Entry) {
@@ -160,10 +140,9 @@ impl<A: GlobalAlloc> TraceLayer<A> {
     }
 }
 
-impl<S, A> Layer<S> for TraceLayer<A>
+impl<S> Layer<S> for TraceLayer
 where
     S: Subscriber,
-    A: GlobalAlloc,
 {
     fn on_new_span(&self, attrs: &Attributes<'_>, id: &TracingId, _ctx: Context<'_, S>) {
         let call_id = self

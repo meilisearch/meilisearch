@@ -3667,7 +3667,6 @@ dependencies = [
  "siphasher 1.0.0",
  "slice-group-by",
  "static-files",
- "stats_alloc",
  "sysinfo",
  "tar",
  "temp-env",
@@ -4434,6 +4433,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "procfs"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "731e0d9356b0c25f16f33b5be79b1c57b562f141ebfcdb0ad8ac2c13a24293b4"
+dependencies = [
+ "bitflags 2.4.1",
+ "hex",
+ "lazy_static",
+ "procfs-core",
+ "rustix 0.38.26",
+]
+
+[[package]]
+name = "procfs-core"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d3554923a69f4ce04c4a754260c338f505ce22642d3830e049a399fc2059a29"
+dependencies = [
+ "bitflags 2.4.1",
+ "hex",
+]
+
+[[package]]
 name = "prometheus"
 version = "0.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4445,7 +4467,7 @@ dependencies = [
  "libc",
  "memchr",
  "parking_lot",
- "procfs",
+ "procfs 0.14.2",
  "protobuf",
  "thiserror",
 ]
@@ -5223,11 +5245,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
-name = "stats_alloc"
-version = "0.1.10"
-source = "git+https://github.com/Kerollmops/stats_alloc?branch=stable-const-fn-trait#6f83c52160c7d0550fdf770e1f73d239b0ff9a97"
-
-[[package]]
 name = "strsim"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5705,9 +5722,9 @@ dependencies = [
  "byte-unit",
  "color-spantrace",
  "fxprof-processed-profile",
+ "procfs 0.16.0",
  "serde",
  "serde_json",
- "stats_alloc",
  "tokio",
  "tracing",
  "tracing-error",
