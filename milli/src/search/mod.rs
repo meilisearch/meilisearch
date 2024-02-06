@@ -6,9 +6,9 @@ use charabia::Normalize;
 use fst::automaton::{Automaton, Str};
 use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
-use log::error;
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
+use tracing::error;
 
 pub use self::facet::{FacetDistribution, Filter, OrderBy, DEFAULT_VALUES_PER_FACET};
 pub use self::new::matches::{FormatOptions, MatchBounds, MatcherBuilder, MatchingWords};

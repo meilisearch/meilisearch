@@ -3813,7 +3813,6 @@ dependencies = [
  "json-depth-checker",
  "levenshtein_automata",
  "liquid",
- "log",
  "logging_timer",
  "maplit",
  "md5",

@@ -78,7 +78,7 @@ pub fn enrich_documents_batch<R: Read + Seek>(
                 },
                 [] => return Ok(Err(UserError::NoPrimaryKeyCandidateFound)),
                 [(field_id, name)] => {
-                    log::info!("Primary key was not specified in index. Inferred to '{name}'");
+                    tracing::info!("Primary key was not specified in index. Inferred to '{name}'");
                     PrimaryKey::Flat { name, field_id: *field_id }
                 }
                 multiple => {

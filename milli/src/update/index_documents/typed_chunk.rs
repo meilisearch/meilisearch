@@ -517,7 +517,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 }
             }
 
-            log::debug!("Finished vector chunk for {}", embedder_name);
+            tracing::debug!("Finished vector chunk for {}", embedder_name);
         }
         TypedChunk::ScriptLanguageDocids(sl_map) => {
             let span = tracing::trace_span!(target: "indexing::write_db", "script_language_docids");

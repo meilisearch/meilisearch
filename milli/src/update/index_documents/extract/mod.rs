@@ -14,8 +14,8 @@ use std::fs::File;
 use std::io::BufReader;
 
 use crossbeam_channel::Sender;
-use log::debug;
 use rayon::prelude::*;
+use tracing::debug;
 
 use self::extract_docid_word_positions::extract_docid_word_positions;
 use self::extract_facet_number_docids::extract_facet_number_docids;

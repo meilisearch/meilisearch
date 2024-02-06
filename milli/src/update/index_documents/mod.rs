@@ -13,11 +13,11 @@ use std::result::Result as StdResult;
 use crossbeam_channel::{Receiver, Sender};
 use heed::types::Str;
 use heed::Database;
-use log::debug;
 use rand::SeedableRng;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use slice_group_by::GroupBy;
+use tracing::debug;
 use typed_chunk::{write_typed_chunk_into_index, TypedChunk};
 
 use self::enrich::enrich_documents_batch;
