@@ -96,12 +96,12 @@ impl TraceLayer {
         self.start_time.elapsed()
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn memory_stats(&self) -> Option<MemoryStats> {
         Some(MemoryStats::fetch().unwrap())
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     fn memory_stats(&self) -> Option<MemoryStats> {
         None
     }

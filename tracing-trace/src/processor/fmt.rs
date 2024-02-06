@@ -188,9 +188,8 @@ fn print_duration(duration: std::time::Duration) -> String {
 }
 
 /// Format only the allocated bytes, deallocated bytes and reallocated bytes in GiB, MiB, KiB, Bytes.
-fn print_memory(MemoryStats { resident, shared, oom_score }: MemoryStats) -> String {
+fn print_memory(MemoryStats { resident }: MemoryStats) -> String {
     use byte_unit::Byte;
     let rss_bytes = Byte::from_bytes(resident).get_appropriate_unit(true);
-    let shared_bytes = Byte::from_bytes(shared).get_appropriate_unit(true);
-    format!("RSS {rss_bytes:.2}, Shared {shared_bytes:.2}, OOM score {oom_score}")
+    format!("RSS {rss_bytes:.2}")
 }
