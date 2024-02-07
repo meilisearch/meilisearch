@@ -1122,6 +1122,14 @@ pub fn validate_embedding_settings(
     let Setting::Set(settings) = settings else { return Ok(settings) };
     let EmbeddingSettings { source, model, revision, api_key, dimensions, document_template } =
         settings;
+
+    if let Some(0) = dimensions.set() {
+        return Err(crate::error::UserError::InvalidSettingsDimensions {
+            embedder_name: name.to_owned(),
+        }
+        .into());
+    }
+
     let Some(inferred_source) = source.set() else {
         return Ok(Setting::Set(EmbeddingSettings {
             source,
@@ -1150,6 +1158,15 @@ pub fn validate_embedding_settings(
                             model: model.name(),
                             dimensions,
                             expected_dimensions: model.default_dimensions(),
+                        }
+                        .into());
+                    }
+                    if dimensions > model.default_dimensions() {
+                        return Err(crate::error::UserError::InvalidOpenAiModelDimensionsMax {
+                            embedder_name: name.to_owned(),
+                            model: model.name(),
+                            dimensions,
+                            max_dimensions: model.default_dimensions(),
                         }
                         .into());
                     }

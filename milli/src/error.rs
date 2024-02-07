@@ -234,6 +234,15 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
         dimensions: usize,
         expected_dimensions: usize,
     },
+    #[error("`.embedders.{embedder_name}.dimensions`: Model `{model}` does not support overriding its dimensions to a value higher than {max_dimensions}. Found {dimensions}")]
+    InvalidOpenAiModelDimensionsMax {
+        embedder_name: String,
+        model: &'static str,
+        dimensions: usize,
+        max_dimensions: usize,
+    },
+    #[error("`.embedders.{embedder_name}.dimensions`: `dimensions` cannot be zero")]
+    InvalidSettingsDimensions { embedder_name: String },
 }
 
 impl From<crate::vector::Error> for Error {
