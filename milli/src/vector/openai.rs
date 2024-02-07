@@ -17,6 +17,7 @@ pub struct Embedder {
 pub struct EmbedderOptions {
     pub api_key: Option<String>,
     pub embedding_model: EmbeddingModel,
+    pub dimensions: Option<usize>,
 }
 
 #[derive(
@@ -41,34 +42,50 @@ pub enum EmbeddingModel {
     #[serde(rename = "text-embedding-ada-002")]
     #[deserr(rename = "text-embedding-ada-002")]
     TextEmbeddingAda002,
+
+    #[serde(rename = "text-embedding-3-small")]
+    #[deserr(rename = "text-embedding-3-small")]
+    TextEmbedding3Small,
+
+    #[serde(rename = "text-embedding-3-large")]
+    #[deserr(rename = "text-embedding-3-large")]
+    TextEmbedding3Large,
 }
 
 impl EmbeddingModel {
     pub fn supported_models() -> &'static [&'static str] {
-        &["text-embedding-ada-002"]
+        &["text-embedding-ada-002", "text-embedding-3-small", "text-embedding-3-large"]
     }
 
     pub fn max_token(&self) -> usize {
         match self {
             EmbeddingModel::TextEmbeddingAda002 => 8191,
+            EmbeddingModel::TextEmbedding3Large => 8191,
+            EmbeddingModel::TextEmbedding3Small => 8191,
         }
     }
 
-    pub fn dimensions(&self) -> usize {
+    pub fn default_dimensions(&self) -> usize {
         match self {
             EmbeddingModel::TextEmbeddingAda002 => 1536,
+            EmbeddingModel::TextEmbedding3Large => 3072,
+            EmbeddingModel::TextEmbedding3Small => 1536,
         }
     }
 
     pub fn name(&self) -> &'static str {
         match self {
             EmbeddingModel::TextEmbeddingAda002 => "text-embedding-ada-002",
+            EmbeddingModel::TextEmbedding3Large => "text-embedding-3-large",
+            EmbeddingModel::TextEmbedding3Small => "text-embedding-3-small",
         }
     }
 
     pub fn from_name(name: &str) -> Option<Self> {
         match name {
             "text-embedding-ada-002" => Some(EmbeddingModel::TextEmbeddingAda002),
+            "text-embedding-3-large" => Some(EmbeddingModel::TextEmbedding3Large),
+            "text-embedding-3-small" => Some(EmbeddingModel::TextEmbedding3Small),
             _ => None,
         }
     }
@@ -78,6 +95,20 @@ impl EmbeddingModel {
             EmbeddingModel::TextEmbeddingAda002 => {
                 Some(DistributionShift { current_mean: 0.90, current_sigma: 0.08 })
             }
+            EmbeddingModel::TextEmbedding3Large => {
+                Some(DistributionShift { current_mean: 0.70, current_sigma: 0.1 })
+            }
+            EmbeddingModel::TextEmbedding3Small => {
+                Some(DistributionShift { current_mean: 0.75, current_sigma: 0.1 })
+            }
+        }
+    }
+
+    pub fn supports_overriding_dimensions(&self) -> bool {
+        match self {
+            EmbeddingModel::TextEmbeddingAda002 => false,
+            EmbeddingModel::TextEmbedding3Large => true,
+            EmbeddingModel::TextEmbedding3Small => true,
         }
     }
 }
@@ -86,11 +117,11 @@ pub const OPENAI_EMBEDDINGS_URL: &str = "https://api.openai.com/v1/embeddings";
 
 impl EmbedderOptions {
     pub fn with_default_model(api_key: Option<String>) -> Self {
-        Self { api_key, embedding_model: Default::default() }
+        Self { api_key, embedding_model: Default::default(), dimensions: None }
     }
 
     pub fn with_embedding_model(api_key: Option<String>, embedding_model: EmbeddingModel) -> Self {
-        Self { api_key, embedding_model }
+        Self { api_key, embedding_model, dimensions: None }
     }
 }
 
@@ -237,7 +268,11 @@ impl Embedder {
         for text in texts {
             log::trace!("Received prompt: {}", text.as_ref())
         }
-        let request = OpenAiRequest { model: self.options.embedding_model.name(), input: texts };
+        let request = OpenAiRequest {
+            model: self.options.embedding_model.name(),
+            input: texts,
+            dimensions: self.overriden_dimensions(),
+        };
         let response = client
             .post(OPENAI_EMBEDDINGS_URL)
             .json(&request)
@@ -280,8 +315,7 @@ impl Embedder {
             }
 
             let mut tokens = encoded.as_slice();
-            let mut embeddings_for_prompt =
-                Embeddings::new(self.options.embedding_model.dimensions());
+            let mut embeddings_for_prompt = Embeddings::new(self.dimensions());
             while tokens.len() > max_token_count {
                 let window = &tokens[..max_token_count];
                 embeddings_for_prompt.push(self.embed_tokens(window, client).await?).unwrap();
@@ -322,8 +356,11 @@ impl Embedder {
         tokens: &[usize],
         client: &reqwest::Client,
     ) -> Result<Embedding, Retry> {
-        let request =
-            OpenAiTokensRequest { model: self.options.embedding_model.name(), input: tokens };
+        let request = OpenAiTokensRequest {
+            model: self.options.embedding_model.name(),
+            input: tokens,
+            dimensions: self.overriden_dimensions(),
+        };
         let response = client
             .post(OPENAI_EMBEDDINGS_URL)
             .json(&request)
@@ -366,11 +403,23 @@ impl Embedder {
     }
 
     pub fn dimensions(&self) -> usize {
-        self.options.embedding_model.dimensions()
+        if self.options.embedding_model.supports_overriding_dimensions() {
+            self.options.dimensions.unwrap_or(self.options.embedding_model.default_dimensions())
+        } else {
+            self.options.embedding_model.default_dimensions()
+        }
     }
 
     pub fn distribution(&self) -> Option<DistributionShift> {
         self.options.embedding_model.distribution()
+    }
+
+    fn overriden_dimensions(&self) -> Option<usize> {
+        if self.options.embedding_model.supports_overriding_dimensions() {
+            self.options.dimensions
+        } else {
+            None
+        }
     }
 }
 
@@ -431,12 +480,16 @@ impl Retry {
 struct OpenAiRequest<'a, S: AsRef<str> + serde::Serialize> {
     model: &'a str,
     input: &'a [S],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dimensions: Option<usize>,
 }
 
 #[derive(Debug, Serialize)]
 struct OpenAiTokensRequest<'a> {
     model: &'a str,
     input: &'a [usize],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dimensions: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]

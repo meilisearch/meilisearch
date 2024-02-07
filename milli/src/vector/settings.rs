@@ -1,6 +1,7 @@
 use deserr::Deserr;
 use serde::{Deserialize, Serialize};
 
+use super::openai;
 use crate::prompt::PromptData;
 use crate::update::Setting;
 use crate::vector::EmbeddingConfig;
@@ -82,7 +83,7 @@ impl EmbeddingSettings {
             Self::MODEL => &[EmbedderSource::HuggingFace, EmbedderSource::OpenAi],
             Self::REVISION => &[EmbedderSource::HuggingFace],
             Self::API_KEY => &[EmbedderSource::OpenAi],
-            Self::DIMENSIONS => &[EmbedderSource::UserProvided],
+            Self::DIMENSIONS => &[EmbedderSource::OpenAi, EmbedderSource::UserProvided],
             Self::DOCUMENT_TEMPLATE => &[EmbedderSource::HuggingFace, EmbedderSource::OpenAi],
             _other => unreachable!("unknown field"),
         }
@@ -90,9 +91,13 @@ impl EmbeddingSettings {
 
     pub fn allowed_fields_for_source(source: EmbedderSource) -> &'static [&'static str] {
         match source {
-            EmbedderSource::OpenAi => {
-                &[Self::SOURCE, Self::MODEL, Self::API_KEY, Self::DOCUMENT_TEMPLATE]
-            }
+            EmbedderSource::OpenAi => &[
+                Self::SOURCE,
+                Self::MODEL,
+                Self::API_KEY,
+                Self::DOCUMENT_TEMPLATE,
+                Self::DIMENSIONS,
+            ],
             EmbedderSource::HuggingFace => {
                 &[Self::SOURCE, Self::MODEL, Self::REVISION, Self::DOCUMENT_TEMPLATE]
             }
@@ -107,6 +112,17 @@ impl EmbeddingSettings {
         }) = setting
         {
             *source = Setting::Set(EmbedderSource::default())
+        }
+    }
+
+    pub(crate) fn apply_default_openai_model(setting: &mut Setting<EmbeddingSettings>) {
+        if let Setting::Set(EmbeddingSettings {
+            source: Setting::Set(EmbedderSource::OpenAi),
+            model: model @ (Setting::NotSet | Setting::Reset),
+            ..
+        }) = setting
+        {
+            *model = Setting::Set(openai::EmbeddingModel::default().name().to_owned())
         }
     }
 }
@@ -176,7 +192,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 model: Setting::Set(options.embedding_model.name().to_owned()),
                 revision: Setting::NotSet,
                 api_key: options.api_key.map(Setting::Set).unwrap_or_default(),
-                dimensions: Setting::NotSet,
+                dimensions: options.dimensions.map(Setting::Set).unwrap_or_default(),
                 document_template: Setting::Set(prompt.template),
             },
             super::EmbedderOptions::UserProvided(options) => Self {
@@ -207,6 +223,9 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
                     }
                     if let Some(api_key) = api_key.set() {
                         options.api_key = Some(api_key);
+                    }
+                    if let Some(dimensions) = dimensions.set() {
+                        options.dimensions = Some(dimensions);
                     }
                     this.embedder_options = super::EmbedderOptions::OpenAi(options);
                 }
