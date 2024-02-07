@@ -7,7 +7,7 @@ use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use serde::Serialize;
-use tracing::debug;
+use tracing::{debug_span};
 
 use crate::analytics::{Analytics, MultiSearchAggregator};
 use crate::extractors::authentication::policies::ActionPolicy;
@@ -52,7 +52,7 @@ pub async fn multi_search_with_post(
         for (query_index, (index_uid, mut query)) in
             queries.into_iter().map(SearchQueryWithIndex::into_index_query).enumerate()
         {
-            debug!("multi-search #{query_index}: called with params: {:?}", query);
+            debug_span!("Multi-search", on_index = query_index, parameters = ?query);
 
             // Check index from API key
             if !index_scheduler.filters().is_index_authorized(&index_uid) {
@@ -107,7 +107,7 @@ pub async fn multi_search_with_post(
         err
     })?;
 
-    debug!("returns: {:?}", search_results);
+    debug_span!("Multi-search", returns = ?search_results);
 
     Ok(HttpResponse::Ok().json(SearchResults { results: search_results }))
 }

@@ -4,7 +4,7 @@ use index_scheduler::IndexScheduler;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::tasks::KindWithContent;
 use serde_json::json;
-use tracing::debug;
+use tracing::debug_span;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
@@ -27,6 +27,6 @@ pub async fn create_snapshot(
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
-    debug!("returns: {:?}", task);
+    debug_span!("Create snapshot", returns = ?task);
     Ok(HttpResponse::Accepted().json(task))
 }

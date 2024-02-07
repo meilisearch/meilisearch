@@ -17,7 +17,7 @@ use rand::SeedableRng;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use slice_group_by::GroupBy;
-use tracing::debug;
+use tracing::{debug_span};
 use typed_chunk::{write_typed_chunk_into_index, TypedChunk};
 
 use self::enrich::enrich_documents_batch;
@@ -506,10 +506,7 @@ where
                     documents_seen: documents_seen_count as usize,
                     total_documents: documents_count,
                 });
-                debug!(
-                    "We have seen {} documents on {} total document so far",
-                    documents_seen_count, documents_count
-                );
+                debug_span!("Seen", documents = documents_seen_count, total = documents_count);
             }
             if is_merged_database {
                 databases_seen += 1;

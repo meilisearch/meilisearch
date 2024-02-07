@@ -7,7 +7,7 @@ use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use serde_json::json;
-use tracing::debug;
+use tracing::{debug_span};
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::ActionPolicy;
@@ -33,8 +33,9 @@ async fn get_features(
     let features = index_scheduler.features();
 
     analytics.publish("Experimental features Seen".to_string(), json!(null), Some(&req));
-    debug!("returns: {:?}", features.runtime_features());
-    HttpResponse::Ok().json(features.runtime_features())
+    let features = features.runtime_features();
+    debug_span!("Get features", returns = ?features);
+    HttpResponse::Ok().json(features)
 }
 
 #[derive(Debug, Deserr)]
@@ -60,6 +61,7 @@ async fn patch_features(
     analytics: Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let features = index_scheduler.features();
+    debug_span!("Patch features", parameters = ?new_features);
 
     let old_features = features.runtime_features();
     let new_features = meilisearch_types::features::RuntimeTogglableFeatures {
@@ -93,5 +95,6 @@ async fn patch_features(
         Some(&req),
     );
     index_scheduler.put_runtime_features(new_features)?;
+    debug_span!("Patch features", returns = ?new_features);
     Ok(HttpResponse::Ok().json(new_features))
 }

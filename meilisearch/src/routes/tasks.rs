@@ -263,7 +263,6 @@ async fn get_tasks(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    tracing::info!("You called tasks");
     let mut params = params.into_inner();
     analytics.get_tasks(&params, &req);
 
