@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
-use log::debug;
 use meilisearch_auth::AuthController;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::settings::{Settings, Unchecked};
@@ -11,6 +10,7 @@ use meilisearch_types::tasks::{Kind, Status, Task, TaskId};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
+use tracing::debug;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;

@@ -29,7 +29,6 @@ use error::PayloadError;
 use extractors::payload::PayloadConfig;
 use http::header::CONTENT_TYPE;
 use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
-use log::error;
 use meilisearch_auth::AuthController;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod};
@@ -39,6 +38,7 @@ use meilisearch_types::versioning::{check_version_file, create_version_file};
 use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
 pub use option::Opt;
 use option::ScheduleSnapshot;
+use tracing::error;
 use tracing_subscriber::filter::Targets;
 
 use crate::error::MeilisearchHttpError;
@@ -293,13 +293,13 @@ fn import_dump(
     let mut dump_reader = dump::DumpReader::open(reader)?;
 
     if let Some(date) = dump_reader.date() {
-        log::info!(
+        tracing::info!(
             "Importing a dump of meilisearch `{:?}` from the {}",
             dump_reader.version(), // TODO: get the meilisearch version instead of the dump version
             date
         );
     } else {
-        log::info!(
+        tracing::info!(
             "Importing a dump of meilisearch `{:?}`",
             dump_reader.version(), // TODO: get the meilisearch version instead of the dump version
         );
@@ -335,7 +335,7 @@ fn import_dump(
     for index_reader in dump_reader.indexes()? {
         let mut index_reader = index_reader?;
         let metadata = index_reader.metadata();
-        log::info!("Importing index `{}`.", metadata.uid);
+        tracing::info!("Importing index `{}`.", metadata.uid);
 
         let date = Some((metadata.created_at, metadata.updated_at));
         let index = index_scheduler.create_raw_index(&metadata.uid, date)?;
@@ -349,14 +349,15 @@ fn import_dump(
         }
 
         // 4.2 Import the settings.
-        log::info!("Importing the settings.");
+        tracing::info!("Importing the settings.");
         let settings = index_reader.settings()?;
         apply_settings_to_builder(&settings, &mut builder);
-        builder.execute(|indexing_step| log::debug!("update: {:?}", indexing_step), || false)?;
+        builder
+            .execute(|indexing_step| tracing::debug!("update: {:?}", indexing_step), || false)?;
 
         // 4.3 Import the documents.
         // 4.3.1 We need to recreate the grenad+obkv format accepted by the index.
-        log::info!("Importing the documents.");
+        tracing::info!("Importing the documents.");
         let file = tempfile::tempfile()?;
         let mut builder = DocumentsBatchBuilder::new(BufWriter::new(file));
         for document in index_reader.documents()? {
@@ -378,15 +379,15 @@ fn import_dump(
                 update_method: IndexDocumentsMethod::ReplaceDocuments,
                 ..Default::default()
             },
-            |indexing_step| log::trace!("update: {:?}", indexing_step),
+            |indexing_step| tracing::trace!("update: {:?}", indexing_step),
             || false,
         )?;
 
         let (builder, user_result) = builder.add_documents(reader)?;
-        log::info!("{} documents found.", user_result?);
+        tracing::info!("{} documents found.", user_result?);
         builder.execute()?;
         wtxn.commit()?;
-        log::info!("All documents successfully imported.");
+        tracing::info!("All documents successfully imported.");
     }
 
     let mut index_scheduler_dump = index_scheduler.register_dumped_task()?;

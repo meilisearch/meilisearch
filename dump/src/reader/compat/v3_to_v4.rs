@@ -76,20 +76,20 @@ impl CompatV3ToV4 {
                         let index_uid = match index_uid {
                             Some(uid) => uid,
                             None => {
-                                log::warn!(
+                                tracing::warn!(
                                     "Error while importing the update {}.",
                                     task.update.id()
                                 );
-                                log::warn!(
+                                tracing::warn!(
                                     "The index associated to the uuid `{}` could not be retrieved.",
                                     task.uuid.to_string()
                                 );
                                 if task.update.is_finished() {
                                     // we're fucking with his history but not his data, that's ok-ish.
-                                    log::warn!("The index-uuid will be set as `unknown`.");
+                                    tracing::warn!("The index-uuid will be set as `unknown`.");
                                     String::from("unknown")
                                 } else {
-                                    log::warn!("The task will be ignored.");
+                                    tracing::warn!("The task will be ignored.");
                                     return None;
                                 }
                             }

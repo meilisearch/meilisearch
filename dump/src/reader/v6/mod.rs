@@ -2,10 +2,10 @@ use std::fs::{self, File};
 use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::Path;
 
-use log::debug;
 pub use meilisearch_types::milli;
 use tempfile::TempDir;
 use time::OffsetDateTime;
+use tracing::debug;
 use uuid::Uuid;
 
 use super::Document;

@@ -146,8 +146,8 @@ impl From<v2::updates::UpdateStatus> for v3::updates::UpdateStatus {
                         started_processing_at: processing.started_processing_at,
                     }),
                     Err(e) => {
-                        log::warn!("Error with task {}: {}", processing.from.update_id, e);
-                        log::warn!("Task will be marked as `Failed`.");
+                        tracing::warn!("Error with task {}: {}", processing.from.update_id, e);
+                        tracing::warn!("Task will be marked as `Failed`.");
                         v3::updates::UpdateStatus::Failed(v3::updates::Failed {
                             from: v3::updates::Processing {
                                 from: v3::updates::Enqueued {
@@ -172,8 +172,8 @@ impl From<v2::updates::UpdateStatus> for v3::updates::UpdateStatus {
                         enqueued_at: enqueued.enqueued_at,
                     }),
                     Err(e) => {
-                        log::warn!("Error with task {}: {}", enqueued.update_id, e);
-                        log::warn!("Task will be marked as `Failed`.");
+                        tracing::warn!("Error with task {}: {}", enqueued.update_id, e);
+                        tracing::warn!("Task will be marked as `Failed`.");
                         v3::updates::UpdateStatus::Failed(v3::updates::Failed {
                             from: v3::updates::Processing {
                                 from: v3::updates::Enqueued {
@@ -353,7 +353,7 @@ impl From<String> for v3::Code {
             "malformed_payload" => v3::Code::MalformedPayload,
             "missing_payload" => v3::Code::MissingPayload,
             other => {
-                log::warn!("Unknown error code {}", other);
+                tracing::warn!("Unknown error code {}", other);
                 v3::Code::UnretrievableErrorCode
             }
         }
