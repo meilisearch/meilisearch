@@ -176,7 +176,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 model: Setting::Set(options.embedding_model.name().to_owned()),
                 revision: Setting::NotSet,
                 api_key: options.api_key.map(Setting::Set).unwrap_or_default(),
-                dimensions: Setting::NotSet,
+                dimensions: options.dimensions.map(Setting::Set).unwrap_or_default(),
                 document_template: Setting::Set(prompt.template),
             },
             super::EmbedderOptions::UserProvided(options) => Self {
