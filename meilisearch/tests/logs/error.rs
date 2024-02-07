@@ -98,6 +98,63 @@ async fn logs_stream_bad_mode() {
 }
 
 #[actix_rt::test]
+async fn logs_stream_bad_profile_memory() {
+    let server = Server::new().await;
+
+    // Wrong type
+    let (response, code) =
+        server.service.post("/logs/stream", json!({ "profileMemory": "tamo" })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Invalid value type at `.profileMemory`: expected a boolean, but found a string: `\"tamo\"`",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
+
+    // Wrong type
+    let (response, code) =
+        server.service.post("/logs/stream", json!({ "profileMemory": ["hello", "kefir"] })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Invalid value type at `.profileMemory`: expected a boolean, but found an array: `[\"hello\",\"kefir\"]`",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
+
+    // Used with default parameters
+    let (response, code) =
+        server.service.post("/logs/stream", json!({ "profileMemory": true })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Invalid value: `profile_memory` can only be used while profiling code and is not compatible with the Fmt mode.",
+      "code": "invalid_settings_typo_tolerance",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_typo_tolerance"
+    }
+    "###);
+
+    // Used with an unsupported mode
+    let (response, code) =
+        server.service.post("/logs/stream", json!({ "mode": "fmt", "profileMemory": true })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Invalid value: `profile_memory` can only be used while profiling code and is not compatible with the Fmt mode.",
+      "code": "invalid_settings_typo_tolerance",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_typo_tolerance"
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn logs_stream_without_enabling_the_route() {
     let server = Server::new().await;
 
