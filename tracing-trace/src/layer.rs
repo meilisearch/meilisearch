@@ -20,24 +20,26 @@ pub struct TraceLayer {
     sender: tokio::sync::mpsc::UnboundedSender<Entry>,
     callsites: RwLock<HashMap<OpaqueIdentifier, ResourceId>>,
     start_time: std::time::Instant,
+    profile_memory: bool,
 }
 
 impl Trace {
-    pub fn new() -> (Self, TraceLayer) {
+    pub fn new(profile_memory: bool) -> (Self, TraceLayer) {
         let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
         let trace = Trace { receiver };
         let layer = TraceLayer {
             sender,
             callsites: Default::default(),
             start_time: std::time::Instant::now(),
+            profile_memory,
         };
         (trace, layer)
     }
 }
 
 impl<W: Write> TraceWriter<W> {
-    pub fn new(writer: W) -> (Self, TraceLayer) {
-        let (trace, layer) = Trace::new();
+    pub fn new(writer: W, profile_memory: bool) -> (Self, TraceLayer) {
+        let (trace, layer) = Trace::new(profile_memory);
         (trace.into_writer(writer), layer)
     }
 
@@ -97,7 +99,11 @@ impl TraceLayer {
     }
 
     fn memory_stats(&self) -> Option<MemoryStats> {
-        MemoryStats::fetch()
+        if self.profile_memory {
+            MemoryStats::fetch()
+        } else {
+            None
+        }
     }
 
     fn send(&self, entry: Entry) {
