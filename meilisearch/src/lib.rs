@@ -136,7 +136,7 @@ pub fn create_app(
             .allow_any_method()
             .max_age(86_400), // 24h
     )
-    .wrap(actix_web::middleware::Logger::default())
+    .wrap(tracing_actix_web::TracingLogger::default())
     .wrap(actix_web::middleware::Compress::default())
     .wrap(actix_web::middleware::NormalizePath::new(actix_web::middleware::TrailingSlash::Trim))
 }
