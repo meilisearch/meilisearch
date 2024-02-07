@@ -575,7 +575,7 @@ fn merge_word_docids_reader_into_fst(
 
 /// Write provided entries in database using serialize_value function.
 /// merge_values function is used if an entry already exist in the database.
-#[tracing::instrument(skip_all, target = "indexing::write_db")]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::write_db")]
 fn write_entries_into_database<R, K, V, FS, FM>(
     data: grenad::Reader<R>,
     database: &heed::Database<K, V>,
