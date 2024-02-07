@@ -121,6 +121,11 @@ impl MemoryStats {
         }
     }
 
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    pub fn fetch() -> Option<Self> {
+        None
+    }
+
     pub fn checked_sub(self, other: Self) -> Option<Self> {
         Some(Self { resident: self.resident.checked_sub(other.resident)? })
     }
