@@ -172,7 +172,7 @@ fn make_layer<
             (Box::new(fmt_layer) as Box<dyn Layer<S> + Send + Sync>, Box::pin(stream))
         }
         LogMode::Profile => {
-            let (trace, layer) = tracing_trace::Trace::new();
+            let (trace, layer) = tracing_trace::Trace::new(opt.profile_memory);
 
             let stream = entry_stream(trace, guard);
 
