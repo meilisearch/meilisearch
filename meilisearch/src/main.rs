@@ -48,9 +48,16 @@ fn setup(opt: &Opt) -> anyhow::Result<LogRouteHandle> {
     Ok(route_layer_handle)
 }
 
+fn on_panic(info: &std::panic::PanicInfo) {
+    let info = info.to_string().replace('\n', " ");
+    tracing::error!(%info);
+}
+
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
     let (opt, config_read_from) = Opt::try_build()?;
+
+    std::panic::set_hook(Box::new(on_panic));
 
     anyhow::ensure!(
         !(cfg!(windows) && opt.experimental_reduce_indexing_memory_usage),
