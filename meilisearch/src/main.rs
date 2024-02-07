@@ -35,7 +35,7 @@ fn setup(opt: &Opt) -> anyhow::Result<LogRouteHandle> {
     let subscriber = tracing_subscriber::registry().with(route_layer).with(
         tracing_subscriber::fmt::layer()
             .with_line_number(true)
-            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
+            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::NEW)
             .with_filter(
                 tracing_subscriber::filter::LevelFilter::from_str(&opt.log_level.to_string())
                     .unwrap(),
