@@ -32,7 +32,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-#[derive(Debug, Default, Clone, Copy, Deserr)]
+#[derive(Debug, Default, Clone, Copy, Deserr, PartialEq, Eq)]
 #[deserr(rename_all = lowercase)]
 pub enum LogMode {
     #[default]
@@ -82,13 +82,33 @@ impl MergeWithError<MyParseError> for DeserrJsonError<BadRequest> {
 }
 
 #[derive(Debug, Deserr)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields, validate = validate_get_logs -> DeserrJsonError<InvalidSettingsTypoTolerance>)]
 pub struct GetLogs {
     #[deserr(default = "info".parse().unwrap(), try_from(&String) = MyTargets::from_str -> DeserrJsonError<BadRequest>)]
     target: MyTargets,
 
     #[deserr(default, error = DeserrJsonError<BadRequest>)]
     mode: LogMode,
+
+    #[deserr(default = false, error = DeserrJsonError<BadRequest>)]
+    profile_memory: bool,
+}
+
+fn validate_get_logs<E: DeserializeError>(
+    logs: GetLogs,
+    location: ValuePointerRef,
+) -> Result<GetLogs, E> {
+    if logs.profile_memory && logs.mode != LogMode::Profile {
+        Err(deserr::take_cf_content(E::error::<Infallible>(
+            None,
+            ErrorKind::Unexpected {
+                msg: format!("`profile_memory` can only be used while profiling code and is not compatible with the {:?} mode.", logs.mode),
+            },
+            location,
+        )))
+    } else {
+        Ok(logs)
+    }
 }
 
 struct LogWriter {
