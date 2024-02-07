@@ -120,7 +120,7 @@ impl From<v1::settings::Settings> for v2::Settings<v2::Unchecked> {
                                 criterion.as_ref().map(ToString::to_string)
                             }
                             Err(()) => {
-                                log::warn!(
+                                tracing::warn!(
                                     "Could not import the following ranking rule: `{}`.",
                                     ranking_rule
                                 );
@@ -152,11 +152,11 @@ impl From<v1::update::UpdateStatus> for Option<v2::updates::UpdateStatus> {
         use v2::updates::UpdateStatus as UpdateStatusV2;
         Some(match source {
             UpdateStatusV1::Enqueued { content } => {
-                log::warn!(
+                tracing::warn!(
                     "Cannot import task {} (importing enqueued tasks from v1 dumps is unsupported)",
                     content.update_id
                 );
-                log::warn!("Task will be skipped in the queue of imported tasks.");
+                tracing::warn!("Task will be skipped in the queue of imported tasks.");
 
                 return None;
             }
@@ -229,7 +229,7 @@ impl From<v1::update::UpdateType> for Option<v2::updates::UpdateMeta> {
         Some(match source {
             v1::update::UpdateType::ClearAll => v2::updates::UpdateMeta::ClearDocuments,
             v1::update::UpdateType::Customs => {
-                log::warn!("Ignoring task with type 'Customs' that is no longer supported");
+                tracing::warn!("Ignoring task with type 'Customs' that is no longer supported");
                 return None;
             }
             v1::update::UpdateType::DocumentsAddition { .. } => {
@@ -296,7 +296,7 @@ impl From<v1::settings::RankingRule> for Option<v2::settings::Criterion> {
             v1::settings::RankingRule::Proximity => Some(v2::settings::Criterion::Proximity),
             v1::settings::RankingRule::Attribute => Some(v2::settings::Criterion::Attribute),
             v1::settings::RankingRule::WordsPosition => {
-                log::warn!("Removing the 'WordsPosition' ranking rule that is no longer supported, please check the resulting ranking rules of your indexes");
+                tracing::warn!("Removing the 'WordsPosition' ranking rule that is no longer supported, please check the resulting ranking rules of your indexes");
                 None
             }
             v1::settings::RankingRule::Exactness => Some(v2::settings::Criterion::Exactness),

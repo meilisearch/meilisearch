@@ -1543,7 +1543,6 @@ dependencies = [
  "big_s",
  "flate2",
  "http 0.2.11",
- "log",
  "maplit",
  "meili-snap",
  "meilisearch-auth",
@@ -1557,6 +1556,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "time",
+ "tracing",
  "uuid",
 ]
 
@@ -2943,7 +2943,6 @@ dependencies = [
  "file-store",
  "flate2",
  "insta",
- "log",
  "meili-snap",
  "meilisearch-auth",
  "meilisearch-types",
@@ -3701,7 +3700,6 @@ dependencies = [
  "itertools 0.11.0",
  "jsonwebtoken",
  "lazy_static",
- "log",
  "manifest-dir-macros",
  "maplit",
  "meili-snap",

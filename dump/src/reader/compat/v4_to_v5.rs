@@ -305,7 +305,7 @@ impl From<v4::ResponseError> for v5::ResponseError {
             "invalid_api_key_expires_at" => v5::Code::InvalidApiKeyExpiresAt,
             "invalid_api_key_description" => v5::Code::InvalidApiKeyDescription,
             other => {
-                log::warn!("Unknown error code {}", other);
+                tracing::warn!("Unknown error code {}", other);
                 v5::Code::UnretrievableErrorCode
             }
         };

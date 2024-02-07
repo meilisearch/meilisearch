@@ -1,7 +1,7 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
-use log::debug;
+use tracing::debug;
 use meilisearch_auth::AuthController;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::tasks::KindWithContent;

@@ -2,12 +2,12 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
 use index_scheduler::IndexScheduler;
-use log::debug;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use serde_json::Value;
+use tracing::debug;
 
 use crate::analytics::{Analytics, FacetSearchAggregator};
 use crate::extractors::authentication::policies::*;

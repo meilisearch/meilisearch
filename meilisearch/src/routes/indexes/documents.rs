@@ -8,7 +8,6 @@ use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::Deserr;
 use futures::StreamExt;
 use index_scheduler::IndexScheduler;
-use log::debug;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
@@ -28,6 +27,7 @@ use serde_json::Value;
 use tempfile::tempfile;
 use tokio::fs::File;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
+use tracing::debug;
 
 use crate::analytics::{Analytics, DocumentDeletionKind, DocumentFetchKind};
 use crate::error::MeilisearchHttpError;
@@ -427,7 +427,7 @@ async fn document_addition(
                 Err(index_scheduler::Error::FileStore(file_store::Error::IoError(e)))
                     if e.kind() == ErrorKind::NotFound => {}
                 Err(e) => {
-                    log::warn!("Unknown error happened while deleting a malformed update file with uuid {uuid}: {e}");
+                    tracing::warn!("Unknown error happened while deleting a malformed update file with uuid {uuid}: {e}");
                 }
             }
             // We still want to return the original error to the end user.

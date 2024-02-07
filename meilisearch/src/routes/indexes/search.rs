@@ -2,7 +2,6 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use index_scheduler::IndexScheduler;
-use log::{debug, warn};
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
@@ -12,6 +11,7 @@ use meilisearch_types::milli;
 use meilisearch_types::milli::vector::DistributionShift;
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
+use tracing::{debug, warn};
 
 use crate::analytics::{Analytics, SearchAggregator};
 use crate::extractors::authentication::policies::*;
