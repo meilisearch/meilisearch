@@ -974,6 +974,9 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                             crate::vector::settings::EmbeddingSettings::apply_default_source(
                                 &mut setting,
                             );
+                            crate::vector::settings::EmbeddingSettings::apply_default_openai_model(
+                                &mut setting,
+                            );
                             let setting = validate_embedding_settings(setting, &name)?;
                             changed = true;
                             new_configs.insert(name, setting);
@@ -1132,14 +1135,25 @@ pub fn validate_embedding_settings(
     match inferred_source {
         EmbedderSource::OpenAi => {
             check_unset(&revision, "revision", inferred_source, name)?;
-            check_unset(&dimensions, "dimensions", inferred_source, name)?;
             if let Setting::Set(model) = &model {
-                crate::vector::openai::EmbeddingModel::from_name(model.as_str()).ok_or(
-                    crate::error::UserError::InvalidOpenAiModel {
+                let model = crate::vector::openai::EmbeddingModel::from_name(model.as_str())
+                    .ok_or(crate::error::UserError::InvalidOpenAiModel {
                         embedder_name: name.to_owned(),
                         model: model.clone(),
-                    },
-                )?;
+                    })?;
+                if let Setting::Set(dimensions) = dimensions {
+                    if !model.supports_overriding_dimensions()
+                        && dimensions != model.default_dimensions()
+                    {
+                        return Err(crate::error::UserError::InvalidOpenAiModelDimensions {
+                            embedder_name: name.to_owned(),
+                            model: model.name(),
+                            dimensions,
+                            expected_dimensions: model.default_dimensions(),
+                        }
+                        .into());
+                    }
+                }
             }
         }
         EmbedderSource::HuggingFace => {

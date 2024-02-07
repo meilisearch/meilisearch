@@ -347,6 +347,7 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidFieldForSource { .. }
                     | UserError::MissingFieldForSource { .. }
                     | UserError::InvalidOpenAiModel { .. }
+                    | UserError::InvalidOpenAiModelDimensions { .. }
                     | UserError::InvalidPrompt(_) => Code::InvalidSettingsEmbedders,
                     UserError::TooManyEmbedders(_) => Code::InvalidSettingsEmbedders,
                     UserError::InvalidPromptForEmbeddings(..) => Code::InvalidSettingsEmbedders,

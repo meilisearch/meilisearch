@@ -227,6 +227,13 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
         source_: crate::vector::settings::EmbedderSource,
         embedder_name: String,
     },
+    #[error("`.embedders.{embedder_name}.dimensions`: Model `{model}` does not support overriding its native dimensions of {expected_dimensions}. Found {dimensions}")]
+    InvalidOpenAiModelDimensions {
+        embedder_name: String,
+        model: &'static str,
+        dimensions: usize,
+        expected_dimensions: usize,
+    },
 }
 
 impl From<crate::vector::Error> for Error {
