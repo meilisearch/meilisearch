@@ -11,7 +11,7 @@ use crate::Result;
 
 /// This is something reasonable given the fact
 /// that there is one grenad sorter by thread.
-const MAX_GRENAD_SORTER_USAGE: usize = 200 * 1024 * 1024; // 200 MiB
+const MAX_GRENAD_SORTER_USAGE: usize = 500 * 1024 * 1024; // 500 MiB
 
 pub type CursorClonableMmap = io::Cursor<ClonableMmap>;
 
