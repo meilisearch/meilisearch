@@ -68,8 +68,8 @@ impl EmbeddingModel {
     pub fn default_dimensions(&self) -> usize {
         match self {
             EmbeddingModel::TextEmbeddingAda002 => 1536,
-            EmbeddingModel::TextEmbedding3Large => 1536,
-            EmbeddingModel::TextEmbedding3Small => 3072,
+            EmbeddingModel::TextEmbedding3Large => 3072,
+            EmbeddingModel::TextEmbedding3Small => 1536,
         }
     }
 
