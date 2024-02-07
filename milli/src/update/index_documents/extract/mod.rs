@@ -15,7 +15,7 @@ use std::io::BufReader;
 
 use crossbeam_channel::Sender;
 use rayon::prelude::*;
-use tracing::debug;
+use tracing::{debug_span};
 
 use self::extract_docid_word_positions::extract_docid_word_positions;
 use self::extract_facet_number_docids::extract_facet_number_docids;
@@ -114,7 +114,7 @@ pub(crate) fn data_from_obkv_documents(
     {
         let lmdb_writer_sx = lmdb_writer_sx.clone();
         rayon::spawn(move || {
-            debug!("merge {} database", "facet-id-exists-docids");
+            debug_span!("merge", database = "facet-id-exists-docids");
             match facet_exists_docids_chunks.merge(merge_deladd_cbo_roaring_bitmaps, &indexer) {
                 Ok(reader) => {
                     let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetExistsDocids(reader)));
@@ -130,7 +130,7 @@ pub(crate) fn data_from_obkv_documents(
     {
         let lmdb_writer_sx = lmdb_writer_sx.clone();
         rayon::spawn(move || {
-            debug!("merge {} database", "facet-id-is-null-docids");
+            debug_span!("merge", database = "facet-id-is-null-docids");
             match facet_is_null_docids_chunks.merge(merge_deladd_cbo_roaring_bitmaps, &indexer) {
                 Ok(reader) => {
                     let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetIsNullDocids(reader)));
@@ -146,7 +146,7 @@ pub(crate) fn data_from_obkv_documents(
     {
         let lmdb_writer_sx = lmdb_writer_sx.clone();
         rayon::spawn(move || {
-            debug!("merge {} database", "facet-id-is-empty-docids");
+            debug_span!("merge", database = "facet-id-is-empty-docids");
             match facet_is_empty_docids_chunks.merge(merge_deladd_cbo_roaring_bitmaps, &indexer) {
                 Ok(reader) => {
                     let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetIsEmptyDocids(reader)));
@@ -272,7 +272,7 @@ fn spawn_extraction_task<FE, FS, M>(
             Ok(chunks) => {
                 let child_span = tracing::trace_span!(target: "indexing::details", parent: &current_span, "merge_multiple_chunks");
                 let _entered = child_span.enter();
-                debug!("merge {} database", name);
+                debug_span!("merge", database = name);
                 puffin::profile_scope!("merge_multiple_chunks", name);
                 let reader = chunks.merge(merge_fn, &indexer);
                 let _ = lmdb_writer_sx.send(reader.map(serialize_fn));

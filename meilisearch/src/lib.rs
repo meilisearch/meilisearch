@@ -294,14 +294,14 @@ fn import_dump(
 
     if let Some(date) = dump_reader.date() {
         tracing::info!(
-            "Importing a dump of meilisearch `{:?}` from the {}",
-            dump_reader.version(), // TODO: get the meilisearch version instead of the dump version
-            date
+            version = ?dump_reader.version(), // TODO: get the meilisearch version instead of the dump version
+            %date,
+            "Importing a dump of meilisearch"
         );
     } else {
         tracing::info!(
-            "Importing a dump of meilisearch `{:?}`",
-            dump_reader.version(), // TODO: get the meilisearch version instead of the dump version
+            version = ?dump_reader.version(), // TODO: get the meilisearch version instead of the dump version
+            "Importing a dump of meilisearch",
         );
     }
 
@@ -384,7 +384,8 @@ fn import_dump(
         )?;
 
         let (builder, user_result) = builder.add_documents(reader)?;
-        tracing::info!("{} documents found.", user_result?);
+        let user_result = user_result?;
+        tracing::info!(documents_found = user_result, "{} documents found.", user_result);
         builder.execute()?;
         wtxn.commit()?;
         tracing::info!("All documents successfully imported.");
