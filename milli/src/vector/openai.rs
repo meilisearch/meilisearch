@@ -96,10 +96,10 @@ impl EmbeddingModel {
                 Some(DistributionShift { current_mean: 0.90, current_sigma: 0.08 })
             }
             EmbeddingModel::TextEmbedding3Large => {
-                Some(DistributionShift { current_mean: 0.90, current_sigma: 0.08 })
+                Some(DistributionShift { current_mean: 0.70, current_sigma: 0.1 })
             }
             EmbeddingModel::TextEmbedding3Small => {
-                Some(DistributionShift { current_mean: 0.90, current_sigma: 0.08 })
+                Some(DistributionShift { current_mean: 0.75, current_sigma: 0.1 })
             }
         }
     }
