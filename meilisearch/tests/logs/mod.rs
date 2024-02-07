@@ -14,7 +14,7 @@ use crate::common::{default_settings, Server};
 use crate::json;
 
 #[actix_web::test]
-async fn basic_test_log_route() {
+async fn basic_test_log_stream_route() {
     let db_path = tempfile::tempdir().unwrap();
     let server = Server::new_with_options(Opt {
         experimental_enable_logs_route: true,
@@ -50,11 +50,11 @@ async fn basic_test_log_route() {
 
     let app = Rc::new(app);
 
-    // First, we start listening on the `/logs` route
+    // First, we start listening on the `/logs/stream` route
     let handle_app = app.clone();
     let handle = tokio::task::spawn_local(async move {
         let req = actix_web::test::TestRequest::post()
-            .uri("/logs")
+            .uri("/logs/stream")
             .insert_header(ContentType::json())
             .set_payload(
                 serde_json::to_vec(&json!({
@@ -81,7 +81,7 @@ async fn basic_test_log_route() {
     "###);
     server.wait_task(ret.uid()).await;
 
-    let req = actix_web::test::TestRequest::delete().uri("/logs");
+    let req = actix_web::test::TestRequest::delete().uri("/logs/stream");
     let req = req.to_request();
     let ret = actix_web::test::call_service(&*app, req).await;
     let code = ret.status();

@@ -26,7 +26,7 @@ use crate::LogRouteHandle;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
-        web::resource("")
+        web::resource("stream")
             .route(web::post().to(SeqHandler(get_logs)))
             .route(web::delete().to(SeqHandler(cancel_logs))),
     );
