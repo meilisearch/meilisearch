@@ -63,8 +63,7 @@ impl RoFeatures {
             Err(FeatureNotEnabledError {
                 disabled_action: "getting logs through the `/logs` route",
                 feature: "logs route",
-                /// Update the discussion link
-                issue_link: "https://github.com/meilisearch/product/discussions/625",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/721",
             }
             .into())
         }
