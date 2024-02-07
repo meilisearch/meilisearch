@@ -4,11 +4,11 @@ use crate::common::Server;
 use crate::json;
 
 #[actix_rt::test]
-async fn logs_bad_target() {
+async fn logs_stream_bad_target() {
     let server = Server::new().await;
 
     // Wrong type
-    let (response, code) = server.service.post("/logs", json!({ "target": true })).await;
+    let (response, code) = server.service.post("/logs/stream", json!({ "target": true })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -20,7 +20,7 @@ async fn logs_bad_target() {
     "###);
 
     // Wrong type
-    let (response, code) = server.service.post("/logs", json!({ "target": [] })).await;
+    let (response, code) = server.service.post("/logs/stream", json!({ "target": [] })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -32,7 +32,7 @@ async fn logs_bad_target() {
     "###);
 
     // Our help message
-    let (response, code) = server.service.post("/logs", json!({ "target": "" })).await;
+    let (response, code) = server.service.post("/logs/stream", json!({ "target": "" })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -44,7 +44,7 @@ async fn logs_bad_target() {
     "###);
 
     // An error from the target parser
-    let (response, code) = server.service.post("/logs", json!({ "target": "==" })).await;
+    let (response, code) = server.service.post("/logs/stream", json!({ "target": "==" })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -57,11 +57,11 @@ async fn logs_bad_target() {
 }
 
 #[actix_rt::test]
-async fn logs_bad_mode() {
+async fn logs_stream_bad_mode() {
     let server = Server::new().await;
 
     // Wrong type
-    let (response, code) = server.service.post("/logs", json!({ "mode": true })).await;
+    let (response, code) = server.service.post("/logs/stream", json!({ "mode": true })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -73,7 +73,7 @@ async fn logs_bad_mode() {
     "###);
 
     // Wrong type
-    let (response, code) = server.service.post("/logs", json!({ "mode": [] })).await;
+    let (response, code) = server.service.post("/logs/stream", json!({ "mode": [] })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -85,7 +85,7 @@ async fn logs_bad_mode() {
     "###);
 
     // Wrong value
-    let (response, code) = server.service.post("/logs", json!({ "mode": "tamo" })).await;
+    let (response, code) = server.service.post("/logs/stream", json!({ "mode": "tamo" })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -98,10 +98,10 @@ async fn logs_bad_mode() {
 }
 
 #[actix_rt::test]
-async fn logs_without_enabling_the_route() {
+async fn logs_stream_without_enabling_the_route() {
     let server = Server::new().await;
 
-    let (response, code) = server.service.post("/logs", json!({})).await;
+    let (response, code) = server.service.post("/logs/stream", json!({})).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -112,7 +112,7 @@ async fn logs_without_enabling_the_route() {
     }
     "###);
 
-    let (response, code) = server.service.delete("/logs").await;
+    let (response, code) = server.service.delete("/logs/stream").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
