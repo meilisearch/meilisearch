@@ -38,6 +38,20 @@ pub enum Entry {
     Event(Event),
 }
 
+impl Entry {
+    pub fn memory(&self) -> Option<MemoryStats> {
+        match self {
+            Entry::NewCallsite(_)
+            | Entry::NewThread(_)
+            | Entry::NewSpan(_)
+            | Entry::SpanClose(_) => None,
+            Entry::SpanEnter(event) => event.memory,
+            Entry::SpanExit(event) => event.memory,
+            Entry::Event(event) => event.memory,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct SpanId(u64);
 

@@ -13,11 +13,10 @@ serde_json = "1.0.111"
 tracing = "0.1.40"
 tracing-error = "0.2.0"
 tracing-subscriber = "0.3.18"
-byte-unit = { version = "4.0.19", default-features = false, features = [
-    "std",
-    "serde",
-] }
 tokio = { version = "1.35.1", features = ["sync"] }
+clap = { version = "4.4.18", features = ["derive"] }
+anyhow = "1.0.79"
+byte-unit = { version = "5.1.4", features = ["byte"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 libproc = "0.14.2"
