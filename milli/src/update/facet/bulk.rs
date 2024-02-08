@@ -66,7 +66,7 @@ impl<'i> FacetsUpdateBulk<'i> {
         }
     }
 
-    #[logging_timer::time("FacetsUpdateBulk::{}")]
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::facets::bulk")]
     pub fn execute(self, wtxn: &mut heed::RwTxn) -> Result<()> {
         let Self { index, field_ids, group_size, min_level_size, facet_type, delta_data } = self;
 

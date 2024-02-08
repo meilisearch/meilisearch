@@ -63,7 +63,7 @@ impl FacetsUpdateIncremental {
         }
     }
 
-    #[logging_timer::time("FacetsUpdateIncremental::{}")]
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::facets::incremental")]
     pub fn execute(self, wtxn: &mut RwTxn) -> crate::Result<()> {
         let mut iter = self.delta_data.into_stream_merger_iter()?;
 
