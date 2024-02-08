@@ -38,7 +38,7 @@ use meilisearch_types::versioning::{check_version_file, create_version_file};
 use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
 pub use option::Opt;
 use option::ScheduleSnapshot;
-use tracing::error;
+use tracing::{error, info_span};
 use tracing_subscriber::filter::Targets;
 
 use crate::error::MeilisearchHttpError;
@@ -136,9 +136,47 @@ pub fn create_app(
             .allow_any_method()
             .max_age(86_400), // 24h
     )
-    .wrap(tracing_actix_web::TracingLogger::default())
+    .wrap(tracing_actix_web::TracingLogger::<AwebTracingLogger>::new())
     .wrap(actix_web::middleware::Compress::default())
     .wrap(actix_web::middleware::NormalizePath::new(actix_web::middleware::TrailingSlash::Trim))
+}
+
+struct AwebTracingLogger;
+
+impl tracing_actix_web::RootSpanBuilder for AwebTracingLogger {
+    fn on_request_start(request: &actix_web::dev::ServiceRequest) -> tracing::Span {
+        use tracing::field::Empty;
+
+        let conn_info = request.connection_info();
+        let headers = request.headers();
+        let user_agent = headers
+            .get(http::header::USER_AGENT)
+            .map(|value| String::from_utf8_lossy(value.as_bytes()).into_owned())
+            .unwrap_or_default();
+        info_span!("HTTP request", method = %request.method(), host = conn_info.host(), route = %request.path(), query_parameters = %request.query_string(), %user_agent, status_code = Empty, error = Empty)
+    }
+
+    fn on_request_end<B: MessageBody>(
+        span: tracing::Span,
+        outcome: &Result<ServiceResponse<B>, actix_web::Error>,
+    ) {
+        match &outcome {
+            Ok(response) => {
+                let code: i32 = response.response().status().as_u16().into();
+                span.record("status_code", code);
+
+                if let Some(error) = response.response().error() {
+                    // use the status code already constructed for the outgoing HTTP response
+                    span.record("error", &tracing::field::display(error.as_response_error()));
+                }
+            }
+            Err(error) => {
+                let code: i32 = error.error_response().status().as_u16().into();
+                span.record("status_code", code);
+                span.record("error", &tracing::field::display(error.as_response_error()));
+            }
+        };
+    }
 }
 
 enum OnFailure {
