@@ -9,6 +9,10 @@ use super::{ClonableMmap, MergeFn};
 use crate::update::index_documents::valid_lmdb_key;
 use crate::Result;
 
+/// This is something reasonable given the fact
+/// that there is one grenad sorter by thread.
+const MAX_GRENAD_SORTER_USAGE: usize = 500 * 1024 * 1024; // 500 MiB
+
 pub type CursorClonableMmap = io::Cursor<ClonableMmap>;
 
 pub fn create_writer<R: io::Write>(
@@ -24,6 +28,9 @@ pub fn create_writer<R: io::Write>(
     builder.build(BufWriter::new(file))
 }
 
+/// A helper function that creates a grenad sorter
+/// with the given parameters. The max memory is
+/// clamped to something reasonable.
 pub fn create_sorter(
     sort_algorithm: grenad::SortAlgorithm,
     merge: MergeFn,
@@ -41,7 +48,7 @@ pub fn create_sorter(
         builder.max_nb_chunks(nb_chunks);
     }
     if let Some(memory) = max_memory {
-        builder.dump_threshold(memory);
+        builder.dump_threshold(memory.min(MAX_GRENAD_SORTER_USAGE));
         builder.allow_realloc(false);
     }
     builder.sort_algorithm(sort_algorithm);
@@ -187,10 +194,15 @@ impl Default for GrenadParameters {
 
 impl GrenadParameters {
     /// This function use the number of threads in the current threadpool to compute the value.
+    ///
     /// This should be called inside of a rayon thread pool,
-    /// Otherwise, it will take the global number of threads.
+    /// otherwise, it will take the global number of threads.
+    ///
+    /// The max memory cannot exceed a given reasonable value.
     pub fn max_memory_by_thread(&self) -> Option<usize> {
-        self.max_memory.map(|max_memory| max_memory / rayon::current_num_threads())
+        self.max_memory.map(|max_memory| {
+            (max_memory / rayon::current_num_threads()).min(MAX_GRENAD_SORTER_USAGE)
+        })
     }
 }
 
