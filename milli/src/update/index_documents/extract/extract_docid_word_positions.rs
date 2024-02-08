@@ -21,7 +21,7 @@ pub type ScriptLanguageDocidsMap = HashMap<(Script, Language), (RoaringBitmap, R
 ///
 /// Returns the generated internal documents ids and a grenad reader
 /// with the list of extracted words from the given chunk of documents.
-#[logging_timer::time]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,

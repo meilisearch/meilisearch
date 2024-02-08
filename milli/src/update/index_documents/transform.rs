@@ -146,7 +146,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         })
     }
 
-    #[logging_timer::time]
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents")]
     pub fn read_documents<R, FP, FA>(
         &mut self,
         reader: EnrichedDocumentsBatchReader<R>,
@@ -359,7 +359,7 @@ impl<'a, 'i> Transform<'a, 'i> {
     /// - If the document to remove was inserted by the `read_documents` method before but was NOT present in the db,
     ///   it's added into the grenad to ensure we don't insert it + removed from the list of new documents ids.
     /// - If the document to remove was not present in either the db or the transform we do nothing.
-    #[logging_timer::time]
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents")]
     pub fn remove_documents<FA>(
         &mut self,
         mut to_remove: Vec<String>,
@@ -450,7 +450,7 @@ impl<'a, 'i> Transform<'a, 'i> {
     /// - No batching using the standards `remove_documents` and `add_documents` took place
     ///
     /// TODO: make it impossible to call `remove_documents` or `add_documents` on an instance that calls this function.
-    #[logging_timer::time]
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::details")]
     pub fn remove_documents_from_db_no_batch<FA>(
         &mut self,
         to_remove: &RoaringBitmap,
@@ -541,6 +541,7 @@ impl<'a, 'i> Transform<'a, 'i> {
 
     // Flatten a document from the fields ids map contained in self and insert the new
     // created fields. Returns `None` if the document doesn't need to be flattened.
+    #[tracing::instrument(level = "trace", skip(self, obkv), target = "indexing::transform")]
     fn flatten_from_fields_ids_map(&mut self, obkv: KvReader<FieldId>) -> Result<Option<Vec<u8>>> {
         if obkv
             .iter()
@@ -661,7 +662,7 @@ impl<'a, 'i> Transform<'a, 'i> {
     /// Generate the `TransformOutput` based on the given sorter that can be generated from any
     /// format like CSV, JSON or JSON stream. This sorter must contain a key that is the document
     /// id for the user side and the value must be an obkv where keys are valid fields ids.
-    #[logging_timer::time]
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::transform")]
     pub(crate) fn output_from_sorter<F>(
         self,
         wtxn: &mut heed::RwTxn,

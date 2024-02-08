@@ -1,6 +1,7 @@
 use std::env;
 use std::io::{stderr, Write};
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use actix_web::http::KeepAlive;
@@ -9,37 +10,60 @@ use actix_web::HttpServer;
 use index_scheduler::IndexScheduler;
 use is_terminal::IsTerminal;
 use meilisearch::analytics::Analytics;
-use meilisearch::{analytics, create_app, prototype_name, setup_meilisearch, Opt};
+use meilisearch::{
+    analytics, create_app, prototype_name, setup_meilisearch, LogRouteHandle, LogRouteType, Opt,
+};
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
+use mimalloc::MiMalloc;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber::layer::SubscriberExt as _;
+use tracing_subscriber::Layer;
 
 #[global_allocator]
-static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+static ALLOC: MiMalloc = MiMalloc;
+
+fn default_layer() -> LogRouteType {
+    None.with_filter(tracing_subscriber::filter::Targets::new().with_target("", LevelFilter::OFF))
+}
 
 /// does all the setup before meilisearch is launched
-fn setup(opt: &Opt) -> anyhow::Result<()> {
-    let mut log_builder = env_logger::Builder::new();
-    let log_filters = format!(
-        "{},h2=warn,hyper=warn,tokio_util=warn,tracing=warn,rustls=warn,mio=warn,reqwest=warn",
-        opt.log_level
+fn setup(opt: &Opt) -> anyhow::Result<LogRouteHandle> {
+    let (route_layer, route_layer_handle) = tracing_subscriber::reload::Layer::new(default_layer());
+    let route_layer: tracing_subscriber::reload::Layer<_, _> = route_layer;
+
+    let subscriber = tracing_subscriber::registry().with(route_layer).with(
+        tracing_subscriber::fmt::layer()
+            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
+            .with_filter(
+                tracing_subscriber::filter::LevelFilter::from_str(&opt.log_level.to_string())
+                    .unwrap(),
+            ),
     );
-    log_builder.parse_filters(&log_filters);
 
-    log_builder.init();
+    // set the subscriber as the default for the application
+    tracing::subscriber::set_global_default(subscriber).unwrap();
 
-    Ok(())
+    Ok(route_layer_handle)
+}
+
+fn on_panic(info: &std::panic::PanicInfo) {
+    let info = info.to_string().replace('\n', " ");
+    tracing::error!(%info);
 }
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
     let (opt, config_read_from) = Opt::try_build()?;
 
+    std::panic::set_hook(Box::new(on_panic));
+
     anyhow::ensure!(
         !(cfg!(windows) && opt.experimental_reduce_indexing_memory_usage),
         "The `experimental-reduce-indexing-memory-usage` flag is not supported on Windows"
     );
 
-    setup(&opt)?;
+    let log_handle = setup(&opt)?;
 
     match (opt.env.as_ref(), &opt.master_key) {
         ("production", Some(master_key)) if master_key.len() < MASTER_KEY_MIN_SIZE => {
@@ -77,7 +101,7 @@ async fn main() -> anyhow::Result<()> {
 
     print_launch_resume(&opt, analytics.clone(), config_read_from);
 
-    run_http(index_scheduler, auth_controller, opt, analytics).await?;
+    run_http(index_scheduler, auth_controller, opt, log_handle, analytics).await?;
 
     Ok(())
 }
@@ -86,6 +110,7 @@ async fn run_http(
     index_scheduler: Arc<IndexScheduler>,
     auth_controller: Arc<AuthController>,
     opt: Opt,
+    logs: LogRouteHandle,
     analytics: Arc<dyn Analytics>,
 ) -> anyhow::Result<()> {
     let enable_dashboard = &opt.env == "development";
@@ -98,6 +123,7 @@ async fn run_http(
             index_scheduler.clone(),
             auth_controller.clone(),
             opt.clone(),
+            logs.clone(),
             analytics.clone(),
             enable_dashboard,
         )

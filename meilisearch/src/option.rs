@@ -51,6 +51,7 @@ const MEILI_IGNORE_MISSING_DUMP: &str = "MEILI_IGNORE_MISSING_DUMP";
 const MEILI_IGNORE_DUMP_IF_DB_EXISTS: &str = "MEILI_IGNORE_DUMP_IF_DB_EXISTS";
 const MEILI_DUMP_DIR: &str = "MEILI_DUMP_DIR";
 const MEILI_LOG_LEVEL: &str = "MEILI_LOG_LEVEL";
+const MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE: &str = "MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE";
 const MEILI_EXPERIMENTAL_ENABLE_METRICS: &str = "MEILI_EXPERIMENTAL_ENABLE_METRICS";
 const MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE: &str =
     "MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE";
@@ -309,6 +310,13 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_enable_metrics: bool,
 
+    /// Experimental logs route feature. For more information, see: <https://github.com/orgs/meilisearch/discussions/721>
+    ///
+    /// Enables the log route on the `POST /logs/stream` endpoint and the `DELETE /logs/stream` to stop receiving logs.
+    #[clap(long, env = MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE)]
+    #[serde(default)]
+    pub experimental_enable_logs_route: bool,
+
     /// Experimental RAM reduction during indexing, do not use in production, see: <https://github.com/meilisearch/product/discussions/652>
     #[clap(long, env = MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE)]
     #[serde(default)]
@@ -414,6 +422,7 @@ impl Opt {
             #[cfg(feature = "analytics")]
             no_analytics,
             experimental_enable_metrics,
+            experimental_enable_logs_route,
             experimental_reduce_indexing_memory_usage,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
@@ -471,6 +480,10 @@ impl Opt {
             experimental_enable_metrics.to_string(),
         );
         export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE,
+            experimental_enable_logs_route.to_string(),
+        );
+        export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE,
             experimental_reduce_indexing_memory_usage.to_string(),
         );
@@ -524,7 +537,10 @@ impl Opt {
     }
 
     pub(crate) fn to_instance_features(&self) -> InstanceTogglableFeatures {
-        InstanceTogglableFeatures { metrics: self.experimental_enable_metrics }
+        InstanceTogglableFeatures {
+            metrics: self.experimental_enable_metrics,
+            logs_route: self.experimental_enable_logs_route,
+        }
     }
 }
 

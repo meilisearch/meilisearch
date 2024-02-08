@@ -39,7 +39,7 @@ pub struct ExtractedFacetValues {
 /// Returns the generated grenad reader containing the docid the fid and the orginal value as key
 /// and the normalized value as value extracted from the given chunk of documents.
 /// We need the fid of the geofields to correctly parse them as numbers if they were sent as strings initially.
-#[logging_timer::time]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
@@ -431,7 +431,7 @@ fn extract_facet_values(value: &Value, geo_field: bool) -> FilterableValues {
                     if let Ok(float) = original.parse() {
                         output_numbers.push(float);
                     } else {
-                        log::warn!(
+                        tracing::warn!(
                             "Internal error, could not parse a geofield that has been validated. Please open an issue."
                         )
                     }

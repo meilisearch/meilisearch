@@ -38,7 +38,12 @@ impl<'t, 'i> WordsPrefixesFst<'t, 'i> {
         self
     }
 
-    #[logging_timer::time("WordsPrefixesFst::{}")]
+    #[tracing::instrument(
+        level = "trace",
+        skip_all,
+        target = "indexing::prefix",
+        name = "words_prefix_fst"
+    )]
     pub fn execute(self) -> Result<()> {
         puffin::profile_function!();
 

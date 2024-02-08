@@ -2,7 +2,6 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use index_scheduler::IndexScheduler;
-use log::{debug, warn};
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
@@ -12,6 +11,7 @@ use meilisearch_types::milli;
 use meilisearch_types::milli::vector::DistributionShift;
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
+use tracing::{debug, warn};
 
 use crate::analytics::{Analytics, SearchAggregator};
 use crate::extractors::authentication::policies::*;
@@ -186,7 +186,7 @@ pub async fn search_with_url_query(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    debug!("called with params: {:?}", params);
+    debug!(parameters = ?params, "Search get");
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let mut query: SearchQuery = params.into_inner().into();
@@ -213,7 +213,7 @@ pub async fn search_with_url_query(
 
     let search_result = search_result?;
 
-    debug!("returns: {:?}", search_result);
+    debug!(returns = ?search_result, "Search get");
     Ok(HttpResponse::Ok().json(search_result))
 }
 
@@ -227,7 +227,7 @@ pub async fn search_with_post(
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let mut query = params.into_inner();
-    debug!("search called with params: {:?}", query);
+    debug!(parameters = ?query, "Search post");
 
     // Tenant token search_rules.
     if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
@@ -252,7 +252,7 @@ pub async fn search_with_post(
 
     let search_result = search_result?;
 
-    debug!("returns: {:?}", search_result);
+    debug!(returns = ?search_result, "Search post");
     Ok(HttpResponse::Ok().json(search_result))
 }
 

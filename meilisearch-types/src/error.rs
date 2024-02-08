@@ -310,6 +310,8 @@ TooManyVectors                        , InvalidRequest       , BAD_REQUEST ;
 UnretrievableDocument                 , Internal             , BAD_REQUEST ;
 UnretrievableErrorCode                , InvalidRequest       , BAD_REQUEST ;
 UnsupportedMediaType                  , InvalidRequest       , UNSUPPORTED_MEDIA_TYPE ;
+
+// Experimental features
 VectorEmbeddingError                  , InvalidRequest       , BAD_REQUEST
 }
 

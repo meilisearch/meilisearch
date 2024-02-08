@@ -43,6 +43,19 @@ impl RoFeatures {
         }
     }
 
+    pub fn check_logs_route(&self) -> Result<()> {
+        if self.runtime.logs_route {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action: "getting logs through the `/logs/stream` route",
+                feature: "logs route",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/721",
+            }
+            .into())
+        }
+    }
+
     pub fn check_vector(&self, disabled_action: &'static str) -> Result<()> {
         if self.runtime.vector_store {
             Ok(())
@@ -81,6 +94,7 @@ impl FeatureData {
             runtime_features_db.get(&txn, EXPERIMENTAL_FEATURES)?.unwrap_or_default();
         let runtime = Arc::new(RwLock::new(RuntimeTogglableFeatures {
             metrics: instance_features.metrics || persisted_features.metrics,
+            logs_route: instance_features.logs_route || persisted_features.logs_route,
             ..persisted_features
         }));
 

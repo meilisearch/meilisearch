@@ -16,12 +16,16 @@ members = [
     "json-depth-checker",
     "benchmarks",
     "fuzzers",
+    "tracing-trace",
     "xtask",
 ]
 
 [workspace.package]
 version = "1.6.1"
-authors = ["Quentin de Quelen <quentin@dequelen.me>", "Clément Renault <clement@meilisearch.com>"]
+authors = [
+    "Quentin de Quelen <quentin@dequelen.me>",
+    "Clément Renault <clement@meilisearch.com>",
+]
 description = "Meilisearch HTTP server"
 homepage = "https://meilisearch.com"
 readme = "README.md"

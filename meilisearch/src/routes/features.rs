@@ -3,11 +3,11 @@ use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
 use deserr::Deserr;
 use index_scheduler::IndexScheduler;
-use log::debug;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use serde_json::json;
+use tracing::debug;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::ActionPolicy;
@@ -33,8 +33,9 @@ async fn get_features(
     let features = index_scheduler.features();
 
     analytics.publish("Experimental features Seen".to_string(), json!(null), Some(&req));
-    debug!("returns: {:?}", features.runtime_features());
-    HttpResponse::Ok().json(features.runtime_features())
+    let features = features.runtime_features();
+    debug!(returns = ?features, "Get features");
+    HttpResponse::Ok().json(features)
 }
 
 #[derive(Debug, Deserr)]
@@ -44,6 +45,8 @@ pub struct RuntimeTogglableFeatures {
     pub vector_store: Option<bool>,
     #[deserr(default)]
     pub metrics: Option<bool>,
+    #[deserr(default)]
+    pub logs_route: Option<bool>,
     #[deserr(default)]
     pub export_puffin_reports: Option<bool>,
 }
@@ -58,11 +61,13 @@ async fn patch_features(
     analytics: Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let features = index_scheduler.features();
+    debug!(parameters = ?new_features, "Patch features");
 
     let old_features = features.runtime_features();
     let new_features = meilisearch_types::features::RuntimeTogglableFeatures {
         vector_store: new_features.0.vector_store.unwrap_or(old_features.vector_store),
         metrics: new_features.0.metrics.unwrap_or(old_features.metrics),
+        logs_route: new_features.0.logs_route.unwrap_or(old_features.logs_route),
         export_puffin_reports: new_features
             .0
             .export_puffin_reports
@@ -75,6 +80,7 @@ async fn patch_features(
     let meilisearch_types::features::RuntimeTogglableFeatures {
         vector_store,
         metrics,
+        logs_route,
         export_puffin_reports,
     } = new_features;
 
@@ -83,10 +89,12 @@ async fn patch_features(
         json!({
             "vector_store": vector_store,
             "metrics": metrics,
+            "logs_route": logs_route,
             "export_puffin_reports": export_puffin_reports,
         }),
         Some(&req),
     );
     index_scheduler.put_runtime_features(new_features)?;
+    debug!(returns = ?new_features, "Patch features");
     Ok(HttpResponse::Ok().json(new_features))
 }

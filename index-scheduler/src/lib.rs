@@ -535,17 +535,17 @@ impl IndexScheduler {
         let budget = if Self::is_good_heed(tasks_path, DEFAULT_BUDGET) {
             DEFAULT_BUDGET
         } else {
-            log::debug!("determining budget with dichotomic search");
+            tracing::debug!("determining budget with dichotomic search");
             utils::dichotomic_search(DEFAULT_BUDGET / 2, |map_size| {
                 Self::is_good_heed(tasks_path, map_size)
             })
         };
 
-        log::debug!("memmap budget: {budget}B");
+        tracing::debug!("memmap budget: {budget}B");
         let mut budget = budget / 2;
         if task_db_size > (budget / 2) {
             task_db_size = clamp_to_page_size(budget * 2 / 5);
-            log::debug!(
+            tracing::debug!(
                 "Decreasing max size of task DB to {task_db_size}B due to constrained memory space"
             );
         }
@@ -555,13 +555,13 @@ impl IndexScheduler {
         let budget = budget;
         let task_db_size = task_db_size;
 
-        log::debug!("index budget: {budget}B");
+        tracing::debug!("index budget: {budget}B");
         let mut index_count = budget / base_map_size;
         if index_count < 2 {
             // take a bit less than half than the budget to make sure we can always afford to open an index
             let map_size = (budget * 2) / 5;
             // single index of max budget
-            log::debug!("1 index of {map_size}B can be opened simultaneously.");
+            tracing::debug!("1 index of {map_size}B can be opened simultaneously.");
             return IndexBudget { map_size, index_count: 1, task_db_size };
         }
         // give us some space for an additional index when the cache is already full
@@ -570,7 +570,7 @@ impl IndexScheduler {
         if index_count > max_index_count {
             index_count = max_index_count;
         }
-        log::debug!("Up to {index_count} indexes of {base_map_size}B opened simultaneously.");
+        tracing::debug!("Up to {index_count} indexes of {base_map_size}B opened simultaneously.");
         IndexBudget { map_size: base_map_size, index_count, task_db_size }
     }
 
@@ -617,7 +617,7 @@ impl IndexScheduler {
                         Ok(TickOutcome::TickAgain(_)) => (),
                         Ok(TickOutcome::WaitForSignal) => run.wake_up.wait(),
                         Err(e) => {
-                            log::error!("{e}");
+                            tracing::error!("{e}");
                             // Wait one second when an irrecoverable error occurs.
                             if !e.is_recoverable() {
                                 std::thread::sleep(Duration::from_secs(1));
@@ -634,15 +634,15 @@ impl IndexScheduler {
                             let mut file = match File::create(format!("{}.puffin", now)) {
                                 Ok(file) => file,
                                 Err(e) => {
-                                    log::error!("{e}");
+                                    tracing::error!("{e}");
                                     continue;
                                 }
                             };
                             if let Err(e) = frame_view.save_to_writer(&mut file) {
-                                log::error!("{e}");
+                                tracing::error!("{e}");
                             }
                             if let Err(e) = file.sync_all() {
-                                log::error!("{e}");
+                                tracing::error!("{e}");
                             }
                             // We erase this frame view as it is no more useful. We want to
                             // measure the new frames now that we exported the previous ones.
@@ -1190,10 +1190,10 @@ impl IndexScheduler {
                     self.update_task(&mut wtxn, &task)
                         .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?;
                     if let Err(e) = self.delete_persisted_task_data(&task) {
-                        log::error!("Failure to delete the content files associated with task {}. Error: {e}", task.uid);
+                        tracing::error!("Failure to delete the content files associated with task {}. Error: {e}", task.uid);
                     }
                 }
-                log::info!("A batch of tasks was successfully completed.");
+                tracing::info!("A batch of tasks was successfully completed.");
             }
             // If we have an abortion error we must stop the tick here and re-schedule tasks.
             Err(Error::Milli(milli::Error::InternalError(
@@ -1247,7 +1247,7 @@ impl IndexScheduler {
                     self.maybe_fail(tests::FailureLocation::UpdatingTaskAfterProcessBatchFailure)?;
 
                     if let Err(e) = self.delete_persisted_task_data(&task) {
-                        log::error!("Failure to delete the content files associated with task {}. Error: {e}", task.uid);
+                        tracing::error!("Failure to delete the content files associated with task {}. Error: {e}", task.uid);
                     }
                     self.update_task(&mut wtxn, &task)
                         .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?;
@@ -1341,7 +1341,7 @@ impl IndexScheduler {
             };
 
             if let Err(e) = request.send(reader) {
-                log::error!("While sending data to the webhook: {e}");
+                tracing::error!("While sending data to the webhook: {e}");
             }
         }
 
@@ -1367,12 +1367,12 @@ impl IndexScheduler {
         // /!\ the len must be at least 2 or else we might enter an infinite loop where we only delete
         //     the deletion tasks we enqueued ourselves.
         if to_delete.len() < 2 {
-            log::warn!("The task queue is almost full, but no task can be deleted yet.");
+            tracing::warn!("The task queue is almost full, but no task can be deleted yet.");
             // the only thing we can do is hope that the user tasks are going to finish
             return Ok(());
         }
 
-        log::info!(
+        tracing::info!(
             "The task queue is almost full. Deleting the oldest {} finished tasks.",
             to_delete.len()
         );

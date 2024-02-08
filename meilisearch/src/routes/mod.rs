@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
-use log::debug;
 use meilisearch_auth::AuthController;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::settings::{Settings, Unchecked};
@@ -11,6 +10,7 @@ use meilisearch_types::tasks::{Kind, Status, Task, TaskId};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
+use tracing::debug;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
@@ -22,6 +22,7 @@ mod api_key;
 mod dump;
 pub mod features;
 pub mod indexes;
+mod logs;
 mod metrics;
 mod multi_search;
 mod snapshot;
@@ -31,6 +32,7 @@ pub mod tasks;
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::scope("/tasks").configure(tasks::configure))
         .service(web::resource("/health").route(web::get().to(get_health)))
+        .service(web::scope("/logs").configure(logs::configure))
         .service(web::scope("/keys").configure(api_key::configure))
         .service(web::scope("/dumps").configure(dump::configure))
         .service(web::scope("/snapshots").configure(snapshot::configure))
@@ -250,7 +252,7 @@ async fn get_stats(
 
     let stats = create_all_stats((*index_scheduler).clone(), (*auth_controller).clone(), filters)?;
 
-    debug!("returns: {:?}", stats);
+    debug!(returns = ?stats, "Get stats");
     Ok(HttpResponse::Ok().json(stats))
 }
 

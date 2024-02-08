@@ -56,6 +56,7 @@ pub fn create_sorter(
     builder.build()
 }
 
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::grenad")]
 pub fn sorter_into_reader(
     sorter: grenad::Sorter<MergeFn>,
     indexer: GrenadParameters,
@@ -252,6 +253,7 @@ pub fn grenad_obkv_into_chunks<R: io::Read + io::Seek>(
 
 /// Write provided sorter in database using serialize_value function.
 /// merge_values function is used if an entry already exist in the database.
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::grenad")]
 pub fn write_sorter_into_database<K, V, FS, FM>(
     sorter: Sorter<MergeFn>,
     database: &heed::Database<K, V>,

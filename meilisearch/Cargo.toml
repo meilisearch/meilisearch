@@ -42,7 +42,6 @@ crossbeam-channel = "0.5.11"
 deserr = { version = "0.6.1", features = ["actix-web"] }
 dump = { path = "../dump" }
 either = "1.9.0"
-env_logger = "0.10.1"
 file-store = { path = "../file-store" }
 flate2 = "1.0.28"
 fst = "0.4.7"
@@ -55,7 +54,6 @@ is-terminal = "0.4.10"
 itertools = "0.11.0"
 jsonwebtoken = "8.3.0"
 lazy_static = "1.4.0"
-log = "0.4.20"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 mimalloc = { version = "0.1.39", default-features = false }
@@ -105,6 +103,10 @@ yaup = "0.2.1"
 serde_urlencoded = "0.7.1"
 termcolor = "1.4.1"
 url = { version = "2.5.0", features = ["serde"] }
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
+tracing-trace = { version = "0.1.0", path = "../tracing-trace" }
+tracing-actix-web = "0.7.9"
 
 [dev-dependencies]
 actix-rt = "2.9.0"

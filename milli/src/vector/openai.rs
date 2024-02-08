@@ -173,12 +173,16 @@ impl Embedder {
             let retry_duration = match result {
                 Ok(embeddings) => return Ok(embeddings),
                 Err(retry) => {
-                    log::warn!("Failed: {}", retry.error);
+                    tracing::warn!("Failed: {}", retry.error);
                     tokenized |= retry.must_tokenize();
                     retry.into_duration(attempt)
                 }
             }?;
-            log::warn!("Attempt #{}, retrying after {}ms.", attempt, retry_duration.as_millis());
+            tracing::warn!(
+                "Attempt #{}, retrying after {}ms.",
+                attempt,
+                retry_duration.as_millis()
+            );
             tokio::time::sleep(retry_duration).await;
         }
 
@@ -244,7 +248,7 @@ impl Embedder {
                         .map_err(EmbedError::openai_unexpected)
                         .map_err(Retry::retry_later)?;
 
-                    log::warn!("OpenAI: input was too long, retrying on tokenized version. For best performance, limit the size of your prompt.");
+                    tracing::warn!("OpenAI: input was too long, retrying on tokenized version. For best performance, limit the size of your prompt.");
 
                     return Err(Retry::retry_tokenized(EmbedError::openai_too_many_tokens(
                         error_response.error,
@@ -266,7 +270,7 @@ impl Embedder {
         client: &reqwest::Client,
     ) -> Result<Vec<Embeddings<f32>>, Retry> {
         for text in texts {
-            log::trace!("Received prompt: {}", text.as_ref())
+            tracing::trace!("Received prompt: {}", text.as_ref())
         }
         let request = OpenAiRequest {
             model: self.options.embedding_model.name(),
@@ -289,7 +293,7 @@ impl Embedder {
             .map_err(EmbedError::openai_unexpected)
             .map_err(Retry::retry_later)?;
 
-        log::trace!("response: {:?}", response.data);
+        tracing::trace!("response: {:?}", response.data);
 
         Ok(response
             .data

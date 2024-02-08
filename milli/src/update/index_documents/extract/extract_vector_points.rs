@@ -67,7 +67,7 @@ impl VectorStateDelta {
 /// Extracts the embedding vector contained in each document under the `_vectors` field.
 ///
 /// Returns the generated grenad reader containing the docid as key associated to the Vec<f32>
-#[logging_timer::time]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 pub fn extract_vector_points<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
@@ -186,12 +186,12 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                         prompt.render(obkv, DelAdd::Deletion, field_id_map).unwrap_or_default();
                     let new_prompt = prompt.render(obkv, DelAdd::Addition, field_id_map)?;
                     if old_prompt != new_prompt {
-                        log::trace!(
+                        tracing::trace!(
                             "🚀 Changing prompt from\n{old_prompt}\n===to===\n{new_prompt}"
                         );
                         VectorStateDelta::NowGenerated(new_prompt)
                     } else {
-                        log::trace!("⏭️ Prompt unmodified, skipping");
+                        tracing::trace!("⏭️ Prompt unmodified, skipping");
                         VectorStateDelta::NoChange
                     }
                 } else {

@@ -25,6 +25,7 @@ impl<R: io::Read + io::Seek> DocumentsBatchReader<R> {
     ///
     /// It first retrieves the index, then moves to the first document. Use the `into_cursor`
     /// method to iterator over the documents, from the first to the last.
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents")]
     pub fn from_reader(reader: R) -> Result<Self, Error> {
         let reader = grenad::Reader::new(reader)?;
         let mut cursor = reader.into_cursor()?;

@@ -29,7 +29,6 @@ use error::PayloadError;
 use extractors::payload::PayloadConfig;
 use http::header::CONTENT_TYPE;
 use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
-use log::error;
 use meilisearch_auth::AuthController;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod};
@@ -39,6 +38,8 @@ use meilisearch_types::versioning::{check_version_file, create_version_file};
 use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
 pub use option::Opt;
 use option::ScheduleSnapshot;
+use tracing::{error, info_span};
+use tracing_subscriber::filter::Targets;
 
 use crate::error::MeilisearchHttpError;
 
@@ -86,10 +87,21 @@ fn is_empty_db(db_path: impl AsRef<Path>) -> bool {
     }
 }
 
+/// The handle used to update the logs at runtime. Must be accessible from the `main.rs` and the `route/logs.rs`.
+pub type LogRouteHandle =
+    tracing_subscriber::reload::Handle<LogRouteType, tracing_subscriber::Registry>;
+
+pub type LogRouteType = tracing_subscriber::filter::Filtered<
+    Option<Box<dyn tracing_subscriber::Layer<tracing_subscriber::Registry> + Send + Sync>>,
+    Targets,
+    tracing_subscriber::Registry,
+>;
+
 pub fn create_app(
     index_scheduler: Data<IndexScheduler>,
     auth_controller: Data<AuthController>,
     opt: Opt,
+    logs: LogRouteHandle,
     analytics: Arc<dyn Analytics>,
     enable_dashboard: bool,
 ) -> actix_web::App<
@@ -108,6 +120,7 @@ pub fn create_app(
                 index_scheduler.clone(),
                 auth_controller.clone(),
                 &opt,
+                logs,
                 analytics.clone(),
             )
         })
@@ -123,9 +136,47 @@ pub fn create_app(
             .allow_any_method()
             .max_age(86_400), // 24h
     )
-    .wrap(actix_web::middleware::Logger::default())
+    .wrap(tracing_actix_web::TracingLogger::<AwebTracingLogger>::new())
     .wrap(actix_web::middleware::Compress::default())
     .wrap(actix_web::middleware::NormalizePath::new(actix_web::middleware::TrailingSlash::Trim))
+}
+
+struct AwebTracingLogger;
+
+impl tracing_actix_web::RootSpanBuilder for AwebTracingLogger {
+    fn on_request_start(request: &actix_web::dev::ServiceRequest) -> tracing::Span {
+        use tracing::field::Empty;
+
+        let conn_info = request.connection_info();
+        let headers = request.headers();
+        let user_agent = headers
+            .get(http::header::USER_AGENT)
+            .map(|value| String::from_utf8_lossy(value.as_bytes()).into_owned())
+            .unwrap_or_default();
+        info_span!("HTTP request", method = %request.method(), host = conn_info.host(), route = %request.path(), query_parameters = %request.query_string(), %user_agent, status_code = Empty, error = Empty)
+    }
+
+    fn on_request_end<B: MessageBody>(
+        span: tracing::Span,
+        outcome: &Result<ServiceResponse<B>, actix_web::Error>,
+    ) {
+        match &outcome {
+            Ok(response) => {
+                let code: i32 = response.response().status().as_u16().into();
+                span.record("status_code", code);
+
+                if let Some(error) = response.response().error() {
+                    // use the status code already constructed for the outgoing HTTP response
+                    span.record("error", &tracing::field::display(error.as_response_error()));
+                }
+            }
+            Err(error) => {
+                let code: i32 = error.error_response().status().as_u16().into();
+                span.record("status_code", code);
+                span.record("error", &tracing::field::display(error.as_response_error()));
+            }
+        };
+    }
 }
 
 enum OnFailure {
@@ -280,15 +331,15 @@ fn import_dump(
     let mut dump_reader = dump::DumpReader::open(reader)?;
 
     if let Some(date) = dump_reader.date() {
-        log::info!(
-            "Importing a dump of meilisearch `{:?}` from the {}",
-            dump_reader.version(), // TODO: get the meilisearch version instead of the dump version
-            date
+        tracing::info!(
+            version = ?dump_reader.version(), // TODO: get the meilisearch version instead of the dump version
+            %date,
+            "Importing a dump of meilisearch"
         );
     } else {
-        log::info!(
-            "Importing a dump of meilisearch `{:?}`",
-            dump_reader.version(), // TODO: get the meilisearch version instead of the dump version
+        tracing::info!(
+            version = ?dump_reader.version(), // TODO: get the meilisearch version instead of the dump version
+            "Importing a dump of meilisearch",
         );
     }
 
@@ -322,7 +373,7 @@ fn import_dump(
     for index_reader in dump_reader.indexes()? {
         let mut index_reader = index_reader?;
         let metadata = index_reader.metadata();
-        log::info!("Importing index `{}`.", metadata.uid);
+        tracing::info!("Importing index `{}`.", metadata.uid);
 
         let date = Some((metadata.created_at, metadata.updated_at));
         let index = index_scheduler.create_raw_index(&metadata.uid, date)?;
@@ -336,14 +387,15 @@ fn import_dump(
         }
 
         // 4.2 Import the settings.
-        log::info!("Importing the settings.");
+        tracing::info!("Importing the settings.");
         let settings = index_reader.settings()?;
         apply_settings_to_builder(&settings, &mut builder);
-        builder.execute(|indexing_step| log::debug!("update: {:?}", indexing_step), || false)?;
+        builder
+            .execute(|indexing_step| tracing::debug!("update: {:?}", indexing_step), || false)?;
 
         // 4.3 Import the documents.
         // 4.3.1 We need to recreate the grenad+obkv format accepted by the index.
-        log::info!("Importing the documents.");
+        tracing::info!("Importing the documents.");
         let file = tempfile::tempfile()?;
         let mut builder = DocumentsBatchBuilder::new(BufWriter::new(file));
         for document in index_reader.documents()? {
@@ -365,15 +417,16 @@ fn import_dump(
                 update_method: IndexDocumentsMethod::ReplaceDocuments,
                 ..Default::default()
             },
-            |indexing_step| log::trace!("update: {:?}", indexing_step),
+            |indexing_step| tracing::trace!("update: {:?}", indexing_step),
             || false,
         )?;
 
         let (builder, user_result) = builder.add_documents(reader)?;
-        log::info!("{} documents found.", user_result?);
+        let user_result = user_result?;
+        tracing::info!(documents_found = user_result, "{} documents found.", user_result);
         builder.execute()?;
         wtxn.commit()?;
-        log::info!("All documents successfully imported.");
+        tracing::info!("All documents successfully imported.");
     }
 
     let mut index_scheduler_dump = index_scheduler.register_dumped_task()?;
@@ -391,6 +444,7 @@ pub fn configure_data(
     index_scheduler: Data<IndexScheduler>,
     auth: Data<AuthController>,
     opt: &Opt,
+    logs: LogRouteHandle,
     analytics: Arc<dyn Analytics>,
 ) {
     let http_payload_size_limit = opt.http_payload_size_limit.get_bytes() as usize;
@@ -398,6 +452,7 @@ pub fn configure_data(
         .app_data(index_scheduler)
         .app_data(auth)
         .app_data(web::Data::from(analytics))
+        .app_data(web::Data::new(logs))
         .app_data(
             web::JsonConfig::default()
                 .limit(http_payload_size_limit)

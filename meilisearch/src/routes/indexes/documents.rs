@@ -8,7 +8,6 @@ use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::Deserr;
 use futures::StreamExt;
 use index_scheduler::IndexScheduler;
-use log::debug;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
@@ -28,6 +27,7 @@ use serde_json::Value;
 use tempfile::tempfile;
 use tokio::fs::File;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
+use tracing::debug;
 
 use crate::analytics::{Analytics, DocumentDeletionKind, DocumentFetchKind};
 use crate::error::MeilisearchHttpError;
@@ -101,6 +101,7 @@ pub async fn get_document(
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let DocumentParam { index_uid, document_id } = document_param.into_inner();
+    debug!(parameters = ?params, "Get document");
     let index_uid = IndexUid::try_from(index_uid)?;
 
     analytics.get_fetch_documents(&DocumentFetchKind::PerDocumentId, &req);
@@ -110,7 +111,7 @@ pub async fn get_document(
 
     let index = index_scheduler.index(&index_uid)?;
     let document = retrieve_document(&index, &document_id, attributes_to_retrieve)?;
-    debug!("returns: {:?}", document);
+    debug!(returns = ?document, "Get document");
     Ok(HttpResponse::Ok().json(document))
 }
 
@@ -131,7 +132,7 @@ pub async fn delete_document(
     };
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
-    debug!("returns: {:?}", task);
+    debug!(returns = ?task, "Delete document");
     Ok(HttpResponse::Accepted().json(task))
 }
 
@@ -168,9 +169,8 @@ pub async fn documents_by_query_post(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    debug!("called with body: {:?}", body);
-
     let body = body.into_inner();
+    debug!(parameters = ?body, "Get documents POST");
 
     analytics.post_fetch_documents(
         &DocumentFetchKind::Normal {
@@ -191,7 +191,7 @@ pub async fn get_documents(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    debug!("called with params: {:?}", params);
+    debug!(parameters = ?params, "Get documents GET");
 
     let BrowseQueryGet { limit, offset, fields, filter } = params.into_inner();
 
@@ -235,7 +235,7 @@ fn documents_by_query(
 
     let ret = PaginationView::new(offset, limit, total as usize, documents);
 
-    debug!("returns: {:?}", ret);
+    debug!(returns = ?ret, "Get documents");
     Ok(HttpResponse::Ok().json(ret))
 }
 
@@ -271,7 +271,7 @@ pub async fn replace_documents(
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
-    debug!("called with params: {:?}", params);
+    debug!(parameters = ?params, "Replace documents");
     let params = params.into_inner();
 
     analytics.add_documents(&params, index_scheduler.index(&index_uid).is_err(), &req);
@@ -288,6 +288,7 @@ pub async fn replace_documents(
         allow_index_creation,
     )
     .await?;
+    debug!(returns = ?task, "Replace documents");
 
     Ok(HttpResponse::Accepted().json(task))
 }
@@ -302,8 +303,8 @@ pub async fn update_documents(
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
-    debug!("called with params: {:?}", params);
     let params = params.into_inner();
+    debug!(parameters = ?params, "Update documents");
 
     analytics.update_documents(&params, index_scheduler.index(&index_uid).is_err(), &req);
 
@@ -319,6 +320,7 @@ pub async fn update_documents(
         allow_index_creation,
     )
     .await?;
+    debug!(returns = ?task, "Update documents");
 
     Ok(HttpResponse::Accepted().json(task))
 }
@@ -427,7 +429,10 @@ async fn document_addition(
                 Err(index_scheduler::Error::FileStore(file_store::Error::IoError(e)))
                     if e.kind() == ErrorKind::NotFound => {}
                 Err(e) => {
-                    log::warn!("Unknown error happened while deleting a malformed update file with uuid {uuid}: {e}");
+                    tracing::warn!(
+                        index_uuid = %uuid,
+                        "Unknown error happened while deleting a malformed update file: {e}"
+                    );
                 }
             }
             // We still want to return the original error to the end user.
@@ -453,7 +458,6 @@ async fn document_addition(
         }
     };
 
-    debug!("returns: {:?}", task);
     Ok(task.into())
 }
 
@@ -464,7 +468,7 @@ pub async fn delete_documents_batch(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    debug!("called with params: {:?}", body);
+    debug!(parameters = ?body, "Delete documents by batch");
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     analytics.delete_documents(DocumentDeletionKind::PerBatch, &req);
@@ -479,7 +483,7 @@ pub async fn delete_documents_batch(
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
-    debug!("returns: {:?}", task);
+    debug!(returns = ?task, "Delete documents by batch");
     Ok(HttpResponse::Accepted().json(task))
 }
 
@@ -497,7 +501,7 @@ pub async fn delete_documents_by_filter(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    debug!("called with params: {:?}", body);
+    debug!(parameters = ?body, "Delete documents by filter");
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let index_uid = index_uid.into_inner();
     let filter = body.into_inner().filter;
@@ -515,7 +519,7 @@ pub async fn delete_documents_by_filter(
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
-    debug!("returns: {:?}", task);
+    debug!(returns = ?task, "Delete documents by filter");
     Ok(HttpResponse::Accepted().json(task))
 }
 
@@ -532,7 +536,7 @@ pub async fn clear_all_documents(
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
-    debug!("returns: {:?}", task);
+    debug!(returns = ?task, "Delete all documents");
     Ok(HttpResponse::Accepted().json(task))
 }
 

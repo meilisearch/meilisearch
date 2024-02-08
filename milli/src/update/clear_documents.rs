@@ -14,6 +14,12 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
         ClearDocuments { wtxn, index }
     }
 
+    #[tracing::instrument(
+        level = "trace",
+        skip(self),
+        target = "indexing::documents",
+        name = "clear_documents"
+    )]
     pub fn execute(self) -> Result<u64> {
         puffin::profile_function!();
 
