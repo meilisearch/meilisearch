@@ -1,6 +1,6 @@
 use std::collections::vec_deque::Drain;
 use std::collections::VecDeque;
-use std::io::{self, BufReader, Write};
+use std::io::{self, BufReader, BufWriter, Stdout, Write};
 use std::mem;
 
 use anyhow::Context;
@@ -32,32 +32,34 @@ fn main() -> anyhow::Result<()> {
     let mut output = io::BufWriter::new(io::stdout());
     for result in tracing_trace::TraceReader::new(input) {
         let entry = result?;
-        if entry.memory().map_or(true, |m| m.resident < memory_threshold.as_u64()) {
+        if matches!(entry, Entry::NewCallsite(_) | Entry::NewThread(_)) {
+            write_to_output(&mut output, &entry)?;
+        } else if entry.memory().map_or(true, |m| m.resident < memory_threshold.as_u64()) {
             if mem::replace(&mut currently_in_threshold, false) {
                 for entry in context.drain() {
-                    serde_json::to_writer(&mut output, &entry)
-                        .context("while serializing and writing to stdout")?;
+                    write_to_output(&mut output, &entry)?;
                 }
             }
             context.push(entry);
         } else {
             currently_in_threshold = true;
             for entry in context.drain() {
-                serde_json::to_writer(&mut output, &entry)
-                    .context("while serializing and writing to stdout")?;
+                write_to_output(&mut output, &entry)?;
             }
-            serde_json::to_writer(&mut output, &entry)
-                .context("while serializing and writing to stdout")?;
+            write_to_output(&mut output, &entry)?;
         }
     }
 
     for entry in context.drain() {
-        serde_json::to_writer(&mut output, &entry)
-            .context("while serializing and writing to stdout")?;
+        write_to_output(&mut output, &entry)?;
     }
 
     output.flush().context("flushing stdout")?;
     Ok(())
+}
+
+fn write_to_output(writer: &mut BufWriter<Stdout>, entry: &Entry) -> anyhow::Result<()> {
+    serde_json::to_writer(writer, &entry).context("while serializing and writing to stdout")
 }
 
 /// Keeps only the last `size` element in memory.
