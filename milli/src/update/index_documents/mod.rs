@@ -497,6 +497,8 @@ where
                         // If no more chunk remains in the chunk accumulator and the channel is disconected, break.
                         } else if status == crossbeam_channel::RecvTimeoutError::Disconnected {
                             break;
+                        } else {
+                            rayon::yield_now();
                         }
                     }
                     Ok(result) => {
