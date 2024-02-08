@@ -10,7 +10,7 @@ use meilisearch_types::milli::update::Setting;
 use meilisearch_types::settings::{settings, RankingRuleView, Settings, Unchecked};
 use meilisearch_types::tasks::KindWithContent;
 use serde_json::json;
-use tracing::{debug_span};
+use tracing::debug;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
@@ -29,7 +29,7 @@ macro_rules! make_setting_route {
             use meilisearch_types::milli::update::Setting;
             use meilisearch_types::settings::{settings, Settings};
             use meilisearch_types::tasks::KindWithContent;
-            use tracing::debug_span;
+            use tracing::debug;
             use $crate::analytics::Analytics;
             use $crate::extractors::authentication::policies::*;
             use $crate::extractors::authentication::GuardedData;
@@ -61,7 +61,7 @@ macro_rules! make_setting_route {
                         .await??
                         .into();
 
-                debug_span!("Delete settings", returns = ?task);
+                debug!(returns = ?task, "Delete settings");
                 Ok(HttpResponse::Accepted().json(task))
             }
 
@@ -78,7 +78,7 @@ macro_rules! make_setting_route {
                 let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
                 let body = body.into_inner();
-                debug_span!("Update settings", parameters = ?body);
+                debug!(parameters = ?body, "Update settings");
 
                 #[allow(clippy::redundant_closure_call)]
                 $analytics(&body, &req);
@@ -110,7 +110,7 @@ macro_rules! make_setting_route {
                         .await??
                         .into();
 
-                debug_span!("Update settings", returns = ?task);
+                debug!(returns = ?task, "Update settings");
                 Ok(HttpResponse::Accepted().json(task))
             }
 
@@ -127,7 +127,7 @@ macro_rules! make_setting_route {
                 let rtxn = index.read_txn()?;
                 let settings = settings(&index, &rtxn)?;
 
-                debug_span!("Update settings", returns = ?settings);
+                debug!(returns = ?settings, "Update settings");
                 let mut json = serde_json::json!(&settings);
                 let val = json[$camelcase_attr].take();
 
@@ -657,7 +657,7 @@ pub async fn update_all(
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let new_settings = body.into_inner();
-    debug_span!("Update all settings", parameters = ?new_settings);
+    debug!(parameters = ?new_settings, "Update all settings");
     let new_settings = validate_settings(new_settings, &index_scheduler)?;
 
     analytics.publish(
@@ -770,7 +770,7 @@ pub async fn update_all(
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
-    debug_span!("Update all settings", returns = ?task);
+    debug!(returns = ?task, "Update all settings");
     Ok(HttpResponse::Accepted().json(task))
 }
 
@@ -783,7 +783,7 @@ pub async fn get_all(
     let index = index_scheduler.index(&index_uid)?;
     let rtxn = index.read_txn()?;
     let new_settings = settings(&index, &rtxn)?;
-    debug_span!("Get all settings", returns = ?new_settings);
+    debug!(returns = ?new_settings, "Get all settings");
     Ok(HttpResponse::Ok().json(new_settings))
 }
 
@@ -806,7 +806,7 @@ pub async fn delete_all(
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
-    debug_span!("Delete all settings", returns = ?task);
+    debug!(returns = ?task, "Delete all settings");
     Ok(HttpResponse::Accepted().json(task))
 }
 

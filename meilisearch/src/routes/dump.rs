@@ -5,7 +5,7 @@ use meilisearch_auth::AuthController;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::tasks::KindWithContent;
 use serde_json::json;
-use tracing::debug_span;
+use tracing::debug;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
@@ -32,6 +32,6 @@ pub async fn create_dump(
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
-    debug_span!("Create dump", returns = ?task);
+    debug!(returns = ?task, "Create dump");
     Ok(HttpResponse::Accepted().json(task))
 }

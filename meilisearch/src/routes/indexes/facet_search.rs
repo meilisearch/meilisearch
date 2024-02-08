@@ -7,7 +7,7 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use serde_json::Value;
-use tracing::debug_span;
+use tracing::debug;
 
 use crate::analytics::{Analytics, FacetSearchAggregator};
 use crate::extractors::authentication::policies::*;
@@ -56,7 +56,7 @@ pub async fn search(
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let query = params.into_inner();
-    debug_span!("Facet search", parameters = ?query);
+    debug!(parameters = ?query, "Facet search");
 
     let mut aggregate = FacetSearchAggregator::from_query(&query, &req);
 
@@ -83,7 +83,7 @@ pub async fn search(
 
     let search_result = search_result?;
 
-    debug_span!("Facet search", returns = ?search_result);
+    debug!(returns = ?search_result, "Facet search");
     Ok(HttpResponse::Ok().json(search_result))
 }
 
