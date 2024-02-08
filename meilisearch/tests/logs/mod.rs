@@ -57,7 +57,7 @@ async fn basic_test_log_stream_route() {
             .insert_header(ContentType::json())
             .set_payload(
                 serde_json::to_vec(&json!({
-                    "mode": "fmt",
+                    "mode": "human",
                     "target": "info",
                 }))
                 .unwrap(),

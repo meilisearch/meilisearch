@@ -36,7 +36,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[deserr(rename_all = lowercase)]
 pub enum LogMode {
     #[default]
-    Fmt,
+    Human,
     Profile,
 }
 
@@ -160,7 +160,7 @@ fn make_layer<
 ) -> (Box<dyn Layer<S> + Send + Sync>, PinnedByteStream) {
     let guard = HandleGuard { logs: logs.into_inner() };
     match opt.mode {
-        LogMode::Fmt => {
+        LogMode::Human => {
             let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
 
             let fmt_layer = tracing_subscriber::fmt::layer()

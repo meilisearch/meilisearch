@@ -89,7 +89,7 @@ async fn logs_stream_bad_mode() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Unknown value `tamo` at `.mode`: expected one of `fmt`, `profile`",
+      "message": "Unknown value `tamo` at `.mode`: expected one of `human`, `profile`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
@@ -133,7 +133,7 @@ async fn logs_stream_bad_profile_memory() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Invalid value: `profile_memory` can only be used while profiling code and is not compatible with the Fmt mode.",
+      "message": "Invalid value: `profile_memory` can only be used while profiling code and is not compatible with the Human mode.",
       "code": "invalid_settings_typo_tolerance",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_settings_typo_tolerance"
@@ -146,10 +146,10 @@ async fn logs_stream_bad_profile_memory() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Invalid value: `profile_memory` can only be used while profiling code and is not compatible with the Fmt mode.",
-      "code": "invalid_settings_typo_tolerance",
+      "message": "Unknown value `fmt` at `.mode`: expected one of `human`, `profile`",
+      "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_typo_tolerance"
+      "link": "https://docs.meilisearch.com/errors#bad_request"
     }
     "###);
 }
