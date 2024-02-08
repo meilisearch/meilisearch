@@ -766,38 +766,14 @@ async fn faceting_max_values_per_facet() {
 }
 
 #[actix_rt::test]
-async fn experimental_feature_score_details() {
+async fn test_score_details() {
     let server = Server::new().await;
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
 
-    index.add_documents(json!(documents), None).await;
-    index.wait_task(0).await;
-
-    index
-        .search(
-            json!({
-                "q": "train dragon",
-                "showRankingScoreDetails": true,
-            }),
-            |response, code| {
-                meili_snap::snapshot!(code, @"400 Bad Request");
-                meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-                {
-                  "message": "Computing score details requires enabling the `score details` experimental feature. See https://github.com/meilisearch/product/discussions/674",
-                  "code": "feature_not_enabled",
-                  "type": "invalid_request",
-                  "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
-                }
-                "###);
-            },
-        )
-        .await;
-
-    let (response, code) = server.set_features(json!({"scoreDetails": true})).await;
-    meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(response["scoreDetails"], @"true");
+    let res = index.add_documents(json!(documents), None).await;
+    index.wait_task(res.0.uid()).await;
 
     index
         .search(

@@ -30,19 +30,6 @@ impl RoFeatures {
         self.runtime
     }
 
-    pub fn check_score_details(&self) -> Result<()> {
-        if self.runtime.score_details {
-            Ok(())
-        } else {
-            Err(FeatureNotEnabledError {
-                disabled_action: "Computing score details",
-                feature: "score details",
-                issue_link: "https://github.com/meilisearch/product/discussions/674",
-            }
-            .into())
-        }
-    }
-
     pub fn check_metrics(&self) -> Result<()> {
         if self.runtime.metrics {
             Ok(())
