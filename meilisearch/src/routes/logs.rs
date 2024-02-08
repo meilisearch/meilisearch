@@ -33,7 +33,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 #[derive(Debug, Default, Clone, Copy, Deserr, PartialEq, Eq)]
-#[deserr(rename_all = lowercase)]
+#[deserr(rename_all = camelCase)]
 pub enum LogMode {
     #[default]
     Human,
