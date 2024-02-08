@@ -30,7 +30,6 @@ async fn basic_test_log_stream_route() {
 
     let subscriber = tracing_subscriber::registry().with(route_layer).with(
         tracing_subscriber::fmt::layer()
-            .with_line_number(true)
             .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
             .with_filter(tracing_subscriber::filter::LevelFilter::from_str("INFO").unwrap()),
     );
