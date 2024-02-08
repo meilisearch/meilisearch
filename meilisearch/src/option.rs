@@ -312,7 +312,7 @@ pub struct Opt {
 
     /// Experimental logs route feature. For more information, see: <https://github.com/orgs/meilisearch/discussions/721>
     ///
-    /// Enables the log route on the `POST /logs` endpoint and the `DELETE /logs` to stop receiving logs.
+    /// Enables the log route on the `POST /logs/stream` endpoint and the `DELETE /logs/stream` to stop receiving logs.
     #[clap(long, env = MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE)]
     #[serde(default)]
     pub experimental_enable_logs_route: bool,

@@ -12,7 +12,7 @@ pub enum MeilisearchHttpError {
     #[error("A Content-Type header is missing. Accepted values for the Content-Type header are: {}",
             .0.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", "))]
     MissingContentType(Vec<String>),
-    #[error("Log route is currently used by someone else.")]
+    #[error("The `/logs/stream` route is currently in use by someone else.")]
     AlreadyUsedLogRoute,
     #[error("The Content-Type `{0}` does not support the use of a csv delimiter. The csv delimiter can only be used with the Content-Type `text/csv`.")]
     CsvDelimiterWithWrongContentType(String),

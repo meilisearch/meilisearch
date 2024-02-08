@@ -61,7 +61,7 @@ impl RoFeatures {
             Ok(())
         } else {
             Err(FeatureNotEnabledError {
-                disabled_action: "getting logs through the `/logs` route",
+                disabled_action: "getting logs through the `/logs/stream` route",
                 feature: "logs route",
                 issue_link: "https://github.com/orgs/meilisearch/discussions/721",
             }
