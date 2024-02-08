@@ -231,7 +231,7 @@ pub(crate) fn data_from_obkv_documents(
         extract_facet_number_docids,
         merge_deladd_cbo_roaring_bitmaps,
         TypedChunk::FieldIdFacetNumberDocids,
-        "field-id-facet-number-docidsdexing::details, ",
+        "field-id-facet-number-docids",
     );
 
     Ok(())
