@@ -164,7 +164,6 @@ fn make_layer<
             let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
 
             let fmt_layer = tracing_subscriber::fmt::layer()
-                .with_line_number(true)
                 .with_writer(move || LogWriter { sender: sender.clone() })
                 .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE);
 

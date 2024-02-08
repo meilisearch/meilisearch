@@ -80,18 +80,7 @@ fn main() {
         // any number of other subscriber layers may be added before or
         // after the `ErrorLayer`...
         .with(ErrorLayer::default())
-        .with(profiling_layer)
-        /*.with(
-            tracing_subscriber::fmt::layer()
-                .with_line_number(true)
-                .with_span_events(FmtSpan::FULL), /*.with_filter(
-                                                      tracing_subscriber::filter::LevelFilter::from_level(tracing::Level::TRACE).and(
-                                                          tracing_subscriber::filter::Targets::new()
-                                                              .with_target("profile", tracing::Level::TRACE)
-                                                              .not(),
-                                                      ),
-                                                  )*/
-        )*/;
+        .with(profiling_layer);
 
     // set the subscriber as the default for the application
     tracing::subscriber::set_global_default(subscriber).unwrap();
