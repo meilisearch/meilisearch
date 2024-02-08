@@ -50,7 +50,7 @@ enum MyParseError {
     #[error(transparent)]
     ParseError(#[from] tracing_subscriber::filter::ParseError),
     #[error(
-        "Empty string is not a valid target. If you want to get no logs use `OFF`. Usage: `info`, `info:meilisearch`, or you can write multiple filters in one target: `index_scheduler=info,milli=trace`"
+        "Empty string is not a valid target. If you want to get no logs use `OFF`. Usage: `info`, `meilisearch=info`, or you can write multiple filters in one target: `index_scheduler=info,milli=trace`"
     )]
     Example,
 }

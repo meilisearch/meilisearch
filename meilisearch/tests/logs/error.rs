@@ -36,7 +36,7 @@ async fn logs_stream_bad_target() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Invalid value at `.target`: Empty string is not a valid target. If you want to get no logs use `OFF`. Usage: `info`, `info:meilisearch`, or you can write multiple filters in one target: `index_scheduler=info,milli=trace`",
+      "message": "Invalid value at `.target`: Empty string is not a valid target. If you want to get no logs use `OFF`. Usage: `info`, `meilisearch=info`, or you can write multiple filters in one target: `index_scheduler=info,milli=trace`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
