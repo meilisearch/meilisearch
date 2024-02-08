@@ -27,7 +27,7 @@ use serde_json::Value;
 use tempfile::tempfile;
 use tokio::fs::File;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
-use tracing::{debug_span};
+use tracing::debug;
 
 use crate::analytics::{Analytics, DocumentDeletionKind, DocumentFetchKind};
 use crate::error::MeilisearchHttpError;
@@ -101,7 +101,7 @@ pub async fn get_document(
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let DocumentParam { index_uid, document_id } = document_param.into_inner();
-    debug_span!("Get document", parameters = ?params);
+    debug!(parameters = ?params, "Get document");
     let index_uid = IndexUid::try_from(index_uid)?;
 
     analytics.get_fetch_documents(&DocumentFetchKind::PerDocumentId, &req);
@@ -111,7 +111,7 @@ pub async fn get_document(
 
     let index = index_scheduler.index(&index_uid)?;
     let document = retrieve_document(&index, &document_id, attributes_to_retrieve)?;
-    debug_span!("Get document", returns = ?document);
+    debug!(returns = ?document, "Get document");
     Ok(HttpResponse::Ok().json(document))
 }
 
@@ -132,7 +132,7 @@ pub async fn delete_document(
     };
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
-    debug_span!("Delete document", returns = ?task);
+    debug!(returns = ?task, "Delete document");
     Ok(HttpResponse::Accepted().json(task))
 }
 
@@ -170,7 +170,7 @@ pub async fn documents_by_query_post(
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let body = body.into_inner();
-    debug_span!("Get documents POST", parameters = ?body);
+    debug!(parameters = ?body, "Get documents POST");
 
     analytics.post_fetch_documents(
         &DocumentFetchKind::Normal {
@@ -191,7 +191,7 @@ pub async fn get_documents(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    debug_span!("Get documents GET", parameters = ?params);
+    debug!(parameters = ?params, "Get documents GET");
 
     let BrowseQueryGet { limit, offset, fields, filter } = params.into_inner();
 
@@ -235,7 +235,7 @@ fn documents_by_query(
 
     let ret = PaginationView::new(offset, limit, total as usize, documents);
 
-    debug_span!("Get documents", returns = ?ret);
+    debug!(returns = ?ret, "Get documents");
     Ok(HttpResponse::Ok().json(ret))
 }
 
@@ -271,7 +271,7 @@ pub async fn replace_documents(
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
-    debug_span!("Replace documents", parameters = ?params);
+    debug!(parameters = ?params, "Replace documents");
     let params = params.into_inner();
 
     analytics.add_documents(&params, index_scheduler.index(&index_uid).is_err(), &req);
@@ -288,7 +288,7 @@ pub async fn replace_documents(
         allow_index_creation,
     )
     .await?;
-    debug_span!("Replace documents", returns = ?task);
+    debug!(returns = ?task, "Replace documents");
 
     Ok(HttpResponse::Accepted().json(task))
 }
@@ -304,7 +304,7 @@ pub async fn update_documents(
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let params = params.into_inner();
-    debug_span!("Update documents", parameters = ?params);
+    debug!(parameters = ?params, "Update documents");
 
     analytics.update_documents(&params, index_scheduler.index(&index_uid).is_err(), &req);
 
@@ -320,7 +320,7 @@ pub async fn update_documents(
         allow_index_creation,
     )
     .await?;
-    debug_span!("Update documents", returns = ?task);
+    debug!(returns = ?task, "Update documents");
 
     Ok(HttpResponse::Accepted().json(task))
 }
@@ -468,7 +468,7 @@ pub async fn delete_documents_batch(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    debug_span!("Delete documents by batch", parameters = ?body);
+    debug!(parameters = ?body, "Delete documents by batch");
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     analytics.delete_documents(DocumentDeletionKind::PerBatch, &req);
@@ -483,7 +483,7 @@ pub async fn delete_documents_batch(
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
-    debug_span!("Delete documents by batch", returns = ?task);
+    debug!(returns = ?task, "Delete documents by batch");
     Ok(HttpResponse::Accepted().json(task))
 }
 
@@ -501,7 +501,7 @@ pub async fn delete_documents_by_filter(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    debug_span!("Delete documents by filter", parameters = ?body);
+    debug!(parameters = ?body, "Delete documents by filter");
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let index_uid = index_uid.into_inner();
     let filter = body.into_inner().filter;
@@ -519,7 +519,7 @@ pub async fn delete_documents_by_filter(
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
-    debug_span!("Delete documents by filter", returns = ?task);
+    debug!(returns = ?task, "Delete documents by filter");
     Ok(HttpResponse::Accepted().json(task))
 }
 
@@ -536,7 +536,7 @@ pub async fn clear_all_documents(
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
-    debug_span!("Delete all documents", returns = ?task);
+    debug!(returns = ?task, "Delete all documents");
     Ok(HttpResponse::Accepted().json(task))
 }
 

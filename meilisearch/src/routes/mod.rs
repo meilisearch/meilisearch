@@ -10,7 +10,7 @@ use meilisearch_types::tasks::{Kind, Status, Task, TaskId};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
-use tracing::{debug_span};
+use tracing::debug;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
@@ -252,7 +252,7 @@ async fn get_stats(
 
     let stats = create_all_stats((*index_scheduler).clone(), (*auth_controller).clone(), filters)?;
 
-    debug_span!("Get stats", returns = ?stats);
+    debug!(returns = ?stats, "Get stats");
     Ok(HttpResponse::Ok().json(stats))
 }
 

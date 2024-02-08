@@ -15,7 +15,7 @@ use meilisearch_types::tasks::KindWithContent;
 use serde::Serialize;
 use serde_json::json;
 use time::OffsetDateTime;
-use tracing::debug_span;
+use tracing::debug;
 
 use super::{Pagination, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
 use crate::analytics::Analytics;
@@ -93,7 +93,7 @@ pub async fn list_indexes(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, Data<IndexScheduler>>,
     paginate: AwebQueryParameter<ListIndexes, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
-    debug_span!("List indexes", parameters = ?paginate);
+    debug!(parameters = ?paginate, "List indexes");
     let filters = index_scheduler.filters();
     let indexes: Vec<Option<IndexView>> =
         index_scheduler.try_for_each_index(|uid, index| -> Result<Option<IndexView>, _> {
@@ -106,7 +106,7 @@ pub async fn list_indexes(
     let indexes: Vec<IndexView> = indexes.into_iter().flatten().collect();
     let ret = paginate.as_pagination().auto_paginate_sized(indexes.into_iter());
 
-    debug_span!("List indexes", returns = ?ret);
+    debug!(returns = ?ret, "List indexes");
     Ok(HttpResponse::Ok().json(ret))
 }
 
@@ -125,7 +125,7 @@ pub async fn create_index(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    debug_span!("Create index", parameters = ?body);
+    debug!(parameters = ?body, "Create index");
     let IndexCreateRequest { primary_key, uid } = body.into_inner();
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&uid);
@@ -139,7 +139,7 @@ pub async fn create_index(
         let task = KindWithContent::IndexCreation { index_uid: uid.to_string(), primary_key };
         let task: SummarizedTaskView =
             tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
-        debug_span!("Create index", returns = ?task);
+        debug!(returns = ?task, "Create index");
 
         Ok(HttpResponse::Accepted().json(task))
     } else {
@@ -180,7 +180,7 @@ pub async fn get_index(
     let index = index_scheduler.index(&index_uid)?;
     let index_view = IndexView::new(index_uid.into_inner(), &index)?;
 
-    debug_span!("Get index", returns = ?index_view);
+    debug!(returns = ?index_view, "Get index");
 
     Ok(HttpResponse::Ok().json(index_view))
 }
@@ -192,7 +192,7 @@ pub async fn update_index(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    debug_span!("Update index", parameters = ?body);
+    debug!(parameters = ?body, "Update index");
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let body = body.into_inner();
     analytics.publish(
@@ -209,7 +209,7 @@ pub async fn update_index(
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
-    debug_span!("Update index", returns = ?task);
+    debug!(returns = ?task, "Update index");
     Ok(HttpResponse::Accepted().json(task))
 }
 
@@ -221,7 +221,7 @@ pub async fn delete_index(
     let task = KindWithContent::IndexDeletion { index_uid: index_uid.into_inner() };
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
-    debug_span!("Delete index", returns = ?task);
+    debug!(returns = ?task, "Delete index");
 
     Ok(HttpResponse::Accepted().json(task))
 }
@@ -259,6 +259,6 @@ pub async fn get_index_stats(
 
     let stats = IndexStats::from(index_scheduler.index_stats(&index_uid)?);
 
-    debug_span!("Get index stats", returns = ?stats);
+    debug!(returns = ?stats, "Get index stats");
     Ok(HttpResponse::Ok().json(stats))
 }
