@@ -503,11 +503,11 @@ impl Opt {
                     }
                     if self.ssl_require_auth {
                         let verifier = AllowAnyAuthenticatedClient::new(client_auth_roots);
-                        config.with_client_cert_verifier(verifier)
+                        config.with_client_cert_verifier(Arc::from(verifier))
                     } else {
                         let verifier =
                             AllowAnyAnonymousOrAuthenticatedClient::new(client_auth_roots);
-                        config.with_client_cert_verifier(verifier)
+                        config.with_client_cert_verifier(Arc::from(verifier))
                     }
                 }
                 None => config.with_no_client_auth(),
