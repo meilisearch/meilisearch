@@ -102,6 +102,7 @@ impl From<FacetSearchQuery> for SearchQuery {
 
         SearchQuery {
             q,
+            index_uid: None,
             offset: DEFAULT_SEARCH_OFFSET(),
             limit: DEFAULT_SEARCH_LIMIT(),
             page: None,
