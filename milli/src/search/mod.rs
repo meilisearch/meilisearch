@@ -36,6 +36,7 @@ pub mod hybrid;
 pub mod new;
 
 pub struct Search<'a> {
+    index_uid: String,
     query: Option<String>,
     vector: Option<Vec<f32>>,
     // this should be linked to the String in the query
@@ -57,8 +58,9 @@ pub struct Search<'a> {
 }
 
 impl<'a> Search<'a> {
-    pub fn new(rtxn: &'a heed::RoTxn, index: &'a Index) -> Search<'a> {
+    pub fn new(rtxn: &'a heed::RoTxn, index: &'a Index, index_uid: String) -> Search<'a> {
         Search {
+            index_uid,
             query: None,
             vector: None,
             filter: None,
@@ -156,7 +158,7 @@ impl<'a> Search<'a> {
 
     pub fn execute_for_candidates(&self, has_vector_search: bool) -> Result<RoaringBitmap> {
         if has_vector_search {
-            let ctx = SearchContext::new(self.index, self.rtxn);
+            let ctx = SearchContext::new(self.index, self.index_uid.to_string(), self.rtxn);
             filtered_universe(&ctx, &self.filter)
         } else {
             Ok(self.execute()?.candidates)
@@ -173,7 +175,7 @@ impl<'a> Search<'a> {
             }
         };
 
-        let mut ctx = SearchContext::new(self.index, self.rtxn);
+        let mut ctx = SearchContext::new(self.index, self.index_uid.to_string(), self.rtxn);
 
         if let Some(searchable_attributes) = self.searchable_attributes {
             ctx.searchable_attributes(searchable_attributes)?;
@@ -224,6 +226,7 @@ impl<'a> Search<'a> {
 impl fmt::Debug for Search<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let Search {
+            index_uid,
             query,
             vector: _,
             filter,
@@ -242,6 +245,7 @@ impl fmt::Debug for Search<'_> {
             embedder_name,
         } = self;
         f.debug_struct("Search")
+            .field("index_uid", index_uid)
             .field("query", query)
             .field("vector", &"[...]")
             .field("filter", filter)

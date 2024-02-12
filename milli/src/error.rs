@@ -122,8 +122,9 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     InvalidFilter(String),
     #[error("Invalid type for filter subexpression: expected: {}, found: {1}.", .0.join(", "))]
     InvalidFilterExpression(&'static [&'static str], Value),
-    #[error("Attribute `{}` is not sortable. {}",
+    #[error("Attribute `{}` of index `{}` is not sortable. {}",
         .field,
+        .index,
         match .valid_fields.is_empty() {
             true => "This index does not have configured sortable attributes.".to_string(),
             false => format!("Available sortable attributes are: `{}{}`.",
@@ -132,7 +133,7 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
                 ),
         }
     )]
-    InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String>, hidden_fields: bool },
+    InvalidSortableAttribute { field: String, index: String, valid_fields: BTreeSet<String>, hidden_fields: bool },
     #[error("Attribute `{}` is not facet-searchable. {}",
         .field,
         match .valid_fields.is_empty() {

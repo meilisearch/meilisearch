@@ -634,6 +634,7 @@ impl SearchAggregator {
     pub fn from_query(query: &SearchQuery, request: &HttpRequest) -> Self {
         let SearchQuery {
             q,
+            index_uid,
             vector,
             offset,
             limit,
