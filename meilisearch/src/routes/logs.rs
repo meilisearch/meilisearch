@@ -22,14 +22,15 @@ use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::LogRouteHandle;
+use crate::{LogRouteHandle, LogStderrHandle};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("stream")
             .route(web::post().to(SeqHandler(get_logs)))
             .route(web::delete().to(SeqHandler(cancel_logs))),
-    );
+    )
+    .service(web::resource("stderr").route(web::post().to(SeqHandler(update_stderr_target))));
 }
 
 #[derive(Debug, Default, Clone, Copy, Deserr, PartialEq, Eq)]
@@ -276,6 +277,30 @@ pub async fn cancel_logs(
     if let Err(e) = logs.modify(|layer| *layer.inner_mut() = None) {
         tracing::error!("Could not free the logs route: {e}");
     }
+
+    Ok(HttpResponse::NoContent().finish())
+}
+
+#[derive(Debug, Deserr)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+pub struct UpdateStderrLogs {
+    #[deserr(default = "info".parse().unwrap(), try_from(&String) = MyTargets::from_str -> DeserrJsonError<BadRequest>)]
+    target: MyTargets,
+}
+
+pub async fn update_stderr_target(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, Data<IndexScheduler>>,
+    logs: Data<LogStderrHandle>,
+    body: AwebJson<UpdateStderrLogs, DeserrJsonError>,
+) -> Result<HttpResponse, ResponseError> {
+    index_scheduler.features().check_logs_route()?;
+
+    let opt = body.into_inner();
+
+    logs.modify(|layer| {
+        *layer.filter_mut() = opt.target.0.clone();
+    })
+    .unwrap();
 
     Ok(HttpResponse::NoContent().finish())
 }

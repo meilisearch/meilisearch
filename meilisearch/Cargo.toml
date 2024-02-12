@@ -104,7 +104,7 @@ serde_urlencoded = "0.7.1"
 termcolor = "1.4.1"
 url = { version = "2.5.0", features = ["serde"] }
 tracing = "0.1.40"
-tracing-subscriber = "0.3.18"
+tracing-subscriber = { version = "0.3.18", features = ["json"] }
 tracing-trace = { version = "0.1.0", path = "../tracing-trace" }
 tracing-actix-web = "0.7.9"
 

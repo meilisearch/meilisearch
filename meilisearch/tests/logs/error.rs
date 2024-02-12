@@ -162,7 +162,7 @@ async fn logs_stream_without_enabling_the_route() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "getting logs through the `/logs/stream` route requires enabling the `logs route` experimental feature. See https://github.com/orgs/meilisearch/discussions/721",
+      "message": "Modifying logs through the `/logs/*` routes requires enabling the `logs route` experimental feature. See https://github.com/orgs/meilisearch/discussions/721",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
@@ -173,7 +173,18 @@ async fn logs_stream_without_enabling_the_route() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "getting logs through the `/logs/stream` route requires enabling the `logs route` experimental feature. See https://github.com/orgs/meilisearch/discussions/721",
+      "message": "Modifying logs through the `/logs/*` routes requires enabling the `logs route` experimental feature. See https://github.com/orgs/meilisearch/discussions/721",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "###);
+
+    let (response, code) = server.service.post("/logs/stderr", json!({})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Modifying logs through the `/logs/*` routes requires enabling the `logs route` experimental feature. See https://github.com/orgs/meilisearch/discussions/721",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
