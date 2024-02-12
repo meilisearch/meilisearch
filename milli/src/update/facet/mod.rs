@@ -182,7 +182,7 @@ impl<'i> FacetsUpdate<'i> {
                     .index
                     .facet_id_normalized_string_strings
                     .remap_key_type::<Bytes>()
-                    .get(wtxn, &key_bytes)?
+                    .get(wtxn, key_bytes)?
                     .unwrap_or_default();
 
                 let add_set = deladd_reader
