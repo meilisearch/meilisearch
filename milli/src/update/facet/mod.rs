@@ -72,7 +72,6 @@ two methods.
 Related PR: https://github.com/meilisearch/milli/pull/619
 */
 
-pub const FACET_MAX_GROUP_SIZE: u8 = 8;
 pub const FACET_GROUP_SIZE: u8 = 4;
 pub const FACET_MIN_LEVEL_SIZE: u8 = 5;
 
@@ -88,17 +87,14 @@ use heed::BytesEncode;
 use log::debug;
 use time::OffsetDateTime;
 
-use self::incremental::FacetsUpdateIncremental;
 use super::FacetsUpdateBulk;
 use crate::facet::FacetType;
-use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec};
-use crate::heed_codec::BytesRefCodec;
+use crate::heed_codec::facet::FacetGroupKey;
 use crate::update::index_documents::create_sorter;
 use crate::update::merge_btreeset_string;
 use crate::{BEU16StrCodec, Index, Result, MAX_FACET_VALUE_LENGTH};
 
 pub mod bulk;
-pub mod incremental;
 
 /// A builder used to add new elements to the `facet_id_string_docids` or `facet_id_f64_docids` databases.
 ///
@@ -106,11 +102,9 @@ pub mod incremental;
 /// a bulk update method or an incremental update method.
 pub struct FacetsUpdate<'i> {
     index: &'i Index,
-    database: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     facet_type: FacetType,
     delta_data: grenad::Reader<BufReader<File>>,
     group_size: u8,
-    max_group_size: u8,
     min_level_size: u8,
 }
 impl<'i> FacetsUpdate<'i> {
@@ -119,19 +113,9 @@ impl<'i> FacetsUpdate<'i> {
         facet_type: FacetType,
         delta_data: grenad::Reader<BufReader<File>>,
     ) -> Self {
-        let database = match facet_type {
-            FacetType::String => {
-                index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>()
-            }
-            FacetType::Number => {
-                index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>()
-            }
-        };
         Self {
             index,
-            database,
             group_size: FACET_GROUP_SIZE,
-            max_group_size: FACET_MAX_GROUP_SIZE,
             min_level_size: FACET_MIN_LEVEL_SIZE,
             facet_type,
             delta_data,
@@ -145,30 +129,16 @@ impl<'i> FacetsUpdate<'i> {
         debug!("Computing and writing the facet values levels docids into LMDB on disk...");
         self.index.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
 
-        // See self::comparison_bench::benchmark_facet_indexing
-        if self.delta_data.len() >= (self.database.len(wtxn)? / 50) {
-            let field_ids =
-                self.index.faceted_fields_ids(wtxn)?.iter().copied().collect::<Vec<_>>();
-            let bulk_update = FacetsUpdateBulk::new(
-                self.index,
-                field_ids,
-                self.facet_type,
-                self.delta_data,
-                self.group_size,
-                self.min_level_size,
-            );
-            bulk_update.execute(wtxn)?;
-        } else {
-            let incremental_update = FacetsUpdateIncremental::new(
-                self.index,
-                self.facet_type,
-                self.delta_data,
-                self.group_size,
-                self.min_level_size,
-                self.max_group_size,
-            );
-            incremental_update.execute(wtxn)?;
-        }
+        let field_ids = self.index.faceted_fields_ids(wtxn)?.iter().copied().collect::<Vec<_>>();
+        let bulk_update = FacetsUpdateBulk::new(
+            self.index,
+            field_ids,
+            self.facet_type,
+            self.delta_data,
+            self.group_size,
+            self.min_level_size,
+        );
+        bulk_update.execute(wtxn)?;
 
         // We clear the list of normalized-for-search facets
         // and the previous FSTs to compute everything from scratch
@@ -264,7 +234,6 @@ impl<'i> FacetsUpdate<'i> {
 pub(crate) mod test_helpers {
     use std::cell::Cell;
     use std::fmt::Display;
-    use std::iter::FromIterator;
     use std::marker::PhantomData;
     use std::rc::Rc;
 
@@ -280,7 +249,6 @@ pub(crate) mod test_helpers {
     use crate::search::facet::get_highest_level;
     use crate::snapshot_tests::display_bitmap;
     use crate::update::del_add::{DelAdd, KvWriterDelAdd};
-    use crate::update::FacetsUpdateIncrementalInner;
     use crate::CboRoaringBitmapCodec;
 
     /// Utility function to generate a string whose position in a lexicographically
@@ -396,49 +364,6 @@ pub(crate) mod test_helpers {
             self.min_level_size.set(std::cmp::max(1, min_level_size));
         }
 
-        pub fn insert<'a>(
-            &self,
-            wtxn: &'a mut RwTxn,
-            field_id: u16,
-            key: &'a <BoundCodec as BytesEncode<'a>>::EItem,
-            docids: &RoaringBitmap,
-        ) {
-            let update = FacetsUpdateIncrementalInner {
-                db: self.content,
-                group_size: self.group_size.get(),
-                min_level_size: self.min_level_size.get(),
-                max_group_size: self.max_group_size.get(),
-            };
-            let key_bytes = BoundCodec::bytes_encode(key).unwrap();
-            update.insert(wtxn, field_id, &key_bytes, docids).unwrap();
-        }
-        pub fn delete_single_docid<'a>(
-            &self,
-            wtxn: &'a mut RwTxn,
-            field_id: u16,
-            key: &'a <BoundCodec as BytesEncode<'a>>::EItem,
-            docid: u32,
-        ) {
-            self.delete(wtxn, field_id, key, &RoaringBitmap::from_iter(std::iter::once(docid)))
-        }
-
-        pub fn delete<'a>(
-            &self,
-            wtxn: &'a mut RwTxn,
-            field_id: u16,
-            key: &'a <BoundCodec as BytesEncode<'a>>::EItem,
-            docids: &RoaringBitmap,
-        ) {
-            let update = FacetsUpdateIncrementalInner {
-                db: self.content,
-                group_size: self.group_size.get(),
-                min_level_size: self.min_level_size.get(),
-                max_group_size: self.max_group_size.get(),
-            };
-            let key_bytes = BoundCodec::bytes_encode(key).unwrap();
-            update.delete(wtxn, field_id, &key_bytes, docids).unwrap();
-        }
-
         pub fn bulk_insert<'a, 'b>(
             &self,
             wtxn: &'a mut RwTxn,
@@ -552,66 +477,6 @@ pub(crate) mod test_helpers {
                 )?;
             }
             Ok(())
-        }
-    }
-}
-
-#[allow(unused)]
-#[cfg(test)]
-mod comparison_bench {
-    use std::iter::once;
-
-    use rand::Rng;
-    use roaring::RoaringBitmap;
-
-    use super::test_helpers::FacetIndex;
-    use crate::heed_codec::facet::OrderedF64Codec;
-
-    // This is a simple test to get an intuition on the relative speed
-    // of the incremental vs. bulk indexer.
-    //
-    // The benchmark shows the worst-case scenario for the incremental indexer, since
-    // each facet value contains only one document ID.
-    //
-    // In that scenario, it appears that the incremental indexer is about 50 times slower than the
-    // bulk indexer.
-    // #[test]
-    fn benchmark_facet_indexing() {
-        let mut facet_value = 0;
-
-        let mut r = rand::thread_rng();
-
-        for i in 1..=20 {
-            let size = 50_000 * i;
-            let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
-
-            let mut txn = index.env.write_txn().unwrap();
-            let mut elements = Vec::<((u16, f64), RoaringBitmap)>::new();
-            for i in 0..size {
-                // field id = 0, left_bound = i, docids = [i]
-                elements.push(((0, facet_value as f64), once(i).collect()));
-                facet_value += 1;
-            }
-            let timer = std::time::Instant::now();
-            index.bulk_insert(&mut txn, &[0], elements.iter());
-            let time_spent = timer.elapsed().as_millis();
-            println!("bulk {size} : {time_spent}ms");
-
-            txn.commit().unwrap();
-
-            for nbr_doc in [1, 100, 1000, 10_000] {
-                let mut txn = index.env.write_txn().unwrap();
-                let timer = std::time::Instant::now();
-                //
-                // insert one document
-                //
-                for _ in 0..nbr_doc {
-                    index.insert(&mut txn, 0, &r.gen(), &once(1).collect());
-                }
-                let time_spent = timer.elapsed().as_millis();
-                println!("    add {nbr_doc} : {time_spent}ms");
-                txn.abort();
-            }
         }
     }
 }
