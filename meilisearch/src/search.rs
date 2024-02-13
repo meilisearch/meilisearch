@@ -41,7 +41,6 @@ pub const DEFAULT_SEMANTIC_RATIO: fn() -> SemanticRatio = || SemanticRatio(0.5);
 #[derive(Debug, Clone, Default, PartialEq, Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQuery {
-    pub index_uid: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
@@ -193,7 +192,6 @@ pub struct SearchQueryWithIndex {
 
 impl SearchQueryWithIndex {
     pub fn into_index_query(self) -> (IndexUid, SearchQuery) {
-        let index_uid_name = self.index_uid.clone().to_string().clone();
         let SearchQueryWithIndex {
             index_uid,
             q,
@@ -219,11 +217,11 @@ impl SearchQueryWithIndex {
             attributes_to_search_on,
             hybrid,
         } = self;
+
         (
             index_uid,
             SearchQuery {
                 q,
-                index_uid: Some(index_uid_name),
                 vector,
                 offset,
                 limit,
@@ -381,13 +379,13 @@ pub fn add_search_rules(query: &mut SearchQuery, rules: IndexSearchRules) {
 
 fn prepare_search<'t>(
     index: &'t Index,
-    index_uid: &String,
+    index_uid: &'t String,
     rtxn: &'t RoTxn,
     query: &'t SearchQuery,
     features: RoFeatures,
     distribution: Option<DistributionShift>,
 ) -> Result<(milli::Search<'t>, bool, usize, usize), MeilisearchHttpError> {
-    let mut search = index.search(rtxn, index_uid.clone());
+    let mut search = index.search(rtxn, &index_uid);
 
     if query.vector.is_some() {
         features.check_vector("Passing `vector` as a query parameter")?;
@@ -490,7 +488,7 @@ fn prepare_search<'t>(
 
 pub fn perform_search(
     index: &Index,
-    index_uid: String,
+    index_uid: &String,
     query: SearchQuery,
     features: RoFeatures,
     distribution: Option<DistributionShift>,
@@ -722,6 +720,7 @@ pub fn perform_search(
 
 pub fn perform_facet_search(
     index: &Index,
+    index_uid: &String,
     search_query: SearchQuery,
     facet_query: Option<String>,
     facet_name: String,
@@ -729,9 +728,8 @@ pub fn perform_facet_search(
 ) -> Result<FacetSearchResult, MeilisearchHttpError> {
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
-
     let (search, _, _, _) =
-        prepare_search(index, &"".to_string(), &rtxn, &search_query, features, None)?;
+        prepare_search(index, &index_uid, &rtxn, &search_query, features, None)?;
     let mut facet_search =
         SearchForFacetValues::new(facet_name, search, search_query.hybrid.is_some());
     if let Some(facet_query) = &facet_query {

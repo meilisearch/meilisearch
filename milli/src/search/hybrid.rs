@@ -115,7 +115,7 @@ impl<'a> Search<'a> {
         // TODO: find classier way to achieve that than to reset vector and query params
         // create separate keyword and semantic searches
         let mut search = Search {
-            index_uid: self.index_uid.to_string().clone(),
+            index_uid: &self.index_uid,
             query: self.query.clone(),
             vector: self.vector.clone(),
             filter: self.filter.clone(),
