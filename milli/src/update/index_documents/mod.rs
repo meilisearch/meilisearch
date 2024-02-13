@@ -25,9 +25,9 @@ use self::enrich::enrich_documents_batch;
 pub use self::enrich::{extract_finite_float_from_value, DocumentId};
 pub use self::helpers::{
     as_cloneable_grenad, create_sorter, create_writer, fst_stream_into_hashset,
-    fst_stream_into_vec, merge_btreeset_string, merge_cbo_roaring_bitmaps,
-    merge_deladd_cbo_roaring_bitmaps, merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
-    merge_roaring_bitmaps, valid_lmdb_key, write_sorter_into_database, writer_into_reader, MergeFn,
+    fst_stream_into_vec, merge_cbo_roaring_bitmaps, merge_deladd_cbo_roaring_bitmaps,
+    merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, merge_roaring_bitmaps,
+    valid_lmdb_key, write_sorter_into_database, writer_into_reader, MergeFn,
 };
 use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};

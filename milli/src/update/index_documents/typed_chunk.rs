@@ -41,7 +41,7 @@ impl ChunkAccumulator {
     pub fn pop_longest(&mut self) -> Option<Vec<TypedChunk>> {
         match self.inner.iter().max_by_key(|v| v.len()) {
             Some(left) => {
-                let position = self.inner.iter().position(|right| left == right);
+                let position = self.inner.iter().position(|right| left.len() == right.len());
                 position.map(|p| self.inner.remove(p)).filter(|v| !v.is_empty())
             }
             None => None,
@@ -49,7 +49,11 @@ impl ChunkAccumulator {
     }
 
     pub fn insert(&mut self, chunk: TypedChunk) {
-        match self.inner.iter().position(|right| Some(&chunk) == right.first()) {
+        match self
+            .inner
+            .iter()
+            .position(|right| right.first().map_or(false, |right| chunk.is_batchable_with(right)))
+        {
             Some(position) => {
                 let v = self.inner.get_mut(position).unwrap();
                 v.push(chunk);
@@ -87,8 +91,8 @@ pub(crate) enum TypedChunk {
     ScriptLanguageDocids(HashMap<(Script, Language), (RoaringBitmap, RoaringBitmap)>),
 }
 
-impl PartialEq for TypedChunk {
-    fn eq(&self, other: &Self) -> bool {
+impl TypedChunk {
+    fn is_batchable_with(&self, other: &Self) -> bool {
         use TypedChunk::*;
         match (self, other) {
             (FieldIdDocidFacetStrings(_), FieldIdDocidFacetStrings(_))
@@ -113,7 +117,6 @@ impl PartialEq for TypedChunk {
         }
     }
 }
-impl Eq for TypedChunk {}
 
 impl TypedChunk {
     pub fn to_debug_string(&self) -> String {

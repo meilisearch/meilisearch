@@ -173,96 +173,108 @@ impl<'i> FacetsUpdate<'i> {
             incremental_update.execute(wtxn)?;
         }
 
-        if let Some(normalized_delta_data) = self.normalized_delta_data {
-            let mut iter = normalized_delta_data.into_stream_merger_iter()?;
-            while let Some((key_bytes, delta_bytes)) = iter.next()? {
-                let deladd_reader = KvReaderDelAdd::new(delta_bytes);
-
-                let database_set = self
-                    .index
-                    .facet_id_normalized_string_strings
-                    .remap_key_type::<Bytes>()
-                    .get(wtxn, key_bytes)?
-                    .unwrap_or_default();
-
-                let add_set = deladd_reader
-                    .get(DelAdd::Addition)
-                    .and_then(|bytes| serde_json::from_slice::<BTreeSet<String>>(bytes).ok())
-                    .unwrap_or_default();
-
-                let del_set = match deladd_reader
-                    .get(DelAdd::Deletion)
-                    .and_then(|bytes| serde_json::from_slice::<BTreeSet<String>>(bytes).ok())
-                {
-                    Some(del_set) => {
-                        let (field_id_bytes, _) = try_split_array_at(key_bytes).unwrap();
-                        let field_id = FieldId::from_be_bytes(field_id_bytes);
-                        let mut set = BTreeSet::new();
-                        for facet in del_set {
-                            let key =
-                                FacetGroupKey { field_id, level: 0, left_bound: facet.as_str() };
-                            // Check if the referenced value doesn't exist anymore before deleting it.
-                            if self.index.facet_id_string_docids.get(wtxn, &key)?.remap_data::<DecodeIgnore>().is_none() {
-                                set.insert(facet);
-                            }
-                        }
-                        set
-                    }
-                    None => BTreeSet::new(),
-                };
-
-                let set: BTreeSet<_> =
-                    database_set.difference(&del_set).chain(add_set.iter()).cloned().collect();
-
-                if set.is_empty() {
-                    self.index
-                        .facet_id_normalized_string_strings
-                        .remap_key_type::<Bytes>()
-                        .delete(wtxn, key_bytes)?;
-                } else {
-                    self.index
-                        .facet_id_normalized_string_strings
-                        .remap_key_type::<Bytes>()
-                        .put(wtxn, key_bytes, &set)?;
-                }
-            }
-
-            // We clear the FST of normalized-for-search to compute everything from scratch.
-            self.index.facet_id_string_fst.clear(wtxn)?;
-            // We compute one FST by string facet
-            let mut text_fsts = vec![];
-            let mut current_fst: Option<(u16, fst::SetBuilder<Vec<u8>>)> = None;
-            let database =
-                self.index.facet_id_normalized_string_strings.remap_data_type::<DecodeIgnore>();
-            for result in database.iter(wtxn)? {
-                let ((field_id, normalized_facet), _) = result?;
-                current_fst = match current_fst.take() {
-                    Some((fid, fst_builder)) if fid != field_id => {
-                        let fst = fst_builder.into_set();
-                        text_fsts.push((fid, fst));
-                        Some((field_id, fst::SetBuilder::memory()))
-                    }
-                    Some((field_id, fst_builder)) => Some((field_id, fst_builder)),
-                    None => Some((field_id, fst::SetBuilder::memory())),
-                };
-
-                if let Some((_, fst_builder)) = current_fst.as_mut() {
-                    fst_builder.insert(normalized_facet)?;
-                }
-            }
-
-            if let Some((field_id, fst_builder)) = current_fst {
-                let fst = fst_builder.into_set();
-                text_fsts.push((field_id, fst));
-            }
-
-            // We write those FSTs in LMDB now
-            for (field_id, fst) in text_fsts {
-                self.index.facet_id_string_fst.put(wtxn, &field_id, &fst)?;
-            }
+        match self.normalized_delta_data {
+            Some(data) => index_facet_search(wtxn, data, self.index),
+            None => Ok(()),
         }
-        Ok(())
     }
+}
+
+fn index_facet_search(
+    wtxn: &mut heed::RwTxn,
+    normalized_delta_data: Merger<BufReader<File>, MergeFn>,
+    index: &Index,
+) -> Result<()> {
+    let mut iter = normalized_delta_data.into_stream_merger_iter()?;
+    while let Some((key_bytes, delta_bytes)) = iter.next()? {
+        let deladd_reader = KvReaderDelAdd::new(delta_bytes);
+
+        let database_set = index
+            .facet_id_normalized_string_strings
+            .remap_key_type::<Bytes>()
+            .get(wtxn, key_bytes)?
+            .unwrap_or_default();
+
+        let add_set = deladd_reader
+            .get(DelAdd::Addition)
+            .and_then(|bytes| serde_json::from_slice::<BTreeSet<String>>(bytes).ok())
+            .unwrap_or_default();
+
+        let del_set = match deladd_reader
+            .get(DelAdd::Deletion)
+            .and_then(|bytes| serde_json::from_slice::<BTreeSet<String>>(bytes).ok())
+        {
+            Some(del_set) => {
+                let (field_id_bytes, _) = try_split_array_at(key_bytes).unwrap();
+                let field_id = FieldId::from_be_bytes(field_id_bytes);
+                let mut set = BTreeSet::new();
+                for facet in del_set {
+                    let key = FacetGroupKey { field_id, level: 0, left_bound: facet.as_str() };
+                    // Check if the referenced value doesn't exist anymore before deleting it.
+                    if index
+                        .facet_id_string_docids
+                        .remap_data_type::<DecodeIgnore>()
+                        .get(wtxn, &key)?
+                        .is_none()
+                    {
+                        set.insert(facet);
+                    }
+                }
+                set
+            }
+            None => BTreeSet::new(),
+        };
+
+        let set: BTreeSet<_> =
+            database_set.difference(&del_set).chain(add_set.iter()).cloned().collect();
+
+        if set.is_empty() {
+            index
+                .facet_id_normalized_string_strings
+                .remap_key_type::<Bytes>()
+                .delete(wtxn, key_bytes)?;
+        } else {
+            index
+                .facet_id_normalized_string_strings
+                .remap_key_type::<Bytes>()
+                .put(wtxn, key_bytes, &set)?;
+        }
+    }
+
+    // We clear the FST of normalized-for-search to compute everything from scratch.
+    index.facet_id_string_fst.clear(wtxn)?;
+    // We compute one FST by string facet
+    let mut text_fsts = vec![];
+    let mut current_fst: Option<(u16, fst::SetBuilder<Vec<u8>>)> = None;
+    let database = index.facet_id_normalized_string_strings.remap_data_type::<DecodeIgnore>();
+    for result in database.iter(wtxn)? {
+        let ((field_id, normalized_facet), _) = result?;
+        current_fst = match current_fst.take() {
+            Some((fid, fst_builder)) if fid != field_id => {
+                let fst = fst_builder.into_set();
+                text_fsts.push((fid, fst));
+                Some((field_id, fst::SetBuilder::memory()))
+            }
+            Some((field_id, fst_builder)) => Some((field_id, fst_builder)),
+            None => Some((field_id, fst::SetBuilder::memory())),
+        };
+
+        if let Some((_, fst_builder)) = current_fst.as_mut() {
+            fst_builder.insert(normalized_facet)?;
+        }
+    }
+
+    if let Some((field_id, fst_builder)) = current_fst {
+        let fst = fst_builder.into_set();
+        text_fsts.push((field_id, fst));
+    }
+
+    // We write those FSTs in LMDB now
+    for (field_id, fst) in text_fsts {
+        index.facet_id_string_fst.put(wtxn, &field_id, &fst)?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

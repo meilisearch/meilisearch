@@ -223,27 +223,6 @@ pub fn merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap<'a>(
     )?)
 }
 
-pub fn merge_btreeset_string<'a>(_key: &[u8], values: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
-    if values.len() == 1 {
-        Ok(values[0].clone())
-    } else {
-        // TODO improve the perf by using a `#[borrow] Cow<str>`.
-        let strings: BTreeSet<String> = values
-            .iter()
-            .map(AsRef::as_ref)
-            .map(serde_json::from_slice::<BTreeSet<String>>)
-            .map(StdResult::unwrap)
-            .reduce(|mut current, new| {
-                for x in new {
-                    current.insert(x);
-                }
-                current
-            })
-            .unwrap();
-        Ok(Cow::Owned(serde_json::to_vec(&strings).unwrap()))
-    }
-}
-
 /// Do a union of BtreeSet on both sides of a DelAdd obkv
 /// separately and outputs a new DelAdd with both unions.
 pub fn merge_deladd_btreeset_string<'a>(
