@@ -10,7 +10,7 @@ fn main() {
     let mut options = EnvOpenOptions::new();
     options.map_size(100 * 1024 * 1024 * 1024); // 100 GB
 
-    let index = Index::new(options, "data_movies.ms").unwrap();
+    let index = Index::new("", options, "data_movies.ms").unwrap();
     let mut wtxn = index.write_txn().unwrap();
 
     let config = IndexerConfig::default();

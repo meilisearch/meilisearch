@@ -25,6 +25,7 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
 
         self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
         let Index {
+			name: _name,
             env: _env,
             main: _main,
             external_documents_ids,

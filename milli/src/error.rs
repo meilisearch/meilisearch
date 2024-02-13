@@ -461,7 +461,7 @@ fn conditionally_lookup_for_error_message() {
     for (list, suffix) in messages {
         let err = UserError::InvalidSortableAttribute {
             field: "name".to_string(),
-			index: "index".to_string(),
+            index: "index".to_string(),
             valid_fields: list,
             hidden_fields: false,
         };
