@@ -202,7 +202,7 @@ impl<'i> FacetsUpdate<'i> {
                             let key =
                                 FacetGroupKey { field_id, level: 0, left_bound: facet.as_str() };
                             // Check if the referenced value doesn't exist anymore before deleting it.
-                            if self.index.facet_id_string_docids.get(wtxn, &key)?.is_none() {
+                            if self.index.facet_id_string_docids.get(wtxn, &key)?.remap_data::<DecodeIgnore>().is_none() {
                                 set.insert(facet);
                             }
                         }
