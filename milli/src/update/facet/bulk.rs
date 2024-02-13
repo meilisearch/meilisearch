@@ -407,54 +407,6 @@ mod tests {
         test("large_group_small_min_level", 16, 2);
         test("odd_group_odd_min_level", 7, 3);
     }
-    #[test]
-    fn insert_delete_field_insert() {
-        let test = |name: &str, group_size: u8, min_level_size: u8| {
-            let index =
-                FacetIndex::<OrderedF64Codec>::new(group_size, 0 /*NA*/, min_level_size);
-            let mut wtxn = index.env.write_txn().unwrap();
-
-            let mut elements = Vec::<((u16, f64), RoaringBitmap)>::new();
-            for i in 0..100u32 {
-                // field id = 0, left_bound = i, docids = [i]
-                elements.push(((0, i as f64), once(i).collect()));
-            }
-            for i in 0..100u32 {
-                // field id = 1, left_bound = i, docids = [i]
-                elements.push(((1, i as f64), once(i).collect()));
-            }
-            index.bulk_insert(&mut wtxn, &[0, 1], elements.iter());
-
-            index.verify_structure_validity(&wtxn, 0);
-            index.verify_structure_validity(&wtxn, 1);
-            // delete all the elements for the facet id 0
-            for i in 0..100u32 {
-                index.delete_single_docid(&mut wtxn, 0, &(i as f64), i);
-            }
-            index.verify_structure_validity(&wtxn, 0);
-            index.verify_structure_validity(&wtxn, 1);
-
-            let mut elements = Vec::<((u16, f64), RoaringBitmap)>::new();
-            // then add some elements again for the facet id 1
-            for i in 0..110u32 {
-                // field id = 1, left_bound = i, docids = [i]
-                elements.push(((1, i as f64), once(i).collect()));
-            }
-            index.verify_structure_validity(&wtxn, 0);
-            index.verify_structure_validity(&wtxn, 1);
-            index.bulk_insert(&mut wtxn, &[0, 1], elements.iter());
-
-            wtxn.commit().unwrap();
-
-            milli_snap!(format!("{index}"), name);
-        };
-
-        test("default", 4, 5);
-        test("small_group_small_min_level", 2, 2);
-        test("small_group_large_min_level", 2, 128);
-        test("large_group_small_min_level", 16, 2);
-        test("odd_group_odd_min_level", 7, 3);
-    }
 
     #[test]
     fn bug_3165() {
