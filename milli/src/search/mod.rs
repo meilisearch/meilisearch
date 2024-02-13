@@ -36,7 +36,7 @@ pub mod hybrid;
 pub mod new;
 
 pub struct Search<'a> {
-    index_uid: String,
+    index_uid: &'a String,
     query: Option<String>,
     vector: Option<Vec<f32>>,
     // this should be linked to the String in the query
@@ -58,7 +58,7 @@ pub struct Search<'a> {
 }
 
 impl<'a> Search<'a> {
-    pub fn new(rtxn: &'a heed::RoTxn, index: &'a Index, index_uid: String) -> Search<'a> {
+    pub fn new(rtxn: &'a heed::RoTxn, index: &'a Index, index_uid: &'a String) -> Search<'a> {
         Search {
             index_uid,
             query: None,
@@ -158,7 +158,7 @@ impl<'a> Search<'a> {
 
     pub fn execute_for_candidates(&self, has_vector_search: bool) -> Result<RoaringBitmap> {
         if has_vector_search {
-            let ctx = SearchContext::new(self.index, self.index_uid.to_string(), self.rtxn);
+            let ctx = SearchContext::new(self.index, self.index_uid.clone(), self.rtxn);
             filtered_universe(&ctx, &self.filter)
         } else {
             Ok(self.execute()?.candidates)

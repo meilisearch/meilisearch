@@ -53,8 +53,8 @@ pub async fn search(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
-
+    let index_uid_string = index_uid.into_inner();
+    let index_uid = IndexUid::try_from(index_uid_string.clone())?;
     let query = params.into_inner();
     debug!(parameters = ?query, "Facet search");
 
@@ -72,7 +72,14 @@ pub async fn search(
     let index = index_scheduler.index(&index_uid)?;
     let features = index_scheduler.features();
     let search_result = tokio::task::spawn_blocking(move || {
-        perform_facet_search(&index, search_query, facet_query, facet_name, features)
+        perform_facet_search(
+            &index,
+            &index_uid_string,
+            search_query,
+            facet_query,
+            facet_name,
+            features,
+        )
     })
     .await?;
 
@@ -102,7 +109,6 @@ impl From<FacetSearchQuery> for SearchQuery {
 
         SearchQuery {
             q,
-            index_uid: None,
             offset: DEFAULT_SEARCH_OFFSET(),
             limit: DEFAULT_SEARCH_LIMIT(),
             page: None,

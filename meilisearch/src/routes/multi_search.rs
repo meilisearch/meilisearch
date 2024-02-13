@@ -54,7 +54,7 @@ pub async fn multi_search_with_post(
         {
             debug!(on_index = query_index, parameters = ?query, "Multi-search");
 
-            let index_uid_name = &index_uid.clone();
+            let index_uid_name = index_uid.to_string();
 
             // Check index from API key
             if !index_scheduler.filters().is_index_authorized(&index_uid) {
@@ -82,13 +82,13 @@ pub async fn multi_search_with_post(
                 .with_index(query_index)?;
 
             let search_result = tokio::task::spawn_blocking(move || {
-                perform_search(&index, index_uid.to_string().clone(), query, features, distribution)
+                perform_search(&index, &index_uid_name.clone(), query, features, distribution)
             })
             .await
             .with_index(query_index)?;
 
             search_results.push(SearchResultWithIndex {
-                index_uid: index_uid_name.to_string(),
+                index_uid: index_uid.to_string(),
                 result: search_result.with_index(query_index)?,
             });
         }
