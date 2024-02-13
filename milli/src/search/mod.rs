@@ -70,7 +70,7 @@ impl<'a> Search<'a> {
             searchable_attributes: None,
             geo_strategy: new::GeoSortStrategy::default(),
             terms_matching_strategy: TermsMatchingStrategy::default(),
-            scoring_strategy: Default::default(),
+            scori ng_strategy: Default::default(),
             exhaustive_number_hits: false,
             words_limit: 10,
             rtxn,

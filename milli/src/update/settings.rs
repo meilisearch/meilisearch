@@ -1215,6 +1215,7 @@ mod tests {
     #[test]
     fn set_and_reset_searchable_fields() {
         let index = TempIndex::new();
+		let index_uid = String::from("test_index");
 
         // First we send 3 documents with ids from 1 to 3.
         let mut wtxn = index.write_txn().unwrap();
@@ -1243,12 +1244,12 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         // When we search for something that is not in
         // the searchable fields it must not return any document.
-        let result = index.search(&rtxn).query("23").execute().unwrap();
+        let result = index.search(&rtxn, &index_uid).query("23").execute().unwrap();
         assert!(result.documents_ids.is_empty());
 
         // When we search for something that is in the searchable fields
         // we must find the appropriate document.
-        let result = index.search(&rtxn).query(r#""kevin""#).execute().unwrap();
+        let result = index.search(&rtxn, &index_uid).query(r#""kevin""#).execute().unwrap();
         let documents = index.documents(&rtxn, result.documents_ids).unwrap();
         assert_eq!(documents.len(), 1);
         assert_eq!(documents[0].1.get(0), Some(&br#""kevin""#[..]));
@@ -1265,7 +1266,7 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let searchable_fields = index.searchable_fields(&rtxn).unwrap();
         assert_eq!(searchable_fields, None);
-        let result = index.search(&rtxn).query("23").execute().unwrap();
+        let result = index.search(&rtxn, &index_uid).query("23").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 1);
         let documents = index.documents(&rtxn, result.documents_ids).unwrap();
         assert_eq!(documents[0].1.get(0), Some(&br#""kevin""#[..]));
@@ -1468,7 +1469,8 @@ mod tests {
 
         // Run an empty query just to ensure that the search results are ordered.
         let rtxn = index.read_txn().unwrap();
-        let SearchResult { documents_ids, .. } = index.search(&rtxn).execute().unwrap();
+		let index_uid = String::from("test_index");
+        let SearchResult { documents_ids, .. } = index.search(&rtxn, &index_uid).execute().unwrap();
         let documents = index.documents(&rtxn, documents_ids).unwrap();
 
         // Fetch the documents "age" field in the ordre in which the documents appear.
@@ -1511,7 +1513,8 @@ mod tests {
 
         // Run an empty query just to ensure that the search results are ordered.
         let rtxn = index.read_txn().unwrap();
-        let SearchResult { documents_ids, .. } = index.search(&rtxn).execute().unwrap();
+		let index_uid = String::from("test_index");
+        let SearchResult { documents_ids, .. } = index.search(&rtxn, &index_uid).execute().unwrap();
 
         // There must be at least one document with a 34 as the age.
         assert_eq!(documents_ids.len(), 3);
@@ -1546,7 +1549,8 @@ mod tests {
 
         // Run an empty query just to ensure that the search results are ordered.
         let rtxn = index.read_txn().unwrap();
-        let SearchResult { documents_ids, .. } = index.search(&rtxn).execute().unwrap();
+		let index_uid = String::from("test_index");
+        let SearchResult { documents_ids, .. } = index.search(&rtxn, &index_uid).execute().unwrap();
 
         // There must be at least one document with a 34 as the age.
         assert_eq!(documents_ids.len(), 3);
@@ -1609,18 +1613,19 @@ mod tests {
         let expected = fst::Set::from_iter(&set).unwrap();
         assert_eq!(stop_words.as_fst().as_bytes(), expected.as_fst().as_bytes());
 
+		let index_uid = String::from("test_index");
         // when we search for something that is a non prefix stop_words it should be ignored
         // thus we should get a placeholder search (all the results = 3)
-        let result = index.search(&rtxn).query("the ").execute().unwrap();
+        let result = index.search(&rtxn, &index_uid).query("the ").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 3);
-        let result = index.search(&rtxn).query("i ").execute().unwrap();
+        let result = index.search(&rtxn, &index_uid).query("i ").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 3);
-        let result = index.search(&rtxn).query("are ").execute().unwrap();
+        let result = index.search(&rtxn, &index_uid).query("are ").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 3);
 
-        let result = index.search(&rtxn).query("dog").execute().unwrap();
+        let result = index.search(&rtxn, &index_uid).query("dog").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 2); // we have two maxims talking about doggos
-        let result = index.search(&rtxn).query("benoît").execute().unwrap();
+        let result = index.search(&rtxn, &index_uid).query("benoît").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 1); // there is one benoit in our data
 
         // now we'll reset the stop_words and ensure it's None
@@ -1635,17 +1640,17 @@ mod tests {
         assert!(stop_words.is_none());
 
         // now we can search for the stop words
-        let result = index.search(&rtxn).query("the").execute().unwrap();
+        let result = index.search(&rtxn, &index_uid).query("the").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 2);
-        let result = index.search(&rtxn).query("i").execute().unwrap();
+        let result = index.search(&rtxn, &index_uid).query("i").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 1);
-        let result = index.search(&rtxn).query("are").execute().unwrap();
+        let result = index.search(&rtxn, &index_uid).query("are").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 2);
 
         // the rest of the search is still not impacted
-        let result = index.search(&rtxn).query("dog").execute().unwrap();
+        let result = index.search(&rtxn, &index_uid).query("dog").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 2); // we have two maxims talking about doggos
-        let result = index.search(&rtxn).query("benoît").execute().unwrap();
+        let result = index.search(&rtxn, &index_uid).query("benoît").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 1); // there is one benoit in our data
     }
 
@@ -1684,12 +1689,13 @@ mod tests {
         let synonyms = index.synonyms(&rtxn).unwrap();
         assert!(!synonyms.is_empty()); // at this point the index should return something
 
+		let index_uid = String::from("temp");
         // Check that we can use synonyms
-        let result = index.search(&rtxn).query("blini").execute().unwrap();
+        let result = index.search(&rtxn, &index_uid).query("blini").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 1);
-        let result = index.search(&rtxn).query("super like").execute().unwrap();
+        let result = index.search(&rtxn, &index_uid).query("super like").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 1);
-        let result = index.search(&rtxn).query("puppies").execute().unwrap();
+        let result = index.search(&rtxn, &index_uid).query("puppies").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 2);
 
         // Reset the synonyms
@@ -1705,11 +1711,11 @@ mod tests {
         assert!(synonyms.is_empty());
 
         // Check that synonyms are no longer work
-        let result = index.search(&rtxn).query("blini").execute().unwrap();
+        let result = index.search(&rtxn, &index_uid).query("blini").execute().unwrap();
         assert!(result.documents_ids.is_empty());
-        let result = index.search(&rtxn).query("super like").execute().unwrap();
+        let result = index.search(&rtxn, &index_uid).query("super like").execute().unwrap();
         assert!(result.documents_ids.is_empty());
-        let result = index.search(&rtxn).query("puppies").execute().unwrap();
+        let result = index.search(&rtxn, &index_uid).query("puppies").execute().unwrap();
         assert!(result.documents_ids.is_empty());
     }
 
@@ -1746,7 +1752,7 @@ mod tests {
         assert!(!synonyms.is_empty()); // at this point the index should return something
 
         // Check that we can use synonyms
-        let result = index.search(&rtxn).query("japanese").execute().unwrap();
+        let result = index.search(&rtxn, &index_uid).query("japanese").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 2);
     }
 
@@ -1899,8 +1905,9 @@ mod tests {
           }
         ])).unwrap();
 
+		let index_uid = String::from("temp");
         let rtxn = index.read_txn().unwrap();
-        let SearchResult { documents_ids, .. } = index.search(&rtxn).query("S").execute().unwrap();
+        let SearchResult { documents_ids, .. } = index.search(&rtxn, &index_uid).query("S").execute().unwrap();
         let first_id = documents_ids[0];
         let documents = index.documents(&rtxn, documents_ids).unwrap();
         let (_, content) = documents.iter().find(|(id, _)| *id == first_id).unwrap();

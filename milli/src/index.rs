@@ -1864,7 +1864,7 @@ pub(crate) mod tests {
 
         // ensure we get the right real searchable fields + user defined searchable fields
         let rtxn = index.read_txn().unwrap();
-        let mut search = index.search(&rtxn);
+        let mut search = index.search(&rtxn, &index.to_string());
 
         // exact match a document
         let search_result = search
