@@ -6,7 +6,7 @@ use std::mem;
 use anyhow::Context;
 use byte_unit::Byte;
 use clap::Parser;
-use tracing_trace::entry::Entry;
+use tracing_trace::entry::{Entry, NewSpan};
 
 /// A program that filters trace logs to only keeps
 /// the logs related to memory usage above the given threshold.
@@ -32,22 +32,34 @@ fn main() -> anyhow::Result<()> {
     let mut output = io::BufWriter::new(io::stdout());
     for result in tracing_trace::TraceReader::new(input) {
         let entry = result?;
-        if matches!(entry, Entry::NewCallsite(_) | Entry::NewThread(_)) {
-            write_to_output(&mut output, &entry)?;
-        } else if entry.memory().map_or(true, |m| m.resident < memory_threshold.as_u64()) {
-            if mem::replace(&mut currently_in_threshold, false) {
-                for entry in context.drain() {
-                    write_to_output(&mut output, &entry)?;
-                }
-            }
-            context.push(entry);
-        } else {
-            currently_in_threshold = true;
-            for entry in context.drain() {
+
+        match entry {
+            Entry::NewCallsite(_) | Entry::NewThread(_) => {
                 write_to_output(&mut output, &entry)?;
             }
-            write_to_output(&mut output, &entry)?;
+            Entry::NewSpan(NewSpan { id, call_id, parent_id, thread_id }) => todo!(),
+            Entry::SpanEnter(_) => todo!(),
+            Entry::SpanExit(_) => todo!(),
+            Entry::SpanClose(_) => todo!(),
+            Entry::Event(_) => todo!(),
         }
+
+        // if matches!(entry, Entry::NewCallsite(_) | Entry::NewThread(_)) {
+        //     write_to_output(&mut output, &entry)?;
+        // } else if entry.memory().map_or(true, |m| m.resident < memory_threshold.as_u64()) {
+        //     if mem::replace(&mut currently_in_threshold, false) {
+        //         for entry in context.drain() {
+        //             write_to_output(&mut output, &entry)?;
+        //         }
+        //     }
+        //     context.push(entry);
+        // } else {
+        //     currently_in_threshold = true;
+        //     for entry in context.drain() {
+        //         write_to_output(&mut output, &entry)?;
+        //     }
+        //     write_to_output(&mut output, &entry)?;
+        // }
     }
 
     for entry in context.drain() {
