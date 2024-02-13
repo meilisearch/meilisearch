@@ -280,7 +280,7 @@ fn send_original_documents_data(
     });
 
     // TODO: create a custom internal error
-    drop(lmdb_writer_sx.send(Ok(TypedChunk::Documents(original_documents_chunk))));
+    let _ = lmdb_writer_sx.send(Ok(TypedChunk::Documents(original_documents_chunk)));
     Ok(())
 }
 
