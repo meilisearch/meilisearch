@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut options = EnvOpenOptions::new();
     options.map_size(100 * 1024 * 1024 * 1024); // 100 GB
 
-    let index = Index::new(program_name.as_str(), options, dataset)?;
+    let index = Index::new(Some(program_name), options, dataset)?;
     let txn = index.read_txn()?;
     let mut query = String::new();
     while stdin().read_line(&mut query)? > 0 {
