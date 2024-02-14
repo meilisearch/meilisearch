@@ -58,7 +58,6 @@ use crate::{
 /// A structure used throughout the execution of a search query.
 pub struct SearchContext<'ctx> {
     pub index: &'ctx Index,
-    pub index_uid: String,
     pub txn: &'ctx RoTxn<'ctx>,
     pub db_cache: DatabaseCache<'ctx>,
     pub word_interner: DedupInterner<String>,
@@ -69,10 +68,9 @@ pub struct SearchContext<'ctx> {
 }
 
 impl<'ctx> SearchContext<'ctx> {
-    pub fn new(index: &'ctx Index, index_uid: String, txn: &'ctx RoTxn<'ctx>) -> Self {
+    pub fn new(index: &'ctx Index, txn: &'ctx RoTxn<'ctx>) -> Self {
         Self {
             index,
-            index_uid,
             txn,
             db_cache: <_>::default(),
             word_interner: <_>::default(),
@@ -708,7 +706,7 @@ fn check_sort_criteria(ctx: &SearchContext, sort_criteria: Option<&Vec<AscDesc>>
 
                 return Err(UserError::InvalidSortableAttribute {
                     field: field.to_string(),
-                    index: ctx.index_uid.clone(),
+                    index: ctx.index.name.clone(),
                     valid_fields,
                     hidden_fields,
                 }
@@ -720,7 +718,7 @@ fn check_sort_criteria(ctx: &SearchContext, sort_criteria: Option<&Vec<AscDesc>>
 
                 return Err(UserError::InvalidSortableAttribute {
                     field: "_geo".to_string(),
-                    index: ctx.index_uid.clone(),
+                    index: ctx.index.name.clone(),
                     valid_fields,
                     hidden_fields,
                 }

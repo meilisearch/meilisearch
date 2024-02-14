@@ -452,7 +452,7 @@ impl std::fmt::Display for FaultSource {
 
 #[test]
 fn conditionally_lookup_for_error_message() {
-    let prefix = "Attribute `name` is not sortable.";
+    let prefix = "Attribute `name` of index `index` is not sortable.";
     let messages = vec![
         (BTreeSet::new(), "This index does not have configured sortable attributes."),
         (BTreeSet::from(["age".to_string()]), "Available sortable attributes are: `age`."),
@@ -461,6 +461,7 @@ fn conditionally_lookup_for_error_message() {
     for (list, suffix) in messages {
         let err = UserError::InvalidSortableAttribute {
             field: "name".to_string(),
+            index: "index".to_string(),
             valid_fields: list,
             hidden_fields: false,
         };

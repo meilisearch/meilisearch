@@ -31,7 +31,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let path = tempfile::tempdir().unwrap();
     let mut options = EnvOpenOptions::new();
     options.map_size(10 * 1024 * 1024); // 10 MB
-    let index = Index::new(options, &path).unwrap();
+    let index = Index::new("", options, &path).unwrap();
 
     let mut wtxn = index.write_txn().unwrap();
     let config = IndexerConfig::default();

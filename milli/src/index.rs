@@ -100,6 +100,8 @@ pub mod db_name {
 
 #[derive(Clone)]
 pub struct Index {
+	pub name: String,
+
     /// The LMDB environment which this index is associated with.
     pub(crate) env: heed::Env,
 
@@ -171,6 +173,7 @@ pub struct Index {
 
 impl Index {
     pub fn new_with_creation_dates<P: AsRef<Path>>(
+		name: &str,
         mut options: heed::EnvOpenOptions,
         path: P,
         created_at: OffsetDateTime,
@@ -180,7 +183,8 @@ impl Index {
 
         options.max_dbs(25);
 
-        let env = options.open(path)?;
+        let name = String::from(name);
+		let env = options.open(path)?;
         let mut wtxn = env.write_txn()?;
         let main = env.database_options().name(MAIN).create(&mut wtxn)?;
         let word_docids = env.create_database(&mut wtxn, Some(WORD_DOCIDS))?;
@@ -229,6 +233,7 @@ impl Index {
         Index::set_creation_dates(&env, main, created_at, updated_at)?;
 
         Ok(Index {
+			name,
             env,
             main,
             external_documents_ids,
@@ -258,9 +263,9 @@ impl Index {
         })
     }
 
-    pub fn new<P: AsRef<Path>>(options: heed::EnvOpenOptions, path: P) -> Result<Index> {
+    pub fn new<P: AsRef<Path>>(name: &str, options: heed::EnvOpenOptions, path: P) -> Result<Index> {
         let now = OffsetDateTime::now_utc();
-        Self::new_with_creation_dates(options, path, now, now)
+        Self::new_with_creation_dates(name, options, path, now, now)
     }
 
     fn set_creation_dates(
@@ -1212,8 +1217,8 @@ impl Index {
         FacetDistribution::new(rtxn, self)
     }
 
-    pub fn search<'a>(&'a self, rtxn: &'a RoTxn, index_uid: &'a String) -> Search<'a> {
-        Search::new(rtxn, self, &index_uid)
+    pub fn search<'a>(&'a self, rtxn: &'a RoTxn) -> Search<'a> {
+        Search::new(rtxn, self)
     }
 
     /// Returns the index creation time.
@@ -1548,7 +1553,7 @@ pub(crate) mod tests {
             let mut options = EnvOpenOptions::new();
             options.map_size(size);
             let _tempdir = TempDir::new_in(".").unwrap();
-            let inner = Index::new(options, _tempdir.path()).unwrap();
+            let inner = Index::new("temp", options, _tempdir.path()).unwrap();
             let indexer_config = IndexerConfig::default();
             let index_documents_config = IndexDocumentsConfig::default();
             Self { inner, indexer_config, index_documents_config, _tempdir }

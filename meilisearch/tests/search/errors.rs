@@ -882,7 +882,7 @@ async fn sort_unsortable_attribute() {
     index.wait_task(1).await;
 
     let expected_response = json!({
-        "message": "Attribute `title` is not sortable. Available sortable attributes are: `id`.",
+        "message": "Attribute `title` of index `test` is not sortable. Available sortable attributes are: `id`.",
         "code": "invalid_search_sort",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_search_sort"

@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     options.map_size(100 * 1024 * 1024 * 1024); // 100 GB
 
     std::fs::create_dir_all(&index_path).unwrap();
-    let index = Index::new(options, index_path).unwrap();
+    let index = Index::new(program_name.as_str(), options, index_path).unwrap();
     let mut wtxn = index.write_txn().unwrap();
 
     let config = IndexerConfig::default();

@@ -103,7 +103,7 @@ impl ReopenableIndex {
                 return Ok(());
             }
             map.unavailable.remove(&self.uuid);
-            map.create(&self.uuid, path, None, self.enable_mdb_writemap, self.map_size)?;
+            map.create("", &self.uuid, path, None, self.enable_mdb_writemap, self.map_size)?;
         }
         Ok(())
     }
@@ -167,6 +167,7 @@ impl IndexMap {
     ///
     pub fn create(
         &mut self,
+		name: &str,
         uuid: &Uuid,
         path: &Path,
         date: Option<(OffsetDateTime, OffsetDateTime)>,
@@ -176,7 +177,7 @@ impl IndexMap {
         if !matches!(self.get_unavailable(uuid), Missing) {
             panic!("Attempt to open an index that was unavailable");
         }
-        let index = create_or_open_index(path, date, enable_mdb_writemap, map_size)?;
+        let index = create_or_open_index(name, path, date, enable_mdb_writemap, map_size)?;
         match self.available.insert(*uuid, index.clone()) {
             InsertionOutcome::InsertedNew => (),
             InsertionOutcome::Evicted(evicted_uuid, evicted_index) => {
@@ -296,6 +297,7 @@ impl IndexMap {
 /// Create or open an index in the specified path.
 /// The path *must* exist or an error will be thrown.
 fn create_or_open_index(
+	name: &str,
     path: &Path,
     date: Option<(OffsetDateTime, OffsetDateTime)>,
     enable_mdb_writemap: bool,
@@ -309,9 +311,9 @@ fn create_or_open_index(
     }
 
     if let Some((created, updated)) = date {
-        Ok(Index::new_with_creation_dates(options, path, created, updated)?)
+        Ok(Index::new_with_creation_dates(name, options, path, created, updated)?)
     } else {
-        Ok(Index::new(options, path)?)
+        Ok(Index::new(name, options, path)?)
     }
 }
 
