@@ -167,7 +167,7 @@ impl IndexMap {
     ///
     pub fn create(
         &mut self,
-		name: &str,
+        name: &str,
         uuid: &Uuid,
         path: &Path,
         date: Option<(OffsetDateTime, OffsetDateTime)>,
@@ -297,7 +297,7 @@ impl IndexMap {
 /// Create or open an index in the specified path.
 /// The path *must* exist or an error will be thrown.
 fn create_or_open_index(
-	name: &str,
+    name: &str,
     path: &Path,
     date: Option<(OffsetDateTime, OffsetDateTime)>,
     enable_mdb_writemap: bool,
@@ -311,9 +311,15 @@ fn create_or_open_index(
     }
 
     if let Some((created, updated)) = date {
-        Ok(Index::new_with_creation_dates(name, options, path, created, updated)?)
+        Ok(Index::new_with_creation_dates(
+            Some(String::from(name)),
+            options,
+            path,
+            created,
+            updated,
+        )?)
     } else {
-        Ok(Index::new(name, options, path)?)
+        Ok(Index::new(Some(String::from(name)), options, path)?)
     }
 }
 
