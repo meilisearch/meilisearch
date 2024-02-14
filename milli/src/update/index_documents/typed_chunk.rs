@@ -52,7 +52,7 @@ impl ChunkAccumulator {
         match self
             .inner
             .iter()
-            .position(|right| right.first().map_or(false, |right| chunk.is_batchable_with(right)))
+            .position(|right| right.first().map_or(false, |right| chunk.mergeable_with(right)))
         {
             Some(position) => {
                 let v = self.inner.get_mut(position).unwrap();
@@ -92,7 +92,7 @@ pub(crate) enum TypedChunk {
 }
 
 impl TypedChunk {
-    fn is_batchable_with(&self, other: &Self) -> bool {
+    fn mergeable_with(&self, other: &Self) -> bool {
         use TypedChunk::*;
         match (self, other) {
             (FieldIdDocidFacetStrings(_), FieldIdDocidFacetStrings(_))
