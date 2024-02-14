@@ -183,7 +183,6 @@ impl Index {
 
         options.max_dbs(25);
 
-        let name = name;
         let env = options.open(path)?;
         let mut wtxn = env.write_txn()?;
         let main = env.database_options().name(MAIN).create(&mut wtxn)?;
