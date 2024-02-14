@@ -35,27 +35,6 @@ pub fn merge_roaring_bitmaps<'a>(_key: &[u8], values: &[Cow<'a, [u8]>]) -> Resul
     }
 }
 
-pub fn merge_btreeset_string<'a>(_key: &[u8], values: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
-    if values.len() == 1 {
-        Ok(values[0].clone())
-    } else {
-        // TODO improve the perf by using a `#[borrow] Cow<str>`.
-        let strings: BTreeSet<String> = values
-            .iter()
-            .map(AsRef::as_ref)
-            .map(serde_json::from_slice::<BTreeSet<String>>)
-            .map(StdResult::unwrap)
-            .reduce(|mut current, new| {
-                for x in new {
-                    current.insert(x);
-                }
-                current
-            })
-            .unwrap();
-        Ok(Cow::Owned(serde_json::to_vec(&strings).unwrap()))
-    }
-}
-
 pub fn keep_first<'a>(_key: &[u8], values: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
     Ok(values[0].clone())
 }
@@ -242,4 +221,41 @@ pub fn merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap<'a>(
         previous,
         buffer,
     )?)
+}
+
+/// Do a union of BtreeSet on both sides of a DelAdd obkv
+/// separately and outputs a new DelAdd with both unions.
+pub fn merge_deladd_btreeset_string<'a>(
+    _key: &[u8],
+    values: &[Cow<'a, [u8]>],
+) -> Result<Cow<'a, [u8]>> {
+    if values.len() == 1 {
+        Ok(values[0].clone())
+    } else {
+        // Retrieve the bitmaps from both sides
+        let mut del_set = BTreeSet::new();
+        let mut add_set = BTreeSet::new();
+        for value in values {
+            let obkv = KvReaderDelAdd::new(value);
+            if let Some(bytes) = obkv.get(DelAdd::Deletion) {
+                let set = serde_json::from_slice::<BTreeSet<String>>(bytes).unwrap();
+                for value in set {
+                    del_set.insert(value);
+                }
+            }
+            if let Some(bytes) = obkv.get(DelAdd::Addition) {
+                let set = serde_json::from_slice::<BTreeSet<String>>(bytes).unwrap();
+                for value in set {
+                    add_set.insert(value);
+                }
+            }
+        }
+
+        let mut output_deladd_obkv = KvWriterDelAdd::memory();
+        let del = serde_json::to_vec(&del_set).unwrap();
+        output_deladd_obkv.insert(DelAdd::Deletion, &del)?;
+        let add = serde_json::to_vec(&add_set).unwrap();
+        output_deladd_obkv.insert(DelAdd::Addition, &add)?;
+        output_deladd_obkv.into_inner().map(Cow::from).map_err(Into::into)
+    }
 }

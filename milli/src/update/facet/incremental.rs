@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::BufReader;
 
+use grenad::Merger;
 use heed::types::{Bytes, DecodeIgnore};
 use heed::{BytesDecode, Error, RoTxn, RwTxn};
 use obkv::KvReader;
@@ -14,6 +15,7 @@ use crate::heed_codec::BytesRefCodec;
 use crate::search::facet::get_highest_level;
 use crate::update::del_add::DelAdd;
 use crate::update::index_documents::valid_lmdb_key;
+use crate::update::MergeFn;
 use crate::{CboRoaringBitmapCodec, Index, Result};
 
 enum InsertionResult {
@@ -31,14 +33,14 @@ enum DeletionResult {
 /// `facet_id_(string/f64)_docids` databases.
 pub struct FacetsUpdateIncremental {
     inner: FacetsUpdateIncrementalInner,
-    delta_data: grenad::Reader<BufReader<File>>,
+    delta_data: Merger<BufReader<File>, MergeFn>,
 }
 
 impl FacetsUpdateIncremental {
     pub fn new(
         index: &Index,
         facet_type: FacetType,
-        delta_data: grenad::Reader<BufReader<File>>,
+        delta_data: Merger<BufReader<File>, MergeFn>,
         group_size: u8,
         min_level_size: u8,
         max_group_size: u8,
@@ -61,16 +63,18 @@ impl FacetsUpdateIncremental {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::facets::incremental")]
     pub fn execute(self, wtxn: &mut RwTxn) -> crate::Result<()> {
-        let mut cursor = self.delta_data.into_cursor()?;
-        while let Some((key, value)) = cursor.move_on_next()? {
+        let mut iter = self.delta_data.into_stream_merger_iter()?;
+
+        while let Some((key, value)) = iter.next()? {
             if !valid_lmdb_key(key) {
                 continue;
             }
+
             let key = FacetGroupKeyCodec::<BytesRefCodec>::bytes_decode(key)
                 .map_err(heed::Error::Encoding)?;
             let value = KvReader::new(value);
-
             let docids_to_delete = value
                 .get(DelAdd::Deletion)
                 .map(CboRoaringBitmapCodec::bytes_decode)

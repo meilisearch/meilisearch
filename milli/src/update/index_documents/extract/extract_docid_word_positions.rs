@@ -26,7 +26,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
     searchable_fields: &Option<HashSet<FieldId>>,
-    stop_words: Option<&fst::Set<&[u8]>>,
+    stop_words: Option<&fst::Set<Vec<u8>>>,
     allowed_separators: Option<&[&str]>,
     dictionary: Option<&[&str]>,
     max_positions_per_attributes: Option<u32>,
@@ -181,11 +181,11 @@ fn searchable_fields_changed(
 
 /// Factorize tokenizer building.
 fn tokenizer_builder<'a>(
-    stop_words: Option<&'a fst::Set<&[u8]>>,
+    stop_words: Option<&'a fst::Set<Vec<u8>>>,
     allowed_separators: Option<&'a [&str]>,
     dictionary: Option<&'a [&str]>,
     script_language: Option<&'a HashMap<Script, Vec<Language>>>,
-) -> TokenizerBuilder<'a, &'a [u8]> {
+) -> TokenizerBuilder<'a, Vec<u8>> {
     let mut tokenizer_builder = TokenizerBuilder::new();
     if let Some(stop_words) = stop_words {
         tokenizer_builder.stop_words(stop_words);
@@ -211,7 +211,7 @@ fn lang_safe_tokens_from_document<'a>(
     obkv: &KvReader<FieldId>,
     searchable_fields: &Option<HashSet<FieldId>>,
     tokenizer: &Tokenizer,
-    stop_words: Option<&fst::Set<&[u8]>>,
+    stop_words: Option<&fst::Set<Vec<u8>>>,
     allowed_separators: Option<&[&str]>,
     dictionary: Option<&[&str]>,
     max_positions_per_attributes: u32,
