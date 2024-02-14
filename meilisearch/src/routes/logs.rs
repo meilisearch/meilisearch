@@ -38,6 +38,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 pub enum LogMode {
     #[default]
     Human,
+    Json,
     Profile,
 }
 
@@ -166,7 +167,18 @@ fn make_layer<
 
             let fmt_layer = tracing_subscriber::fmt::layer()
                 .with_writer(move || LogWriter { sender: sender.clone() })
-                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE);
+                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE);
+
+            let stream = byte_stream(receiver, guard);
+            (Box::new(fmt_layer) as Box<dyn Layer<S> + Send + Sync>, Box::pin(stream))
+        }
+        LogMode::Json => {
+            let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+
+            let fmt_layer = tracing_subscriber::fmt::layer()
+                .with_writer(move || LogWriter { sender: sender.clone() })
+                .json()
+                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE);
 
             let stream = byte_stream(receiver, guard);
             (Box::new(fmt_layer) as Box<dyn Layer<S> + Send + Sync>, Box::pin(stream))

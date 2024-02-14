@@ -89,7 +89,7 @@ async fn logs_stream_bad_mode() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Unknown value `tamo` at `.mode`: expected one of `human`, `profile`",
+      "message": "Unknown value `tamo` at `.mode`: expected one of `human`, `json`, `profile`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
@@ -146,7 +146,7 @@ async fn logs_stream_bad_profile_memory() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Unknown value `fmt` at `.mode`: expected one of `human`, `profile`",
+      "message": "Unknown value `fmt` at `.mode`: expected one of `human`, `json`, `profile`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
