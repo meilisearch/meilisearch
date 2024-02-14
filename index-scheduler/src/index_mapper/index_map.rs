@@ -311,13 +311,7 @@ fn create_or_open_index(
     }
 
     if let Some((created, updated)) = date {
-        Ok(Index::new_with_creation_dates(
-            name,
-            options,
-            path,
-            created,
-            updated,
-        )?)
+        Ok(Index::new_with_creation_dates(name, options, path, created, updated)?)
     } else {
         Ok(Index::new(name, options, path)?)
     }
