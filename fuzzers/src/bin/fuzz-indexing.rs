@@ -56,7 +56,7 @@ fn main() {
                 Some(path) => TempDir::new_in(path).unwrap(),
                 None => TempDir::new().unwrap(),
             };
-            let index = Index::new("", options, tempdir.path()).unwrap();
+            let index = Index::new(None, options, tempdir.path()).unwrap();
             let indexer_config = IndexerConfig::default();
             let index_documents_config = IndexDocumentsConfig::default();
 

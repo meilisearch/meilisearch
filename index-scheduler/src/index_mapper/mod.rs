@@ -182,7 +182,7 @@ impl IndexMapper {
                 // This is very unlikely to happen in practice.
                 // TODO: it would be better to lazily create the index. But we need an Index::open function for milli.
                 let index = self.index_map.write().unwrap().create(
-					&name,
+					Some(name.to_string()),
                     &uuid,
                     &index_path,
                     date,
@@ -372,7 +372,7 @@ impl IndexMapper {
                             let index_path = self.base_path.join(uuid.to_string());
 
                             break index_map.create(
-								name,
+								Some(name.to_string()),
                                 &uuid,
                                 &index_path,
                                 None,
