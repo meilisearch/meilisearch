@@ -1,5 +1,5 @@
 use std::env;
-use std::io::{stderr, Write};
+use std::io::{stderr, LineWriter, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -31,6 +31,7 @@ fn default_log_route_layer() -> LogRouteType {
 
 fn default_log_stderr_layer(opt: &Opt) -> LogStderrType {
     let layer = tracing_subscriber::fmt::layer()
+        .with_writer(|| LineWriter::new(std::io::stderr()))
         .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE);
 
     let layer = match opt.experimental_logs_mode {
