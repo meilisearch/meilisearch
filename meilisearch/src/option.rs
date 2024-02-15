@@ -344,8 +344,7 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_enable_metrics: bool,
 
-    /// TODO: TAMO: update link
-    /// Experimental logs mode feature. For more information, see: <https://github.com/orgs/meilisearch/discussions/721>
+    /// Experimental logs mode feature. For more information, see: <https://github.com/orgs/meilisearch/discussions/723>
     ///
     /// Change the mode of the logs on the console.
     #[clap(long, env = MEILI_EXPERIMENTAL_LOGS_MODE, default_value_t)]
