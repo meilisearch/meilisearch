@@ -110,7 +110,7 @@ impl FromStr for LogMode {
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("Unsupported log {0} mode level. Supported values are `HUMAN` and `JSON`.")]
+#[error("Unsupported log mode level `{0}`. Supported values are `HUMAN` and `JSON`.")]
 pub struct LogModeError(String);
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
