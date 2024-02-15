@@ -28,7 +28,9 @@ use super::{
     config_user_id_path, DocumentDeletionKind, DocumentFetchKind, MEILISEARCH_CONFIG_PATH,
 };
 use crate::analytics::Analytics;
-use crate::option::{default_http_addr, IndexerOpts, MaxMemory, MaxThreads, ScheduleSnapshot};
+use crate::option::{
+    default_http_addr, IndexerOpts, LogMode, MaxMemory, MaxThreads, ScheduleSnapshot,
+};
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
 use crate::routes::indexes::facet_search::FacetSearchQuery;
 use crate::routes::tasks::TasksFilterQuery;
@@ -250,6 +252,7 @@ impl super::Analytics for SegmentAnalytics {
 struct Infos {
     env: String,
     experimental_enable_metrics: bool,
+    experimental_logs_mode: LogMode,
     experimental_enable_logs_route: bool,
     experimental_reduce_indexing_memory_usage: bool,
     experimental_max_number_of_batched_tasks: usize,
@@ -288,6 +291,7 @@ impl From<Opt> for Infos {
         let Opt {
             db_path,
             experimental_enable_metrics,
+            experimental_logs_mode,
             experimental_enable_logs_route,
             experimental_reduce_indexing_memory_usage,
             experimental_max_number_of_batched_tasks,
@@ -335,6 +339,7 @@ impl From<Opt> for Infos {
         Self {
             env,
             experimental_enable_metrics,
+            experimental_logs_mode,
             experimental_enable_logs_route,
             experimental_reduce_indexing_memory_usage,
             db_path: db_path != PathBuf::from("./data.ms"),

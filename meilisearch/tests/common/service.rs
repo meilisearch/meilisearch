@@ -5,7 +5,7 @@ use actix_web::http::StatusCode;
 use actix_web::test;
 use actix_web::test::TestRequest;
 use index_scheduler::IndexScheduler;
-use meilisearch::{analytics, create_app, Opt};
+use meilisearch::{analytics, create_app, Opt, SubscriberForSecondLayer};
 use meilisearch_auth::AuthController;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::Layer;
@@ -111,12 +111,20 @@ impl Service {
             tracing_subscriber::reload::Layer::new(None.with_filter(
                 tracing_subscriber::filter::Targets::new().with_target("", LevelFilter::OFF),
             ));
+        let (_stderr_layer, stderr_layer_handle) = tracing_subscriber::reload::Layer::new(
+            (Box::new(
+                tracing_subscriber::fmt::layer()
+                    .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE),
+            )
+                as Box<dyn tracing_subscriber::Layer<SubscriberForSecondLayer> + Send + Sync>)
+                .with_filter(tracing_subscriber::filter::Targets::new()),
+        );
 
         let app = test::init_service(create_app(
             self.index_scheduler.clone().into(),
             self.auth.clone().into(),
             self.options.clone(),
-            route_layer_handle,
+            (route_layer_handle, stderr_layer_handle),
             analytics::MockAnalytics::new(&self.options),
             true,
         ))

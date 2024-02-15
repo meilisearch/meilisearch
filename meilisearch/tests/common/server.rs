@@ -9,7 +9,7 @@ use actix_web::http::StatusCode;
 use byte_unit::{Byte, ByteUnit};
 use clap::Parser;
 use meilisearch::option::{IndexerOpts, MaxMemory, Opt};
-use meilisearch::{analytics, create_app, setup_meilisearch};
+use meilisearch::{analytics, create_app, setup_meilisearch, SubscriberForSecondLayer};
 use once_cell::sync::Lazy;
 use tempfile::TempDir;
 use tokio::time::sleep;
@@ -87,12 +87,20 @@ impl Server {
             tracing_subscriber::reload::Layer::new(None.with_filter(
                 tracing_subscriber::filter::Targets::new().with_target("", LevelFilter::OFF),
             ));
+        let (_stderr_layer, stderr_layer_handle) = tracing_subscriber::reload::Layer::new(
+            (Box::new(
+                tracing_subscriber::fmt::layer()
+                    .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE),
+            )
+                as Box<dyn tracing_subscriber::Layer<SubscriberForSecondLayer> + Send + Sync>)
+                .with_filter(tracing_subscriber::filter::Targets::new()),
+        );
 
         actix_web::test::init_service(create_app(
             self.service.index_scheduler.clone().into(),
             self.service.auth.clone().into(),
             self.service.options.clone(),
-            route_layer_handle,
+            (route_layer_handle, stderr_layer_handle),
             analytics::MockAnalytics::new(&self.service.options),
             true,
         ))

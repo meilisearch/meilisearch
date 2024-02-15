@@ -10,8 +10,10 @@ use actix_web::HttpServer;
 use index_scheduler::IndexScheduler;
 use is_terminal::IsTerminal;
 use meilisearch::analytics::Analytics;
+use meilisearch::option::LogMode;
 use meilisearch::{
-    analytics, create_app, prototype_name, setup_meilisearch, LogRouteHandle, LogRouteType, Opt,
+    analytics, create_app, prototype_name, setup_meilisearch, LogRouteHandle, LogRouteType,
+    LogStderrHandle, LogStderrType, Opt, SubscriberForSecondLayer,
 };
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
 use mimalloc::MiMalloc;
@@ -23,28 +25,43 @@ use tracing_subscriber::Layer;
 #[global_allocator]
 static ALLOC: MiMalloc = MiMalloc;
 
-fn default_layer() -> LogRouteType {
+fn default_log_route_layer() -> LogRouteType {
     None.with_filter(tracing_subscriber::filter::Targets::new().with_target("", LevelFilter::OFF))
 }
 
+fn default_log_stderr_layer(opt: &Opt) -> LogStderrType {
+    let layer = tracing_subscriber::fmt::layer()
+        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE);
+
+    let layer = match opt.experimental_logs_mode {
+        LogMode::Human => Box::new(layer)
+            as Box<dyn tracing_subscriber::Layer<SubscriberForSecondLayer> + Send + Sync>,
+        LogMode::Json => Box::new(layer.json())
+            as Box<dyn tracing_subscriber::Layer<SubscriberForSecondLayer> + Send + Sync>,
+    };
+
+    layer.with_filter(
+        tracing_subscriber::filter::Targets::new()
+            .with_target("", LevelFilter::from_str(&opt.log_level.to_string()).unwrap()),
+    )
+}
+
 /// does all the setup before meilisearch is launched
-fn setup(opt: &Opt) -> anyhow::Result<LogRouteHandle> {
-    let (route_layer, route_layer_handle) = tracing_subscriber::reload::Layer::new(default_layer());
+fn setup(opt: &Opt) -> anyhow::Result<(LogRouteHandle, LogStderrHandle)> {
+    let (route_layer, route_layer_handle) =
+        tracing_subscriber::reload::Layer::new(default_log_route_layer());
     let route_layer: tracing_subscriber::reload::Layer<_, _> = route_layer;
 
-    let subscriber = tracing_subscriber::registry().with(route_layer).with(
-        tracing_subscriber::fmt::layer()
-            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
-            .with_filter(
-                tracing_subscriber::filter::LevelFilter::from_str(&opt.log_level.to_string())
-                    .unwrap(),
-            ),
-    );
+    let (stderr_layer, stderr_layer_handle) =
+        tracing_subscriber::reload::Layer::new(default_log_stderr_layer(opt));
+    let route_layer: tracing_subscriber::reload::Layer<_, _> = route_layer;
+
+    let subscriber = tracing_subscriber::registry().with(route_layer).with(stderr_layer);
 
     // set the subscriber as the default for the application
     tracing::subscriber::set_global_default(subscriber).unwrap();
 
-    Ok(route_layer_handle)
+    Ok((route_layer_handle, stderr_layer_handle))
 }
 
 fn on_panic(info: &std::panic::PanicInfo) {
@@ -110,7 +127,7 @@ async fn run_http(
     index_scheduler: Arc<IndexScheduler>,
     auth_controller: Arc<AuthController>,
     opt: Opt,
-    logs: LogRouteHandle,
+    logs: (LogRouteHandle, LogStderrHandle),
     analytics: Arc<dyn Analytics>,
 ) -> anyhow::Result<()> {
     let enable_dashboard = &opt.env == "development";

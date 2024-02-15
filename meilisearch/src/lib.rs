@@ -97,11 +97,25 @@ pub type LogRouteType = tracing_subscriber::filter::Filtered<
     tracing_subscriber::Registry,
 >;
 
+pub type SubscriberForSecondLayer = tracing_subscriber::layer::Layered<
+    tracing_subscriber::reload::Layer<LogRouteType, tracing_subscriber::Registry>,
+    tracing_subscriber::Registry,
+>;
+
+pub type LogStderrHandle =
+    tracing_subscriber::reload::Handle<LogStderrType, SubscriberForSecondLayer>;
+
+pub type LogStderrType = tracing_subscriber::filter::Filtered<
+    Box<dyn tracing_subscriber::Layer<SubscriberForSecondLayer> + Send + Sync>,
+    Targets,
+    SubscriberForSecondLayer,
+>;
+
 pub fn create_app(
     index_scheduler: Data<IndexScheduler>,
     auth_controller: Data<AuthController>,
     opt: Opt,
-    logs: LogRouteHandle,
+    logs: (LogRouteHandle, LogStderrHandle),
     analytics: Arc<dyn Analytics>,
     enable_dashboard: bool,
 ) -> actix_web::App<
@@ -444,7 +458,7 @@ pub fn configure_data(
     index_scheduler: Data<IndexScheduler>,
     auth: Data<AuthController>,
     opt: &Opt,
-    logs: LogRouteHandle,
+    (logs_route, logs_stderr): (LogRouteHandle, LogStderrHandle),
     analytics: Arc<dyn Analytics>,
 ) {
     let http_payload_size_limit = opt.http_payload_size_limit.get_bytes() as usize;
@@ -452,7 +466,8 @@ pub fn configure_data(
         .app_data(index_scheduler)
         .app_data(auth)
         .app_data(web::Data::from(analytics))
-        .app_data(web::Data::new(logs))
+        .app_data(web::Data::new(logs_route))
+        .app_data(web::Data::new(logs_stderr))
         .app_data(
             web::JsonConfig::default()
                 .limit(http_payload_size_limit)
