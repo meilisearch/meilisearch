@@ -11,7 +11,7 @@ mod extract_word_position_docids;
 
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{self, BufReader, Write};
 
 use crossbeam_channel::Sender;
 use rayon::prelude::*;
@@ -37,6 +37,30 @@ use super::{helpers, TypedChunk};
 use crate::proximity::ProximityPrecision;
 use crate::vector::EmbeddingConfigs;
 use crate::{FieldId, FieldsIdsMap, Result};
+
+pub struct RawKVWriter {
+    file: io::BufWriter<File>,
+}
+
+impl RawKVWriter {
+    pub fn new(path: &str) -> io::Result<Self> {
+        Ok(Self { file: File::create(path).map(io::BufWriter::new)? })
+    }
+
+    pub fn push(&mut self, key: &[u8], value: &[u8]) -> io::Result<()> {
+        let key_len = key.len().to_be_bytes();
+        let value_len = value.len().to_be_bytes();
+        self.file.write_all(&key_len)?;
+        self.file.write_all(key)?;
+        self.file.write_all(&value_len)?;
+        self.file.write_all(value)?;
+        Ok(())
+    }
+
+    pub fn flush(&mut self) -> io::Result<()> {
+        self.file.flush()
+    }
+}
 
 /// Extract data for each databases from obkv documents in parallel.
 /// Send data in grenad file over provided Sender.

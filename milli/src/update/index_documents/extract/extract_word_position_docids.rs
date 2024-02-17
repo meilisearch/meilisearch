@@ -1,18 +1,24 @@
 use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::{self, BufReader};
+use std::sync::Mutex;
 
 use obkv::KvReaderU16;
+use once_cell::sync::Lazy;
 
 use super::helpers::{
     create_sorter, merge_deladd_cbo_roaring_bitmaps, sorter_into_reader, try_split_array_at,
     GrenadParameters,
 };
+use super::RawKVWriter;
 use crate::error::SerializationError;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::MergeFn;
 use crate::{bucketed_position, DocumentId, Result};
+
+static WORD_POSITION_DOCIDS_RAW_KV: Lazy<Mutex<RawKVWriter>> =
+    Lazy::new(|| Mutex::new(RawKVWriter::new("extract_word_position_docids").unwrap()));
 
 /// Extracts the word positions and the documents ids where this word appear.
 ///
@@ -88,6 +94,8 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
         )?;
     }
 
+    WORD_POSITION_DOCIDS_RAW_KV.lock().unwrap().flush().unwrap();
+
     // TODO remove noop DelAdd OBKV
     let word_position_docids_reader = sorter_into_reader(word_position_docids_sorter, indexer)?;
 
@@ -106,6 +114,8 @@ fn words_position_into_sorter(
 
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};
+
+    let mut word_position_docids_raw_kv = WORD_POSITION_DOCIDS_RAW_KV.lock().unwrap();
 
     let mut buffer = Vec::new();
     for eob in merge_join_by(del_word_positions.iter(), add_word_positions.iter(), |d, a| d.cmp(a))
@@ -133,7 +143,10 @@ fn words_position_into_sorter(
         key_buffer.extend_from_slice(word_bytes);
         key_buffer.push(0);
         key_buffer.extend_from_slice(&position.to_be_bytes());
-        word_position_docids_sorter.insert(&key_buffer, value_writer.into_inner().unwrap())?;
+
+        let value_buffer = value_writer.into_inner().unwrap();
+        word_position_docids_raw_kv.push(key_buffer, value_buffer).unwrap();
+        word_position_docids_sorter.insert(&key_buffer, &value_buffer)?;
     }
 
     Ok(())

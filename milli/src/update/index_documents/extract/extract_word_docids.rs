@@ -1,20 +1,28 @@
 use std::collections::{BTreeSet, HashSet};
 use std::fs::File;
 use std::io::{self, BufReader};
+use std::sync::Mutex;
 
 use heed::BytesDecode;
 use obkv::KvReaderU16;
+use once_cell::sync::Lazy;
 
 use super::helpers::{
     create_sorter, create_writer, merge_deladd_cbo_roaring_bitmaps, sorter_into_reader,
     try_split_array_at, writer_into_reader, GrenadParameters,
 };
+use super::RawKVWriter;
 use crate::error::SerializationError;
 use crate::heed_codec::StrBEU16Codec;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
 use crate::update::del_add::{is_noop_del_add_obkv, DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::MergeFn;
 use crate::{DocumentId, FieldId, Result};
+
+static WORD_FID_DOCIDS_RAW_KV: Lazy<Mutex<RawKVWriter>> =
+    Lazy::new(|| Mutex::new(RawKVWriter::new("extract_word_fid_docids").unwrap()));
+static WORD_DOCIDS_RAW_KV: Lazy<Mutex<RawKVWriter>> =
+    Lazy::new(|| Mutex::new(RawKVWriter::new("extract_word_docids").unwrap()));
 
 /// Extracts the word and the documents ids where this word appear.
 ///
@@ -109,6 +117,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         tempfile::tempfile()?,
     );
 
+    let mut word_docids_raw_kv = WORD_DOCIDS_RAW_KV.lock().unwrap();
     let mut iter = word_fid_docids_sorter.into_stream_merger_iter()?;
     // TODO: replace sorters by writers by accumulating values into a buffer before inserting them.
     while let Some((key, value)) = iter.next()? {
@@ -124,9 +133,13 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         if exact_attributes.contains(&fid) {
             exact_word_docids_sorter.insert(word.as_bytes(), value)?;
         } else {
+            word_docids_raw_kv.push(word.as_bytes(), value).unwrap();
             word_docids_sorter.insert(word.as_bytes(), value)?;
         }
     }
+
+    WORD_FID_DOCIDS_RAW_KV.lock().unwrap().flush().unwrap();
+    word_docids_raw_kv.flush().unwrap();
 
     Ok((
         sorter_into_reader(word_docids_sorter, indexer)?,
@@ -145,6 +158,8 @@ fn words_into_sorter(
     word_fid_docids_sorter: &mut grenad::Sorter<MergeFn>,
 ) -> Result<()> {
     puffin::profile_function!();
+
+    let mut raw_kv_word_fid_docids = WORD_FID_DOCIDS_RAW_KV.lock().unwrap();
 
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};
@@ -173,7 +188,9 @@ fn words_into_sorter(
         key_buffer.extend_from_slice(word_bytes);
         key_buffer.push(0);
         key_buffer.extend_from_slice(&fid.to_be_bytes());
-        word_fid_docids_sorter.insert(&key_buffer, value_writer.into_inner().unwrap())?;
+        let value_buffer = value_writer.into_inner().unwrap();
+        raw_kv_word_fid_docids.push(key_buffer, value_buffer).unwrap();
+        word_fid_docids_sorter.insert(&key_buffer, value_buffer)?;
     }
 
     Ok(())

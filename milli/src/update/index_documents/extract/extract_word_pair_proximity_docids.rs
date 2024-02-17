@@ -1,19 +1,25 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::fs::File;
 use std::io::BufReader;
+use std::sync::Mutex;
 use std::{cmp, io};
 
 use obkv::KvReaderU16;
+use once_cell::sync::Lazy;
 
 use super::helpers::{
     create_sorter, create_writer, merge_deladd_cbo_roaring_bitmaps, try_split_array_at,
     writer_into_reader, GrenadParameters, MergeFn,
 };
+use super::RawKVWriter;
 use crate::error::SerializationError;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
 use crate::proximity::{index_proximity, MAX_DISTANCE};
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::{DocumentId, Result};
+
+static WORD_PAIR_PROXIMITY_DOCIDS_RAW_KV: Lazy<Mutex<RawKVWriter>> =
+    Lazy::new(|| Mutex::new(RawKVWriter::new("extract_word_pair_proximity_docids").unwrap()));
 
 /// Extracts the best proximity between pairs of words and the documents ids where this pair appear.
 ///
@@ -153,6 +159,9 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
             &mut word_pair_proximity_docids_sorters,
         )?;
     }
+
+    WORD_PAIR_PROXIMITY_DOCIDS_RAW_KV.lock().unwrap().flush().unwrap();
+
     {
         puffin::profile_scope!("sorter_into_reader");
         // FIXME: span inside of a hot loop might degrade performance and create big reports
@@ -186,6 +195,8 @@ fn document_word_positions_into_sorter(
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};
 
+    let mut word_pair_proximity_docids_raw_kv = WORD_PAIR_PROXIMITY_DOCIDS_RAW_KV.lock().unwrap();
+
     let mut buffer = Vec::new();
     let mut key_buffer = Vec::new();
     for eob in
@@ -217,8 +228,9 @@ fn document_word_positions_into_sorter(
         key_buffer.push(0);
         key_buffer.extend_from_slice(w2.as_bytes());
 
-        word_pair_proximity_docids_sorters[*prox as usize - 1]
-            .insert(&key_buffer, value_writer.into_inner().unwrap())?;
+        let value_buffer = value_writer.into_inner().unwrap();
+        word_pair_proximity_docids_raw_kv.push(&key_buffer, value_buffer).unwrap();
+        word_pair_proximity_docids_sorters[*prox as usize - 1].insert(&key_buffer, value_buffer)?;
     }
 
     Ok(())
