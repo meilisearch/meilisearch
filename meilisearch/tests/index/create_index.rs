@@ -2,9 +2,10 @@ use actix_web::http::header::ContentType;
 use actix_web::test;
 use http::header::ACCEPT_ENCODING;
 use meili_snap::{json_string, snapshot};
+use meilisearch::Opt;
 
 use crate::common::encoder::Encoder;
-use crate::common::{Server, Value};
+use crate::common::{default_settings, Server, Value};
 use crate::json;
 
 #[actix_rt::test]
@@ -202,7 +203,11 @@ async fn error_create_with_invalid_index_uid() {
 
 #[actix_rt::test]
 async fn send_task_id() {
-    let server = Server::new().await;
+    let temp = tempfile::tempdir().unwrap();
+
+    let options = Opt { experimental_ha_parameters: true, ..default_settings(temp.path()) };
+    let server = Server::new_with_options(options).await.unwrap();
+
     let app = server.init_web_app().await;
     let index = server.index("catto");
     let (response, code) = index.create(None).await;

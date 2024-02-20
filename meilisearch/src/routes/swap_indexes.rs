@@ -16,6 +16,7 @@ use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::Opt;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(SeqHandler(swap_indexes))));
@@ -32,6 +33,7 @@ pub async fn swap_indexes(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_SWAP }>, Data<IndexScheduler>>,
     params: AwebJson<Vec<SwapIndexesPayload>, DeserrJsonError>,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = params.into_inner();
@@ -60,7 +62,7 @@ pub async fn swap_indexes(
     }
 
     let task = KindWithContent::IndexSwap { swaps };
-    let uid = get_task_id(&req)?;
+    let uid = get_task_id(&req, &opt)?;
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
     Ok(HttpResponse::Accepted().json(task))

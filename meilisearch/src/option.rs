@@ -52,6 +52,7 @@ const MEILI_IGNORE_DUMP_IF_DB_EXISTS: &str = "MEILI_IGNORE_DUMP_IF_DB_EXISTS";
 const MEILI_DUMP_DIR: &str = "MEILI_DUMP_DIR";
 const MEILI_LOG_LEVEL: &str = "MEILI_LOG_LEVEL";
 const MEILI_EXPERIMENTAL_LOGS_MODE: &str = "MEILI_EXPERIMENTAL_LOGS_MODE";
+const MEILI_EXPERIMENTAL_HA_PARAMETERS: &str = "MEILI_EXPERIMENTAL_HA_PARAMETERS";
 const MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE: &str = "MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE";
 const MEILI_EXPERIMENTAL_ENABLE_METRICS: &str = "MEILI_EXPERIMENTAL_ENABLE_METRICS";
 const MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE: &str =
@@ -358,6 +359,17 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_enable_logs_route: bool,
 
+    /// Enable multiple features that helps you to run meilisearch in a high availability context.
+    /// TODO: TAMO: Update the discussion link
+    /// For more information, see: <https://github.com/orgs/meilisearch/discussions/721>
+    ///
+    /// - /!\ Disable the automatic clean up of old processed tasks, you're in charge of that now
+    /// - Lets you specify a custom task ID upon registering a task
+    /// - Lets you execute dry-register a task (get an answer from the route but nothing is actually registered in meilisearch and it won't be processed)
+    #[clap(long, env = MEILI_EXPERIMENTAL_HA_PARAMETERS)]
+    #[serde(default)]
+    pub experimental_ha_parameters: bool,
+
     /// Experimental RAM reduction during indexing, do not use in production, see: <https://github.com/meilisearch/product/discussions/652>
     #[clap(long, env = MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE)]
     #[serde(default)]
@@ -465,6 +477,7 @@ impl Opt {
             experimental_enable_metrics,
             experimental_logs_mode,
             experimental_enable_logs_route,
+            experimental_ha_parameters,
             experimental_reduce_indexing_memory_usage,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
@@ -524,6 +537,10 @@ impl Opt {
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_LOGS_MODE,
             experimental_logs_mode.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_HA_PARAMETERS,
+            experimental_ha_parameters.to_string(),
         );
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE,
