@@ -23,6 +23,7 @@ use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::Opt;
 
 const DEFAULT_LIMIT: u32 = 20;
 
@@ -161,6 +162,7 @@ async fn cancel_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_CANCEL }>, Data<IndexScheduler>>,
     params: AwebQueryParameter<TaskDeletionOrCancelationQuery, DeserrQueryParamError>,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = params.into_inner();
@@ -197,7 +199,7 @@ async fn cancel_tasks(
     let task_cancelation =
         KindWithContent::TaskCancelation { query: format!("?{}", req.query_string()), tasks };
 
-    let uid = get_task_id(&req)?;
+    let uid = get_task_id(&req, &opt)?;
     let task =
         task::spawn_blocking(move || index_scheduler.register(task_cancelation, uid)).await??;
     let task: SummarizedTaskView = task.into();
@@ -209,6 +211,7 @@ async fn delete_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_DELETE }>, Data<IndexScheduler>>,
     params: AwebQueryParameter<TaskDeletionOrCancelationQuery, DeserrQueryParamError>,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = params.into_inner();
@@ -244,7 +247,7 @@ async fn delete_tasks(
     let task_deletion =
         KindWithContent::TaskDeletion { query: format!("?{}", req.query_string()), tasks };
 
-    let uid = get_task_id(&req)?;
+    let uid = get_task_id(&req, &opt)?;
     let task = task::spawn_blocking(move || index_scheduler.register(task_deletion, uid)).await??;
     let task: SummarizedTaskView = task.into();
 

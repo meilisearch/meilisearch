@@ -38,6 +38,7 @@ use crate::extractors::payload::Payload;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::{get_task_id, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
 use crate::search::parse_filter;
+use crate::Opt;
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
@@ -119,6 +120,7 @@ pub async fn delete_document(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     path: web::Path<DocumentParam>,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let DocumentParam { index_uid, document_id } = path.into_inner();
@@ -130,7 +132,7 @@ pub async fn delete_document(
         index_uid: index_uid.to_string(),
         documents_ids: vec![document_id],
     };
-    let uid = get_task_id(&req)?;
+    let uid = get_task_id(&req, &opt)?;
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
     debug!("returns: {:?}", task);
@@ -268,6 +270,7 @@ pub async fn replace_documents(
     params: AwebQueryParameter<UpdateDocumentsQuery, DeserrQueryParamError>,
     body: Payload,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
@@ -278,7 +281,7 @@ pub async fn replace_documents(
     analytics.add_documents(&params, index_scheduler.index(&index_uid).is_err(), &req);
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
-    let uid = get_task_id(&req)?;
+    let uid = get_task_id(&req, &opt)?;
     let task = document_addition(
         extract_mime_type(&req)?,
         index_scheduler,
@@ -302,6 +305,7 @@ pub async fn update_documents(
     params: AwebQueryParameter<UpdateDocumentsQuery, DeserrQueryParamError>,
     body: Payload,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
@@ -312,7 +316,7 @@ pub async fn update_documents(
     analytics.update_documents(&params, index_scheduler.index(&index_uid).is_err(), &req);
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
-    let uid = get_task_id(&req)?;
+    let uid = get_task_id(&req, &opt)?;
     let task = document_addition(
         extract_mime_type(&req)?,
         index_scheduler,
@@ -472,6 +476,7 @@ pub async fn delete_documents_batch(
     index_uid: web::Path<String>,
     body: web::Json<Vec<Value>>,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Delete documents by batch");
@@ -486,7 +491,7 @@ pub async fn delete_documents_batch(
 
     let task =
         KindWithContent::DocumentDeletion { index_uid: index_uid.to_string(), documents_ids: ids };
-    let uid = get_task_id(&req)?;
+    let uid = get_task_id(&req, &opt)?;
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
 
@@ -506,6 +511,7 @@ pub async fn delete_documents_by_filter(
     index_uid: web::Path<String>,
     body: AwebJson<DocumentDeletionByFilter, DeserrJsonError>,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Delete documents by filter");
@@ -523,7 +529,7 @@ pub async fn delete_documents_by_filter(
     .map_err(|err| ResponseError::from_msg(err.message, Code::InvalidDocumentFilter))?;
     let task = KindWithContent::DocumentDeletionByFilter { index_uid, filter_expr: filter };
 
-    let uid = get_task_id(&req)?;
+    let uid = get_task_id(&req, &opt)?;
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
 
@@ -535,13 +541,14 @@ pub async fn clear_all_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     analytics.delete_documents(DocumentDeletionKind::ClearAll, &req);
 
     let task = KindWithContent::DocumentClear { index_uid: index_uid.to_string() };
-    let uid = get_task_id(&req)?;
+    let uid = get_task_id(&req, &opt)?;
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
 

@@ -15,6 +15,7 @@ use tracing::debug;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
+use crate::Opt;
 
 const PAGINATION_DEFAULT_LIMIT: usize = 20;
 
@@ -45,7 +46,10 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/experimental-features").configure(features::configure));
 }
 
-pub fn get_task_id(req: &HttpRequest) -> Result<Option<TaskId>, ResponseError> {
+pub fn get_task_id(req: &HttpRequest, opt: &Opt) -> Result<Option<TaskId>, ResponseError> {
+    if !opt.experimental_ha_parameters {
+        return Ok(None);
+    }
     let task_id = req
         .headers()
         .get("TaskId")

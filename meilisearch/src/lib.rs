@@ -453,6 +453,7 @@ pub fn configure_data(
         .app_data(auth)
         .app_data(web::Data::from(analytics))
         .app_data(web::Data::new(logs))
+        .app_data(web::Data::new(opt.clone()))
         .app_data(
             web::JsonConfig::default()
                 .limit(http_payload_size_limit)
