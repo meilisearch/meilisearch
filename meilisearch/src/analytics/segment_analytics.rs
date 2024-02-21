@@ -253,7 +253,7 @@ struct Infos {
     env: String,
     experimental_enable_metrics: bool,
     experimental_logs_mode: LogMode,
-    experimental_ha_parameters: bool,
+    experimental_replication_parameters: bool,
     experimental_enable_logs_route: bool,
     experimental_reduce_indexing_memory_usage: bool,
     experimental_max_number_of_batched_tasks: usize,
@@ -292,12 +292,8 @@ impl From<Opt> for Infos {
         let Opt {
             db_path,
             experimental_enable_metrics,
-<<<<<<< HEAD
             experimental_logs_mode,
-||||||| parent of 01ae46dd8 (add an experimental cli parameter to allow specifying your task id)
-=======
-            experimental_ha_parameters,
->>>>>>> 01ae46dd8 (add an experimental cli parameter to allow specifying your task id)
+            experimental_replication_parameters,
             experimental_enable_logs_route,
             experimental_reduce_indexing_memory_usage,
             experimental_max_number_of_batched_tasks,
@@ -345,12 +341,8 @@ impl From<Opt> for Infos {
         Self {
             env,
             experimental_enable_metrics,
-<<<<<<< HEAD
             experimental_logs_mode,
-||||||| parent of 01ae46dd8 (add an experimental cli parameter to allow specifying your task id)
-=======
-            experimental_ha_parameters,
->>>>>>> 01ae46dd8 (add an experimental cli parameter to allow specifying your task id)
+            experimental_replication_parameters,
             experimental_enable_logs_route,
             experimental_reduce_indexing_memory_usage,
             db_path: db_path != PathBuf::from("./data.ms"),

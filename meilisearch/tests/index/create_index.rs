@@ -205,7 +205,8 @@ async fn error_create_with_invalid_index_uid() {
 async fn send_task_id() {
     let temp = tempfile::tempdir().unwrap();
 
-    let options = Opt { experimental_ha_parameters: true, ..default_settings(temp.path()) };
+    let options =
+        Opt { experimental_replication_parameters: true, ..default_settings(temp.path()) };
     let server = Server::new_with_options(options).await.unwrap();
 
     let app = server.init_web_app().await;

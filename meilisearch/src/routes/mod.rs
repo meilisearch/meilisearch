@@ -47,7 +47,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 pub fn get_task_id(req: &HttpRequest, opt: &Opt) -> Result<Option<TaskId>, ResponseError> {
-    if !opt.experimental_ha_parameters {
+    if !opt.experimental_replication_parameters {
         return Ok(None);
     }
     let task_id = req
@@ -78,7 +78,7 @@ pub fn get_task_id(req: &HttpRequest, opt: &Opt) -> Result<Option<TaskId>, Respo
 }
 
 pub fn is_dry_run(req: &HttpRequest, opt: &Opt) -> Result<bool, ResponseError> {
-    if !opt.experimental_ha_parameters {
+    if !opt.experimental_replication_parameters {
         return Ok(false);
     }
     Ok(req
