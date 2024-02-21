@@ -288,7 +288,7 @@ fn open_or_create_database_unchecked(
             enable_mdb_writemap: opt.experimental_reduce_indexing_memory_usage,
             indexer_config: (&opt.indexer_options).try_into()?,
             autobatching_enabled: true,
-            cleanup_enabled: !opt.experimental_ha_parameters,
+            cleanup_enabled: !opt.experimental_replication_parameters,
             max_number_of_tasks: 1_000_000,
             max_number_of_batched_tasks: opt.experimental_max_number_of_batched_tasks,
             index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().get_bytes() as usize,
