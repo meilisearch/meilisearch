@@ -56,7 +56,7 @@ impl FileStore {
         let file = NamedTempFile::new_in(&self.path)?;
         let uuid = Uuid::new_v4();
         let path = self.path.join(uuid.to_string());
-        let update_file = File { file, path };
+        let update_file = File { dry: false, file, path };
 
         Ok((uuid, update_file))
     }
@@ -67,7 +67,7 @@ impl FileStore {
         let file = NamedTempFile::new_in(&self.path)?;
         let uuid = Uuid::from_u128(uuid);
         let path = self.path.join(uuid.to_string());
-        let update_file = File { file, path };
+        let update_file = File { dry: false, file, path };
 
         Ok((uuid, update_file))
     }
@@ -135,13 +135,29 @@ impl FileStore {
 }
 
 pub struct File {
+    dry: bool,
     path: PathBuf,
     file: NamedTempFile,
 }
 
 impl File {
+    pub fn dry_file() -> Result<Self> {
+        #[cfg(target_family = "unix")]
+        let path = PathBuf::from_str("/dev/null").unwrap();
+        #[cfg(target_family = "windows")]
+        let path = PathBuf::from_str("\\Device\\Null").unwrap();
+
+        Ok(Self {
+            dry: true,
+            path: path.clone(),
+            file: tempfile::Builder::new().make(|_| std::fs::File::create(path.clone()))?,
+        })
+    }
+
     pub fn persist(self) -> Result<()> {
-        self.file.persist(&self.path)?;
+        if !self.dry {
+            self.file.persist(&self.path)?;
+        }
         Ok(())
     }
 }

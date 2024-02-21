@@ -11,7 +11,7 @@ use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::{get_task_id, SummarizedTaskView};
+use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::Opt;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -32,8 +32,11 @@ pub async fn create_dump(
         instance_uid: analytics.instance_uid().cloned(),
     };
     let uid = get_task_id(&req, &opt)?;
+    let dry_run = is_dry_run(&req, &opt)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
+            .await??
+            .into();
 
     debug!(returns = ?task, "Create dump");
     Ok(HttpResponse::Accepted().json(task))

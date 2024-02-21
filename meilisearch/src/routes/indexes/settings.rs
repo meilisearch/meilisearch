@@ -15,7 +15,7 @@ use tracing::debug;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
-use crate::routes::{get_task_id, SummarizedTaskView};
+use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::Opt;
 
 #[macro_export]
@@ -36,7 +36,7 @@ macro_rules! make_setting_route {
             use $crate::extractors::authentication::GuardedData;
             use $crate::extractors::sequential_extractor::SeqHandler;
             use $crate::Opt;
-            use $crate::routes::{get_task_id, SummarizedTaskView};
+            use $crate::routes::{is_dry_run, get_task_id, SummarizedTaskView};
 
             pub async fn delete(
                 index_scheduler: GuardedData<
@@ -61,8 +61,9 @@ macro_rules! make_setting_route {
                     allow_index_creation,
                 };
                 let uid = get_task_id(&req, &opt)?;
+                let dry_run = is_dry_run(&req, &opt)?;
                 let task: SummarizedTaskView =
-                    tokio::task::spawn_blocking(move || index_scheduler.register(task, uid))
+                    tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
                         .await??
                         .into();
 
@@ -112,8 +113,9 @@ macro_rules! make_setting_route {
                     allow_index_creation,
                 };
                 let uid = get_task_id(&req, &opt)?;
+                let dry_run = is_dry_run(&req, &opt)?;
                 let task: SummarizedTaskView =
-                    tokio::task::spawn_blocking(move || index_scheduler.register(task, uid))
+                    tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
                         .await??
                         .into();
 
@@ -776,8 +778,11 @@ pub async fn update_all(
         allow_index_creation,
     };
     let uid = get_task_id(&req, &opt)?;
+    let dry_run = is_dry_run(&req, &opt)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
+            .await??
+            .into();
 
     debug!(returns = ?task, "Update all settings");
     Ok(HttpResponse::Accepted().json(task))
@@ -815,8 +820,11 @@ pub async fn delete_all(
         allow_index_creation,
     };
     let uid = get_task_id(&req, &opt)?;
+    let dry_run = is_dry_run(&req, &opt)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
+            .await??
+            .into();
 
     debug!(returns = ?task, "Delete all settings");
     Ok(HttpResponse::Accepted().json(task))

@@ -77,6 +77,25 @@ pub fn get_task_id(req: &HttpRequest, opt: &Opt) -> Result<Option<TaskId>, Respo
     Ok(task_id)
 }
 
+pub fn is_dry_run(req: &HttpRequest, opt: &Opt) -> Result<bool, ResponseError> {
+    if !opt.experimental_ha_parameters {
+        return Ok(false);
+    }
+    Ok(req
+        .headers()
+        .get("DryRun")
+        .map(|header| {
+            header.to_str().map_err(|e| {
+                ResponseError::from_msg(
+                    format!("DryRun is not a valid utf-8 string: {e}"),
+                    Code::BadRequest,
+                )
+            })
+        })
+        .transpose()?
+        .map_or(false, |s| s.to_lowercase() == "true"))
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SummarizedTaskView {
