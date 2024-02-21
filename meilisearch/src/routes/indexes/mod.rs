@@ -22,6 +22,7 @@ use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::routes::is_dry_run;
 use crate::Opt;
 
 pub mod documents;
@@ -140,8 +141,11 @@ pub async fn create_index(
 
         let task = KindWithContent::IndexCreation { index_uid: uid.to_string(), primary_key };
         let uid = get_task_id(&req, &opt)?;
+        let dry_run = is_dry_run(&req, &opt)?;
         let task: SummarizedTaskView =
-            tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
+            tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
+                .await??
+                .into();
         debug!(returns = ?task, "Create index");
 
         Ok(HttpResponse::Accepted().json(task))
@@ -211,8 +215,11 @@ pub async fn update_index(
     };
 
     let uid = get_task_id(&req, &opt)?;
+    let dry_run = is_dry_run(&req, &opt)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
+            .await??
+            .into();
 
     debug!(returns = ?task, "Update index");
     Ok(HttpResponse::Accepted().json(task))
@@ -227,8 +234,11 @@ pub async fn delete_index(
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let task = KindWithContent::IndexDeletion { index_uid: index_uid.into_inner() };
     let uid = get_task_id(&req, &opt)?;
+    let dry_run = is_dry_run(&req, &opt)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
+            .await??
+            .into();
     debug!(returns = ?task, "Delete index");
 
     Ok(HttpResponse::Accepted().json(task))

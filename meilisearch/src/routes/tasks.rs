@@ -18,7 +18,7 @@ use time::macros::format_description;
 use time::{Date, Duration, OffsetDateTime, Time};
 use tokio::task;
 
-use super::{get_task_id, SummarizedTaskView};
+use super::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
@@ -200,8 +200,10 @@ async fn cancel_tasks(
         KindWithContent::TaskCancelation { query: format!("?{}", req.query_string()), tasks };
 
     let uid = get_task_id(&req, &opt)?;
+    let dry_run = is_dry_run(&req, &opt)?;
     let task =
-        task::spawn_blocking(move || index_scheduler.register(task_cancelation, uid)).await??;
+        task::spawn_blocking(move || index_scheduler.register(task_cancelation, uid, dry_run))
+            .await??;
     let task: SummarizedTaskView = task.into();
 
     Ok(HttpResponse::Ok().json(task))
@@ -248,7 +250,9 @@ async fn delete_tasks(
         KindWithContent::TaskDeletion { query: format!("?{}", req.query_string()), tasks };
 
     let uid = get_task_id(&req, &opt)?;
-    let task = task::spawn_blocking(move || index_scheduler.register(task_deletion, uid)).await??;
+    let dry_run = is_dry_run(&req, &opt)?;
+    let task = task::spawn_blocking(move || index_scheduler.register(task_deletion, uid, dry_run))
+        .await??;
     let task: SummarizedTaskView = task.into();
 
     Ok(HttpResponse::Ok().json(task))

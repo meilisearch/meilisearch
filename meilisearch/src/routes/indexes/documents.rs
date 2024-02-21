@@ -36,7 +36,9 @@ use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::payload::Payload;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::{get_task_id, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
+use crate::routes::{
+    get_task_id, is_dry_run, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
+};
 use crate::search::parse_filter;
 use crate::Opt;
 
@@ -133,8 +135,11 @@ pub async fn delete_document(
         documents_ids: vec![document_id],
     };
     let uid = get_task_id(&req, &opt)?;
+    let dry_run = is_dry_run(&req, &opt)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
+            .await??
+            .into();
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
 }
@@ -282,6 +287,7 @@ pub async fn replace_documents(
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
     let uid = get_task_id(&req, &opt)?;
+    let dry_run = is_dry_run(&req, &opt)?;
     let task = document_addition(
         extract_mime_type(&req)?,
         index_scheduler,
@@ -291,6 +297,7 @@ pub async fn replace_documents(
         body,
         IndexDocumentsMethod::ReplaceDocuments,
         uid,
+        dry_run,
         allow_index_creation,
     )
     .await?;
@@ -317,6 +324,7 @@ pub async fn update_documents(
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
     let uid = get_task_id(&req, &opt)?;
+    let dry_run = is_dry_run(&req, &opt)?;
     let task = document_addition(
         extract_mime_type(&req)?,
         index_scheduler,
@@ -326,6 +334,7 @@ pub async fn update_documents(
         body,
         IndexDocumentsMethod::UpdateDocuments,
         uid,
+        dry_run,
         allow_index_creation,
     )
     .await?;
@@ -344,6 +353,7 @@ async fn document_addition(
     mut body: Payload,
     method: IndexDocumentsMethod,
     task_id: Option<TaskId>,
+    dry_run: bool,
     allow_index_creation: bool,
 ) -> Result<SummarizedTaskView, MeilisearchHttpError> {
     let format = match (
@@ -376,7 +386,7 @@ async fn document_addition(
         }
     };
 
-    let (uuid, mut update_file) = index_scheduler.create_update_file()?;
+    let (uuid, mut update_file) = index_scheduler.create_update_file(dry_run)?;
 
     let temp_file = match tempfile() {
         Ok(file) => file,
@@ -460,7 +470,9 @@ async fn document_addition(
     };
 
     let scheduler = index_scheduler.clone();
-    let task = match tokio::task::spawn_blocking(move || scheduler.register(task, task_id)).await? {
+    let task = match tokio::task::spawn_blocking(move || scheduler.register(task, task_id, dry_run))
+        .await?
+    {
         Ok(task) => task,
         Err(e) => {
             index_scheduler.delete_update_file(uuid)?;
@@ -492,8 +504,11 @@ pub async fn delete_documents_batch(
     let task =
         KindWithContent::DocumentDeletion { index_uid: index_uid.to_string(), documents_ids: ids };
     let uid = get_task_id(&req, &opt)?;
+    let dry_run = is_dry_run(&req, &opt)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
+            .await??
+            .into();
 
     debug!(returns = ?task, "Delete documents by batch");
     Ok(HttpResponse::Accepted().json(task))
@@ -530,8 +545,11 @@ pub async fn delete_documents_by_filter(
     let task = KindWithContent::DocumentDeletionByFilter { index_uid, filter_expr: filter };
 
     let uid = get_task_id(&req, &opt)?;
+    let dry_run = is_dry_run(&req, &opt)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
+            .await??
+            .into();
 
     debug!(returns = ?task, "Delete documents by filter");
     Ok(HttpResponse::Accepted().json(task))
@@ -549,8 +567,11 @@ pub async fn clear_all_documents(
 
     let task = KindWithContent::DocumentClear { index_uid: index_uid.to_string() };
     let uid = get_task_id(&req, &opt)?;
+    let dry_run = is_dry_run(&req, &opt)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid)).await??.into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
+            .await??
+            .into();
 
     debug!(returns = ?task, "Delete all documents");
     Ok(HttpResponse::Accepted().json(task))
