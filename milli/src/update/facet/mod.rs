@@ -429,7 +429,8 @@ pub(crate) mod test_helpers {
                 max_group_size: self.max_group_size.get(),
             };
             let key_bytes = BoundCodec::bytes_encode(key).unwrap();
-            update.insert(wtxn, field_id, &key_bytes, docids).unwrap();
+            update.modify(wtxn, field_id, &key_bytes, Some(docids), None).unwrap();
+            update.add_or_delete_level(wtxn, field_id).unwrap();
         }
         pub fn delete_single_docid<'a>(
             &self,
@@ -455,7 +456,8 @@ pub(crate) mod test_helpers {
                 max_group_size: self.max_group_size.get(),
             };
             let key_bytes = BoundCodec::bytes_encode(key).unwrap();
-            update.delete(wtxn, field_id, &key_bytes, docids).unwrap();
+            update.modify(wtxn, field_id, &key_bytes, None, Some(docids)).unwrap();
+            update.add_or_delete_level(wtxn, field_id).unwrap();
         }
 
         pub fn bulk_insert<'a, 'b>(
