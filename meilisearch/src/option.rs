@@ -360,8 +360,7 @@ pub struct Opt {
     pub experimental_enable_logs_route: bool,
 
     /// Enable multiple features that helps you to run meilisearch in a high availability context.
-    /// TODO: TAMO: Update the discussion link
-    /// For more information, see: <https://github.com/orgs/meilisearch/discussions/721>
+    /// For more information, see: <https://github.com/orgs/meilisearch/discussions/725>
     ///
     /// - /!\ Disable the automatic clean up of old processed tasks, you're in charge of that now
     /// - Lets you specify a custom task ID upon registering a task
