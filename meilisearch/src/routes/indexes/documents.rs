@@ -425,11 +425,9 @@ async fn document_addition(
     let read_file = buffer.into_inner().into_std().await;
     let documents_count = tokio::task::spawn_blocking(move || {
         let documents_count = match format {
-            PayloadType::Json => read_json(&read_file, update_file.as_file_mut())?,
-            PayloadType::Csv { delimiter } => {
-                read_csv(&read_file, update_file.as_file_mut(), delimiter)?
-            }
-            PayloadType::Ndjson => read_ndjson(&read_file, update_file.as_file_mut())?,
+            PayloadType::Json => read_json(&read_file, &mut update_file)?,
+            PayloadType::Csv { delimiter } => read_csv(&read_file, &mut update_file, delimiter)?,
+            PayloadType::Ndjson => read_ndjson(&read_file, &mut update_file)?,
         };
         // we NEED to persist the file here because we moved the `udpate_file` in another task.
         update_file.persist()?;
