@@ -1550,7 +1550,7 @@ impl<'a> Dump<'a> {
         let content_uuid = match content_file {
             Some(content_file) if task.status == Status::Enqueued => {
                 let (uuid, mut file) = self.index_scheduler.create_update_file(false)?;
-                let mut builder = DocumentsBatchBuilder::new(file.as_file_mut());
+                let mut builder = DocumentsBatchBuilder::new(&mut file);
                 for doc in content_file {
                     builder.append_json_object(&doc?)?;
                 }
@@ -1734,7 +1734,7 @@ pub struct IndexStats {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{BufWriter, Seek, Write};
+    use std::io::{BufWriter, Write};
     use std::time::Instant;
 
     use big_s::S;
@@ -1882,7 +1882,7 @@ mod tests {
     /// Adapting to the new json reading interface
     pub fn read_json(
         bytes: &[u8],
-        write: impl Write + Seek,
+        write: impl Write,
     ) -> std::result::Result<u64, DocumentFormatError> {
         let temp_file = NamedTempFile::new().unwrap();
         let mut buffer = BufWriter::new(temp_file.reopen().unwrap());
@@ -1909,7 +1909,7 @@ mod tests {
         );
 
         let (_uuid, mut file) = index_scheduler.create_update_file_with_uuid(file_uuid).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         (file, documents_count)
     }
 
@@ -2321,7 +2321,7 @@ mod tests {
         }"#;
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(
@@ -2366,7 +2366,7 @@ mod tests {
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(
@@ -2406,7 +2406,7 @@ mod tests {
         ]"#;
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(
@@ -2472,7 +2472,7 @@ mod tests {
         ]"#;
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(
@@ -2678,7 +2678,7 @@ mod tests {
         }"#;
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(
@@ -2852,7 +2852,7 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(
@@ -2903,7 +2903,7 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(
@@ -2956,7 +2956,7 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(
@@ -3010,7 +3010,7 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(
@@ -3065,7 +3065,7 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(
@@ -3567,7 +3567,7 @@ mod tests {
         }"#;
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(
@@ -3609,7 +3609,7 @@ mod tests {
         }"#;
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(
@@ -3669,7 +3669,7 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(
@@ -3721,7 +3721,7 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(
@@ -3783,7 +3783,7 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(
@@ -3850,7 +3850,7 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(
@@ -3922,7 +3922,7 @@ mod tests {
             let allow_index_creation = i % 2 != 0;
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(
@@ -3979,7 +3979,7 @@ mod tests {
             let allow_index_creation = i % 2 != 0;
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(
@@ -4033,7 +4033,7 @@ mod tests {
             );
             let (uuid, mut file) =
                 index_scheduler.create_update_file_with_uuid(id as u128).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             assert_eq!(documents_count, 1);
             file.persist().unwrap();
 
@@ -4098,7 +4098,7 @@ mod tests {
             );
             let (uuid, mut file) =
                 index_scheduler.create_update_file_with_uuid(id as u128).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             assert_eq!(documents_count, 1);
             file.persist().unwrap();
 
@@ -4159,7 +4159,7 @@ mod tests {
             );
             let (uuid, mut file) =
                 index_scheduler.create_update_file_with_uuid(id as u128).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             assert_eq!(documents_count, 1);
             file.persist().unwrap();
 
@@ -4244,7 +4244,7 @@ mod tests {
             );
             let (uuid, mut file) =
                 index_scheduler.create_update_file_with_uuid(id as u128).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             assert_eq!(documents_count, 1);
             file.persist().unwrap();
 
@@ -4331,7 +4331,7 @@ mod tests {
             );
             let (uuid, mut file) =
                 index_scheduler.create_update_file_with_uuid(id as u128).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             assert_eq!(documents_count, 1);
             file.persist().unwrap();
 
