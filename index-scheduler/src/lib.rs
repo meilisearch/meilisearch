@@ -60,6 +60,7 @@ use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmap
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use puffin::FrameView;
+use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use roaring::RoaringBitmap;
 use synchronoise::SignalEvent;
 use time::format_description::well_known::Rfc3339;
@@ -1175,6 +1176,9 @@ impl IndexScheduler {
                 #[cfg(test)]
                 self.breakpoint(Breakpoint::ProcessBatchSucceeded);
 
+                let mut success = 0;
+                let mut failure = 0;
+
                 #[allow(unused_variables)]
                 for (i, mut task) in tasks.into_iter().enumerate() {
                     task.started_at = Some(started_at);
@@ -1187,13 +1191,15 @@ impl IndexScheduler {
                         },
                     )?;
 
+                    match task.error {
+                        Some(_) => failure += 1,
+                        None => success += 1,
+                    }
+
                     self.update_task(&mut wtxn, &task)
                         .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?;
-                    if let Err(e) = self.delete_persisted_task_data(&task) {
-                        tracing::error!("Failure to delete the content files associated with task {}. Error: {e}", task.uid);
-                    }
                 }
-                tracing::info!("A batch of tasks was successfully completed.");
+                tracing::info!("A batch of tasks was successfully completed with {success} successful tasks and {failure} failed tasks.");
             }
             // If we have an abortion error we must stop the tick here and re-schedule tasks.
             Err(Error::Milli(milli::Error::InternalError(
@@ -1204,6 +1210,7 @@ impl IndexScheduler {
                 self.breakpoint(Breakpoint::AbortedIndexation);
                 wtxn.abort();
 
+                tracing::info!("A batch of tasks was aborted.");
                 // We make sure that we don't call `stop_processing` on the `processing_tasks`,
                 // this is because we want to let the next tick call `create_next_batch` and keep
                 // the `started_at` date times and `processings` of the current processing tasks.
@@ -1225,6 +1232,8 @@ impl IndexScheduler {
                 self.index_mapper.resize_index(&wtxn, &index_uid)?;
                 wtxn.abort();
 
+                tracing::info!("The max database size was reached. Resizing the index.");
+
                 return Ok(TickOutcome::TickAgain(0));
             }
             // In case of a failure we must get back and patch all the tasks with the error.
@@ -1232,9 +1241,9 @@ impl IndexScheduler {
                 #[cfg(test)]
                 self.breakpoint(Breakpoint::ProcessBatchFailed);
                 let error: ResponseError = err.into();
-                for id in ids {
+                for id in ids.iter() {
                     let mut task = self
-                        .get_task(&wtxn, id)
+                        .get_task(&wtxn, *id)
                         .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?
                         .ok_or(Error::CorruptedTaskQueue)?;
                     task.started_at = Some(started_at);
@@ -1246,9 +1255,8 @@ impl IndexScheduler {
                     #[cfg(test)]
                     self.maybe_fail(tests::FailureLocation::UpdatingTaskAfterProcessBatchFailure)?;
 
-                    if let Err(e) = self.delete_persisted_task_data(&task) {
-                        tracing::error!("Failure to delete the content files associated with task {}. Error: {e}", task.uid);
-                    }
+                    tracing::info!("Batch failed {}", error);
+
                     self.update_task(&mut wtxn, &task)
                         .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?;
                 }
@@ -1261,6 +1269,24 @@ impl IndexScheduler {
         self.maybe_fail(tests::FailureLocation::CommittingWtxn)?;
 
         wtxn.commit().map_err(Error::HeedTransaction)?;
+
+        // Once the tasks are commited, we should delete all the update files associated ASAP to avoid leaking files in case of a restart
+        tracing::debug!("Deleting the upadate files");
+
+        ids.into_par_iter().try_for_each(|id| -> Result<()> {
+            let rtxn = self.read_txn()?;
+            let task = self
+                .get_task(&rtxn, id)
+                .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?
+                .ok_or(Error::CorruptedTaskQueue)?;
+            if let Err(e) = self.delete_persisted_task_data(&task) {
+                tracing::error!(
+                    "Failure to delete the content files associated with task {}. Error: {e}",
+                    task.uid
+                );
+            }
+            Ok(())
+        })?;
 
         // We shouldn't crash the tick function if we can't send data to the webhook.
         let _ = self.notify_webhook(&processed);
