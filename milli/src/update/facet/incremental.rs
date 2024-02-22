@@ -201,7 +201,7 @@ impl FacetsUpdateIncrementalInner {
         match (old_value, add_docids, del_docids) {
             // Addition + deletion on an existing value
             (Some(FacetGroupValue { bitmap, .. }), Some(add_docids), Some(del_docids)) => {
-                let value = FacetGroupValue { bitmap: bitmap - del_docids | add_docids, size: 1 };
+                let value = FacetGroupValue { bitmap: (bitmap - del_docids) | add_docids, size: 1 };
                 self.db.put(txn, &key, &value)?;
                 Ok(ModificationResult::InPlace)
             }
@@ -575,7 +575,7 @@ impl FacetsUpdateIncrementalInner {
     fn delete_level(&self, txn: &mut RwTxn, highest_level_prefix: &[u8]) -> Result<()> {
         let mut to_delete = vec![];
         let mut iter =
-            self.db.remap_types::<Bytes, Bytes>().prefix_iter(txn, &highest_level_prefix)?;
+            self.db.remap_types::<Bytes, Bytes>().prefix_iter(txn, highest_level_prefix)?;
         for el in iter.by_ref() {
             let (k, _) = el?;
             to_delete.push(
@@ -603,7 +603,7 @@ impl FacetsUpdateIncrementalInner {
         let mut groups_iter = self
             .db
             .remap_types::<Bytes, FacetGroupValueCodec>()
-            .prefix_iter(txn, &highest_level_prefix)?;
+            .prefix_iter(txn, highest_level_prefix)?;
 
         let nbr_new_groups = size_highest_level / self.group_size as usize;
         let nbr_leftover_elements = size_highest_level % self.group_size as usize;
