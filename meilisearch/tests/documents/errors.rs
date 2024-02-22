@@ -209,7 +209,8 @@ async fn replace_documents_missing_payload() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let (response, code) = index.raw_add_documents("", Some("application/json"), "").await;
+    let (response, code) =
+        index.raw_add_documents("", vec![("Content-Type", "application/json")], "").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -220,7 +221,8 @@ async fn replace_documents_missing_payload() {
     }
     "###);
 
-    let (response, code) = index.raw_add_documents("", Some("application/x-ndjson"), "").await;
+    let (response, code) =
+        index.raw_add_documents("", vec![("Content-Type", "application/x-ndjson")], "").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -231,7 +233,8 @@ async fn replace_documents_missing_payload() {
     }
     "###);
 
-    let (response, code) = index.raw_add_documents("", Some("text/csv"), "").await;
+    let (response, code) =
+        index.raw_add_documents("", vec![("Content-Type", "text/csv")], "").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -287,7 +290,7 @@ async fn replace_documents_missing_content_type() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let (response, code) = index.raw_add_documents("", None, "").await;
+    let (response, code) = index.raw_add_documents("", Vec::new(), "").await;
     snapshot!(code, @"415 Unsupported Media Type");
     snapshot!(json_string!(response), @r###"
     {
@@ -299,7 +302,7 @@ async fn replace_documents_missing_content_type() {
     "###);
 
     // even with a csv delimiter specified this error is triggered first
-    let (response, code) = index.raw_add_documents("", None, "?csvDelimiter=;").await;
+    let (response, code) = index.raw_add_documents("", Vec::new(), "?csvDelimiter=;").await;
     snapshot!(code, @"415 Unsupported Media Type");
     snapshot!(json_string!(response), @r###"
     {
@@ -345,7 +348,7 @@ async fn replace_documents_bad_content_type() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let (response, code) = index.raw_add_documents("", Some("doggo"), "").await;
+    let (response, code) = index.raw_add_documents("", vec![("Content-Type", "doggo")], "").await;
     snapshot!(code, @"415 Unsupported Media Type");
     snapshot!(json_string!(response), @r###"
     {
@@ -379,8 +382,9 @@ async fn replace_documents_bad_csv_delimiter() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let (response, code) =
-        index.raw_add_documents("", Some("application/json"), "?csvDelimiter").await;
+    let (response, code) = index
+        .raw_add_documents("", vec![("Content-Type", "application/json")], "?csvDelimiter")
+        .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -391,8 +395,9 @@ async fn replace_documents_bad_csv_delimiter() {
     }
     "###);
 
-    let (response, code) =
-        index.raw_add_documents("", Some("application/json"), "?csvDelimiter=doggo").await;
+    let (response, code) = index
+        .raw_add_documents("", vec![("Content-Type", "application/json")], "?csvDelimiter=doggo")
+        .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -404,7 +409,11 @@ async fn replace_documents_bad_csv_delimiter() {
     "###);
 
     let (response, code) = index
-        .raw_add_documents("", Some("application/json"), &format!("?csvDelimiter={}", encode("🍰")))
+        .raw_add_documents(
+            "",
+            vec![("Content-Type", "application/json")],
+            &format!("?csvDelimiter={}", encode("🍰")),
+        )
         .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
@@ -469,8 +478,9 @@ async fn replace_documents_csv_delimiter_with_bad_content_type() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let (response, code) =
-        index.raw_add_documents("", Some("application/json"), "?csvDelimiter=a").await;
+    let (response, code) = index
+        .raw_add_documents("", vec![("Content-Type", "application/json")], "?csvDelimiter=a")
+        .await;
     snapshot!(code, @"415 Unsupported Media Type");
     snapshot!(json_string!(response), @r###"
     {
@@ -481,8 +491,9 @@ async fn replace_documents_csv_delimiter_with_bad_content_type() {
     }
     "###);
 
-    let (response, code) =
-        index.raw_add_documents("", Some("application/x-ndjson"), "?csvDelimiter=a").await;
+    let (response, code) = index
+        .raw_add_documents("", vec![("Content-Type", "application/x-ndjson")], "?csvDelimiter=a")
+        .await;
     snapshot!(code, @"415 Unsupported Media Type");
     snapshot!(json_string!(response), @r###"
     {
