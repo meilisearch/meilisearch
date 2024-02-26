@@ -13,6 +13,7 @@ license.workspace = true
 [dependencies]
 tempfile = "3.9.0"
 thiserror = "1.0.56"
+tracing = "0.1.40"
 uuid = { version = "1.6.1", features = ["serde", "v4"] }
 
 [dev-dependencies]
