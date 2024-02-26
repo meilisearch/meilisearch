@@ -261,3 +261,7 @@ impl DistributionShift {
         score
     }
 }
+
+pub const fn is_cuda_enabled() -> bool {
+    cfg!(feature = "cuda")
+}
