@@ -142,22 +142,28 @@ pub(crate) enum IndexOperation {
 
 impl Batch {
     /// Return the task ids associated with this batch.
-    pub fn ids(&self) -> Vec<TaskId> {
+    pub fn ids(&self) -> RoaringBitmap {
         match self {
             Batch::TaskCancelation { task, .. }
             | Batch::Dump(task)
             | Batch::IndexCreation { task, .. }
-            | Batch::IndexUpdate { task, .. } => vec![task.uid],
+            | Batch::IndexUpdate { task, .. } => {
+                RoaringBitmap::from_sorted_iter(std::iter::once(task.uid)).unwrap()
+            }
             Batch::SnapshotCreation(tasks)
             | Batch::TaskDeletions(tasks)
-            | Batch::IndexDeletion { tasks, .. } => tasks.iter().map(|task| task.uid).collect(),
+            | Batch::IndexDeletion { tasks, .. } => {
+                RoaringBitmap::from_iter(tasks.iter().map(|task| task.uid))
+            }
             Batch::IndexOperation { op, .. } => match op {
                 IndexOperation::DocumentOperation { tasks, .. }
                 | IndexOperation::Settings { tasks, .. }
                 | IndexOperation::DocumentClear { tasks, .. } => {
-                    tasks.iter().map(|task| task.uid).collect()
+                    RoaringBitmap::from_iter(tasks.iter().map(|task| task.uid))
                 }
-                IndexOperation::IndexDocumentDeletionByFilter { task, .. } => vec![task.uid],
+                IndexOperation::IndexDocumentDeletionByFilter { task, .. } => {
+                    RoaringBitmap::from_sorted_iter(std::iter::once(task.uid)).unwrap()
+                }
                 IndexOperation::SettingsAndDocumentOperation {
                     document_import_tasks: tasks,
                     settings_tasks: other,
@@ -167,9 +173,11 @@ impl Batch {
                     cleared_tasks: tasks,
                     settings_tasks: other,
                     ..
-                } => tasks.iter().chain(other).map(|task| task.uid).collect(),
+                } => RoaringBitmap::from_iter(tasks.iter().chain(other).map(|task| task.uid)),
             },
-            Batch::IndexSwap { task } => vec![task.uid],
+            Batch::IndexSwap { task } => {
+                RoaringBitmap::from_sorted_iter(std::iter::once(task.uid)).unwrap()
+            }
         }
     }
 
