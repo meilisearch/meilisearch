@@ -68,14 +68,21 @@ get_os() {
 # Gets the C lib the system is using by setting the $c_lib variable.
 # Returns 0 in case of success, 1 otherwise.
 get_C_library(){
-  if ldd --version | grep -i glibc; then
-    c_lib='glibc'
-  elif ldd --version | grep -i eglibc; then
+  if [ "$os" != 'linux' ] ; then
+    return 0
+  fi
+  if ldd --version | grep -qi eglibc; then
     c_lib='eglibc'
-  elif ldd --version | grep -i musl; then
+    return 0
+  elif ldd --version | grep -qi glibc; then
+    c_lib='glibc'
+    return 0
+  elif ldd --version | grep -qi musl; then
     c_library_failure_usage
-  elif ldd --version | grep -i bionic; then
+    return 1
+  elif ldd --version | grep -qi bionic; then
     c_library_failure_usage
+    return 1
   else
     return 1
   fi
@@ -161,6 +168,7 @@ fill_release_variables() {
      # Fill $c_lib variable.
      if ! get_C_library; then
        c_library_failure_usage
+       exit 1
      fi
 
 }
