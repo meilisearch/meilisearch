@@ -1,5 +1,5 @@
 use std::fs::File as StdFile;
-use std::ops::{Deref, DerefMut};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -22,20 +22,6 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-impl Deref for File {
-    type Target = NamedTempFile;
-
-    fn deref(&self) -> &Self::Target {
-        &self.file
-    }
-}
-
-impl DerefMut for File {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.file
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct FileStore {
     path: PathBuf,
@@ -56,7 +42,7 @@ impl FileStore {
         let file = NamedTempFile::new_in(&self.path)?;
         let uuid = Uuid::new_v4();
         let path = self.path.join(uuid.to_string());
-        let update_file = File { file, path };
+        let update_file = File { file: Some(file), path };
 
         Ok((uuid, update_file))
     }
@@ -67,7 +53,7 @@ impl FileStore {
         let file = NamedTempFile::new_in(&self.path)?;
         let uuid = Uuid::from_u128(uuid);
         let path = self.path.join(uuid.to_string());
-        let update_file = File { file, path };
+        let update_file = File { file: Some(file), path };
 
         Ok((uuid, update_file))
     }
@@ -136,13 +122,37 @@ impl FileStore {
 
 pub struct File {
     path: PathBuf,
-    file: NamedTempFile,
+    file: Option<NamedTempFile>,
 }
 
 impl File {
+    pub fn dry_file() -> Result<Self> {
+        Ok(Self { path: PathBuf::new(), file: None })
+    }
+
     pub fn persist(self) -> Result<()> {
-        self.file.persist(&self.path)?;
+        if let Some(file) = self.file {
+            file.persist(&self.path)?;
+        }
         Ok(())
+    }
+}
+
+impl Write for File {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if let Some(file) = self.file.as_mut() {
+            file.write(buf)
+        } else {
+            Ok(buf.len())
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        if let Some(file) = self.file.as_mut() {
+            file.flush()
+        } else {
+            Ok(())
+        }
     }
 }
 
