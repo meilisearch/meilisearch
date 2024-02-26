@@ -22,6 +22,7 @@ use crate::{FieldId, Index, Result};
 /// # Panics
 ///
 /// - if reader.is_empty(), this function may panic in some cases
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::documents")]
 pub fn enrich_documents_batch<R: Read + Seek>(
     rtxn: &heed::RoTxn,
     index: &Index,
@@ -77,7 +78,7 @@ pub fn enrich_documents_batch<R: Read + Seek>(
                 },
                 [] => return Ok(Err(UserError::NoPrimaryKeyCandidateFound)),
                 [(field_id, name)] => {
-                    log::info!("Primary key was not specified in index. Inferred to '{name}'");
+                    tracing::info!("Primary key was not specified in index. Inferred to '{name}'");
                     PrimaryKey::Flat { name, field_id: *field_id }
                 }
                 multiple => {
@@ -143,6 +144,8 @@ pub fn enrich_documents_batch<R: Read + Seek>(
 
 /// Retrieve the document id after validating it, returning a `UserError`
 /// if the id is invalid or can't be guessed.
+#[tracing::instrument(level = "trace", skip(uuid_buffer, documents_batch_index, document)
+target = "indexing::documents")]
 fn fetch_or_generate_document_id(
     document: &obkv::KvReader<FieldId>,
     documents_batch_index: &DocumentsBatchIndex,

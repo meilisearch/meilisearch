@@ -30,19 +30,6 @@ impl RoFeatures {
         self.runtime
     }
 
-    pub fn check_score_details(&self) -> Result<()> {
-        if self.runtime.score_details {
-            Ok(())
-        } else {
-            Err(FeatureNotEnabledError {
-                disabled_action: "Computing score details",
-                feature: "score details",
-                issue_link: "https://github.com/meilisearch/product/discussions/674",
-            }
-            .into())
-        }
-    }
-
     pub fn check_metrics(&self) -> Result<()> {
         if self.runtime.metrics {
             Ok(())
@@ -51,6 +38,19 @@ impl RoFeatures {
                 disabled_action: "Getting metrics",
                 feature: "metrics",
                 issue_link: "https://github.com/meilisearch/product/discussions/625",
+            }
+            .into())
+        }
+    }
+
+    pub fn check_logs_route(&self) -> Result<()> {
+        if self.runtime.logs_route {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action: "getting logs through the `/logs/stream` route",
+                feature: "logs route",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/721",
             }
             .into())
         }
@@ -94,6 +94,7 @@ impl FeatureData {
             runtime_features_db.get(&txn, EXPERIMENTAL_FEATURES)?.unwrap_or_default();
         let runtime = Arc::new(RwLock::new(RuntimeTogglableFeatures {
             metrics: instance_features.metrics || persisted_features.metrics,
+            logs_route: instance_features.logs_route || persisted_features.logs_route,
             ..persisted_features
         }));
 

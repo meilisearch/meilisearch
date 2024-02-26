@@ -310,6 +310,8 @@ TooManyVectors                        , InvalidRequest       , BAD_REQUEST ;
 UnretrievableDocument                 , Internal             , BAD_REQUEST ;
 UnretrievableErrorCode                , InvalidRequest       , BAD_REQUEST ;
 UnsupportedMediaType                  , InvalidRequest       , UNSUPPORTED_MEDIA_TYPE ;
+
+// Experimental features
 VectorEmbeddingError                  , InvalidRequest       , BAD_REQUEST
 }
 
@@ -347,6 +349,9 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidFieldForSource { .. }
                     | UserError::MissingFieldForSource { .. }
                     | UserError::InvalidOpenAiModel { .. }
+                    | UserError::InvalidOpenAiModelDimensions { .. }
+                    | UserError::InvalidOpenAiModelDimensionsMax { .. }
+                    | UserError::InvalidSettingsDimensions { .. }
                     | UserError::InvalidPrompt(_) => Code::InvalidSettingsEmbedders,
                     UserError::TooManyEmbedders(_) => Code::InvalidSettingsEmbedders,
                     UserError::InvalidPromptForEmbeddings(..) => Code::InvalidSettingsEmbedders,

@@ -19,7 +19,7 @@ use crate::{DocumentId, Result};
 ///
 /// Returns a grenad reader with the list of extracted word pairs proximities and
 /// documents ids from the given chunk of docid word positions.
-#[logging_timer::time]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
     docid_word_positions: grenad::Reader<R>,
     indexer: GrenadParameters,
@@ -58,6 +58,10 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
         // if we change document, we fill the sorter
         if current_document_id.map_or(false, |id| id != document_id) {
             puffin::profile_scope!("Document into sorter");
+
+            // FIXME: span inside of a hot loop might degrade performance and create big reports
+            let span = tracing::trace_span!(target: "indexing::details", "document_into_sorter");
+            let _entered = span.enter();
 
             document_word_positions_into_sorter(
                 current_document_id.unwrap(),
@@ -138,6 +142,10 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
 
     if let Some(document_id) = current_document_id {
         puffin::profile_scope!("Final document into sorter");
+        // FIXME: span inside of a hot loop might degrade performance and create big reports
+        let span = tracing::trace_span!(target: "indexing::details", "final_document_into_sorter");
+        let _entered = span.enter();
+
         document_word_positions_into_sorter(
             document_id,
             &del_word_pair_proximity,
@@ -147,6 +155,10 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
     }
     {
         puffin::profile_scope!("sorter_into_reader");
+        // FIXME: span inside of a hot loop might degrade performance and create big reports
+        let span = tracing::trace_span!(target: "indexing::details", "sorter_into_reader");
+        let _entered = span.enter();
+
         let mut writer = create_writer(
             indexer.chunk_compression_type,
             indexer.chunk_compression_level,

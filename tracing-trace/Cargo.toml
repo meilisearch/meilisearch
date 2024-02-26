@@ -1,0 +1,23 @@
+[package]
+name = "tracing-trace"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+color-spantrace = "0.2.1"
+fxprof-processed-profile = "0.6.0"
+serde = { version = "1.0.195", features = ["derive"] }
+serde_json = "1.0.111"
+tracing = "0.1.40"
+tracing-error = "0.2.0"
+tracing-subscriber = "0.3.18"
+byte-unit = { version = "4.0.19", default-features = false, features = [
+    "std",
+    "serde",
+] }
+tokio = { version = "1.35.1", features = ["sync"] }
+
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+libproc = "0.14.2"

@@ -2,7 +2,6 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
 use index_scheduler::IndexScheduler;
-use log::debug;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::facet_values_sort::FacetValuesSort;
@@ -11,11 +10,13 @@ use meilisearch_types::milli::update::Setting;
 use meilisearch_types::settings::{settings, RankingRuleView, Settings, Unchecked};
 use meilisearch_types::tasks::KindWithContent;
 use serde_json::json;
+use tracing::debug;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
-use crate::routes::SummarizedTaskView;
+use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
+use crate::Opt;
 
 #[macro_export]
 macro_rules! make_setting_route {
@@ -24,17 +25,18 @@ macro_rules! make_setting_route {
             use actix_web::web::Data;
             use actix_web::{web, HttpRequest, HttpResponse, Resource};
             use index_scheduler::IndexScheduler;
-            use log::debug;
             use meilisearch_types::error::ResponseError;
             use meilisearch_types::index_uid::IndexUid;
             use meilisearch_types::milli::update::Setting;
             use meilisearch_types::settings::{settings, Settings};
             use meilisearch_types::tasks::KindWithContent;
+            use tracing::debug;
             use $crate::analytics::Analytics;
             use $crate::extractors::authentication::policies::*;
             use $crate::extractors::authentication::GuardedData;
             use $crate::extractors::sequential_extractor::SeqHandler;
-            use $crate::routes::SummarizedTaskView;
+            use $crate::Opt;
+            use $crate::routes::{is_dry_run, get_task_id, SummarizedTaskView};
 
             pub async fn delete(
                 index_scheduler: GuardedData<
@@ -42,6 +44,8 @@ macro_rules! make_setting_route {
                     Data<IndexScheduler>,
                 >,
                 index_uid: web::Path<String>,
+                req: HttpRequest,
+                opt: web::Data<Opt>,
             ) -> Result<HttpResponse, ResponseError> {
                 let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
@@ -56,12 +60,14 @@ macro_rules! make_setting_route {
                     is_deletion: true,
                     allow_index_creation,
                 };
+                let uid = get_task_id(&req, &opt)?;
+                let dry_run = is_dry_run(&req, &opt)?;
                 let task: SummarizedTaskView =
-                    tokio::task::spawn_blocking(move || index_scheduler.register(task))
+                    tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
                         .await??
                         .into();
 
-                debug!("returns: {:?}", task);
+                debug!(returns = ?task, "Delete settings");
                 Ok(HttpResponse::Accepted().json(task))
             }
 
@@ -73,11 +79,13 @@ macro_rules! make_setting_route {
                 index_uid: actix_web::web::Path<String>,
                 body: deserr::actix_web::AwebJson<Option<$type>, $err_ty>,
                 req: HttpRequest,
+                opt: web::Data<Opt>,
                 $analytics_var: web::Data<dyn Analytics>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
                 let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
                 let body = body.into_inner();
+                debug!(parameters = ?body, "Update settings");
 
                 #[allow(clippy::redundant_closure_call)]
                 $analytics(&body, &req);
@@ -104,12 +112,14 @@ macro_rules! make_setting_route {
                     is_deletion: false,
                     allow_index_creation,
                 };
+                let uid = get_task_id(&req, &opt)?;
+                let dry_run = is_dry_run(&req, &opt)?;
                 let task: SummarizedTaskView =
-                    tokio::task::spawn_blocking(move || index_scheduler.register(task))
+                    tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
                         .await??
                         .into();
 
-                debug!("returns: {:?}", task);
+                debug!(returns = ?task, "Update settings");
                 Ok(HttpResponse::Accepted().json(task))
             }
 
@@ -126,7 +136,7 @@ macro_rules! make_setting_route {
                 let rtxn = index.read_txn()?;
                 let settings = settings(&index, &rtxn)?;
 
-                debug!("returns: {:?}", settings);
+                debug!(returns = ?settings, "Update settings");
                 let mut json = serde_json::json!(&settings);
                 let val = json[$camelcase_attr].take();
 
@@ -651,11 +661,13 @@ pub async fn update_all(
     index_uid: web::Path<String>,
     body: AwebJson<Settings<Unchecked>, DeserrJsonError>,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let new_settings = body.into_inner();
+    debug!(parameters = ?new_settings, "Update all settings");
     let new_settings = validate_settings(new_settings, &index_scheduler)?;
 
     analytics.publish(
@@ -765,10 +777,14 @@ pub async fn update_all(
         is_deletion: false,
         allow_index_creation,
     };
+    let uid = get_task_id(&req, &opt)?;
+    let dry_run = is_dry_run(&req, &opt)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
+            .await??
+            .into();
 
-    debug!("returns: {:?}", task);
+    debug!(returns = ?task, "Update all settings");
     Ok(HttpResponse::Accepted().json(task))
 }
 
@@ -781,13 +797,15 @@ pub async fn get_all(
     let index = index_scheduler.index(&index_uid)?;
     let rtxn = index.read_txn()?;
     let new_settings = settings(&index, &rtxn)?;
-    debug!("returns: {:?}", new_settings);
+    debug!(returns = ?new_settings, "Get all settings");
     Ok(HttpResponse::Ok().json(new_settings))
 }
 
 pub async fn delete_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
+    req: HttpRequest,
+    opt: web::Data<Opt>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
@@ -801,10 +819,14 @@ pub async fn delete_all(
         is_deletion: true,
         allow_index_creation,
     };
+    let uid = get_task_id(&req, &opt)?;
+    let dry_run = is_dry_run(&req, &opt)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
+            .await??
+            .into();
 
-    debug!("returns: {:?}", task);
+    debug!(returns = ?task, "Delete all settings");
     Ok(HttpResponse::Accepted().json(task))
 }
 

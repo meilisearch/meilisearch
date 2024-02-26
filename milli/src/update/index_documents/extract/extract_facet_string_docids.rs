@@ -15,7 +15,7 @@ use crate::{FieldId, Result};
 ///
 /// Returns a grenad reader with the list of extracted facet strings and
 /// documents ids from the given chunk of docid facet string positions.
-#[logging_timer::time]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
     docid_fid_facet_string: grenad::Reader<R>,
     indexer: GrenadParameters,

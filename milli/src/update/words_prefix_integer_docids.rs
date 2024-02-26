@@ -4,7 +4,7 @@ use std::str;
 use grenad::CompressionType;
 use heed::types::Bytes;
 use heed::{BytesDecode, BytesEncode, Database};
-use log::debug;
+use tracing::debug;
 
 use crate::error::SerializationError;
 use crate::heed_codec::StrBEU16Codec;
@@ -44,7 +44,12 @@ impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
         }
     }
 
-    #[logging_timer::time("WordPrefixIntegerDocids::{}")]
+    #[tracing::instrument(
+        level = "trace",
+        skip_all,
+        target = "indexing::prefix",
+        name = "words_prefix_integer_docids"
+    )]
     pub fn execute(
         self,
         new_word_integer_docids: grenad::Reader<CursorClonableMmap>,

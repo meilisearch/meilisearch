@@ -23,7 +23,7 @@ use crate::{DocumentId, FieldId, Result};
 ///
 /// The first returned reader is the one for normal word_docids, and the second one is for
 /// exact_word_docids
-#[logging_timer::time]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 pub fn extract_word_docids<R: io::Read + io::Seek>(
     docid_word_positions: grenad::Reader<R>,
     indexer: GrenadParameters,
@@ -135,6 +135,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     ))
 }
 
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 fn words_into_sorter(
     document_id: DocumentId,
     fid: FieldId,

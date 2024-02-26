@@ -441,10 +441,6 @@ fn prepare_search<'t>(
         ScoringStrategy::Skip
     });
 
-    if query.show_ranking_score_details {
-        features.check_score_details()?;
-    }
-
     if let Some(HybridQuery { embedder: Some(embedder), .. }) = &query.hybrid {
         search.embedder_name(embedder);
     }

@@ -14,18 +14,18 @@ default-run = "meilisearch"
 
 [dependencies]
 actix-cors = "0.7.0"
-actix-http = { version = "3.5.1", default-features = false, features = [
+actix-http = { version = "3.6.0", default-features = false, features = [
     "compress-brotli",
     "compress-gzip",
-    "rustls",
+    "rustls-0_21",
 ] }
 actix-utils = "3.0.1"
-actix-web = { version = "4.4.1", default-features = false, features = [
+actix-web = { version = "4.5.1", default-features = false, features = [
     "macros",
     "compress-brotli",
     "compress-gzip",
     "cookies",
-    "rustls",
+    "rustls-0_21",
 ] }
 actix-web-static-files = { git = "https://github.com/kilork/actix-web-static-files.git", rev = "2d3b6160", optional = true }
 anyhow = { version = "1.0.79", features = ["backtrace"] }
@@ -42,7 +42,6 @@ crossbeam-channel = "0.5.11"
 deserr = { version = "0.6.1", features = ["actix-web"] }
 dump = { path = "../dump" }
 either = "1.9.0"
-env_logger = "0.10.1"
 file-store = { path = "../file-store" }
 flate2 = "1.0.28"
 fst = "0.4.7"
@@ -53,9 +52,8 @@ index-scheduler = { path = "../index-scheduler" }
 indexmap = { version = "2.1.0", features = ["serde"] }
 is-terminal = "0.4.10"
 itertools = "0.11.0"
-jsonwebtoken = "8.3.0"
+jsonwebtoken = "9.2.0"
 lazy_static = "1.4.0"
-log = "0.4.20"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 mimalloc = { version = "0.1.39", default-features = false }
@@ -77,7 +75,7 @@ reqwest = { version = "0.11.23", features = [
     "rustls-tls",
     "json",
 ], default-features = false }
-rustls = "0.20.8"
+rustls = "0.21.6"
 rustls-pemfile = "1.0.2"
 segment = { version = "0.2.3", optional = true }
 serde = { version = "1.0.195", features = ["derive"] }
@@ -105,6 +103,10 @@ yaup = "0.2.1"
 serde_urlencoded = "0.7.1"
 termcolor = "1.4.1"
 url = { version = "2.5.0", features = ["serde"] }
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
+tracing-trace = { version = "0.1.0", path = "../tracing-trace" }
+tracing-actix-web = "0.7.9"
 
 [dev-dependencies]
 actix-rt = "2.9.0"

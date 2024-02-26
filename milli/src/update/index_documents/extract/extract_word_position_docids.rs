@@ -18,7 +18,7 @@ use crate::{bucketed_position, DocumentId, Result};
 ///
 /// Returns a grenad reader with the list of extracted words at positions and
 /// documents ids from the given chunk of docid word positions.
-#[logging_timer::time]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 pub fn extract_word_position_docids<R: io::Read + io::Seek>(
     docid_word_positions: grenad::Reader<R>,
     indexer: GrenadParameters,
@@ -94,6 +94,7 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
     Ok(word_position_docids_reader)
 }
 
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 fn words_position_into_sorter(
     document_id: DocumentId,
     key_buffer: &mut Vec<u8>,

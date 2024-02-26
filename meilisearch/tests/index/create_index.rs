@@ -2,9 +2,10 @@ use actix_web::http::header::ContentType;
 use actix_web::test;
 use http::header::ACCEPT_ENCODING;
 use meili_snap::{json_string, snapshot};
+use meilisearch::Opt;
 
 use crate::common::encoder::Encoder;
-use crate::common::{Server, Value};
+use crate::common::{default_settings, Server, Value};
 use crate::json;
 
 #[actix_rt::test]
@@ -196,6 +197,82 @@ async fn error_create_with_invalid_index_uid() {
       "code": "invalid_index_uid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn send_task_id() {
+    let temp = tempfile::tempdir().unwrap();
+
+    let options =
+        Opt { experimental_replication_parameters: true, ..default_settings(temp.path()) };
+    let server = Server::new_with_options(options).await.unwrap();
+
+    let app = server.init_web_app().await;
+    let index = server.index("catto");
+    let (response, code) = index.create(None).await;
+    snapshot!(code, @"202 Accepted");
+    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
+    {
+      "taskUid": 0,
+      "indexUid": "catto",
+      "status": "enqueued",
+      "type": "indexCreation",
+      "enqueuedAt": "[date]"
+    }
+    "###);
+
+    let body = serde_json::to_string(&json!({
+        "uid": "doggo",
+        "primaryKey": None::<&str>,
+    }))
+    .unwrap();
+    let req = test::TestRequest::post()
+        .uri("/indexes")
+        .insert_header(("TaskId", "25"))
+        .insert_header(ContentType::json())
+        .set_payload(body)
+        .to_request();
+
+    let res = test::call_service(&app, req).await;
+    snapshot!(res.status(), @"202 Accepted");
+
+    let bytes = test::read_body(res).await;
+    let response = serde_json::from_slice::<Value>(&bytes).expect("Expecting valid json");
+    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
+    {
+      "taskUid": 25,
+      "indexUid": "doggo",
+      "status": "enqueued",
+      "type": "indexCreation",
+      "enqueuedAt": "[date]"
+    }
+    "###);
+
+    let body = serde_json::to_string(&json!({
+        "uid": "girafo",
+        "primaryKey": None::<&str>,
+    }))
+    .unwrap();
+    let req = test::TestRequest::post()
+        .uri("/indexes")
+        .insert_header(("TaskId", "12"))
+        .insert_header(ContentType::json())
+        .set_payload(body)
+        .to_request();
+
+    let res = test::call_service(&app, req).await;
+    snapshot!(res.status(), @"400 Bad Request");
+
+    let bytes = test::read_body(res).await;
+    let response = serde_json::from_slice::<Value>(&bytes).expect("Expecting valid json");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Received bad task id: 12 should be >= to 26.",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
     }
     "###);
 }

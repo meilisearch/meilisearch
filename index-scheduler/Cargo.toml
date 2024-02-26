@@ -19,7 +19,6 @@ dump = { path = "../dump" }
 enum-iterator = "1.5.0"
 file-store = { path = "../file-store" }
 flate2 = "1.0.28"
-log = "0.4.20"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 page_size = "0.5.0"
@@ -30,7 +29,13 @@ serde_json = { version = "1.0.111", features = ["preserve_order"] }
 synchronoise = "1.0.1"
 tempfile = "3.9.0"
 thiserror = "1.0.56"
-time = { version = "0.3.31", features = ["serde-well-known", "formatting", "parsing", "macros"] }
+time = { version = "0.3.31", features = [
+    "serde-well-known",
+    "formatting",
+    "parsing",
+    "macros",
+] }
+tracing = "0.1.40"
 ureq = "2.9.1"
 uuid = { version = "1.6.1", features = ["serde", "v4"] }
 
@@ -39,4 +44,3 @@ big_s = "1.0.2"
 crossbeam = "0.8.4"
 insta = { version = "1.34.0", features = ["json", "redactions"] }
 meili-snap = { path = "../meili-snap" }
-nelson = { git = "https://github.com/meilisearch/nelson.git", rev = "675f13885548fb415ead8fbb447e9e6d9314000a"}

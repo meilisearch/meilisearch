@@ -1845,9 +1845,9 @@ async fn import_dump_v6_containing_experimental_features() {
     meili_snap::snapshot!(code, @"200 OK");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "scoreDetails": false,
       "vectorStore": false,
       "metrics": false,
+      "logsRoute": false,
       "exportPuffinReports": false
     }
     "###);

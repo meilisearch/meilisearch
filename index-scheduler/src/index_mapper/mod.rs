@@ -3,13 +3,13 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use std::{fs, thread};
 
-use log::error;
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn};
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::{FieldDistribution, Index};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+use tracing::error;
 use uuid::Uuid;
 
 use self::index_map::IndexMap;

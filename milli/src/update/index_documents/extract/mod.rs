@@ -14,8 +14,8 @@ use std::fs::File;
 use std::io::BufReader;
 
 use crossbeam_channel::Sender;
-use log::debug;
 use rayon::prelude::*;
+use tracing::debug;
 
 use self::extract_docid_word_positions::extract_docid_word_positions;
 use self::extract_facet_number_docids::extract_facet_number_docids;
@@ -41,6 +41,7 @@ use crate::{FieldId, FieldsIdsMap, Result};
 /// Extract data for each databases from obkv documents in parallel.
 /// Send data in grenad file over provided Sender.
 #[allow(clippy::too_many_arguments)]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 pub(crate) fn data_from_obkv_documents(
     original_obkv_chunks: impl Iterator<Item = Result<grenad::Reader<BufReader<File>>>> + Send,
     flattened_obkv_chunks: impl Iterator<Item = Result<grenad::Reader<BufReader<File>>>> + Send,
@@ -113,7 +114,7 @@ pub(crate) fn data_from_obkv_documents(
     {
         let lmdb_writer_sx = lmdb_writer_sx.clone();
         rayon::spawn(move || {
-            debug!("merge {} database", "facet-id-exists-docids");
+            debug!(database = "facet-id-exists-docids", "merge");
             match facet_exists_docids_chunks.merge(merge_deladd_cbo_roaring_bitmaps, &indexer) {
                 Ok(reader) => {
                     let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetExistsDocids(reader)));
@@ -129,7 +130,7 @@ pub(crate) fn data_from_obkv_documents(
     {
         let lmdb_writer_sx = lmdb_writer_sx.clone();
         rayon::spawn(move || {
-            debug!("merge {} database", "facet-id-is-null-docids");
+            debug!(database = "facet-id-is-null-docids", "merge");
             match facet_is_null_docids_chunks.merge(merge_deladd_cbo_roaring_bitmaps, &indexer) {
                 Ok(reader) => {
                     let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetIsNullDocids(reader)));
@@ -145,7 +146,7 @@ pub(crate) fn data_from_obkv_documents(
     {
         let lmdb_writer_sx = lmdb_writer_sx.clone();
         rayon::spawn(move || {
-            debug!("merge {} database", "facet-id-is-empty-docids");
+            debug!(database = "facet-id-is-empty-docids", "merge");
             match facet_is_empty_docids_chunks.merge(merge_deladd_cbo_roaring_bitmaps, &indexer) {
                 Ok(reader) => {
                     let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetIsEmptyDocids(reader)));
@@ -257,13 +258,22 @@ fn spawn_extraction_task<FE, FS, M>(
     M: MergeableReader + FromParallelIterator<M::Output> + Send + 'static,
     M::Output: Send,
 {
+    let current_span = tracing::Span::current();
+
     rayon::spawn(move || {
-        puffin::profile_scope!("extract_multiple_chunks", name);
+        let child_span =
+            tracing::trace_span!(target: "", parent: &current_span, "extract_multiple_chunks");
+        let _entered = child_span.enter();
+        puffin::profile_scope!("extract_multiple_chunksdexing::details, ", name);
         let chunks: Result<M> =
             chunks.into_par_iter().map(|chunk| extract_fn(chunk, indexer)).collect();
+        let current_span = tracing::Span::current();
+
         rayon::spawn(move || match chunks {
             Ok(chunks) => {
-                debug!("merge {} database", name);
+                let child_span = tracing::trace_span!(target: "", parent: &current_span, "merge_multiple_chunks");
+                let _entered = child_span.enter();
+                debug!(database = name, "merge");
                 puffin::profile_scope!("merge_multiple_chunks", name);
                 let reader = chunks.merge(merge_fn, &indexer);
                 let _ = lmdb_writer_sx.send(reader.map(serialize_fn));

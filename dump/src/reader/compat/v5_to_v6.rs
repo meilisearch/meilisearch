@@ -304,7 +304,7 @@ impl From<v5::ResponseError> for v6::ResponseError {
             "immutable_field" => v6::Code::BadRequest,
             "api_key_already_exists" => v6::Code::ApiKeyAlreadyExists,
             other => {
-                log::warn!("Unknown error code {}", other);
+                tracing::warn!("Unknown error code {}", other);
                 v6::Code::UnretrievableErrorCode
             }
         };
@@ -329,7 +329,7 @@ impl<T> From<v5::Settings<T>> for v6::Settings<v6::Unchecked> {
                                     new_ranking_rules.push(new_rule);
                                 }
                                 Err(_) => {
-                                    log::warn!("Error while importing settings. The ranking rule `{rule}` does not exist anymore.")
+                                    tracing::warn!("Error while importing settings. The ranking rule `{rule}` does not exist anymore.")
                                 }
                             }
                         }

@@ -3,18 +3,19 @@ use std::collections::BTreeMap;
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
-use log::debug;
 use meilisearch_auth::AuthController;
-use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::tasks::{Kind, Status, Task, TaskId};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
+use tracing::debug;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
+use crate::Opt;
 
 const PAGINATION_DEFAULT_LIMIT: usize = 20;
 
@@ -22,6 +23,7 @@ mod api_key;
 mod dump;
 pub mod features;
 pub mod indexes;
+mod logs;
 mod metrics;
 mod multi_search;
 mod snapshot;
@@ -31,6 +33,7 @@ pub mod tasks;
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::scope("/tasks").configure(tasks::configure))
         .service(web::resource("/health").route(web::get().to(get_health)))
+        .service(web::scope("/logs").configure(logs::configure))
         .service(web::scope("/keys").configure(api_key::configure))
         .service(web::scope("/dumps").configure(dump::configure))
         .service(web::scope("/snapshots").configure(snapshot::configure))
@@ -41,6 +44,56 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/swap-indexes").configure(swap_indexes::configure))
         .service(web::scope("/metrics").configure(metrics::configure))
         .service(web::scope("/experimental-features").configure(features::configure));
+}
+
+pub fn get_task_id(req: &HttpRequest, opt: &Opt) -> Result<Option<TaskId>, ResponseError> {
+    if !opt.experimental_replication_parameters {
+        return Ok(None);
+    }
+    let task_id = req
+        .headers()
+        .get("TaskId")
+        .map(|header| {
+            header.to_str().map_err(|e| {
+                ResponseError::from_msg(
+                    format!("TaskId is not a valid utf-8 string: {e}"),
+                    Code::BadRequest,
+                )
+            })
+        })
+        .transpose()?
+        .map(|s| {
+            s.parse::<TaskId>().map_err(|e| {
+                ResponseError::from_msg(
+                    format!(
+                        "Could not parse the TaskId as a {}: {e}",
+                        std::any::type_name::<TaskId>(),
+                    ),
+                    Code::BadRequest,
+                )
+            })
+        })
+        .transpose()?;
+    Ok(task_id)
+}
+
+pub fn is_dry_run(req: &HttpRequest, opt: &Opt) -> Result<bool, ResponseError> {
+    if !opt.experimental_replication_parameters {
+        return Ok(false);
+    }
+    Ok(req
+        .headers()
+        .get("DryRun")
+        .map(|header| {
+            header.to_str().map_err(|e| {
+                ResponseError::from_msg(
+                    format!("DryRun is not a valid utf-8 string: {e}"),
+                    Code::BadRequest,
+                )
+            })
+        })
+        .transpose()?
+        .map_or(false, |s| s.to_lowercase() == "true"))
 }
 
 #[derive(Debug, Serialize)]
@@ -250,7 +303,7 @@ async fn get_stats(
 
     let stats = create_all_stats((*index_scheduler).clone(), (*auth_controller).clone(), filters)?;
 
-    debug!("returns: {:?}", stats);
+    debug!(returns = ?stats, "Get stats");
     Ok(HttpResponse::Ok().json(stats))
 }
 
