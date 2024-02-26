@@ -426,6 +426,9 @@ fn import_dump(
         let reader = BufReader::new(file);
         let reader = DocumentsBatchReader::from_reader(reader)?;
 
+        let embedder_configs = index.embedding_configs(&wtxn)?;
+        let embedders = index_scheduler.embedders(embedder_configs)?;
+
         let builder = milli::update::IndexDocuments::new(
             &mut wtxn,
             &index,
@@ -437,6 +440,8 @@ fn import_dump(
             |indexing_step| tracing::trace!("update: {:?}", indexing_step),
             || false,
         )?;
+
+        let builder = builder.with_embedders(embedders);
 
         let (builder, user_result) = builder.add_documents(reader)?;
         let user_result = user_result?;
