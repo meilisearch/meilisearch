@@ -18,11 +18,12 @@ use time::macros::format_description;
 use time::{Date, Duration, OffsetDateTime, Time};
 use tokio::task;
 
-use super::SummarizedTaskView;
+use super::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::Opt;
 
 const DEFAULT_LIMIT: u32 = 20;
 
@@ -161,6 +162,7 @@ async fn cancel_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_CANCEL }>, Data<IndexScheduler>>,
     params: AwebQueryParameter<TaskDeletionOrCancelationQuery, DeserrQueryParamError>,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = params.into_inner();
@@ -197,7 +199,11 @@ async fn cancel_tasks(
     let task_cancelation =
         KindWithContent::TaskCancelation { query: format!("?{}", req.query_string()), tasks };
 
-    let task = task::spawn_blocking(move || index_scheduler.register(task_cancelation)).await??;
+    let uid = get_task_id(&req, &opt)?;
+    let dry_run = is_dry_run(&req, &opt)?;
+    let task =
+        task::spawn_blocking(move || index_scheduler.register(task_cancelation, uid, dry_run))
+            .await??;
     let task: SummarizedTaskView = task.into();
 
     Ok(HttpResponse::Ok().json(task))
@@ -207,6 +213,7 @@ async fn delete_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_DELETE }>, Data<IndexScheduler>>,
     params: AwebQueryParameter<TaskDeletionOrCancelationQuery, DeserrQueryParamError>,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = params.into_inner();
@@ -242,7 +249,10 @@ async fn delete_tasks(
     let task_deletion =
         KindWithContent::TaskDeletion { query: format!("?{}", req.query_string()), tasks };
 
-    let task = task::spawn_blocking(move || index_scheduler.register(task_deletion)).await??;
+    let uid = get_task_id(&req, &opt)?;
+    let dry_run = is_dry_run(&req, &opt)?;
+    let task = task::spawn_blocking(move || index_scheduler.register(task_deletion, uid, dry_run))
+        .await??;
     let task: SummarizedTaskView = task.into();
 
     Ok(HttpResponse::Ok().json(task))

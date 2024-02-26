@@ -100,16 +100,11 @@ impl Index<'_> {
     pub async fn raw_add_documents(
         &self,
         payload: &str,
-        content_type: Option<&str>,
+        headers: Vec<(&str, &str)>,
         query_parameter: &str,
     ) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/documents{}", urlencode(self.uid.as_ref()), query_parameter);
-
-        if let Some(content_type) = content_type {
-            self.service.post_str(url, payload, vec![("Content-Type", content_type)]).await
-        } else {
-            self.service.post_str(url, payload, Vec::new()).await
-        }
+        self.service.post_str(url, payload, headers).await
     }
 
     pub async fn update_documents(
