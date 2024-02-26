@@ -210,8 +210,7 @@ fn run_extraction_task<FE, FS, M>(
     let current_span = tracing::Span::current();
 
     rayon::spawn(move || {
-        let child_span =
-            tracing::trace_span!(target: "", parent: &current_span, "extract_multiple_chunks");
+        let child_span = tracing::trace_span!(target: "indexing::extract::details", parent: &current_span, "extract_multiple_chunks");
         let _entered = child_span.enter();
         puffin::profile_scope!("extract_multiple_chunks", name);
         match extract_fn(chunk, indexer) {
