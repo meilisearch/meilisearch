@@ -12,11 +12,11 @@ license.workspace = true
 
 [dependencies]
 anyhow = "1.0.79"
+build-info = { version = "1.7.0", path = "../build-info" }
 cargo_metadata = "0.18.1"
 clap = { version = "4.4.14", features = ["derive"] }
 futures-core = "0.3.30"
 futures-util = "0.3.30"
-git2 = { version = "0.16", default_features = false }
 reqwest = { version = "0.11.23", features = [
     "stream",
     "json",
@@ -26,7 +26,11 @@ serde = { version = "1.0.195", features = ["derive"] }
 serde_json = "1.0.111"
 sha2 = "0.10.8"
 sysinfo = "0.30.5"
-time = { version = "0.3.32", features = ["serde", "serde-human-readable"] }
+time = { version = "0.3.32", features = [
+    "serde",
+    "serde-human-readable",
+    "macros",
+] }
 tokio = { version = "1.35.1", features = [
     "rt",
     "net",
@@ -38,3 +42,6 @@ tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 tracing-trace = { version = "0.1.0", path = "../tracing-trace" }
 uuid = { version = "1.7.0", features = ["v7", "serde"] }
+
+[build-dependencies]
+anyhow = "1.0.79"

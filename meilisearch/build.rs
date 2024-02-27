@@ -1,17 +1,4 @@
-use vergen::{vergen, Config, SemverKind};
-
 fn main() {
-    // Note: any code that needs VERGEN_ environment variables should take care to define them manually in the Dockerfile and pass them
-    // in the corresponding GitHub workflow (publish_docker.yml).
-    // This is due to the Dockerfile building the binary outside of the git directory.
-    let mut config = Config::default();
-    // allow using non-annotated tags
-    *config.git_mut().semver_kind_mut() = SemverKind::Lightweight;
-
-    if let Err(e) = vergen(config) {
-        println!("cargo:warning=vergen: {}", e);
-    }
-
     #[cfg(feature = "mini-dashboard")]
     mini_dashboard::setup_mini_dashboard().expect("Could not load the mini-dashboard assets");
 }

@@ -473,7 +473,9 @@ impl Segment {
             create_all_stats(index_scheduler.into(), auth_controller.into(), &AuthFilter::default())
         {
             // Replace the version number with the prototype name if any.
-            let version = if let Some(prototype) = crate::prototype_name() {
+            let version = if let Some(prototype) = build_info::DescribeResult::from_build()
+                .and_then(|describe| describe.as_prototype())
+            {
                 prototype
             } else {
                 env!("CARGO_PKG_VERSION")

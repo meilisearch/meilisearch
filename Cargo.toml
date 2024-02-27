@@ -17,7 +17,7 @@ members = [
     "benchmarks",
     "fuzzers",
     "tracing-trace",
-    "xtask",
+    "xtask", "build-info",
 ]
 
 [workspace.package]

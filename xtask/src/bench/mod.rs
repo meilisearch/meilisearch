@@ -292,8 +292,7 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
         args.log_filter.parse().context("invalid --log-filter")?;
 
     let env = env_info::Environment::generate_from_current_config();
-    let (source, commit_date) =
-        env_info::Source::from_repo(".").context("could not get repository information")?;
+    let build_info = build_info::BuildInfo::from_build();
 
     let subscriber = tracing_subscriber::registry().with(
         tracing_subscriber::fmt::layer()
@@ -344,17 +343,18 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
             );
         }
 
-        let commit_message = source.commit_msg.split('\n').next().unwrap();
+        let commit_message = build_info.commit_msg.context("missing commit message")?.split('\n').next().unwrap();
         let max_workloads = args.workload_file.len();
         let reason: Option<&str> = args.reason.as_deref();
         let response = dashboard_client
             .put("invocation")
             .json(&json!({
                 "commit": {
-                    "sha1": source.commit_id,
+                    "sha1": build_info.commit_sha1,
                     "message": commit_message,
-                    "commit_date": commit_date,
-                    "branch": source.branch_or_tag
+                    "commit_date": build_info.commit_timestamp,
+                    "branch": build_info.branch,
+                    "tag": build_info.describe.and_then(|describe| describe.as_tag()),
                 },
                 "machine_hostname": env.hostname,
                 "max_workloads": max_workloads,
