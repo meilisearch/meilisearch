@@ -1395,7 +1395,9 @@ impl IndexScheduler {
 
             // let reader = GzEncoder::new(BufReader::new(task_reader), Compression::default());
             let reader = GzEncoder::new(BufReader::new(task_reader), Compression::default());
-            let request = ureq::post(url).set("Content-Encoding", "gzip");
+            let request = ureq::post(url)
+                .set("Content-Encoding", "gzip")
+                .set("Content-Type", "application/x-ndjson");
             let request = match &self.webhook_authorization_header {
                 Some(header) => request.set("Authorization", header),
                 None => request,

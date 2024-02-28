@@ -7,7 +7,7 @@ use std::sync::Arc;
 use actix_http::body::MessageBody;
 use actix_web::dev::{ServiceFactory, ServiceResponse};
 use actix_web::web::{Bytes, Data};
-use actix_web::{post, App, HttpResponse, HttpServer};
+use actix_web::{post, App, HttpRequest, HttpResponse, HttpServer};
 use meili_snap::{json_string, snapshot};
 use meilisearch::Opt;
 use tokio::sync::mpsc;
@@ -17,7 +17,17 @@ use crate::common::{default_settings, Server};
 use crate::json;
 
 #[post("/")]
-async fn forward_body(sender: Data<mpsc::UnboundedSender<Vec<u8>>>, body: Bytes) -> HttpResponse {
+async fn forward_body(
+    req: HttpRequest,
+    sender: Data<mpsc::UnboundedSender<Vec<u8>>>,
+    body: Bytes,
+) -> HttpResponse {
+    let headers = req.headers();
+    assert_eq!(headers.get("content-type").unwrap(), "application/x-ndjson");
+    assert_eq!(headers.get("transfer-encoding").unwrap(), "chunked");
+    assert_eq!(headers.get("accept-encoding").unwrap(), "gzip");
+    assert_eq!(headers.get("content-encoding").unwrap(), "gzip");
+
     let body = body.to_vec();
     sender.send(body).unwrap();
     HttpResponse::Ok().into()
