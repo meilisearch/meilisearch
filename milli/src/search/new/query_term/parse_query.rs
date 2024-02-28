@@ -1,7 +1,11 @@
+use std::collections::BTreeSet;
+
 use charabia::normalizer::NormalizedTokenIter;
 use charabia::{SeparatorKind, TokenKind};
 
-use super::*;
+use super::compute_derivations::partially_initialized_term_from_word;
+use super::{LocatedQueryTerm, ZeroTypoTerm};
+use crate::search::new::query_term::{Lazy, Phrase, QueryTerm};
 use crate::{Result, SearchContext, MAX_WORD_LENGTH};
 
 /// Convert the tokenised search query into a list of located query terms.
@@ -225,7 +229,7 @@ pub fn make_ngram(
 }
 
 struct PhraseBuilder {
-    words: Vec<Option<Interned<String>>>,
+    words: Vec<Option<crate::search::new::Interned<String>>>,
     start: u16,
     end: u16,
 }

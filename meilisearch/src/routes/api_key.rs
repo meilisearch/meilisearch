@@ -10,7 +10,7 @@ use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{Code, ResponseError};
-use meilisearch_types::keys::{Action, CreateApiKey, Key, PatchApiKey};
+use meilisearch_types::keys::{CreateApiKey, Key, PatchApiKey};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;

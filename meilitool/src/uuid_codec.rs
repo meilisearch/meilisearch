@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::convert::TryInto;
 
 use meilisearch_types::heed::{BoxedError, BytesDecode, BytesEncode};
 use uuid::Uuid;
