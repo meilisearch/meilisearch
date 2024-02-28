@@ -1,4 +1,4 @@
-use meili_snap::snapshot;
+use meili_snap::{json_string, snapshot};
 
 use crate::common::encoder::Encoder;
 use crate::common::{GetAllDocumentsOptions, Server};
@@ -208,4 +208,94 @@ async fn error_update_documents_missing_document_id() {
         response["error"]["link"],
         "https://docs.meilisearch.com/errors#missing_document_id"
     );
+}
+
+#[actix_rt::test]
+async fn update_faceted_document() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index
+        .update_settings(json!({
+            "rankingRules": ["facet:asc"],
+        }))
+        .await;
+    assert_eq!("202", code.as_str(), "{:?}", response);
+    index.wait_task(0).await;
+
+    let documents: Vec<_> = (0..1000)
+        .map(|id| {
+            json!({
+                "doc_id": id,
+                "facet": (id/3),
+            })
+        })
+        .collect();
+
+    let (_response, code) = index.add_documents(documents.into(), None).await;
+    assert_eq!(code, 202);
+
+    index.wait_task(1).await;
+
+    let documents = json!([
+        {
+            "doc_id": 9,
+            "facet": 1.5,
+        }
+    ]);
+
+    let (response, code) = index.update_documents(documents, None).await;
+    assert_eq!(code, 202, "response: {}", response);
+
+    index.wait_task(2).await;
+
+    index
+        .search(json!({"limit": 10}), |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "doc_id": 0,
+                "facet": 0
+              },
+              {
+                "doc_id": 1,
+                "facet": 0
+              },
+              {
+                "doc_id": 2,
+                "facet": 0
+              },
+              {
+                "doc_id": 3,
+                "facet": 1
+              },
+              {
+                "doc_id": 4,
+                "facet": 1
+              },
+              {
+                "doc_id": 5,
+                "facet": 1
+              },
+              {
+                "doc_id": 9,
+                "facet": 1.5
+              },
+              {
+                "doc_id": 6,
+                "facet": 2
+              },
+              {
+                "doc_id": 7,
+                "facet": 2
+              },
+              {
+                "doc_id": 8,
+                "facet": 2
+              }
+            ]
+            "###);
+        })
+        .await;
 }
