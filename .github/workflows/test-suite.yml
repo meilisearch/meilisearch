@@ -31,16 +31,9 @@ jobs:
           apt-get update && apt-get install -y curl
           apt-get install build-essential -y
       - name: Setup test with Rust stable
-        if: github.event_name != 'schedule'
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-          override: true
-      - name: Setup test with Rust nightly
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
           override: true
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.7.1
