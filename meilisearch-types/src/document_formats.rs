@@ -1,6 +1,6 @@
 use std::fmt::{self, Debug, Display};
 use std::fs::File;
-use std::io::{self, Seek, Write};
+use std::io::{self, BufWriter, Write};
 use std::marker::PhantomData;
 
 use memmap2::MmapOptions;
@@ -104,8 +104,8 @@ impl ErrorCode for DocumentFormatError {
 }
 
 /// Reads CSV from input and write an obkv batch to writer.
-pub fn read_csv(file: &File, writer: impl Write + Seek, delimiter: u8) -> Result<u64> {
-    let mut builder = DocumentsBatchBuilder::new(writer);
+pub fn read_csv(file: &File, writer: impl Write, delimiter: u8) -> Result<u64> {
+    let mut builder = DocumentsBatchBuilder::new(BufWriter::new(writer));
     let mmap = unsafe { MmapOptions::new().map(file)? };
     let csv = csv::ReaderBuilder::new().delimiter(delimiter).from_reader(mmap.as_ref());
     builder.append_csv(csv).map_err(|e| (PayloadType::Csv { delimiter }, e))?;
@@ -116,9 +116,9 @@ pub fn read_csv(file: &File, writer: impl Write + Seek, delimiter: u8) -> Result
     Ok(count as u64)
 }
 
-/// Reads JSON from temporary file  and write an obkv batch to writer.
-pub fn read_json(file: &File, writer: impl Write + Seek) -> Result<u64> {
-    let mut builder = DocumentsBatchBuilder::new(writer);
+/// Reads JSON from temporary file and write an obkv batch to writer.
+pub fn read_json(file: &File, writer: impl Write) -> Result<u64> {
+    let mut builder = DocumentsBatchBuilder::new(BufWriter::new(writer));
     let mmap = unsafe { MmapOptions::new().map(file)? };
     let mut deserializer = serde_json::Deserializer::from_slice(&mmap);
 
@@ -151,8 +151,8 @@ pub fn read_json(file: &File, writer: impl Write + Seek) -> Result<u64> {
 }
 
 /// Reads JSON from temporary file  and write an obkv batch to writer.
-pub fn read_ndjson(file: &File, writer: impl Write + Seek) -> Result<u64> {
-    let mut builder = DocumentsBatchBuilder::new(writer);
+pub fn read_ndjson(file: &File, writer: impl Write) -> Result<u64> {
+    let mut builder = DocumentsBatchBuilder::new(BufWriter::new(writer));
     let mmap = unsafe { MmapOptions::new().map(file)? };
 
     for result in serde_json::Deserializer::from_slice(&mmap).into_iter() {

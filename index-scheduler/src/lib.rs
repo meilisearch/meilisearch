@@ -264,6 +264,9 @@ pub struct IndexSchedulerOptions {
     /// Set to `true` iff the index scheduler is allowed to automatically
     /// batch tasks together, to process multiple tasks at once.
     pub autobatching_enabled: bool,
+    /// Set to `true` iff the index scheduler is allowed to automatically
+    /// delete the finished tasks when there are too many tasks.
+    pub cleanup_enabled: bool,
     /// The maximum number of tasks stored in the task queue before starting
     /// to auto schedule task deletions.
     pub max_number_of_tasks: usize,
@@ -326,6 +329,9 @@ pub struct IndexScheduler {
 
     /// Whether auto-batching is enabled or not.
     pub(crate) autobatching_enabled: bool,
+
+    /// Whether we should automatically cleanup the task queue or not.
+    pub(crate) cleanup_enabled: bool,
 
     /// The max number of tasks allowed before the scheduler starts to delete
     /// the finished tasks automatically.
@@ -393,6 +399,7 @@ impl IndexScheduler {
             index_mapper: self.index_mapper.clone(),
             wake_up: self.wake_up.clone(),
             autobatching_enabled: self.autobatching_enabled,
+            cleanup_enabled: self.cleanup_enabled,
             max_number_of_tasks: self.max_number_of_tasks,
             max_number_of_batched_tasks: self.max_number_of_batched_tasks,
             puffin_frame: self.puffin_frame.clone(),
@@ -494,6 +501,7 @@ impl IndexScheduler {
             wake_up: Arc::new(SignalEvent::auto(true)),
             puffin_frame: Arc::new(puffin::GlobalFrameView::default()),
             autobatching_enabled: options.autobatching_enabled,
+            cleanup_enabled: options.cleanup_enabled,
             max_number_of_tasks: options.max_number_of_tasks,
             max_number_of_batched_tasks: options.max_number_of_batched_tasks,
             dumps_path: options.dumps_path,
@@ -996,7 +1004,12 @@ impl IndexScheduler {
     /// Register a new task in the scheduler.
     ///
     /// If it fails and data was associated with the task, it tries to delete the associated data.
-    pub fn register(&self, kind: KindWithContent) -> Result<Task> {
+    pub fn register(
+        &self,
+        kind: KindWithContent,
+        task_id: Option<TaskId>,
+        dry_run: bool,
+    ) -> Result<Task> {
         let mut wtxn = self.env.write_txn()?;
 
         // if the task doesn't delete anything and 50% of the task queue is full, we must refuse to enqueue the incomming task
@@ -1006,8 +1019,16 @@ impl IndexScheduler {
             return Err(Error::NoSpaceLeftInTaskQueue);
         }
 
+        let next_task_id = self.next_task_id(&wtxn)?;
+
+        if let Some(uid) = task_id {
+            if uid < next_task_id {
+                return Err(Error::BadTaskId { received: uid, expected: next_task_id });
+            }
+        }
+
         let mut task = Task {
-            uid: self.next_task_id(&wtxn)?,
+            uid: task_id.unwrap_or(next_task_id),
             enqueued_at: OffsetDateTime::now_utc(),
             started_at: None,
             finished_at: None,
@@ -1023,6 +1044,11 @@ impl IndexScheduler {
         // If the register task is an index swap task, verify that it is well-formed
         // (that it does not contain duplicate indexes).
         check_index_swap_validity(&task)?;
+
+        // At this point the task is going to be registered and no further checks will be done
+        if dry_run {
+            return Ok(task);
+        }
 
         // Get rid of the mutability.
         let task = task;
@@ -1088,8 +1114,12 @@ impl IndexScheduler {
     /// The returned file and uuid can be used to associate
     /// some data to a task. The file will be kept until
     /// the task has been fully processed.
-    pub fn create_update_file(&self) -> Result<(Uuid, file_store::File)> {
-        Ok(self.file_store.new_update()?)
+    pub fn create_update_file(&self, dry_run: bool) -> Result<(Uuid, file_store::File)> {
+        if dry_run {
+            Ok((Uuid::nil(), file_store::File::dry_file()?))
+        } else {
+            Ok(self.file_store.new_update()?)
+        }
     }
 
     #[cfg(test)]
@@ -1129,7 +1159,9 @@ impl IndexScheduler {
             self.breakpoint(Breakpoint::Start);
         }
 
-        self.cleanup_task_queue()?;
+        if self.cleanup_enabled {
+            self.cleanup_task_queue()?;
+        }
 
         let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
         let batch =
@@ -1389,13 +1421,17 @@ impl IndexScheduler {
         // increase time by one nanosecond so that the enqueuedAt of the last task to delete is also lower than that date.
         let delete_before = last_task_to_delete.enqueued_at + Duration::from_nanos(1);
 
-        self.register(KindWithContent::TaskDeletion {
-            query: format!(
-                "?beforeEnqueuedAt={}&statuses=succeeded,failed,canceled",
-                delete_before.format(&Rfc3339).map_err(|_| Error::CorruptedTaskQueue)?,
-            ),
-            tasks: to_delete,
-        })?;
+        self.register(
+            KindWithContent::TaskDeletion {
+                query: format!(
+                    "?beforeEnqueuedAt={}&statuses=succeeded,failed,canceled",
+                    delete_before.format(&Rfc3339).map_err(|_| Error::CorruptedTaskQueue)?,
+                ),
+                tasks: to_delete,
+            },
+            None,
+            false,
+        )?;
 
         Ok(())
     }
@@ -1516,8 +1552,8 @@ impl<'a> Dump<'a> {
     ) -> Result<Task> {
         let content_uuid = match content_file {
             Some(content_file) if task.status == Status::Enqueued => {
-                let (uuid, mut file) = self.index_scheduler.create_update_file()?;
-                let mut builder = DocumentsBatchBuilder::new(file.as_file_mut());
+                let (uuid, mut file) = self.index_scheduler.create_update_file(false)?;
+                let mut builder = DocumentsBatchBuilder::new(&mut file);
                 for doc in content_file {
                     builder.append_json_object(&doc?)?;
                 }
@@ -1701,7 +1737,7 @@ pub struct IndexStats {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{BufWriter, Seek, Write};
+    use std::io::{BufWriter, Write};
     use std::time::Instant;
 
     use big_s::S;
@@ -1773,6 +1809,7 @@ mod tests {
                 index_count: 5,
                 indexer_config,
                 autobatching_enabled: true,
+                cleanup_enabled: true,
                 max_number_of_tasks: 1_000_000,
                 max_number_of_batched_tasks: usize::MAX,
                 instance_features: Default::default(),
@@ -1848,7 +1885,7 @@ mod tests {
     /// Adapting to the new json reading interface
     pub fn read_json(
         bytes: &[u8],
-        write: impl Write + Seek,
+        write: impl Write,
     ) -> std::result::Result<u64, DocumentFormatError> {
         let temp_file = NamedTempFile::new().unwrap();
         let mut buffer = BufWriter::new(temp_file.reopen().unwrap());
@@ -1875,7 +1912,7 @@ mod tests {
         );
 
         let (_uuid, mut file) = index_scheduler.create_update_file_with_uuid(file_uuid).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         (file, documents_count)
     }
 
@@ -2019,7 +2056,7 @@ mod tests {
 
         for (idx, kind) in kinds.into_iter().enumerate() {
             let k = kind.as_kind();
-            let task = index_scheduler.register(kind).unwrap();
+            let task = index_scheduler.register(kind, None, false).unwrap();
             index_scheduler.assert_internally_consistent();
 
             assert_eq!(task.uid, idx as u32);
@@ -2034,18 +2071,18 @@ mod tests {
     fn insert_task_while_another_task_is_processing() {
         let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
-        index_scheduler.register(index_creation_task("index_a", "id")).unwrap();
+        index_scheduler.register(index_creation_task("index_a", "id"), None, false).unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
         handle.advance_till([Start, BatchCreated]);
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_batch_creation");
 
         // while the task is processing can we register another task?
-        index_scheduler.register(index_creation_task("index_b", "id")).unwrap();
+        index_scheduler.register(index_creation_task("index_b", "id"), None, false).unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
 
         index_scheduler
-            .register(KindWithContent::IndexDeletion { index_uid: S("index_a") })
+            .register(KindWithContent::IndexDeletion { index_uid: S("index_a") }, None, false)
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_third_task");
     }
@@ -2054,7 +2091,7 @@ mod tests {
     fn test_task_is_processing() {
         let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
-        index_scheduler.register(index_creation_task("index_a", "id")).unwrap();
+        index_scheduler.register(index_creation_task("index_a", "id"), None, false).unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_a_task");
 
         handle.advance_till([Start, BatchCreated]);
@@ -2068,17 +2105,25 @@ mod tests {
         let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         index_scheduler
-            .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
+            .register(
+                KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None },
+                None,
+                false,
+            )
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
         index_scheduler
-            .register(KindWithContent::IndexCreation { index_uid: S("cattos"), primary_key: None })
+            .register(
+                KindWithContent::IndexCreation { index_uid: S("cattos"), primary_key: None },
+                None,
+                false,
+            )
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
 
         index_scheduler
-            .register(KindWithContent::IndexDeletion { index_uid: S("doggos") })
+            .register(KindWithContent::IndexDeletion { index_uid: S("doggos") }, None, false)
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_third_task");
 
@@ -2097,22 +2142,26 @@ mod tests {
         let (index_scheduler, mut handle) = IndexScheduler::test(false, vec![]);
 
         index_scheduler
-            .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
+            .register(
+                KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None },
+                None,
+                false,
+            )
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
         index_scheduler
-            .register(KindWithContent::DocumentClear { index_uid: S("doggos") })
+            .register(KindWithContent::DocumentClear { index_uid: S("doggos") }, None, false)
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
 
         index_scheduler
-            .register(KindWithContent::DocumentClear { index_uid: S("doggos") })
+            .register(KindWithContent::DocumentClear { index_uid: S("doggos") }, None, false)
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_third_task");
 
         index_scheduler
-            .register(KindWithContent::DocumentClear { index_uid: S("doggos") })
+            .register(KindWithContent::DocumentClear { index_uid: S("doggos") }, None, false)
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_fourth_task");
 
@@ -2145,7 +2194,7 @@ mod tests {
         ];
 
         for task in to_enqueue {
-            let _ = index_scheduler.register(task).unwrap();
+            let _ = index_scheduler.register(task, None, false).unwrap();
             index_scheduler.assert_internally_consistent();
         }
 
@@ -2154,10 +2203,14 @@ mod tests {
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_enqueued");
 
         index_scheduler
-            .register(KindWithContent::TaskDeletion {
-                query: "test_query".to_owned(),
-                tasks: RoaringBitmap::from_iter([0, 1]),
-            })
+            .register(
+                KindWithContent::TaskDeletion {
+                    query: "test_query".to_owned(),
+                    tasks: RoaringBitmap::from_iter([0, 1]),
+                },
+                None,
+                false,
+            )
             .unwrap();
         // again, no progress made at all, but one more task is registered
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "task_deletion_enqueued");
@@ -2191,7 +2244,7 @@ mod tests {
         ];
 
         for task in to_enqueue {
-            let _ = index_scheduler.register(task).unwrap();
+            let _ = index_scheduler.register(task, None, false).unwrap();
             index_scheduler.assert_internally_consistent();
         }
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_enqueued");
@@ -2202,10 +2255,14 @@ mod tests {
 
         // Now we delete the first task
         index_scheduler
-            .register(KindWithContent::TaskDeletion {
-                query: "test_query".to_owned(),
-                tasks: RoaringBitmap::from_iter([0]),
-            })
+            .register(
+                KindWithContent::TaskDeletion {
+                    query: "test_query".to_owned(),
+                    tasks: RoaringBitmap::from_iter([0]),
+                },
+                None,
+                false,
+            )
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_the_task_deletion");
 
@@ -2228,7 +2285,7 @@ mod tests {
         ];
 
         for task in to_enqueue {
-            let _ = index_scheduler.register(task).unwrap();
+            let _ = index_scheduler.register(task, None, false).unwrap();
             index_scheduler.assert_internally_consistent();
         }
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_enqueued");
@@ -2240,10 +2297,14 @@ mod tests {
         // Now we delete the first task multiple times in a row
         for _ in 0..2 {
             index_scheduler
-                .register(KindWithContent::TaskDeletion {
-                    query: "test_query".to_owned(),
-                    tasks: RoaringBitmap::from_iter([0]),
-                })
+                .register(
+                    KindWithContent::TaskDeletion {
+                        query: "test_query".to_owned(),
+                        tasks: RoaringBitmap::from_iter([0]),
+                    },
+                    None,
+                    false,
+                )
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
@@ -2263,17 +2324,21 @@ mod tests {
         }"#;
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
-            .register(KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: Some(S("id")),
-                method: ReplaceDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: true,
-            })
+            .register(
+                KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_register");
 
@@ -2295,27 +2360,35 @@ mod tests {
         }"#;
 
         index_scheduler
-            .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
+            .register(
+                KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None },
+                None,
+                false,
+            )
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
-            .register(KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: Some(S("id")),
-                method: ReplaceDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: true,
-            })
+            .register(
+                KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
 
         index_scheduler
-            .register(KindWithContent::IndexDeletion { index_uid: S("doggos") })
+            .register(KindWithContent::IndexDeletion { index_uid: S("doggos") }, None, false)
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_third_task");
 
@@ -2336,24 +2409,32 @@ mod tests {
         ]"#;
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
-            .register(KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: Some(S("id")),
-                method: ReplaceDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: true,
-            })
+            .register(
+                KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
         index_scheduler
-            .register(KindWithContent::DocumentDeletion {
-                index_uid: S("doggos"),
-                documents_ids: vec![S("1"), S("2")],
-            })
+            .register(
+                KindWithContent::DocumentDeletion {
+                    index_uid: S("doggos"),
+                    documents_ids: vec![S("1"), S("2")],
+                },
+                None,
+                false,
+            )
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
 
@@ -2376,10 +2457,14 @@ mod tests {
     fn document_deletion_and_document_addition() {
         let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
         index_scheduler
-            .register(KindWithContent::DocumentDeletion {
-                index_uid: S("doggos"),
-                documents_ids: vec![S("1"), S("2")],
-            })
+            .register(
+                KindWithContent::DocumentDeletion {
+                    index_uid: S("doggos"),
+                    documents_ids: vec![S("1"), S("2")],
+                },
+                None,
+                false,
+            )
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
@@ -2390,17 +2475,21 @@ mod tests {
         ]"#;
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
-            .register(KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: Some(S("id")),
-                method: ReplaceDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: true,
-            })
+            .register(
+                KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
 
@@ -2431,17 +2520,25 @@ mod tests {
 
         for name in index_names {
             index_scheduler
-                .register(KindWithContent::IndexCreation {
-                    index_uid: name.to_string(),
-                    primary_key: None,
-                })
+                .register(
+                    KindWithContent::IndexCreation {
+                        index_uid: name.to_string(),
+                        primary_key: None,
+                    },
+                    None,
+                    false,
+                )
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
 
         for name in index_names {
             index_scheduler
-                .register(KindWithContent::DocumentClear { index_uid: name.to_string() })
+                .register(
+                    KindWithContent::DocumentClear { index_uid: name.to_string() },
+                    None,
+                    false,
+                )
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
@@ -2466,7 +2563,7 @@ mod tests {
         ];
 
         for task in to_enqueue {
-            let _ = index_scheduler.register(task).unwrap();
+            let _ = index_scheduler.register(task, None, false).unwrap();
             index_scheduler.assert_internally_consistent();
         }
 
@@ -2480,18 +2577,26 @@ mod tests {
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "create_d");
 
         index_scheduler
-            .register(KindWithContent::IndexSwap {
-                swaps: vec![
-                    IndexSwap { indexes: ("a".to_owned(), "b".to_owned()) },
-                    IndexSwap { indexes: ("c".to_owned(), "d".to_owned()) },
-                ],
-            })
+            .register(
+                KindWithContent::IndexSwap {
+                    swaps: vec![
+                        IndexSwap { indexes: ("a".to_owned(), "b".to_owned()) },
+                        IndexSwap { indexes: ("c".to_owned(), "d".to_owned()) },
+                    ],
+                },
+                None,
+                false,
+            )
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "first_swap_registered");
         index_scheduler
-            .register(KindWithContent::IndexSwap {
-                swaps: vec![IndexSwap { indexes: ("a".to_owned(), "c".to_owned()) }],
-            })
+            .register(
+                KindWithContent::IndexSwap {
+                    swaps: vec![IndexSwap { indexes: ("a".to_owned(), "c".to_owned()) }],
+                },
+                None,
+                false,
+            )
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "two_swaps_registered");
 
@@ -2501,7 +2606,9 @@ mod tests {
         handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_swap_processed");
 
-        index_scheduler.register(KindWithContent::IndexSwap { swaps: vec![] }).unwrap();
+        index_scheduler
+            .register(KindWithContent::IndexSwap { swaps: vec![] }, None, false)
+            .unwrap();
         handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "third_empty_swap_processed");
     }
@@ -2518,7 +2625,7 @@ mod tests {
         ];
 
         for task in to_enqueue {
-            let _ = index_scheduler.register(task).unwrap();
+            let _ = index_scheduler.register(task, None, false).unwrap();
             index_scheduler.assert_internally_consistent();
         }
         handle.advance_n_successful_batches(4);
@@ -2528,12 +2635,16 @@ mod tests {
         snapshot!(first_snap, name: "initial_tasks_processed");
 
         let err = index_scheduler
-            .register(KindWithContent::IndexSwap {
-                swaps: vec![
-                    IndexSwap { indexes: ("a".to_owned(), "b".to_owned()) },
-                    IndexSwap { indexes: ("b".to_owned(), "a".to_owned()) },
-                ],
-            })
+            .register(
+                KindWithContent::IndexSwap {
+                    swaps: vec![
+                        IndexSwap { indexes: ("a".to_owned(), "b".to_owned()) },
+                        IndexSwap { indexes: ("b".to_owned(), "a".to_owned()) },
+                    ],
+                },
+                None,
+                false,
+            )
             .unwrap_err();
         snapshot!(format!("{err}"), @"Indexes must be declared only once during a swap. `a`, `b` were specified several times.");
 
@@ -2542,13 +2653,17 @@ mod tests {
 
         // Index `e` does not exist, but we don't check its existence yet
         index_scheduler
-            .register(KindWithContent::IndexSwap {
-                swaps: vec![
-                    IndexSwap { indexes: ("a".to_owned(), "b".to_owned()) },
-                    IndexSwap { indexes: ("c".to_owned(), "e".to_owned()) },
-                    IndexSwap { indexes: ("d".to_owned(), "f".to_owned()) },
-                ],
-            })
+            .register(
+                KindWithContent::IndexSwap {
+                    swaps: vec![
+                        IndexSwap { indexes: ("a".to_owned(), "b".to_owned()) },
+                        IndexSwap { indexes: ("c".to_owned(), "e".to_owned()) },
+                        IndexSwap { indexes: ("d".to_owned(), "f".to_owned()) },
+                    ],
+                },
+                None,
+                false,
+            )
             .unwrap();
         handle.advance_one_failed_batch();
         // Now the first swap should have an error message saying `e` and `f` do not exist
@@ -2566,20 +2681,24 @@ mod tests {
         }"#;
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
-            .register(KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: Some(S("id")),
-                method: ReplaceDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: true,
-            })
+            .register(
+                KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
             .unwrap();
         index_scheduler
-            .register(KindWithContent::IndexDeletion { index_uid: S("doggos") })
+            .register(KindWithContent::IndexDeletion { index_uid: S("doggos") }, None, false)
             .unwrap();
 
         snapshot!(snapshot_index_scheduler(&index_scheduler));
@@ -2604,7 +2723,7 @@ mod tests {
             },
         ];
         for task in to_enqueue {
-            let _ = index_scheduler.register(task).unwrap();
+            let _ = index_scheduler.register(task, None, false).unwrap();
             index_scheduler.assert_internally_consistent();
         }
 
@@ -2621,7 +2740,7 @@ mod tests {
         file0.persist().unwrap();
 
         let _ = index_scheduler
-            .register(replace_document_import_task("catto", None, 0, documents_count0))
+            .register(replace_document_import_task("catto", None, 0, documents_count0), None, false)
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
@@ -2629,10 +2748,14 @@ mod tests {
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_task_processed");
 
         index_scheduler
-            .register(KindWithContent::TaskCancelation {
-                query: "test_query".to_owned(),
-                tasks: RoaringBitmap::from_iter([0]),
-            })
+            .register(
+                KindWithContent::TaskCancelation {
+                    query: "test_query".to_owned(),
+                    tasks: RoaringBitmap::from_iter([0]),
+                },
+                None,
+                false,
+            )
             .unwrap();
 
         handle.advance_one_successful_batch();
@@ -2647,7 +2770,7 @@ mod tests {
         file0.persist().unwrap();
 
         let _ = index_scheduler
-            .register(replace_document_import_task("catto", None, 0, documents_count0))
+            .register(replace_document_import_task("catto", None, 0, documents_count0), None, false)
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
@@ -2655,10 +2778,14 @@ mod tests {
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_task_processing");
 
         index_scheduler
-            .register(KindWithContent::TaskCancelation {
-                query: "test_query".to_owned(),
-                tasks: RoaringBitmap::from_iter([0]),
-            })
+            .register(
+                KindWithContent::TaskCancelation {
+                    query: "test_query".to_owned(),
+                    tasks: RoaringBitmap::from_iter([0]),
+                },
+                None,
+                false,
+            )
             .unwrap();
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "cancel_task_registered");
@@ -2688,7 +2815,7 @@ mod tests {
             replace_document_import_task("wolfo", None, 2, documents_count2),
         ];
         for task in to_enqueue {
-            let _ = index_scheduler.register(task).unwrap();
+            let _ = index_scheduler.register(task, None, false).unwrap();
             index_scheduler.assert_internally_consistent();
         }
         handle.advance_one_successful_batch();
@@ -2696,10 +2823,14 @@ mod tests {
 
         handle.advance_till([Start, BatchCreated, InsideProcessBatch]);
         index_scheduler
-            .register(KindWithContent::TaskCancelation {
-                query: "test_query".to_owned(),
-                tasks: RoaringBitmap::from_iter([0, 1, 2]),
-            })
+            .register(
+                KindWithContent::TaskCancelation {
+                    query: "test_query".to_owned(),
+                    tasks: RoaringBitmap::from_iter([0, 1, 2]),
+                },
+                None,
+                false,
+            )
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "processing_second_task_cancel_enqueued");
 
@@ -2724,17 +2855,21 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
-                .register(KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                })
+                .register(
+                    KindWithContent::DocumentAdditionOrUpdate {
+                        index_uid: S("doggos"),
+                        primary_key: Some(S("id")),
+                        method: ReplaceDocuments,
+                        content_file: uuid,
+                        documents_count,
+                        allow_index_creation: true,
+                    },
+                    None,
+                    false,
+                )
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
@@ -2771,17 +2906,21 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
-                .register(KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: UpdateDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                })
+                .register(
+                    KindWithContent::DocumentAdditionOrUpdate {
+                        index_uid: S("doggos"),
+                        primary_key: Some(S("id")),
+                        method: UpdateDocuments,
+                        content_file: uuid,
+                        documents_count,
+                        allow_index_creation: true,
+                    },
+                    None,
+                    false,
+                )
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
@@ -2820,17 +2959,21 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
-                .register(KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                })
+                .register(
+                    KindWithContent::DocumentAdditionOrUpdate {
+                        index_uid: S("doggos"),
+                        primary_key: Some(S("id")),
+                        method,
+                        content_file: uuid,
+                        documents_count,
+                        allow_index_creation: true,
+                    },
+                    None,
+                    false,
+                )
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
@@ -2870,17 +3013,21 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
-                .register(KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                })
+                .register(
+                    KindWithContent::DocumentAdditionOrUpdate {
+                        index_uid: S("doggos"),
+                        primary_key: Some(S("id")),
+                        method: ReplaceDocuments,
+                        content_file: uuid,
+                        documents_count,
+                        allow_index_creation: true,
+                    },
+                    None,
+                    false,
+                )
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
@@ -2921,17 +3068,21 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
-                .register(KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: UpdateDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                })
+                .register(
+                    KindWithContent::DocumentAdditionOrUpdate {
+                        index_uid: S("doggos"),
+                        primary_key: Some(S("id")),
+                        method: UpdateDocuments,
+                        content_file: uuid,
+                        documents_count,
+                        allow_index_creation: true,
+                    },
+                    None,
+                    false,
+                )
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
@@ -2976,13 +3127,13 @@ mod tests {
         let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         let kind = index_creation_task("doggo", "bone");
-        let _task = index_scheduler.register(kind).unwrap();
+        let _task = index_scheduler.register(kind, None, false).unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
         let kind = index_creation_task("whalo", "plankton");
-        let _task = index_scheduler.register(kind).unwrap();
+        let _task = index_scheduler.register(kind, None, false).unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
         let kind = index_creation_task("catto", "his_own_vomit");
-        let _task = index_scheduler.register(kind).unwrap();
+        let _task = index_scheduler.register(kind, None, false).unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_third_task");
 
         handle.advance_n_successful_batches(3);
@@ -3040,11 +3191,11 @@ mod tests {
             IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
 
         let kind = index_creation_task("catto", "mouse");
-        let _task = index_scheduler.register(kind).unwrap();
+        let _task = index_scheduler.register(kind, None, false).unwrap();
         let kind = index_creation_task("doggo", "sheep");
-        let _task = index_scheduler.register(kind).unwrap();
+        let _task = index_scheduler.register(kind, None, false).unwrap();
         let kind = index_creation_task("whalo", "fish");
-        let _task = index_scheduler.register(kind).unwrap();
+        let _task = index_scheduler.register(kind, None, false).unwrap();
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
 
@@ -3263,17 +3414,17 @@ mod tests {
             IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
 
         let kind = index_creation_task("catto", "mouse");
-        let _task = index_scheduler.register(kind).unwrap();
+        let _task = index_scheduler.register(kind, None, false).unwrap();
         let kind = index_creation_task("doggo", "sheep");
-        let _task = index_scheduler.register(kind).unwrap();
+        let _task = index_scheduler.register(kind, None, false).unwrap();
         let kind = KindWithContent::IndexSwap {
             swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "doggo".to_owned()) }],
         };
-        let _task = index_scheduler.register(kind).unwrap();
+        let _task = index_scheduler.register(kind, None, false).unwrap();
         let kind = KindWithContent::IndexSwap {
             swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "whalo".to_owned()) }],
         };
-        let _task = index_scheduler.register(kind).unwrap();
+        let _task = index_scheduler.register(kind, None, false).unwrap();
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
 
@@ -3349,20 +3500,20 @@ mod tests {
             IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
 
         let kind = index_creation_task("catto", "mouse");
-        let _ = index_scheduler.register(kind).unwrap();
+        let _ = index_scheduler.register(kind, None, false).unwrap();
         let kind = index_creation_task("doggo", "sheep");
-        let _ = index_scheduler.register(kind).unwrap();
+        let _ = index_scheduler.register(kind, None, false).unwrap();
         let kind = KindWithContent::IndexSwap {
             swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "doggo".to_owned()) }],
         };
-        let _task = index_scheduler.register(kind).unwrap();
+        let _task = index_scheduler.register(kind, None, false).unwrap();
 
         handle.advance_n_successful_batches(1);
         let kind = KindWithContent::TaskCancelation {
             query: "test_query".to_string(),
             tasks: [0, 1, 2, 3].into_iter().collect(),
         };
-        let task_cancelation = index_scheduler.register(kind).unwrap();
+        let task_cancelation = index_scheduler.register(kind, None, false).unwrap();
         handle.advance_n_successful_batches(1);
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
@@ -3397,7 +3548,7 @@ mod tests {
 
         let kind = index_creation_task("catto", "mouse");
 
-        let _task = index_scheduler.register(kind).unwrap();
+        let _task = index_scheduler.register(kind, None, false).unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_register");
 
         handle.advance_one_failed_batch();
@@ -3419,17 +3570,21 @@ mod tests {
         }"#;
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
-            .register(KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: Some(S("id")),
-                method: ReplaceDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: true,
-            })
+            .register(
+                KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
         handle.advance_till([Start, BatchCreated]);
@@ -3457,17 +3612,21 @@ mod tests {
         }"#;
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
-            .register(KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: Some(S("id")),
-                method: ReplaceDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: true,
-            })
+            .register(
+                KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
@@ -3513,17 +3672,21 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
-                .register(KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: false,
-                })
+                .register(
+                    KindWithContent::DocumentAdditionOrUpdate {
+                        index_uid: S("doggos"),
+                        primary_key: Some(S("id")),
+                        method: ReplaceDocuments,
+                        content_file: uuid,
+                        documents_count,
+                        allow_index_creation: false,
+                    },
+                    None,
+                    false,
+                )
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
@@ -3561,17 +3724,21 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
-                .register(KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: false,
-                })
+                .register(
+                    KindWithContent::DocumentAdditionOrUpdate {
+                        index_uid: S("doggos"),
+                        primary_key: Some(S("id")),
+                        method: ReplaceDocuments,
+                        content_file: uuid,
+                        documents_count,
+                        allow_index_creation: false,
+                    },
+                    None,
+                    false,
+                )
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
@@ -3599,7 +3766,11 @@ mod tests {
 
         // Create the index.
         index_scheduler
-            .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
+            .register(
+                KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None },
+                None,
+                false,
+            )
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
         handle.advance_one_successful_batch();
@@ -3615,17 +3786,21 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
-                .register(KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: false,
-                })
+                .register(
+                    KindWithContent::DocumentAdditionOrUpdate {
+                        index_uid: S("doggos"),
+                        primary_key: Some(S("id")),
+                        method: ReplaceDocuments,
+                        content_file: uuid,
+                        documents_count,
+                        allow_index_creation: false,
+                    },
+                    None,
+                    false,
+                )
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
@@ -3658,7 +3833,11 @@ mod tests {
 
         // Create the index.
         index_scheduler
-            .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
+            .register(
+                KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None },
+                None,
+                false,
+            )
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
         handle.advance_one_successful_batch();
@@ -3674,17 +3853,21 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
-                .register(KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: false,
-                })
+                .register(
+                    KindWithContent::DocumentAdditionOrUpdate {
+                        index_uid: S("doggos"),
+                        primary_key: Some(S("id")),
+                        method: ReplaceDocuments,
+                        content_file: uuid,
+                        documents_count,
+                        allow_index_creation: false,
+                    },
+                    None,
+                    false,
+                )
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
@@ -3721,7 +3904,11 @@ mod tests {
 
         // Create the index.
         index_scheduler
-            .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
+            .register(
+                KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None },
+                None,
+                false,
+            )
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
         handle.advance_one_successful_batch();
@@ -3738,17 +3925,21 @@ mod tests {
             let allow_index_creation = i % 2 != 0;
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
-                .register(KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation,
-                })
+                .register(
+                    KindWithContent::DocumentAdditionOrUpdate {
+                        index_uid: S("doggos"),
+                        primary_key: Some(S("id")),
+                        method: ReplaceDocuments,
+                        content_file: uuid,
+                        documents_count,
+                        allow_index_creation,
+                    },
+                    None,
+                    false,
+                )
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
@@ -3791,17 +3982,21 @@ mod tests {
             let allow_index_creation = i % 2 != 0;
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
-                .register(KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation,
-                })
+                .register(
+                    KindWithContent::DocumentAdditionOrUpdate {
+                        index_uid: S("doggos"),
+                        primary_key: Some(S("id")),
+                        method: ReplaceDocuments,
+                        content_file: uuid,
+                        documents_count,
+                        allow_index_creation,
+                    },
+                    None,
+                    false,
+                )
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
@@ -3841,19 +4036,23 @@ mod tests {
             );
             let (uuid, mut file) =
                 index_scheduler.create_update_file_with_uuid(id as u128).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             assert_eq!(documents_count, 1);
             file.persist().unwrap();
 
             index_scheduler
-                .register(KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S(primary_key)),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                })
+                .register(
+                    KindWithContent::DocumentAdditionOrUpdate {
+                        index_uid: S("doggos"),
+                        primary_key: Some(S(primary_key)),
+                        method: ReplaceDocuments,
+                        content_file: uuid,
+                        documents_count,
+                        allow_index_creation: true,
+                    },
+                    None,
+                    false,
+                )
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
@@ -3902,19 +4101,23 @@ mod tests {
             );
             let (uuid, mut file) =
                 index_scheduler.create_update_file_with_uuid(id as u128).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             assert_eq!(documents_count, 1);
             file.persist().unwrap();
 
             index_scheduler
-                .register(KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S(primary_key)),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                })
+                .register(
+                    KindWithContent::DocumentAdditionOrUpdate {
+                        index_uid: S("doggos"),
+                        primary_key: Some(S(primary_key)),
+                        method: ReplaceDocuments,
+                        content_file: uuid,
+                        documents_count,
+                        allow_index_creation: true,
+                    },
+                    None,
+                    false,
+                )
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
@@ -3959,19 +4162,23 @@ mod tests {
             );
             let (uuid, mut file) =
                 index_scheduler.create_update_file_with_uuid(id as u128).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             assert_eq!(documents_count, 1);
             file.persist().unwrap();
 
             index_scheduler
-                .register(KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S(primary_key)),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                })
+                .register(
+                    KindWithContent::DocumentAdditionOrUpdate {
+                        index_uid: S("doggos"),
+                        primary_key: Some(S(primary_key)),
+                        method: ReplaceDocuments,
+                        content_file: uuid,
+                        documents_count,
+                        allow_index_creation: true,
+                    },
+                    None,
+                    false,
+                )
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
@@ -4040,19 +4247,23 @@ mod tests {
             );
             let (uuid, mut file) =
                 index_scheduler.create_update_file_with_uuid(id as u128).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             assert_eq!(documents_count, 1);
             file.persist().unwrap();
 
             index_scheduler
-                .register(KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: primary_key.map(|pk| pk.to_string()),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                })
+                .register(
+                    KindWithContent::DocumentAdditionOrUpdate {
+                        index_uid: S("doggos"),
+                        primary_key: primary_key.map(|pk| pk.to_string()),
+                        method: ReplaceDocuments,
+                        content_file: uuid,
+                        documents_count,
+                        allow_index_creation: true,
+                    },
+                    None,
+                    false,
+                )
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
@@ -4123,19 +4334,23 @@ mod tests {
             );
             let (uuid, mut file) =
                 index_scheduler.create_update_file_with_uuid(id as u128).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             assert_eq!(documents_count, 1);
             file.persist().unwrap();
 
             index_scheduler
-                .register(KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: primary_key.map(|pk| pk.to_string()),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                })
+                .register(
+                    KindWithContent::DocumentAdditionOrUpdate {
+                        index_uid: S("doggos"),
+                        primary_key: primary_key.map(|pk| pk.to_string()),
+                        method: ReplaceDocuments,
+                        content_file: uuid,
+                        documents_count,
+                        allow_index_creation: true,
+                    },
+                    None,
+                    false,
+                )
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
@@ -4189,7 +4404,7 @@ mod tests {
 
         let kind = index_creation_task("catto", "mouse");
 
-        let _task = index_scheduler.register(kind).unwrap();
+        let _task = index_scheduler.register(kind, None, false).unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
         handle.advance_till([Start, BatchCreated, ProcessBatchFailed, AfterProcessing]);
@@ -4209,15 +4424,20 @@ mod tests {
             });
 
         index_scheduler
-            .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
+            .register(
+                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
+                None,
+                false,
+            )
             .unwrap();
         handle.advance_one_successful_batch();
         // on average this task takes ~600 bytes
         loop {
-            let result = index_scheduler.register(KindWithContent::IndexCreation {
-                index_uid: S("doggo"),
-                primary_key: None,
-            });
+            let result = index_scheduler.register(
+                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
+                None,
+                false,
+            );
             if result.is_err() {
                 break;
             }
@@ -4227,7 +4447,11 @@ mod tests {
 
         // at this point the task DB shoud have reached its limit and we should not be able to register new tasks
         let result = index_scheduler
-            .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
+            .register(
+                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
+                None,
+                false,
+            )
             .unwrap_err();
         snapshot!(result, @"Meilisearch cannot receive write operations because the limit of the task database has been reached. Please delete tasks to continue performing write operations.");
         // we won't be able to test this error in an integration test thus as a best effort test I still ensure the error return the expected error code
@@ -4235,10 +4459,11 @@ mod tests {
 
         // Even the task deletion that doesn't delete anything shouldn't be accepted
         let result = index_scheduler
-            .register(KindWithContent::TaskDeletion {
-                query: S("test"),
-                tasks: RoaringBitmap::new(),
-            })
+            .register(
+                KindWithContent::TaskDeletion { query: S("test"), tasks: RoaringBitmap::new() },
+                None,
+                false,
+            )
             .unwrap_err();
         snapshot!(result, @"Meilisearch cannot receive write operations because the limit of the task database has been reached. Please delete tasks to continue performing write operations.");
         // we won't be able to test this error in an integration test thus as a best effort test I still ensure the error return the expected error code
@@ -4246,13 +4471,21 @@ mod tests {
 
         // But a task deletion that delete something should works
         index_scheduler
-            .register(KindWithContent::TaskDeletion { query: S("test"), tasks: (0..100).collect() })
+            .register(
+                KindWithContent::TaskDeletion { query: S("test"), tasks: (0..100).collect() },
+                None,
+                false,
+            )
             .unwrap();
         handle.advance_one_successful_batch();
 
         // Now we should be able to enqueue a few tasks again
         index_scheduler
-            .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
+            .register(
+                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
+                None,
+                false,
+            )
             .unwrap();
         handle.advance_one_failed_batch();
     }
@@ -4265,22 +4498,38 @@ mod tests {
             });
 
         index_scheduler
-            .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
+            .register(
+                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
+                None,
+                false,
+            )
             .unwrap();
         handle.advance_one_successful_batch();
 
         index_scheduler
-            .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
+            .register(
+                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
+                None,
+                false,
+            )
             .unwrap();
         handle.advance_one_failed_batch();
 
         // at this point the max number of tasks is reached
         // we can still enqueue multiple tasks
         index_scheduler
-            .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
+            .register(
+                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
+                None,
+                false,
+            )
             .unwrap();
         index_scheduler
-            .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
+            .register(
+                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
+                None,
+                false,
+            )
             .unwrap();
 
         let rtxn = index_scheduler.env.read_txn().unwrap();
@@ -4324,15 +4573,74 @@ mod tests {
     }
 
     #[test]
+    fn test_disable_auto_deletion_of_tasks() {
+        let (index_scheduler, mut handle) =
+            IndexScheduler::test_with_custom_config(vec![], |config| {
+                config.cleanup_enabled = false;
+                config.max_number_of_tasks = 2;
+            });
+
+        index_scheduler
+            .register(
+                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
+                None,
+                false,
+            )
+            .unwrap();
+        handle.advance_one_successful_batch();
+
+        index_scheduler
+            .register(
+                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
+                None,
+                false,
+            )
+            .unwrap();
+        handle.advance_one_failed_batch();
+
+        // at this point the max number of tasks is reached
+        // we can still enqueue multiple tasks
+        index_scheduler
+            .register(
+                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
+                None,
+                false,
+            )
+            .unwrap();
+        index_scheduler
+            .register(
+                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
+                None,
+                false,
+            )
+            .unwrap();
+
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+        let tasks = index_scheduler.get_task_ids(&rtxn, &Query { ..Default::default() }).unwrap();
+        let tasks = index_scheduler.get_existing_tasks(&rtxn, tasks).unwrap();
+        snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]" }), name: "task_queue_is_full");
+        drop(rtxn);
+
+        // now we're above the max number of tasks
+        // and if we try to advance in the tick function no new task deletion should be enqueued
+        handle.advance_till([Start, BatchCreated]);
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+        let tasks = index_scheduler.get_task_ids(&rtxn, &Query { ..Default::default() }).unwrap();
+        let tasks = index_scheduler.get_existing_tasks(&rtxn, tasks).unwrap();
+        snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]", ".**.original_filter" => "[filter]", ".**.query" => "[query]" }), name: "task_deletion_have_not_been_enqueued");
+        drop(rtxn);
+    }
+
+    #[test]
     fn basic_get_stats() {
         let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         let kind = index_creation_task("catto", "mouse");
-        let _task = index_scheduler.register(kind).unwrap();
+        let _task = index_scheduler.register(kind, None, false).unwrap();
         let kind = index_creation_task("doggo", "sheep");
-        let _task = index_scheduler.register(kind).unwrap();
+        let _task = index_scheduler.register(kind, None, false).unwrap();
         let kind = index_creation_task("whalo", "fish");
-        let _task = index_scheduler.register(kind).unwrap();
+        let _task = index_scheduler.register(kind, None, false).unwrap();
 
         snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r###"
         {
@@ -4482,16 +4790,104 @@ mod tests {
             query: "cancel dump".to_owned(),
             tasks: RoaringBitmap::from_iter([0]),
         };
-        let _ = index_scheduler.register(dump_creation).unwrap();
+        let _ = index_scheduler.register(dump_creation, None, false).unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_dump_register");
         handle.advance_till([Start, BatchCreated, InsideProcessBatch]);
 
-        let _ = index_scheduler.register(dump_cancellation).unwrap();
+        let _ = index_scheduler.register(dump_cancellation, None, false).unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "cancel_registered");
 
         snapshot!(format!("{:?}", handle.advance()), @"AbortedIndexation");
 
         handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "cancel_processed");
+    }
+
+    #[test]
+    fn basic_set_taskid() {
+        let (index_scheduler, _handle) = IndexScheduler::test(true, vec![]);
+
+        let kind = KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None };
+        let task = index_scheduler.register(kind, None, false).unwrap();
+        snapshot!(task.uid, @"0");
+
+        let kind = KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None };
+        let task = index_scheduler.register(kind, Some(12), false).unwrap();
+        snapshot!(task.uid, @"12");
+
+        let kind = KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None };
+        let error = index_scheduler.register(kind, Some(5), false).unwrap_err();
+        snapshot!(error, @"Received bad task id: 5 should be >= to 13.");
+    }
+
+    #[test]
+    fn dry_run() {
+        let (index_scheduler, _handle) = IndexScheduler::test(true, vec![]);
+
+        let kind = KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None };
+        let task = index_scheduler.register(kind, None, true).unwrap();
+        snapshot!(task.uid, @"0");
+        snapshot!(snapshot_index_scheduler(&index_scheduler), @r###"
+        ### Autobatching Enabled = true
+        ### Processing Tasks:
+        []
+        ----------------------------------------------------------------------
+        ### All Tasks:
+        ----------------------------------------------------------------------
+        ### Status:
+        ----------------------------------------------------------------------
+        ### Kind:
+        ----------------------------------------------------------------------
+        ### Index Tasks:
+        ----------------------------------------------------------------------
+        ### Index Mapper:
+
+        ----------------------------------------------------------------------
+        ### Canceled By:
+
+        ----------------------------------------------------------------------
+        ### Enqueued At:
+        ----------------------------------------------------------------------
+        ### Started At:
+        ----------------------------------------------------------------------
+        ### Finished At:
+        ----------------------------------------------------------------------
+        ### File Store:
+
+        ----------------------------------------------------------------------
+        "###);
+
+        let kind = KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None };
+        let task = index_scheduler.register(kind, Some(12), true).unwrap();
+        snapshot!(task.uid, @"12");
+        snapshot!(snapshot_index_scheduler(&index_scheduler), @r###"
+        ### Autobatching Enabled = true
+        ### Processing Tasks:
+        []
+        ----------------------------------------------------------------------
+        ### All Tasks:
+        ----------------------------------------------------------------------
+        ### Status:
+        ----------------------------------------------------------------------
+        ### Kind:
+        ----------------------------------------------------------------------
+        ### Index Tasks:
+        ----------------------------------------------------------------------
+        ### Index Mapper:
+
+        ----------------------------------------------------------------------
+        ### Canceled By:
+
+        ----------------------------------------------------------------------
+        ### Enqueued At:
+        ----------------------------------------------------------------------
+        ### Started At:
+        ----------------------------------------------------------------------
+        ### Finished At:
+        ----------------------------------------------------------------------
+        ### File Store:
+
+        ----------------------------------------------------------------------
+        "###);
     }
 }

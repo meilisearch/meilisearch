@@ -1,10 +1,11 @@
 use actix_web::test;
 use meili_snap::{json_string, snapshot};
+use meilisearch::Opt;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
 use crate::common::encoder::Encoder;
-use crate::common::{GetAllDocumentsOptions, Server, Value};
+use crate::common::{default_settings, GetAllDocumentsOptions, Server, Value};
 use crate::json;
 
 /// This is the basic usage of our API and every other tests uses the content-type application/json
@@ -2156,4 +2157,50 @@ async fn batch_several_documents_addition() {
         .await;
     assert_eq!(code, 200, "failed with `{}`", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 120);
+}
+
+#[actix_rt::test]
+async fn dry_register_file() {
+    let temp = tempfile::tempdir().unwrap();
+
+    let options =
+        Opt { experimental_replication_parameters: true, ..default_settings(temp.path()) };
+    let server = Server::new_with_options(options).await.unwrap();
+    let index = server.index("tamo");
+
+    let documents = r#"
+        {
+            "id": "12",
+            "doggo": "kefir"
+        }
+    "#;
+
+    let (response, code) = index
+        .raw_add_documents(
+            documents,
+            vec![("Content-Type", "application/json"), ("DryRun", "true")],
+            "",
+        )
+        .await;
+    snapshot!(response, @r###"
+    {
+      "taskUid": 0,
+      "indexUid": "tamo",
+      "status": "enqueued",
+      "type": "documentAdditionOrUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
+    snapshot!(code, @"202 Accepted");
+
+    let (response, code) = index.get_task(response.uid()).await;
+    snapshot!(response, @r###"
+    {
+      "message": "Task `0` not found.",
+      "code": "task_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#task_not_found"
+    }
+    "###);
+    snapshot!(code, @"404 Not Found");
 }
