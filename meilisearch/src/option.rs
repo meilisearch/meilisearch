@@ -1,4 +1,3 @@
-use std::convert::TryFrom;
 use std::env::VarError;
 use std::ffi::OsStr;
 use std::fmt::Display;
