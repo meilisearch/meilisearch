@@ -100,8 +100,6 @@ pub mod db_name {
 
 #[derive(Clone)]
 pub struct Index {
-    pub name: Option<String>,
-
     /// The LMDB environment which this index is associated with.
     pub(crate) env: heed::Env,
 
@@ -173,7 +171,6 @@ pub struct Index {
 
 impl Index {
     pub fn new_with_creation_dates<P: AsRef<Path>>(
-        name: Option<String>,
         mut options: heed::EnvOpenOptions,
         path: P,
         created_at: OffsetDateTime,
@@ -232,7 +229,6 @@ impl Index {
         Index::set_creation_dates(&env, main, created_at, updated_at)?;
 
         Ok(Index {
-            name,
             env,
             main,
             external_documents_ids,
@@ -262,13 +258,9 @@ impl Index {
         })
     }
 
-    pub fn new<P: AsRef<Path>>(
-        name: Option<String>,
-        options: heed::EnvOpenOptions,
-        path: P,
-    ) -> Result<Index> {
+    pub fn new<P: AsRef<Path>>(options: heed::EnvOpenOptions, path: P) -> Result<Index> {
         let now = OffsetDateTime::now_utc();
-        Self::new_with_creation_dates(name, options, path, now, now)
+        Self::new_with_creation_dates(options, path, now, now)
     }
 
     fn set_creation_dates(

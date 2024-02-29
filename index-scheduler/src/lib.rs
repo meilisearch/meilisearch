@@ -277,6 +277,9 @@ pub struct IndexSchedulerOptions {
 /// Structure which holds meilisearch's indexes and schedules the tasks
 /// to be performed on them.
 pub struct IndexScheduler {
+    /// A String representing the name of the index
+    pub(crate) name: String,
+
     /// The LMDB environment which the DBs are associated with.
     pub(crate) env: Env,
 
