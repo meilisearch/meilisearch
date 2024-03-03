@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use hf_hub::api::sync::ApiError;
 
+use super::ollama::OllamaError;
 use crate::error::FaultSource;
 use crate::vector::openai::OpenAiError;
 
@@ -71,6 +72,15 @@ pub enum EmbedErrorKind {
     OpenAiRuntimeInit(std::io::Error),
     #[error("initializing web client for sending embedding requests failed: {0}")]
     InitWebClient(reqwest::Error),
+    // Dedicated Ollama error kinds, might have to merge them into one cohesive error type for all backends.
+    #[error("unexpected response from Ollama: {0}")]
+    OllamaUnexpected(reqwest::Error),
+    #[error("sent too many requests to Ollama: {0}")]
+    OllamaTooManyRequests(OllamaError),
+    #[error("received internal error from Ollama: {0}")]
+    OllamaInternalServerError(OllamaError),
+    #[error("received unhandled HTTP status code {0} from Ollama")]
+    OllamaUnhandledStatusCode(u16),
 }
 
 impl EmbedError {
@@ -128,6 +138,22 @@ impl EmbedError {
 
     pub fn openai_initialize_web_client(inner: reqwest::Error) -> Self {
         Self { kind: EmbedErrorKind::InitWebClient(inner), fault: FaultSource::Runtime }
+    }
+
+    pub fn ollama_unexpected(inner: reqwest::Error) -> EmbedError {
+        Self { kind: EmbedErrorKind::OllamaUnexpected(inner), fault: FaultSource::Bug }
+    }
+
+    pub(crate) fn ollama_too_many_requests(inner: OllamaError) -> EmbedError {
+        Self { kind: EmbedErrorKind::OllamaTooManyRequests(inner), fault: FaultSource::Runtime }
+    }
+
+    pub(crate) fn ollama_internal_server_error(inner: OllamaError) -> EmbedError {
+        Self { kind: EmbedErrorKind::OllamaInternalServerError(inner), fault: FaultSource::Runtime }
+    }
+
+    pub(crate) fn ollama_unhandled_status_code(code: u16) -> EmbedError {
+        Self { kind: EmbedErrorKind::OllamaUnhandledStatusCode(code), fault: FaultSource::Bug }
     }
 }
 
