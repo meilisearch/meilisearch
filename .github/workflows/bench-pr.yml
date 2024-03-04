@@ -1,0 +1,46 @@
+name: Bench (PR)
+on:
+    issue_comment:
+        types: [created]
+
+permissions:
+    issues: write
+
+env:
+    GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
+
+jobs:
+    run-benchmarks-on-comment:
+      if: startsWith(github.event.comment.body, '/bench')
+      name: Run and upload benchmarks
+      runs-on: benchmarks
+      timeout-minutes: 180 # 3h
+      steps:
+        - name: Check for Command
+          id: command
+          uses: xt0rted/slash-command-action@v2
+          with:
+              command: bench
+              reaction-type: "rocket"
+              repo-token: ${{ env.GH_TOKEN }}
+
+        - uses: xt0rted/pull-request-comment-branch@v2
+          id: comment-branch
+          with:
+            repo_token: ${{ env.GH_TOKEN }}
+
+        - uses: actions/checkout@v3
+          if: success()
+          with:
+            fetch-depth: 0 # fetch full history to be able to get main commit sha
+            ref: ${{ steps.comment-branch.outputs.head_ref }}
+
+        - uses: actions-rs/toolchain@v1
+          with:
+            profile: minimal
+            toolchain: stable
+            override: true
+
+        - name: Run benchmarks on PR ${{ github.event.issue.id }}
+          run: |
+            cargo xtask bench --api-key "${{ secrets.BENCHMARK_API_KEY }}" --dashboard-url "${{ vars.BENCHMARK_DASHBOARD_URL }}" --reason "[Comment](${{ github.event.comment.url }}) on [#${{github.event.issue.id}}](${{ github.event.issue.url }})" -- ${{ steps.command.outputs.command-arguments }}
