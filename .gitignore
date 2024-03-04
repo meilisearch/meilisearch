@@ -9,6 +9,8 @@
 /data.ms
 /snapshots
 /dumps
+/bench
+/_xtask_benchmark.ms
 
 # Snapshots
 ## ... large
