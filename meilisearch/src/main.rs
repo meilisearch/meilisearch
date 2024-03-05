@@ -195,7 +195,7 @@ pub fn print_launch_resume(
         build_info
             .commit_timestamp
             .and_then(|commit_timestamp| commit_timestamp
-                .format(&time::format_description::well_known::Iso8601::DEFAULT)
+                .format(&time::format_description::well_known::Rfc3339::DEFAULT)
                 .ok())
             .unwrap_or("unknown".into())
     );
