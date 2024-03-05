@@ -106,6 +106,7 @@ impl ScoreWithRatioResult {
             candidates: left.candidates | right.candidates,
             documents_ids,
             document_scores,
+            degraded: false,
         }
     }
 }
@@ -131,6 +132,7 @@ impl<'a> Search<'a> {
             index: self.index,
             distribution_shift: self.distribution_shift,
             embedder_name: self.embedder_name.clone(),
+            time_budget: self.time_budget,
         };
 
         let vector_query = search.vector.take();

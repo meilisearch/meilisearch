@@ -1,14 +1,19 @@
 use std::cmp::Reverse;
 use std::collections::HashSet;
 use std::io::Cursor;
+use std::time::Duration;
 
 use big_s::S;
 use either::{Either, Left, Right};
 use heed::EnvOpenOptions;
 use maplit::{btreemap, hashset};
+use meili_snap::snapshot;
 use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
-use milli::{AscDesc, Criterion, DocumentId, Index, Member, Object, TermsMatchingStrategy};
+use milli::{
+    AscDesc, Criterion, DocumentId, Filter, Index, Member, Object, Search, TermsMatchingStrategy,
+    TimeBudget,
+};
 use serde::{Deserialize, Deserializer};
 use slice_group_by::GroupBy;
 
@@ -348,4 +353,42 @@ where
 {
     let result = serde_json::Value::deserialize(deserializer)?;
     Ok(Some(result))
+}
+
+#[test]
+fn basic_degraded_search() {
+    use Criterion::*;
+    let criteria = vec![Words, Typo, Proximity, Attribute, Exactness];
+    let index = setup_search_index_with_criteria(&criteria);
+    let rtxn = index.read_txn().unwrap();
+
+    let mut search = Search::new(&rtxn, &index);
+    search.query(TEST_QUERY);
+    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
+    search.time_budget(TimeBudget::new(Duration::from_millis(0)));
+
+    let result = search.execute().unwrap();
+    assert!(result.degraded);
+}
+
+#[test]
+fn degraded_search_cannot_skip_filter() {
+    use Criterion::*;
+    let criteria = vec![Words, Typo, Proximity, Attribute, Exactness];
+    let index = setup_search_index_with_criteria(&criteria);
+    let rtxn = index.read_txn().unwrap();
+
+    let mut search = Search::new(&rtxn, &index);
+    search.query(TEST_QUERY);
+    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
+    search.time_budget(TimeBudget::new(Duration::from_millis(0)));
+    let filter_condition = Filter::from_str("tag = etiopia").unwrap().unwrap();
+    search.filter(filter_condition);
+
+    let result = search.execute().unwrap();
+    assert!(result.degraded);
+    snapshot!(format!("{:?}\n{:?}", result.candidates, result.documents_ids), @r###"
+    RoaringBitmap<[0, 2, 5, 8, 11, 14]>
+    [0, 2, 5, 8, 11, 14]
+    "###);
 }

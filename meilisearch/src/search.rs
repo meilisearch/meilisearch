@@ -1,7 +1,7 @@
 use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use deserr::Deserr;
 use either::Either;
@@ -14,7 +14,7 @@ use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::score_details::{self, ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::DistributionShift;
-use meilisearch_types::milli::{FacetValueHit, OrderBy, SearchForFacetValues};
+use meilisearch_types::milli::{FacetValueHit, OrderBy, SearchForFacetValues, TimeBudget};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
@@ -323,6 +323,9 @@ pub struct SearchResult {
     pub facet_distribution: Option<BTreeMap<String, IndexMap<String, u64>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facet_stats: Option<BTreeMap<String, FacetStats>>,
+
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub degraded: bool,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -382,8 +385,10 @@ fn prepare_search<'t>(
     query: &'t SearchQuery,
     features: RoFeatures,
     distribution: Option<DistributionShift>,
+    time_budget: TimeBudget,
 ) -> Result<(milli::Search<'t>, bool, usize, usize), MeilisearchHttpError> {
     let mut search = index.search(rtxn);
+    search.time_budget(time_budget);
 
     if query.vector.is_some() {
         features.check_vector("Passing `vector` as a query parameter")?;
@@ -491,19 +496,26 @@ pub fn perform_search(
     distribution: Option<DistributionShift>,
 ) -> Result<SearchResult, MeilisearchHttpError> {
     let before_search = Instant::now();
+    let time_budget = TimeBudget::new(Duration::from_millis(150));
     let rtxn = index.read_txn()?;
 
     let (search, is_finite_pagination, max_total_hits, offset) =
-        prepare_search(index, &rtxn, &query, features, distribution)?;
+        prepare_search(index, &rtxn, &query, features, distribution, time_budget)?;
 
-    let milli::SearchResult { documents_ids, matching_words, candidates, document_scores, .. } =
-        match &query.hybrid {
-            Some(hybrid) => match *hybrid.semantic_ratio {
-                ratio if ratio == 0.0 || ratio == 1.0 => search.execute()?,
-                ratio => search.execute_hybrid(ratio)?,
-            },
-            None => search.execute()?,
-        };
+    let milli::SearchResult {
+        documents_ids,
+        matching_words,
+        candidates,
+        document_scores,
+        degraded,
+        ..
+    } = match &query.hybrid {
+        Some(hybrid) => match *hybrid.semantic_ratio {
+            ratio if ratio == 0.0 || ratio == 1.0 => search.execute()?,
+            ratio => search.execute_hybrid(ratio)?,
+        },
+        None => search.execute()?,
+    };
 
     let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
@@ -700,6 +712,7 @@ pub fn perform_search(
         processing_time_ms: before_search.elapsed().as_millis(),
         facet_distribution,
         facet_stats,
+        degraded,
     };
     Ok(result)
 }
@@ -712,9 +725,11 @@ pub fn perform_facet_search(
     features: RoFeatures,
 ) -> Result<FacetSearchResult, MeilisearchHttpError> {
     let before_search = Instant::now();
+    let time_budget = TimeBudget::new(Duration::from_millis(150));
     let rtxn = index.read_txn()?;
 
-    let (search, _, _, _) = prepare_search(index, &rtxn, &search_query, features, None)?;
+    let (search, _, _, _) =
+        prepare_search(index, &rtxn, &search_query, features, None, time_budget)?;
     let mut facet_search =
         SearchForFacetValues::new(facet_name, search, search_query.hybrid.is_some());
     if let Some(facet_query) = &facet_query {

@@ -579,6 +579,7 @@ pub struct SearchAggregator {
     // requests
     total_received: usize,
     total_succeeded: usize,
+    total_degraded: usize,
     time_spent: BinaryHeap<usize>,
 
     // sort
@@ -758,9 +759,13 @@ impl SearchAggregator {
             hits_info: _,
             facet_distribution: _,
             facet_stats: _,
+            degraded,
         } = result;
 
         self.total_succeeded = self.total_succeeded.saturating_add(1);
+        if *degraded {
+            self.total_degraded = self.total_degraded.saturating_add(1);
+        }
         self.time_spent.push(*processing_time_ms as usize);
     }
 
@@ -802,6 +807,7 @@ impl SearchAggregator {
             semantic_ratio,
             embedder,
             hybrid,
+            total_degraded,
         } = other;
 
         if self.timestamp.is_none() {
@@ -816,6 +822,7 @@ impl SearchAggregator {
         // request
         self.total_received = self.total_received.saturating_add(total_received);
         self.total_succeeded = self.total_succeeded.saturating_add(total_succeeded);
+        self.total_degraded = self.total_degraded.saturating_add(total_degraded);
         self.time_spent.append(time_spent);
 
         // sort
@@ -921,6 +928,7 @@ impl SearchAggregator {
             semantic_ratio,
             embedder,
             hybrid,
+            total_degraded,
         } = self;
 
         if total_received == 0 {
@@ -940,6 +948,7 @@ impl SearchAggregator {
                     "total_succeeded": total_succeeded,
                     "total_failed": total_received.saturating_sub(total_succeeded), // just to be sure we never panics
                     "total_received": total_received,
+                    "total_degraded": total_degraded,
                 },
                 "sort": {
                     "with_geoPoint": sort_with_geo_point,

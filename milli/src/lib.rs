@@ -30,6 +30,7 @@ pub mod snapshot_tests;
 
 use std::collections::{BTreeMap, HashMap};
 use std::convert::{TryFrom, TryInto};
+use std::fmt;
 use std::hash::BuildHasherDefault;
 
 use charabia::normalizer::{CharNormalizer, CompatibilityDecompositionNormalizer};
@@ -103,6 +104,40 @@ pub const MAX_FACET_VALUE_LENGTH: usize = MAX_LMDB_KEY_LENGTH - 32;
 pub const MAX_WORD_LENGTH: usize = MAX_LMDB_KEY_LENGTH / 2;
 
 pub const MAX_POSITION_PER_ATTRIBUTE: u32 = u16::MAX as u32 + 1;
+
+#[derive(Clone, Copy)]
+pub struct TimeBudget {
+    started_at: std::time::Instant,
+    budget: std::time::Duration,
+}
+
+impl fmt::Debug for TimeBudget {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TimeBudget")
+            .field("started_at", &self.started_at)
+            .field("budget", &self.budget)
+            .field("left", &(self.budget - self.started_at.elapsed()))
+            .finish()
+    }
+}
+
+impl TimeBudget {
+    pub fn new(budget: std::time::Duration) -> Self {
+        Self { started_at: std::time::Instant::now(), budget }
+    }
+
+    pub fn max() -> Self {
+        Self::new(std::time::Duration::from_secs(u64::MAX))
+    }
+
+    pub fn exceeded(&self) -> bool {
+        self.must_stop()
+    }
+
+    pub fn must_stop(&self) -> bool {
+        self.started_at.elapsed() > self.budget
+    }
+}
 
 // Convert an absolute word position into a relative position.
 // Return the field id of the attribute related to the absolute position

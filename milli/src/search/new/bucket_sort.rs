@@ -5,12 +5,14 @@ use super::ranking_rules::{BoxRankingRule, RankingRuleQueryTrait};
 use super::SearchContext;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::{apply_distinct_rule, distinct_single_docid, DistinctOutput};
-use crate::Result;
+use crate::{Result, TimeBudget};
 
 pub struct BucketSortOutput {
     pub docids: Vec<u32>,
     pub scores: Vec<Vec<ScoreDetails>>,
     pub all_candidates: RoaringBitmap,
+
+    pub degraded: bool,
 }
 
 // TODO: would probably be good to regroup some of these inside of a struct?
@@ -25,6 +27,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     length: usize,
     scoring_strategy: ScoringStrategy,
     logger: &mut dyn SearchLogger<Q>,
+    time_budget: TimeBudget,
 ) -> Result<BucketSortOutput> {
     logger.initial_query(query);
     logger.ranking_rules(&ranking_rules);
@@ -41,6 +44,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
             docids: vec![],
             scores: vec![],
             all_candidates: universe.clone(),
+            degraded: false,
         });
     }
     if ranking_rules.is_empty() {
@@ -74,6 +78,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
                 scores: vec![Default::default(); results.len()],
                 docids: results,
                 all_candidates,
+                degraded: false,
             });
         } else {
             let docids: Vec<u32> = universe.iter().skip(from).take(length).collect();
@@ -81,6 +86,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
                 scores: vec![Default::default(); docids.len()],
                 docids,
                 all_candidates: universe.clone(),
+                degraded: false,
             });
         };
     }
@@ -154,6 +160,18 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     }
 
     while valid_docids.len() < length {
+        if time_budget.exceeded() {
+            let bucket = std::mem::take(&mut ranking_rule_universes[cur_ranking_rule_index]);
+            maybe_add_to_results!(bucket);
+
+            return Ok(BucketSortOutput {
+                scores: vec![Default::default(); valid_docids.len()],
+                docids: valid_docids,
+                all_candidates,
+                degraded: true,
+            });
+        }
+
         // The universe for this bucket is zero, so we don't need to sort
         // anything, just go back to the parent ranking rule.
         if ranking_rule_universes[cur_ranking_rule_index].is_empty()
@@ -219,7 +237,12 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         )?;
     }
 
-    Ok(BucketSortOutput { docids: valid_docids, scores: valid_scores, all_candidates })
+    Ok(BucketSortOutput {
+        docids: valid_docids,
+        scores: valid_scores,
+        all_candidates,
+        degraded: false,
+    })
 }
 
 /// Add the candidates to the results. Take `distinct`, `from`, `length`, and `cur_offset`
