@@ -98,17 +98,16 @@ impl EmbeddingConfigs {
     }
 
     pub fn get_default(&self) -> Option<(Arc<Embedder>, Arc<Prompt>)> {
-        self.get_default_embedder_name().and_then(|default| self.get(&default))
+        self.get(&self.get_default_embedder_name())
     }
 
-    pub fn get_default_embedder_name(&self) -> Option<String> {
+    pub fn get_default_embedder_name(&self) -> String {
         let mut it = self.0.keys();
         let first_name = it.next();
         let second_name = it.next();
         match (first_name, second_name) {
-            (None, _) => None,
-            (Some(first), None) => Some(first.to_owned()),
-            (Some(_), Some(_)) => Some("default".to_owned()),
+            (Some(first), None) => first.to_owned(),
+            _ => "default".to_owned(),
         }
     }
 }

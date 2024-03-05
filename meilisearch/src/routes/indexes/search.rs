@@ -261,33 +261,56 @@ pub async fn embed(
     index_scheduler: &IndexScheduler,
     index: &milli::Index,
 ) -> Result<Option<DistributionShift>, ResponseError> {
-    match (&query.hybrid, &query.vector, &query.q) {
-        (Some(HybridQuery { semantic_ratio: _, embedder }), None, Some(q))
-            if !q.trim().is_empty() =>
-        {
-            let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
-            let embedders = index_scheduler.embedders(embedder_configs)?;
+    /// TEST:
+    // - pure vector search without hybrid
+    // - pure vector search without hybrid passing a vector of the wrong dimension
+    // - pure vector search without hybrid, with multiple embedders, none of them called 'default'
+    let Some(hybrid) = &query.hybrid
+    else {
+        return Ok(None);
+    };
 
-            let embedder = if let Some(embedder_name) = embedder {
-                embedders.get(embedder_name)
-            } else {
-                embedders.get_default()
+    let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
+
+    let embedders = index_scheduler.embedders(embedder_configs)?;
+
+    let embedder_name = match &hybrid.embedder {
+        Some(embedder_name) => embedder_name.clone(),
+        None => embedders.get_default_embedder_name(),
+    };
+
+    let embedder = embedders.get(&embedder_name);
+
+    let embedder = embedder
+        .ok_or(milli::UserError::InvalidEmbedder(embedder_name))
+        .map_err(milli::Error::from)?
+        .0;
+
+    let distribution = embedder.distribution();
+
+    match (&query.vector, &query.q) {
+        (None, Some(q)) if !q.trim().is_empty() => {
+            let embeddings = match tokio::time::timeout(
+                tokio::time::Duration::from_secs(10),
+                embedder.embed(vec![q.to_owned()]),
+            )
+            .await
+            {
+                Ok(Ok(mut embeddings)) => embeddings.pop(),
+                Ok(Err(error)) => {
+                    warn!(%error, "error while embedding");
+                    None
+                }
+                Err(_) => {
+                    warn!("timeout while embedding");
+                    None
+                }
             };
 
-            let embedder = embedder
-                .ok_or(milli::UserError::InvalidEmbedder("default".to_owned()))
-                .map_err(milli::Error::from)?
-                .0;
-
-            let distribution = embedder.distribution();
-
-            let embeddings = embedder
-                .embed(vec![q.to_owned()])
-                .await
-                .map_err(milli::vector::Error::from)
-                .map_err(milli::Error::from)?
-                .pop()
-                .expect("No vector returned from embedding");
+            let Some(embeddings) = embeddings else {
+                warn!("no embedding available, vector search will not take place");
+                return Ok(distribution);
+            };
 
             if embeddings.iter().nth(1).is_some() {
                 warn!("Ignoring embeddings past the first one in long search query");
@@ -295,23 +318,10 @@ pub async fn embed(
             } else {
                 query.vector = Some(embeddings.into_inner());
             }
+
             Ok(distribution)
         }
-        (Some(hybrid), vector, _) => {
-            let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
-            let embedders = index_scheduler.embedders(embedder_configs)?;
-
-            let embedder = if let Some(embedder_name) = &hybrid.embedder {
-                embedders.get(embedder_name)
-            } else {
-                embedders.get_default()
-            };
-
-            let embedder = embedder
-                .ok_or(milli::UserError::InvalidEmbedder("default".to_owned()))
-                .map_err(milli::Error::from)?
-                .0;
-
+        (vector, _) => {
             if let Some(vector) = vector {
                 if vector.len() != embedder.dimensions() {
                     return Err(meilisearch_types::milli::Error::UserError(
@@ -326,7 +336,6 @@ pub async fn embed(
 
             Ok(embedder.distribution())
         }
-        _ => Ok(None),
     }
 }
 
