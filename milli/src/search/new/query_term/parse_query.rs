@@ -9,7 +9,7 @@ use crate::search::new::query_term::{Lazy, Phrase, QueryTerm};
 use crate::{Result, SearchContext, MAX_WORD_LENGTH};
 
 /// Convert the tokenised search query into a list of located query terms.
-#[logging_timer::time]
+#[tracing::instrument(level = "trace", skip_all, target = "search::query")]
 pub fn located_query_terms_from_tokens(
     ctx: &mut SearchContext,
     query: NormalizedTokenIter,

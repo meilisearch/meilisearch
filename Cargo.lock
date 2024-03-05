@@ -3024,28 +3024,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
 
 [[package]]
-name = "logging_timer"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64e96f261d684b7089aa576bb74e823241dccd994b27d30fabf1dcb3af284fe9"
-dependencies = [
- "log",
- "logging_timer_proc_macros",
-]
-
-[[package]]
-name = "logging_timer_proc_macros"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10a9062912d7952c5588cc474795e0b9ee008e7e6781127945b85413d4b99d81"
-dependencies = [
- "log",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "lz4_flex"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3316,7 +3294,6 @@ dependencies = [
  "json-depth-checker",
  "levenshtein_automata",
  "liquid",
- "logging_timer",
  "maplit",
  "md5",
  "meili-snap",
