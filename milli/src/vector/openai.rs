@@ -220,24 +220,12 @@ impl Embedder {
                         error_response.error,
                     )));
                 }
-                StatusCode::INTERNAL_SERVER_ERROR => {
-                    let error_response: OpenAiErrorResponse = response
-                        .json()
-                        .await
-                        .map_err(EmbedError::openai_unexpected)
-                        .map_err(Retry::retry_later)?;
+                StatusCode::INTERNAL_SERVER_ERROR
+                | StatusCode::BAD_GATEWAY
+                | StatusCode::SERVICE_UNAVAILABLE => {
+                    let error_response: Result<OpenAiErrorResponse, _> = response.json().await;
                     return Err(Retry::retry_later(EmbedError::openai_internal_server_error(
-                        error_response.error,
-                    )));
-                }
-                StatusCode::SERVICE_UNAVAILABLE => {
-                    let error_response: OpenAiErrorResponse = response
-                        .json()
-                        .await
-                        .map_err(EmbedError::openai_unexpected)
-                        .map_err(Retry::retry_later)?;
-                    return Err(Retry::retry_later(EmbedError::openai_internal_server_error(
-                        error_response.error,
+                        error_response.ok().map(|error_response| error_response.error),
                     )));
                 }
                 StatusCode::BAD_REQUEST => {
@@ -248,14 +236,14 @@ impl Embedder {
                         .map_err(EmbedError::openai_unexpected)
                         .map_err(Retry::retry_later)?;
 
-                    tracing::warn!("OpenAI: input was too long, retrying on tokenized version. For best performance, limit the size of your prompt.");
+                    tracing::warn!("OpenAI: received `BAD_REQUEST`. Input was maybe too long, retrying on tokenized version. For best performance, limit the size of your prompt.");
 
                     return Err(Retry::retry_tokenized(EmbedError::openai_too_many_tokens(
                         error_response.error,
                     )));
                 }
                 code => {
-                    return Err(Retry::give_up(EmbedError::openai_unhandled_status_code(
+                    return Err(Retry::retry_later(EmbedError::openai_unhandled_status_code(
                         code.as_u16(),
                     )));
                 }
