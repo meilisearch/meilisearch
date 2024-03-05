@@ -12,8 +12,8 @@ use is_terminal::IsTerminal;
 use meilisearch::analytics::Analytics;
 use meilisearch::option::LogMode;
 use meilisearch::{
-    analytics, create_app, prototype_name, setup_meilisearch, LogRouteHandle, LogRouteType,
-    LogStderrHandle, LogStderrType, Opt, SubscriberForSecondLayer,
+    analytics, create_app, setup_meilisearch, LogRouteHandle, LogRouteType, LogStderrHandle,
+    LogStderrType, Opt, SubscriberForSecondLayer,
 };
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
 use mimalloc::MiMalloc;
@@ -163,8 +163,8 @@ pub fn print_launch_resume(
     analytics: Arc<dyn Analytics>,
     config_read_from: Option<PathBuf>,
 ) {
-    let commit_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
-    let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");
+    let build_info = build_info::BuildInfo::from_build();
+
     let protocol =
         if opt.ssl_cert_path.is_some() && opt.ssl_key_path.is_some() { "https" } else { "http" };
     let ascii_name = r#"
@@ -189,10 +189,18 @@ pub fn print_launch_resume(
     eprintln!("Database path:\t\t{:?}", opt.db_path);
     eprintln!("Server listening on:\t\"{}://{}\"", protocol, opt.http_addr);
     eprintln!("Environment:\t\t{:?}", opt.env);
-    eprintln!("Commit SHA:\t\t{:?}", commit_sha.to_string());
-    eprintln!("Commit date:\t\t{:?}", commit_date.to_string());
+    eprintln!("Commit SHA:\t\t{:?}", build_info.commit_sha1.unwrap_or("unknown"));
+    eprintln!(
+        "Commit date:\t\t{:?}",
+        build_info
+            .commit_timestamp
+            .and_then(|commit_timestamp| commit_timestamp
+                .format(&time::format_description::well_known::Rfc3339)
+                .ok())
+            .unwrap_or("unknown".into())
+    );
     eprintln!("Package version:\t{:?}", env!("CARGO_PKG_VERSION").to_string());
-    if let Some(prototype) = prototype_name() {
+    if let Some(prototype) = build_info.describe.and_then(|describe| describe.as_prototype()) {
         eprintln!("Prototype:\t\t{:?}", prototype);
     }
 

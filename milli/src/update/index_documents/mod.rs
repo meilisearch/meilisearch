@@ -284,7 +284,7 @@ where
     #[tracing::instrument(
         level = "trace",
         skip_all,
-        target = "profile::indexing::details",
+        target = "indexing::details",
         name = "index_documents_raw"
     )]
     pub fn execute_raw(self, output: TransformOutput) -> Result<u64>

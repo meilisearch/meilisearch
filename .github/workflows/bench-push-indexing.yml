@@ -1,0 +1,25 @@
+name: Indexing bench (push)
+
+on:
+    push:
+        branches:
+            - main
+
+jobs:
+    benchmarks:
+        name: Run and upload benchmarks
+        runs-on: benchmarks
+        timeout-minutes: 180 # 3h
+        steps:
+          - uses: actions/checkout@v3
+          - uses: actions-rs/toolchain@v1
+            with:
+              profile: minimal
+              toolchain: stable
+              override: true
+
+          # Run benchmarks
+          - name: Run benchmarks - Dataset ${BENCH_NAME} - Branch main - Commit ${{ github.sha }}
+            run: |
+              cargo xtask bench --api-key "${{ secrets.BENCHMARK_API_KEY }}" --dashboard-url "${{ vars.BENCHMARK_DASHBOARD_URL }}" --reason "Push on `main` [Run #${{ github.run_id }}](https://github.com/meilisearch/meilisearch/actions/runs/${{ github.run_id }})" -- workloads/*.json
+

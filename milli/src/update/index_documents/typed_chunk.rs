@@ -473,7 +473,7 @@ pub(crate) fn write_typed_chunk_into_index(
             is_merged_database = true;
         }
         TypedChunk::FieldIdFacetIsEmptyDocids(_) => {
-            let span = tracing::trace_span!(target: "profile::indexing::write_db", "field_id_facet_is_empty_docids");
+            let span = tracing::trace_span!(target: "indexing::write_db", "field_id_facet_is_empty_docids");
             let _entered = span.enter();
 
             let mut builder = MergerBuilder::new(merge_deladd_cbo_roaring_bitmaps as MergeFn);

@@ -107,6 +107,7 @@ tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["json"] }
 tracing-trace = { version = "0.1.0", path = "../tracing-trace" }
 tracing-actix-web = "0.7.9"
+build-info = { version = "1.7.0", path = "../build-info" }
 
 [dev-dependencies]
 actix-rt = "2.9.0"
@@ -131,7 +132,6 @@ reqwest = { version = "0.11.23", features = [
 sha-1 = { version = "0.10.1", optional = true }
 static-files = { version = "0.2.3", optional = true }
 tempfile = { version = "3.9.0", optional = true }
-vergen = { version = "7.5.1", default-features = false, features = ["git"] }
 zip = { version = "0.6.6", optional = true }
 
 [features]
