@@ -191,7 +191,7 @@ fn resolve_maximally_reduced_query_graph(
     Ok(docids)
 }
 
-#[logging_timer::time]
+#[tracing::instrument(level = "trace", skip_all, target = "search")]
 fn resolve_universe(
     ctx: &mut SearchContext,
     initial_universe: &RoaringBitmap,
@@ -557,7 +557,7 @@ pub fn execute_vector_search(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[logging_timer::time]
+#[tracing::instrument(level = "trace", skip_all, target = "search")]
 pub fn execute_search(
     ctx: &mut SearchContext,
     query: Option<&str>,
@@ -577,6 +577,9 @@ pub fn execute_search(
 
     let mut located_query_terms = None;
     let query_terms = if let Some(query) = query {
+        let span = tracing::trace_span!(target: "search::tokens", "tokenizer_builder");
+        let entered = span.enter();
+
         // We make sure that the analyzer is aware of the stop words
         // this ensures that the query builder is able to properly remove them.
         let mut tokbuilder = TokenizerBuilder::new();
@@ -605,7 +608,12 @@ pub fn execute_search(
         }
 
         let tokenizer = tokbuilder.build();
+        drop(entered);
+
+        let span = tracing::trace_span!(target: "search::tokens", "tokenize");
+        let entered = span.enter();
         let tokens = tokenizer.tokenize(query);
+        drop(entered);
 
         let query_terms = located_query_terms_from_tokens(ctx, tokens, words_limit)?;
         if query_terms.is_empty() {

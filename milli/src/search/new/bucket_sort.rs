@@ -15,7 +15,7 @@ pub struct BucketSortOutput {
 
 // TODO: would probably be good to regroup some of these inside of a struct?
 #[allow(clippy::too_many_arguments)]
-#[logging_timer::time]
+#[tracing::instrument(level = "trace", skip_all, target = "search::bucket_sort")]
 pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     ctx: &mut SearchContext<'ctx>,
     mut ranking_rules: Vec<BoxRankingRule<'ctx, Q>>,
