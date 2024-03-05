@@ -178,6 +178,8 @@ impl Embedder {
                     retry.into_duration(attempt)
                 }
             }?;
+
+            let retry_duration = retry_duration.min(std::time::Duration::from_secs(60)); // don't wait more than a minute
             tracing::warn!(
                 "Attempt #{}, retrying after {}ms.",
                 attempt,
