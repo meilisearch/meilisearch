@@ -50,6 +50,10 @@ pub struct BenchDeriveArgs {
     #[arg(long, default_value_t = default_dashboard_url())]
     dashboard_url: String,
 
+    /// Don't actually send results to the dashboard
+    #[arg(long)]
+    no_dashboard: bool,
+
     /// Directory to output reports.
     #[arg(long, default_value_t = default_report_folder())]
     report_folder: String,
@@ -103,11 +107,11 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
     let assets_client =
         Client::new(None, args.assets_key.as_deref(), Some(std::time::Duration::from_secs(3600)))?; // 1h
 
-    let dashboard_client = Client::new(
-        Some(format!("{}/api/v1", args.dashboard_url)),
-        args.api_key.as_deref(),
-        Some(std::time::Duration::from_secs(60)),
-    )?;
+    let dashboard_client = if args.no_dashboard {
+        dashboard::DashboardClient::new_dry()
+    } else {
+        dashboard::DashboardClient::new(&args.dashboard_url, args.api_key.as_deref())?
+    };
 
     // reporting uses its own client because keeping the stream open to wait for entries
     // blocks any other requests
@@ -127,12 +131,12 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
     // enter runtime
 
     rt.block_on(async {
-        dashboard::send_machine_info(&dashboard_client, &env).await?;
+        dashboard_client.send_machine_info(&env).await?;
 
         let commit_message = build_info.commit_msg.context("missing commit message")?.split('\n').next().unwrap();
         let max_workloads = args.workload_file.len();
         let reason: Option<&str> = args.reason.as_deref();
-        let invocation_uuid = dashboard::create_invocation(&dashboard_client, build_info, commit_message, env, max_workloads, reason).await?;
+        let invocation_uuid = dashboard_client.create_invocation( build_info, commit_message, env, max_workloads, reason).await?;
 
         tracing::info!(workload_count = args.workload_file.len(), "handling workload files");
 
@@ -167,7 +171,7 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
         let abort_handle = workload_runs.abort_handle();
         tokio::spawn({
             let dashboard_client = dashboard_client.clone();
-            dashboard::cancel_on_ctrl_c(invocation_uuid, dashboard_client, abort_handle)
+            dashboard_client.cancel_on_ctrl_c(invocation_uuid, abort_handle)
         });
 
         // wait for the end of the main task, handle result
@@ -178,7 +182,7 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
             }
             Ok(Err(error)) => {
                 tracing::error!(%invocation_uuid, error = %error, "invocation failed, attempting to report the failure to dashboard");
-                dashboard::mark_as_failed(dashboard_client, invocation_uuid, Some(error.to_string())).await;
+                dashboard_client.mark_as_failed(invocation_uuid, Some(error.to_string())).await;
                 tracing::warn!(%invocation_uuid, "invocation marked as failed following error");
                 Err(error)
             },
@@ -186,7 +190,7 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
                 match join_error.try_into_panic() {
                     Ok(panic) => {
                         tracing::error!("invocation panicked, attempting to report the failure to dashboard");
-                        dashboard::mark_as_failed(dashboard_client, invocation_uuid, Some("Panicked".into())).await;
+                        dashboard_client.mark_as_failed( invocation_uuid, Some("Panicked".into())).await;
                         std::panic::resume_unwind(panic)
                     }
                     Err(_) => {
