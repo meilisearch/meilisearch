@@ -59,8 +59,8 @@ pub enum EmbedErrorKind {
     OpenAiAuth(OpenAiError),
     #[error("sent too many requests to OpenAI: {0}")]
     OpenAiTooManyRequests(OpenAiError),
-    #[error("received internal error from OpenAI: {0}")]
-    OpenAiInternalServerError(OpenAiError),
+    #[error("received internal error from OpenAI: {0:?}")]
+    OpenAiInternalServerError(Option<OpenAiError>),
     #[error("sent too many tokens in a request to OpenAI: {0}")]
     OpenAiTooManyTokens(OpenAiError),
     #[error("received unhandled HTTP status code {0} from OpenAI")]
@@ -106,7 +106,7 @@ impl EmbedError {
         Self { kind: EmbedErrorKind::OpenAiTooManyRequests(inner), fault: FaultSource::Runtime }
     }
 
-    pub(crate) fn openai_internal_server_error(inner: OpenAiError) -> EmbedError {
+    pub(crate) fn openai_internal_server_error(inner: Option<OpenAiError>) -> EmbedError {
         Self { kind: EmbedErrorKind::OpenAiInternalServerError(inner), fault: FaultSource::Runtime }
     }
 

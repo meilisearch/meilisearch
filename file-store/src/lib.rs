@@ -61,7 +61,13 @@ impl FileStore {
     /// Returns the file corresponding to the requested uuid.
     pub fn get_update(&self, uuid: Uuid) -> Result<StdFile> {
         let path = self.get_update_path(uuid);
-        let file = StdFile::open(path)?;
+        let file = match StdFile::open(path) {
+            Ok(file) => file,
+            Err(e) => {
+                tracing::error!("Can't access update file {uuid}: {e}");
+                return Err(e.into());
+            }
+        };
         Ok(file)
     }
 
@@ -96,8 +102,12 @@ impl FileStore {
 
     pub fn delete(&self, uuid: Uuid) -> Result<()> {
         let path = self.path.join(uuid.to_string());
-        std::fs::remove_file(path)?;
-        Ok(())
+        if let Err(e) = std::fs::remove_file(path) {
+            tracing::error!("Can't delete file {uuid}: {e}");
+            Err(e.into())
+        } else {
+            Ok(())
+        }
     }
 
     /// List the Uuids of the files in the FileStore

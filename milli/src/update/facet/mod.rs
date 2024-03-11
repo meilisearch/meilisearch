@@ -79,12 +79,9 @@ pub const FACET_MIN_LEVEL_SIZE: u8 = 5;
 use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::BufReader;
-use std::iter::FromIterator;
 
-use charabia::normalizer::{Normalize, NormalizerOption};
-use grenad::{CompressionType, SortAlgorithm};
-use heed::types::{Bytes, DecodeIgnore, SerdeJson};
-use heed::BytesEncode;
+use grenad::Merger;
+use heed::types::{Bytes, DecodeIgnore};
 use time::OffsetDateTime;
 use tracing::debug;
 
@@ -93,9 +90,9 @@ use super::FacetsUpdateBulk;
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec};
 use crate::heed_codec::BytesRefCodec;
-use crate::update::index_documents::create_sorter;
-use crate::update::merge_btreeset_string;
-use crate::{BEU16StrCodec, Index, Result, MAX_FACET_VALUE_LENGTH};
+use crate::update::del_add::{DelAdd, KvReaderDelAdd};
+use crate::update::MergeFn;
+use crate::{try_split_array_at, FieldId, Index, Result};
 
 pub mod bulk;
 pub mod incremental;
@@ -108,16 +105,20 @@ pub struct FacetsUpdate<'i> {
     index: &'i Index,
     database: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     facet_type: FacetType,
-    delta_data: grenad::Reader<BufReader<File>>,
+    delta_data: Merger<BufReader<File>, MergeFn>,
+    normalized_delta_data: Option<Merger<BufReader<File>, MergeFn>>,
     group_size: u8,
     max_group_size: u8,
     min_level_size: u8,
+    data_size: u64,
 }
 impl<'i> FacetsUpdate<'i> {
     pub fn new(
         index: &'i Index,
         facet_type: FacetType,
-        delta_data: grenad::Reader<BufReader<File>>,
+        delta_data: Merger<BufReader<File>, MergeFn>,
+        normalized_delta_data: Option<Merger<BufReader<File>, MergeFn>>,
+        data_size: u64,
     ) -> Self {
         let database = match facet_type {
             FacetType::String => {
@@ -135,18 +136,20 @@ impl<'i> FacetsUpdate<'i> {
             min_level_size: FACET_MIN_LEVEL_SIZE,
             facet_type,
             delta_data,
+            normalized_delta_data,
+            data_size,
         }
     }
 
     pub fn execute(self, wtxn: &mut heed::RwTxn) -> Result<()> {
-        if self.delta_data.is_empty() {
+        if self.data_size == 0 {
             return Ok(());
         }
         debug!("Computing and writing the facet values levels docids into LMDB on disk...");
         self.index.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
 
         // See self::comparison_bench::benchmark_facet_indexing
-        if self.delta_data.len() >= (self.database.len(wtxn)? / 50) {
+        if self.data_size >= (self.database.len(wtxn)? / 500) {
             let field_ids =
                 self.index.faceted_fields_ids(wtxn)?.iter().copied().collect::<Vec<_>>();
             let bulk_update = FacetsUpdateBulk::new(
@@ -170,94 +173,108 @@ impl<'i> FacetsUpdate<'i> {
             incremental_update.execute(wtxn)?;
         }
 
-        // We clear the list of normalized-for-search facets
-        // and the previous FSTs to compute everything from scratch
-        self.index.facet_id_normalized_string_strings.clear(wtxn)?;
-        self.index.facet_id_string_fst.clear(wtxn)?;
-
-        // As we can't use the same write transaction to read and write in two different databases
-        // we must create a temporary sorter that we will write into LMDB afterward.
-        // As multiple unnormalized facet values can become the same normalized facet value
-        // we must merge them together.
-        let mut sorter = create_sorter(
-            SortAlgorithm::Unstable,
-            merge_btreeset_string,
-            CompressionType::None,
-            None,
-            None,
-            None,
-        );
-
-        // We iterate on the list of original, semi-normalized, facet values
-        // and normalize them for search, inserting them in LMDB in any given order.
-        let options = NormalizerOption { lossy: true, ..Default::default() };
-        let database = self.index.facet_id_string_docids.remap_data_type::<DecodeIgnore>();
-        for result in database.iter(wtxn)? {
-            let (facet_group_key, ()) = result?;
-            if let FacetGroupKey { field_id, level: 0, left_bound } = facet_group_key {
-                let mut normalized_facet = left_bound.normalize(&options);
-                let normalized_truncated_facet: String;
-                if normalized_facet.len() > MAX_FACET_VALUE_LENGTH {
-                    normalized_truncated_facet = normalized_facet
-                        .char_indices()
-                        .take_while(|(idx, _)| *idx < MAX_FACET_VALUE_LENGTH)
-                        .map(|(_, c)| c)
-                        .collect();
-                    normalized_facet = normalized_truncated_facet.into();
-                }
-                let set = BTreeSet::from_iter(std::iter::once(left_bound));
-                let key = (field_id, normalized_facet.as_ref());
-                let key = BEU16StrCodec::bytes_encode(&key).map_err(heed::Error::Encoding)?;
-                let val = SerdeJson::bytes_encode(&set).map_err(heed::Error::Encoding)?;
-                sorter.insert(key, val)?;
-            }
+        match self.normalized_delta_data {
+            Some(data) => index_facet_search(wtxn, data, self.index),
+            None => Ok(()),
         }
-
-        // In this loop we don't need to take care of merging bitmaps
-        // as the grenad sorter already merged them for us.
-        let mut merger_iter = sorter.into_stream_merger_iter()?;
-        while let Some((key_bytes, btreeset_bytes)) = merger_iter.next()? {
-            self.index.facet_id_normalized_string_strings.remap_types::<Bytes, Bytes>().put(
-                wtxn,
-                key_bytes,
-                btreeset_bytes,
-            )?;
-        }
-
-        // We compute one FST by string facet
-        let mut text_fsts = vec![];
-        let mut current_fst: Option<(u16, fst::SetBuilder<Vec<u8>>)> = None;
-        let database =
-            self.index.facet_id_normalized_string_strings.remap_data_type::<DecodeIgnore>();
-        for result in database.iter(wtxn)? {
-            let ((field_id, normalized_facet), _) = result?;
-            current_fst = match current_fst.take() {
-                Some((fid, fst_builder)) if fid != field_id => {
-                    let fst = fst_builder.into_set();
-                    text_fsts.push((fid, fst));
-                    Some((field_id, fst::SetBuilder::memory()))
-                }
-                Some((field_id, fst_builder)) => Some((field_id, fst_builder)),
-                None => Some((field_id, fst::SetBuilder::memory())),
-            };
-
-            if let Some((_, fst_builder)) = current_fst.as_mut() {
-                fst_builder.insert(normalized_facet)?;
-            }
-        }
-
-        if let Some((field_id, fst_builder)) = current_fst {
-            let fst = fst_builder.into_set();
-            text_fsts.push((field_id, fst));
-        }
-
-        // We write those FSTs in LMDB now
-        for (field_id, fst) in text_fsts {
-            self.index.facet_id_string_fst.put(wtxn, &field_id, &fst)?;
-        }
-
-        Ok(())
     }
+}
+
+fn index_facet_search(
+    wtxn: &mut heed::RwTxn,
+    normalized_delta_data: Merger<BufReader<File>, MergeFn>,
+    index: &Index,
+) -> Result<()> {
+    let mut iter = normalized_delta_data.into_stream_merger_iter()?;
+    while let Some((key_bytes, delta_bytes)) = iter.next()? {
+        let deladd_reader = KvReaderDelAdd::new(delta_bytes);
+
+        let database_set = index
+            .facet_id_normalized_string_strings
+            .remap_key_type::<Bytes>()
+            .get(wtxn, key_bytes)?
+            .unwrap_or_default();
+
+        let add_set = deladd_reader
+            .get(DelAdd::Addition)
+            .and_then(|bytes| serde_json::from_slice::<BTreeSet<String>>(bytes).ok())
+            .unwrap_or_default();
+
+        let del_set = match deladd_reader
+            .get(DelAdd::Deletion)
+            .and_then(|bytes| serde_json::from_slice::<BTreeSet<String>>(bytes).ok())
+        {
+            Some(del_set) => {
+                let (field_id_bytes, _) = try_split_array_at(key_bytes).unwrap();
+                let field_id = FieldId::from_be_bytes(field_id_bytes);
+                let mut set = BTreeSet::new();
+                for facet in del_set {
+                    let key = FacetGroupKey { field_id, level: 0, left_bound: facet.as_str() };
+                    // Check if the referenced value doesn't exist anymore before deleting it.
+                    if index
+                        .facet_id_string_docids
+                        .remap_data_type::<DecodeIgnore>()
+                        .get(wtxn, &key)?
+                        .is_none()
+                    {
+                        set.insert(facet);
+                    }
+                }
+                set
+            }
+            None => BTreeSet::new(),
+        };
+
+        let set: BTreeSet<_> =
+            database_set.difference(&del_set).chain(add_set.iter()).cloned().collect();
+
+        if set.is_empty() {
+            index
+                .facet_id_normalized_string_strings
+                .remap_key_type::<Bytes>()
+                .delete(wtxn, key_bytes)?;
+        } else {
+            index
+                .facet_id_normalized_string_strings
+                .remap_key_type::<Bytes>()
+                .put(wtxn, key_bytes, &set)?;
+        }
+    }
+
+    // We clear the FST of normalized-for-search to compute everything from scratch.
+    index.facet_id_string_fst.clear(wtxn)?;
+    // We compute one FST by string facet
+    let mut text_fsts = vec![];
+    let mut current_fst: Option<(u16, fst::SetBuilder<Vec<u8>>)> = None;
+    let database = index.facet_id_normalized_string_strings.remap_data_type::<DecodeIgnore>();
+    for result in database.iter(wtxn)? {
+        let ((field_id, normalized_facet), _) = result?;
+        current_fst = match current_fst.take() {
+            Some((fid, fst_builder)) if fid != field_id => {
+                let fst = fst_builder.into_set();
+                text_fsts.push((fid, fst));
+                Some((field_id, fst::SetBuilder::memory()))
+            }
+            Some((field_id, fst_builder)) => Some((field_id, fst_builder)),
+            None => Some((field_id, fst::SetBuilder::memory())),
+        };
+
+        if let Some((_, fst_builder)) = current_fst.as_mut() {
+            fst_builder.insert(normalized_facet)?;
+        }
+    }
+
+    if let Some((field_id, fst_builder)) = current_fst {
+        let fst = fst_builder.into_set();
+        text_fsts.push((field_id, fst));
+    }
+
+    // We write those FSTs in LMDB now
+    for (field_id, fst) in text_fsts {
+        index.facet_id_string_fst.put(wtxn, &field_id, &fst)?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -268,6 +285,7 @@ pub(crate) mod test_helpers {
     use std::marker::PhantomData;
     use std::rc::Rc;
 
+    use grenad::MergerBuilder;
     use heed::types::Bytes;
     use heed::{BytesDecode, BytesEncode, Env, RoTxn, RwTxn};
     use roaring::RoaringBitmap;
@@ -280,7 +298,8 @@ pub(crate) mod test_helpers {
     use crate::search::facet::get_highest_level;
     use crate::snapshot_tests::display_bitmap;
     use crate::update::del_add::{DelAdd, KvWriterDelAdd};
-    use crate::update::FacetsUpdateIncrementalInner;
+    use crate::update::index_documents::merge_deladd_cbo_roaring_bitmaps;
+    use crate::update::{FacetsUpdateIncrementalInner, MergeFn};
     use crate::CboRoaringBitmapCodec;
 
     /// Utility function to generate a string whose position in a lexicographically
@@ -410,7 +429,8 @@ pub(crate) mod test_helpers {
                 max_group_size: self.max_group_size.get(),
             };
             let key_bytes = BoundCodec::bytes_encode(key).unwrap();
-            update.insert(wtxn, field_id, &key_bytes, docids).unwrap();
+            update.modify(wtxn, field_id, &key_bytes, Some(docids), None).unwrap();
+            update.add_or_delete_level(wtxn, field_id).unwrap();
         }
         pub fn delete_single_docid<'a>(
             &self,
@@ -436,7 +456,8 @@ pub(crate) mod test_helpers {
                 max_group_size: self.max_group_size.get(),
             };
             let key_bytes = BoundCodec::bytes_encode(key).unwrap();
-            update.delete(wtxn, field_id, &key_bytes, docids).unwrap();
+            update.modify(wtxn, field_id, &key_bytes, None, Some(docids)).unwrap();
+            update.add_or_delete_level(wtxn, field_id).unwrap();
         }
 
         pub fn bulk_insert<'a, 'b>(
@@ -463,10 +484,13 @@ pub(crate) mod test_helpers {
             }
             writer.finish().unwrap();
             let reader = grenad::Reader::new(std::io::Cursor::new(new_data)).unwrap();
+            let mut builder = MergerBuilder::new(merge_deladd_cbo_roaring_bitmaps as MergeFn);
+            builder.push(reader.into_cursor().unwrap());
+            let merger = builder.build();
 
             let update = FacetsUpdateBulkInner {
                 db: self.content,
-                delta_data: Some(reader),
+                delta_data: Some(merger),
                 group_size: self.group_size.get(),
                 min_level_size: self.min_level_size.get(),
             };

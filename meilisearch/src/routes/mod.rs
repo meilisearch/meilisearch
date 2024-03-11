@@ -359,12 +359,18 @@ async fn get_version(
 ) -> HttpResponse {
     analytics.publish("Version Seen".to_string(), json!(null), Some(&req));
 
-    let commit_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
-    let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");
+    let build_info = build_info::BuildInfo::from_build();
 
     HttpResponse::Ok().json(VersionResponse {
-        commit_sha: commit_sha.to_string(),
-        commit_date: commit_date.to_string(),
+        commit_sha: build_info.commit_sha1.unwrap_or("unknown").to_string(),
+        commit_date: build_info
+            .commit_timestamp
+            .and_then(|commit_timestamp| {
+                commit_timestamp
+                    .format(&time::format_description::well_known::Iso8601::DEFAULT)
+                    .ok()
+            })
+            .unwrap_or("unknown".into()),
         pkg_version: env!("CARGO_PKG_VERSION").to_string(),
     })
 }

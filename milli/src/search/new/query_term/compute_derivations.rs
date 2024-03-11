@@ -6,9 +6,10 @@ use fst::automaton::Str;
 use fst::{Automaton, IntoStreamer, Streamer};
 use heed::types::DecodeIgnore;
 
-use super::*;
+use super::{OneTypoTerm, Phrase, QueryTerm, ZeroTypoTerm};
 use crate::search::fst_utils::{Complement, Intersection, StartsWith, Union};
-use crate::search::new::query_term::TwoTypoTerm;
+use crate::search::new::interner::{DedupInterner, Interned};
+use crate::search::new::query_term::{Lazy, TwoTypoTerm};
 use crate::search::new::{limits, SearchContext};
 use crate::search::{build_dfa, get_first};
 use crate::{Result, MAX_WORD_LENGTH};

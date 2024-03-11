@@ -97,11 +97,25 @@ pub type LogRouteType = tracing_subscriber::filter::Filtered<
     tracing_subscriber::Registry,
 >;
 
+pub type SubscriberForSecondLayer = tracing_subscriber::layer::Layered<
+    tracing_subscriber::reload::Layer<LogRouteType, tracing_subscriber::Registry>,
+    tracing_subscriber::Registry,
+>;
+
+pub type LogStderrHandle =
+    tracing_subscriber::reload::Handle<LogStderrType, SubscriberForSecondLayer>;
+
+pub type LogStderrType = tracing_subscriber::filter::Filtered<
+    Box<dyn tracing_subscriber::Layer<SubscriberForSecondLayer> + Send + Sync>,
+    Targets,
+    SubscriberForSecondLayer,
+>;
+
 pub fn create_app(
     index_scheduler: Data<IndexScheduler>,
     auth_controller: Data<AuthController>,
     opt: Opt,
-    logs: LogRouteHandle,
+    logs: (LogRouteHandle, LogStderrHandle),
     analytics: Arc<dyn Analytics>,
     enable_dashboard: bool,
 ) -> actix_web::App<
@@ -412,6 +426,9 @@ fn import_dump(
         let reader = BufReader::new(file);
         let reader = DocumentsBatchReader::from_reader(reader)?;
 
+        let embedder_configs = index.embedding_configs(&wtxn)?;
+        let embedders = index_scheduler.embedders(embedder_configs)?;
+
         let builder = milli::update::IndexDocuments::new(
             &mut wtxn,
             &index,
@@ -423,6 +440,8 @@ fn import_dump(
             |indexing_step| tracing::trace!("update: {:?}", indexing_step),
             || false,
         )?;
+
+        let builder = builder.with_embedders(embedders);
 
         let (builder, user_result) = builder.add_documents(reader)?;
         let user_result = user_result?;
@@ -447,7 +466,7 @@ pub fn configure_data(
     index_scheduler: Data<IndexScheduler>,
     auth: Data<AuthController>,
     opt: &Opt,
-    logs: LogRouteHandle,
+    (logs_route, logs_stderr): (LogRouteHandle, LogStderrHandle),
     analytics: Arc<dyn Analytics>,
 ) {
     let http_payload_size_limit = opt.http_payload_size_limit.get_bytes() as usize;
@@ -455,7 +474,8 @@ pub fn configure_data(
         .app_data(index_scheduler)
         .app_data(auth)
         .app_data(web::Data::from(analytics))
-        .app_data(web::Data::new(logs))
+        .app_data(web::Data::new(logs_route))
+        .app_data(web::Data::new(logs_stderr))
         .app_data(web::Data::new(opt.clone()))
         .app_data(
             web::JsonConfig::default()
@@ -515,31 +535,4 @@ pub fn dashboard(config: &mut web::ServiceConfig, enable_frontend: bool) {
 #[cfg(not(feature = "mini-dashboard"))]
 pub fn dashboard(config: &mut web::ServiceConfig, _enable_frontend: bool) {
     config.service(web::resource("/").route(web::get().to(routes::running)));
-}
-
-/// Parses the output of
-/// [`VERGEN_GIT_SEMVER_LIGHTWEIGHT`](https://docs.rs/vergen/latest/vergen/struct.Git.html#instructions)
-///  as a prototype name.
-///
-/// Returns `Some(prototype_name)` if the following conditions are met on this value:
-///
-/// 1. starts with `prototype-`,
-/// 2. ends with `-<some_number>`,
-/// 3. does not end with `<some_number>-<some_number>`.
-///
-/// Otherwise, returns `None`.
-pub fn prototype_name() -> Option<&'static str> {
-    let prototype: &'static str = option_env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT")?;
-
-    if !prototype.starts_with("prototype-") {
-        return None;
-    }
-
-    let mut rsplit_prototype = prototype.rsplit('-');
-    // last component MUST be a number
-    rsplit_prototype.next()?.parse::<u64>().ok()?;
-    // before than last component SHALL NOT be a number
-    rsplit_prototype.next()?.parse::<u64>().err()?;
-
-    Some(prototype)
 }

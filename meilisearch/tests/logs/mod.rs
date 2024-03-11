@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use actix_web::http::header::ContentType;
 use meili_snap::snapshot;
-use meilisearch::{analytics, create_app, Opt};
+use meilisearch::{analytics, create_app, Opt, SubscriberForSecondLayer};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Layer;
@@ -27,18 +27,25 @@ async fn basic_test_log_stream_route() {
         tracing_subscriber::reload::Layer::new(None.with_filter(
             tracing_subscriber::filter::Targets::new().with_target("", LevelFilter::OFF),
         ));
+    let (_stderr_layer, stderr_layer_handle) = tracing_subscriber::reload::Layer::new(
+        (Box::new(
+            tracing_subscriber::fmt::layer()
+                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE),
+        ) as Box<dyn tracing_subscriber::Layer<SubscriberForSecondLayer> + Send + Sync>)
+            .with_filter(tracing_subscriber::filter::Targets::new()),
+    );
 
     let subscriber = tracing_subscriber::registry().with(route_layer).with(
         tracing_subscriber::fmt::layer()
             .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
-            .with_filter(tracing_subscriber::filter::LevelFilter::from_str("INFO").unwrap()),
+            .with_filter(tracing_subscriber::filter::LevelFilter::from_str("OFF").unwrap()),
     );
 
     let app = actix_web::test::init_service(create_app(
         server.service.index_scheduler.clone().into(),
         server.service.auth.clone().into(),
         server.service.options.clone(),
-        route_layer_handle,
+        (route_layer_handle, stderr_layer_handle),
         analytics::MockAnalytics::new(&server.service.options),
         true,
     ))

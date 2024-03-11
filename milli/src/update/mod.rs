@@ -3,9 +3,8 @@ pub use self::clear_documents::ClearDocuments;
 pub use self::facet::bulk::FacetsUpdateBulk;
 pub use self::facet::incremental::FacetsUpdateIncrementalInner;
 pub use self::index_documents::{
-    merge_btreeset_string, merge_cbo_roaring_bitmaps, merge_roaring_bitmaps,
-    DocumentAdditionResult, DocumentId, IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod,
-    MergeFn,
+    merge_cbo_roaring_bitmaps, merge_roaring_bitmaps, DocumentAdditionResult, DocumentId,
+    IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod, MergeFn,
 };
 pub use self::indexer_config::IndexerConfig;
 pub use self::settings::{validate_embedding_settings, Setting, Settings};

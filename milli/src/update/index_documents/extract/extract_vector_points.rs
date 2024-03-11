@@ -257,6 +257,7 @@ fn push_vectors_diff(
     key_buffer: &mut Vec<u8>,
     delta: VectorStateDelta,
 ) -> Result<()> {
+    puffin::profile_function!();
     let (must_remove, prompt, (mut del_vectors, mut add_vectors)) = delta.into_values();
     if must_remove {
         key_buffer.truncate(TRUNCATE_SIZE);
@@ -332,13 +333,14 @@ fn extract_vectors(
     }
 }
 
-#[logging_timer::time]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 pub fn extract_embeddings<R: io::Read + io::Seek>(
     // docid, prompt
     prompt_reader: grenad::Reader<R>,
     indexer: GrenadParameters,
     embedder: Arc<Embedder>,
 ) -> Result<grenad::Reader<BufReader<File>>> {
+    puffin::profile_function!();
     let n_chunks = embedder.chunk_count_hint(); // chunk level parallelism
     let n_vectors_per_chunk = embedder.prompt_count_in_chunk_hint(); // number of vectors in a single chunk
 

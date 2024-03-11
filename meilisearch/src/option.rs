@@ -1,4 +1,3 @@
-use std::convert::TryFrom;
 use std::env::VarError;
 use std::ffi::OsStr;
 use std::fmt::Display;
@@ -51,6 +50,7 @@ const MEILI_IGNORE_MISSING_DUMP: &str = "MEILI_IGNORE_MISSING_DUMP";
 const MEILI_IGNORE_DUMP_IF_DB_EXISTS: &str = "MEILI_IGNORE_DUMP_IF_DB_EXISTS";
 const MEILI_DUMP_DIR: &str = "MEILI_DUMP_DIR";
 const MEILI_LOG_LEVEL: &str = "MEILI_LOG_LEVEL";
+const MEILI_EXPERIMENTAL_LOGS_MODE: &str = "MEILI_EXPERIMENTAL_LOGS_MODE";
 const MEILI_EXPERIMENTAL_REPLICATION_PARAMETERS: &str = "MEILI_EXPERIMENTAL_REPLICATION_PARAMETERS";
 const MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE: &str = "MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE";
 const MEILI_EXPERIMENTAL_ENABLE_METRICS: &str = "MEILI_EXPERIMENTAL_ENABLE_METRICS";
@@ -79,6 +79,39 @@ const DEFAULT_LOG_EVERY_N: usize = 100_000;
 // opened simultaneously.
 pub const INDEX_SIZE: u64 = 2 * 1024 * 1024 * 1024 * 1024; // 2 TiB
 pub const TASK_DB_SIZE: u64 = 20 * 1024 * 1024 * 1024; // 20 GiB
+
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum LogMode {
+    #[default]
+    Human,
+    Json,
+}
+
+impl Display for LogMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LogMode::Human => Display::fmt("HUMAN", f),
+            LogMode::Json => Display::fmt("JSON", f),
+        }
+    }
+}
+
+impl FromStr for LogMode {
+    type Err = LogModeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_lowercase().as_str() {
+            "human" => Ok(LogMode::Human),
+            "json" => Ok(LogMode::Json),
+            _ => Err(LogModeError(s.to_owned())),
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("Unsupported log mode level `{0}`. Supported values are `HUMAN` and `JSON`.")]
+pub struct LogModeError(String);
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
@@ -311,9 +344,16 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_enable_metrics: bool,
 
+    /// Experimental logs mode feature. For more information, see: <https://github.com/orgs/meilisearch/discussions/723>
+    ///
+    /// Change the mode of the logs on the console.
+    #[clap(long, env = MEILI_EXPERIMENTAL_LOGS_MODE, default_value_t)]
+    #[serde(default)]
+    pub experimental_logs_mode: LogMode,
+
     /// Experimental logs route feature. For more information, see: <https://github.com/orgs/meilisearch/discussions/721>
     ///
-    /// Enables the log route on the `POST /logs/stream` endpoint and the `DELETE /logs/stream` to stop receiving logs.
+    /// Enables the log routes on the `POST /logs/stream`, `POST /logs/stderr` endpoints, and the `DELETE /logs/stream` to stop receiving logs.
     #[clap(long, env = MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE)]
     #[serde(default)]
     pub experimental_enable_logs_route: bool,
@@ -433,6 +473,7 @@ impl Opt {
             #[cfg(feature = "analytics")]
             no_analytics,
             experimental_enable_metrics,
+            experimental_logs_mode,
             experimental_enable_logs_route,
             experimental_replication_parameters,
             experimental_reduce_indexing_memory_usage,
@@ -490,6 +531,10 @@ impl Opt {
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_ENABLE_METRICS,
             experimental_enable_metrics.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_LOGS_MODE,
+            experimental_logs_mode.to_string(),
         );
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_REPLICATION_PARAMETERS,

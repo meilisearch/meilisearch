@@ -1,5 +1,5 @@
 use std::env;
-use std::io::{stderr, Write};
+use std::io::{stderr, LineWriter, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -10,8 +10,10 @@ use actix_web::HttpServer;
 use index_scheduler::IndexScheduler;
 use is_terminal::IsTerminal;
 use meilisearch::analytics::Analytics;
+use meilisearch::option::LogMode;
 use meilisearch::{
-    analytics, create_app, prototype_name, setup_meilisearch, LogRouteHandle, LogRouteType, Opt,
+    analytics, create_app, setup_meilisearch, LogRouteHandle, LogRouteType, LogStderrHandle,
+    LogStderrType, Opt, SubscriberForSecondLayer,
 };
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
 use mimalloc::MiMalloc;
@@ -23,28 +25,44 @@ use tracing_subscriber::Layer;
 #[global_allocator]
 static ALLOC: MiMalloc = MiMalloc;
 
-fn default_layer() -> LogRouteType {
+fn default_log_route_layer() -> LogRouteType {
     None.with_filter(tracing_subscriber::filter::Targets::new().with_target("", LevelFilter::OFF))
 }
 
+fn default_log_stderr_layer(opt: &Opt) -> LogStderrType {
+    let layer = tracing_subscriber::fmt::layer()
+        .with_writer(|| LineWriter::new(std::io::stderr()))
+        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE);
+
+    let layer = match opt.experimental_logs_mode {
+        LogMode::Human => Box::new(layer)
+            as Box<dyn tracing_subscriber::Layer<SubscriberForSecondLayer> + Send + Sync>,
+        LogMode::Json => Box::new(layer.json())
+            as Box<dyn tracing_subscriber::Layer<SubscriberForSecondLayer> + Send + Sync>,
+    };
+
+    layer.with_filter(
+        tracing_subscriber::filter::Targets::new()
+            .with_target("", LevelFilter::from_str(&opt.log_level.to_string()).unwrap()),
+    )
+}
+
 /// does all the setup before meilisearch is launched
-fn setup(opt: &Opt) -> anyhow::Result<LogRouteHandle> {
-    let (route_layer, route_layer_handle) = tracing_subscriber::reload::Layer::new(default_layer());
+fn setup(opt: &Opt) -> anyhow::Result<(LogRouteHandle, LogStderrHandle)> {
+    let (route_layer, route_layer_handle) =
+        tracing_subscriber::reload::Layer::new(default_log_route_layer());
     let route_layer: tracing_subscriber::reload::Layer<_, _> = route_layer;
 
-    let subscriber = tracing_subscriber::registry().with(route_layer).with(
-        tracing_subscriber::fmt::layer()
-            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
-            .with_filter(
-                tracing_subscriber::filter::LevelFilter::from_str(&opt.log_level.to_string())
-                    .unwrap(),
-            ),
-    );
+    let (stderr_layer, stderr_layer_handle) =
+        tracing_subscriber::reload::Layer::new(default_log_stderr_layer(opt));
+    let route_layer: tracing_subscriber::reload::Layer<_, _> = route_layer;
+
+    let subscriber = tracing_subscriber::registry().with(route_layer).with(stderr_layer);
 
     // set the subscriber as the default for the application
     tracing::subscriber::set_global_default(subscriber).unwrap();
 
-    Ok(route_layer_handle)
+    Ok((route_layer_handle, stderr_layer_handle))
 }
 
 fn on_panic(info: &std::panic::PanicInfo) {
@@ -110,7 +128,7 @@ async fn run_http(
     index_scheduler: Arc<IndexScheduler>,
     auth_controller: Arc<AuthController>,
     opt: Opt,
-    logs: LogRouteHandle,
+    logs: (LogRouteHandle, LogStderrHandle),
     analytics: Arc<dyn Analytics>,
 ) -> anyhow::Result<()> {
     let enable_dashboard = &opt.env == "development";
@@ -145,8 +163,8 @@ pub fn print_launch_resume(
     analytics: Arc<dyn Analytics>,
     config_read_from: Option<PathBuf>,
 ) {
-    let commit_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
-    let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");
+    let build_info = build_info::BuildInfo::from_build();
+
     let protocol =
         if opt.ssl_cert_path.is_some() && opt.ssl_key_path.is_some() { "https" } else { "http" };
     let ascii_name = r#"
@@ -171,10 +189,18 @@ pub fn print_launch_resume(
     eprintln!("Database path:\t\t{:?}", opt.db_path);
     eprintln!("Server listening on:\t\"{}://{}\"", protocol, opt.http_addr);
     eprintln!("Environment:\t\t{:?}", opt.env);
-    eprintln!("Commit SHA:\t\t{:?}", commit_sha.to_string());
-    eprintln!("Commit date:\t\t{:?}", commit_date.to_string());
+    eprintln!("Commit SHA:\t\t{:?}", build_info.commit_sha1.unwrap_or("unknown"));
+    eprintln!(
+        "Commit date:\t\t{:?}",
+        build_info
+            .commit_timestamp
+            .and_then(|commit_timestamp| commit_timestamp
+                .format(&time::format_description::well_known::Rfc3339)
+                .ok())
+            .unwrap_or("unknown".into())
+    );
     eprintln!("Package version:\t{:?}", env!("CARGO_PKG_VERSION").to_string());
-    if let Some(prototype) = prototype_name() {
+    if let Some(prototype) = build_info.describe.and_then(|describe| describe.as_prototype()) {
         eprintln!("Prototype:\t\t{:?}", prototype);
     }
 

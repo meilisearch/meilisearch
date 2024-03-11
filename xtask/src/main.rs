@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use clap::Parser;
+use xtask::bench::BenchDeriveArgs;
 
 /// List features available in the workspace
 #[derive(Parser, Debug)]
@@ -17,13 +18,16 @@ struct ListFeaturesDeriveArgs {
 #[command(bin_name = "cargo xtask")]
 enum Command {
     ListFeatures(ListFeaturesDeriveArgs),
+    Bench(BenchDeriveArgs),
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let args = Command::parse();
     match args {
         Command::ListFeatures(args) => list_features(args),
+        Command::Bench(args) => xtask::bench::run(args)?,
     }
+    Ok(())
 }
 
 fn list_features(args: ListFeaturesDeriveArgs) {

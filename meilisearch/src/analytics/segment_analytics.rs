@@ -28,7 +28,9 @@ use super::{
     config_user_id_path, DocumentDeletionKind, DocumentFetchKind, MEILISEARCH_CONFIG_PATH,
 };
 use crate::analytics::Analytics;
-use crate::option::{default_http_addr, IndexerOpts, MaxMemory, MaxThreads, ScheduleSnapshot};
+use crate::option::{
+    default_http_addr, IndexerOpts, LogMode, MaxMemory, MaxThreads, ScheduleSnapshot,
+};
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
 use crate::routes::indexes::facet_search::FacetSearchQuery;
 use crate::routes::tasks::TasksFilterQuery;
@@ -250,10 +252,12 @@ impl super::Analytics for SegmentAnalytics {
 struct Infos {
     env: String,
     experimental_enable_metrics: bool,
+    experimental_logs_mode: LogMode,
     experimental_replication_parameters: bool,
     experimental_enable_logs_route: bool,
     experimental_reduce_indexing_memory_usage: bool,
     experimental_max_number_of_batched_tasks: usize,
+    gpu_enabled: bool,
     db_path: bool,
     import_dump: bool,
     dump_dir: bool,
@@ -289,6 +293,7 @@ impl From<Opt> for Infos {
         let Opt {
             db_path,
             experimental_enable_metrics,
+            experimental_logs_mode,
             experimental_replication_parameters,
             experimental_enable_logs_route,
             experimental_reduce_indexing_memory_usage,
@@ -337,9 +342,11 @@ impl From<Opt> for Infos {
         Self {
             env,
             experimental_enable_metrics,
+            experimental_logs_mode,
             experimental_replication_parameters,
             experimental_enable_logs_route,
             experimental_reduce_indexing_memory_usage,
+            gpu_enabled: meilisearch_types::milli::vector::is_cuda_enabled(),
             db_path: db_path != PathBuf::from("./data.ms"),
             import_dump: import_dump.is_some(),
             dump_dir: dump_dir != PathBuf::from("dumps/"),
@@ -466,7 +473,9 @@ impl Segment {
             create_all_stats(index_scheduler.into(), auth_controller.into(), &AuthFilter::default())
         {
             // Replace the version number with the prototype name if any.
-            let version = if let Some(prototype) = crate::prototype_name() {
+            let version = if let Some(prototype) = build_info::DescribeResult::from_build()
+                .and_then(|describe| describe.as_prototype())
+            {
                 prototype
             } else {
                 env!("CARGO_PKG_VERSION")
