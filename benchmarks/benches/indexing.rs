@@ -32,7 +32,7 @@ fn setup_index() -> Index {
     let mut options = EnvOpenOptions::new();
     options.map_size(100 * 1024 * 1024 * 1024); // 100 GB
     options.max_readers(10);
-    Index::new(options, path).unwrap()
+    Index::new(None, options, path).unwrap()
 }
 
 fn setup_settings<'t>(

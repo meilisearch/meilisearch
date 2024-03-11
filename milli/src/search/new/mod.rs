@@ -714,6 +714,7 @@ fn check_sort_criteria(ctx: &SearchContext, sort_criteria: Option<&Vec<AscDesc>>
 
                 return Err(UserError::InvalidSortableAttribute {
                     field: field.to_string(),
+                    index_name: ctx.index.name.clone(),
                     valid_fields,
                     hidden_fields,
                 }
@@ -725,6 +726,7 @@ fn check_sort_criteria(ctx: &SearchContext, sort_criteria: Option<&Vec<AscDesc>>
 
                 return Err(UserError::InvalidSortableAttribute {
                     field: "_geo".to_string(),
+                    index_name: ctx.index.name.clone(),
                     valid_fields,
                     hidden_fields,
                 }

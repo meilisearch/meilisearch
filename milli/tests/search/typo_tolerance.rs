@@ -104,7 +104,7 @@ fn test_typo_disabled_on_word() {
     let tmp = tempdir().unwrap();
     let mut options = EnvOpenOptions::new();
     options.map_size(4096 * 100);
-    let index = Index::new(options, tmp.path()).unwrap();
+    let index = Index::new(None, options, tmp.path()).unwrap();
 
     let mut builder = milli::documents::DocumentsBatchBuilder::new(Vec::new());
     let doc1 = json!({

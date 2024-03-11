@@ -1548,7 +1548,7 @@ pub(crate) mod tests {
             let mut options = EnvOpenOptions::new();
             options.map_size(size);
             let _tempdir = TempDir::new_in(".").unwrap();
-            let inner = Index::new(options, _tempdir.path()).unwrap();
+            let inner = Index::new(Some("temp".to_string()), options, _tempdir.path()).unwrap();
             let indexer_config = IndexerConfig::default();
             let index_documents_config = IndexDocumentsConfig::default();
             Self { inner, indexer_config, index_documents_config, _tempdir }

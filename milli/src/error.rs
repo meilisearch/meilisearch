@@ -122,8 +122,12 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     InvalidFilter(String),
     #[error("Invalid type for filter subexpression: expected: {}, found: {1}.", .0.join(", "))]
     InvalidFilterExpression(&'static [&'static str], Value),
-    #[error("Attribute `{}` is not sortable. {}",
+    #[error("Attribute `{}`{} is not sortable. {}",
         .field,
+        match .index_name.is_some() {
+            true => format!(" of index `{}`", index_name.clone().unwrap()),
+            false => String::from(""),
+        },
         match .valid_fields.is_empty() {
             true => "This index does not have configured sortable attributes.".to_string(),
             false => format!("Available sortable attributes are: `{}{}`.",
@@ -132,7 +136,12 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
                 ),
         }
     )]
-    InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String>, hidden_fields: bool },
+    InvalidSortableAttribute {
+        field: String,
+        index_name: Option<String>,
+        valid_fields: BTreeSet<String>,
+        hidden_fields: bool,
+    },
     #[error("Attribute `{}` is not facet-searchable. {}",
         .field,
         match .valid_fields.is_empty() {
@@ -451,7 +460,7 @@ impl std::fmt::Display for FaultSource {
 
 #[test]
 fn conditionally_lookup_for_error_message() {
-    let prefix = "Attribute `name` is not sortable.";
+    let prefix = "Attribute `name` of index `index` is not sortable.";
     let messages = vec![
         (BTreeSet::new(), "This index does not have configured sortable attributes."),
         (BTreeSet::from(["age".to_string()]), "Available sortable attributes are: `age`."),
@@ -460,6 +469,7 @@ fn conditionally_lookup_for_error_message() {
     for (list, suffix) in messages {
         let err = UserError::InvalidSortableAttribute {
             field: "name".to_string(),
+            index_name: Some("index".to_string()),
             valid_fields: list,
             hidden_fields: false,
         };
