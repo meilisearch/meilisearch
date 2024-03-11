@@ -624,6 +624,25 @@ fn embedder_analytics(
     )
 }
 
+make_setting_route!(
+    "/search_cutoff",
+    patch,
+    u64,
+    meilisearch_types::deserr::DeserrJsonError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsSearchCutoff,
+    >,
+    search_cutoff,
+    "search_cutoff",
+    analytics,
+    |setting: &Option<u64>, req: &HttpRequest| {
+        analytics.publish(
+            "Search Cutoff Updated".to_string(),
+            serde_json::json!({"search_cutoff": setting }),
+            Some(req),
+        );
+    }
+);
+
 macro_rules! generate_configure {
     ($($mod:ident),*) => {
         pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -765,7 +784,8 @@ pub async fn update_all(
             "synonyms": {
                 "total": new_settings.synonyms.as_ref().set().map(|synonyms| synonyms.len()),
             },
-            "embedders": crate::routes::indexes::settings::embedder_analytics(new_settings.embedders.as_ref().set())
+            "embedders": crate::routes::indexes::settings::embedder_analytics(new_settings.embedders.as_ref().set()),
+            "search_cutoff": new_settings.search_cutoff.as_ref().set(),
         }),
         Some(&req),
     );

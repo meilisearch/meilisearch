@@ -259,6 +259,7 @@ InvalidSettingsProximityPrecision     , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFaceting               , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFilterableAttributes   , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsPagination             , InvalidRequest       , BAD_REQUEST ;
+InvalidSettingsSearchCutoff           , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsEmbedders              , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsRankingRules           , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsSearchableAttributes   , InvalidRequest       , BAD_REQUEST ;

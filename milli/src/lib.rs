@@ -121,6 +121,12 @@ impl fmt::Debug for TimeBudget {
     }
 }
 
+impl Default for TimeBudget {
+    fn default() -> Self {
+        Self::new(std::time::Duration::from_millis(150))
+    }
+}
+
 impl TimeBudget {
     pub fn new(budget: std::time::Duration) -> Self {
         Self { started_at: std::time::Instant::now(), budget }

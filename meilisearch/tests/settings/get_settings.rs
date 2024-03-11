@@ -49,12 +49,12 @@ async fn get_settings_unexisting_index() {
 async fn get_settings() {
     let server = Server::new().await;
     let index = server.index("test");
-    index.create(None).await;
-    index.wait_task(0).await;
+    let (response, _code) = index.create(None).await;
+    index.wait_task(response.uid()).await;
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     let settings = response.as_object().unwrap();
-    assert_eq!(settings.keys().len(), 15);
+    assert_eq!(settings.keys().len(), 16);
     assert_eq!(settings["displayedAttributes"], json!(["*"]));
     assert_eq!(settings["searchableAttributes"], json!(["*"]));
     assert_eq!(settings["filterableAttributes"], json!([]));
@@ -84,6 +84,7 @@ async fn get_settings() {
         })
     );
     assert_eq!(settings["proximityPrecision"], json!("byWord"));
+    assert_eq!(settings["searchCutoff"], json!(null));
 }
 
 #[actix_rt::test]

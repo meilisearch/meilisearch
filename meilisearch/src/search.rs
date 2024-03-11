@@ -496,8 +496,11 @@ pub fn perform_search(
     distribution: Option<DistributionShift>,
 ) -> Result<SearchResult, MeilisearchHttpError> {
     let before_search = Instant::now();
-    let time_budget = TimeBudget::new(Duration::from_millis(150));
     let rtxn = index.read_txn()?;
+    let time_budget = match index.search_cutoff(&rtxn)? {
+        Some(cutoff) => TimeBudget::new(Duration::from_millis(cutoff)),
+        None => TimeBudget::default(),
+    };
 
     let (search, is_finite_pagination, max_total_hits, offset) =
         prepare_search(index, &rtxn, &query, features, distribution, time_budget)?;

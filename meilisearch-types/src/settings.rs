@@ -202,6 +202,9 @@ pub struct Settings<T> {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsEmbedders>)]
     pub embedders: Setting<BTreeMap<String, Setting<milli::vector::settings::EmbeddingSettings>>>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsSearchCutoff>)]
+    pub search_cutoff: Setting<u64>,
 
     #[serde(skip)]
     #[deserr(skip)]
@@ -227,6 +230,7 @@ impl Settings<Checked> {
             faceting: Setting::Reset,
             pagination: Setting::Reset,
             embedders: Setting::Reset,
+            search_cutoff: Setting::Reset,
             _kind: PhantomData,
         }
     }
@@ -249,6 +253,7 @@ impl Settings<Checked> {
             faceting,
             pagination,
             embedders,
+            search_cutoff,
             ..
         } = self;
 
@@ -269,6 +274,7 @@ impl Settings<Checked> {
             faceting,
             pagination,
             embedders,
+            search_cutoff,
             _kind: PhantomData,
         }
     }
@@ -315,6 +321,7 @@ impl Settings<Unchecked> {
             faceting: self.faceting,
             pagination: self.pagination,
             embedders: self.embedders,
+            search_cutoff: self.search_cutoff,
             _kind: PhantomData,
         }
     }
@@ -347,19 +354,40 @@ pub fn apply_settings_to_builder(
     settings: &Settings<Checked>,
     builder: &mut milli::update::Settings,
 ) {
-    match settings.searchable_attributes {
+    let Settings {
+        displayed_attributes,
+        searchable_attributes,
+        filterable_attributes,
+        sortable_attributes,
+        ranking_rules,
+        stop_words,
+        non_separator_tokens,
+        separator_tokens,
+        dictionary,
+        synonyms,
+        distinct_attribute,
+        proximity_precision,
+        typo_tolerance,
+        faceting,
+        pagination,
+        embedders,
+        search_cutoff,
+        _kind,
+    } = settings;
+
+    match searchable_attributes {
         Setting::Set(ref names) => builder.set_searchable_fields(names.clone()),
         Setting::Reset => builder.reset_searchable_fields(),
         Setting::NotSet => (),
     }
 
-    match settings.displayed_attributes {
+    match displayed_attributes {
         Setting::Set(ref names) => builder.set_displayed_fields(names.clone()),
         Setting::Reset => builder.reset_displayed_fields(),
         Setting::NotSet => (),
     }
 
-    match settings.filterable_attributes {
+    match filterable_attributes {
         Setting::Set(ref facets) => {
             builder.set_filterable_fields(facets.clone().into_iter().collect())
         }
@@ -367,13 +395,13 @@ pub fn apply_settings_to_builder(
         Setting::NotSet => (),
     }
 
-    match settings.sortable_attributes {
+    match sortable_attributes {
         Setting::Set(ref fields) => builder.set_sortable_fields(fields.iter().cloned().collect()),
         Setting::Reset => builder.reset_sortable_fields(),
         Setting::NotSet => (),
     }
 
-    match settings.ranking_rules {
+    match ranking_rules {
         Setting::Set(ref criteria) => {
             builder.set_criteria(criteria.iter().map(|c| c.clone().into()).collect())
         }
@@ -381,13 +409,13 @@ pub fn apply_settings_to_builder(
         Setting::NotSet => (),
     }
 
-    match settings.stop_words {
+    match stop_words {
         Setting::Set(ref stop_words) => builder.set_stop_words(stop_words.clone()),
         Setting::Reset => builder.reset_stop_words(),
         Setting::NotSet => (),
     }
 
-    match settings.non_separator_tokens {
+    match non_separator_tokens {
         Setting::Set(ref non_separator_tokens) => {
             builder.set_non_separator_tokens(non_separator_tokens.clone())
         }
@@ -395,7 +423,7 @@ pub fn apply_settings_to_builder(
         Setting::NotSet => (),
     }
 
-    match settings.separator_tokens {
+    match separator_tokens {
         Setting::Set(ref separator_tokens) => {
             builder.set_separator_tokens(separator_tokens.clone())
         }
@@ -403,31 +431,31 @@ pub fn apply_settings_to_builder(
         Setting::NotSet => (),
     }
 
-    match settings.dictionary {
+    match dictionary {
         Setting::Set(ref dictionary) => builder.set_dictionary(dictionary.clone()),
         Setting::Reset => builder.reset_dictionary(),
         Setting::NotSet => (),
     }
 
-    match settings.synonyms {
+    match synonyms {
         Setting::Set(ref synonyms) => builder.set_synonyms(synonyms.clone().into_iter().collect()),
         Setting::Reset => builder.reset_synonyms(),
         Setting::NotSet => (),
     }
 
-    match settings.distinct_attribute {
+    match distinct_attribute {
         Setting::Set(ref attr) => builder.set_distinct_field(attr.clone()),
         Setting::Reset => builder.reset_distinct_field(),
         Setting::NotSet => (),
     }
 
-    match settings.proximity_precision {
+    match proximity_precision {
         Setting::Set(ref precision) => builder.set_proximity_precision((*precision).into()),
         Setting::Reset => builder.reset_proximity_precision(),
         Setting::NotSet => (),
     }
 
-    match settings.typo_tolerance {
+    match typo_tolerance {
         Setting::Set(ref value) => {
             match value.enabled {
                 Setting::Set(val) => builder.set_autorize_typos(val),
@@ -482,7 +510,7 @@ pub fn apply_settings_to_builder(
         Setting::NotSet => (),
     }
 
-    match &settings.faceting {
+    match faceting {
         Setting::Set(FacetingSettings { max_values_per_facet, sort_facet_values_by }) => {
             match max_values_per_facet {
                 Setting::Set(val) => builder.set_max_values_per_facet(*val),
@@ -504,7 +532,7 @@ pub fn apply_settings_to_builder(
         Setting::NotSet => (),
     }
 
-    match settings.pagination {
+    match pagination {
         Setting::Set(ref value) => match value.max_total_hits {
             Setting::Set(val) => builder.set_pagination_max_total_hits(val),
             Setting::Reset => builder.reset_pagination_max_total_hits(),
@@ -514,9 +542,15 @@ pub fn apply_settings_to_builder(
         Setting::NotSet => (),
     }
 
-    match settings.embedders.clone() {
-        Setting::Set(value) => builder.set_embedder_settings(value),
+    match embedders {
+        Setting::Set(value) => builder.set_embedder_settings(value.clone()),
         Setting::Reset => builder.reset_embedder_settings(),
+        Setting::NotSet => (),
+    }
+
+    match search_cutoff {
+        Setting::Set(cutoff) => builder.set_search_cutoff(*cutoff),
+        Setting::Reset => builder.reset_search_cutoff(),
         Setting::NotSet => (),
     }
 }
@@ -607,6 +641,8 @@ pub fn settings(
         .collect();
     let embedders = if embedders.is_empty() { Setting::NotSet } else { Setting::Set(embedders) };
 
+    let search_cutoff = index.search_cutoff(rtxn)?;
+
     Ok(Settings {
         displayed_attributes: match displayed_attributes {
             Some(attrs) => Setting::Set(attrs),
@@ -633,6 +669,10 @@ pub fn settings(
         faceting: Setting::Set(faceting),
         pagination: Setting::Set(pagination),
         embedders,
+        search_cutoff: match search_cutoff {
+            Some(cutoff) => Setting::Set(cutoff),
+            None => Setting::Reset,
+        },
         _kind: PhantomData,
     })
 }
@@ -783,6 +823,7 @@ pub(crate) mod test {
             faceting: Setting::NotSet,
             pagination: Setting::NotSet,
             embedders: Setting::NotSet,
+            search_cutoff: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 
@@ -809,6 +850,7 @@ pub(crate) mod test {
             faceting: Setting::NotSet,
             pagination: Setting::NotSet,
             embedders: Setting::NotSet,
+            search_cutoff: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 
