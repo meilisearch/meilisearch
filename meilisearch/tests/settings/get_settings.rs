@@ -35,6 +35,7 @@ static DEFAULT_SETTINGS_VALUES: Lazy<HashMap<&'static str, Value>> = Lazy::new(|
             "maxTotalHits": json!(1000),
         }),
     );
+    map.insert("search_cutoff", json!(null));
     map
 });
 
@@ -286,7 +287,8 @@ test_setting_routes!(
     ranking_rules put,
     synonyms put,
     pagination patch,
-    faceting patch
+    faceting patch,
+    search_cutoff put
 );
 
 #[actix_rt::test]
