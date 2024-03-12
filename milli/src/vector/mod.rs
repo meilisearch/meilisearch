@@ -16,46 +16,62 @@ pub use self::error::Error;
 
 pub type Embedding = Vec<f32>;
 
+/// One or multiple embeddings stored consecutively in a flat vector.
 pub struct Embeddings<F> {
     data: Vec<F>,
     dimension: usize,
 }
 
 impl<F> Embeddings<F> {
+    /// Declares an empty  vector of embeddings of the specified dimensions.
     pub fn new(dimension: usize) -> Self {
         Self { data: Default::default(), dimension }
     }
 
+    /// Declares a vector of embeddings containing a single element.
+    ///
+    /// The dimension is inferred from the length of the passed embedding.
     pub fn from_single_embedding(embedding: Vec<F>) -> Self {
         Self { dimension: embedding.len(), data: embedding }
     }
 
+    /// Declares a vector of embeddings from its components.
+    ///
+    /// `data.len()` must be a multiple of `dimension`, otherwise an error is returned.
     pub fn from_inner(data: Vec<F>, dimension: usize) -> Result<Self, Vec<F>> {
         let mut this = Self::new(dimension);
         this.append(data)?;
         Ok(this)
     }
 
+    /// Returns the number of embeddings in this vector of embeddings.
     pub fn embedding_count(&self) -> usize {
         self.data.len() / self.dimension
     }
 
+    /// Dimension of a single embedding.
     pub fn dimension(&self) -> usize {
         self.dimension
     }
 
+    /// Deconstructs self into the inner flat vector.
     pub fn into_inner(self) -> Vec<F> {
         self.data
     }
 
+    /// A reference to the inner flat vector.
     pub fn as_inner(&self) -> &[F] {
         &self.data
     }
 
+    /// Iterates over the embeddings contained in the flat vector.
     pub fn iter(&self) -> impl Iterator<Item = &'_ [F]> + '_ {
         self.data.as_slice().chunks_exact(self.dimension)
     }
 
+    /// Push an embedding at the end of the embeddings.
+    ///
+    /// If `embedding.len() != self.dimension`, then the push operation fails.
     pub fn push(&mut self, mut embedding: Vec<F>) -> Result<(), Vec<F>> {
         if embedding.len() != self.dimension {
             return Err(embedding);
@@ -64,6 +80,9 @@ impl<F> Embeddings<F> {
         Ok(())
     }
 
+    /// Append a flat vector of embeddings a the end of the embeddings.
+    ///
+    /// If `embeddings.len() % self.dimension != 0`, then the append operation fails.
     pub fn append(&mut self, mut embeddings: Vec<F>) -> Result<(), Vec<F>> {
         if embeddings.len() % self.dimension != 0 {
             return Err(embeddings);
@@ -73,37 +92,57 @@ impl<F> Embeddings<F> {
     }
 }
 
+/// An embedder can be used to transform text into embeddings.
 #[derive(Debug)]
 pub enum Embedder {
+    /// An embedder based on running local models, fetched from the Hugging Face Hub.
     HuggingFace(hf::Embedder),
+    /// An embedder based on making embedding queries against the OpenAI API.
     OpenAi(openai::Embedder),
+    /// An embedder based on the user providing the embeddings in the documents and queries.
     UserProvided(manual::Embedder),
     Ollama(ollama::Embedder),
 }
 
+/// Configuration for an embedder.
 #[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
 pub struct EmbeddingConfig {
+    /// Options of the embedder, specific to each kind of embedder
     pub embedder_options: EmbedderOptions,
+    /// Document template
     pub prompt: PromptData,
     // TODO: add metrics and anything needed
 }
 
+/// Map of embedder configurations.
+///
+/// Each configuration is mapped to a name.
 #[derive(Clone, Default)]
 pub struct EmbeddingConfigs(HashMap<String, (Arc<Embedder>, Arc<Prompt>)>);
 
 impl EmbeddingConfigs {
+    /// Create the map from its internal component.s
     pub fn new(data: HashMap<String, (Arc<Embedder>, Arc<Prompt>)>) -> Self {
         Self(data)
     }
 
+    /// Get an embedder configuration and template from its name.
     pub fn get(&self, name: &str) -> Option<(Arc<Embedder>, Arc<Prompt>)> {
         self.0.get(name).cloned()
     }
 
+    /// Get the default embedder configuration, if any.
     pub fn get_default(&self) -> Option<(Arc<Embedder>, Arc<Prompt>)> {
         self.get_default_embedder_name().and_then(|default| self.get(&default))
     }
 
+    /// Get the name of the default embedder configuration.
+    ///
+    /// The default embedder is determined as follows:
+    ///
+    /// - If there is only one embedder, it is always the default.
+    /// - If there are multiple embedders and one of them is called `default`, then that one is the default embedder.
+    /// - In all other cases, there is no default embedder.
     pub fn get_default_embedder_name(&self) -> Option<String> {
         let mut it = self.0.keys();
         let first_name = it.next();
@@ -126,6 +165,7 @@ impl IntoIterator for EmbeddingConfigs {
     }
 }
 
+/// Options of an embedder, specific to each kind of embedder.
 #[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub enum EmbedderOptions {
     HuggingFace(hf::EmbedderOptions),
@@ -141,10 +181,12 @@ impl Default for EmbedderOptions {
 }
 
 impl EmbedderOptions {
+    /// Default options for the Hugging Face embedder
     pub fn huggingface() -> Self {
         Self::HuggingFace(hf::EmbedderOptions::new())
     }
 
+    /// Default options for the OpenAI embedder
     pub fn openai(api_key: Option<String>) -> Self {
         Self::OpenAi(openai::EmbedderOptions::with_default_model(api_key))
     }
@@ -155,6 +197,7 @@ impl EmbedderOptions {
 }
 
 impl Embedder {
+    /// Spawns a new embedder built from its options.
     pub fn new(options: EmbedderOptions) -> std::result::Result<Self, NewEmbedderError> {
         Ok(match options {
             EmbedderOptions::HuggingFace(options) => Self::HuggingFace(hf::Embedder::new(options)?),
@@ -166,6 +209,9 @@ impl Embedder {
         })
     }
 
+    /// Embed one or multiple texts.
+    ///
+    /// Each text can be embedded as one or multiple embeddings.
     pub async fn embed(
         &self,
         texts: Vec<String>,
@@ -184,6 +230,10 @@ impl Embedder {
         }
     }
 
+    /// Embed multiple chunks of texts.
+    ///
+    /// Each chunk is composed of one or multiple texts.
+    ///
     /// # Panics
     ///
     /// - if called from an asynchronous context
@@ -199,6 +249,7 @@ impl Embedder {
         }
     }
 
+    /// Indicates the preferred number of chunks to pass to [`Self::embed_chunks`]
     pub fn chunk_count_hint(&self) -> usize {
         match self {
             Embedder::HuggingFace(embedder) => embedder.chunk_count_hint(),
@@ -208,6 +259,7 @@ impl Embedder {
         }
     }
 
+    /// Indicates the preferred number of texts in a single chunk passed to [`Self::embed`]
     pub fn prompt_count_in_chunk_hint(&self) -> usize {
         match self {
             Embedder::HuggingFace(embedder) => embedder.prompt_count_in_chunk_hint(),
@@ -217,6 +269,7 @@ impl Embedder {
         }
     }
 
+    /// Indicates the dimensions of a single embedding produced by the embedder.
     pub fn dimensions(&self) -> usize {
         match self {
             Embedder::HuggingFace(embedder) => embedder.dimensions(),
@@ -226,6 +279,7 @@ impl Embedder {
         }
     }
 
+    /// An optional distribution used to apply an affine transformation to the similarity score of a document.
     pub fn distribution(&self) -> Option<DistributionShift> {
         match self {
             Embedder::HuggingFace(embedder) => embedder.distribution(),
@@ -236,9 +290,20 @@ impl Embedder {
     }
 }
 
+/// Describes the mean and sigma of distribution of embedding similarity in the embedding space.
+///
+/// The intended use is to make the similarity score more comparable to the regular ranking score.
+/// This allows to correct effects where results are too "packed" around a certain value.
 #[derive(Debug, Clone, Copy)]
 pub struct DistributionShift {
+    /// Value where the results are "packed".
+    ///
+    /// Similarity scores are translated so that they are packed around 0.5 instead
     pub current_mean: f32,
+
+    /// standard deviation of a similarity score.
+    ///
+    /// Set below 0.4 to make the results less packed around the mean, and above 0.4 to make them more packed.
     pub current_sigma: f32,
 }
 
@@ -280,6 +345,7 @@ impl DistributionShift {
     }
 }
 
+/// Whether CUDA is supported in this version of Meilisearch.
 pub const fn is_cuda_enabled() -> bool {
     cfg!(feature = "cuda")
 }
