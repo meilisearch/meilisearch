@@ -79,6 +79,8 @@ pub enum EmbedErrorKind {
     OllamaTooManyRequests(OllamaError),
     #[error("received internal error from Ollama: {0}")]
     OllamaInternalServerError(OllamaError),
+    #[error("model not found. MeiliSearch will not automatically download models from the Ollama library, please pull the model manually: {0}")]
+    OllamaModelNotFoundError(OllamaError),
     #[error("received unhandled HTTP status code {0} from Ollama")]
     OllamaUnhandledStatusCode(u16),
 }
@@ -140,8 +142,12 @@ impl EmbedError {
         Self { kind: EmbedErrorKind::InitWebClient(inner), fault: FaultSource::Runtime }
     }
 
-    pub fn ollama_unexpected(inner: reqwest::Error) -> EmbedError {
+    pub(crate) fn ollama_unexpected(inner: reqwest::Error) -> EmbedError {
         Self { kind: EmbedErrorKind::OllamaUnexpected(inner), fault: FaultSource::Bug }
+    }
+
+    pub(crate) fn ollama_model_not_found(inner: OllamaError) -> EmbedError {
+        Self { kind: EmbedErrorKind::OllamaModelNotFoundError(inner), fault: FaultSource::User }
     }
 
     pub(crate) fn ollama_too_many_requests(inner: OllamaError) -> EmbedError {
@@ -218,6 +224,13 @@ impl NewEmbedderError {
         Self {
             kind: NewEmbedderErrorKind::CouldNotDetermineDimension(inner),
             fault: FaultSource::Runtime,
+        }
+    }
+
+    pub fn ollama_could_not_determine_dimension(inner: EmbedError) -> NewEmbedderError {
+        Self {
+            kind: NewEmbedderErrorKind::CouldNotDetermineDimension(inner),
+            fault: FaultSource::User,
         }
     }
 

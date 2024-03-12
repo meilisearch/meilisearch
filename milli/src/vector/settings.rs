@@ -85,9 +85,7 @@ impl EmbeddingSettings {
             }
             Self::REVISION => &[EmbedderSource::HuggingFace],
             Self::API_KEY => &[EmbedderSource::OpenAi],
-            Self::DIMENSIONS => {
-                &[EmbedderSource::OpenAi, EmbedderSource::UserProvided, EmbedderSource::Ollama]
-            }
+            Self::DIMENSIONS => &[EmbedderSource::OpenAi, EmbedderSource::UserProvided],
             Self::DOCUMENT_TEMPLATE => {
                 &[EmbedderSource::HuggingFace, EmbedderSource::OpenAi, EmbedderSource::Ollama]
             }
@@ -107,9 +105,7 @@ impl EmbeddingSettings {
             EmbedderSource::HuggingFace => {
                 &[Self::SOURCE, Self::MODEL, Self::REVISION, Self::DOCUMENT_TEMPLATE]
             }
-            EmbedderSource::Ollama => {
-                &[Self::SOURCE, Self::MODEL, Self::DIMENSIONS, Self::DOCUMENT_TEMPLATE]
-            }
+            EmbedderSource::Ollama => &[Self::SOURCE, Self::MODEL, Self::DOCUMENT_TEMPLATE],
             EmbedderSource::UserProvided => &[Self::SOURCE, Self::DIMENSIONS],
         }
     }
@@ -211,7 +207,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 model: Setting::Set(options.embedding_model.name().to_owned()),
                 revision: Setting::NotSet,
                 api_key: Setting::NotSet,
-                dimensions: Setting::Set(options.dimensions),
+                dimensions: Setting::NotSet,
                 document_template: Setting::Set(prompt.template),
             },
             super::EmbedderOptions::UserProvided(options) => Self {
@@ -251,9 +247,8 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
                 EmbedderSource::Ollama => {
                     let mut options: ollama::EmbedderOptions =
                         super::ollama::EmbedderOptions::with_default_model();
-                    if let (Some(model), Some(dim)) = (model.set(), dimensions.set()) {
+                    if let Some(model) = model.set() {
                         options.embedding_model = super::ollama::EmbeddingModel::from_name(&model);
-                        options.dimensions = dim;
                     }
                     this.embedder_options = super::EmbedderOptions::Ollama(options);
                 }

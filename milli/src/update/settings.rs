@@ -1179,8 +1179,8 @@ pub fn validate_embedding_settings(
             }
         }
         EmbedderSource::Ollama => {
-            // Existence & corrent dimensions of models cannot easily be checked here.
-            check_set(&dimensions, "dimensions", inferred_source, name)?;
+            // Dimensions get inferred, only model name is required
+            check_unset(&dimensions, "dimensions", inferred_source, name)?;
             check_set(&model, "model", inferred_source, name)?;
             check_unset(&api_key, "apiKey", inferred_source, name)?;
             check_unset(&revision, "revision", inferred_source, name)?;

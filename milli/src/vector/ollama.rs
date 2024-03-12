@@ -18,7 +18,6 @@ pub struct Embedder {
 #[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct EmbedderOptions {
     pub embedding_model: EmbeddingModel,
-    pub dimensions: usize,
 }
 
 #[derive(
@@ -27,6 +26,7 @@ pub struct EmbedderOptions {
 #[deserr(deny_unknown_fields)]
 pub struct EmbeddingModel {
     name: String,
+    dimensions: usize,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -41,15 +41,8 @@ struct OllamaResponse {
 }
 
 #[derive(Debug, serde::Deserialize)]
-struct OllamaErrorResponse {
-    error: OllamaError,
-}
-
-#[derive(Debug, serde::Deserialize)]
 pub struct OllamaError {
-    message: String,
-    // type: String,
-    code: Option<String>,
+    error: String,
 }
 
 impl EmbeddingModel {
@@ -68,7 +61,7 @@ impl EmbeddingModel {
     }
 
     pub fn from_name(name: &str) -> Self {
-        Self { name: name.to_string() }
+        Self { name: name.to_string(), dimensions: 0 }
     }
 
     pub fn supports_overriding_dimensions(&self) -> bool {
@@ -78,17 +71,17 @@ impl EmbeddingModel {
 
 impl Default for EmbeddingModel {
     fn default() -> Self {
-        Self { name: "nomic-embed-text".to_string() }
+        Self { name: "nomic-embed-text".to_string(), dimensions: 0 }
     }
 }
 
 impl EmbedderOptions {
     pub fn with_default_model() -> Self {
-        Self { embedding_model: Default::default(), dimensions: 768 }
+        Self { embedding_model: Default::default() }
     }
 
-    pub fn with_embedding_model(embedding_model: EmbeddingModel, dimensions: usize) -> Self {
-        Self { embedding_model, dimensions }
+    pub fn with_embedding_model(embedding_model: EmbeddingModel) -> Self {
+        Self { embedding_model }
     }
 }
 
@@ -107,7 +100,58 @@ impl Embedder {
             reqwest::header::HeaderValue::from_static("application/json"),
         );
 
-        Ok(Self { options, headers })
+        let mut embedder = Self { options, headers };
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .map_err(EmbedError::openai_runtime_init)
+            .map_err(NewEmbedderError::ollama_could_not_determine_dimension)?;
+
+        // Get dimensions from Ollama
+        let request =
+            OllamaRequest { model: &embedder.options.embedding_model.name(), prompt: "test" };
+        // TODO: Refactor into shared error type
+        let client = embedder
+            .new_client()
+            .map_err(NewEmbedderError::ollama_could_not_determine_dimension)?;
+
+        rt.block_on(async move {
+            let response = client
+                .post(get_ollama_path())
+                .json(&request)
+                .send()
+                .await
+                .map_err(EmbedError::ollama_unexpected)
+                .map_err(NewEmbedderError::ollama_could_not_determine_dimension)?;
+
+            // Process error in case model not found
+            let response = Self::check_response(response).await.map_err(|_err| {
+                let e = EmbedError::ollama_model_not_found(OllamaError {
+                    error: format!("model: {}", embedder.options.embedding_model.name()),
+                });
+                NewEmbedderError::ollama_could_not_determine_dimension(e)
+            })?;
+
+            let response: OllamaResponse = response
+                .json()
+                .await
+                .map_err(EmbedError::ollama_unexpected)
+                .map_err(NewEmbedderError::ollama_could_not_determine_dimension)?;
+
+            let embedding = Embeddings::from_single_embedding(response.embedding);
+
+            embedder.options.embedding_model.dimensions = embedding.dimension();
+
+            tracing::info!(
+                "ollama model {} with dimensionality {} added",
+                embedder.options.embedding_model.name(),
+                embedding.dimension()
+            );
+
+            Ok(embedder)
+        })
     }
 
     async fn check_response(response: reqwest::Response) -> Result<reqwest::Response, Retry> {
@@ -115,25 +159,36 @@ impl Embedder {
             // Not the same number of possible error cases covered as with OpenAI.
             match response.status() {
                 StatusCode::TOO_MANY_REQUESTS => {
-                    let error_response: OllamaErrorResponse = response
+                    let error_response: OllamaError = response
                         .json()
                         .await
                         .map_err(EmbedError::ollama_unexpected)
                         .map_err(Retry::retry_later)?;
 
                     return Err(Retry::rate_limited(EmbedError::ollama_too_many_requests(
-                        error_response.error,
+                        OllamaError { error: error_response.error },
                     )));
                 }
                 StatusCode::SERVICE_UNAVAILABLE => {
-                    let error_response: OllamaErrorResponse = response
+                    let error_response: OllamaError = response
                         .json()
                         .await
                         .map_err(EmbedError::ollama_unexpected)
                         .map_err(Retry::retry_later)?;
                     return Err(Retry::retry_later(EmbedError::ollama_internal_server_error(
-                        error_response.error,
+                        OllamaError { error: error_response.error },
                     )));
+                }
+                StatusCode::NOT_FOUND => {
+                    let error_response: OllamaError = response
+                        .json()
+                        .await
+                        .map_err(EmbedError::ollama_unexpected)
+                        .map_err(Retry::give_up)?;
+
+                    return Err(Retry::give_up(EmbedError::ollama_model_not_found(OllamaError {
+                        error: error_response.error,
+                    })));
                 }
                 code => {
                     return Err(Retry::give_up(EmbedError::ollama_unhandled_status_code(
@@ -232,7 +287,7 @@ impl Embedder {
     }
 
     pub fn dimensions(&self) -> usize {
-        self.options.dimensions
+        self.options.embedding_model.dimensions
     }
 
     pub fn distribution(&self) -> Option<DistributionShift> {
@@ -242,10 +297,7 @@ impl Embedder {
 
 impl Display for OllamaError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.code {
-            Some(code) => write!(f, "{} ({})", self.message, code),
-            None => write!(f, "{}", self.message),
-        }
+        write!(f, "{}", self.error)
     }
 }
 
