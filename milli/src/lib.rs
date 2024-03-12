@@ -16,6 +16,7 @@ pub mod facet;
 mod fields_ids_map;
 pub mod heed_codec;
 pub mod index;
+pub mod order_by_map;
 pub mod prompt;
 pub mod proximity;
 pub mod score_details;
