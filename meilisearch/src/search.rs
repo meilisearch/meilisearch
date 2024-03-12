@@ -726,8 +726,15 @@ pub fn perform_facet_search(
     let rtxn = index.read_txn()?;
 
     let (search, _, _, _) = prepare_search(index, &rtxn, &search_query, features, None)?;
+    let sort_by = {
+        let sorts = index.sort_facet_values_by(&rtxn)?;
+        sorts
+            .get(&facet_name)
+            .copied()
+            .unwrap_or_else(|| sorts.get("*").copied().unwrap_or_default())
+    };
     let mut facet_search =
-        SearchForFacetValues::new(facet_name, search, search_query.hybrid.is_some());
+        SearchForFacetValues::new(facet_name, search, sort_by, search_query.hybrid.is_some());
     if let Some(facet_query) = &facet_query {
         facet_search.query(facet_query);
     }

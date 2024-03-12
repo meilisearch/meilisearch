@@ -307,6 +307,7 @@ pub struct SearchForFacetValues<'a> {
     facet: String,
     search_query: Search<'a>,
     max_values: usize,
+    sort_by: OrderBy,
     is_hybrid: bool,
 }
 
@@ -314,6 +315,7 @@ impl<'a> SearchForFacetValues<'a> {
     pub fn new(
         facet: String,
         search_query: Search<'a>,
+        sort_by: OrderBy,
         is_hybrid: bool,
     ) -> SearchForFacetValues<'a> {
         SearchForFacetValues {
@@ -321,6 +323,7 @@ impl<'a> SearchForFacetValues<'a> {
             facet,
             search_query,
             max_values: DEFAULT_MAX_NUMBER_OF_VALUES_PER_FACET,
+            sort_by,
             is_hybrid,
         }
     }
