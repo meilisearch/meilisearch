@@ -1,3 +1,5 @@
+use std::cmp::{Ordering, Reverse};
+use std::collections::BinaryHeap;
 use std::fmt;
 use std::ops::ControlFlow;
 
@@ -307,7 +309,6 @@ pub struct SearchForFacetValues<'a> {
     facet: String,
     search_query: Search<'a>,
     max_values: usize,
-    sort_by: OrderBy,
     is_hybrid: bool,
 }
 
@@ -315,7 +316,6 @@ impl<'a> SearchForFacetValues<'a> {
     pub fn new(
         facet: String,
         search_query: Search<'a>,
-        sort_by: OrderBy,
         is_hybrid: bool,
     ) -> SearchForFacetValues<'a> {
         SearchForFacetValues {
@@ -323,7 +323,6 @@ impl<'a> SearchForFacetValues<'a> {
             facet,
             search_query,
             max_values: DEFAULT_MAX_NUMBER_OF_VALUES_PER_FACET,
-            sort_by,
             is_hybrid,
         }
     }
@@ -383,6 +382,8 @@ impl<'a> SearchForFacetValues<'a> {
         let search_candidates = self
             .search_query
             .execute_for_candidates(self.is_hybrid || self.search_query.vector.is_some())?;
+
+        let sort_by = index.sort_facet_values_by(rtxn)?.get(&self.facet);
 
         match self.query.as_ref() {
             Some(query) => {
@@ -465,23 +466,56 @@ impl<'a> SearchForFacetValues<'a> {
                 }
             }
             None => {
-                let mut results = vec![];
                 let prefix = FacetGroupKey { field_id: fid, level: 0, left_bound: "" };
-                for result in index.facet_id_string_docids.prefix_iter(rtxn, &prefix)? {
-                    let (FacetGroupKey { left_bound, .. }, FacetGroupValue { bitmap, .. }) =
-                        result?;
-                    let count = search_candidates.intersection_len(&bitmap);
-                    if count != 0 {
-                        let value = self
-                            .one_original_value_of(fid, left_bound, bitmap.min().unwrap())?
-                            .unwrap_or_else(|| left_bound.to_string());
-                        results.push(FacetValueHit { value, count });
+
+                match sort_by {
+                    OrderBy::Lexicographic => {
+                        let mut results = vec![];
+                        for result in index.facet_id_string_docids.prefix_iter(rtxn, &prefix)? {
+                            let (FacetGroupKey { left_bound, .. }, FacetGroupValue { bitmap, .. }) =
+                                result?;
+                            let count = search_candidates.intersection_len(&bitmap);
+                            if count != 0 {
+                                let value = self
+                                    .one_original_value_of(fid, left_bound, bitmap.min().unwrap())?
+                                    .unwrap_or_else(|| left_bound.to_string());
+                                results.push(FacetValueHit { value, count });
+                            }
+                            if results.len() >= self.max_values {
+                                break;
+                            }
+                        }
+                        Ok(results)
                     }
-                    if results.len() >= self.max_values {
-                        break;
+                    OrderBy::Count => {
+                        let mut top_counts = BinaryHeap::new();
+                        for result in index.facet_id_string_docids.prefix_iter(rtxn, &prefix)? {
+                            let (FacetGroupKey { left_bound, .. }, FacetGroupValue { bitmap, .. }) =
+                                result?;
+                            let count = search_candidates.intersection_len(&bitmap);
+                            if count != 0 {
+                                let value = self
+                                    .one_original_value_of(fid, left_bound, bitmap.min().unwrap())?
+                                    .unwrap_or_else(|| left_bound.to_string());
+                                if top_counts.len() >= self.max_values {
+                                    top_counts.pop();
+                                }
+                                // It is a max heap and we need to move the smallest counts at the
+                                // top to be able to pop them when we reach the max_values limit.
+                                top_counts.push(Reverse(FacetValueHit { value, count }));
+                            }
+                        }
+
+                        // Convert the heap into a vec of hits by removing the Reverse wrapper.
+                        // Hits are already in the right order as they were reversed and there
+                        // are output in ascending order.
+                        Ok(top_counts
+                            .into_sorted_vec()
+                            .into_iter()
+                            .map(|Reverse(hit)| hit)
+                            .collect())
                     }
                 }
-                Ok(results)
             }
         }
     }
@@ -538,6 +572,20 @@ pub struct FacetValueHit {
     /// The number of documents associated to this facet
     pub count: u64,
 }
+
+impl PartialOrd for FacetValueHit {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for FacetValueHit {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.count.cmp(&other.count).then_with(|| self.value.cmp(&other.value))
+    }
+}
+
+impl Eq for FacetValueHit {}
 
 #[cfg(test)]
 mod test {
