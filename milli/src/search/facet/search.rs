@@ -89,7 +89,7 @@ impl<'a> SearchForFacetValues<'a> {
 
         let fst = match self.search_query.index.facet_id_string_fst.get(rtxn, &fid)? {
             Some(fst) => fst,
-            None => return Ok(vec![]),
+            None => return Ok(Vec::new()),
         };
 
         let search_candidates = self
@@ -274,11 +274,11 @@ enum ValuesCollection {
 
 impl ValuesCollection {
     pub fn by_lexicographic(max: usize) -> Self {
-        ValuesCollection::Lexicographic { max, content: Vec::with_capacity(max) }
+        ValuesCollection::Lexicographic { max, content: Vec::new() }
     }
 
     pub fn by_count(max: usize) -> Self {
-        ValuesCollection::Count { max, content: BinaryHeap::with_capacity(max) }
+        ValuesCollection::Count { max, content: BinaryHeap::new() }
     }
 
     pub fn insert(&mut self, value: FacetValueHit) -> ControlFlow<()> {
