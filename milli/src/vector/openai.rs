@@ -419,12 +419,12 @@ impl Embedder {
 
 // retrying in case of failure
 
-struct Retry {
-    error: EmbedError,
+pub struct Retry {
+    pub error: EmbedError,
     strategy: RetryStrategy,
 }
 
-enum RetryStrategy {
+pub enum RetryStrategy {
     GiveUp,
     Retry,
     RetryTokenized,
@@ -432,23 +432,23 @@ enum RetryStrategy {
 }
 
 impl Retry {
-    fn give_up(error: EmbedError) -> Self {
+    pub fn give_up(error: EmbedError) -> Self {
         Self { error, strategy: RetryStrategy::GiveUp }
     }
 
-    fn retry_later(error: EmbedError) -> Self {
+    pub fn retry_later(error: EmbedError) -> Self {
         Self { error, strategy: RetryStrategy::Retry }
     }
 
-    fn retry_tokenized(error: EmbedError) -> Self {
+    pub fn retry_tokenized(error: EmbedError) -> Self {
         Self { error, strategy: RetryStrategy::RetryTokenized }
     }
 
-    fn rate_limited(error: EmbedError) -> Self {
+    pub fn rate_limited(error: EmbedError) -> Self {
         Self { error, strategy: RetryStrategy::RetryAfterRateLimit }
     }
 
-    fn into_duration(self, attempt: u32) -> Result<tokio::time::Duration, EmbedError> {
+    pub fn into_duration(self, attempt: u32) -> Result<tokio::time::Duration, EmbedError> {
         match self.strategy {
             RetryStrategy::GiveUp => Err(self.error),
             RetryStrategy::Retry => Ok(tokio::time::Duration::from_millis((10u64).pow(attempt))),
@@ -459,11 +459,11 @@ impl Retry {
         }
     }
 
-    fn must_tokenize(&self) -> bool {
+    pub fn must_tokenize(&self) -> bool {
         matches!(self.strategy, RetryStrategy::RetryTokenized)
     }
 
-    fn into_error(self) -> EmbedError {
+    pub fn into_error(self) -> EmbedError {
         self.error
     }
 }
