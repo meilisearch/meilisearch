@@ -671,27 +671,16 @@ pub fn perform_search(
 
             let sort_facet_values_by =
                 index.sort_facet_values_by(&rtxn).map_err(milli::Error::from)?;
-            let default_sort_facet_values_by =
-                sort_facet_values_by.get("*").copied().unwrap_or_default();
 
             if fields.iter().all(|f| f != "*") {
-                let fields: Vec<_> = fields
-                    .iter()
-                    .map(|n| {
-                        (
-                            n,
-                            sort_facet_values_by
-                                .get(n)
-                                .copied()
-                                .unwrap_or(default_sort_facet_values_by),
-                        )
-                    })
-                    .collect();
+                let fields: Vec<_> =
+                    fields.iter().map(|n| (n, sort_facet_values_by.get(n))).collect();
                 facet_distribution.facets(fields);
             }
+
             let distribution = facet_distribution
                 .candidates(candidates)
-                .default_order_by(default_sort_facet_values_by)
+                .default_order_by(sort_facet_values_by.get("*"))
                 .execute()?;
             let stats = facet_distribution.compute_stats()?;
             (Some(distribution), Some(stats))

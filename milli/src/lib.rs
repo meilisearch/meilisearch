@@ -16,6 +16,7 @@ pub mod facet;
 mod fields_ids_map;
 pub mod heed_codec;
 pub mod index;
+pub mod order_by_map;
 pub mod prompt;
 pub mod proximity;
 pub mod score_details;
@@ -56,10 +57,10 @@ pub use self::heed_codec::{
     UncheckedU8StrStrCodec,
 };
 pub use self::index::Index;
+pub use self::search::facet::{FacetValueHit, SearchForFacetValues};
 pub use self::search::{
-    FacetDistribution, FacetValueHit, Filter, FormatOptions, MatchBounds, MatcherBuilder,
-    MatchingWords, OrderBy, Search, SearchForFacetValues, SearchResult, TermsMatchingStrategy,
-    DEFAULT_VALUES_PER_FACET,
+    FacetDistribution, Filter, FormatOptions, MatchBounds, MatcherBuilder, MatchingWords, OrderBy,
+    Search, SearchResult, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
 
 pub type Result<T> = std::result::Result<T, error::Error>;
