@@ -79,7 +79,7 @@ pub enum EmbedErrorKind {
     OllamaTooManyRequests(OllamaError),
     #[error("received internal error from Ollama: {0}")]
     OllamaInternalServerError(OllamaError),
-    #[error("model not found. MeiliSearch will not automatically download models from the Ollama library, please pull the model manually: {0}")]
+    #[error("model not found. Meilisearch will not automatically download models from the Ollama library, please pull the model manually: {0}")]
     OllamaModelNotFoundError(OllamaError),
     #[error("received unhandled HTTP status code {0} from Ollama")]
     OllamaUnhandledStatusCode(u16),
