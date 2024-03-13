@@ -6,6 +6,8 @@ use charabia::normalizer::NormalizerOption;
 use charabia::Normalize;
 use fst::automaton::{Automaton, Str};
 use fst::{IntoStreamer, Streamer};
+use futures::stream::PeekMut;
+use itertools::concat;
 use roaring::RoaringBitmap;
 use tracing::error;
 
@@ -298,3 +300,68 @@ impl Ord for FacetValueHit {
 }
 
 impl Eq for FacetValueHit {}
+
+/// A wrapper type that collects the best facet values by
+/// lexicographic or number of associated values.
+enum ValuesCollection {
+    /// Keeps the top values according to the lexicographic order.
+    Lexicographic { max: usize, content: Vec<FacetValueHit> },
+    /// Keeps the top values according to the number of values associated to them.
+    ///
+    /// Note that it is a max heap and we need to move the smallest counts
+    /// at the top to be able to pop them when we reach the max_values limit.
+    Count { max: usize, content: BinaryHeap<Reverse<FacetValueHit>> },
+}
+
+impl ValuesCollection {
+    pub fn new_lexicographic(max: usize) -> Self {
+        ValuesCollection::Lexicographic { max, content: Vec::with_capacity(max) }
+    }
+
+    pub fn new_count(max: usize) -> Self {
+        ValuesCollection::Count { max, content: BinaryHeap::with_capacity(max) }
+    }
+
+    pub fn insert(&mut self, value: FacetValueHit) -> ControlFlow<()> {
+        match self {
+            ValuesCollection::Lexicographic { max, content } => {
+                if content.len() < *max {
+                    content.push(value);
+                    if content.len() < *max {
+                        return ControlFlow::Continue(());
+                    }
+                }
+                ControlFlow::Break(())
+            }
+            ValuesCollection::Count { max, content } => {
+                if content.len() == *max {
+                    // Peeking gives us the worst value in the list as
+                    // this is a max-heap and we reversed it.
+                    let Some(mut peek) = content.peek_mut() else { return ControlFlow::Break(()) };
+                    if peek.0.count <= value.count {
+                        // Replace the current worst value in the heap
+                        // with the new one we received that is better.
+                        *peek = Reverse(value);
+                    }
+                } else {
+                    content.push(Reverse(value));
+                }
+                ControlFlow::Continue(())
+            }
+        }
+    }
+
+    /// Returns the list of facet values in descending order of, either,
+    /// count or lexicographic order of the value depending on the type.
+    pub fn into_sorted_vec(self) -> Vec<FacetValueHit> {
+        match self {
+            ValuesCollection::Lexicographic { content, .. } => content.into_iter().collect(),
+            ValuesCollection::Count { content, .. } => {
+                // Convert the heap into a vec of hits by removing the Reverse wrapper.
+                // Hits are already in the right order as they were reversed and there
+                // are output in ascending order.
+                content.into_sorted_vec().into_iter().map(|Reverse(hit)| hit).collect()
+            }
+        }
+    }
+}
