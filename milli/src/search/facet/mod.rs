@@ -6,15 +6,18 @@ use roaring::RoaringBitmap;
 
 pub use self::facet_distribution::{FacetDistribution, OrderBy, DEFAULT_VALUES_PER_FACET};
 pub use self::filter::{BadGeoError, Filter};
+pub use self::search::{FacetValueHit, SearchForFacetValues};
 use crate::heed_codec::facet::{FacetGroupKeyCodec, FacetGroupValueCodec, OrderedF64Codec};
 use crate::heed_codec::BytesRefCodec;
 use crate::{Index, Result};
+
 mod facet_distribution;
 mod facet_distribution_iter;
 mod facet_range_search;
 mod facet_sort_ascending;
 mod facet_sort_descending;
 mod filter;
+mod search;
 
 fn facet_extreme_value<'t>(
     mut extreme_it: impl Iterator<Item = heed::Result<(RoaringBitmap, &'t [u8])>> + 't,
