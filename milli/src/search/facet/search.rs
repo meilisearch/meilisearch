@@ -6,8 +6,6 @@ use charabia::normalizer::NormalizerOption;
 use charabia::Normalize;
 use fst::automaton::{Automaton, Str};
 use fst::{IntoStreamer, Streamer};
-use futures::stream::PeekMut;
-use itertools::concat;
 use roaring::RoaringBitmap;
 use tracing::error;
 
@@ -98,7 +96,10 @@ impl<'a> SearchForFacetValues<'a> {
             .search_query
             .execute_for_candidates(self.is_hybrid || self.search_query.vector.is_some())?;
 
-        let sort_by = index.sort_facet_values_by(rtxn)?.get(&self.facet);
+        let mut results = match index.sort_facet_values_by(rtxn)?.get(&self.facet) {
+            OrderBy::Lexicographic => ValuesCollection::by_lexicographic(self.max_values),
+            OrderBy::Count => ValuesCollection::by_count(self.max_values),
+        };
 
         match self.query.as_ref() {
             Some(query) => {
@@ -113,7 +114,6 @@ impl<'a> SearchForFacetValues<'a> {
                 if authorize_typos && field_authorizes_typos {
                     let exact_words_fst = self.search_query.index.exact_words(rtxn)?;
                     if exact_words_fst.map_or(false, |fst| fst.contains(query)) {
-                        let mut results = vec![];
                         if fst.contains(query) {
                             self.fetch_original_facets_using_normalized(
                                 fid,
@@ -123,7 +123,6 @@ impl<'a> SearchForFacetValues<'a> {
                                 &mut results,
                             )?;
                         }
-                        Ok(results)
                     } else {
                         let one_typo = self.search_query.index.min_word_len_one_typo(rtxn)?;
                         let two_typos = self.search_query.index.min_word_len_two_typos(rtxn)?;
@@ -138,7 +137,6 @@ impl<'a> SearchForFacetValues<'a> {
                         };
 
                         let mut stream = fst.search(automaton).into_stream();
-                        let mut results = vec![];
                         while let Some(facet_value) = stream.next() {
                             let value = std::str::from_utf8(facet_value)?;
                             if self
@@ -154,13 +152,10 @@ impl<'a> SearchForFacetValues<'a> {
                                 break;
                             }
                         }
-
-                        Ok(results)
                     }
                 } else {
                     let automaton = Str::new(query).starts_with();
                     let mut stream = fst.search(automaton).into_stream();
-                    let mut results = vec![];
                     while let Some(facet_value) = stream.next() {
                         let value = std::str::from_utf8(facet_value)?;
                         if self
@@ -176,62 +171,27 @@ impl<'a> SearchForFacetValues<'a> {
                             break;
                         }
                     }
-
-                    Ok(results)
                 }
             }
             None => {
                 let prefix = FacetGroupKey { field_id: fid, level: 0, left_bound: "" };
-                match sort_by {
-                    OrderBy::Lexicographic => {
-                        let mut results = vec![];
-                        for result in index.facet_id_string_docids.prefix_iter(rtxn, &prefix)? {
-                            let (FacetGroupKey { left_bound, .. }, FacetGroupValue { bitmap, .. }) =
-                                result?;
-                            let count = search_candidates.intersection_len(&bitmap);
-                            if count != 0 {
-                                let value = self
-                                    .one_original_value_of(fid, left_bound, bitmap.min().unwrap())?
-                                    .unwrap_or_else(|| left_bound.to_string());
-                                results.push(FacetValueHit { value, count });
-                            }
-                            if results.len() >= self.max_values {
-                                break;
-                            }
+                for result in index.facet_id_string_docids.prefix_iter(rtxn, &prefix)? {
+                    let (FacetGroupKey { left_bound, .. }, FacetGroupValue { bitmap, .. }) =
+                        result?;
+                    let count = search_candidates.intersection_len(&bitmap);
+                    if count != 0 {
+                        let value = self
+                            .one_original_value_of(fid, left_bound, bitmap.min().unwrap())?
+                            .unwrap_or_else(|| left_bound.to_string());
+                        if results.insert(FacetValueHit { value, count }).is_break() {
+                            break;
                         }
-                        Ok(results)
-                    }
-                    OrderBy::Count => {
-                        let mut top_counts = BinaryHeap::new();
-                        for result in index.facet_id_string_docids.prefix_iter(rtxn, &prefix)? {
-                            let (FacetGroupKey { left_bound, .. }, FacetGroupValue { bitmap, .. }) =
-                                result?;
-                            let count = search_candidates.intersection_len(&bitmap);
-                            if count != 0 {
-                                let value = self
-                                    .one_original_value_of(fid, left_bound, bitmap.min().unwrap())?
-                                    .unwrap_or_else(|| left_bound.to_string());
-                                if top_counts.len() >= self.max_values {
-                                    top_counts.pop();
-                                }
-                                // It is a max heap and we need to move the smallest counts at the
-                                // top to be able to pop them when we reach the max_values limit.
-                                top_counts.push(Reverse(FacetValueHit { value, count }));
-                            }
-                        }
-
-                        // Convert the heap into a vec of hits by removing the Reverse wrapper.
-                        // Hits are already in the right order as they were reversed and there
-                        // are output in ascending order.
-                        Ok(top_counts
-                            .into_sorted_vec()
-                            .into_iter()
-                            .map(|Reverse(hit)| hit)
-                            .collect())
                     }
                 }
             }
         }
+
+        Ok(results.into_sorted_vec())
     }
 
     fn fetch_original_facets_using_normalized(
@@ -240,7 +200,7 @@ impl<'a> SearchForFacetValues<'a> {
         value: &str,
         query: &str,
         search_candidates: &RoaringBitmap,
-        results: &mut Vec<FacetValueHit>,
+        results: &mut ValuesCollection,
     ) -> Result<ControlFlow<()>> {
         let index = self.search_query.index;
         let rtxn = self.search_query.rtxn;
@@ -268,10 +228,9 @@ impl<'a> SearchForFacetValues<'a> {
                 let value = self
                     .one_original_value_of(fid, &original, docids.min().unwrap())?
                     .unwrap_or_else(|| query.to_string());
-                results.push(FacetValueHit { value, count });
-            }
-            if results.len() >= self.max_values {
-                return Ok(ControlFlow::Break(()));
+                if results.insert(FacetValueHit { value, count }).is_break() {
+                    break;
+                }
             }
         }
 
@@ -314,11 +273,11 @@ enum ValuesCollection {
 }
 
 impl ValuesCollection {
-    pub fn new_lexicographic(max: usize) -> Self {
+    pub fn by_lexicographic(max: usize) -> Self {
         ValuesCollection::Lexicographic { max, content: Vec::with_capacity(max) }
     }
 
-    pub fn new_count(max: usize) -> Self {
+    pub fn by_count(max: usize) -> Self {
         ValuesCollection::Count { max, content: BinaryHeap::with_capacity(max) }
     }
 
