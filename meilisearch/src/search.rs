@@ -530,7 +530,7 @@ pub fn perform_search(
     // The attributes to retrieve are the ones explicitly marked as to retrieve (all by default),
     // but these attributes must be also be present
     // - in the fields_ids_map
-    // - in the the displayed attributes
+    // - in the displayed attributes
     let to_retrieve_ids: BTreeSet<_> = query
         .attributes_to_retrieve
         .as_ref()
