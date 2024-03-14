@@ -324,7 +324,8 @@ pub struct SearchResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facet_stats: Option<BTreeMap<String, FacetStats>>,
 
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    // This information is only used for analytics purposes
+    #[serde(skip)]
     pub degraded: bool,
 }
 

@@ -855,54 +855,61 @@ async fn test_degraded_score_details() {
             }),
             |response, code| {
                 meili_snap::snapshot!(code, @"200 OK");
-                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
-                [
-                  {
-                    "doggos": [
-                      {
-                        "name": "bobby"
-                      },
-                      {
-                        "name": "buddy"
+                meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+                {
+                  "hits": [
+                    {
+                      "doggos": [
+                        {
+                          "name": "bobby"
+                        },
+                        {
+                          "name": "buddy"
+                        }
+                      ],
+                      "cattos": "pésti",
+                      "_rankingScoreDetails": {
+                        "skipped": 0.0
                       }
-                    ],
-                    "cattos": "pésti",
-                    "_rankingScoreDetails": {
-                      "skipped": 0.0
-                    }
-                  },
-                  {
-                    "doggos": [
-                      {
-                        "name": "gros bill"
+                    },
+                    {
+                      "doggos": [
+                        {
+                          "name": "gros bill"
+                        }
+                      ],
+                      "cattos": [
+                        "simba",
+                        "pestiféré"
+                      ],
+                      "_rankingScoreDetails": {
+                        "skipped": 0.0
                       }
-                    ],
-                    "cattos": [
-                      "simba",
-                      "pestiféré"
-                    ],
-                    "_rankingScoreDetails": {
-                      "skipped": 0.0
-                    }
-                  },
-                  {
-                    "doggos": [
-                      {
-                        "name": "turbo"
-                      },
-                      {
-                        "name": "fast"
+                    },
+                    {
+                      "doggos": [
+                        {
+                          "name": "turbo"
+                        },
+                        {
+                          "name": "fast"
+                        }
+                      ],
+                      "cattos": [
+                        "moumoute",
+                        "gomez"
+                      ],
+                      "_rankingScoreDetails": {
+                        "skipped": 0.0
                       }
-                    ],
-                    "cattos": [
-                      "moumoute",
-                      "gomez"
-                    ],
-                    "_rankingScoreDetails": {
-                      "skipped": 0.0
                     }
-                  }
-                ]
+                  ],
+                  "query": "b",
+                  "processingTimeMs": 0,
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 3
+                }
                 "###);
             },
         )
