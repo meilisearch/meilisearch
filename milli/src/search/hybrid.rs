@@ -132,7 +132,7 @@ impl<'a> Search<'a> {
             index: self.index,
             distribution_shift: self.distribution_shift,
             embedder_name: self.embedder_name.clone(),
-            time_budget: self.time_budget,
+            time_budget: self.time_budget.clone(),
         };
 
         let vector_query = search.vector.take();

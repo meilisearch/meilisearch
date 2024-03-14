@@ -161,11 +161,21 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
 
     while valid_docids.len() < length {
         if time_budget.exceeded() {
-            let bucket = std::mem::take(&mut ranking_rule_universes[cur_ranking_rule_index]);
-            maybe_add_to_results!(bucket);
+            loop {
+                let bucket = std::mem::take(&mut ranking_rule_universes[cur_ranking_rule_index]);
+                ranking_rule_scores.push(ScoreDetails::Skipped);
+                maybe_add_to_results!(bucket);
+                ranking_rule_scores.pop();
+
+                if cur_ranking_rule_index == 0 {
+                    break;
+                }
+
+                back!();
+            }
 
             return Ok(BucketSortOutput {
-                scores: vec![Default::default(); valid_docids.len()],
+                scores: valid_scores,
                 docids: valid_docids,
                 all_candidates,
                 degraded: true,

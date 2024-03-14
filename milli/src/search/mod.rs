@@ -195,7 +195,7 @@ impl<'a> Search<'a> {
                 self.limit,
                 self.distribution_shift,
                 embedder_name,
-                self.time_budget,
+                self.time_budget.clone(),
             )?,
             None => execute_search(
                 &mut ctx,
@@ -211,7 +211,7 @@ impl<'a> Search<'a> {
                 Some(self.words_limit),
                 &mut DefaultSearchLogger,
                 &mut DefaultSearchLogger,
-                self.time_budget,
+                self.time_budget.clone(),
             )?,
         };
 

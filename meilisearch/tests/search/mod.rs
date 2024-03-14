@@ -835,6 +835,115 @@ async fn test_score_details() {
 }
 
 #[actix_rt::test]
+async fn test_degraded_score_details() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = NESTED_DOCUMENTS.clone();
+
+    index.add_documents(json!(documents), None).await;
+    // We can't really use anything else than 0ms here; otherwise, the test will get flaky.
+    let (res, _code) = index.update_settings(json!({ "searchCutoff": 0 })).await;
+    index.wait_task(res.uid()).await;
+
+    index
+        .search(
+            json!({
+                "q": "b",
+                "showRankingScoreDetails": true,
+            }),
+            |response, code| {
+                meili_snap::snapshot!(code, @"200 OK");
+                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "id": 852,
+                    "father": "jean",
+                    "mother": "michelle",
+                    "doggos": [
+                      {
+                        "name": "bobby",
+                        "age": 2
+                      },
+                      {
+                        "name": "buddy",
+                        "age": 4
+                      }
+                    ],
+                    "cattos": "pésti",
+                    "_vectors": {
+                      "manual": [
+                        1,
+                        2,
+                        3
+                      ]
+                    },
+                    "_rankingScoreDetails": {
+                      "skipped": 0.0
+                    }
+                  },
+                  {
+                    "id": 654,
+                    "father": "pierre",
+                    "mother": "sabine",
+                    "doggos": [
+                      {
+                        "name": "gros bill",
+                        "age": 8
+                      }
+                    ],
+                    "cattos": [
+                      "simba",
+                      "pestiféré"
+                    ],
+                    "_vectors": {
+                      "manual": [
+                        1,
+                        2,
+                        54
+                      ]
+                    },
+                    "_rankingScoreDetails": {
+                      "skipped": 0.0
+                    }
+                  },
+                  {
+                    "id": 951,
+                    "father": "jean-baptiste",
+                    "mother": "sophie",
+                    "doggos": [
+                      {
+                        "name": "turbo",
+                        "age": 5
+                      },
+                      {
+                        "name": "fast",
+                        "age": 6
+                      }
+                    ],
+                    "cattos": [
+                      "moumoute",
+                      "gomez"
+                    ],
+                    "_vectors": {
+                      "manual": [
+                        10,
+                        23,
+                        32
+                      ]
+                    },
+                    "_rankingScoreDetails": {
+                      "skipped": 0.0
+                    }
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
 async fn experimental_feature_vector_store() {
     let server = Server::new().await;
     let index = server.index("test");

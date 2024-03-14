@@ -17,6 +17,9 @@ pub enum ScoreDetails {
     Sort(Sort),
     Vector(Vector),
     GeoSort(GeoSort),
+
+    /// Returned when we don't have the time to finish applying all the subsequent ranking-rules
+    Skipped,
 }
 
 #[derive(Clone, Copy)]
@@ -50,6 +53,7 @@ impl ScoreDetails {
             ScoreDetails::Sort(_) => None,
             ScoreDetails::GeoSort(_) => None,
             ScoreDetails::Vector(_) => None,
+            ScoreDetails::Skipped => Some(Rank { rank: 0, max_rank: 1 }),
         }
     }
 
@@ -97,6 +101,7 @@ impl ScoreDetails {
             ScoreDetails::Vector(vector) => RankOrValue::Score(
                 vector.value_similarity.as_ref().map(|(_, s)| *s as f64).unwrap_or(0.0f64),
             ),
+            ScoreDetails::Skipped => RankOrValue::Score(0.),
         }
     }
 
@@ -254,6 +259,13 @@ impl ScoreDetails {
                         "similarity": similarity,
                     });
                     details_map.insert(vector, details);
+                    order += 1;
+                }
+                ScoreDetails::Skipped => {
+                    details_map.insert(
+                        "skipped".to_string(),
+                        serde_json::Number::from_f64(0.).unwrap().into(),
+                    );
                     order += 1;
                 }
             }
