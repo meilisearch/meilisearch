@@ -850,6 +850,7 @@ async fn test_degraded_score_details() {
         .search(
             json!({
                 "q": "b",
+                "attributesToRetrieve": ["doggos.name", "cattos"],
                 "showRankingScoreDetails": true,
             }),
             |response, code| {
@@ -857,81 +858,46 @@ async fn test_degraded_score_details() {
                 meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
                 [
                   {
-                    "id": 852,
-                    "father": "jean",
-                    "mother": "michelle",
                     "doggos": [
                       {
-                        "name": "bobby",
-                        "age": 2
+                        "name": "bobby"
                       },
                       {
-                        "name": "buddy",
-                        "age": 4
+                        "name": "buddy"
                       }
                     ],
                     "cattos": "pésti",
-                    "_vectors": {
-                      "manual": [
-                        1,
-                        2,
-                        3
-                      ]
-                    },
                     "_rankingScoreDetails": {
                       "skipped": 0.0
                     }
                   },
                   {
-                    "id": 654,
-                    "father": "pierre",
-                    "mother": "sabine",
                     "doggos": [
                       {
-                        "name": "gros bill",
-                        "age": 8
+                        "name": "gros bill"
                       }
                     ],
                     "cattos": [
                       "simba",
                       "pestiféré"
                     ],
-                    "_vectors": {
-                      "manual": [
-                        1,
-                        2,
-                        54
-                      ]
-                    },
                     "_rankingScoreDetails": {
                       "skipped": 0.0
                     }
                   },
                   {
-                    "id": 951,
-                    "father": "jean-baptiste",
-                    "mother": "sophie",
                     "doggos": [
                       {
-                        "name": "turbo",
-                        "age": 5
+                        "name": "turbo"
                       },
                       {
-                        "name": "fast",
-                        "age": 6
+                        "name": "fast"
                       }
                     ],
                     "cattos": [
                       "moumoute",
                       "gomez"
                     ],
-                    "_vectors": {
-                      "manual": [
-                        10,
-                        23,
-                        32
-                      ]
-                    },
                     "_rankingScoreDetails": {
                       "skipped": 0.0
                     }
