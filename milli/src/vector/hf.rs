@@ -131,7 +131,7 @@ impl Embedder {
 
         let embeddings = this
             .embed(vec!["test".into()])
-            .map_err(NewEmbedderError::hf_could_not_determine_dimension)?;
+            .map_err(NewEmbedderError::could_not_determine_dimension)?;
         this.dimensions = embeddings.first().unwrap().dimension();
 
         Ok(this)

@@ -98,7 +98,7 @@ pub enum Embedder {
     /// An embedder based on running local models, fetched from the Hugging Face Hub.
     HuggingFace(hf::Embedder),
     /// An embedder based on making embedding queries against the OpenAI API.
-    OpenAi(openai::Embedder),
+    OpenAi(openai::sync::Embedder),
     /// An embedder based on the user providing the embeddings in the documents and queries.
     UserProvided(manual::Embedder),
     Ollama(ollama::Embedder),
@@ -201,7 +201,7 @@ impl Embedder {
     pub fn new(options: EmbedderOptions) -> std::result::Result<Self, NewEmbedderError> {
         Ok(match options {
             EmbedderOptions::HuggingFace(options) => Self::HuggingFace(hf::Embedder::new(options)?),
-            EmbedderOptions::OpenAi(options) => Self::OpenAi(openai::Embedder::new(options)?),
+            EmbedderOptions::OpenAi(options) => Self::OpenAi(openai::sync::Embedder::new(options)?),
             EmbedderOptions::Ollama(options) => Self::Ollama(ollama::Embedder::new(options)?),
             EmbedderOptions::UserProvided(options) => {
                 Self::UserProvided(manual::Embedder::new(options))
@@ -218,10 +218,7 @@ impl Embedder {
     ) -> std::result::Result<Vec<Embeddings<f32>>, EmbedError> {
         match self {
             Embedder::HuggingFace(embedder) => embedder.embed(texts),
-            Embedder::OpenAi(embedder) => {
-                let client = embedder.new_client()?;
-                embedder.embed(texts, &client).await
-            }
+            Embedder::OpenAi(embedder) => embedder.embed(texts),
             Embedder::Ollama(embedder) => {
                 let client = embedder.new_client()?;
                 embedder.embed(texts, &client).await

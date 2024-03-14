@@ -53,17 +53,17 @@ pub enum EmbedErrorKind {
     #[error("could not run model: {0}")]
     ModelForward(candle_core::Error),
     #[error("could not reach OpenAI: {0}")]
-    OpenAiNetwork(reqwest::Error),
+    OpenAiNetwork(ureq::Transport),
     #[error("unexpected response from OpenAI: {0}")]
-    OpenAiUnexpected(reqwest::Error),
-    #[error("could not authenticate against OpenAI: {0}")]
-    OpenAiAuth(OpenAiError),
-    #[error("sent too many requests to OpenAI: {0}")]
-    OpenAiTooManyRequests(OpenAiError),
+    OpenAiUnexpected(ureq::Error),
+    #[error("could not authenticate against OpenAI: {0:?}")]
+    OpenAiAuth(Option<OpenAiError>),
+    #[error("sent too many requests to OpenAI: {0:?}")]
+    OpenAiTooManyRequests(Option<OpenAiError>),
     #[error("received internal error from OpenAI: {0:?}")]
     OpenAiInternalServerError(Option<OpenAiError>),
-    #[error("sent too many tokens in a request to OpenAI: {0}")]
-    OpenAiTooManyTokens(OpenAiError),
+    #[error("sent too many tokens in a request to OpenAI: {0:?}")]
+    OpenAiTooManyTokens(Option<OpenAiError>),
     #[error("received unhandled HTTP status code {0} from OpenAI")]
     OpenAiUnhandledStatusCode(u16),
     #[error("attempt to embed the following text in a configuration where embeddings must be user provided: {0:?}")]
@@ -102,19 +102,19 @@ impl EmbedError {
         Self { kind: EmbedErrorKind::ModelForward(inner), fault: FaultSource::Runtime }
     }
 
-    pub fn openai_network(inner: reqwest::Error) -> Self {
+    pub fn openai_network(inner: ureq::Transport) -> Self {
         Self { kind: EmbedErrorKind::OpenAiNetwork(inner), fault: FaultSource::Runtime }
     }
 
-    pub fn openai_unexpected(inner: reqwest::Error) -> EmbedError {
+    pub fn openai_unexpected(inner: ureq::Error) -> EmbedError {
         Self { kind: EmbedErrorKind::OpenAiUnexpected(inner), fault: FaultSource::Bug }
     }
 
-    pub(crate) fn openai_auth_error(inner: OpenAiError) -> EmbedError {
+    pub(crate) fn openai_auth_error(inner: Option<OpenAiError>) -> EmbedError {
         Self { kind: EmbedErrorKind::OpenAiAuth(inner), fault: FaultSource::User }
     }
 
-    pub(crate) fn openai_too_many_requests(inner: OpenAiError) -> EmbedError {
+    pub(crate) fn openai_too_many_requests(inner: Option<OpenAiError>) -> EmbedError {
         Self { kind: EmbedErrorKind::OpenAiTooManyRequests(inner), fault: FaultSource::Runtime }
     }
 
@@ -122,7 +122,7 @@ impl EmbedError {
         Self { kind: EmbedErrorKind::OpenAiInternalServerError(inner), fault: FaultSource::Runtime }
     }
 
-    pub(crate) fn openai_too_many_tokens(inner: OpenAiError) -> EmbedError {
+    pub(crate) fn openai_too_many_tokens(inner: Option<OpenAiError>) -> EmbedError {
         Self { kind: EmbedErrorKind::OpenAiTooManyTokens(inner), fault: FaultSource::Bug }
     }
 
@@ -220,7 +220,7 @@ impl NewEmbedderError {
         Self { kind: NewEmbedderErrorKind::LoadModel(inner), fault: FaultSource::Runtime }
     }
 
-    pub fn hf_could_not_determine_dimension(inner: EmbedError) -> NewEmbedderError {
+    pub fn could_not_determine_dimension(inner: EmbedError) -> NewEmbedderError {
         Self {
             kind: NewEmbedderErrorKind::CouldNotDetermineDimension(inner),
             fault: FaultSource::Runtime,
