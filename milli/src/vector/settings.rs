@@ -199,7 +199,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 model: Setting::Set(options.embedding_model.name().to_owned()),
                 revision: Setting::NotSet,
                 api_key: options.api_key.map(Setting::Set).unwrap_or_default(),
-                dimensions: Setting::Set(options.dimensions.unwrap_or_default()),
+                dimensions: options.dimensions.map(Setting::Set).unwrap_or_default(),
                 document_template: Setting::Set(prompt.template),
             },
             super::EmbedderOptions::Ollama(options) => Self {
