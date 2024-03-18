@@ -843,7 +843,7 @@ async fn test_degraded_score_details() {
 
     index.add_documents(json!(documents), None).await;
     // We can't really use anything else than 0ms here; otherwise, the test will get flaky.
-    let (res, _code) = index.update_settings(json!({ "searchCutoff": 0 })).await;
+    let (res, _code) = index.update_settings(json!({ "searchCutoffMs": 0 })).await;
     index.wait_task(res.uid()).await;
 
     index
@@ -855,7 +855,7 @@ async fn test_degraded_score_details() {
             }),
             |response, code| {
                 meili_snap::snapshot!(code, @"200 OK");
-                meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+                meili_snap::snapshot!(meili_snap::json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
                 {
                   "hits": [
                     {
@@ -905,7 +905,7 @@ async fn test_degraded_score_details() {
                     }
                   ],
                   "query": "b",
-                  "processingTimeMs": 0,
+                  "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
                   "estimatedTotalHits": 3

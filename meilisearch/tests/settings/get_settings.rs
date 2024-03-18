@@ -35,7 +35,7 @@ static DEFAULT_SETTINGS_VALUES: Lazy<HashMap<&'static str, Value>> = Lazy::new(|
             "maxTotalHits": json!(1000),
         }),
     );
-    map.insert("search_cutoff", json!(null));
+    map.insert("search_cutoff_ms", json!(null));
     map
 });
 
@@ -85,7 +85,7 @@ async fn get_settings() {
         })
     );
     assert_eq!(settings["proximityPrecision"], json!("byWord"));
-    assert_eq!(settings["searchCutoff"], json!(null));
+    assert_eq!(settings["searchCutoffMs"], json!(null));
 }
 
 #[actix_rt::test]
@@ -288,7 +288,7 @@ test_setting_routes!(
     synonyms put,
     pagination patch,
     faceting patch,
-    search_cutoff put
+    search_cutoff_ms put
 );
 
 #[actix_rt::test]

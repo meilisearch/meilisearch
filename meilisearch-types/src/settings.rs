@@ -204,7 +204,7 @@ pub struct Settings<T> {
     pub embedders: Setting<BTreeMap<String, Setting<milli::vector::settings::EmbeddingSettings>>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsSearchCutoff>)]
-    pub search_cutoff: Setting<u64>,
+    pub search_cutoff_ms: Setting<u64>,
 
     #[serde(skip)]
     #[deserr(skip)]
@@ -230,7 +230,7 @@ impl Settings<Checked> {
             faceting: Setting::Reset,
             pagination: Setting::Reset,
             embedders: Setting::Reset,
-            search_cutoff: Setting::Reset,
+            search_cutoff_ms: Setting::Reset,
             _kind: PhantomData,
         }
     }
@@ -253,7 +253,7 @@ impl Settings<Checked> {
             faceting,
             pagination,
             embedders,
-            search_cutoff,
+            search_cutoff_ms,
             ..
         } = self;
 
@@ -274,7 +274,7 @@ impl Settings<Checked> {
             faceting,
             pagination,
             embedders,
-            search_cutoff,
+            search_cutoff_ms,
             _kind: PhantomData,
         }
     }
@@ -321,7 +321,7 @@ impl Settings<Unchecked> {
             faceting: self.faceting,
             pagination: self.pagination,
             embedders: self.embedders,
-            search_cutoff: self.search_cutoff,
+            search_cutoff_ms: self.search_cutoff_ms,
             _kind: PhantomData,
         }
     }
@@ -371,7 +371,7 @@ pub fn apply_settings_to_builder(
         faceting,
         pagination,
         embedders,
-        search_cutoff,
+        search_cutoff_ms,
         _kind,
     } = settings;
 
@@ -548,7 +548,7 @@ pub fn apply_settings_to_builder(
         Setting::NotSet => (),
     }
 
-    match search_cutoff {
+    match search_cutoff_ms {
         Setting::Set(cutoff) => builder.set_search_cutoff(*cutoff),
         Setting::Reset => builder.reset_search_cutoff(),
         Setting::NotSet => (),
@@ -641,7 +641,7 @@ pub fn settings(
         .collect();
     let embedders = if embedders.is_empty() { Setting::NotSet } else { Setting::Set(embedders) };
 
-    let search_cutoff = index.search_cutoff(rtxn)?;
+    let search_cutoff_ms = index.search_cutoff(rtxn)?;
 
     Ok(Settings {
         displayed_attributes: match displayed_attributes {
@@ -669,7 +669,7 @@ pub fn settings(
         faceting: Setting::Set(faceting),
         pagination: Setting::Set(pagination),
         embedders,
-        search_cutoff: match search_cutoff {
+        search_cutoff_ms: match search_cutoff_ms {
             Some(cutoff) => Setting::Set(cutoff),
             None => Setting::Reset,
         },
@@ -823,7 +823,7 @@ pub(crate) mod test {
             faceting: Setting::NotSet,
             pagination: Setting::NotSet,
             embedders: Setting::NotSet,
-            search_cutoff: Setting::NotSet,
+            search_cutoff_ms: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 
@@ -850,7 +850,7 @@ pub(crate) mod test {
             faceting: Setting::NotSet,
             pagination: Setting::NotSet,
             embedders: Setting::NotSet,
-            search_cutoff: Setting::NotSet,
+            search_cutoff_ms: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 
