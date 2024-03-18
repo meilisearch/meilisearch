@@ -17,6 +17,7 @@ use crate::analytics::{Analytics, SearchAggregator};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::metrics::MEILISEARCH_DEGRADED_SEARCH_REQUESTS;
 use crate::search::{
     add_search_rules, perform_search, HybridQuery, MatchingStrategy, SearchQuery, SemanticRatio,
     DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
@@ -247,6 +248,9 @@ pub async fn search_with_post(
             .await?;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
+        if search_result.degraded {
+            MEILISEARCH_DEGRADED_SEARCH_REQUESTS.inc();
+        }
     }
     analytics.post_search(aggregate);
 
