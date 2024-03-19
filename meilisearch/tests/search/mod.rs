@@ -869,7 +869,9 @@ async fn test_degraded_score_details() {
                       ],
                       "cattos": "pésti",
                       "_rankingScoreDetails": {
-                        "skipped": 0.0
+                        "skipped": {
+                          "order": 0
+                        }
                       }
                     },
                     {
@@ -883,7 +885,9 @@ async fn test_degraded_score_details() {
                         "pestiféré"
                       ],
                       "_rankingScoreDetails": {
-                        "skipped": 0.0
+                        "skipped": {
+                          "order": 0
+                        }
                       }
                     },
                     {
@@ -900,7 +904,9 @@ async fn test_degraded_score_details() {
                         "gomez"
                       ],
                       "_rankingScoreDetails": {
-                        "skipped": 0.0
+                        "skipped": {
+                          "order": 0
+                        }
                       }
                     }
                   ],

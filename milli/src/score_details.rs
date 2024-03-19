@@ -101,7 +101,7 @@ impl ScoreDetails {
             ScoreDetails::Vector(vector) => RankOrValue::Score(
                 vector.value_similarity.as_ref().map(|(_, s)| *s as f64).unwrap_or(0.0f64),
             ),
-            ScoreDetails::Skipped => RankOrValue::Score(0.),
+            ScoreDetails::Skipped => RankOrValue::Rank(Rank { rank: 0, max_rank: 1 }),
         }
     }
 
@@ -262,10 +262,8 @@ impl ScoreDetails {
                     order += 1;
                 }
                 ScoreDetails::Skipped => {
-                    details_map.insert(
-                        "skipped".to_string(),
-                        serde_json::Number::from_f64(0.).unwrap().into(),
-                    );
+                    details_map
+                        .insert("skipped".to_string(), serde_json::json!({ "order": order }));
                     order += 1;
                 }
             }
