@@ -317,6 +317,14 @@ They are JSON files with the following structure (comments are not actually supp
 }
 ```
 
+### Adding new assets
+
+Assets reside in our DigitalOcean S3 space. Assuming you have team access to the DigitalOcean S3 space:
+
+1. go to <https://cloud.digitalocean.com/spaces/milli-benchmarks?i=d1c552&path=bench%2Fdatasets%2F>
+2. upload your dataset:
+   1. if your dataset is a single file, upload that single file using the "upload" button,
+   2. otherwise, create a folder using the "create folder" button, then inside that folder upload your individual files.
 
 ## Upgrading `https://bench.meilisearch.dev`
 
