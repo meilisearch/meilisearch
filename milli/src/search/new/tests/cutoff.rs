@@ -10,6 +10,7 @@ use maplit::hashset;
 use meili_snap::snapshot;
 
 use crate::index::tests::TempIndex;
+use crate::score_details::ScoringStrategy;
 use crate::{Criterion, Filter, Search, TimeBudget};
 
 fn create_index() -> TempIndex {
@@ -94,6 +95,7 @@ fn degraded_search_and_score_details() {
     let mut search = Search::new(&rtxn, &index);
     search.query("hello puppy kefir");
     search.limit(4);
+    search.scoring_strategy(ScoringStrategy::Detailed);
     search.time_budget(TimeBudget::max());
 
     let result = search.execute().unwrap();
@@ -140,12 +142,24 @@ fn degraded_search_and_score_details() {
                     max_matching_words: 3,
                 },
             ),
+            Typo(
+                Typo {
+                    typo_count: 2,
+                    max_typo_count: 3,
+                },
+            ),
         ],
         [
             Words(
                 Words {
                     matching_words: 2,
                     max_matching_words: 3,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 0,
+                    max_typo_count: 2,
                 },
             ),
         ],
@@ -350,6 +364,12 @@ fn degraded_search_and_score_details() {
                     max_matching_words: 3,
                 },
             ),
+            Typo(
+                Typo {
+                    typo_count: 2,
+                    max_typo_count: 3,
+                },
+            ),
         ],
         [
             Skipped,
@@ -357,9 +377,9 @@ fn degraded_search_and_score_details() {
     ]
     "###);
 
-    // After FIVE loop iteration. The words ranking rule gave us a new bucket.
+    // After SIX loop iteration. The words ranking rule gave us a new bucket.
     // Since we reached the limit we were able to early exit without checking the typo ranking rule.
-    search.time_budget(TimeBudget::max().with_stop_after(5));
+    search.time_budget(TimeBudget::max().with_stop_after(6));
 
     let result = search.execute().unwrap();
     snapshot!(format!("{:#?}\n{:#?}", result.documents_ids, result.document_scores), @r###"
@@ -405,6 +425,12 @@ fn degraded_search_and_score_details() {
                     max_matching_words: 3,
                 },
             ),
+            Typo(
+                Typo {
+                    typo_count: 2,
+                    max_typo_count: 3,
+                },
+            ),
         ],
         [
             Words(
@@ -413,6 +439,7 @@ fn degraded_search_and_score_details() {
                     max_matching_words: 3,
                 },
             ),
+            Skipped,
         ],
     ]
     "###);
