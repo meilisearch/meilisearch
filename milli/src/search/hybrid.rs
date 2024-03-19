@@ -50,8 +50,12 @@ fn compare_scores(
                     order => return order,
                 }
             }
-            (Some(ScoreValue::Score(_)), Some(_)) => return Ordering::Greater,
-            (Some(_), Some(ScoreValue::Score(_))) => return Ordering::Less,
+            (Some(ScoreValue::Score(x)), Some(_)) => {
+                return if x == 0. { Ordering::Less } else { Ordering::Greater }
+            }
+            (Some(_), Some(ScoreValue::Score(x))) => {
+                return if x == 0. { Ordering::Greater } else { Ordering::Less }
+            }
             // if we have this, we're bad
             (Some(ScoreValue::GeoSort(_)), Some(ScoreValue::Sort(_)))
             | (Some(ScoreValue::Sort(_)), Some(ScoreValue::GeoSort(_))) => {
