@@ -1671,7 +1671,7 @@ mod tests {
         let count = index
             .facet_id_string_docids
             .remap_key_type::<Bytes>()
-            .prefix_iter(&rtxn, &[0, 1, 0])
+            .prefix_iter(&rtxn, &[0, 0])
             .unwrap()
             .count();
         assert_eq!(count, 5);
@@ -1703,7 +1703,7 @@ mod tests {
         let count = index
             .facet_id_string_docids
             .remap_key_type::<Bytes>()
-            .prefix_iter(&rtxn, &[0, 1, 0])
+            .prefix_iter(&rtxn, &[0, 0])
             .unwrap()
             .count();
         assert_eq!(count, 5);
