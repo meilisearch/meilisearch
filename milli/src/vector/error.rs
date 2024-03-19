@@ -2,9 +2,7 @@ use std::path::PathBuf;
 
 use hf_hub::api::sync::ApiError;
 
-use super::ollama::OllamaError;
 use crate::error::FaultSource;
-use crate::vector::openai::OpenAiError;
 
 #[derive(Debug, thiserror::Error)]
 #[error("Error while generating embeddings: {inner}")]
@@ -52,43 +50,12 @@ pub enum EmbedErrorKind {
     TensorValue(candle_core::Error),
     #[error("could not run model: {0}")]
     ModelForward(candle_core::Error),
-    #[error("could not reach OpenAI: {0}")]
-    OpenAiNetwork(ureq::Transport),
-    #[error("unexpected response from OpenAI: {0}")]
-    OpenAiUnexpected(ureq::Error),
-    #[error("could not authenticate against OpenAI: {0:?}")]
-    OpenAiAuth(Option<OpenAiError>),
-    #[error("sent too many requests to OpenAI: {0:?}")]
-    OpenAiTooManyRequests(Option<OpenAiError>),
-    #[error("received internal error from OpenAI: {0:?}")]
-    OpenAiInternalServerError(Option<OpenAiError>),
-    #[error("sent too many tokens in a request to OpenAI: {0:?}")]
-    OpenAiTooManyTokens(Option<OpenAiError>),
-    #[error("received unhandled HTTP status code {0} from OpenAI")]
-    OpenAiUnhandledStatusCode(u16),
     #[error("attempt to embed the following text in a configuration where embeddings must be user provided: {0:?}")]
     ManualEmbed(String),
     #[error("could not initialize asynchronous runtime: {0}")]
     OpenAiRuntimeInit(std::io::Error),
-    #[error("initializing web client for sending embedding requests failed: {0}")]
-    InitWebClient(reqwest::Error),
-    // Dedicated Ollama error kinds, might have to merge them into one cohesive error type for all backends.
-    #[error("unexpected response from Ollama: {0}")]
-    OllamaUnexpected(reqwest::Error),
-    #[error("sent too many requests to Ollama: {0}")]
-    OllamaTooManyRequests(OllamaError),
-    #[error("received internal error from Ollama: {0}")]
-    OllamaInternalServerError(OllamaError),
-    #[error("model not found. Meilisearch will not automatically download models from the Ollama library, please pull the model manually: {0}")]
-    OllamaModelNotFoundError(OllamaError),
-    #[error("received unhandled HTTP status code {0} from Ollama")]
-    OllamaUnhandledStatusCode(u16),
-    #[error("error serializing template context: {0}")]
-    RestTemplateContextSerialization(liquid::Error),
-    #[error(
-        "error rendering request template: {0}. Hint: available variable in the context: {{{{input}}}}'"
-    )]
-    RestTemplateError(liquid::Error),
+    #[error("model not found. Meilisearch will not automatically download models from the Ollama library, please pull the model manually: {0:?}")]
+    OllamaModelNotFoundError(Option<String>),
     #[error("error deserialization the response body as JSON: {0}")]
     RestResponseDeserialization(std::io::Error),
     #[error("component `{0}` not found in path `{1}` in response: `{2}`")]
@@ -128,75 +95,12 @@ impl EmbedError {
         Self { kind: EmbedErrorKind::ModelForward(inner), fault: FaultSource::Runtime }
     }
 
-    pub fn openai_network(inner: ureq::Transport) -> Self {
-        Self { kind: EmbedErrorKind::OpenAiNetwork(inner), fault: FaultSource::Runtime }
-    }
-
-    pub fn openai_unexpected(inner: ureq::Error) -> EmbedError {
-        Self { kind: EmbedErrorKind::OpenAiUnexpected(inner), fault: FaultSource::Bug }
-    }
-
-    pub(crate) fn openai_auth_error(inner: Option<OpenAiError>) -> EmbedError {
-        Self { kind: EmbedErrorKind::OpenAiAuth(inner), fault: FaultSource::User }
-    }
-
-    pub(crate) fn openai_too_many_requests(inner: Option<OpenAiError>) -> EmbedError {
-        Self { kind: EmbedErrorKind::OpenAiTooManyRequests(inner), fault: FaultSource::Runtime }
-    }
-
-    pub(crate) fn openai_internal_server_error(inner: Option<OpenAiError>) -> EmbedError {
-        Self { kind: EmbedErrorKind::OpenAiInternalServerError(inner), fault: FaultSource::Runtime }
-    }
-
-    pub(crate) fn openai_too_many_tokens(inner: Option<OpenAiError>) -> EmbedError {
-        Self { kind: EmbedErrorKind::OpenAiTooManyTokens(inner), fault: FaultSource::Bug }
-    }
-
-    pub(crate) fn openai_unhandled_status_code(code: u16) -> EmbedError {
-        Self { kind: EmbedErrorKind::OpenAiUnhandledStatusCode(code), fault: FaultSource::Bug }
-    }
-
     pub(crate) fn embed_on_manual_embedder(texts: String) -> EmbedError {
         Self { kind: EmbedErrorKind::ManualEmbed(texts), fault: FaultSource::User }
     }
 
-    pub(crate) fn openai_runtime_init(inner: std::io::Error) -> EmbedError {
-        Self { kind: EmbedErrorKind::OpenAiRuntimeInit(inner), fault: FaultSource::Runtime }
-    }
-
-    pub fn openai_initialize_web_client(inner: reqwest::Error) -> Self {
-        Self { kind: EmbedErrorKind::InitWebClient(inner), fault: FaultSource::Runtime }
-    }
-
-    pub(crate) fn ollama_unexpected(inner: reqwest::Error) -> EmbedError {
-        Self { kind: EmbedErrorKind::OllamaUnexpected(inner), fault: FaultSource::Bug }
-    }
-
-    pub(crate) fn ollama_model_not_found(inner: OllamaError) -> EmbedError {
+    pub(crate) fn ollama_model_not_found(inner: Option<String>) -> EmbedError {
         Self { kind: EmbedErrorKind::OllamaModelNotFoundError(inner), fault: FaultSource::User }
-    }
-
-    pub(crate) fn ollama_too_many_requests(inner: OllamaError) -> EmbedError {
-        Self { kind: EmbedErrorKind::OllamaTooManyRequests(inner), fault: FaultSource::Runtime }
-    }
-
-    pub(crate) fn ollama_internal_server_error(inner: OllamaError) -> EmbedError {
-        Self { kind: EmbedErrorKind::OllamaInternalServerError(inner), fault: FaultSource::Runtime }
-    }
-
-    pub(crate) fn ollama_unhandled_status_code(code: u16) -> EmbedError {
-        Self { kind: EmbedErrorKind::OllamaUnhandledStatusCode(code), fault: FaultSource::Bug }
-    }
-
-    pub(crate) fn rest_template_context_serialization(error: liquid::Error) -> EmbedError {
-        Self {
-            kind: EmbedErrorKind::RestTemplateContextSerialization(error),
-            fault: FaultSource::Bug,
-        }
-    }
-
-    pub(crate) fn rest_template_render(error: liquid::Error) -> EmbedError {
-        Self { kind: EmbedErrorKind::RestTemplateError(error), fault: FaultSource::User }
     }
 
     pub(crate) fn rest_response_deserialization(error: std::io::Error) -> EmbedError {
@@ -335,17 +239,6 @@ impl NewEmbedderError {
             fault: FaultSource::Runtime,
         }
     }
-
-    pub fn ollama_could_not_determine_dimension(inner: EmbedError) -> NewEmbedderError {
-        Self {
-            kind: NewEmbedderErrorKind::CouldNotDetermineDimension(inner),
-            fault: FaultSource::User,
-        }
-    }
-
-    pub fn openai_invalid_api_key_format(inner: reqwest::header::InvalidHeaderValue) -> Self {
-        Self { kind: NewEmbedderErrorKind::InvalidApiKeyFormat(inner), fault: FaultSource::User }
-    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -392,7 +285,4 @@ pub enum NewEmbedderErrorKind {
     CouldNotDetermineDimension(EmbedError),
     #[error("loading model failed: {0}")]
     LoadModel(candle_core::Error),
-    // openai
-    #[error("The API key passed to Authorization error was in an invalid format: {0}")]
-    InvalidApiKeyFormat(reqwest::header::InvalidHeaderValue),
 }

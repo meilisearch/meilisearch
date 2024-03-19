@@ -17,6 +17,8 @@ pub use self::error::Error;
 
 pub type Embedding = Vec<f32>;
 
+pub const REQUEST_PARALLELISM: usize = 40;
+
 /// One or multiple embeddings stored consecutively in a flat vector.
 pub struct Embeddings<F> {
     data: Vec<F>,
@@ -99,7 +101,7 @@ pub enum Embedder {
     /// An embedder based on running local models, fetched from the Hugging Face Hub.
     HuggingFace(hf::Embedder),
     /// An embedder based on making embedding queries against the OpenAI API.
-    OpenAi(openai::sync::Embedder),
+    OpenAi(openai::Embedder),
     /// An embedder based on the user providing the embeddings in the documents and queries.
     UserProvided(manual::Embedder),
     Ollama(ollama::Embedder),
@@ -202,7 +204,7 @@ impl Embedder {
     pub fn new(options: EmbedderOptions) -> std::result::Result<Self, NewEmbedderError> {
         Ok(match options {
             EmbedderOptions::HuggingFace(options) => Self::HuggingFace(hf::Embedder::new(options)?),
-            EmbedderOptions::OpenAi(options) => Self::OpenAi(openai::sync::Embedder::new(options)?),
+            EmbedderOptions::OpenAi(options) => Self::OpenAi(openai::Embedder::new(options)?),
             EmbedderOptions::Ollama(options) => Self::Ollama(ollama::Embedder::new(options)?),
             EmbedderOptions::UserProvided(options) => {
                 Self::UserProvided(manual::Embedder::new(options))
@@ -213,17 +215,14 @@ impl Embedder {
     /// Embed one or multiple texts.
     ///
     /// Each text can be embedded as one or multiple embeddings.
-    pub async fn embed(
+    pub fn embed(
         &self,
         texts: Vec<String>,
     ) -> std::result::Result<Vec<Embeddings<f32>>, EmbedError> {
         match self {
             Embedder::HuggingFace(embedder) => embedder.embed(texts),
             Embedder::OpenAi(embedder) => embedder.embed(texts),
-            Embedder::Ollama(embedder) => {
-                let client = embedder.new_client()?;
-                embedder.embed(texts, &client).await
-            }
+            Embedder::Ollama(embedder) => embedder.embed(texts),
             Embedder::UserProvided(embedder) => embedder.embed(texts),
         }
     }
@@ -231,18 +230,15 @@ impl Embedder {
     /// Embed multiple chunks of texts.
     ///
     /// Each chunk is composed of one or multiple texts.
-    ///
-    /// # Panics
-    ///
-    /// - if called from an asynchronous context
     pub fn embed_chunks(
         &self,
         text_chunks: Vec<Vec<String>>,
+        threads: &rayon::ThreadPool,
     ) -> std::result::Result<Vec<Vec<Embeddings<f32>>>, EmbedError> {
         match self {
             Embedder::HuggingFace(embedder) => embedder.embed_chunks(text_chunks),
-            Embedder::OpenAi(embedder) => embedder.embed_chunks(text_chunks),
-            Embedder::Ollama(embedder) => embedder.embed_chunks(text_chunks),
+            Embedder::OpenAi(embedder) => embedder.embed_chunks(text_chunks, threads),
+            Embedder::Ollama(embedder) => embedder.embed_chunks(text_chunks, threads),
             Embedder::UserProvided(embedder) => embedder.embed_chunks(text_chunks),
         }
     }

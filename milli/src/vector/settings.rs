@@ -204,7 +204,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
             },
             super::EmbedderOptions::Ollama(options) => Self {
                 source: Setting::Set(EmbedderSource::Ollama),
-                model: Setting::Set(options.embedding_model.name().to_owned()),
+                model: Setting::Set(options.embedding_model.to_owned()),
                 revision: Setting::NotSet,
                 api_key: Setting::NotSet,
                 dimensions: Setting::NotSet,
@@ -248,7 +248,7 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
                     let mut options: ollama::EmbedderOptions =
                         super::ollama::EmbedderOptions::with_default_model();
                     if let Some(model) = model.set() {
-                        options.embedding_model = super::ollama::EmbeddingModel::from_name(&model);
+                        options.embedding_model = model;
                     }
                     this.embedder_options = super::EmbedderOptions::Ollama(options);
                 }
