@@ -81,6 +81,30 @@ Meilisearch follows the [cargo xtask](https://github.com/matklad/cargo-xtask) wo
 
 Run `cargo xtask --help` from the root of the repository to find out what is available.
 
+### Logging
+
+Meilisearch uses [`tracing`](https://lib.rs/crates/tracing) for logging purposes. Tracing logs are structured and can be displayed as JSON to the end user, so prefer passing arguments as fields rather than interpolating them in the message.
+
+Refer to the [documentation](https://docs.rs/tracing/0.1.40/tracing/index.html#using-the-macros) for the syntax of the spans and events.
+
+Logging spans are used for 3 distinct purposes:
+
+1. Regular logging
+2. Profiling
+3. Benchmarking
+
+As a result, the spans should follow some rules:
+
+- They should not be put on functions that are called too often. That is because opening and closing a span causes some overhead. For regular logging, avoid putting spans on functions that are taking less than a few hundred nanoseconds. For profiling or benchmarking, avoid putting spans on functions that are taking less than a few microseconds.
+- For profiling and benchmarking, use the `TRACE` level.
+- For profiling and benchmarking, use the following `target` prefixes:
+  - `indexing::` for spans meant when profiling the indexing operations.
+  - `search::` for spans meant when profiling the search operations.
+
+### Benchmarking
+
+See [BENCHMARKS.md](./BENCHMARKS.md)
+
 ## Git Guidelines
 
 ### Git Branches
