@@ -10,6 +10,7 @@ struct ScoreWithRatioResult {
     matching_words: MatchingWords,
     candidates: RoaringBitmap,
     document_scores: Vec<(u32, ScoreWithRatio)>,
+    degraded: bool,
 }
 
 type ScoreWithRatio = (Vec<ScoreDetails>, f32);
@@ -72,6 +73,7 @@ impl ScoreWithRatioResult {
             matching_words: results.matching_words,
             candidates: results.candidates,
             document_scores,
+            degraded: results.degraded,
         }
     }
 
@@ -106,7 +108,7 @@ impl ScoreWithRatioResult {
             candidates: left.candidates | right.candidates,
             documents_ids,
             document_scores,
-            degraded: false,
+            degraded: left.degraded | right.degraded,
         }
     }
 }
