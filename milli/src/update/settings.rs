@@ -1033,6 +1033,13 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     {
         self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
+        let existing_fields: HashSet<_> = self
+            .index
+            .field_distribution(self.wtxn)?
+            .into_iter()
+            .filter_map(|(field, count)| (count != 0).then_some(field))
+            .collect();
+
         let old_faceted_fields = self.index.user_defined_faceted_fields(self.wtxn)?;
         let old_fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
 
@@ -1053,7 +1060,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         // index new fields as facets. It means that the distinct attribute,
         // an Asc/Desc criterion or a filtered attribute as be added or removed.
         let new_faceted_fields = self.index.user_defined_faceted_fields(self.wtxn)?;
-        let faceted_updated = old_faceted_fields != new_faceted_fields;
+        let faceted_updated =
+            (&existing_fields - &old_faceted_fields) != (&existing_fields - &new_faceted_fields);
 
         let stop_words_updated = self.update_stop_words()?;
         let non_separator_tokens_updated = self.update_non_separator_tokens()?;
