@@ -604,7 +604,6 @@ fn embedder_analytics(
                 EmbedderSource::OpenAi => sources.insert("openAi"),
                 EmbedderSource::HuggingFace => sources.insert("huggingFace"),
                 EmbedderSource::UserProvided => sources.insert("userProvided"),
-                EmbedderSource::Ollama => sources.insert("ollama"),
             };
         }
     };

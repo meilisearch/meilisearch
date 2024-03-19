@@ -124,28 +124,6 @@ async fn simple_facet_search_with_max_values() {
 }
 
 #[actix_rt::test]
-async fn simple_facet_search_by_count_with_max_values() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let documents = DOCUMENTS.clone();
-    index
-        .update_settings_faceting(
-            json!({ "maxValuesPerFacet": 1, "sortFacetValuesBy": { "*": "count" } }),
-        )
-        .await;
-    index.update_settings_filterable_attributes(json!(["genres"])).await;
-    index.add_documents(documents, None).await;
-    index.wait_task(2).await;
-
-    let (response, code) =
-        index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
-
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(dbg!(response)["facetHits"].as_array().unwrap().len(), 1);
-}
-
-#[actix_rt::test]
 async fn non_filterable_facet_search_error() {
     let server = Server::new().await;
     let index = server.index("test");
@@ -178,25 +156,4 @@ async fn facet_search_dont_support_words() {
 
     assert_eq!(code, 200, "{}", response);
     assert_eq!(response["facetHits"].as_array().unwrap().len(), 0);
-}
-
-#[actix_rt::test]
-async fn simple_facet_search_with_sort_by_count() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let documents = DOCUMENTS.clone();
-    index.update_settings_faceting(json!({ "sortFacetValuesBy": { "*": "count" } })).await;
-    index.update_settings_filterable_attributes(json!(["genres"])).await;
-    index.add_documents(documents, None).await;
-    index.wait_task(2).await;
-
-    let (response, code) =
-        index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
-
-    assert_eq!(code, 200, "{}", response);
-    let hits = response["facetHits"].as_array().unwrap();
-    assert_eq!(hits.len(), 2);
-    assert_eq!(hits[0], json!({ "value": "Action", "count": 3 }));
-    assert_eq!(hits[1], json!({ "value": "Adventure", "count": 2 }));
 }

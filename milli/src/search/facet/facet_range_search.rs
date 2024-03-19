@@ -168,7 +168,7 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
             }
 
             // should we stop?
-            // We should if the search range doesn't include any
+            // We should if the the search range doesn't include any
             // element from the previous key or its successors
             let should_stop = {
                 match self.right {
@@ -232,7 +232,7 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
         }
 
         // should we stop?
-        // We should if the search range doesn't include any
+        // We should if the the search range doesn't include any
         // element from the previous key or its successors
         let should_stop = {
             match self.right {

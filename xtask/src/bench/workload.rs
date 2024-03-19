@@ -12,9 +12,8 @@ use uuid::Uuid;
 use super::assets::Asset;
 use super::client::Client;
 use super::command::SyncMode;
-use super::dashboard::DashboardClient;
 use super::BenchDeriveArgs;
-use crate::bench::{assets, meili_process};
+use crate::bench::{assets, dashboard, meili_process};
 
 #[derive(Deserialize)]
 pub struct Workload {
@@ -26,7 +25,7 @@ pub struct Workload {
 }
 
 async fn run_commands(
-    dashboard_client: &DashboardClient,
+    dashboard_client: &Client,
     logs_client: &Client,
     meili_client: &Client,
     workload_uuid: Uuid,
@@ -65,7 +64,7 @@ async fn run_commands(
 #[tracing::instrument(skip(assets_client, dashboard_client, logs_client, meili_client, workload, master_key, args), fields(workload = workload.name))]
 pub async fn execute(
     assets_client: &Client,
-    dashboard_client: &DashboardClient,
+    dashboard_client: &Client,
     logs_client: &Client,
     meili_client: &Client,
     invocation_uuid: Uuid,
@@ -75,7 +74,8 @@ pub async fn execute(
 ) -> anyhow::Result<()> {
     assets::fetch_assets(assets_client, &workload.assets, &args.asset_folder).await?;
 
-    let workload_uuid = dashboard_client.create_workload(invocation_uuid, &workload).await?;
+    let workload_uuid =
+        dashboard::create_workload(dashboard_client, invocation_uuid, &workload).await?;
 
     let mut tasks = Vec::new();
 
@@ -113,7 +113,7 @@ pub async fn execute(
 #[allow(clippy::too_many_arguments)] // not best code quality, but this is a benchmark runner
 #[tracing::instrument(skip(dashboard_client, logs_client, meili_client, workload, master_key, args), fields(workload = %workload.name))]
 async fn execute_run(
-    dashboard_client: &DashboardClient,
+    dashboard_client: &Client,
     logs_client: &Client,
     meili_client: &Client,
     workload_uuid: Uuid,
@@ -202,7 +202,7 @@ async fn start_report(
 }
 
 async fn stop_report(
-    dashboard_client: &DashboardClient,
+    dashboard_client: &Client,
     logs_client: &Client,
     workload_uuid: Uuid,
     filename: String,
@@ -232,7 +232,7 @@ async fn stop_report(
             .context("could not convert trace to report")?;
             let context = || format!("writing report to {filename}");
 
-            dashboard_client.create_run(workload_uuid, &report).await?;
+            dashboard::create_run(dashboard_client, workload_uuid, &report).await?;
 
             let mut output_file = std::io::BufWriter::new(
                 std::fs::File::options()

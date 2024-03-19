@@ -151,7 +151,7 @@ async fn run_http(
     .keep_alive(KeepAlive::Os);
 
     if let Some(config) = opt_clone.get_ssl_config()? {
-        http_server.bind_rustls_021(opt_clone.http_addr, config)?.run().await?;
+        http_server.bind_rustls(opt_clone.http_addr, config)?.run().await?;
     } else {
         http_server.bind(&opt_clone.http_addr)?.run().await?;
     }
