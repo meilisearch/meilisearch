@@ -43,4 +43,4 @@ jobs:
 
         - name: Run benchmarks on PR ${{ github.event.issue.id }}
           run: |
-            cargo xtask bench --api-key "${{ secrets.BENCHMARK_API_KEY }}" --dashboard-url "${{ vars.BENCHMARK_DASHBOARD_URL }}" --reason "[Comment](${{ github.event.comment.html_url }}) on [#${{ github.event.issue.number }}](${{ github.event.issue.html_url }})" -- ${{ steps.command.outputs.command-arguments }}
+            cargo xtask bench --api-key "${{ secrets.BENCHMARK_API_KEY }}" --dashboard-url "${{ vars.BENCHMARK_DASHBOARD_URL }}" --reason "[Comment](${{ github.event.comment.url }}) on [#${{github.event.issue.id}}](${{ github.event.issue.url }})" -- ${{ steps.command.outputs.command-arguments }}
