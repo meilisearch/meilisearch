@@ -260,7 +260,7 @@ impl fmt::Debug for Search<'_> {
             .field("words_limit", words_limit)
             .field("distribution_shift", distribution_shift)
             .field("embedder_name", embedder_name)
-            .field("time_bduget", time_budget)
+            .field("time_budget", time_budget)
             .finish()
     }
 }
