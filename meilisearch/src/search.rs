@@ -729,8 +729,11 @@ pub fn perform_facet_search(
     features: RoFeatures,
 ) -> Result<FacetSearchResult, MeilisearchHttpError> {
     let before_search = Instant::now();
-    let time_budget = TimeBudget::new(Duration::from_millis(150));
     let rtxn = index.read_txn()?;
+    let time_budget = match index.search_cutoff(&rtxn)? {
+        Some(cutoff) => TimeBudget::new(Duration::from_millis(cutoff)),
+        None => TimeBudget::default(),
+    };
 
     let (search, _, _, _) =
         prepare_search(index, &rtxn, &search_query, features, None, time_budget)?;
