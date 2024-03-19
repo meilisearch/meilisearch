@@ -10,7 +10,7 @@ use maplit::hashset;
 use meili_snap::snapshot;
 
 use crate::index::tests::TempIndex;
-use crate::score_details::ScoringStrategy;
+use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::{Criterion, Filter, Search, TimeBudget};
 
 fn create_index() -> TempIndex {
@@ -88,6 +88,7 @@ fn degraded_search_cannot_skip_filter() {
 }
 
 #[test]
+#[allow(clippy::format_collect)] // the test is already quite big
 fn degraded_search_and_score_details() {
     let index = create_index();
     let rtxn = index.read_txn().unwrap();
@@ -99,13 +100,10 @@ fn degraded_search_and_score_details() {
     search.time_budget(TimeBudget::max());
 
     let result = search.execute().unwrap();
-    snapshot!(format!("{:#?}\n{:#?}", result.documents_ids, result.document_scores), @r###"
-    [
-        4,
-        1,
-        0,
-        3,
-    ]
+    snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
+    IDs: [4, 1, 0, 3]
+    Scores: 1.0000 0.9167 0.8333 0.6667 
+    Score Details:
     [
         [
             Words(
@@ -170,13 +168,10 @@ fn degraded_search_and_score_details() {
     search.time_budget(TimeBudget::max().with_stop_after(1));
 
     let result = search.execute().unwrap();
-    snapshot!(format!("{:#?}\n{:#?}", result.documents_ids, result.document_scores), @r###"
-    [
-        0,
-        1,
-        4,
-        2,
-    ]
+    snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
+    IDs: [0, 1, 4, 2]
+    Scores: 0.6667 0.6667 0.6667 0.0000 
+    Score Details:
     [
         [
             Words(
@@ -215,13 +210,10 @@ fn degraded_search_and_score_details() {
     search.time_budget(TimeBudget::max().with_stop_after(2));
 
     let result = search.execute().unwrap();
-    snapshot!(format!("{:#?}\n{:#?}", result.documents_ids, result.document_scores), @r###"
-    [
-        4,
-        0,
-        1,
-        2,
-    ]
+    snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
+    IDs: [4, 0, 1, 2]
+    Scores: 1.0000 0.6667 0.6667 0.0000 
+    Score Details:
     [
         [
             Words(
@@ -265,13 +257,10 @@ fn degraded_search_and_score_details() {
     search.time_budget(TimeBudget::max().with_stop_after(3));
 
     let result = search.execute().unwrap();
-    snapshot!(format!("{:#?}\n{:#?}", result.documents_ids, result.document_scores), @r###"
-    [
-        4,
-        1,
-        0,
-        2,
-    ]
+    snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
+    IDs: [4, 1, 0, 2]
+    Scores: 1.0000 0.9167 0.6667 0.0000 
+    Score Details:
     [
         [
             Words(
@@ -321,13 +310,10 @@ fn degraded_search_and_score_details() {
     search.time_budget(TimeBudget::max().with_stop_after(4));
 
     let result = search.execute().unwrap();
-    snapshot!(format!("{:#?}\n{:#?}", result.documents_ids, result.document_scores), @r###"
-    [
-        4,
-        1,
-        0,
-        2,
-    ]
+    snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
+    IDs: [4, 1, 0, 2]
+    Scores: 1.0000 0.9167 0.8333 0.0000 
+    Score Details:
     [
         [
             Words(
@@ -382,13 +368,10 @@ fn degraded_search_and_score_details() {
     search.time_budget(TimeBudget::max().with_stop_after(6));
 
     let result = search.execute().unwrap();
-    snapshot!(format!("{:#?}\n{:#?}", result.documents_ids, result.document_scores), @r###"
-    [
-        4,
-        1,
-        0,
-        3,
-    ]
+    snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
+    IDs: [4, 1, 0, 3]
+    Scores: 1.0000 0.9167 0.8333 0.3333 
+    Score Details:
     [
         [
             Words(
