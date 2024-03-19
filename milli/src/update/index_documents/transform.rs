@@ -23,7 +23,7 @@ use crate::error::{Error, InternalError, UserError};
 use crate::index::{db_name, main_key};
 use crate::update::del_add::{into_del_add_obkv, DelAdd, DelAddOperation, KvReaderDelAdd};
 use crate::update::index_documents::GrenadParameters;
-use crate::update::{AvailableDocumentsIds, ClearDocuments, UpdateIndexingStep};
+use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
 use crate::{FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldsIdsMap, Index, Result};
 
 pub struct TransformOutput {
@@ -875,7 +875,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             document_sorter_value_buffer.clear();
             into_del_add_obkv(
                 KvReaderU16::new(buffer),
-                DelAddOperation::Addition,
+                DelAddOperation::DeletionAndAddition,
                 &mut document_sorter_value_buffer,
             )?;
             original_sorter.insert(&document_sorter_key_buffer, &document_sorter_value_buffer)?;
@@ -916,7 +916,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             document_sorter_value_buffer.clear();
             into_del_add_obkv(
                 KvReaderU16::new(&buffer),
-                DelAddOperation::Addition,
+                DelAddOperation::DeletionAndAddition,
                 &mut document_sorter_value_buffer,
             )?;
             flattened_sorter.insert(docid.to_be_bytes(), &document_sorter_value_buffer)?;
@@ -945,9 +945,6 @@ impl<'a, 'i> Transform<'a, 'i> {
 
         let new_facets = output.compute_real_facets(wtxn, self.index)?;
         self.index.put_faceted_fields(wtxn, &new_facets)?;
-
-        // We clear the full database (words-fst, documents ids and documents content).
-        ClearDocuments::new(wtxn, self.index).execute()?;
 
         Ok(output)
     }
