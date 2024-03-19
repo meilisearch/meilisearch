@@ -1643,6 +1643,70 @@ mod tests {
             .unwrap()
             .count();
         assert_eq!(count, 4);
+
+        // Set the filterable fields to be the age and the name.
+        index
+            .update_settings(|settings| {
+                settings.set_filterable_fields(hashset! { S("age"),  S("name") });
+            })
+            .unwrap();
+
+        // Check that the displayed fields are correctly set.
+        let rtxn = index.read_txn().unwrap();
+        let fields_ids = index.filterable_fields(&rtxn).unwrap();
+        assert_eq!(fields_ids, hashset! { S("age"),  S("name") });
+
+        let rtxn = index.read_txn().unwrap();
+        // Only count the field_id 0 and level 0 facet values.
+        let count = index
+            .facet_id_f64_docids
+            .remap_key_type::<Bytes>()
+            .prefix_iter(&rtxn, &[0, 1, 0])
+            .unwrap()
+            .count();
+        assert_eq!(count, 4);
+
+        let rtxn = index.read_txn().unwrap();
+        // Only count the field_id 0 and level 0 facet values.
+        let count = index
+            .facet_id_string_docids
+            .remap_key_type::<Bytes>()
+            .prefix_iter(&rtxn, &[0, 1, 0])
+            .unwrap()
+            .count();
+        assert_eq!(count, 5);
+
+        // Remove the age from the filterable fields.
+        index
+            .update_settings(|settings| {
+                settings.set_filterable_fields(hashset! { S("name") });
+            })
+            .unwrap();
+
+        // Check that the displayed fields are correctly set.
+        let rtxn = index.read_txn().unwrap();
+        let fields_ids = index.filterable_fields(&rtxn).unwrap();
+        assert_eq!(fields_ids, hashset! { S("name") });
+
+        let rtxn = index.read_txn().unwrap();
+        // Only count the field_id 0 and level 0 facet values.
+        let count = index
+            .facet_id_f64_docids
+            .remap_key_type::<Bytes>()
+            .prefix_iter(&rtxn, &[0, 1, 0])
+            .unwrap()
+            .count();
+        assert_eq!(count, 0);
+
+        let rtxn = index.read_txn().unwrap();
+        // Only count the field_id 0 and level 0 facet values.
+        let count = index
+            .facet_id_string_docids
+            .remap_key_type::<Bytes>()
+            .prefix_iter(&rtxn, &[0, 1, 0])
+            .unwrap()
+            .count();
+        assert_eq!(count, 5);
     }
 
     #[test]
