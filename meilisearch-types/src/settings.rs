@@ -203,7 +203,7 @@ pub struct Settings<T> {
     #[deserr(default, error = DeserrJsonError<InvalidSettingsEmbedders>)]
     pub embedders: Setting<BTreeMap<String, Setting<milli::vector::settings::EmbeddingSettings>>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsSearchCutoff>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsSearchCutoffMs>)]
     pub search_cutoff_ms: Setting<u64>,
 
     #[serde(skip)]

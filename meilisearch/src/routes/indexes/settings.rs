@@ -138,7 +138,6 @@ macro_rules! make_setting_route {
 
                 debug!(returns = ?settings, "Update settings");
                 let mut json = serde_json::json!(&settings);
-                dbg!(&json);
                 let val = json[$camelcase_attr].take();
 
                 Ok(HttpResponse::Ok().json(val))
@@ -630,7 +629,7 @@ make_setting_route!(
     put,
     u64,
     meilisearch_types::deserr::DeserrJsonError<
-        meilisearch_types::error::deserr_codes::InvalidSettingsSearchCutoff,
+        meilisearch_types::error::deserr_codes::InvalidSettingsSearchCutoffMs,
     >,
     search_cutoff_ms,
     "searchCutoffMs",
