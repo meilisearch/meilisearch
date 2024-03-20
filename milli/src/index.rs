@@ -20,13 +20,13 @@ use crate::heed_codec::facet::{
 use crate::heed_codec::{
     BEU16StrCodec, FstSetCodec, ScriptLanguageCodec, StrBEU16Codec, StrRefCodec,
 };
+use crate::order_by_map::OrderByMap;
 use crate::proximity::ProximityPrecision;
 use crate::vector::EmbeddingConfig;
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdWordCountCodec, GeoPoint, ObkvCodec,
-    OrderBy, Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, BEU16,
-    BEU32, BEU64,
+    Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, BEU16, BEU32, BEU64,
 };
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
@@ -1373,21 +1373,19 @@ impl Index {
         self.main.remap_key_type::<Str>().delete(txn, main_key::MAX_VALUES_PER_FACET)
     }
 
-    pub fn sort_facet_values_by(&self, txn: &RoTxn) -> heed::Result<HashMap<String, OrderBy>> {
-        let mut orders = self
+    pub fn sort_facet_values_by(&self, txn: &RoTxn) -> heed::Result<OrderByMap> {
+        let orders = self
             .main
-            .remap_types::<Str, SerdeJson<HashMap<String, OrderBy>>>()
+            .remap_types::<Str, SerdeJson<OrderByMap>>()
             .get(txn, main_key::SORT_FACET_VALUES_BY)?
             .unwrap_or_default();
-        // Insert the default ordering if it is not already overwritten by the user.
-        orders.entry("*".to_string()).or_insert(OrderBy::Lexicographic);
         Ok(orders)
     }
 
     pub(crate) fn put_sort_facet_values_by(
         &self,
         txn: &mut RwTxn,
-        val: &HashMap<String, OrderBy>,
+        val: &OrderByMap,
     ) -> heed::Result<()> {
         self.main.remap_types::<Str, SerdeJson<_>>().put(txn, main_key::SORT_FACET_VALUES_BY, &val)
     }
