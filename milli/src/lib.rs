@@ -30,6 +30,7 @@ pub mod snapshot_tests;
 
 use std::collections::{BTreeMap, HashMap};
 use std::convert::{TryFrom, TryInto};
+use std::fmt;
 use std::hash::BuildHasherDefault;
 
 use charabia::normalizer::{CharNormalizer, CompatibilityDecompositionNormalizer};
@@ -103,6 +104,73 @@ pub const MAX_FACET_VALUE_LENGTH: usize = MAX_LMDB_KEY_LENGTH - 32;
 pub const MAX_WORD_LENGTH: usize = MAX_LMDB_KEY_LENGTH / 2;
 
 pub const MAX_POSITION_PER_ATTRIBUTE: u32 = u16::MAX as u32 + 1;
+
+#[derive(Clone)]
+pub struct TimeBudget {
+    started_at: std::time::Instant,
+    budget: std::time::Duration,
+
+    /// When testing the time budget, ensuring we did more than iteration of the bucket sort can be useful.
+    /// But to avoid being flaky, the only option is to add the ability to stop after a specific number of calls instead of a `Duration`.
+    #[cfg(test)]
+    stop_after: Option<(std::sync::Arc<std::sync::atomic::AtomicUsize>, usize)>,
+}
+
+impl fmt::Debug for TimeBudget {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TimeBudget")
+            .field("started_at", &self.started_at)
+            .field("budget", &self.budget)
+            .field("left", &(self.budget - self.started_at.elapsed()))
+            .finish()
+    }
+}
+
+impl Default for TimeBudget {
+    fn default() -> Self {
+        Self::new(std::time::Duration::from_millis(150))
+    }
+}
+
+impl TimeBudget {
+    pub fn new(budget: std::time::Duration) -> Self {
+        Self {
+            started_at: std::time::Instant::now(),
+            budget,
+
+            #[cfg(test)]
+            stop_after: None,
+        }
+    }
+
+    pub fn max() -> Self {
+        Self::new(std::time::Duration::from_secs(u64::MAX))
+    }
+
+    #[cfg(test)]
+    pub fn with_stop_after(mut self, stop_after: usize) -> Self {
+        use std::sync::atomic::AtomicUsize;
+        use std::sync::Arc;
+
+        self.stop_after = Some((Arc::new(AtomicUsize::new(0)), stop_after));
+        self
+    }
+
+    pub fn exceeded(&self) -> bool {
+        #[cfg(test)]
+        if let Some((current, stop_after)) = &self.stop_after {
+            let current = current.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if current >= *stop_after {
+                return true;
+            } else {
+                // if a number has been specified then we ignore entirely the time budget
+                return false;
+            }
+        }
+
+        self.started_at.elapsed() > self.budget
+    }
+}
 
 // Convert an absolute word position into a relative position.
 // Return the field id of the attribute related to the absolute position

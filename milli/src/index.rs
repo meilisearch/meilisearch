@@ -67,6 +67,7 @@ pub mod main_key {
     pub const PAGINATION_MAX_TOTAL_HITS: &str = "pagination-max-total-hits";
     pub const PROXIMITY_PRECISION: &str = "proximity-precision";
     pub const EMBEDDING_CONFIGS: &str = "embedding_configs";
+    pub const SEARCH_CUTOFF: &str = "search_cutoff";
 }
 
 pub mod db_name {
@@ -1505,6 +1506,18 @@ impl Index {
             _ => "default".to_owned(),
         })
     }
+
+    pub(crate) fn put_search_cutoff(&self, wtxn: &mut RwTxn<'_>, cutoff: u64) -> heed::Result<()> {
+        self.main.remap_types::<Str, BEU64>().put(wtxn, main_key::SEARCH_CUTOFF, &cutoff)
+    }
+
+    pub fn search_cutoff(&self, rtxn: &RoTxn<'_>) -> Result<Option<u64>> {
+        Ok(self.main.remap_types::<Str, BEU64>().get(rtxn, main_key::SEARCH_CUTOFF)?)
+    }
+
+    pub(crate) fn delete_search_cutoff(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::SEARCH_CUTOFF)
+    }
 }
 
 #[cfg(test)]
@@ -2421,6 +2434,7 @@ pub(crate) mod tests {
             candidates: _,
             document_scores: _,
             mut documents_ids,
+            degraded: _,
         } = search.execute().unwrap();
         let primary_key_id = index.fields_ids_map(&rtxn).unwrap().id("primary_key").unwrap();
         documents_ids.sort_unstable();

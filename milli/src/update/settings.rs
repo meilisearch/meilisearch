@@ -150,6 +150,7 @@ pub struct Settings<'a, 't, 'i> {
     pagination_max_total_hits: Setting<usize>,
     proximity_precision: Setting<ProximityPrecision>,
     embedder_settings: Setting<BTreeMap<String, Setting<EmbeddingSettings>>>,
+    search_cutoff: Setting<u64>,
 }
 
 impl<'a, 't, 'i> Settings<'a, 't, 'i> {
@@ -183,6 +184,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             pagination_max_total_hits: Setting::NotSet,
             proximity_precision: Setting::NotSet,
             embedder_settings: Setting::NotSet,
+            search_cutoff: Setting::NotSet,
             indexer_config,
         }
     }
@@ -371,6 +373,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
     pub fn reset_embedder_settings(&mut self) {
         self.embedder_settings = Setting::Reset;
+    }
+
+    pub fn set_search_cutoff(&mut self, value: u64) {
+        self.search_cutoff = Setting::Set(value);
+    }
+
+    pub fn reset_search_cutoff(&mut self) {
+        self.search_cutoff = Setting::Reset;
     }
 
     #[tracing::instrument(
@@ -1026,6 +1036,24 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(update)
     }
 
+    fn update_search_cutoff(&mut self) -> Result<bool> {
+        let changed = match self.search_cutoff {
+            Setting::Set(new) => {
+                let old = self.index.search_cutoff(self.wtxn)?;
+                if old == Some(new) {
+                    false
+                } else {
+                    self.index.put_search_cutoff(self.wtxn, new)?;
+                    true
+                }
+            }
+            Setting::Reset => self.index.delete_search_cutoff(self.wtxn)?,
+            Setting::NotSet => false,
+        };
+
+        Ok(changed)
+    }
+
     pub fn execute<FP, FA>(mut self, progress_callback: FP, should_abort: FA) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
@@ -1078,6 +1106,9 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         // 2. Only change the name -> embedder mapping on a name change
         // 3. Keep the old vectors but reattempt indexing on a prompt change: only actually changed prompt will need embedding + storage
         let embedding_configs_updated = self.update_embedding_configs()?;
+
+        // never trigger re-indexing
+        self.update_search_cutoff()?;
 
         if stop_words_updated
             || non_separator_tokens_updated
@@ -2035,6 +2066,7 @@ mod tests {
                     pagination_max_total_hits,
                     proximity_precision,
                     embedder_settings,
+                    search_cutoff,
                 } = settings;
                 assert!(matches!(searchable_fields, Setting::NotSet));
                 assert!(matches!(displayed_fields, Setting::NotSet));
@@ -2058,6 +2090,7 @@ mod tests {
                 assert!(matches!(pagination_max_total_hits, Setting::NotSet));
                 assert!(matches!(proximity_precision, Setting::NotSet));
                 assert!(matches!(embedder_settings, Setting::NotSet));
+                assert!(matches!(search_cutoff, Setting::NotSet));
             })
             .unwrap();
     }

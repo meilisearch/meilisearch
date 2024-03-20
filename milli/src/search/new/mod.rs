@@ -52,7 +52,8 @@ use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::apply_distinct_rule;
 use crate::vector::DistributionShift;
 use crate::{
-    AscDesc, DocumentId, FieldId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError,
+    AscDesc, DocumentId, FieldId, Filter, Index, Member, Result, TermsMatchingStrategy, TimeBudget,
+    UserError,
 };
 
 /// A structure used throughout the execution of a search query.
@@ -518,6 +519,7 @@ pub fn execute_vector_search(
     length: usize,
     distribution_shift: Option<DistributionShift>,
     embedder_name: &str,
+    time_budget: TimeBudget,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
@@ -537,7 +539,7 @@ pub fn execute_vector_search(
     let placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery> =
         &mut placeholder_search_logger;
 
-    let BucketSortOutput { docids, scores, all_candidates } = bucket_sort(
+    let BucketSortOutput { docids, scores, all_candidates, degraded } = bucket_sort(
         ctx,
         ranking_rules,
         &PlaceholderQuery,
@@ -546,6 +548,7 @@ pub fn execute_vector_search(
         length,
         scoring_strategy,
         placeholder_search_logger,
+        time_budget,
     )?;
 
     Ok(PartialSearchResult {
@@ -553,6 +556,7 @@ pub fn execute_vector_search(
         document_scores: scores,
         documents_ids: docids,
         located_query_terms: None,
+        degraded,
     })
 }
 
@@ -572,6 +576,7 @@ pub fn execute_search(
     words_limit: Option<usize>,
     placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery>,
     query_graph_logger: &mut dyn SearchLogger<QueryGraph>,
+    time_budget: TimeBudget,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
@@ -648,6 +653,7 @@ pub fn execute_search(
             length,
             scoring_strategy,
             query_graph_logger,
+            time_budget,
         )?
     } else {
         let ranking_rules =
@@ -661,10 +667,11 @@ pub fn execute_search(
             length,
             scoring_strategy,
             placeholder_search_logger,
+            time_budget,
         )?
     };
 
-    let BucketSortOutput { docids, scores, mut all_candidates } = bucket_sort_output;
+    let BucketSortOutput { docids, scores, mut all_candidates, degraded } = bucket_sort_output;
     let fields_ids_map = ctx.index.fields_ids_map(ctx.txn)?;
 
     // The candidates is the universe unless the exhaustive number of hits
@@ -682,6 +689,7 @@ pub fn execute_search(
         document_scores: scores,
         documents_ids: docids,
         located_query_terms,
+        degraded,
     })
 }
 
@@ -742,4 +750,6 @@ pub struct PartialSearchResult {
     pub candidates: RoaringBitmap,
     pub documents_ids: Vec<DocumentId>,
     pub document_scores: Vec<Vec<ScoreDetails>>,
+
+    pub degraded: bool,
 }
