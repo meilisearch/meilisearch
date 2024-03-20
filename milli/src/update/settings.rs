@@ -20,7 +20,7 @@ use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::vector::settings::{check_set, check_unset, EmbedderSource, EmbeddingSettings};
 use crate::vector::{Embedder, EmbeddingConfig, EmbeddingConfigs};
-use crate::{FieldsIdsMap, Index, Result};
+use crate::{FieldId, FieldsIdsMap, Index, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum Setting<T> {
@@ -1066,20 +1066,11 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     {
         self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
-        // Note: this MUST be before `update_sortable` so that we can get the old value to compare with the updated value afterwards
-
-        let existing_fields: HashSet<_> = self
-            .index
-            .field_distribution(self.wtxn)?
-            .into_iter()
-            .filter_map(|(field, count)| (count != 0).then_some(field))
-            .collect();
-        let old_faceted_fields = self.index.user_defined_faceted_fields(self.wtxn)?;
+        let old_inner_settings = InnerIndexSettings::from_index(&self.index, &self.wtxn)?;
         let old_fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
 
+        // never trigger re-indexing
         self.update_displayed()?;
-        self.update_filterable()?;
-        self.update_sortable()?;
         self.update_distinct_field()?;
         self.update_criteria()?;
         self.update_primary_key()?;
@@ -1089,16 +1080,19 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.update_max_values_per_facet()?;
         self.update_sort_facet_values_by()?;
         self.update_pagination_max_total_hits()?;
+        self.update_search_cutoff()?;
 
-        let faceted_updated = self.update_faceted(existing_fields, old_faceted_fields)?;
-        let stop_words_updated = self.update_stop_words()?;
-        let non_separator_tokens_updated = self.update_non_separator_tokens()?;
-        let separator_tokens_updated = self.update_separator_tokens()?;
-        let dictionary_updated = self.update_dictionary()?;
-        let synonyms_updated = self.update_synonyms()?;
-        let searchable_updated = self.update_searchable()?;
-        let exact_attributes_updated = self.update_exact_attributes()?;
-        let proximity_precision = self.update_proximity_precision()?;
+        // could trigger re-indexing
+        self.update_filterable()?;
+        self.update_sortable()?;
+        self.update_stop_words()?;
+        self.update_non_separator_tokens()?;
+        self.update_separator_tokens()?;
+        self.update_dictionary()?;
+        self.update_synonyms()?;
+        self.update_searchable()?;
+        self.update_exact_attributes()?;
+        self.update_proximity_precision()?;
         // TODO: very rough approximation of the needs for reindexing where any change will result in
         // a full reindexing.
         // What can be done instead:
@@ -1107,20 +1101,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         // 3. Keep the old vectors but reattempt indexing on a prompt change: only actually changed prompt will need embedding + storage
         let embedding_configs_updated = self.update_embedding_configs()?;
 
-        // never trigger re-indexing
-        self.update_search_cutoff()?;
+        let new_inner_settings = InnerIndexSettings::from_index(&self.index, &self.wtxn)?;
+        let inner_settings_diff = InnerIndexSettingsDiff {
+            old: old_inner_settings,
+            new: new_inner_settings,
+            embedding_configs_updated,
+        };
 
-        if stop_words_updated
-            || non_separator_tokens_updated
-            || separator_tokens_updated
-            || dictionary_updated
-            || faceted_updated
-            || synonyms_updated
-            || searchable_updated
-            || exact_attributes_updated
-            || proximity_precision
-            || embedding_configs_updated
-        {
+        if inner_settings_diff.any_reindexing_needed() {
             self.reindex(&progress_callback, &should_abort, old_fields_ids_map)?;
         }
 
@@ -1153,6 +1141,117 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             (&existing_fields - &old_faceted_fields) != (&existing_fields - &new_faceted_fields);
 
         Ok(faceted_updated)
+    }
+}
+
+pub(crate) struct InnerIndexSettingsDiff {
+    old: InnerIndexSettings,
+    new: InnerIndexSettings,
+
+    // TODO: compare directly the embedders.
+    embedding_configs_updated: bool,
+}
+
+impl InnerIndexSettingsDiff {
+    fn any_reindexing_needed(&self) -> bool {
+        self.reindex_searchable() || self.reindex_facets() || self.reindex_vectors()
+    }
+
+    fn reindex_searchable(&self) -> bool {
+        self.old
+            .fields_ids_map
+            .iter()
+            .zip(self.new.fields_ids_map.iter())
+            .any(|(old, new)| old != new)
+            || self.old.stop_words.as_ref().map(|set| set.as_fst().as_bytes())
+                != self.new.stop_words.as_ref().map(|set| set.as_fst().as_bytes())
+            || self.old.allowed_separators != self.new.allowed_separators
+            || self.old.dictionary != self.new.dictionary
+            || self.old.searchable_fields != self.new.searchable_fields
+            || self.old.exact_attributes != self.new.exact_attributes
+            || self.old.proximity_precision != self.new.proximity_precision
+    }
+
+    fn reindex_facets(&self) -> bool {
+        let existing_fields = self.new.existing_fields;
+        if existing_fields.iter().any(|field| field.contains('.')) {
+            return true;
+        }
+
+        let old_faceted_fields = self.old.user_defined_faceted_fields;
+        if old_faceted_fields.iter().any(|field| field.contains('.')) {
+            return true;
+        }
+
+        // If there is new faceted fields we indicate that we must reindex as we must
+        // index new fields as facets. It means that the distinct attribute,
+        // an Asc/Desc criterion or a filtered attribute as be added or removed.
+        let new_faceted_fields = self.new.user_defined_faceted_fields;
+        if new_faceted_fields.iter().any(|field| field.contains('.')) {
+            return true;
+        }
+
+        let faceted_updated =
+            (&existing_fields - &old_faceted_fields) != (&existing_fields - &new_faceted_fields);
+
+        self.old
+            .fields_ids_map
+            .iter()
+            .zip(self.new.fields_ids_map.iter())
+            .any(|(old, new)| old != new)
+            || faceted_updated
+    }
+
+    fn reindex_vectors(&self) -> bool {
+        self.embedding_configs_updated
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct InnerIndexSettings {
+    stop_words: Option<fst::Set<Vec<u8>>>,
+    allowed_separators: Option<BTreeSet<String>>,
+    dictionary: Option<BTreeSet<String>>,
+    fields_ids_map: FieldsIdsMap,
+    faceted_fields: HashSet<FieldId>,
+    searchable_fields: Option<BTreeSet<FieldId>>,
+    exact_attributes: HashSet<FieldId>,
+    proximity_precision: ProximityPrecision,
+    embedding_configs: Vec<(String, crate::vector::EmbeddingConfig)>,
+    existing_fields: HashSet<String>,
+}
+
+impl InnerIndexSettings {
+    fn from_index(index: &Index, rtxn: &heed::RoTxn) -> Result<Self> {
+        let stop_words = index.stop_words(rtxn)?;
+        let stop_words = stop_words.map(|sw| sw.map_data(Vec::from).unwrap());
+        let allowed_separators = index.allowed_separators(rtxn)?;
+        let dictionary = index.dictionary(rtxn)?;
+        let fields_ids_map = index.fields_ids_map(rtxn)?;
+        let searchable_fields = index.searchable_fields_ids(rtxn)?;
+        let searchable_fields = searchable_fields.map(|sf| sf.into_iter().collect());
+        let faceted_fields = index.faceted_fields_ids(rtxn)?;
+        let exact_attributes = index.exact_attributes_ids(rtxn)?;
+        let proximity_precision = index.proximity_precision(rtxn)?.unwrap_or_default();
+        let embedding_configs = index.embedding_configs(rtxn)?;
+        let existing_fields: HashSet<_> = index
+            .field_distribution(rtxn)?
+            .into_iter()
+            .filter_map(|(field, count)| (count != 0).then_some(field))
+            .collect();
+
+        Ok(Self {
+            stop_words,
+            allowed_separators,
+            dictionary,
+            fields_ids_map,
+            faceted_fields,
+            searchable_fields,
+            exact_attributes,
+            proximity_precision,
+            embedding_configs,
+            existing_fields,
+        })
     }
 }
 
