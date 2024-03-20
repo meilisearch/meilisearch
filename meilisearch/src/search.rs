@@ -530,7 +530,7 @@ pub fn perform_search(
     // The attributes to retrieve are the ones explicitly marked as to retrieve (all by default),
     // but these attributes must be also be present
     // - in the fields_ids_map
-    // - in the displayed attributes
+    // - in the the displayed attributes
     let to_retrieve_ids: BTreeSet<_> = query
         .attributes_to_retrieve
         .as_ref()
@@ -671,16 +671,27 @@ pub fn perform_search(
 
             let sort_facet_values_by =
                 index.sort_facet_values_by(&rtxn).map_err(milli::Error::from)?;
+            let default_sort_facet_values_by =
+                sort_facet_values_by.get("*").copied().unwrap_or_default();
 
             if fields.iter().all(|f| f != "*") {
-                let fields: Vec<_> =
-                    fields.iter().map(|n| (n, sort_facet_values_by.get(n))).collect();
+                let fields: Vec<_> = fields
+                    .iter()
+                    .map(|n| {
+                        (
+                            n,
+                            sort_facet_values_by
+                                .get(n)
+                                .copied()
+                                .unwrap_or(default_sort_facet_values_by),
+                        )
+                    })
+                    .collect();
                 facet_distribution.facets(fields);
             }
-
             let distribution = facet_distribution
                 .candidates(candidates)
-                .default_order_by(sort_facet_values_by.get("*"))
+                .default_order_by(default_sort_facet_values_by)
                 .execute()?;
             let stats = facet_distribution.compute_stats()?;
             (Some(distribution), Some(stats))

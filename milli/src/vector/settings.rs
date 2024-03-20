@@ -1,7 +1,7 @@
 use deserr::Deserr;
 use serde::{Deserialize, Serialize};
 
-use super::{ollama, openai};
+use super::openai;
 use crate::prompt::PromptData;
 use crate::update::Setting;
 use crate::vector::EmbeddingConfig;
@@ -80,15 +80,11 @@ impl EmbeddingSettings {
             Self::SOURCE => {
                 &[EmbedderSource::HuggingFace, EmbedderSource::OpenAi, EmbedderSource::UserProvided]
             }
-            Self::MODEL => {
-                &[EmbedderSource::HuggingFace, EmbedderSource::OpenAi, EmbedderSource::Ollama]
-            }
+            Self::MODEL => &[EmbedderSource::HuggingFace, EmbedderSource::OpenAi],
             Self::REVISION => &[EmbedderSource::HuggingFace],
             Self::API_KEY => &[EmbedderSource::OpenAi],
             Self::DIMENSIONS => &[EmbedderSource::OpenAi, EmbedderSource::UserProvided],
-            Self::DOCUMENT_TEMPLATE => {
-                &[EmbedderSource::HuggingFace, EmbedderSource::OpenAi, EmbedderSource::Ollama]
-            }
+            Self::DOCUMENT_TEMPLATE => &[EmbedderSource::HuggingFace, EmbedderSource::OpenAi],
             _other => unreachable!("unknown field"),
         }
     }
@@ -105,7 +101,6 @@ impl EmbeddingSettings {
             EmbedderSource::HuggingFace => {
                 &[Self::SOURCE, Self::MODEL, Self::REVISION, Self::DOCUMENT_TEMPLATE]
             }
-            EmbedderSource::Ollama => &[Self::SOURCE, Self::MODEL, Self::DOCUMENT_TEMPLATE],
             EmbedderSource::UserProvided => &[Self::SOURCE, Self::DIMENSIONS],
         }
     }
@@ -139,7 +134,6 @@ pub enum EmbedderSource {
     #[default]
     OpenAi,
     HuggingFace,
-    Ollama,
     UserProvided,
 }
 
@@ -149,7 +143,6 @@ impl std::fmt::Display for EmbedderSource {
             EmbedderSource::OpenAi => "openAi",
             EmbedderSource::HuggingFace => "huggingFace",
             EmbedderSource::UserProvided => "userProvided",
-            EmbedderSource::Ollama => "ollama",
         };
         f.write_str(s)
     }
@@ -202,14 +195,6 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 dimensions: options.dimensions.map(Setting::Set).unwrap_or_default(),
                 document_template: Setting::Set(prompt.template),
             },
-            super::EmbedderOptions::Ollama(options) => Self {
-                source: Setting::Set(EmbedderSource::Ollama),
-                model: Setting::Set(options.embedding_model.name().to_owned()),
-                revision: Setting::NotSet,
-                api_key: Setting::NotSet,
-                dimensions: Setting::NotSet,
-                document_template: Setting::Set(prompt.template),
-            },
             super::EmbedderOptions::UserProvided(options) => Self {
                 source: Setting::Set(EmbedderSource::UserProvided),
                 model: Setting::NotSet,
@@ -243,14 +228,6 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
                         options.dimensions = Some(dimensions);
                     }
                     this.embedder_options = super::EmbedderOptions::OpenAi(options);
-                }
-                EmbedderSource::Ollama => {
-                    let mut options: ollama::EmbedderOptions =
-                        super::ollama::EmbedderOptions::with_default_model();
-                    if let Some(model) = model.set() {
-                        options.embedding_model = super::ollama::EmbeddingModel::from_name(&model);
-                    }
-                    this.embedder_options = super::EmbedderOptions::Ollama(options);
                 }
                 EmbedderSource::HuggingFace => {
                     let mut options = super::hf::EmbedderOptions::default();

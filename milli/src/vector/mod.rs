@@ -10,8 +10,6 @@ pub mod manual;
 pub mod openai;
 pub mod settings;
 
-pub mod ollama;
-
 pub use self::error::Error;
 
 pub type Embedding = Vec<f32>;
@@ -78,7 +76,6 @@ pub enum Embedder {
     HuggingFace(hf::Embedder),
     OpenAi(openai::Embedder),
     UserProvided(manual::Embedder),
-    Ollama(ollama::Embedder),
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
@@ -130,7 +127,6 @@ impl IntoIterator for EmbeddingConfigs {
 pub enum EmbedderOptions {
     HuggingFace(hf::EmbedderOptions),
     OpenAi(openai::EmbedderOptions),
-    Ollama(ollama::EmbedderOptions),
     UserProvided(manual::EmbedderOptions),
 }
 
@@ -148,10 +144,6 @@ impl EmbedderOptions {
     pub fn openai(api_key: Option<String>) -> Self {
         Self::OpenAi(openai::EmbedderOptions::with_default_model(api_key))
     }
-
-    pub fn ollama() -> Self {
-        Self::Ollama(ollama::EmbedderOptions::with_default_model())
-    }
 }
 
 impl Embedder {
@@ -159,7 +151,6 @@ impl Embedder {
         Ok(match options {
             EmbedderOptions::HuggingFace(options) => Self::HuggingFace(hf::Embedder::new(options)?),
             EmbedderOptions::OpenAi(options) => Self::OpenAi(openai::Embedder::new(options)?),
-            EmbedderOptions::Ollama(options) => Self::Ollama(ollama::Embedder::new(options)?),
             EmbedderOptions::UserProvided(options) => {
                 Self::UserProvided(manual::Embedder::new(options))
             }
@@ -173,10 +164,6 @@ impl Embedder {
         match self {
             Embedder::HuggingFace(embedder) => embedder.embed(texts),
             Embedder::OpenAi(embedder) => {
-                let client = embedder.new_client()?;
-                embedder.embed(texts, &client).await
-            }
-            Embedder::Ollama(embedder) => {
                 let client = embedder.new_client()?;
                 embedder.embed(texts, &client).await
             }
@@ -194,7 +181,6 @@ impl Embedder {
         match self {
             Embedder::HuggingFace(embedder) => embedder.embed_chunks(text_chunks),
             Embedder::OpenAi(embedder) => embedder.embed_chunks(text_chunks),
-            Embedder::Ollama(embedder) => embedder.embed_chunks(text_chunks),
             Embedder::UserProvided(embedder) => embedder.embed_chunks(text_chunks),
         }
     }
@@ -203,7 +189,6 @@ impl Embedder {
         match self {
             Embedder::HuggingFace(embedder) => embedder.chunk_count_hint(),
             Embedder::OpenAi(embedder) => embedder.chunk_count_hint(),
-            Embedder::Ollama(embedder) => embedder.chunk_count_hint(),
             Embedder::UserProvided(_) => 1,
         }
     }
@@ -212,7 +197,6 @@ impl Embedder {
         match self {
             Embedder::HuggingFace(embedder) => embedder.prompt_count_in_chunk_hint(),
             Embedder::OpenAi(embedder) => embedder.prompt_count_in_chunk_hint(),
-            Embedder::Ollama(embedder) => embedder.prompt_count_in_chunk_hint(),
             Embedder::UserProvided(_) => 1,
         }
     }
@@ -221,7 +205,6 @@ impl Embedder {
         match self {
             Embedder::HuggingFace(embedder) => embedder.dimensions(),
             Embedder::OpenAi(embedder) => embedder.dimensions(),
-            Embedder::Ollama(embedder) => embedder.dimensions(),
             Embedder::UserProvided(embedder) => embedder.dimensions(),
         }
     }
@@ -230,7 +213,6 @@ impl Embedder {
         match self {
             Embedder::HuggingFace(embedder) => embedder.distribution(),
             Embedder::OpenAi(embedder) => embedder.distribution(),
-            Embedder::Ollama(embedder) => embedder.distribution(),
             Embedder::UserProvided(_embedder) => None,
         }
     }

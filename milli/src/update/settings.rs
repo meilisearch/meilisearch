@@ -14,13 +14,12 @@ use super::IndexerConfig;
 use crate::criterion::Criterion;
 use crate::error::UserError;
 use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
-use crate::order_by_map::OrderByMap;
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::vector::settings::{check_set, check_unset, EmbedderSource, EmbeddingSettings};
 use crate::vector::{Embedder, EmbeddingConfig, EmbeddingConfigs};
-use crate::{FieldsIdsMap, Index, Result};
+use crate::{FieldsIdsMap, Index, OrderBy, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum Setting<T> {
@@ -146,7 +145,7 @@ pub struct Settings<'a, 't, 'i> {
     /// Attributes on which typo tolerance is disabled.
     exact_attributes: Setting<HashSet<String>>,
     max_values_per_facet: Setting<usize>,
-    sort_facet_values_by: Setting<OrderByMap>,
+    sort_facet_values_by: Setting<HashMap<String, OrderBy>>,
     pagination_max_total_hits: Setting<usize>,
     proximity_precision: Setting<ProximityPrecision>,
     embedder_settings: Setting<BTreeMap<String, Setting<EmbeddingSettings>>>,
@@ -341,7 +340,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.max_values_per_facet = Setting::Reset;
     }
 
-    pub fn set_sort_facet_values_by(&mut self, value: OrderByMap) {
+    pub fn set_sort_facet_values_by(&mut self, value: HashMap<String, OrderBy>) {
         self.sort_facet_values_by = Setting::Set(value);
     }
 
@@ -1186,13 +1185,6 @@ pub fn validate_embedding_settings(
                     }
                 }
             }
-        }
-        EmbedderSource::Ollama => {
-            // Dimensions get inferred, only model name is required
-            check_unset(&dimensions, "dimensions", inferred_source, name)?;
-            check_set(&model, "model", inferred_source, name)?;
-            check_unset(&api_key, "apiKey", inferred_source, name)?;
-            check_unset(&revision, "revision", inferred_source, name)?;
         }
         EmbedderSource::HuggingFace => {
             check_unset(&api_key, "apiKey", inferred_source, name)?;

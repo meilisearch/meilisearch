@@ -14,18 +14,18 @@ default-run = "meilisearch"
 
 [dependencies]
 actix-cors = "0.7.0"
-actix-http = { version = "3.6.0", default-features = false, features = [
+actix-http = { version = "3.5.1", default-features = false, features = [
     "compress-brotli",
     "compress-gzip",
-    "rustls-0_21",
+    "rustls",
 ] }
 actix-utils = "3.0.1"
-actix-web = { version = "4.5.1", default-features = false, features = [
+actix-web = { version = "4.4.1", default-features = false, features = [
     "macros",
     "compress-brotli",
     "compress-gzip",
     "cookies",
-    "rustls-0_21",
+    "rustls",
 ] }
 actix-web-static-files = { git = "https://github.com/kilork/actix-web-static-files.git", rev = "2d3b6160", optional = true }
 anyhow = { version = "1.0.79", features = ["backtrace"] }
@@ -52,7 +52,7 @@ index-scheduler = { path = "../index-scheduler" }
 indexmap = { version = "2.1.0", features = ["serde"] }
 is-terminal = "0.4.10"
 itertools = "0.11.0"
-jsonwebtoken = "9.2.0"
+jsonwebtoken = "8.3.0"
 lazy_static = "1.4.0"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
@@ -75,7 +75,7 @@ reqwest = { version = "0.11.23", features = [
     "rustls-tls",
     "json",
 ], default-features = false }
-rustls = "0.21.6"
+rustls = "0.20.8"
 rustls-pemfile = "1.0.2"
 segment = { version = "0.2.3", optional = true }
 serde = { version = "1.0.195", features = ["derive"] }

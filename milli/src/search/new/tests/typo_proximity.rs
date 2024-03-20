@@ -5,7 +5,7 @@ The typo ranking rule should transform the query graph such that it only contain
 the combinations of word derivations that it used to compute its bucket.
 
 The proximity ranking rule should then look for proximities only between those specific derivations.
-For example, given the search query `beautiful summer` and the dataset:
+For example, given the the search query `beautiful summer` and the dataset:
 ```text
 { "id": 0, "text": "beautigul summer...... beautiful day in the summer" }
 { "id": 1, "text": "beautiful summer" }
