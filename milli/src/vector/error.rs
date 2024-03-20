@@ -52,8 +52,6 @@ pub enum EmbedErrorKind {
     ModelForward(candle_core::Error),
     #[error("attempt to embed the following text in a configuration where embeddings must be user provided: {0:?}")]
     ManualEmbed(String),
-    #[error("could not initialize asynchronous runtime: {0}")]
-    OpenAiRuntimeInit(std::io::Error),
     #[error("model not found. Meilisearch will not automatically download models from the Ollama library, please pull the model manually: {0:?}")]
     OllamaModelNotFoundError(Option<String>),
     #[error("error deserialization the response body as JSON: {0}")]
@@ -76,6 +74,10 @@ pub enum EmbedErrorKind {
     RestOtherStatusCode(u16, Option<String>),
     #[error("could not reach embedding server: {0}")]
     RestNetwork(ureq::Transport),
+    #[error("was expected '{}' to be an object in query '{0}'", .1.join("."))]
+    RestNotAnObject(serde_json::Value, Vec<String>),
+    #[error("while embedding tokenized, was expecting embeddings of dimension `{0}`, got embeddings of dimensions `{1}`")]
+    OpenAiUnexpectedDimension(usize, usize),
 }
 
 impl EmbedError {
@@ -173,6 +175,20 @@ impl EmbedError {
 
     pub(crate) fn rest_network(transport: ureq::Transport) -> EmbedError {
         Self { kind: EmbedErrorKind::RestNetwork(transport), fault: FaultSource::Runtime }
+    }
+
+    pub(crate) fn rest_not_an_object(
+        query: serde_json::Value,
+        input_path: Vec<String>,
+    ) -> EmbedError {
+        Self { kind: EmbedErrorKind::RestNotAnObject(query, input_path), fault: FaultSource::User }
+    }
+
+    pub(crate) fn openai_unexpected_dimension(expected: usize, got: usize) -> EmbedError {
+        Self {
+            kind: EmbedErrorKind::OpenAiUnexpectedDimension(expected, got),
+            fault: FaultSource::Runtime,
+        }
     }
 }
 

@@ -189,19 +189,29 @@ where
         [input] => {
             let mut body = options.query.clone();
 
-            /// FIXME unwrap
-            body.as_object_mut().unwrap().insert(input.clone(), input_value);
+            body.as_object_mut()
+                .ok_or_else(|| {
+                    EmbedError::rest_not_an_object(
+                        options.query.clone(),
+                        options.input_field.clone(),
+                    )
+                })?
+                .insert(input.clone(), input_value);
             body
         }
         [path @ .., input] => {
             let mut body = options.query.clone();
 
-            /// FIXME unwrap
             let mut current_value = &mut body;
             for component in path {
                 current_value = current_value
                     .as_object_mut()
-                    .unwrap()
+                    .ok_or_else(|| {
+                        EmbedError::rest_not_an_object(
+                            options.query.clone(),
+                            options.input_field.clone(),
+                        )
+                    })?
                     .entry(component.clone())
                     .or_insert(serde_json::json!({}));
             }

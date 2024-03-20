@@ -242,11 +242,9 @@ fn send_original_documents_data(
     let request_threads = rayon::ThreadPoolBuilder::new()
         .num_threads(crate::vector::REQUEST_PARALLELISM)
         .thread_name(|index| format!("embedding-request-{index}"))
-        .build()
-        .unwrap();
+        .build()?;
 
     rayon::spawn(move || {
-        /// FIXME: unwrap
         for (name, (embedder, prompt)) in embedders {
             let result = extract_vector_points(
                 documents_chunk_cloned.clone(),

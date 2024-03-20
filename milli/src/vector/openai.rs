@@ -210,16 +210,19 @@ impl Embedder {
             while tokens.len() > max_token_count {
                 let window = &tokens[..max_token_count];
                 let embedding = self.rest_embedder.embed_tokens(window)?;
-                /// FIXME: unwrap
-                embeddings_for_prompt.append(embedding.into_inner()).unwrap();
+                embeddings_for_prompt.append(embedding.into_inner()).map_err(|got| {
+                    EmbedError::openai_unexpected_dimension(self.dimensions(), got.len())
+                })?;
 
                 tokens = &tokens[max_token_count - OVERLAP_SIZE..];
             }
 
             // end of text
             let embedding = self.rest_embedder.embed_tokens(tokens)?;
-            /// FIXME: unwrap
-            embeddings_for_prompt.append(embedding.into_inner()).unwrap();
+
+            embeddings_for_prompt.append(embedding.into_inner()).map_err(|got| {
+                EmbedError::openai_unexpected_dimension(self.dimensions(), got.len())
+            })?;
 
             all_embeddings.push(embeddings_for_prompt);
         }
