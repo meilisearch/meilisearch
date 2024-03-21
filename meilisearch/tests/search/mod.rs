@@ -835,6 +835,94 @@ async fn test_score_details() {
 }
 
 #[actix_rt::test]
+async fn test_degraded_score_details() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = NESTED_DOCUMENTS.clone();
+
+    index.add_documents(json!(documents), None).await;
+    // We can't really use anything else than 0ms here; otherwise, the test will get flaky.
+    let (res, _code) = index.update_settings(json!({ "searchCutoffMs": 0 })).await;
+    index.wait_task(res.uid()).await;
+
+    index
+        .search(
+            json!({
+                "q": "b",
+                "attributesToRetrieve": ["doggos.name", "cattos"],
+                "showRankingScoreDetails": true,
+            }),
+            |response, code| {
+                meili_snap::snapshot!(code, @"200 OK");
+                meili_snap::snapshot!(meili_snap::json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+                {
+                  "hits": [
+                    {
+                      "doggos": [
+                        {
+                          "name": "bobby"
+                        },
+                        {
+                          "name": "buddy"
+                        }
+                      ],
+                      "cattos": "pésti",
+                      "_rankingScoreDetails": {
+                        "skipped": {
+                          "order": 0
+                        }
+                      }
+                    },
+                    {
+                      "doggos": [
+                        {
+                          "name": "gros bill"
+                        }
+                      ],
+                      "cattos": [
+                        "simba",
+                        "pestiféré"
+                      ],
+                      "_rankingScoreDetails": {
+                        "skipped": {
+                          "order": 0
+                        }
+                      }
+                    },
+                    {
+                      "doggos": [
+                        {
+                          "name": "turbo"
+                        },
+                        {
+                          "name": "fast"
+                        }
+                      ],
+                      "cattos": [
+                        "moumoute",
+                        "gomez"
+                      ],
+                      "_rankingScoreDetails": {
+                        "skipped": {
+                          "order": 0
+                        }
+                      }
+                    }
+                  ],
+                  "query": "b",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 3
+                }
+                "###);
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
 async fn experimental_feature_vector_store() {
     let server = Server::new().await;
     let index = server.index("test");

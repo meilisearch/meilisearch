@@ -337,3 +337,31 @@ async fn settings_bad_pagination() {
     }
     "###);
 }
+
+#[actix_rt::test]
+async fn settings_bad_search_cutoff_ms() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.update_settings(json!({ "searchCutoffMs": "doggo" })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.searchCutoffMs`: expected a positive integer, but found a string: `\"doggo\"`",
+      "code": "invalid_settings_search_cutoff_ms",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_search_cutoff_ms"
+    }
+    "###);
+
+    let (response, code) = index.update_settings_search_cutoff_ms(json!("doggo")).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type: expected a positive integer, but found a string: `\"doggo\"`",
+      "code": "invalid_settings_search_cutoff_ms",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_search_cutoff_ms"
+    }
+    "###);
+}

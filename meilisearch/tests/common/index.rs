@@ -328,6 +328,11 @@ impl Index<'_> {
         self.service.patch_encoded(url, settings, self.encoder).await
     }
 
+    pub async fn update_settings_search_cutoff_ms(&self, settings: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/search-cutoff-ms", urlencode(self.uid.as_ref()));
+        self.service.put_encoded(url, settings, self.encoder).await
+    }
+
     pub async fn delete_settings(&self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/settings", urlencode(self.uid.as_ref()));
         self.service.delete(url).await
