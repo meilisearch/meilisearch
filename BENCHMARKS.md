@@ -341,7 +341,7 @@ The URL of the server is in our password manager (look for "benchboard").
   ```
   ssh root@<ipv6-address>
   ```
-  Note the the ipv6 must **NOT** be between escaped square brackets for SSH 🥲
+  Note the ipv6 must **NOT** be between escaped square brackets for SSH 🥲
 5. On the server, set the correct permissions for the new binary:
    ```
    chown bench:bench /bench/new-benchboard
