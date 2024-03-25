@@ -1199,6 +1199,14 @@ pub fn validate_embedding_settings(
         .into());
     }
 
+    if let Some(url) = url.as_ref().set() {
+        url::Url::parse(url).map_err(|error| crate::error::UserError::InvalidUrl {
+            embedder_name: name.to_owned(),
+            inner_error: error,
+            url: url.to_owned(),
+        })?;
+    }
+
     let Some(inferred_source) = source.set() else {
         return Ok(Setting::Set(EmbeddingSettings {
             source,

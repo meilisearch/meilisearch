@@ -243,6 +243,8 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     },
     #[error("`.embedders.{embedder_name}.dimensions`: `dimensions` cannot be zero")]
     InvalidSettingsDimensions { embedder_name: String },
+    #[error("`.embedders.{embedder_name}.url`: could not parse `{url}`: {inner_error}")]
+    InvalidUrl { embedder_name: String, inner_error: url::ParseError, url: String },
 }
 
 impl From<crate::vector::Error> for Error {
