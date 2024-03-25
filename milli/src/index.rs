@@ -1507,6 +1507,93 @@ impl Index {
             _ => "default".to_owned(),
         })
     }
+
+    pub fn check_document_facet_consistency(
+        &self,
+        rtxn: &RoTxn<'_>,
+    ) -> Result<DocumentFacetConsistency> {
+        let documents = self.documents_ids(rtxn)?;
+
+        let field_ids_map = self.fields_ids_map(rtxn)?;
+
+        let mut facets = Vec::new();
+        let mut facet_exists = Vec::new();
+        let faceted_fields = self.user_defined_faceted_fields(rtxn)?;
+        for fid in field_ids_map.ids() {
+            let facet_name = field_ids_map.name(fid).unwrap();
+            if !faceted_fields.contains(facet_name) {
+                continue;
+            };
+            let mut facet = RoaringBitmap::new();
+
+            // value doesn't matter here we'll truncate to the level
+            let key = crate::heed_codec::facet::FacetGroupKey {
+                field_id: fid,
+                level: 0,
+                left_bound: &[] as _,
+            };
+
+            for res in self
+                .facet_id_f64_docids
+                .remap_key_type::<FacetGroupKeyCodec<crate::heed_codec::BytesRefCodec>>()
+                .prefix_iter(rtxn, &key)?
+            {
+                let (_k, v) = res?;
+                facet |= v.bitmap;
+            }
+
+            for res in self
+                .facet_id_string_docids
+                .remap_key_type::<FacetGroupKeyCodec<crate::heed_codec::BytesRefCodec>>()
+                .prefix_iter(rtxn, &key)?
+            {
+                let (_k, v) = res?;
+                facet |= v.bitmap;
+            }
+
+            facets.push((field_ids_map.name(fid).unwrap().to_owned(), facet));
+            facet_exists.push(self.exists_faceted_documents_ids(rtxn, fid)?);
+        }
+
+        Ok(DocumentFacetConsistency { documents, facets, facet_exists })
+    }
+}
+
+pub struct DocumentFacetConsistency {
+    documents: RoaringBitmap,
+    facets: Vec<(String, RoaringBitmap)>,
+    facet_exists: Vec<RoaringBitmap>,
+}
+
+impl DocumentFacetConsistency {
+    pub fn check(&self) {
+        let mut inconsistencies = 0;
+        for ((field_name, facet), facet_exists) in self.facets.iter().zip(self.facet_exists.iter())
+        {
+            if field_name == "_geo" {
+                continue;
+            }
+
+            let documents = self.documents.clone() & facet_exists;
+            let missing_in_facets = &documents - facet;
+            let missing_in_documents = facet - documents;
+
+            for id in missing_in_facets {
+                tracing::error!(id, field_name, "Missing in facets");
+                inconsistencies += 1;
+            }
+            for id in missing_in_documents {
+                tracing::error!(id, field_name, "Missing in documents");
+                inconsistencies += 1;
+            }
+        }
+        if inconsistencies > 0 {
+            panic!(
+                "Panicked due to the previous {} inconsistencies between documents and facets",
+                inconsistencies
+            )
+        }
+    }
 }
 
 #[cfg(test)]

@@ -962,6 +962,9 @@ impl IndexScheduler {
 
                 let mut index_wtxn = index.write_txn()?;
                 let tasks = self.apply_index_operation(&mut index_wtxn, &index, op)?;
+
+                index.check_document_facet_consistency(&index_wtxn)?.check();
+
                 index_wtxn.commit()?;
 
                 // if the update processed successfully, we're going to store the new
@@ -1339,6 +1342,7 @@ impl IndexScheduler {
                     } else {
                         unreachable!()
                     };
+
                 let deleted_documents = delete_document_by_filter(
                     index_wtxn,
                     filter,
