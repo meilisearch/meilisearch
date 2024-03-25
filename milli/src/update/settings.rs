@@ -1271,7 +1271,6 @@ pub fn validate_embedding_settings(
             check_unset(&api_key, "apiKey", inferred_source, name)?;
             check_unset(&revision, "revision", inferred_source, name)?;
 
-            check_unset(&url, "url", inferred_source, name)?;
             check_unset(&query, "query", inferred_source, name)?;
             check_unset(&input_field, "inputField", inferred_source, name)?;
             check_unset(&path_to_embeddings, "pathToEmbeddings", inferred_source, name)?;

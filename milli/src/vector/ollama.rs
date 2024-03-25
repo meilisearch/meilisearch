@@ -12,15 +12,12 @@ pub struct Embedder {
 #[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct EmbedderOptions {
     pub embedding_model: String,
+    pub url: Option<String>,
 }
 
 impl EmbedderOptions {
-    pub fn with_default_model() -> Self {
-        Self { embedding_model: "nomic-embed-text".into() }
-    }
-
-    pub fn with_embedding_model(embedding_model: String) -> Self {
-        Self { embedding_model }
+    pub fn with_default_model(url: Option<String>) -> Self {
+        Self { embedding_model: "nomic-embed-text".into(), url }
     }
 }
 
@@ -31,7 +28,7 @@ impl Embedder {
             api_key: None,
             distribution: None,
             dimensions: None,
-            url: get_ollama_path(),
+            url: options.url.unwrap_or_else(get_ollama_path),
             query: serde_json::json!({
                 "model": model,
             }),

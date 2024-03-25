@@ -124,7 +124,7 @@ impl EmbeddingSettings {
                 EmbedderSource::Ollama,
                 EmbedderSource::Rest,
             ],
-            Self::URL => &[EmbedderSource::Rest],
+            Self::URL => &[EmbedderSource::Ollama, EmbedderSource::Rest],
             Self::QUERY => &[EmbedderSource::Rest],
             Self::INPUT_FIELD => &[EmbedderSource::Rest],
             Self::PATH_TO_EMBEDDINGS => &[EmbedderSource::Rest],
@@ -146,7 +146,9 @@ impl EmbeddingSettings {
             EmbedderSource::HuggingFace => {
                 &[Self::SOURCE, Self::MODEL, Self::REVISION, Self::DOCUMENT_TEMPLATE]
             }
-            EmbedderSource::Ollama => &[Self::SOURCE, Self::MODEL, Self::DOCUMENT_TEMPLATE],
+            EmbedderSource::Ollama => {
+                &[Self::SOURCE, Self::MODEL, Self::DOCUMENT_TEMPLATE, Self::URL]
+            }
             EmbedderSource::UserProvided => &[Self::SOURCE, Self::DIMENSIONS],
             EmbedderSource::Rest => &[
                 Self::SOURCE,
@@ -387,10 +389,15 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
                 }
                 EmbedderSource::Ollama => {
                     let mut options: ollama::EmbedderOptions =
-                        super::ollama::EmbedderOptions::with_default_model();
+                        super::ollama::EmbedderOptions::with_default_model(None);
                     if let Some(model) = model.set() {
                         options.embedding_model = model;
                     }
+
+                    if let Some(url) = url.set() {
+                        options.url = Some(url)
+                    }
+
                     this.embedder_options = super::EmbedderOptions::Ollama(options);
                 }
                 EmbedderSource::HuggingFace => {
