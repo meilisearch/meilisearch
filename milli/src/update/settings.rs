@@ -1278,7 +1278,6 @@ pub fn validate_embedding_settings(
             // Dimensions get inferred, only model name is required
             check_unset(&dimensions, EmbeddingSettings::DIMENSIONS, inferred_source, name)?;
             check_set(&model, EmbeddingSettings::MODEL, inferred_source, name)?;
-            check_unset(&api_key, EmbeddingSettings::API_KEY, inferred_source, name)?;
             check_unset(&revision, EmbeddingSettings::REVISION, inferred_source, name)?;
 
             check_unset(&query, EmbeddingSettings::QUERY, inferred_source, name)?;

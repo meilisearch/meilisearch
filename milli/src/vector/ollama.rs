@@ -13,11 +13,12 @@ pub struct Embedder {
 pub struct EmbedderOptions {
     pub embedding_model: String,
     pub url: Option<String>,
+    pub api_key: Option<String>,
 }
 
 impl EmbedderOptions {
-    pub fn with_default_model(url: Option<String>) -> Self {
-        Self { embedding_model: "nomic-embed-text".into(), url }
+    pub fn with_default_model(api_key: Option<String>, url: Option<String>) -> Self {
+        Self { embedding_model: "nomic-embed-text".into(), api_key, url }
     }
 }
 
@@ -25,7 +26,7 @@ impl Embedder {
     pub fn new(options: EmbedderOptions) -> Result<Self, NewEmbedderError> {
         let model = options.embedding_model.as_str();
         let rest_embedder = match RestEmbedder::new(RestEmbedderOptions {
-            api_key: None,
+            api_key: options.api_key,
             distribution: None,
             dimensions: None,
             url: options.url.unwrap_or_else(get_ollama_path),

@@ -201,8 +201,8 @@ impl EmbedderOptions {
         Self::OpenAi(openai::EmbedderOptions::with_default_model(api_key))
     }
 
-    pub fn ollama(url: Option<String>) -> Self {
-        Self::Ollama(ollama::EmbedderOptions::with_default_model(url))
+    pub fn ollama(api_key: Option<String>, url: Option<String>) -> Self {
+        Self::Ollama(ollama::EmbedderOptions::with_default_model(api_key, url))
     }
 }
 
