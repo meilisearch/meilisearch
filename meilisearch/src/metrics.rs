@@ -4,19 +4,7 @@ use prometheus::{
     register_int_gauge_vec, HistogramVec, IntCounterVec, IntGauge, IntGaugeVec,
 };
 
-/// Create evenly distributed buckets
-fn create_buckets() -> [f64; 29] {
-    (0..10)
-        .chain((10..100).step_by(10))
-        .chain((100..=1000).step_by(100))
-        .map(|i| i as f64 / 1000.)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap()
-}
-
 lazy_static! {
-    pub static ref MEILISEARCH_HTTP_RESPONSE_TIME_CUSTOM_BUCKETS: [f64; 29] = create_buckets();
     pub static ref MEILISEARCH_HTTP_REQUESTS_TOTAL: IntCounterVec = register_int_counter_vec!(
         opts!("meilisearch_http_requests_total", "Meilisearch HTTP requests total"),
         &["method", "path"]
@@ -47,7 +35,7 @@ lazy_static! {
         "meilisearch_http_response_time_seconds",
         "Meilisearch HTTP response times",
         &["method", "path"],
-        MEILISEARCH_HTTP_RESPONSE_TIME_CUSTOM_BUCKETS.to_vec()
+        vec![0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0]
     )
     .expect("Can't create a metric");
     pub static ref MEILISEARCH_NB_TASKS: IntGaugeVec = register_int_gauge_vec!(
