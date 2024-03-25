@@ -19,7 +19,7 @@ lazy_static! {
     pub static ref MEILISEARCH_HTTP_RESPONSE_TIME_CUSTOM_BUCKETS: [f64; 29] = create_buckets();
     pub static ref MEILISEARCH_HTTP_REQUESTS_TOTAL: IntCounterVec = register_int_counter_vec!(
         opts!("meilisearch_http_requests_total", "Meilisearch HTTP requests total"),
-        &["method", "path"]
+        &["method", "path", "status"]
     )
     .expect("Can't create a metric");
     pub static ref MEILISEARCH_DEGRADED_SEARCH_REQUESTS: IntGauge = register_int_gauge!(opts!(
