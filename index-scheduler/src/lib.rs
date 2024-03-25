@@ -1163,6 +1163,48 @@ impl IndexScheduler {
         // Reset the currently updating index to relinquish the index handle
         self.index_mapper.set_currently_updating_index(None);
 
+        if let Err(_error) = &res {
+            let dump_batch = batch::Batch::Dump(Task {
+                uid: u32::MAX,
+                enqueued_at: OffsetDateTime::now_utc(),
+                started_at: Some(OffsetDateTime::now_utc()),
+                finished_at: None,
+                error: None,
+                canceled_by: None,
+                details: None,
+                status: Status::Processing,
+                kind: KindWithContent::DumpCreation { keys: vec![], instance_uid: None },
+            });
+
+            let res = {
+                let cloned_index_scheduler = self.private_clone();
+                let handle = std::thread::Builder::new()
+                    .name(String::from("batch-operation"))
+                    .spawn(move || cloned_index_scheduler.process_batch(dump_batch))
+                    .unwrap();
+                handle.join().unwrap_or(Err(Error::ProcessBatchPanicked))
+            };
+
+            match res {
+                Ok(_) => tracing::info!("Created a dump after failed task"),
+                Err(error) => tracing::error!(%error, "Could not create a dump after failed task"),
+            }
+
+            let user = std::env::var("MEILI_LOUIS_PUSHOVER_USER").unwrap();
+            let app = std::env::var("MEILI_LOUIS_PUSHOVER_APP").unwrap();
+
+            if let Err(error) = ureq::post("https://api.pushover.net/1/messages.json").send_json(
+                serde_json::json!({
+                    "token": app,
+                    "user": user,
+                    "title": "Issue 138 db inconsistency",
+                    "message": "A dump has been created",
+                }),
+            ) {
+                tracing::error!(%error, "could not send pushover")
+            }
+        }
+
         #[cfg(test)]
         self.maybe_fail(tests::FailureLocation::AcquiringWtxn)?;
 
