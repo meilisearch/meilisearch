@@ -1,3 +1,4 @@
+use ordered_float::OrderedFloat;
 use rayon::iter::{IntoParallelIterator, ParallelIterator as _};
 
 use super::error::{EmbedError, NewEmbedderError};
@@ -110,15 +111,18 @@ impl EmbeddingModel {
 
     fn distribution(&self) -> Option<DistributionShift> {
         match self {
-            EmbeddingModel::TextEmbeddingAda002 => {
-                Some(DistributionShift { current_mean: 0.90, current_sigma: 0.08 })
-            }
-            EmbeddingModel::TextEmbedding3Large => {
-                Some(DistributionShift { current_mean: 0.70, current_sigma: 0.1 })
-            }
-            EmbeddingModel::TextEmbedding3Small => {
-                Some(DistributionShift { current_mean: 0.75, current_sigma: 0.1 })
-            }
+            EmbeddingModel::TextEmbeddingAda002 => Some(DistributionShift {
+                current_mean: OrderedFloat(0.90),
+                current_sigma: OrderedFloat(0.08),
+            }),
+            EmbeddingModel::TextEmbedding3Large => Some(DistributionShift {
+                current_mean: OrderedFloat(0.70),
+                current_sigma: OrderedFloat(0.1),
+            }),
+            EmbeddingModel::TextEmbedding3Small => Some(DistributionShift {
+                current_mean: OrderedFloat(0.75),
+                current_sigma: OrderedFloat(0.1),
+            }),
         }
     }
 

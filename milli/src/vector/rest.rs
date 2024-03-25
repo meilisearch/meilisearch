@@ -1,5 +1,6 @@
+use deserr::Deserr;
 use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::{
     DistributionShift, EmbedError, Embedding, Embeddings, NewEmbedderError, REQUEST_PARALLELISM,
@@ -64,7 +65,7 @@ pub struct Embedder {
     dimensions: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct EmbedderOptions {
     pub api_key: Option<String>,
     pub distribution: Option<DistributionShift>,
@@ -79,7 +80,41 @@ pub struct EmbedderOptions {
     pub input_type: InputType,
 }
 
-#[derive(Debug)]
+impl Default for EmbedderOptions {
+    fn default() -> Self {
+        Self {
+            url: Default::default(),
+            query: Default::default(),
+            input_field: vec!["input".into()],
+            path_to_embeddings: vec!["data".into()],
+            embedding_object: vec!["embedding".into()],
+            input_type: InputType::Text,
+            api_key: None,
+            distribution: None,
+            dimensions: None,
+        }
+    }
+}
+
+impl std::hash::Hash for EmbedderOptions {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.api_key.hash(state);
+        self.distribution.hash(state);
+        self.dimensions.hash(state);
+        self.url.hash(state);
+        // skip hashing the query
+        // collisions in regular usage should be minimal,
+        // and the list is limited to 256 values anyway
+        self.input_field.hash(state);
+        self.path_to_embeddings.hash(state);
+        self.embedding_object.hash(state);
+        self.input_type.hash(state);
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash, Deserr)]
+#[serde(rename_all = "camelCase")]
+#[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub enum InputType {
     Text,
     TextArray,

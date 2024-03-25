@@ -194,7 +194,10 @@ impl Embedder {
 
     pub fn distribution(&self) -> Option<DistributionShift> {
         if self.options.model == "BAAI/bge-base-en-v1.5" {
-            Some(DistributionShift { current_mean: 0.85, current_sigma: 0.1 })
+            Some(DistributionShift {
+                current_mean: ordered_float::OrderedFloat(0.85),
+                current_sigma: ordered_float::OrderedFloat(0.1),
+            })
         } else {
             None
         }
