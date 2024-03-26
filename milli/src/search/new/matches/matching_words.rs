@@ -261,7 +261,7 @@ pub(crate) mod tests {
         let mut builder = TokenizerBuilder::default();
         let tokenizer = builder.build();
         let tokens = tokenizer.tokenize("split this world");
-        let query_terms = located_query_terms_from_tokens(&mut ctx, tokens, None).unwrap();
+        let (query_terms, _) = located_query_terms_from_tokens(&mut ctx, tokens, None).unwrap();
         let matching_words = MatchingWords::new(ctx, query_terms);
 
         assert_eq!(
