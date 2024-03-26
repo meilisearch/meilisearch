@@ -72,6 +72,7 @@ impl SearchQueue {
                 _ = search_finished.recv() => {
                     searches_running = searches_running.saturating_sub(1);
                     if !queue.is_empty() {
+                        // Can't panic: the queue wasn't empty thus the range isn't empty.
                         let remove = rng.gen_range(0..queue.len());
                         let channel = queue.swap_remove(remove);
                         let _ = channel.send(Permit { sender: sender.clone() });
