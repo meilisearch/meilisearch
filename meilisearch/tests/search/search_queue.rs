@@ -1,5 +1,6 @@
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
+use actix_web::ResponseError;
 use meili_snap::snapshot;
 use meilisearch::search_queue::SearchQueue;
 
@@ -35,7 +36,7 @@ async fn search_queue_register() {
 }
 
 #[actix_rt::test]
-async fn search_queue_wait_till_cores_available() {
+async fn wait_till_cores_are_available() {
     let queue = Arc::new(SearchQueue::new(4, NonZeroUsize::new(1).unwrap()));
 
     // First, use all the cores
@@ -59,7 +60,7 @@ async fn search_queue_wait_till_cores_available() {
 }
 
 #[actix_rt::test]
-async fn search_queue_refuse_search_requests() {
+async fn refuse_search_requests_when_queue_is_full() {
     let queue = Arc::new(SearchQueue::new(1, NonZeroUsize::new(1).unwrap()));
 
     // First, use the whole capacity of the
@@ -80,7 +81,19 @@ async fn search_queue_refuse_search_requests() {
         .expect("I should get a result straight away")
         .unwrap(); // task should end successfully
 
-    snapshot!(permit2.unwrap_err(), @"Too many search requests running at the same time: 1. Retry after 10s.");
+    let err = meilisearch_types::error::ResponseError::from(permit2.unwrap_err());
+    let http_response = err.error_response();
+    snapshot!(format!("{:?}", http_response.headers()), @r###"HeaderMap { inner: {"retry-after": Value { inner: ["10"] }, "content-type": Value { inner: ["application/json"] }} }"###);
+
+    let err = serde_json::to_string_pretty(&err).unwrap();
+    snapshot!(err, @r###"
+    {
+      "message": "Too many search requests running at the same time: 1. Retry after 10s.",
+      "code": "too_many_search_requests",
+      "type": "system",
+      "link": "https://docs.meilisearch.com/errors#too_many_search_requests"
+    }
+    "###);
 }
 
 #[actix_rt::test]
