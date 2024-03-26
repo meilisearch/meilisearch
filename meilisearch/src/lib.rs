@@ -9,6 +9,7 @@ pub mod middleware;
 pub mod option;
 pub mod routes;
 pub mod search;
+pub mod search_queue;
 
 use std::fs::File;
 use std::io::{BufReader, BufWriter};

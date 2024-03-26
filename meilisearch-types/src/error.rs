@@ -305,6 +305,7 @@ MissingSwapIndexes                    , InvalidRequest       , BAD_REQUEST ;
 MissingTaskFilters                    , InvalidRequest       , BAD_REQUEST ;
 NoSpaceLeftOnDevice                   , System               , UNPROCESSABLE_ENTITY;
 PayloadTooLarge                       , InvalidRequest       , PAYLOAD_TOO_LARGE ;
+TooManySearchRequests                 , System               , SERVICE_UNAVAILABLE ;
 TaskNotFound                          , InvalidRequest       , NOT_FOUND ;
 TooManyOpenFiles                      , System               , UNPROCESSABLE_ENTITY ;
 TooManyVectors                        , InvalidRequest       , BAD_REQUEST ;
