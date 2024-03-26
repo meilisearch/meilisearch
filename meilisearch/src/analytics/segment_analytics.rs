@@ -252,6 +252,7 @@ impl super::Analytics for SegmentAnalytics {
 struct Infos {
     env: String,
     experimental_enable_metrics: bool,
+    experimental_search_queue_size: usize,
     experimental_logs_mode: LogMode,
     experimental_replication_parameters: bool,
     experimental_enable_logs_route: bool,
@@ -293,6 +294,7 @@ impl From<Opt> for Infos {
         let Opt {
             db_path,
             experimental_enable_metrics,
+            experimental_search_queue_size,
             experimental_logs_mode,
             experimental_replication_parameters,
             experimental_enable_logs_route,
@@ -342,6 +344,7 @@ impl From<Opt> for Infos {
         Self {
             env,
             experimental_enable_metrics,
+            experimental_search_queue_size,
             experimental_logs_mode,
             experimental_replication_parameters,
             experimental_enable_logs_route,
