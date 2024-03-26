@@ -2,6 +2,7 @@ use std::{fmt, io};
 
 use actix_web::http::StatusCode;
 use actix_web::{self as aweb, HttpResponseBuilder};
+use aweb::http::header;
 use aweb::rt::task::JoinError;
 use convert_case::Casing;
 use milli::heed::{Error as HeedError, MdbError};
@@ -56,7 +57,14 @@ where
 impl aweb::error::ResponseError for ResponseError {
     fn error_response(&self) -> aweb::HttpResponse {
         let json = serde_json::to_vec(self).unwrap();
-        HttpResponseBuilder::new(self.status_code()).content_type("application/json").body(json)
+        let mut builder = HttpResponseBuilder::new(self.status_code());
+        builder.content_type("application/json");
+
+        if self.code == StatusCode::SERVICE_UNAVAILABLE {
+            builder.insert_header((header::RETRY_AFTER, "10"));
+        }
+
+        builder.body(json)
     }
 
     fn status_code(&self) -> StatusCode {

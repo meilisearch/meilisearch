@@ -29,8 +29,8 @@ pub enum MeilisearchHttpError {
     InvalidExpression(&'static [&'static str], Value),
     #[error("A {0} payload is missing.")]
     MissingPayload(PayloadType),
-    #[error("Too many search requests running at the same time: {0}. Retry after {1:?}.")]
-    TooManySearchRequests(usize, std::time::Duration),
+    #[error("Too many search requests running at the same time: {0}. Retry after 10s.")]
+    TooManySearchRequests(usize),
     #[error("Internal error: Search limiter is down")]
     SearchLimiterIsDown,
     #[error("The provided payload reached the size limit. The maximum accepted payload size is {}.",  Byte::from_bytes(*.0 as u64).get_appropriate_unit(true))]
@@ -73,7 +73,7 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::EmptyFilter => Code::InvalidDocumentFilter,
             MeilisearchHttpError::InvalidExpression(_, _) => Code::InvalidSearchFilter,
             MeilisearchHttpError::PayloadTooLarge(_) => Code::PayloadTooLarge,
-            MeilisearchHttpError::TooManySearchRequests(_, _) => Code::TooManySearchRequests,
+            MeilisearchHttpError::TooManySearchRequests(_) => Code::TooManySearchRequests,
             MeilisearchHttpError::SearchLimiterIsDown => Code::Internal,
             MeilisearchHttpError::SwapIndexPayloadWrongLength(_) => Code::InvalidSwapIndexes,
             MeilisearchHttpError::IndexUid(e) => e.error_code(),
