@@ -131,3 +131,40 @@ async fn search_request_crashes_while_holding_permits() {
         .expect("I should get a permit straight away")
         .unwrap();
 }
+
+#[actix_rt::test]
+async fn works_with_capacity_of_zero() {
+    let queue = Arc::new(SearchQueue::new(0, NonZeroUsize::new(1).unwrap()));
+
+    // First, use the whole capacity of the
+    let permit1 = tokio::time::timeout(Duration::from_secs(1), queue.try_get_search_permit())
+        .await
+        .expect("I should get a permit straight away")
+        .unwrap();
+
+    // then we should get an error if we try to register a second search request.
+    let permit2 = tokio::time::timeout(Duration::from_secs(1), queue.try_get_search_permit())
+        .await
+        .expect("I should get a result straight away");
+
+    let err = meilisearch_types::error::ResponseError::from(permit2.unwrap_err());
+    let http_response = err.error_response();
+    snapshot!(format!("{:?}", http_response.headers()), @r###"HeaderMap { inner: {"content-type": Value { inner: ["application/json"] }, "retry-after": Value { inner: ["10"] }} }"###);
+
+    let err = serde_json::to_string_pretty(&err).unwrap();
+    snapshot!(err, @r###"
+    {
+      "message": "Too many search requests running at the same time: 0. Retry after 10s.",
+      "code": "too_many_search_requests",
+      "type": "system",
+      "link": "https://docs.meilisearch.com/errors#too_many_search_requests"
+    }
+    "###);
+
+    drop(permit1);
+    // After dropping the first permit we should be able to get a new permit
+    let _permit3 = tokio::time::timeout(Duration::from_secs(1), queue.try_get_search_permit())
+        .await
+        .expect("I should get a permit straight away")
+        .unwrap();
+}

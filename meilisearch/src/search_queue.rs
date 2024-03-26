@@ -47,14 +47,21 @@ impl SearchQueue {
         loop {
             tokio::select! {
                 search_request = receive_new_searches.recv() => {
+                    // this unwrap is safe because we're sure the `SearchQueue` still lives somewhere in actix-web
                     let search_request = search_request.unwrap();
                     if searches_running < usize::from(parallelism) && queue.is_empty() {
                         searches_running += 1;
                         // if the search requests die it's not a hard error on our side
                         let _ = search_request.send(Permit { sender: sender.clone() });
                         continue;
-                    }
-                    if queue.len() >= capacity {
+                    } else if capacity == 0 {
+                        // in the very specific case where we have a capacity of zero
+                        // we must refuse the request straight away without going through
+                        // the queue stuff.
+                        drop(search_request);
+                        continue;
+
+                    } else if queue.len() >= capacity {
                         let remove = rng.gen_range(0..queue.len());
                         let thing = queue.swap_remove(remove); // this will drop the channel and notify the search that it won't be processed
                         drop(thing);
