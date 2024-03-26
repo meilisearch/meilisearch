@@ -11,6 +11,7 @@ struct ScoreWithRatioResult {
     candidates: RoaringBitmap,
     document_scores: Vec<(u32, ScoreWithRatio)>,
     degraded: bool,
+    used_negative_operator: bool,
 }
 
 type ScoreWithRatio = (Vec<ScoreDetails>, f32);
@@ -78,6 +79,7 @@ impl ScoreWithRatioResult {
             candidates: results.candidates,
             document_scores,
             degraded: results.degraded,
+            used_negative_operator: results.used_negative_operator,
         }
     }
 
@@ -113,6 +115,7 @@ impl ScoreWithRatioResult {
             documents_ids,
             document_scores,
             degraded: left.degraded | right.degraded,
+            used_negative_operator: left.used_negative_operator | right.used_negative_operator,
         }
     }
 }

@@ -571,6 +571,7 @@ pub fn execute_vector_search(
         documents_ids: docids,
         located_query_terms: None,
         degraded,
+        used_negative_operator: false,
     })
 }
 
@@ -594,6 +595,7 @@ pub fn execute_search(
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
+    let mut used_negative_operator = false;
     let mut located_query_terms = None;
     let query_terms = if let Some(query) = query {
         let span = tracing::trace_span!(target: "search::tokens", "tokenizer_builder");
@@ -636,6 +638,7 @@ pub fn execute_search(
 
         let (query_terms, negative_words) =
             located_query_terms_from_tokens(ctx, tokens, words_limit)?;
+        used_negative_operator = !negative_words.is_empty();
 
         let ignored_documents = resolve_negative_words(ctx, &negative_words)?;
         universe -= ignored_documents;
@@ -710,6 +713,7 @@ pub fn execute_search(
         documents_ids: docids,
         located_query_terms,
         degraded,
+        used_negative_operator,
     })
 }
 
@@ -772,4 +776,5 @@ pub struct PartialSearchResult {
     pub document_scores: Vec<Vec<ScoreDetails>>,
 
     pub degraded: bool,
+    pub used_negative_operator: bool,
 }
