@@ -85,7 +85,13 @@ async fn refuse_search_requests_when_queue_is_full() {
 
     let err = meilisearch_types::error::ResponseError::from(permit2.unwrap_err());
     let http_response = err.error_response();
-    snapshot!(format!("{:?}", http_response.headers()), @r###"HeaderMap { inner: {"retry-after": Value { inner: ["10"] }, "content-type": Value { inner: ["application/json"] }} }"###);
+    let mut headers: Vec<_> = http_response
+        .headers()
+        .iter()
+        .map(|(name, value)| (name.to_string(), value.to_str().unwrap().to_string()))
+        .collect();
+    headers.sort();
+    snapshot!(format!("{headers:?}"), @r###"[("content-type", "application/json"), ("retry-after", "10")]"###);
 
     let err = serde_json::to_string_pretty(&err).unwrap();
     snapshot!(err, @r###"
@@ -151,7 +157,13 @@ async fn works_with_capacity_of_zero() {
 
     let err = meilisearch_types::error::ResponseError::from(permit2.unwrap_err());
     let http_response = err.error_response();
-    snapshot!(format!("{:?}", http_response.headers()), @r###"HeaderMap { inner: {"content-type": Value { inner: ["application/json"] }, "retry-after": Value { inner: ["10"] }} }"###);
+    let mut headers: Vec<_> = http_response
+        .headers()
+        .iter()
+        .map(|(name, value)| (name.to_string(), value.to_str().unwrap().to_string()))
+        .collect();
+    headers.sort();
+    snapshot!(format!("{headers:?}"), @r###"[("content-type", "application/json"), ("retry-after", "10")]"###);
 
     let err = serde_json::to_string_pretty(&err).unwrap();
     snapshot!(err, @r###"
