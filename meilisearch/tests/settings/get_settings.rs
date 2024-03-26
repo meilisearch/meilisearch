@@ -89,6 +89,136 @@ async fn get_settings() {
 }
 
 #[actix_rt::test]
+async fn secrets_are_hidden_in_settings() {
+    let server = Server::new().await;
+    let (response, code) = server.set_features(json!({"vectorStore": true})).await;
+
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "vectorStore": true,
+      "metrics": false,
+      "logsRoute": false,
+      "exportPuffinReports": false
+    }
+    "###);
+
+    let index = server.index("test");
+    let (response, _code) = index.create(None).await;
+    index.wait_task(response.uid()).await;
+
+    let (response, code) = index
+        .update_settings(json!({
+            "embedders": {
+                "default": {
+                    "source": "rest",
+                    "url": "https://localhost:7777",
+                    "apiKey": "My super secret value you will never guess"
+                }
+            }
+        }))
+        .await;
+    meili_snap::snapshot!(code, @"202 Accepted");
+
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    @r###"
+    {
+      "taskUid": 1,
+      "indexUid": "test",
+      "status": "enqueued",
+      "type": "settingsUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
+
+    let settings_update_uid = response.uid();
+
+    index.wait_task(settings_update_uid).await;
+
+    let (response, code) = index.settings().await;
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "displayedAttributes": [
+        "*"
+      ],
+      "searchableAttributes": [
+        "*"
+      ],
+      "filterableAttributes": [],
+      "sortableAttributes": [],
+      "rankingRules": [
+        "words",
+        "typo",
+        "proximity",
+        "attribute",
+        "sort",
+        "exactness"
+      ],
+      "stopWords": [],
+      "nonSeparatorTokens": [],
+      "separatorTokens": [],
+      "dictionary": [],
+      "synonyms": {},
+      "distinctAttribute": null,
+      "proximityPrecision": "byWord",
+      "typoTolerance": {
+        "enabled": true,
+        "minWordSizeForTypos": {
+          "oneTypo": 5,
+          "twoTypos": 9
+        },
+        "disableOnWords": [],
+        "disableOnAttributes": []
+      },
+      "faceting": {
+        "maxValuesPerFacet": 100,
+        "sortFacetValuesBy": {
+          "*": "alpha"
+        }
+      },
+      "pagination": {
+        "maxTotalHits": 1000
+      },
+      "embedders": {
+        "default": {
+          "source": "rest",
+          "apiKey": "My suXXXXXX...",
+          "documentTemplate": "{% for field in fields %} {{ field.name }}: {{ field.value }}\n{% endfor %}",
+          "url": "https://localhost:7777",
+          "query": null,
+          "inputField": [
+            "input"
+          ],
+          "pathToEmbeddings": [
+            "data"
+          ],
+          "embeddingObject": [
+            "embedding"
+          ],
+          "inputType": "text"
+        }
+      },
+      "searchCutoffMs": null
+    }
+    "###);
+
+    let (response, code) = server.get_task(settings_update_uid).await;
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(meili_snap::json_string!(response["details"]), @r###"
+    {
+      "embedders": {
+        "default": {
+          "source": "rest",
+          "apiKey": "My suXXXXXX...",
+          "url": "https://localhost:7777"
+        }
+      }
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn error_update_settings_unknown_field() {
     let server = Server::new().await;
     let index = server.index("test");

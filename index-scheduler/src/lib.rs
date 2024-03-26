@@ -3029,6 +3029,66 @@ mod tests {
     }
 
     #[test]
+    fn test_settings_update() {
+        use meilisearch_types::settings::{Settings, Unchecked};
+        use milli::update::Setting;
+
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        let mut new_settings: Box<Settings<Unchecked>> = Box::default();
+        let mut embedders = BTreeMap::default();
+        let embedding_settings = milli::vector::settings::EmbeddingSettings {
+            source: Setting::Set(milli::vector::settings::EmbedderSource::Rest),
+            api_key: Setting::Set(S("My super secret")),
+            url: Setting::Set(S("http://localhost:7777")),
+            ..Default::default()
+        };
+        embedders.insert(S("default"), Setting::Set(embedding_settings));
+        new_settings.embedders = Setting::Set(embedders);
+
+        index_scheduler
+            .register(
+                KindWithContent::SettingsUpdate {
+                    index_uid: S("doggos"),
+                    new_settings,
+                    is_deletion: false,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        index_scheduler.assert_internally_consistent();
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_settings_task");
+
+        {
+            let rtxn = index_scheduler.read_txn().unwrap();
+            let task = index_scheduler.get_task(&rtxn, 0).unwrap().unwrap();
+            let task = meilisearch_types::task_view::TaskView::from_task(&task);
+            insta::assert_json_snapshot!(task.details);
+        }
+
+        handle.advance_n_successful_batches(1);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "settings_update_processed");
+
+        {
+            let rtxn = index_scheduler.read_txn().unwrap();
+            let task = index_scheduler.get_task(&rtxn, 0).unwrap().unwrap();
+            let task = meilisearch_types::task_view::TaskView::from_task(&task);
+            insta::assert_json_snapshot!(task.details);
+        }
+
+        // has everything being pushed successfully in milli?
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+
+        let configs = index.embedding_configs(&rtxn).unwrap();
+        let (_, embedding_config) = configs.first().unwrap();
+        insta::assert_json_snapshot!(embedding_config.embedder_options);
+    }
+
+    #[test]
     fn test_document_replace_without_autobatching() {
         let (index_scheduler, mut handle) = IndexScheduler::test(false, vec![]);
 
