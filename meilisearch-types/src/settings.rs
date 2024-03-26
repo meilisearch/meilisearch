@@ -211,6 +211,43 @@ pub struct Settings<T> {
     pub _kind: PhantomData<T>,
 }
 
+impl<T> Settings<T> {
+    pub fn hide_secrets(&mut self) {
+        let Setting::Set(embedders) = &mut self.embedders else {
+            return;
+        };
+
+        for mut embedder in embedders.values_mut() {
+            let Setting::Set(embedder) = &mut embedder else {
+                continue;
+            };
+
+            let Setting::Set(api_key) = &mut embedder.api_key else {
+                continue;
+            };
+
+            Self::hide_secret(api_key);
+        }
+    }
+
+    fn hide_secret(secret: &mut String) {
+        match secret.len() {
+            x if x < 10 => {
+                secret.replace_range(.., "XXX...");
+            }
+            x if x < 20 => {
+                secret.replace_range(2.., "XXXX...");
+            }
+            x if x < 30 => {
+                secret.replace_range(3.., "XXXXX...");
+            }
+            _x => {
+                secret.replace_range(5.., "XXXXXX...");
+            }
+        }
+    }
+}
+
 impl Settings<Checked> {
     pub fn cleared() -> Settings<Checked> {
         Settings {
@@ -555,9 +592,15 @@ pub fn apply_settings_to_builder(
     }
 }
 
+pub enum SecretPolicy {
+    RevealSecrets,
+    HideSecrets,
+}
+
 pub fn settings(
     index: &Index,
     rtxn: &crate::heed::RoTxn,
+    secret_policy: SecretPolicy,
 ) -> Result<Settings<Checked>, milli::Error> {
     let displayed_attributes =
         index.displayed_fields(rtxn)?.map(|fields| fields.into_iter().map(String::from).collect());
@@ -643,7 +686,7 @@ pub fn settings(
 
     let search_cutoff_ms = index.search_cutoff(rtxn)?;
 
-    Ok(Settings {
+    let mut settings = Settings {
         displayed_attributes: match displayed_attributes {
             Some(attrs) => Setting::Set(attrs),
             None => Setting::Reset,
@@ -674,7 +717,13 @@ pub fn settings(
             None => Setting::Reset,
         },
         _kind: PhantomData,
-    })
+    };
+
+    if let SecretPolicy::HideSecrets = secret_policy {
+        settings.hide_secrets()
+    }
+
+    Ok(settings)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserr)]
