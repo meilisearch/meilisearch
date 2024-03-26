@@ -209,6 +209,20 @@ fn resolve_universe(
     )
 }
 
+#[tracing::instrument(level = "trace", skip_all, target = "search")]
+fn resolve_negative_words(
+    ctx: &mut SearchContext,
+    negative_words: &[Word],
+) -> Result<RoaringBitmap> {
+    let mut negative_bitmap = RoaringBitmap::new();
+    for &word in negative_words {
+        if let Some(bitmap) = ctx.word_docids(word)? {
+            negative_bitmap |= bitmap;
+        }
+    }
+    Ok(negative_bitmap)
+}
+
 /// Return the list of initialised ranking rules to be used for a placeholder search.
 fn get_ranking_rules_for_placeholder_search<'ctx>(
     ctx: &SearchContext<'ctx>,
@@ -620,7 +634,12 @@ pub fn execute_search(
         let tokens = tokenizer.tokenize(query);
         drop(entered);
 
-        let query_terms = located_query_terms_from_tokens(ctx, tokens, words_limit)?;
+        let (query_terms, negative_words) =
+            located_query_terms_from_tokens(ctx, tokens, words_limit)?;
+
+        let ignored_documents = resolve_negative_words(ctx, &negative_words)?;
+        universe -= ignored_documents;
+
         if query_terms.is_empty() {
             // Do a placeholder search instead
             None
@@ -630,6 +649,7 @@ pub fn execute_search(
     } else {
         None
     };
+
     let bucket_sort_output = if let Some(query_terms) = query_terms {
         let (graph, new_located_query_terms) = QueryGraph::from_query(ctx, &query_terms)?;
         located_query_terms = Some(new_located_query_terms);

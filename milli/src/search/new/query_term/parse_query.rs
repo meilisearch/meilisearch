@@ -6,6 +6,7 @@ use charabia::{SeparatorKind, TokenKind};
 use super::compute_derivations::partially_initialized_term_from_word;
 use super::{LocatedQueryTerm, ZeroTypoTerm};
 use crate::search::new::query_term::{Lazy, Phrase, QueryTerm};
+use crate::search::new::Word;
 use crate::{Result, SearchContext, MAX_WORD_LENGTH};
 
 /// Convert the tokenised search query into a list of located query terms.
@@ -14,12 +15,14 @@ pub fn located_query_terms_from_tokens(
     ctx: &mut SearchContext,
     query: NormalizedTokenIter,
     words_limit: Option<usize>,
-) -> Result<Vec<LocatedQueryTerm>> {
+) -> Result<(Vec<LocatedQueryTerm>, Vec<Word>)> {
     let nbr_typos = number_of_typos_allowed(ctx)?;
 
     let mut located_terms = Vec::new();
 
     let mut phrase: Option<PhraseBuilder> = None;
+    let mut negative_next_token = false;
+    let mut negative_words = Vec::new();
 
     let parts_limit = words_limit.unwrap_or(usize::MAX);
 
@@ -33,7 +36,7 @@ pub fn located_query_terms_from_tokens(
         }
         // early return if word limit is exceeded
         if located_terms.len() >= parts_limit {
-            return Ok(located_terms);
+            return Ok((located_terms, negative_words));
         }
 
         match token.kind {
@@ -46,6 +49,11 @@ pub fn located_query_terms_from_tokens(
                 // 3. if the word is the last token of the query we push it as a prefix word.
                 if let Some(phrase) = &mut phrase {
                     phrase.push_word(ctx, &token, position)
+                } else if negative_next_token {
+                    let word = token.lemma().to_string();
+                    let word = Word::Original(ctx.word_interner.insert(word));
+                    negative_words.push(word);
+                    negative_next_token = false;
                 } else if peekable.peek().is_some() {
                     match token.kind {
                         TokenKind::Word => {
@@ -63,7 +71,7 @@ pub fn located_query_terms_from_tokens(
                             };
                             located_terms.push(located_term);
                         }
-                        TokenKind::StopWord | TokenKind::Separator(_) | TokenKind::Unknown => {}
+                        TokenKind::StopWord | TokenKind::Separator(_) | TokenKind::Unknown => (),
                     }
                 } else {
                     let word = token.lemma();
@@ -122,6 +130,10 @@ pub fn located_query_terms_from_tokens(
                     // Start new phrase if the token ends with an opening quote
                     (quote_count % 2 == 1).then_some(PhraseBuilder::empty())
                 };
+
+                if phrase.is_none() && token.lemma() == "-" {
+                    negative_next_token = true;
+                }
             }
             _ => (),
         }
@@ -134,7 +146,7 @@ pub fn located_query_terms_from_tokens(
         }
     }
 
-    Ok(located_terms)
+    Ok((located_terms, negative_words))
 }
 
 pub fn number_of_typos_allowed<'ctx>(
@@ -317,6 +329,7 @@ mod tests {
         // panics with `attempt to add with overflow` before <https://github.com/meilisearch/meilisearch/issues/3785>
         let located_query_terms = located_query_terms_from_tokens(&mut ctx, tokens, None)?;
         assert!(located_query_terms.is_empty());
+
         Ok(())
     }
 }
