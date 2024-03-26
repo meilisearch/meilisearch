@@ -21,6 +21,7 @@ pub fn located_query_terms_from_tokens(
     let mut located_terms = Vec::new();
 
     let mut phrase: Option<PhraseBuilder> = None;
+    let mut encountered_whitespace = true;
     let mut negative_next_token = false;
     let mut negative_words = Vec::new();
 
@@ -34,6 +35,7 @@ pub fn located_query_terms_from_tokens(
         if token.lemma().is_empty() {
             continue;
         }
+
         // early return if word limit is exceeded
         if located_terms.len() >= parts_limit {
             return Ok((located_terms, negative_words));
@@ -131,12 +133,14 @@ pub fn located_query_terms_from_tokens(
                     (quote_count % 2 == 1).then_some(PhraseBuilder::empty())
                 };
 
-                if phrase.is_none() && token.lemma() == "-" {
-                    negative_next_token = true;
-                }
+                negative_next_token =
+                    phrase.is_none() && token.lemma() == "-" && encountered_whitespace;
             }
             _ => (),
         }
+
+        encountered_whitespace =
+            token.lemma().chars().last().filter(|c| c.is_whitespace()).is_some();
     }
 
     // If a quote is never closed, we consider all of the end of the query as a phrase.
