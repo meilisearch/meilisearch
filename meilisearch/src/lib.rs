@@ -13,9 +13,10 @@ pub mod search_queue;
 
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
+use std::num::NonZeroUsize;
 use std::path::Path;
 use std::sync::Arc;
-use std::thread;
+use std::thread::{self, available_parallelism};
 use std::time::Duration;
 
 use actix_cors::Cors;
@@ -39,6 +40,7 @@ use meilisearch_types::versioning::{check_version_file, create_version_file};
 use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
 pub use option::Opt;
 use option::ScheduleSnapshot;
+use search_queue::SearchQueue;
 use tracing::{error, info_span};
 use tracing_subscriber::filter::Targets;
 
@@ -470,10 +472,15 @@ pub fn configure_data(
     (logs_route, logs_stderr): (LogRouteHandle, LogStderrHandle),
     analytics: Arc<dyn Analytics>,
 ) {
+    let search_queue = SearchQueue::new(
+        opt.experimental_search_queue_size,
+        available_parallelism().unwrap_or(NonZeroUsize::new(2).unwrap()),
+    );
     let http_payload_size_limit = opt.http_payload_size_limit.get_bytes() as usize;
     config
         .app_data(index_scheduler)
         .app_data(auth)
+        .app_data(web::Data::new(search_queue))
         .app_data(web::Data::from(analytics))
         .app_data(web::Data::new(logs_route))
         .app_data(web::Data::new(logs_stderr))

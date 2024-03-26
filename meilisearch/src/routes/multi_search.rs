@@ -17,6 +17,7 @@ use crate::routes::indexes::search::embed;
 use crate::search::{
     add_search_rules, perform_search, SearchQueryWithIndex, SearchResultWithIndex,
 };
+use crate::search_queue::SearchQueue;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(SeqHandler(multi_search_with_post))));
@@ -35,6 +36,7 @@ pub struct SearchQueries {
 
 pub async fn multi_search_with_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
+    search_queue: Data<SearchQueue>,
     params: AwebJson<SearchQueries, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
@@ -43,6 +45,10 @@ pub async fn multi_search_with_post(
 
     let mut multi_aggregate = MultiSearchAggregator::from_queries(&queries, &req);
     let features = index_scheduler.features();
+
+    // Since we don't want to process half of the search requests and then get a permit refused
+    // we're going to get one permit for the whole duration of the multi-search request.
+    let _permit = search_queue.try_get_search_permit().await?;
 
     // Explicitly expect a `(ResponseError, usize)` for the error type rather than `ResponseError` only,
     // so that `?` doesn't work if it doesn't use `with_index`, ensuring that it is not forgotten in case of code

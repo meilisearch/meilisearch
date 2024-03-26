@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{num::NonZeroUsize, time::Duration};
 
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use tokio::sync::{mpsc, oneshot};
@@ -24,7 +24,7 @@ impl Drop for Permit {
 }
 
 impl SearchQueue {
-    pub fn new(capacity: usize, paralellism: usize) -> Self {
+    pub fn new(capacity: usize, paralellism: NonZeroUsize) -> Self {
         // We can make the search requests wait until we're available.
         // they're going to wait anyway right after, so let's not allocate any
         // RAM by keeping a capacity of 1.
@@ -35,21 +35,21 @@ impl SearchQueue {
 
     async fn run(
         capacity: usize,
-        parallelism: usize,
+        parallelism: NonZeroUsize,
         mut receive_new_searches: mpsc::Receiver<oneshot::Sender<Permit>>,
     ) {
         let mut queue: Vec<oneshot::Sender<Permit>> = Default::default();
         let mut rng: StdRng = StdRng::from_entropy();
-        let mut searches_running = 0;
+        let mut searches_running: usize = 0;
         // by having a capacity of parallelism we ensures that every time a search finish it can release its RAM asap
-        let (sender, mut search_finished) = mpsc::channel(parallelism);
+        let (sender, mut search_finished) = mpsc::channel(parallelism.into());
 
         loop {
             tokio::select! {
                 search_request = receive_new_searches.recv() => {
                     let search_request = search_request.unwrap();
                     println!("queue contains {} elements and already running {}", queue.len(), searches_running);
-                    if searches_running < parallelism && queue.is_empty() {
+                    if searches_running < usize::from(parallelism) && queue.is_empty() {
                         println!("We can process the search straight away");
                         searches_running += 1;
                         // if the search requests die it's not a hard error on our side
@@ -78,7 +78,7 @@ impl SearchQueue {
         }
     }
 
-    pub async fn register_search(&self) -> Result<Permit, MeilisearchHttpError> {
+    pub async fn try_get_search_permit(&self) -> Result<Permit, MeilisearchHttpError> {
         let (sender, receiver) = oneshot::channel();
         self.sender.send(sender).await.map_err(|_| MeilisearchHttpError::SearchLimiterIsDown)?;
         receiver.await.map_err(|_| {
