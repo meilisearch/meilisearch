@@ -345,8 +345,7 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_enable_metrics: bool,
 
-    /// TODO: Update the discussion link
-    /// Experimental search queue size. For more information, see: <https://github.com/meilisearch/meilisearch/discussions/3518>
+    /// Experimental search queue size. For more information, see: <https://github.com/orgs/meilisearch/discussions/729>
     ///
     /// Lets you customize the size of the search queue. Meilisearch processes your search requests as fast as possible but once the
     /// queue is full it starts returning HTTP 503, Service Unavailable.
