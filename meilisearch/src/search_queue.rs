@@ -1,6 +1,7 @@
 use std::num::NonZeroUsize;
 
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::error::MeilisearchHttpError;
