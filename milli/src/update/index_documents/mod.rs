@@ -253,26 +253,11 @@ where
             let number_of_documents = self.index.number_of_documents(self.wtxn)?;
             return Ok(DocumentAdditionResult { indexed_documents: 0, number_of_documents });
         }
-        let output = self
+        let mut output = self
             .transform
             .take()
             .expect("Invalid document addition state")
             .output_from_sorter(self.wtxn, &self.progress)?;
-
-        let new_facets = output.compute_real_facets(self.wtxn, self.index)?;
-        self.index.put_faceted_fields(self.wtxn, &new_facets)?;
-
-        // in case new fields were introduced we're going to recreate the searchable fields.
-        if let Some(faceted_fields) = self.index.user_defined_searchable_fields(self.wtxn)? {
-            // we can't keep references on the faceted fields while we update the index thus we need to own it.
-            let faceted_fields: Vec<String> =
-                faceted_fields.into_iter().map(str::to_string).collect();
-            self.index.put_all_searchable_fields_from_fields_ids_map(
-                self.wtxn,
-                &faceted_fields.iter().map(String::as_ref).collect::<Vec<_>>(),
-                &output.fields_ids_map,
-            )?;
-        }
 
         let indexed_documents = output.documents_count as u64;
         let number_of_documents = self.execute_raw(output)?;
@@ -296,16 +281,17 @@ where
 
         let TransformOutput {
             primary_key,
-            fields_ids_map,
+            settings_diff,
             field_distribution,
             documents_count,
             original_documents,
             flattened_documents,
         } = output;
 
-        // The fields_ids_map is put back to the store now so the rest of the transaction sees an
-        // up to date field map.
-        self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
+        // update the internal facet and searchable list,
+        // because they might have changed due to the nested documents flattening.
+        settings_diff.new.recompute_facets(self.wtxn, self.index)?;
+        settings_diff.new.recompute_searchables(self.wtxn, self.index)?;
 
         let backup_pool;
         let pool = match self.indexer_config.thread_pool {
@@ -333,7 +319,7 @@ where
         ) = crossbeam_channel::unbounded();
 
         // get the primary key field id
-        let primary_key_id = fields_ids_map.id(&primary_key).unwrap();
+        let primary_key_id = output.settings_diff.new.fields_ids_map.id(&primary_key).unwrap();
 
         // get searchable fields for word databases
         let searchable_fields =
@@ -400,8 +386,6 @@ where
 
         let max_positions_per_attributes = self.indexer_config.max_positions_per_attributes;
 
-        let cloned_embedder = self.embedders.clone();
-
         let mut final_documents_ids = RoaringBitmap::new();
         let mut databases_seen = 0;
         let mut word_position_docids = None;
@@ -410,7 +394,6 @@ where
         let mut exact_word_docids = None;
         let mut chunk_accumulator = ChunkAccumulator::default();
         let mut dimension = HashMap::new();
-        let stop_words = stop_words.map(|sw| sw.map_data(Vec::from).unwrap());
 
         let current_span = tracing::Span::current();
 
@@ -428,10 +411,6 @@ where
                 let flattened_chunk_iter =
                     grenad_obkv_into_chunks(flattened_documents, pool_params, documents_chunk_size);
 
-                let separators: Option<Vec<_>> =
-                    separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
-                let dictionary: Option<Vec<_>> =
-                    dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
                 let result = original_chunk_iter.and_then(|original_chunk| {
                     let flattened_chunk = flattened_chunk_iter?;
                     // extract all databases from the chunked obkv douments
@@ -440,18 +419,10 @@ where
                         flattened_chunk,
                         pool_params,
                         lmdb_writer_sx.clone(),
-                        searchable_fields,
-                        faceted_fields,
                         primary_key_id,
                         geo_fields_ids,
-                        field_id_map,
-                        stop_words,
-                        separators.as_deref(),
-                        dictionary.as_deref(),
+                        &settings_diff,
                         max_positions_per_attributes,
-                        exact_attributes,
-                        proximity_precision,
-                        cloned_embedder,
                     )
                 });
 

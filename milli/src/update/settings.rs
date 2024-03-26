@@ -385,14 +385,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
     #[tracing::instrument(
         level = "trace"
-        skip(self, progress_callback, should_abort, old_fields_ids_map),
+        skip(self, progress_callback, should_abort, settings_diff),
         target = "indexing::documents"
     )]
     fn reindex<FP, FA>(
         &mut self,
         progress_callback: &FP,
         should_abort: &FA,
-        old_fields_ids_map: FieldsIdsMap,
+        settings_diff: InnerIndexSettingsDiff,
     ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
@@ -416,14 +416,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         )?;
 
         // We clear the databases and remap the documents fields based on the new `FieldsIdsMap`.
-        let output = transform.prepare_for_documents_reindexing(
-            self.wtxn,
-            old_fields_ids_map,
-            fields_ids_map,
-        )?;
-
-        let embedder_configs = self.index.embedding_configs(self.wtxn)?;
-        let embedders = self.embedders(embedder_configs)?;
+        let output = transform.prepare_for_documents_reindexing(self.wtxn, settings_diff)?;
 
         // We index the generated `TransformOutput` which must contain
         // all the documents with fields in the newly defined searchable order.
@@ -436,30 +429,9 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             &should_abort,
         )?;
 
-        let indexing_builder = indexing_builder.with_embedders(embedders);
         indexing_builder.execute_raw(output)?;
 
         Ok(())
-    }
-
-    fn embedders(
-        &self,
-        embedding_configs: Vec<(String, EmbeddingConfig)>,
-    ) -> Result<EmbeddingConfigs> {
-        let res: Result<_> = embedding_configs
-            .into_iter()
-            .map(|(name, EmbeddingConfig { embedder_options, prompt })| {
-                let prompt = Arc::new(prompt.try_into().map_err(crate::Error::from)?);
-
-                let embedder = Arc::new(
-                    Embedder::new(embedder_options.clone())
-                        .map_err(crate::vector::Error::from)
-                        .map_err(crate::Error::from)?,
-                );
-                Ok((name, (embedder, prompt)))
-            })
-            .collect();
-        res.map(EmbeddingConfigs::new)
     }
 
     fn update_displayed(&mut self) -> Result<bool> {
@@ -1067,7 +1039,6 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
         let old_inner_settings = InnerIndexSettings::from_index(&self.index, &self.wtxn)?;
-        let old_fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
 
         // never trigger re-indexing
         self.update_displayed()?;
@@ -1109,47 +1080,19 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         };
 
         if inner_settings_diff.any_reindexing_needed() {
-            self.reindex(&progress_callback, &should_abort, old_fields_ids_map)?;
+            self.reindex(&progress_callback, &should_abort, inner_settings_diff)?;
         }
 
         Ok(())
     }
-
-    fn update_faceted(
-        &self,
-        existing_fields: HashSet<String>,
-        old_faceted_fields: HashSet<String>,
-    ) -> Result<bool> {
-        if existing_fields.iter().any(|field| field.contains('.')) {
-            return Ok(true);
-        }
-
-        if old_faceted_fields.iter().any(|field| field.contains('.')) {
-            return Ok(true);
-        }
-
-        // If there is new faceted fields we indicate that we must reindex as we must
-        // index new fields as facets. It means that the distinct attribute,
-        // an Asc/Desc criterion or a filtered attribute as be added or removed.
-        let new_faceted_fields = self.index.user_defined_faceted_fields(self.wtxn)?;
-
-        if new_faceted_fields.iter().any(|field| field.contains('.')) {
-            return Ok(true);
-        }
-
-        let faceted_updated =
-            (&existing_fields - &old_faceted_fields) != (&existing_fields - &new_faceted_fields);
-
-        Ok(faceted_updated)
-    }
 }
 
 pub(crate) struct InnerIndexSettingsDiff {
-    old: InnerIndexSettings,
-    new: InnerIndexSettings,
+    pub old: InnerIndexSettings,
+    pub new: InnerIndexSettings,
 
     // TODO: compare directly the embedders.
-    embedding_configs_updated: bool,
+    pub embedding_configs_updated: bool,
 }
 
 impl InnerIndexSettingsDiff {
@@ -1167,7 +1110,7 @@ impl InnerIndexSettingsDiff {
                 != self.new.stop_words.as_ref().map(|set| set.as_fst().as_bytes())
             || self.old.allowed_separators != self.new.allowed_separators
             || self.old.dictionary != self.new.dictionary
-            || self.old.searchable_fields != self.new.searchable_fields
+            || self.old.user_defined_searchable_fields != self.new.user_defined_searchable_fields
             || self.old.exact_attributes != self.new.exact_attributes
             || self.old.proximity_precision != self.new.proximity_precision
     }
@@ -1207,33 +1150,38 @@ impl InnerIndexSettingsDiff {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) struct InnerIndexSettings {
-    stop_words: Option<fst::Set<Vec<u8>>>,
-    allowed_separators: Option<BTreeSet<String>>,
-    dictionary: Option<BTreeSet<String>>,
-    fields_ids_map: FieldsIdsMap,
-    faceted_fields: HashSet<FieldId>,
-    searchable_fields: Option<BTreeSet<FieldId>>,
-    exact_attributes: HashSet<FieldId>,
-    proximity_precision: ProximityPrecision,
-    embedding_configs: Vec<(String, crate::vector::EmbeddingConfig)>,
-    existing_fields: HashSet<String>,
+    pub stop_words: Option<fst::Set<Vec<u8>>>,
+    pub allowed_separators: Option<BTreeSet<String>>,
+    pub dictionary: Option<BTreeSet<String>>,
+    pub fields_ids_map: FieldsIdsMap,
+    pub user_defined_faceted_fields: HashSet<String>,
+    pub user_defined_searchable_fields: Option<Vec<String>>,
+    pub faceted_fields_ids: HashSet<FieldId>,
+    pub searchable_fields_ids: Option<Vec<FieldId>>,
+    pub exact_attributes: HashSet<FieldId>,
+    pub proximity_precision: ProximityPrecision,
+    pub embedding_configs: EmbeddingConfigs,
+    pub existing_fields: HashSet<String>,
 }
 
 impl InnerIndexSettings {
-    fn from_index(index: &Index, rtxn: &heed::RoTxn) -> Result<Self> {
+    pub fn from_index(index: &Index, rtxn: &heed::RoTxn) -> Result<Self> {
         let stop_words = index.stop_words(rtxn)?;
         let stop_words = stop_words.map(|sw| sw.map_data(Vec::from).unwrap());
         let allowed_separators = index.allowed_separators(rtxn)?;
         let dictionary = index.dictionary(rtxn)?;
         let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let searchable_fields = index.searchable_fields_ids(rtxn)?;
-        let searchable_fields = searchable_fields.map(|sf| sf.into_iter().collect());
-        let faceted_fields = index.faceted_fields_ids(rtxn)?;
+        let user_defined_searchable_fields = index.user_defined_searchable_fields(rtxn)?;
+        let user_defined_searchable_fields =
+            user_defined_searchable_fields.map(|sf| sf.into_iter().map(String::from).collect());
+        let user_defined_faceted_fields = index.user_defined_faceted_fields(rtxn)?;
+        let searchable_fields_ids = index.searchable_fields_ids(rtxn)?;
+        let faceted_fields_ids = index.faceted_fields_ids(rtxn)?;
         let exact_attributes = index.exact_attributes_ids(rtxn)?;
         let proximity_precision = index.proximity_precision(rtxn)?.unwrap_or_default();
-        let embedding_configs = index.embedding_configs(rtxn)?;
+        let embedding_configs = embedders(index.embedding_configs(rtxn)?)?;
         let existing_fields: HashSet<_> = index
             .field_distribution(rtxn)?
             .into_iter()
@@ -1245,14 +1193,65 @@ impl InnerIndexSettings {
             allowed_separators,
             dictionary,
             fields_ids_map,
-            faceted_fields,
-            searchable_fields,
+            user_defined_faceted_fields,
+            user_defined_searchable_fields,
+            faceted_fields_ids,
+            searchable_fields_ids,
             exact_attributes,
             proximity_precision,
             embedding_configs,
             existing_fields,
         })
     }
+
+    // find and insert the new field ids
+    pub fn recompute_facets(&mut self, wtxn: &mut heed::RwTxn, index: &Index) -> Result<()> {
+        let new_facets = self
+            .fields_ids_map
+            .names()
+            .filter(|&field| crate::is_faceted(field, &self.user_defined_faceted_fields))
+            .map(|field| field.to_string())
+            .collect();
+        index.put_faceted_fields(wtxn, &new_facets)?;
+
+        self.faceted_fields_ids = index.faceted_fields_ids(wtxn)?;
+        Ok(())
+    }
+
+    // find and insert the new field ids
+    pub fn recompute_searchables(&mut self, wtxn: &mut heed::RwTxn, index: &Index) -> Result<()> {
+        // in case new fields were introduced we're going to recreate the searchable fields.
+        if let Some(searchable_fields) = self.user_defined_searchable_fields.as_ref() {
+            let searchable_fields =
+                searchable_fields.iter().map(String::as_ref).collect::<Vec<_>>();
+            index.put_all_searchable_fields_from_fields_ids_map(
+                wtxn,
+                &searchable_fields,
+                &self.fields_ids_map,
+            )?;
+            let searchable_fields_ids = index.searchable_fields_ids(wtxn)?;
+            self.searchable_fields_ids = searchable_fields_ids;
+        }
+
+        Ok(())
+    }
+}
+
+fn embedders(embedding_configs: Vec<(String, EmbeddingConfig)>) -> Result<EmbeddingConfigs> {
+    let res: Result<_> = embedding_configs
+        .into_iter()
+        .map(|(name, EmbeddingConfig { embedder_options, prompt })| {
+            let prompt = Arc::new(prompt.try_into().map_err(crate::Error::from)?);
+
+            let embedder = Arc::new(
+                Embedder::new(embedder_options.clone())
+                    .map_err(crate::vector::Error::from)
+                    .map_err(crate::Error::from)?,
+            );
+            Ok((name, (embedder, prompt)))
+        })
+        .collect();
+    res.map(EmbeddingConfigs::new)
 }
 
 fn validate_prompt(

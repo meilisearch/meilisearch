@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::{self, BufReader};
@@ -20,6 +20,7 @@ use crate::error::InternalError;
 use crate::facet::value_encoding::f64_into_bytes;
 use crate::update::del_add::{DelAdd, KvWriterDelAdd};
 use crate::update::index_documents::{create_writer, writer_into_reader};
+use crate::update::settings::InnerIndexSettingsDiff;
 use crate::{CboRoaringBitmapCodec, DocumentId, Error, FieldId, Result, MAX_FACET_VALUE_LENGTH};
 
 /// The length of the elements that are always in the buffer when inserting new values.
@@ -43,7 +44,7 @@ pub struct ExtractedFacetValues {
 pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
-    faceted_fields: &HashSet<FieldId>,
+    settings_diff: &InnerIndexSettingsDiff,
     geo_fields_ids: Option<(FieldId, FieldId)>,
 ) -> Result<ExtractedFacetValues> {
     puffin::profile_function!();
@@ -82,7 +83,9 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
         let obkv = obkv::KvReader::new(value);
 
         for (field_id, field_bytes) in obkv.iter() {
-            if faceted_fields.contains(&field_id) {
+            let delete_faceted = settings_diff.old.faceted_fields_ids.contains(&field_id);
+            let add_faceted = settings_diff.new.faceted_fields_ids.contains(&field_id);
+            if delete_faceted || add_faceted {
                 numbers_key_buffer.clear();
                 strings_key_buffer.clear();
 
@@ -99,11 +102,12 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
                 strings_key_buffer.extend_from_slice(docid_bytes);
 
                 let del_add_obkv = obkv::KvReader::new(field_bytes);
-                let del_value = match del_add_obkv.get(DelAdd::Deletion) {
+                let del_value = match del_add_obkv.get(DelAdd::Deletion).filter(|_| delete_faceted)
+                {
                     Some(bytes) => Some(from_slice(bytes).map_err(InternalError::SerdeJson)?),
                     None => None,
                 };
-                let add_value = match del_add_obkv.get(DelAdd::Addition) {
+                let add_value = match del_add_obkv.get(DelAdd::Addition).filter(|_| add_faceted) {
                     Some(bytes) => Some(from_slice(bytes).map_err(InternalError::SerdeJson)?),
                     None => None,
                 };

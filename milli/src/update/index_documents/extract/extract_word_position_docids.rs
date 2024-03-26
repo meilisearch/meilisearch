@@ -11,6 +11,7 @@ use super::helpers::{
 use crate::error::SerializationError;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
+use crate::update::settings::InnerIndexSettingsDiff;
 use crate::update::MergeFn;
 use crate::{bucketed_position, DocumentId, Result};
 
@@ -22,6 +23,7 @@ use crate::{bucketed_position, DocumentId, Result};
 pub fn extract_word_position_docids<R: io::Read + io::Seek>(
     docid_word_positions: grenad::Reader<R>,
     indexer: GrenadParameters,
+    _settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<grenad::Reader<BufReader<File>>> {
     puffin::profile_function!();
 

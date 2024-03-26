@@ -13,6 +13,7 @@ use crate::error::SerializationError;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
 use crate::proximity::{index_proximity, MAX_DISTANCE};
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
+use crate::update::settings::InnerIndexSettingsDiff;
 use crate::{DocumentId, Result};
 
 /// Extracts the best proximity between pairs of words and the documents ids where this pair appear.
@@ -23,6 +24,7 @@ use crate::{DocumentId, Result};
 pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
     docid_word_positions: grenad::Reader<R>,
     indexer: GrenadParameters,
+    _settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<grenad::Reader<BufReader<File>>> {
     puffin::profile_function!();
 

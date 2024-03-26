@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::BufReader;
@@ -12,6 +12,7 @@ use serde_json::Value;
 use super::helpers::{create_sorter, keep_latest_obkv, sorter_into_reader, GrenadParameters};
 use crate::error::{InternalError, SerializationError};
 use crate::update::del_add::{del_add_from_two_obkvs, DelAdd, KvReaderDelAdd};
+use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
 use crate::{FieldId, Result, MAX_POSITION_PER_ATTRIBUTE, MAX_WORD_LENGTH};
 
 pub type ScriptLanguageDocidsMap = HashMap<(Script, Language), (RoaringBitmap, RoaringBitmap)>;
@@ -25,10 +26,7 @@ pub type ScriptLanguageDocidsMap = HashMap<(Script, Language), (RoaringBitmap, R
 pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
-    searchable_fields: &Option<HashSet<FieldId>>,
-    stop_words: Option<&fst::Set<Vec<u8>>>,
-    allowed_separators: Option<&[&str]>,
-    dictionary: Option<&[&str]>,
+    settings_diff: &InnerIndexSettingsDiff,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<(grenad::Reader<BufReader<File>>, ScriptLanguageDocidsMap)> {
     puffin::profile_function!();
@@ -56,8 +54,33 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     let mut value_buffer = Vec::new();
 
     // initialize tokenizer.
-    let mut builder = tokenizer_builder(stop_words, allowed_separators, dictionary, None);
-    let tokenizer = builder.build();
+    // TODO: Fix ugly allocation
+    let old_stop_words = settings_diff.old.stop_words.as_ref();
+    let old_separators: Option<Vec<_>> =
+        settings_diff.old.allowed_separators.map(|s| s.iter().map(String::as_str).collect());
+    let old_dictionary: Option<Vec<_>> =
+        settings_diff.old.dictionary.map(|s| s.iter().map(String::as_str).collect());
+    let mut del_builder = tokenizer_builder(
+        old_stop_words,
+        old_separators.as_deref(),
+        old_dictionary.as_deref(),
+        None,
+    );
+    let del_tokenizer = del_builder.build();
+
+    // TODO: Fix ugly allocation
+    let new_stop_words = settings_diff.new.stop_words.as_ref();
+    let new_separators: Option<Vec<_>> =
+        settings_diff.new.allowed_separators.map(|s| s.iter().map(String::as_str).collect());
+    let new_dictionary: Option<Vec<_>> =
+        settings_diff.new.dictionary.map(|s| s.iter().map(String::as_str).collect());
+    let mut add_builder = tokenizer_builder(
+        new_stop_words,
+        new_separators.as_deref(),
+        new_dictionary.as_deref(),
+        None,
+    );
+    let add_tokenizer = add_builder.build();
 
     // iterate over documents.
     let mut cursor = obkv_documents.into_cursor()?;
@@ -69,7 +92,10 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         let obkv = KvReader::<FieldId>::new(value);
 
         // if the searchable fields didn't change, skip the searchable indexing for this document.
-        if !searchable_fields_changed(&KvReader::<FieldId>::new(value), searchable_fields) {
+        if !searchable_fields_changed(
+            &KvReader::<FieldId>::new(value),
+            &settings_diff.new.searchable_fields_ids,
+        ) {
             continue;
         }
 
@@ -85,11 +111,8 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
                 // deletions
                 lang_safe_tokens_from_document(
                     &obkv,
-                    searchable_fields,
-                    &tokenizer,
-                    stop_words,
-                    allowed_separators,
-                    dictionary,
+                    &settings_diff.old,
+                    &del_tokenizer,
                     max_positions_per_attributes,
                     DelAdd::Deletion,
                     &mut del_buffers,
@@ -99,11 +122,8 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
                 // additions
                 lang_safe_tokens_from_document(
                     &obkv,
-                    searchable_fields,
-                    &tokenizer,
-                    stop_words,
-                    allowed_separators,
-                    dictionary,
+                    &settings_diff.new,
+                    &add_tokenizer,
                     max_positions_per_attributes,
                     DelAdd::Addition,
                     &mut add_buffers,
@@ -118,8 +138,8 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         // transforming two KV<FieldId, KV<u16, String>> into one KV<FieldId, KV<DelAdd, KV<u16, String>>>
         value_buffer.clear();
         del_add_from_two_obkvs(
-            KvReader::<FieldId>::new(del_obkv),
-            KvReader::<FieldId>::new(add_obkv),
+            &KvReader::<FieldId>::new(del_obkv),
+            &KvReader::<FieldId>::new(add_obkv),
             &mut value_buffer,
         )?;
 
@@ -160,7 +180,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
 /// Check if any searchable fields of a document changed.
 fn searchable_fields_changed(
     obkv: &KvReader<FieldId>,
-    searchable_fields: &Option<HashSet<FieldId>>,
+    searchable_fields: &Option<Vec<FieldId>>,
 ) -> bool {
     for (field_id, field_bytes) in obkv.iter() {
         if searchable_fields.as_ref().map_or(true, |sf| sf.contains(&field_id)) {
@@ -206,14 +226,10 @@ fn tokenizer_builder<'a>(
 
 /// Extract words mapped with their positions of a document,
 /// ensuring no Language detection mistakes was made.
-#[allow(clippy::too_many_arguments)] // FIXME: consider grouping arguments in a struct
 fn lang_safe_tokens_from_document<'a>(
     obkv: &KvReader<FieldId>,
-    searchable_fields: &Option<HashSet<FieldId>>,
+    settings: &InnerIndexSettings,
     tokenizer: &Tokenizer,
-    stop_words: Option<&fst::Set<Vec<u8>>>,
-    allowed_separators: Option<&[&str]>,
-    dictionary: Option<&[&str]>,
     max_positions_per_attributes: u32,
     del_add: DelAdd,
     buffers: &'a mut Buffers,
@@ -222,7 +238,7 @@ fn lang_safe_tokens_from_document<'a>(
 
     tokens_from_document(
         obkv,
-        searchable_fields,
+        &settings.searchable_fields_ids,
         tokenizer,
         max_positions_per_attributes,
         del_add,
@@ -246,12 +262,14 @@ fn lang_safe_tokens_from_document<'a>(
         // then we don't rerun the extraction.
         if !script_language.is_empty() {
             // build a new temporary tokenizer including the allow list.
-            let mut builder = tokenizer_builder(
-                stop_words,
-                allowed_separators,
-                dictionary,
-                Some(&script_language),
-            );
+            // TODO: Fix ugly allocation
+            let stop_words = settings.stop_words.as_ref();
+            let separators: Option<Vec<_>> =
+                settings.allowed_separators.map(|s| s.iter().map(String::as_str).collect());
+            let dictionary: Option<Vec<_>> =
+                settings.dictionary.map(|s| s.iter().map(String::as_str).collect());
+            let mut builder =
+                tokenizer_builder(stop_words, separators.as_deref(), dictionary.as_deref(), None);
             let tokenizer = builder.build();
 
             script_language_word_count.clear();
@@ -259,7 +277,7 @@ fn lang_safe_tokens_from_document<'a>(
             // rerun the extraction.
             tokens_from_document(
                 obkv,
-                searchable_fields,
+                &settings.searchable_fields_ids,
                 &tokenizer,
                 max_positions_per_attributes,
                 del_add,
@@ -276,7 +294,7 @@ fn lang_safe_tokens_from_document<'a>(
 /// Extract words mapped with their positions of a document.
 fn tokens_from_document<'a>(
     obkv: &KvReader<FieldId>,
-    searchable_fields: &Option<HashSet<FieldId>>,
+    searchable_fields: &Option<Vec<FieldId>>,
     tokenizer: &Tokenizer,
     max_positions_per_attributes: u32,
     del_add: DelAdd,

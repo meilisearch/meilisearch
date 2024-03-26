@@ -1,20 +1,22 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::{self, BufReader};
 
-use heed::BytesDecode;
+use heed::{BytesDecode, BytesEncode};
 use obkv::KvReaderU16;
+use roaring::RoaringBitmap;
 
 use super::helpers::{
-    create_sorter, create_writer, merge_deladd_cbo_roaring_bitmaps, sorter_into_reader,
-    try_split_array_at, writer_into_reader, GrenadParameters,
+    create_sorter, create_writer, merge_deladd_cbo_roaring_bitmaps, try_split_array_at,
+    writer_into_reader, GrenadParameters,
 };
 use crate::error::SerializationError;
 use crate::heed_codec::StrBEU16Codec;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
 use crate::update::del_add::{is_noop_del_add_obkv, DelAdd, KvReaderDelAdd, KvWriterDelAdd};
+use crate::update::settings::InnerIndexSettingsDiff;
 use crate::update::MergeFn;
-use crate::{DocumentId, FieldId, Result};
+use crate::{CboRoaringBitmapCodec, DocumentId, FieldId, Result};
 
 /// Extracts the word and the documents ids where this word appear.
 ///
@@ -27,7 +29,7 @@ use crate::{DocumentId, FieldId, Result};
 pub fn extract_word_docids<R: io::Read + io::Seek>(
     docid_word_positions: grenad::Reader<R>,
     indexer: GrenadParameters,
-    exact_attributes: &HashSet<FieldId>,
+    settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<(
     grenad::Reader<BufReader<File>>,
     grenad::Reader<BufReader<File>>,
@@ -43,7 +45,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
-        max_memory.map(|x| x / 3),
+        max_memory,
     );
     let mut key_buffer = Vec::new();
     let mut del_words = BTreeSet::new();
@@ -85,30 +87,29 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         add_words.clear();
     }
 
-    let mut word_docids_sorter = create_sorter(
-        grenad::SortAlgorithm::Unstable,
-        merge_deladd_cbo_roaring_bitmaps,
-        indexer.chunk_compression_type,
-        indexer.chunk_compression_level,
-        indexer.max_nb_chunks,
-        max_memory.map(|x| x / 3),
-    );
-
-    let mut exact_word_docids_sorter = create_sorter(
-        grenad::SortAlgorithm::Unstable,
-        merge_deladd_cbo_roaring_bitmaps,
-        indexer.chunk_compression_type,
-        indexer.chunk_compression_level,
-        indexer.max_nb_chunks,
-        max_memory.map(|x| x / 3),
-    );
-
     let mut word_fid_docids_writer = create_writer(
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         tempfile::tempfile()?,
     );
 
+    let mut word_docids_writer = create_writer(
+        indexer.chunk_compression_type,
+        indexer.chunk_compression_level,
+        tempfile::tempfile()?,
+    );
+
+    let mut exact_word_docids_writer = create_writer(
+        indexer.chunk_compression_type,
+        indexer.chunk_compression_level,
+        tempfile::tempfile()?,
+    );
+
+    let mut word: Option<String> = None;
+    let mut deletions = RoaringBitmap::new();
+    let mut additions = RoaringBitmap::new();
+    let mut exact_deletions = RoaringBitmap::new();
+    let mut exact_additions = RoaringBitmap::new();
     let mut iter = word_fid_docids_sorter.into_stream_merger_iter()?;
     // TODO: replace sorters by writers by accumulating values into a buffer before inserting them.
     while let Some((key, value)) = iter.next()? {
@@ -117,20 +118,69 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
             word_fid_docids_writer.insert(key, value)?;
         }
 
-        let (word, fid) = StrBEU16Codec::bytes_decode(key)
+        let (w, fid) = StrBEU16Codec::bytes_decode(key)
             .map_err(|_| SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
 
-        // every words contained in an attribute set to exact must be pushed in the exact_words list.
-        if exact_attributes.contains(&fid) {
-            exact_word_docids_sorter.insert(word.as_bytes(), value)?;
+        if let Some(word) = word {
+            if word.as_str() != w {
+                docids_into_writers(&word, &deletions, &additions, &mut word_docids_writer);
+                docids_into_writers(
+                    &word,
+                    &exact_deletions,
+                    &exact_additions,
+                    &mut exact_word_docids_writer,
+                );
+                let word = Some(w.to_string());
+                // clear buffers
+                deletions.clear();
+                additions.clear();
+                exact_deletions.clear();
+                exact_additions.clear();
+            }
         } else {
-            word_docids_sorter.insert(word.as_bytes(), value)?;
+            let word = Some(w.to_string());
+        }
+
+        // merge all deletions
+        let obkv = KvReaderDelAdd::new(value);
+        if let Some(value) = obkv.get(DelAdd::Deletion) {
+            let delete_from_exact = settings_diff.old.exact_attributes.contains(&fid);
+            let docids = CboRoaringBitmapCodec::bytes_decode(value).map_err(|_| {
+                SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) }
+            })?;
+            if delete_from_exact {
+                exact_deletions |= docids;
+            } else {
+                deletions |= docids
+            }
+        }
+        // merge all additions
+        if let Some(value) = obkv.get(DelAdd::Addition) {
+            let add_in_exact = settings_diff.new.exact_attributes.contains(&fid);
+            let docids = CboRoaringBitmapCodec::bytes_decode(value).map_err(|_| {
+                SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) }
+            })?;
+            if add_in_exact {
+                exact_additions |= docids;
+            } else {
+                additions |= docids
+            }
         }
     }
 
+    if let Some(word) = word {
+        docids_into_writers(&word, &deletions, &additions, &mut word_docids_writer);
+        docids_into_writers(
+            &word,
+            &exact_deletions,
+            &exact_additions,
+            &mut exact_word_docids_writer,
+        );
+    }
+
     Ok((
-        sorter_into_reader(word_docids_sorter, indexer)?,
-        sorter_into_reader(exact_word_docids_sorter, indexer)?,
+        writer_into_reader(word_docids_writer)?,
+        writer_into_reader(exact_word_docids_writer)?,
         writer_into_reader(word_fid_docids_writer)?,
     ))
 }
@@ -175,6 +225,48 @@ fn words_into_sorter(
         key_buffer.extend_from_slice(&fid.to_be_bytes());
         word_fid_docids_sorter.insert(&key_buffer, value_writer.into_inner().unwrap())?;
     }
+
+    Ok(())
+}
+
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
+fn docids_into_writers<W>(
+    word: &str,
+    deletions: &RoaringBitmap,
+    additions: &RoaringBitmap,
+    writer: &mut grenad::Writer<W>,
+) -> Result<()>
+where
+    W: std::io::Write,
+{
+    if deletions == additions {
+        // if the same value is deleted and added, do nothing.
+        return Ok(());
+    }
+
+    // Write each value in the same KvDelAdd before inserting it in the final writer.
+    let mut obkv = KvWriterDelAdd::memory();
+    // deletions:
+    if !deletions.is_empty() && !deletions.is_subset(additions) {
+        obkv.insert(
+            DelAdd::Deletion,
+            CboRoaringBitmapCodec::bytes_encode(deletions).map_err(|_| {
+                SerializationError::Encoding { db_name: Some(DOCID_WORD_POSITIONS) }
+            })?,
+        );
+    }
+    // additions:
+    if !additions.is_empty() {
+        obkv.insert(
+            DelAdd::Addition,
+            CboRoaringBitmapCodec::bytes_encode(additions).map_err(|_| {
+                SerializationError::Encoding { db_name: Some(DOCID_WORD_POSITIONS) }
+            })?,
+        );
+    }
+
+    // insert everything in the same writer.
+    writer.insert(word.as_bytes(), obkv.into_inner().unwrap())?;
 
     Ok(())
 }
