@@ -605,6 +605,7 @@ fn embedder_analytics(
                 EmbedderSource::HuggingFace => sources.insert("huggingFace"),
                 EmbedderSource::UserProvided => sources.insert("userProvided"),
                 EmbedderSource::Ollama => sources.insert("ollama"),
+                EmbedderSource::Rest => sources.insert("rest"),
             };
         }
     };

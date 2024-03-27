@@ -339,6 +339,7 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
     prompt_reader: grenad::Reader<R>,
     indexer: GrenadParameters,
     embedder: Arc<Embedder>,
+    request_threads: &rayon::ThreadPool,
 ) -> Result<grenad::Reader<BufReader<File>>> {
     puffin::profile_function!();
     let n_chunks = embedder.chunk_count_hint(); // chunk level parallelism
@@ -376,7 +377,10 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
 
         if chunks.len() == chunks.capacity() {
             let chunked_embeds = embedder
-                .embed_chunks(std::mem::replace(&mut chunks, Vec::with_capacity(n_chunks)))
+                .embed_chunks(
+                    std::mem::replace(&mut chunks, Vec::with_capacity(n_chunks)),
+                    request_threads,
+                )
                 .map_err(crate::vector::Error::from)
                 .map_err(crate::Error::from)?;
 
@@ -394,7 +398,7 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
     // send last chunk
     if !chunks.is_empty() {
         let chunked_embeds = embedder
-            .embed_chunks(std::mem::take(&mut chunks))
+            .embed_chunks(std::mem::take(&mut chunks), request_threads)
             .map_err(crate::vector::Error::from)
             .map_err(crate::Error::from)?;
         for (docid, embeddings) in chunks_ids
@@ -408,7 +412,7 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
 
     if !current_chunk.is_empty() {
         let embeds = embedder
-            .embed_chunks(vec![std::mem::take(&mut current_chunk)])
+            .embed_chunks(vec![std::mem::take(&mut current_chunk)], request_threads)
             .map_err(crate::vector::Error::from)
             .map_err(crate::Error::from)?;
 

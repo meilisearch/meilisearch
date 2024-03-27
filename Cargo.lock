@@ -3338,7 +3338,6 @@ dependencies = [
  "filter-parser",
  "flatten-serde-json",
  "fst",
- "futures",
  "fxhash",
  "geoutils",
  "grenad",
@@ -3362,7 +3361,6 @@ dependencies = [
  "rand",
  "rand_pcg",
  "rayon",
- "reqwest",
  "roaring",
  "rstar",
  "serde",
@@ -3376,8 +3374,9 @@ dependencies = [
  "tiktoken-rs",
  "time",
  "tokenizers",
- "tokio",
  "tracing",
+ "ureq",
+ "url",
  "uuid",
 ]
 
