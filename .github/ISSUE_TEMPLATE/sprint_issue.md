@@ -2,7 +2,7 @@
 name: New sprint issue
 about: ⚠️ Should only be used by the engine team ⚠️
 title: ''
-labels: ''
+labels: 'missing usage in PRD, impacts docs'
 assignees: ''
 
 ---
@@ -21,11 +21,7 @@ Related spec: WIP
 
 ## TODO
 
-<!---Feel free to adapt this list with more technical/product steps-->
-
-- [ ] Release a prototype
-- [ ] If prototype validated, merge changes into `main`
-- [ ] Update the spec
+<!---If necessary, create a list with technical/product steps-->
 
 ### Reminders when modifying the Setting API
 
