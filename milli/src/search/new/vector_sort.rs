@@ -12,7 +12,7 @@ pub struct VectorSort<Q: RankingRuleQueryTrait> {
     query: Option<Q>,
     target: Vec<f32>,
     vector_candidates: RoaringBitmap,
-    cached_sorted_docids: std::vec::IntoIter<(DocumentId, f32, Vec<f32>)>,
+    cached_sorted_docids: std::vec::IntoIter<(DocumentId, f32)>,
     limit: usize,
     distribution_shift: Option<DistributionShift>,
     embedder_index: u8,
@@ -70,14 +70,9 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         for reader in readers.iter() {
             let nns_by_vector =
                 reader.nns_by_vector(ctx.txn, target, self.limit, None, Some(vector_candidates))?;
-            let vectors: std::result::Result<Vec<_>, _> = nns_by_vector
-                .iter()
-                .map(|(docid, _)| reader.item_vector(ctx.txn, *docid).transpose().unwrap())
-                .collect();
-            let vectors = vectors?;
-            results.extend(nns_by_vector.into_iter().zip(vectors).map(|((x, y), z)| (x, y, z)));
+            results.extend(nns_by_vector.into_iter());
         }
-        results.sort_unstable_by_key(|(_, distance, _)| OrderedFloat(*distance));
+        results.sort_unstable_by_key(|(_, distance)| OrderedFloat(*distance));
         self.cached_sorted_docids = results.into_iter();
 
         Ok(())
@@ -118,14 +113,11 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
             return Ok(Some(RankingRuleOutput {
                 query,
                 candidates: universe.clone(),
-                score: ScoreDetails::Vector(score_details::Vector {
-                    target_vector: self.target.clone(),
-                    value_similarity: None,
-                }),
+                score: ScoreDetails::Vector(score_details::Vector { similarity: None }),
             }));
         }
 
-        for (docid, distance, vector) in self.cached_sorted_docids.by_ref() {
+        for (docid, distance) in self.cached_sorted_docids.by_ref() {
             if vector_candidates.contains(docid) {
                 let score = 1.0 - distance;
                 let score = self
@@ -135,10 +127,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
                 return Ok(Some(RankingRuleOutput {
                     query,
                     candidates: RoaringBitmap::from_iter([docid]),
-                    score: ScoreDetails::Vector(score_details::Vector {
-                        target_vector: self.target.clone(),
-                        value_similarity: Some((vector, score)),
-                    }),
+                    score: ScoreDetails::Vector(score_details::Vector { similarity: Some(score) }),
                 }));
             }
         }
@@ -154,10 +143,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
             return Ok(Some(RankingRuleOutput {
                 query,
                 candidates: universe.clone(),
-                score: ScoreDetails::Vector(score_details::Vector {
-                    target_vector: self.target.clone(),
-                    value_similarity: None,
-                }),
+                score: ScoreDetails::Vector(score_details::Vector { similarity: None }),
             }));
         }
 

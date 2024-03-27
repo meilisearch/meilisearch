@@ -633,10 +633,8 @@ pub fn perform_search(
 
         let mut semantic_score = None;
         for details in &score {
-            if let ScoreDetails::Vector(score_details::Vector {
-                target_vector: _,
-                value_similarity: Some((_matching_vector, similarity)),
-            }) = details
+            if let ScoreDetails::Vector(score_details::Vector { similarity: Some(similarity) }) =
+                details
             {
                 semantic_score = Some(*similarity);
                 break;
