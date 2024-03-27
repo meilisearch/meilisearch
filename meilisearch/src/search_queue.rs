@@ -1,3 +1,22 @@
+//! This file implements a queue of searches to process and the ability to control how many searches can be run in parallel.
+//! We need this because we don't want to process more search requests than we have cores.
+//! That slows down everything and consumes RAM for no reason.
+//! The steps to do a search are to get the `SearchQueue` data structure and try to get a search permit.
+//! This can fail if the queue is full, and we need to drop your search request to register a new one.
+//!
+//! ### How to do a search request
+//!
+//! In order to do a search request you should try to get a search permit.
+//! Retrieve the `SearchQueue` structure from actix-web (`search_queue: Data<SearchQueue>`)
+//! and right before processing the search, calls the `SearchQueue::try_get_search_permit` method: `search_queue.try_get_search_permit().await?;`
+//!
+//! What is going to happen at this point is that you're going to send a oneshot::Sender over an async mpsc channel.
+//! Then, the queue/scheduler is going to either:
+//! - Drop your oneshot channel => that means there are too many searches going on, and yours won't be executed.
+//!                                You should exit and free all the RAM you use ASAP.
+//! - Sends you a Permit => that will unlock the method, and you will be able to process your search.
+//!                         And should drop the Permit only once you have freed all the RAM consumed by the method.
+
 use std::num::NonZeroUsize;
 
 use rand::rngs::StdRng;
@@ -12,6 +31,8 @@ pub struct SearchQueue {
     capacity: usize,
 }
 
+/// You should only run search requests while holding this permit.
+/// Once it's dropped, a new search request will be able to process.
 #[derive(Debug)]
 pub struct Permit {
     sender: mpsc::Sender<()>,
@@ -34,6 +55,10 @@ impl SearchQueue {
         Self { sender, capacity }
     }
 
+    /// This function is the main loop, it's in charge on scheduling which search request should execute first and
+    /// how many should executes at the same time.
+    ///
+    /// It **must never** panic or exit.
     async fn run(
         capacity: usize,
         parallelism: NonZeroUsize,
@@ -42,7 +67,7 @@ impl SearchQueue {
         let mut queue: Vec<oneshot::Sender<Permit>> = Default::default();
         let mut rng: StdRng = StdRng::from_entropy();
         let mut searches_running: usize = 0;
-        // by having a capacity of parallelism we ensures that every time a search finish it can release its RAM asap
+        // By having a capacity of parallelism we ensures that every time a search finish it can release its RAM asap
         let (sender, mut search_finished) = mpsc::channel(parallelism.into());
 
         loop {
@@ -85,6 +110,8 @@ impl SearchQueue {
         }
     }
 
+    /// Returns a search `Permit`.
+    /// It should be dropped as soon as you've freed all the RAM associated with the search request being processed.
     pub async fn try_get_search_permit(&self) -> Result<Permit, MeilisearchHttpError> {
         let (sender, receiver) = oneshot::channel();
         self.sender.send(sender).await.map_err(|_| MeilisearchHttpError::SearchLimiterIsDown)?;
