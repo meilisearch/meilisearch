@@ -33,6 +33,7 @@ enum WeightSource {
 pub struct EmbedderOptions {
     pub model: String,
     pub revision: Option<String>,
+    pub distribution: Option<DistributionShift>,
 }
 
 impl EmbedderOptions {
@@ -40,6 +41,7 @@ impl EmbedderOptions {
         Self {
             model: "BAAI/bge-base-en-v1.5".to_string(),
             revision: Some("617ca489d9e86b49b8167676d8220688b99db36e".into()),
+            distribution: None,
         }
     }
 }
@@ -193,13 +195,15 @@ impl Embedder {
     }
 
     pub fn distribution(&self) -> Option<DistributionShift> {
-        if self.options.model == "BAAI/bge-base-en-v1.5" {
-            Some(DistributionShift {
-                current_mean: ordered_float::OrderedFloat(0.85),
-                current_sigma: ordered_float::OrderedFloat(0.1),
-            })
-        } else {
-            None
-        }
+        self.options.distribution.or_else(|| {
+            if self.options.model == "BAAI/bge-base-en-v1.5" {
+                Some(DistributionShift {
+                    current_mean: ordered_float::OrderedFloat(0.85),
+                    current_sigma: ordered_float::OrderedFloat(0.1),
+                })
+            } else {
+                None
+            }
+        })
     }
 }

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use deserr::{DeserializeError, Deserr};
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
@@ -292,7 +293,7 @@ impl Embedder {
             Embedder::HuggingFace(embedder) => embedder.distribution(),
             Embedder::OpenAi(embedder) => embedder.distribution(),
             Embedder::Ollama(embedder) => embedder.distribution(),
-            Embedder::UserProvided(_embedder) => None,
+            Embedder::UserProvided(embedder) => embedder.distribution(),
             Embedder::Rest(embedder) => embedder.distribution(),
         }
     }
