@@ -237,58 +237,6 @@ impl std::fmt::Display for EmbedderSource {
     }
 }
 
-impl EmbeddingSettings {
-    pub fn apply(&mut self, new: Self) {
-        let EmbeddingSettings {
-            source,
-            model,
-            revision,
-            api_key,
-            dimensions,
-            document_template,
-            url,
-            query,
-            input_field,
-            path_to_embeddings,
-            embedding_object,
-            input_type,
-        } = new;
-        let old_source = self.source;
-        self.source.apply(source);
-        // Reinitialize the whole setting object on a source change
-        if old_source != self.source {
-            *self = EmbeddingSettings {
-                source,
-                model,
-                revision,
-                api_key,
-                dimensions,
-                document_template,
-                url,
-                query,
-                input_field,
-                path_to_embeddings,
-                embedding_object,
-                input_type,
-            };
-            return;
-        }
-
-        self.model.apply(model);
-        self.revision.apply(revision);
-        self.api_key.apply(api_key);
-        self.dimensions.apply(dimensions);
-        self.document_template.apply(document_template);
-
-        self.url.apply(url);
-        self.query.apply(query);
-        self.input_field.apply(input_field);
-        self.path_to_embeddings.apply(path_to_embeddings);
-        self.embedding_object.apply(embedding_object);
-        self.input_type.apply(input_type);
-    }
-}
-
 impl From<EmbeddingConfig> for EmbeddingSettings {
     fn from(value: EmbeddingConfig) -> Self {
         let EmbeddingConfig { embedder_options, prompt } = value;
