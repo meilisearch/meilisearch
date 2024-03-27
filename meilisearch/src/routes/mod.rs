@@ -15,6 +15,7 @@ use tracing::debug;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
+use crate::search_queue::SearchQueue;
 use crate::Opt;
 
 const PAGINATION_DEFAULT_LIMIT: usize = 20;
@@ -385,10 +386,12 @@ pub async fn get_health(
     req: HttpRequest,
     index_scheduler: Data<IndexScheduler>,
     auth_controller: Data<AuthController>,
+    search_queue: Data<SearchQueue>,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     analytics.health_seen(&req);
 
+    search_queue.health().unwrap();
     index_scheduler.health().unwrap();
     auth_controller.health().unwrap();
 

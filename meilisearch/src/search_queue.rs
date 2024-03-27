@@ -117,4 +117,14 @@ impl SearchQueue {
         self.sender.send(sender).await.map_err(|_| MeilisearchHttpError::SearchLimiterIsDown)?;
         receiver.await.map_err(|_| MeilisearchHttpError::TooManySearchRequests(self.capacity))
     }
+
+    /// Returns `Ok(())` if everything seems normal.
+    /// Returns `Err(MeilisearchHttpError::SearchLimiterIsDown)` if the search limiter seems down.
+    pub fn health(&self) -> Result<(), MeilisearchHttpError> {
+        if self.sender.is_closed() {
+            Err(MeilisearchHttpError::SearchLimiterIsDown)
+        } else {
+            Ok(())
+        }
+    }
 }
