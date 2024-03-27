@@ -758,7 +758,6 @@ impl SearchAggregator {
         let SearchResult {
             hits: _,
             query: _,
-            vector: _,
             processing_time_ms,
             hits_info: _,
             facet_distribution: _,

@@ -314,8 +314,6 @@ pub struct SearchHit {
 pub struct SearchResult {
     pub hits: Vec<SearchHit>,
     pub query: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub vector: Option<Vec<f32>>,
     pub processing_time_ms: u128,
     #[serde(flatten)]
     pub hits_info: HitsInfo,
@@ -713,7 +711,6 @@ pub fn perform_search(
         hits: documents,
         hits_info,
         query: query.q.unwrap_or_default(),
-        vector: query.vector,
         processing_time_ms: before_search.elapsed().as_millis(),
         facet_distribution,
         facet_stats,
