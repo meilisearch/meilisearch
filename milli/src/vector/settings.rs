@@ -210,6 +210,66 @@ impl EmbeddingSettings {
             *model = Setting::Set(openai::EmbeddingModel::default().name().to_owned())
         }
     }
+
+    pub(crate) fn apply_and_need_reindex(
+        old: &mut Setting<EmbeddingSettings>,
+        new: Setting<EmbeddingSettings>,
+    ) -> bool {
+        match (old, new) {
+            (
+                Setting::Set(EmbeddingSettings {
+                    source: old_source,
+                    model: old_model,
+                    revision: old_revision,
+                    api_key: old_api_key,
+                    dimensions: old_dimensions,
+                    document_template: old_document_template,
+                    url: old_url,
+                    query: old_query,
+                    input_field: old_input_field,
+                    path_to_embeddings: old_path_to_embeddings,
+                    embedding_object: old_embedding_object,
+                    input_type: old_input_type,
+                    distribution: old_distribution,
+                }),
+                Setting::Set(EmbeddingSettings {
+                    source: new_source,
+                    model: new_model,
+                    revision: new_revision,
+                    api_key: new_api_key,
+                    dimensions: new_dimensions,
+                    document_template: new_document_template,
+                    url: new_url,
+                    query: new_query,
+                    input_field: new_input_field,
+                    path_to_embeddings: new_path_to_embeddings,
+                    embedding_object: new_embedding_object,
+                    input_type: new_input_type,
+                    distribution: new_distribution,
+                }),
+            ) => {
+                let mut needs_reindex = false;
+
+                needs_reindex |= old_source.apply(new_source);
+                needs_reindex |= old_model.apply(new_model);
+                needs_reindex |= old_revision.apply(new_revision);
+                needs_reindex |= old_dimensions.apply(new_dimensions);
+                needs_reindex |= old_document_template.apply(new_document_template);
+                needs_reindex |= old_url.apply(new_url);
+                needs_reindex |= old_query.apply(new_query);
+                needs_reindex |= old_input_field.apply(new_input_field);
+                needs_reindex |= old_path_to_embeddings.apply(new_path_to_embeddings);
+                needs_reindex |= old_embedding_object.apply(new_embedding_object);
+                needs_reindex |= old_input_type.apply(new_input_type);
+
+                old_distribution.apply(new_distribution);
+                old_api_key.apply(new_api_key);
+                needs_reindex
+            }
+            (Setting::Reset, Setting::Reset) | (_, Setting::NotSet) => false,
+            _ => true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]

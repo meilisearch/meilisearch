@@ -976,7 +976,12 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                     match joined {
                         // updated config
                         EitherOrBoth::Both((name, mut old), (_, new)) => {
-                            changed |= old.apply(new);
+                            changed |= EmbeddingSettings::apply_and_need_reindex(&mut old, new);
+                            if changed {
+                                tracing::debug!(embedder = name, "need reindex");
+                            } else {
+                                tracing::debug!(embedder = name, "skip reindex");
+                            }
                             let new = validate_embedding_settings(old, &name)?;
                             new_configs.insert(name, new);
                         }
