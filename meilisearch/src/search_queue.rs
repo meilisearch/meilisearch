@@ -47,6 +47,18 @@ impl SearchQueue {
 
         loop {
             tokio::select! {
+                // biased select because we wants to free up space before trying to register new tasks
+                biased;
+                _ = search_finished.recv() => {
+                    searches_running = searches_running.saturating_sub(1);
+                    if !queue.is_empty() {
+                        // Can't panic: the queue wasn't empty thus the range isn't empty.
+                        let remove = rng.gen_range(0..queue.len());
+                        let channel = queue.swap_remove(remove);
+                        let _ = channel.send(Permit { sender: sender.clone() });
+                    }
+                },
+
                 search_request = receive_new_searches.recv() => {
                     // this unwrap is safe because we're sure the `SearchQueue` still lives somewhere in actix-web
                     let search_request = search_request.unwrap();
@@ -68,15 +80,6 @@ impl SearchQueue {
                         drop(thing);
                     }
                     queue.push(search_request);
-                },
-                _ = search_finished.recv() => {
-                    searches_running = searches_running.saturating_sub(1);
-                    if !queue.is_empty() {
-                        // Can't panic: the queue wasn't empty thus the range isn't empty.
-                        let remove = rng.gen_range(0..queue.len());
-                        let channel = queue.swap_remove(remove);
-                        let _ = channel.send(Permit { sender: sender.clone() });
-                    }
                 },
             }
         }
