@@ -1301,8 +1301,8 @@ impl IndexScheduler {
 
         wtxn.commit().map_err(Error::HeedTransaction)?;
 
-        // Once the tasks are commited, we should delete all the update files associated ASAP to avoid leaking files in case of a restart
-        tracing::debug!("Deleting the upadate files");
+        // Once the tasks are committed, we should delete all the update files associated ASAP to avoid leaking files in case of a restart
+        tracing::debug!("Deleting the update files");
 
         //We take one read transaction **per thread**. Then, every thread is going to pull out new IDs from the roaring bitmap with the help of an atomic shared index into the bitmap
         let idx = AtomicU32::new(0);
@@ -1332,7 +1332,7 @@ impl IndexScheduler {
         Ok(TickOutcome::TickAgain(processed_tasks))
     }
 
-    /// Once the tasks changes have been commited we must send all the tasks that were updated to our webhook if there is one.
+    /// Once the tasks changes have been committed we must send all the tasks that were updated to our webhook if there is one.
     fn notify_webhook(&self, updated: &RoaringBitmap) -> Result<()> {
         if let Some(ref url) = self.webhook_url {
             struct TaskReader<'a, 'b> {
