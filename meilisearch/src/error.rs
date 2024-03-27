@@ -31,7 +31,7 @@ pub enum MeilisearchHttpError {
     MissingPayload(PayloadType),
     #[error("Too many search requests running at the same time: {0}. Retry after 10s.")]
     TooManySearchRequests(usize),
-    #[error("Internal error: Search limiter is down")]
+    #[error("Internal error: Search limiter is down.")]
     SearchLimiterIsDown,
     #[error("The provided payload reached the size limit. The maximum accepted payload size is {}.",  Byte::from_bytes(*.0 as u64).get_appropriate_unit(true))]
     PayloadTooLarge(usize),
