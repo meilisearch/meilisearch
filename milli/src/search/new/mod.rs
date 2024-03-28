@@ -52,7 +52,7 @@ use self::vector_sort::VectorSort;
 use crate::error::FieldIdMapMissingEntry;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::apply_distinct_rule;
-use crate::vector::DistributionShift;
+use crate::vector::Embedder;
 use crate::{
     AscDesc, DocumentId, FieldId, Filter, Index, Member, Result, TermsMatchingStrategy, TimeBudget,
     UserError,
@@ -298,8 +298,8 @@ fn get_ranking_rules_for_vector<'ctx>(
     geo_strategy: geo_sort::Strategy,
     limit_plus_offset: usize,
     target: &[f32],
-    distribution_shift: Option<DistributionShift>,
     embedder_name: &str,
+    embedder: &Embedder,
 ) -> Result<Vec<BoxRankingRule<'ctx, PlaceholderQuery>>> {
     // query graph search
 
@@ -325,8 +325,8 @@ fn get_ranking_rules_for_vector<'ctx>(
                         target.to_vec(),
                         vector_candidates,
                         limit_plus_offset,
-                        distribution_shift,
                         embedder_name,
+                        embedder,
                     )?;
                     ranking_rules.push(Box::new(vector_sort));
                     vector = true;
@@ -548,8 +548,8 @@ pub fn execute_vector_search(
     geo_strategy: geo_sort::Strategy,
     from: usize,
     length: usize,
-    distribution_shift: Option<DistributionShift>,
     embedder_name: &str,
+    embedder: &Embedder,
     time_budget: TimeBudget,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
@@ -562,8 +562,8 @@ pub fn execute_vector_search(
         geo_strategy,
         from + length,
         vector,
-        distribution_shift,
         embedder_name,
+        embedder,
     )?;
 
     let mut placeholder_search_logger = logger::DefaultSearchLogger;

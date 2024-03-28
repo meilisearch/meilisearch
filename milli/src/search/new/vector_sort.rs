@@ -5,7 +5,7 @@ use roaring::RoaringBitmap;
 
 use super::ranking_rules::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait};
 use crate::score_details::{self, ScoreDetails};
-use crate::vector::DistributionShift;
+use crate::vector::{DistributionShift, Embedder};
 use crate::{DocumentId, Result, SearchContext, SearchLogger};
 
 pub struct VectorSort<Q: RankingRuleQueryTrait> {
@@ -24,8 +24,8 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         target: Vec<f32>,
         vector_candidates: RoaringBitmap,
         limit: usize,
-        distribution_shift: Option<DistributionShift>,
         embedder_name: &str,
+        embedder: &Embedder,
     ) -> Result<Self> {
         let embedder_index = ctx
             .index
@@ -39,7 +39,7 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
             vector_candidates,
             cached_sorted_docids: Default::default(),
             limit,
-            distribution_shift,
+            distribution_shift: embedder.distribution(),
             embedder_index,
         })
     }

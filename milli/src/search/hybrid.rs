@@ -4,6 +4,7 @@ use itertools::Itertools;
 use roaring::RoaringBitmap;
 
 use crate::score_details::{ScoreDetails, ScoreValue, ScoringStrategy};
+use crate::search::SemanticSearch;
 use crate::{MatchingWords, Result, Search, SearchResult};
 
 struct ScoreWithRatioResult {
@@ -126,7 +127,6 @@ impl<'a> Search<'a> {
         // create separate keyword and semantic searches
         let mut search = Search {
             query: self.query.clone(),
-            vector: self.vector.clone(),
             filter: self.filter.clone(),
             offset: 0,
             limit: self.limit + self.offset,
@@ -139,26 +139,41 @@ impl<'a> Search<'a> {
             exhaustive_number_hits: self.exhaustive_number_hits,
             rtxn: self.rtxn,
             index: self.index,
-            distribution_shift: self.distribution_shift,
-            embedder_name: self.embedder_name.clone(),
+            semantic: self.semantic.clone(),
             time_budget: self.time_budget.clone(),
         };
 
-        let vector_query = search.vector.take();
+        let semantic = search.semantic.take();
         let keyword_results = search.execute()?;
-
-        // skip semantic search if we don't have a vector query (placeholder search)
-        let Some(vector_query) = vector_query else {
-            return Ok(keyword_results);
-        };
 
         // completely skip semantic search if the results of the keyword search are good enough
         if self.results_good_enough(&keyword_results, semantic_ratio) {
             return Ok(keyword_results);
         }
 
-        search.vector = Some(vector_query);
-        search.query = None;
+        // no vector search against placeholder search
+        let Some(query) = search.query.take() else { return Ok(keyword_results) };
+        // no embedder, no semantic search
+        let Some(SemanticSearch { vector, embedder_name, embedder }) = semantic else {
+            return Ok(keyword_results);
+        };
+
+        let vector_query = match vector {
+            Some(vector_query) => vector_query,
+            None => {
+                // attempt to embed the vector
+                match embedder.embed_one(query) {
+                    Ok(embedding) => embedding,
+                    Err(error) => {
+                        tracing::error!(error=%error, "Embedding failed");
+                        return Ok(keyword_results);
+                    }
+                }
+            }
+        };
+
+        search.semantic =
+            Some(SemanticSearch { vector: Some(vector_query), embedder_name, embedder });
 
         // TODO: would be better to have two distinct functions at this point
         let vector_results = search.execute()?;
