@@ -1,12 +1,14 @@
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Write};
 
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use bstr::ByteSlice as _;
+use bytes::Bytes;
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::Deserr;
 use futures::StreamExt;
+use futures_util::Stream;
 use index_scheduler::{IndexScheduler, TaskId};
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
@@ -22,7 +24,9 @@ use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::{milli, Document, Index};
 use mime::Mime;
 use once_cell::sync::Lazy;
-use serde::Deserialize;
+use roaring::RoaringBitmap;
+use serde::ser::SerializeSeq;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tempfile::tempfile;
 use tokio::fs::File;
@@ -230,6 +234,34 @@ pub async fn get_documents(
     documents_by_query(&index_scheduler, index_uid, query)
 }
 
+pub struct Writer2Streamer {
+    sender: tokio::sync::mpsc::Sender<Result<Bytes, anyhow::Error>>,
+}
+
+impl Write for Writer2Streamer {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.sender.blocking_send(Ok(buf.to_vec().into())).map_err(std::io::Error::other)?;
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+pub fn stream(
+    data: impl Serialize + Send + Sync + 'static,
+) -> impl Stream<Item = Result<Bytes, anyhow::Error>> {
+    let (sender, receiver) = tokio::sync::mpsc::channel::<Result<Bytes, anyhow::Error>>(1);
+
+    tokio::task::spawn_blocking(move || {
+        serde_json::to_writer(std::io::BufWriter::new(Writer2Streamer { sender }), &data)
+    });
+    futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|value| (value, receiver))
+    })
+}
+
 fn documents_by_query(
     index_scheduler: &IndexScheduler,
     index_uid: web::Path<String>,
@@ -239,12 +271,13 @@ fn documents_by_query(
     let BrowseQuery { offset, limit, fields, filter } = query;
 
     let index = index_scheduler.index(&index_uid)?;
-    let (total, documents) = retrieve_documents(&index, offset, limit, filter, fields)?;
+    let documents = retrieve_documents(index, offset, limit, filter, fields)?;
 
-    let ret = PaginationView::new(offset, limit, total as usize, documents);
+    let ret = PaginationView::new(offset, limit, documents.total_documents as usize, documents);
 
     debug!(returns = ?ret, "Get documents");
-    Ok(HttpResponse::Ok().json(ret))
+
+    Ok(HttpResponse::Ok().streaming(stream(ret)))
 }
 
 #[derive(Deserialize, Debug, Deserr)]
@@ -590,13 +623,46 @@ fn some_documents<'a, 't: 'a>(
     }))
 }
 
-fn retrieve_documents<S: AsRef<str>>(
-    index: &Index,
+pub struct DocumentsStreamer {
+    attributes_to_retrieve: Option<Vec<String>>,
+    documents: RoaringBitmap,
+    index: Index,
+    pub total_documents: u64,
+}
+
+impl Serialize for DocumentsStreamer {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let rtxn = self.index.read_txn().unwrap();
+
+        let mut seq = serializer.serialize_seq(Some(self.documents.len() as usize)).unwrap();
+
+        let documents = some_documents(&self.index, &rtxn, self.documents.iter()).unwrap();
+        for document in documents {
+            let document = document.unwrap();
+            let document = match self.attributes_to_retrieve {
+                Some(ref attributes_to_retrieve) => permissive_json_pointer::select_values(
+                    &document,
+                    attributes_to_retrieve.iter().map(|s| s.as_ref()),
+                ),
+                None => document,
+            };
+
+            seq.serialize_element(&document)?;
+        }
+        seq.end()
+    }
+}
+
+fn retrieve_documents(
+    index: Index,
     offset: usize,
     limit: usize,
     filter: Option<Value>,
-    attributes_to_retrieve: Option<Vec<S>>,
-) -> Result<(u64, Vec<Document>), ResponseError> {
+    attributes_to_retrieve: Option<Vec<String>>,
+) -> Result<DocumentsStreamer, ResponseError> {
     let rtxn = index.read_txn()?;
     let filter = &filter;
     let filter = if let Some(filter) = filter {
@@ -607,7 +673,7 @@ fn retrieve_documents<S: AsRef<str>>(
     };
 
     let candidates = if let Some(filter) = filter {
-        filter.evaluate(&rtxn, index).map_err(|err| match err {
+        filter.evaluate(&rtxn, &index).map_err(|err| match err {
             milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
                 ResponseError::from_msg(err.to_string(), Code::InvalidDocumentFilter)
             }
@@ -616,28 +682,14 @@ fn retrieve_documents<S: AsRef<str>>(
     } else {
         index.documents_ids(&rtxn)?
     };
+    drop(rtxn);
 
-    let (it, number_of_documents) = {
-        let number_of_documents = candidates.len();
-        (
-            some_documents(index, &rtxn, candidates.into_iter().skip(offset).take(limit))?,
-            number_of_documents,
-        )
-    };
-
-    let documents: Result<Vec<_>, ResponseError> = it
-        .map(|document| {
-            Ok(match &attributes_to_retrieve {
-                Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
-                    &document?,
-                    attributes_to_retrieve.iter().map(|s| s.as_ref()),
-                ),
-                None => document?,
-            })
-        })
-        .collect();
-
-    Ok((number_of_documents, documents?))
+    Ok(DocumentsStreamer {
+        total_documents: candidates.len(),
+        attributes_to_retrieve,
+        documents: candidates.into_iter().skip(offset).take(limit).collect(),
+        index,
+    })
 }
 
 fn retrieve_document<S: AsRef<str>>(
