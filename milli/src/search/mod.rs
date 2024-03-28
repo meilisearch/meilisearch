@@ -183,6 +183,7 @@ impl<'a> Search<'a> {
             documents_ids,
             document_scores,
             degraded,
+            used_negative_operator,
         } = match self.vector.as_ref() {
             Some(vector) => execute_vector_search(
                 &mut ctx,
@@ -221,7 +222,14 @@ impl<'a> Search<'a> {
             None => MatchingWords::default(),
         };
 
-        Ok(SearchResult { matching_words, candidates, document_scores, documents_ids, degraded })
+        Ok(SearchResult {
+            matching_words,
+            candidates,
+            document_scores,
+            documents_ids,
+            degraded,
+            used_negative_operator,
+        })
     }
 }
 
@@ -272,6 +280,7 @@ pub struct SearchResult {
     pub documents_ids: Vec<DocumentId>,
     pub document_scores: Vec<Vec<ScoreDetails>>,
     pub degraded: bool,
+    pub used_negative_operator: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

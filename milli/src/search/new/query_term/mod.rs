@@ -9,7 +9,9 @@ use std::ops::RangeInclusive;
 
 use either::Either;
 pub use ntypo_subset::NTypoTermSubset;
-pub use parse_query::{located_query_terms_from_tokens, make_ngram, number_of_typos_allowed};
+pub use parse_query::{
+    located_query_terms_from_tokens, make_ngram, number_of_typos_allowed, ExtractedTokens,
+};
 pub use phrase::Phrase;
 
 use super::interner::{DedupInterner, Interned};
@@ -478,6 +480,11 @@ impl QueryTerm {
     pub fn original_word(&self, ctx: &SearchContext) -> String {
         ctx.word_interner.get(self.original).clone()
     }
+
+    pub fn original_phrase(&self) -> Option<Interned<Phrase>> {
+        self.zero_typo.phrase
+    }
+
     pub fn all_computed_derivations(&self) -> (Vec<Interned<String>>, Vec<Interned<Phrase>>) {
         let mut words = BTreeSet::new();
         let mut phrases = BTreeSet::new();

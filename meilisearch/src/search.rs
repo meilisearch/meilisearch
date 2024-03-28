@@ -324,9 +324,11 @@ pub struct SearchResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facet_stats: Option<BTreeMap<String, FacetStats>>,
 
-    // This information is only used for analytics purposes
+    // These fields are only used for analytics purposes
     #[serde(skip)]
     pub degraded: bool,
+    #[serde(skip)]
+    pub used_negative_operator: bool,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -512,6 +514,7 @@ pub fn perform_search(
         candidates,
         document_scores,
         degraded,
+        used_negative_operator,
         ..
     } = match &query.hybrid {
         Some(hybrid) => match *hybrid.semantic_ratio {
@@ -717,6 +720,7 @@ pub fn perform_search(
         facet_distribution,
         facet_stats,
         degraded,
+        used_negative_operator,
     };
     Ok(result)
 }
