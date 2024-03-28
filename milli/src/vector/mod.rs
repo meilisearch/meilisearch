@@ -237,6 +237,17 @@ impl Embedder {
         }
     }
 
+    pub fn embed_one(&self, text: String) -> std::result::Result<Embedding, EmbedError> {
+        let mut embeddings = self.embed(vec![text])?;
+        let embeddings = embeddings.pop().ok_or_else(EmbedError::missing_embedding)?;
+        Ok(if embeddings.iter().nth(1).is_some() {
+            tracing::warn!("Ignoring embeddings past the first one in long search query");
+            embeddings.iter().next().unwrap().to_vec()
+        } else {
+            embeddings.into_inner()
+        })
+    }
+
     /// Embed multiple chunks of texts.
     ///
     /// Each chunk is composed of one or multiple texts.

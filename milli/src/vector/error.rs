@@ -58,7 +58,7 @@ pub enum EmbedErrorKind {
     RestResponseDeserialization(std::io::Error),
     #[error("component `{0}` not found in path `{1}` in response: `{2}`")]
     RestResponseMissingEmbeddings(String, String, String),
-    #[error("expected a response parseable as a vector or an array of vectors: {0}")]
+    #[error("unexpected format of the embedding response: {0}")]
     RestResponseFormat(serde_json::Error),
     #[error("expected a response containing {0} embeddings, got only {1}")]
     RestResponseEmbeddingCount(usize, usize),
@@ -78,6 +78,8 @@ pub enum EmbedErrorKind {
     RestNotAnObject(serde_json::Value, Vec<String>),
     #[error("while embedding tokenized, was expecting embeddings of dimension `{0}`, got embeddings of dimensions `{1}`")]
     OpenAiUnexpectedDimension(usize, usize),
+    #[error("no embedding was produced")]
+    MissingEmbedding,
 }
 
 impl EmbedError {
@@ -189,6 +191,9 @@ impl EmbedError {
             kind: EmbedErrorKind::OpenAiUnexpectedDimension(expected, got),
             fault: FaultSource::Runtime,
         }
+    }
+    pub(crate) fn missing_embedding() -> EmbedError {
+        Self { kind: EmbedErrorKind::MissingEmbedding, fault: FaultSource::Undecided }
     }
 }
 
