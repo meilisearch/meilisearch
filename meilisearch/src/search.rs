@@ -6,7 +6,6 @@ use std::time::{Duration, Instant};
 
 use deserr::Deserr;
 use either::Either;
-use index_scheduler::RoFeatures;
 use indexmap::IndexMap;
 use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::DeserrJsonError;
@@ -448,20 +447,11 @@ fn prepare_search<'t>(
     index: &'t Index,
     rtxn: &'t RoTxn,
     query: &'t SearchQuery,
-    features: RoFeatures,
     search_kind: &SearchKind,
     time_budget: TimeBudget,
 ) -> Result<(milli::Search<'t>, bool, usize, usize), MeilisearchHttpError> {
     let mut search = index.search(rtxn);
     search.time_budget(time_budget);
-
-    if query.vector.is_some() {
-        features.check_vector("Passing `vector` as a query parameter")?;
-    }
-
-    if query.hybrid.is_some() {
-        features.check_vector("Passing `hybrid` as a query parameter")?;
-    }
 
     match search_kind {
         SearchKind::KeywordOnly => {
@@ -551,7 +541,6 @@ fn prepare_search<'t>(
 pub fn perform_search(
     index: &Index,
     query: SearchQuery,
-    features: RoFeatures,
     search_kind: SearchKind,
 ) -> Result<SearchResult, MeilisearchHttpError> {
     let before_search = Instant::now();
@@ -562,7 +551,7 @@ pub fn perform_search(
     };
 
     let (search, is_finite_pagination, max_total_hits, offset) =
-        prepare_search(index, &rtxn, &query, features, &search_kind, time_budget)?;
+        prepare_search(index, &rtxn, &query, &search_kind, time_budget)?;
 
     let milli::SearchResult {
         documents_ids,
@@ -780,7 +769,6 @@ pub fn perform_facet_search(
     search_query: SearchQuery,
     facet_query: Option<String>,
     facet_name: String,
-    features: RoFeatures,
     search_kind: SearchKind,
 ) -> Result<FacetSearchResult, MeilisearchHttpError> {
     let before_search = Instant::now();
@@ -790,8 +778,7 @@ pub fn perform_facet_search(
         None => TimeBudget::default(),
     };
 
-    let (search, _, _, _) =
-        prepare_search(index, &rtxn, &search_query, features, &search_kind, time_budget)?;
+    let (search, _, _, _) = prepare_search(index, &rtxn, &search_query, &search_kind, time_budget)?;
     let mut facet_search = SearchForFacetValues::new(
         facet_name,
         search,

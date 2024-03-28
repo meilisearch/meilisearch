@@ -1,7 +1,7 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
-use index_scheduler::IndexScheduler;
+use index_scheduler::{IndexScheduler, RoFeatures};
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
@@ -204,12 +204,11 @@ pub async fn search_with_url_query(
     let index = index_scheduler.index(&index_uid)?;
     let features = index_scheduler.features();
 
-    let search_kind = search_kind(&query, index_scheduler.get_ref(), &index)?;
+    let search_kind = search_kind(&query, index_scheduler.get_ref(), &index, features)?;
 
     let _permit = search_queue.try_get_search_permit().await?;
     let search_result =
-        tokio::task::spawn_blocking(move || perform_search(&index, query, features, search_kind))
-            .await?;
+        tokio::task::spawn_blocking(move || perform_search(&index, query, search_kind)).await?;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
@@ -245,12 +244,11 @@ pub async fn search_with_post(
 
     let features = index_scheduler.features();
 
-    let search_kind = search_kind(&query, index_scheduler.get_ref(), &index)?;
+    let search_kind = search_kind(&query, index_scheduler.get_ref(), &index, features)?;
 
     let _permit = search_queue.try_get_search_permit().await?;
     let search_result =
-        tokio::task::spawn_blocking(move || perform_search(&index, query, features, search_kind))
-            .await?;
+        tokio::task::spawn_blocking(move || perform_search(&index, query, search_kind)).await?;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
         if search_result.degraded {
@@ -269,7 +267,16 @@ pub fn search_kind(
     query: &SearchQuery,
     index_scheduler: &IndexScheduler,
     index: &milli::Index,
+    features: RoFeatures,
 ) -> Result<SearchKind, ResponseError> {
+    if query.vector.is_some() {
+        features.check_vector("Passing `vector` as a query parameter")?;
+    }
+
+    if query.hybrid.is_some() {
+        features.check_vector("Passing `hybrid` as a query parameter")?;
+    }
+
     // regardless of anything, always do a semantic search when we don't have a vector and the query is whitespace or missing
     if query.vector.is_none() {
         match &query.q {
