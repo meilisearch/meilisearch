@@ -143,7 +143,7 @@ impl EmbeddingConfigs {
 
     /// Get the default embedder configuration, if any.
     pub fn get_default(&self) -> Option<(Arc<Embedder>, Arc<Prompt>)> {
-        self.get_default_embedder_name().and_then(|default| self.get(&default))
+        self.get(self.get_default_embedder_name())
     }
 
     /// Get the name of the default embedder configuration.
@@ -153,14 +153,14 @@ impl EmbeddingConfigs {
     /// - If there is only one embedder, it is always the default.
     /// - If there are multiple embedders and one of them is called `default`, then that one is the default embedder.
     /// - In all other cases, there is no default embedder.
-    pub fn get_default_embedder_name(&self) -> Option<String> {
+    pub fn get_default_embedder_name(&self) -> &str {
         let mut it = self.0.keys();
         let first_name = it.next();
         let second_name = it.next();
         match (first_name, second_name) {
-            (None, _) => None,
-            (Some(first), None) => Some(first.to_owned()),
-            (Some(_), Some(_)) => Some("default".to_owned()),
+            (None, _) => "default",
+            (Some(first), None) => first,
+            (Some(_), Some(_)) => "default",
         }
     }
 }
