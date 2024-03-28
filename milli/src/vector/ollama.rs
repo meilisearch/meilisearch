@@ -14,11 +14,12 @@ pub struct EmbedderOptions {
     pub embedding_model: String,
     pub url: Option<String>,
     pub api_key: Option<String>,
+    pub distribution: Option<DistributionShift>,
 }
 
 impl EmbedderOptions {
     pub fn with_default_model(api_key: Option<String>, url: Option<String>) -> Self {
-        Self { embedding_model: "nomic-embed-text".into(), api_key, url }
+        Self { embedding_model: "nomic-embed-text".into(), api_key, url, distribution: None }
     }
 }
 
@@ -27,8 +28,8 @@ impl Embedder {
         let model = options.embedding_model.as_str();
         let rest_embedder = match RestEmbedder::new(RestEmbedderOptions {
             api_key: options.api_key,
-            distribution: None,
             dimensions: None,
+            distribution: options.distribution,
             url: options.url.unwrap_or_else(get_ollama_path),
             query: serde_json::json!({
                 "model": model,
@@ -90,7 +91,7 @@ impl Embedder {
     }
 
     pub fn distribution(&self) -> Option<DistributionShift> {
-        None
+        self.rest_embedder.distribution()
     }
 }
 

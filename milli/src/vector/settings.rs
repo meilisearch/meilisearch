@@ -2,7 +2,7 @@ use deserr::Deserr;
 use serde::{Deserialize, Serialize};
 
 use super::rest::InputType;
-use super::{ollama, openai};
+use super::{ollama, openai, DistributionShift};
 use crate::prompt::PromptData;
 use crate::update::Setting;
 use crate::vector::EmbeddingConfig;
@@ -48,6 +48,9 @@ pub struct EmbeddingSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     pub input_type: Setting<InputType>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
+    pub distribution: Setting<DistributionShift>,
 }
 
 pub fn check_unset<T>(
@@ -101,6 +104,8 @@ impl EmbeddingSettings {
     pub const EMBEDDING_OBJECT: &'static str = "embeddingObject";
     pub const INPUT_TYPE: &'static str = "inputType";
 
+    pub const DISTRIBUTION: &'static str = "distribution";
+
     pub fn allowed_sources_for_field(field: &'static str) -> &'static [EmbedderSource] {
         match field {
             Self::SOURCE => &[
@@ -132,6 +137,13 @@ impl EmbeddingSettings {
             Self::PATH_TO_EMBEDDINGS => &[EmbedderSource::Rest],
             Self::EMBEDDING_OBJECT => &[EmbedderSource::Rest],
             Self::INPUT_TYPE => &[EmbedderSource::Rest],
+            Self::DISTRIBUTION => &[
+                EmbedderSource::HuggingFace,
+                EmbedderSource::Ollama,
+                EmbedderSource::OpenAi,
+                EmbedderSource::Rest,
+                EmbedderSource::UserProvided,
+            ],
             _other => unreachable!("unknown field"),
         }
     }
@@ -144,14 +156,24 @@ impl EmbeddingSettings {
                 Self::API_KEY,
                 Self::DOCUMENT_TEMPLATE,
                 Self::DIMENSIONS,
+                Self::DISTRIBUTION,
             ],
-            EmbedderSource::HuggingFace => {
-                &[Self::SOURCE, Self::MODEL, Self::REVISION, Self::DOCUMENT_TEMPLATE]
-            }
-            EmbedderSource::Ollama => {
-                &[Self::SOURCE, Self::MODEL, Self::DOCUMENT_TEMPLATE, Self::URL, Self::API_KEY]
-            }
-            EmbedderSource::UserProvided => &[Self::SOURCE, Self::DIMENSIONS],
+            EmbedderSource::HuggingFace => &[
+                Self::SOURCE,
+                Self::MODEL,
+                Self::REVISION,
+                Self::DOCUMENT_TEMPLATE,
+                Self::DISTRIBUTION,
+            ],
+            EmbedderSource::Ollama => &[
+                Self::SOURCE,
+                Self::MODEL,
+                Self::DOCUMENT_TEMPLATE,
+                Self::URL,
+                Self::API_KEY,
+                Self::DISTRIBUTION,
+            ],
+            EmbedderSource::UserProvided => &[Self::SOURCE, Self::DIMENSIONS, Self::DISTRIBUTION],
             EmbedderSource::Rest => &[
                 Self::SOURCE,
                 Self::API_KEY,
@@ -163,6 +185,7 @@ impl EmbeddingSettings {
                 Self::PATH_TO_EMBEDDINGS,
                 Self::EMBEDDING_OBJECT,
                 Self::INPUT_TYPE,
+                Self::DISTRIBUTION,
             ],
         }
     }
@@ -185,6 +208,66 @@ impl EmbeddingSettings {
         }) = setting
         {
             *model = Setting::Set(openai::EmbeddingModel::default().name().to_owned())
+        }
+    }
+
+    pub(crate) fn apply_and_need_reindex(
+        old: &mut Setting<EmbeddingSettings>,
+        new: Setting<EmbeddingSettings>,
+    ) -> bool {
+        match (old, new) {
+            (
+                Setting::Set(EmbeddingSettings {
+                    source: old_source,
+                    model: old_model,
+                    revision: old_revision,
+                    api_key: old_api_key,
+                    dimensions: old_dimensions,
+                    document_template: old_document_template,
+                    url: old_url,
+                    query: old_query,
+                    input_field: old_input_field,
+                    path_to_embeddings: old_path_to_embeddings,
+                    embedding_object: old_embedding_object,
+                    input_type: old_input_type,
+                    distribution: old_distribution,
+                }),
+                Setting::Set(EmbeddingSettings {
+                    source: new_source,
+                    model: new_model,
+                    revision: new_revision,
+                    api_key: new_api_key,
+                    dimensions: new_dimensions,
+                    document_template: new_document_template,
+                    url: new_url,
+                    query: new_query,
+                    input_field: new_input_field,
+                    path_to_embeddings: new_path_to_embeddings,
+                    embedding_object: new_embedding_object,
+                    input_type: new_input_type,
+                    distribution: new_distribution,
+                }),
+            ) => {
+                let mut needs_reindex = false;
+
+                needs_reindex |= old_source.apply(new_source);
+                needs_reindex |= old_model.apply(new_model);
+                needs_reindex |= old_revision.apply(new_revision);
+                needs_reindex |= old_dimensions.apply(new_dimensions);
+                needs_reindex |= old_document_template.apply(new_document_template);
+                needs_reindex |= old_url.apply(new_url);
+                needs_reindex |= old_query.apply(new_query);
+                needs_reindex |= old_input_field.apply(new_input_field);
+                needs_reindex |= old_path_to_embeddings.apply(new_path_to_embeddings);
+                needs_reindex |= old_embedding_object.apply(new_embedding_object);
+                needs_reindex |= old_input_type.apply(new_input_type);
+
+                old_distribution.apply(new_distribution);
+                old_api_key.apply(new_api_key);
+                needs_reindex
+            }
+            (Setting::Reset, Setting::Reset) | (_, Setting::NotSet) => false,
+            _ => true,
         }
     }
 }
@@ -214,58 +297,6 @@ impl std::fmt::Display for EmbedderSource {
     }
 }
 
-impl EmbeddingSettings {
-    pub fn apply(&mut self, new: Self) {
-        let EmbeddingSettings {
-            source,
-            model,
-            revision,
-            api_key,
-            dimensions,
-            document_template,
-            url,
-            query,
-            input_field,
-            path_to_embeddings,
-            embedding_object,
-            input_type,
-        } = new;
-        let old_source = self.source;
-        self.source.apply(source);
-        // Reinitialize the whole setting object on a source change
-        if old_source != self.source {
-            *self = EmbeddingSettings {
-                source,
-                model,
-                revision,
-                api_key,
-                dimensions,
-                document_template,
-                url,
-                query,
-                input_field,
-                path_to_embeddings,
-                embedding_object,
-                input_type,
-            };
-            return;
-        }
-
-        self.model.apply(model);
-        self.revision.apply(revision);
-        self.api_key.apply(api_key);
-        self.dimensions.apply(dimensions);
-        self.document_template.apply(document_template);
-
-        self.url.apply(url);
-        self.query.apply(query);
-        self.input_field.apply(input_field);
-        self.path_to_embeddings.apply(path_to_embeddings);
-        self.embedding_object.apply(embedding_object);
-        self.input_type.apply(input_type);
-    }
-}
-
 impl From<EmbeddingConfig> for EmbeddingSettings {
     fn from(value: EmbeddingConfig) -> Self {
         let EmbeddingConfig { embedder_options, prompt } = value;
@@ -283,6 +314,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 path_to_embeddings: Setting::NotSet,
                 embedding_object: Setting::NotSet,
                 input_type: Setting::NotSet,
+                distribution: options.distribution.map(Setting::Set).unwrap_or_default(),
             },
             super::EmbedderOptions::OpenAi(options) => Self {
                 source: Setting::Set(EmbedderSource::OpenAi),
@@ -297,6 +329,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 path_to_embeddings: Setting::NotSet,
                 embedding_object: Setting::NotSet,
                 input_type: Setting::NotSet,
+                distribution: options.distribution.map(Setting::Set).unwrap_or_default(),
             },
             super::EmbedderOptions::Ollama(options) => Self {
                 source: Setting::Set(EmbedderSource::Ollama),
@@ -311,6 +344,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 path_to_embeddings: Setting::NotSet,
                 embedding_object: Setting::NotSet,
                 input_type: Setting::NotSet,
+                distribution: options.distribution.map(Setting::Set).unwrap_or_default(),
             },
             super::EmbedderOptions::UserProvided(options) => Self {
                 source: Setting::Set(EmbedderSource::UserProvided),
@@ -325,11 +359,10 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 path_to_embeddings: Setting::NotSet,
                 embedding_object: Setting::NotSet,
                 input_type: Setting::NotSet,
+                distribution: options.distribution.map(Setting::Set).unwrap_or_default(),
             },
             super::EmbedderOptions::Rest(super::rest::EmbedderOptions {
                 api_key,
-                // TODO: support distribution
-                distribution: _,
                 dimensions,
                 url,
                 query,
@@ -337,6 +370,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 path_to_embeddings,
                 embedding_object,
                 input_type,
+                distribution,
             }) => Self {
                 source: Setting::Set(EmbedderSource::Rest),
                 model: Setting::NotSet,
@@ -350,6 +384,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 path_to_embeddings: Setting::Set(path_to_embeddings),
                 embedding_object: Setting::Set(embedding_object),
                 input_type: Setting::Set(input_type),
+                distribution: distribution.map(Setting::Set).unwrap_or_default(),
             },
         }
     }
@@ -371,7 +406,9 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
             path_to_embeddings,
             embedding_object,
             input_type,
+            distribution,
         } = value;
+
         if let Some(source) = source.set() {
             match source {
                 EmbedderSource::OpenAi => {
@@ -387,6 +424,7 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
                     if let Some(dimensions) = dimensions.set() {
                         options.dimensions = Some(dimensions);
                     }
+                    options.distribution = distribution.set();
                     this.embedder_options = super::EmbedderOptions::OpenAi(options);
                 }
                 EmbedderSource::Ollama => {
@@ -399,6 +437,7 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
                         options.embedding_model = model;
                     }
 
+                    options.distribution = distribution.set();
                     this.embedder_options = super::EmbedderOptions::Ollama(options);
                 }
                 EmbedderSource::HuggingFace => {
@@ -415,12 +454,14 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
                     if let Some(revision) = revision.set() {
                         options.revision = Some(revision);
                     }
+                    options.distribution = distribution.set();
                     this.embedder_options = super::EmbedderOptions::HuggingFace(options);
                 }
                 EmbedderSource::UserProvided => {
                     this.embedder_options =
                         super::EmbedderOptions::UserProvided(super::manual::EmbedderOptions {
                             dimensions: dimensions.set().unwrap(),
+                            distribution: distribution.set(),
                         });
                 }
                 EmbedderSource::Rest => {
@@ -429,7 +470,6 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
                     this.embedder_options =
                         super::EmbedderOptions::Rest(super::rest::EmbedderOptions {
                             api_key: api_key.set(),
-                            distribution: None,
                             dimensions: dimensions.set(),
                             url: url.set().unwrap(),
                             query: query.set().unwrap_or(embedder_options.query),
@@ -441,6 +481,7 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
                                 .set()
                                 .unwrap_or(embedder_options.embedding_object),
                             input_type: input_type.set().unwrap_or(embedder_options.input_type),
+                            distribution: distribution.set(),
                         })
                 }
             }

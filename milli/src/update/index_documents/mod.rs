@@ -2652,6 +2652,7 @@ mod tests {
                         path_to_embeddings: Setting::NotSet,
                         embedding_object: Setting::NotSet,
                         input_type: Setting::NotSet,
+                        distribution: Setting::NotSet,
                     }),
                 );
                 settings.set_embedder_settings(embedders);
