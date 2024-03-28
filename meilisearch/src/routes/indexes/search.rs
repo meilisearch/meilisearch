@@ -23,6 +23,7 @@ use crate::search::{
     DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
     DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
+use crate::search_queue::SearchQueue;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -182,6 +183,7 @@ fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 
 pub async fn search_with_url_query(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
+    search_queue: web::Data<SearchQueue>,
     index_uid: web::Path<String>,
     params: AwebQueryParameter<SearchQueryGet, DeserrQueryParamError>,
     req: HttpRequest,
@@ -204,6 +206,7 @@ pub async fn search_with_url_query(
 
     let distribution = embed(&mut query, index_scheduler.get_ref(), &index)?;
 
+    let _permit = search_queue.try_get_search_permit().await?;
     let search_result =
         tokio::task::spawn_blocking(move || perform_search(&index, query, features, distribution))
             .await?;
@@ -220,6 +223,7 @@ pub async fn search_with_url_query(
 
 pub async fn search_with_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
+    search_queue: web::Data<SearchQueue>,
     index_uid: web::Path<String>,
     params: AwebJson<SearchQuery, DeserrJsonError>,
     req: HttpRequest,
@@ -243,6 +247,7 @@ pub async fn search_with_post(
 
     let distribution = embed(&mut query, index_scheduler.get_ref(), &index)?;
 
+    let _permit = search_queue.try_get_search_permit().await?;
     let search_result =
         tokio::task::spawn_blocking(move || perform_search(&index, query, features, distribution))
             .await?;

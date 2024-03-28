@@ -10,6 +10,7 @@ mod hybrid;
 mod multi;
 mod pagination;
 mod restrict_searchable;
+mod search_queue;
 
 use once_cell::sync::Lazy;
 
