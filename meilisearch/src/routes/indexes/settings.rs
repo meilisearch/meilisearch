@@ -7,7 +7,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::facet_values_sort::FacetValuesSort;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::update::Setting;
-use meilisearch_types::settings::{settings, RankingRuleView, Settings, Unchecked};
+use meilisearch_types::settings::{settings, RankingRuleView, SecretPolicy, Settings, Unchecked};
 use meilisearch_types::tasks::KindWithContent;
 use serde_json::json;
 use tracing::debug;
@@ -134,7 +134,7 @@ macro_rules! make_setting_route {
 
                 let index = index_scheduler.index(&index_uid)?;
                 let rtxn = index.read_txn()?;
-                let settings = settings(&index, &rtxn)?;
+                let settings = settings(&index, &rtxn, meilisearch_types::settings::SecretPolicy::HideSecrets)?;
 
                 debug!(returns = ?settings, "Update settings");
                 let mut json = serde_json::json!(&settings);
@@ -819,7 +819,7 @@ pub async fn get_all(
 
     let index = index_scheduler.index(&index_uid)?;
     let rtxn = index.read_txn()?;
-    let new_settings = settings(&index, &rtxn)?;
+    let new_settings = settings(&index, &rtxn, SecretPolicy::HideSecrets)?;
     debug!(returns = ?new_settings, "Get all settings");
     Ok(HttpResponse::Ok().json(new_settings))
 }
