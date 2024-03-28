@@ -17,6 +17,7 @@ use crate::analytics::{Analytics, SearchAggregator};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::metrics::MEILISEARCH_DEGRADED_SEARCH_REQUESTS;
 use crate::search::{
     add_search_rules, perform_search, HybridQuery, MatchingStrategy, SearchQuery, SemanticRatio,
     DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
@@ -201,7 +202,7 @@ pub async fn search_with_url_query(
     let index = index_scheduler.index(&index_uid)?;
     let features = index_scheduler.features();
 
-    let distribution = embed(&mut query, index_scheduler.get_ref(), &index).await?;
+    let distribution = embed(&mut query, index_scheduler.get_ref(), &index)?;
 
     let search_result =
         tokio::task::spawn_blocking(move || perform_search(&index, query, features, distribution))
@@ -240,13 +241,16 @@ pub async fn search_with_post(
 
     let features = index_scheduler.features();
 
-    let distribution = embed(&mut query, index_scheduler.get_ref(), &index).await?;
+    let distribution = embed(&mut query, index_scheduler.get_ref(), &index)?;
 
     let search_result =
         tokio::task::spawn_blocking(move || perform_search(&index, query, features, distribution))
             .await?;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
+        if search_result.degraded {
+            MEILISEARCH_DEGRADED_SEARCH_REQUESTS.inc();
+        }
     }
     analytics.post_search(aggregate);
 
@@ -256,7 +260,7 @@ pub async fn search_with_post(
     Ok(HttpResponse::Ok().json(search_result))
 }
 
-pub async fn embed(
+pub fn embed(
     query: &mut SearchQuery,
     index_scheduler: &IndexScheduler,
     index: &milli::Index,
@@ -283,7 +287,6 @@ pub async fn embed(
 
             let embeddings = embedder
                 .embed(vec![q.to_owned()])
-                .await
                 .map_err(milli::vector::Error::from)
                 .map_err(milli::Error::from)?
                 .pop()

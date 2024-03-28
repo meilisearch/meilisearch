@@ -10,6 +10,7 @@ struct ScoreWithRatioResult {
     matching_words: MatchingWords,
     candidates: RoaringBitmap,
     document_scores: Vec<(u32, ScoreWithRatio)>,
+    degraded: bool,
 }
 
 type ScoreWithRatio = (Vec<ScoreDetails>, f32);
@@ -49,8 +50,12 @@ fn compare_scores(
                     order => return order,
                 }
             }
-            (Some(ScoreValue::Score(_)), Some(_)) => return Ordering::Greater,
-            (Some(_), Some(ScoreValue::Score(_))) => return Ordering::Less,
+            (Some(ScoreValue::Score(x)), Some(_)) => {
+                return if x == 0. { Ordering::Less } else { Ordering::Greater }
+            }
+            (Some(_), Some(ScoreValue::Score(x))) => {
+                return if x == 0. { Ordering::Greater } else { Ordering::Less }
+            }
             // if we have this, we're bad
             (Some(ScoreValue::GeoSort(_)), Some(ScoreValue::Sort(_)))
             | (Some(ScoreValue::Sort(_)), Some(ScoreValue::GeoSort(_))) => {
@@ -72,6 +77,7 @@ impl ScoreWithRatioResult {
             matching_words: results.matching_words,
             candidates: results.candidates,
             document_scores,
+            degraded: results.degraded,
         }
     }
 
@@ -106,6 +112,7 @@ impl ScoreWithRatioResult {
             candidates: left.candidates | right.candidates,
             documents_ids,
             document_scores,
+            degraded: left.degraded | right.degraded,
         }
     }
 }
@@ -131,6 +138,7 @@ impl<'a> Search<'a> {
             index: self.index,
             distribution_shift: self.distribution_shift,
             embedder_name: self.embedder_name.clone(),
+            time_budget: self.time_budget.clone(),
         };
 
         let vector_query = search.vector.take();

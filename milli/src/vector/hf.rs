@@ -131,7 +131,7 @@ impl Embedder {
 
         let embeddings = this
             .embed(vec!["test".into()])
-            .map_err(NewEmbedderError::hf_could_not_determine_dimension)?;
+            .map_err(NewEmbedderError::could_not_determine_dimension)?;
         this.dimensions = embeddings.first().unwrap().dimension();
 
         Ok(this)
@@ -194,7 +194,10 @@ impl Embedder {
 
     pub fn distribution(&self) -> Option<DistributionShift> {
         if self.options.model == "BAAI/bge-base-en-v1.5" {
-            Some(DistributionShift { current_mean: 0.85, current_sigma: 0.1 })
+            Some(DistributionShift {
+                current_mean: ordered_float::OrderedFloat(0.85),
+                current_sigma: ordered_float::OrderedFloat(0.1),
+            })
         } else {
             None
         }

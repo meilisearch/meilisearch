@@ -259,6 +259,7 @@ InvalidSettingsProximityPrecision     , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFaceting               , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFilterableAttributes   , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsPagination             , InvalidRequest       , BAD_REQUEST ;
+InvalidSettingsSearchCutoffMs           , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsEmbedders              , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsRankingRules           , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsSearchableAttributes   , InvalidRequest       , BAD_REQUEST ;
@@ -352,6 +353,7 @@ impl ErrorCode for milli::Error {
                     | UserError::InvalidOpenAiModelDimensions { .. }
                     | UserError::InvalidOpenAiModelDimensionsMax { .. }
                     | UserError::InvalidSettingsDimensions { .. }
+                    | UserError::InvalidUrl { .. }
                     | UserError::InvalidPrompt(_) => Code::InvalidSettingsEmbedders,
                     UserError::TooManyEmbedders(_) => Code::InvalidSettingsEmbedders,
                     UserError::InvalidPromptForEmbeddings(..) => Code::InvalidSettingsEmbedders,

@@ -110,6 +110,44 @@ jobs:
             --milestone $MILESTONE_VERSION \
             --assignee curquiza
 
+  create-update-version-issue:
+    needs: get-release-version
+    # Create the update-version issue even if the release is a patch release
+    if: github.event.action == 'created'
+    runs-on: ubuntu-latest
+    env:
+      ISSUE_TEMPLATE: issue-template.md
+    steps:
+      - uses: actions/checkout@v3
+      - name: Download the issue template
+        run: curl -s https://raw.githubusercontent.com/meilisearch/engine-team/main/issue-templates/update-version-issue.md > $ISSUE_TEMPLATE
+      - name: Create the issue
+        run: |
+          gh issue create \
+            --title "Update version in Cargo.toml for $MILESTONE_VERSION" \
+            --label 'maintenance' \
+            --body-file $ISSUE_TEMPLATE \
+            --milestone $MILESTONE_VERSION
+
+  create-update-openapi-issue:
+    needs: get-release-version
+    # Create the openAPI issue if the release is not only a patch release
+    if: github.event.action == 'created' && needs.get-release-version.outputs.is-patch == 'false'
+    runs-on: ubuntu-latest
+    env:
+      ISSUE_TEMPLATE: issue-template.md
+    steps:
+      - uses: actions/checkout@v3
+      - name: Download the issue template
+        run: curl -s https://raw.githubusercontent.com/meilisearch/engine-team/main/issue-templates/update-openapi-issue.md > $ISSUE_TEMPLATE
+      - name: Create the issue
+        run: |
+          gh issue create \
+            --title "Update Open API file for $MILESTONE_VERSION" \
+            --label 'maintenance' \
+            --body-file $ISSUE_TEMPLATE \
+            --milestone $MILESTONE_VERSION
+
 # ----------------
 # MILESTONE CLOSED
 # ----------------

@@ -20,13 +20,13 @@ use crate::heed_codec::facet::{
 use crate::heed_codec::{
     BEU16StrCodec, FstSetCodec, ScriptLanguageCodec, StrBEU16Codec, StrRefCodec,
 };
+use crate::order_by_map::OrderByMap;
 use crate::proximity::ProximityPrecision;
 use crate::vector::EmbeddingConfig;
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdWordCountCodec, GeoPoint, ObkvCodec,
-    OrderBy, Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, BEU16,
-    BEU32, BEU64,
+    Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, BEU16, BEU32, BEU64,
 };
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
@@ -67,6 +67,7 @@ pub mod main_key {
     pub const PAGINATION_MAX_TOTAL_HITS: &str = "pagination-max-total-hits";
     pub const PROXIMITY_PRECISION: &str = "proximity-precision";
     pub const EMBEDDING_CONFIGS: &str = "embedding_configs";
+    pub const SEARCH_CUTOFF: &str = "search_cutoff";
 }
 
 pub mod db_name {
@@ -1373,21 +1374,19 @@ impl Index {
         self.main.remap_key_type::<Str>().delete(txn, main_key::MAX_VALUES_PER_FACET)
     }
 
-    pub fn sort_facet_values_by(&self, txn: &RoTxn) -> heed::Result<HashMap<String, OrderBy>> {
-        let mut orders = self
+    pub fn sort_facet_values_by(&self, txn: &RoTxn) -> heed::Result<OrderByMap> {
+        let orders = self
             .main
-            .remap_types::<Str, SerdeJson<HashMap<String, OrderBy>>>()
+            .remap_types::<Str, SerdeJson<OrderByMap>>()
             .get(txn, main_key::SORT_FACET_VALUES_BY)?
             .unwrap_or_default();
-        // Insert the default ordering if it is not already overwritten by the user.
-        orders.entry("*".to_string()).or_insert(OrderBy::Lexicographic);
         Ok(orders)
     }
 
     pub(crate) fn put_sort_facet_values_by(
         &self,
         txn: &mut RwTxn,
-        val: &HashMap<String, OrderBy>,
+        val: &OrderByMap,
     ) -> heed::Result<()> {
         self.main.remap_types::<Str, SerdeJson<_>>().put(txn, main_key::SORT_FACET_VALUES_BY, &val)
     }
@@ -1506,6 +1505,18 @@ impl Index {
             [(ref first_name, _)] => first_name.clone(),
             _ => "default".to_owned(),
         })
+    }
+
+    pub(crate) fn put_search_cutoff(&self, wtxn: &mut RwTxn<'_>, cutoff: u64) -> heed::Result<()> {
+        self.main.remap_types::<Str, BEU64>().put(wtxn, main_key::SEARCH_CUTOFF, &cutoff)
+    }
+
+    pub fn search_cutoff(&self, rtxn: &RoTxn<'_>) -> Result<Option<u64>> {
+        Ok(self.main.remap_types::<Str, BEU64>().get(rtxn, main_key::SEARCH_CUTOFF)?)
+    }
+
+    pub(crate) fn delete_search_cutoff(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::SEARCH_CUTOFF)
     }
 }
 
@@ -2423,6 +2434,7 @@ pub(crate) mod tests {
             candidates: _,
             document_scores: _,
             mut documents_ids,
+            degraded: _,
         } = search.execute().unwrap();
         let primary_key_id = index.fields_ids_map(&rtxn).unwrap().id("primary_key").unwrap();
         documents_ids.sort_unstable();

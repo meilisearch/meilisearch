@@ -16,6 +16,7 @@ pub use server::{default_settings, Server};
 pub struct Value(pub serde_json::Value);
 
 impl Value {
+    #[track_caller]
     pub fn uid(&self) -> u64 {
         if let Some(uid) = self["uid"].as_u64() {
             uid

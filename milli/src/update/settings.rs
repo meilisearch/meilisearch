@@ -14,12 +14,13 @@ use super::IndexerConfig;
 use crate::criterion::Criterion;
 use crate::error::UserError;
 use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
+use crate::order_by_map::OrderByMap;
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::vector::settings::{check_set, check_unset, EmbedderSource, EmbeddingSettings};
 use crate::vector::{Embedder, EmbeddingConfig, EmbeddingConfigs};
-use crate::{FieldsIdsMap, Index, OrderBy, Result};
+use crate::{FieldsIdsMap, Index, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum Setting<T> {
@@ -145,10 +146,11 @@ pub struct Settings<'a, 't, 'i> {
     /// Attributes on which typo tolerance is disabled.
     exact_attributes: Setting<HashSet<String>>,
     max_values_per_facet: Setting<usize>,
-    sort_facet_values_by: Setting<HashMap<String, OrderBy>>,
+    sort_facet_values_by: Setting<OrderByMap>,
     pagination_max_total_hits: Setting<usize>,
     proximity_precision: Setting<ProximityPrecision>,
     embedder_settings: Setting<BTreeMap<String, Setting<EmbeddingSettings>>>,
+    search_cutoff: Setting<u64>,
 }
 
 impl<'a, 't, 'i> Settings<'a, 't, 'i> {
@@ -182,6 +184,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             pagination_max_total_hits: Setting::NotSet,
             proximity_precision: Setting::NotSet,
             embedder_settings: Setting::NotSet,
+            search_cutoff: Setting::NotSet,
             indexer_config,
         }
     }
@@ -340,7 +343,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.max_values_per_facet = Setting::Reset;
     }
 
-    pub fn set_sort_facet_values_by(&mut self, value: HashMap<String, OrderBy>) {
+    pub fn set_sort_facet_values_by(&mut self, value: OrderByMap) {
         self.sort_facet_values_by = Setting::Set(value);
     }
 
@@ -370,6 +373,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
     pub fn reset_embedder_settings(&mut self) {
         self.embedder_settings = Setting::Reset;
+    }
+
+    pub fn set_search_cutoff(&mut self, value: u64) {
+        self.search_cutoff = Setting::Set(value);
+    }
+
+    pub fn reset_search_cutoff(&mut self) {
+        self.search_cutoff = Setting::Reset;
     }
 
     #[tracing::instrument(
@@ -1025,6 +1036,24 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(update)
     }
 
+    fn update_search_cutoff(&mut self) -> Result<bool> {
+        let changed = match self.search_cutoff {
+            Setting::Set(new) => {
+                let old = self.index.search_cutoff(self.wtxn)?;
+                if old == Some(new) {
+                    false
+                } else {
+                    self.index.put_search_cutoff(self.wtxn, new)?;
+                    true
+                }
+            }
+            Setting::Reset => self.index.delete_search_cutoff(self.wtxn)?,
+            Setting::NotSet => false,
+        };
+
+        Ok(changed)
+    }
+
     pub fn execute<FP, FA>(mut self, progress_callback: FP, should_abort: FA) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
@@ -1072,6 +1101,9 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         // 2. Only change the name -> embedder mapping on a name change
         // 3. Keep the old vectors but reattempt indexing on a prompt change: only actually changed prompt will need embedding + storage
         let embedding_configs_updated = self.update_embedding_configs()?;
+
+        // never trigger re-indexing
+        self.update_search_cutoff()?;
 
         if stop_words_updated
             || non_separator_tokens_updated
@@ -1131,6 +1163,12 @@ fn validate_prompt(
             api_key,
             dimensions,
             document_template: Setting::Set(template),
+            url,
+            query,
+            input_field,
+            path_to_embeddings,
+            embedding_object,
+            input_type,
         }) => {
             // validate
             let template = crate::prompt::Prompt::new(template)
@@ -1144,6 +1182,12 @@ fn validate_prompt(
                 api_key,
                 dimensions,
                 document_template: Setting::Set(template),
+                url,
+                query,
+                input_field,
+                path_to_embeddings,
+                embedding_object,
+                input_type,
             }))
         }
         new => Ok(new),
@@ -1156,14 +1200,34 @@ pub fn validate_embedding_settings(
 ) -> Result<Setting<EmbeddingSettings>> {
     let settings = validate_prompt(name, settings)?;
     let Setting::Set(settings) = settings else { return Ok(settings) };
-    let EmbeddingSettings { source, model, revision, api_key, dimensions, document_template } =
-        settings;
+    let EmbeddingSettings {
+        source,
+        model,
+        revision,
+        api_key,
+        dimensions,
+        document_template,
+        url,
+        query,
+        input_field,
+        path_to_embeddings,
+        embedding_object,
+        input_type,
+    } = settings;
 
     if let Some(0) = dimensions.set() {
         return Err(crate::error::UserError::InvalidSettingsDimensions {
             embedder_name: name.to_owned(),
         }
         .into());
+    }
+
+    if let Some(url) = url.as_ref().set() {
+        url::Url::parse(url).map_err(|error| crate::error::UserError::InvalidUrl {
+            embedder_name: name.to_owned(),
+            inner_error: error,
+            url: url.to_owned(),
+        })?;
     }
 
     let Some(inferred_source) = source.set() else {
@@ -1174,11 +1238,25 @@ pub fn validate_embedding_settings(
             api_key,
             dimensions,
             document_template,
+            url,
+            query,
+            input_field,
+            path_to_embeddings,
+            embedding_object,
+            input_type,
         }));
     };
     match inferred_source {
         EmbedderSource::OpenAi => {
             check_unset(&revision, "revision", inferred_source, name)?;
+
+            check_unset(&url, "url", inferred_source, name)?;
+            check_unset(&query, "query", inferred_source, name)?;
+            check_unset(&input_field, "inputField", inferred_source, name)?;
+            check_unset(&path_to_embeddings, "pathToEmbeddings", inferred_source, name)?;
+            check_unset(&embedding_object, "embeddingObject", inferred_source, name)?;
+            check_unset(&input_type, "inputType", inferred_source, name)?;
+
             if let Setting::Set(model) = &model {
                 let model = crate::vector::openai::EmbeddingModel::from_name(model.as_str())
                     .ok_or(crate::error::UserError::InvalidOpenAiModel {
@@ -1209,9 +1287,30 @@ pub fn validate_embedding_settings(
                 }
             }
         }
+        EmbedderSource::Ollama => {
+            // Dimensions get inferred, only model name is required
+            check_unset(&dimensions, "dimensions", inferred_source, name)?;
+            check_set(&model, "model", inferred_source, name)?;
+            check_unset(&api_key, "apiKey", inferred_source, name)?;
+            check_unset(&revision, "revision", inferred_source, name)?;
+
+            check_unset(&url, "url", inferred_source, name)?;
+            check_unset(&query, "query", inferred_source, name)?;
+            check_unset(&input_field, "inputField", inferred_source, name)?;
+            check_unset(&path_to_embeddings, "pathToEmbeddings", inferred_source, name)?;
+            check_unset(&embedding_object, "embeddingObject", inferred_source, name)?;
+            check_unset(&input_type, "inputType", inferred_source, name)?;
+        }
         EmbedderSource::HuggingFace => {
             check_unset(&api_key, "apiKey", inferred_source, name)?;
             check_unset(&dimensions, "dimensions", inferred_source, name)?;
+
+            check_unset(&url, "url", inferred_source, name)?;
+            check_unset(&query, "query", inferred_source, name)?;
+            check_unset(&input_field, "inputField", inferred_source, name)?;
+            check_unset(&path_to_embeddings, "pathToEmbeddings", inferred_source, name)?;
+            check_unset(&embedding_object, "embeddingObject", inferred_source, name)?;
+            check_unset(&input_type, "inputType", inferred_source, name)?;
         }
         EmbedderSource::UserProvided => {
             check_unset(&model, "model", inferred_source, name)?;
@@ -1219,6 +1318,18 @@ pub fn validate_embedding_settings(
             check_unset(&api_key, "apiKey", inferred_source, name)?;
             check_unset(&document_template, "documentTemplate", inferred_source, name)?;
             check_set(&dimensions, "dimensions", inferred_source, name)?;
+
+            check_unset(&url, "url", inferred_source, name)?;
+            check_unset(&query, "query", inferred_source, name)?;
+            check_unset(&input_field, "inputField", inferred_source, name)?;
+            check_unset(&path_to_embeddings, "pathToEmbeddings", inferred_source, name)?;
+            check_unset(&embedding_object, "embeddingObject", inferred_source, name)?;
+            check_unset(&input_type, "inputType", inferred_source, name)?;
+        }
+        EmbedderSource::Rest => {
+            check_unset(&model, "model", inferred_source, name)?;
+            check_unset(&revision, "revision", inferred_source, name)?;
+            check_set(&url, "url", inferred_source, name)?;
         }
     }
     Ok(Setting::Set(EmbeddingSettings {
@@ -1228,6 +1339,12 @@ pub fn validate_embedding_settings(
         api_key,
         dimensions,
         document_template,
+        url,
+        query,
+        input_field,
+        path_to_embeddings,
+        embedding_object,
+        input_type,
     }))
 }
 
@@ -2050,6 +2167,7 @@ mod tests {
                     pagination_max_total_hits,
                     proximity_precision,
                     embedder_settings,
+                    search_cutoff,
                 } = settings;
                 assert!(matches!(searchable_fields, Setting::NotSet));
                 assert!(matches!(displayed_fields, Setting::NotSet));
@@ -2073,6 +2191,7 @@ mod tests {
                 assert!(matches!(pagination_max_total_hits, Setting::NotSet));
                 assert!(matches!(proximity_precision, Setting::NotSet));
                 assert!(matches!(embedder_settings, Setting::NotSet));
+                assert!(matches!(search_cutoff, Setting::NotSet));
             })
             .unwrap();
     }

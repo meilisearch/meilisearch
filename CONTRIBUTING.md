@@ -4,7 +4,7 @@ First, thank you for contributing to Meilisearch! The goal of this document is t
 
 Remember that there are many ways to contribute other than writing code: writing [tutorials or blog posts](https://github.com/meilisearch/awesome-meilisearch), improving [the documentation](https://github.com/meilisearch/documentation), submitting [bug reports](https://github.com/meilisearch/meilisearch/issues/new?assignees=&labels=&template=bug_report.md&title=) and [feature requests](https://github.com/meilisearch/product/discussions/categories/feedback-feature-proposal)...
 
-The code in this repository is only concerned with managing multiple indexes, handling the update store, and exposing an HTTP API. Search and indexation are the domain of our core engine, [`milli`](https://github.com/meilisearch/milli), while tokenization is handled by [our `charabia` library](https://github.com/meilisearch/charabia/).
+Meilisearch can manage multiple indexes, handle the update store, and expose an HTTP API. Search and indexation are the domain of our core engine, [`milli`](https://github.com/meilisearch/meilisearch/tree/main/milli), while tokenization is handled by [our `charabia` library](https://github.com/meilisearch/charabia/).
 
 If Meilisearch does not offer optimized support for your language, please consider contributing to `charabia` by following the [CONTRIBUTING.md file](https://github.com/meilisearch/charabia/blob/main/CONTRIBUTING.md) and integrating your intended normalizer/segmenter.
 
@@ -80,6 +80,30 @@ ulimit -Sn 3000
 Meilisearch follows the [cargo xtask](https://github.com/matklad/cargo-xtask) workflow to provide some build tools.
 
 Run `cargo xtask --help` from the root of the repository to find out what is available.
+
+### Logging
+
+Meilisearch uses [`tracing`](https://lib.rs/crates/tracing) for logging purposes. Tracing logs are structured and can be displayed as JSON to the end user, so prefer passing arguments as fields rather than interpolating them in the message.
+
+Refer to the [documentation](https://docs.rs/tracing/0.1.40/tracing/index.html#using-the-macros) for the syntax of the spans and events.
+
+Logging spans are used for 3 distinct purposes:
+
+1. Regular logging
+2. Profiling
+3. Benchmarking
+
+As a result, the spans should follow some rules:
+
+- They should not be put on functions that are called too often. That is because opening and closing a span causes some overhead. For regular logging, avoid putting spans on functions that are taking less than a few hundred nanoseconds. For profiling or benchmarking, avoid putting spans on functions that are taking less than a few microseconds.
+- For profiling and benchmarking, use the `TRACE` level.
+- For profiling and benchmarking, use the following `target` prefixes:
+  - `indexing::` for spans meant when profiling the indexing operations.
+  - `search::` for spans meant when profiling the search operations.
+
+### Benchmarking
+
+See [BENCHMARKS.md](./BENCHMARKS.md)
 
 ## Git Guidelines
 
