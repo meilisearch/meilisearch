@@ -114,7 +114,9 @@ impl EmbeddingSettings {
                 &[EmbedderSource::HuggingFace, EmbedderSource::OpenAi, EmbedderSource::Ollama]
             }
             Self::REVISION => &[EmbedderSource::HuggingFace],
-            Self::API_KEY => &[EmbedderSource::OpenAi, EmbedderSource::Rest],
+            Self::API_KEY => {
+                &[EmbedderSource::OpenAi, EmbedderSource::Ollama, EmbedderSource::Rest]
+            }
             Self::DIMENSIONS => {
                 &[EmbedderSource::OpenAi, EmbedderSource::UserProvided, EmbedderSource::Rest]
             }
@@ -124,7 +126,7 @@ impl EmbeddingSettings {
                 EmbedderSource::Ollama,
                 EmbedderSource::Rest,
             ],
-            Self::URL => &[EmbedderSource::Rest],
+            Self::URL => &[EmbedderSource::Ollama, EmbedderSource::Rest],
             Self::QUERY => &[EmbedderSource::Rest],
             Self::INPUT_FIELD => &[EmbedderSource::Rest],
             Self::PATH_TO_EMBEDDINGS => &[EmbedderSource::Rest],
@@ -146,7 +148,9 @@ impl EmbeddingSettings {
             EmbedderSource::HuggingFace => {
                 &[Self::SOURCE, Self::MODEL, Self::REVISION, Self::DOCUMENT_TEMPLATE]
             }
-            EmbedderSource::Ollama => &[Self::SOURCE, Self::MODEL, Self::DOCUMENT_TEMPLATE],
+            EmbedderSource::Ollama => {
+                &[Self::SOURCE, Self::MODEL, Self::DOCUMENT_TEMPLATE, Self::URL, Self::API_KEY]
+            }
             EmbedderSource::UserProvided => &[Self::SOURCE, Self::DIMENSIONS],
             EmbedderSource::Rest => &[
                 Self::SOURCE,
@@ -387,10 +391,14 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
                 }
                 EmbedderSource::Ollama => {
                     let mut options: ollama::EmbedderOptions =
-                        super::ollama::EmbedderOptions::with_default_model();
+                        super::ollama::EmbedderOptions::with_default_model(
+                            api_key.set(),
+                            url.set(),
+                        );
                     if let Some(model) = model.set() {
                         options.embedding_model = model;
                     }
+
                     this.embedder_options = super::EmbedderOptions::Ollama(options);
                 }
                 EmbedderSource::HuggingFace => {
