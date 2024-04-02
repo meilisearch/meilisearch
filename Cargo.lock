@@ -556,6 +556,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "bindgen_cuda"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f8489af5b7d17a81bffe37e0f4d6e1e4de87c87329d05447f22c35d95a1227d"
+dependencies = [
+ "glob",
+ "num_cpus",
+ "rayon",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -731,7 +742,7 @@ dependencies = [
 [[package]]
 name = "candle-core"
 version = "0.3.3"
-source = "git+https://github.com/huggingface/candle.git#5270224f407502b82fe90bc2622894ce3871b002"
+source = "git+https://github.com/huggingface/candle.git?rev=5270224f407502b82fe90bc2622894ce3871b002#5270224f407502b82fe90bc2622894ce3871b002"
 dependencies = [
  "byteorder",
  "candle-kernels",
@@ -752,18 +763,16 @@ dependencies = [
 
 [[package]]
 name = "candle-kernels"
-version = "0.3.1"
-source = "git+https://github.com/huggingface/candle.git#f4fcf6090045ac44122fd5f0a7e46db6e3e16528"
+version = "0.3.3"
+source = "git+https://github.com/huggingface/candle.git?rev=5270224f407502b82fe90bc2622894ce3871b002#5270224f407502b82fe90bc2622894ce3871b002"
 dependencies = [
- "anyhow",
- "glob",
- "rayon",
+ "bindgen_cuda",
 ]
 
 [[package]]
 name = "candle-nn"
 version = "0.3.3"
-source = "git+https://github.com/huggingface/candle.git#5270224f407502b82fe90bc2622894ce3871b002"
+source = "git+https://github.com/huggingface/candle.git?rev=5270224f407502b82fe90bc2622894ce3871b002#5270224f407502b82fe90bc2622894ce3871b002"
 dependencies = [
  "candle-core",
  "half 2.3.1",
@@ -777,7 +786,7 @@ dependencies = [
 [[package]]
 name = "candle-transformers"
 version = "0.3.3"
-source = "git+https://github.com/huggingface/candle.git#5270224f407502b82fe90bc2622894ce3871b002"
+source = "git+https://github.com/huggingface/candle.git?rev=5270224f407502b82fe90bc2622894ce3871b002#5270224f407502b82fe90bc2622894ce3871b002"
 dependencies = [
  "byteorder",
  "candle-core",

@@ -71,9 +71,9 @@ itertools = "0.11.0"
 puffin = "0.16.0"
 
 csv = "1.3.0"
-candle-core = { git = "https://github.com/huggingface/candle.git", version = "0.3.1" }
-candle-transformers = { git = "https://github.com/huggingface/candle.git", version = "0.3.1" }
-candle-nn = { git = "https://github.com/huggingface/candle.git", version = "0.3.1" }
+candle-core = { git = "https://github.com/huggingface/candle.git", rev="5270224f407502b82fe90bc2622894ce3871b002", version = "0.3.3" }
+candle-transformers = { git = "https://github.com/huggingface/candle.git", rev="5270224f407502b82fe90bc2622894ce3871b002", version = "0.3.3" }
+candle-nn = { git = "https://github.com/huggingface/candle.git", rev="5270224f407502b82fe90bc2622894ce3871b002", version = "0.3.3" }
 tokenizers = { git = "https://github.com/huggingface/tokenizers.git", tag = "v0.14.1", version = "0.14.1", default_features = false, features = [
     "onig",
 ] }
