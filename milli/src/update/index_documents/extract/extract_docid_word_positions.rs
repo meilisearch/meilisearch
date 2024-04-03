@@ -34,6 +34,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     let max_positions_per_attributes = max_positions_per_attributes
         .map_or(MAX_POSITION_PER_ATTRIBUTE, |max| max.min(MAX_POSITION_PER_ATTRIBUTE));
     let max_memory = indexer.max_memory_by_thread();
+    let force_reindexing = settings_diff.reindex_searchable();
 
     // initialize destination values.
     let mut documents_ids = RoaringBitmap::new();
@@ -54,12 +55,15 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     let mut value_buffer = Vec::new();
 
     // initialize tokenizer.
-    // TODO: Fix ugly allocation
+    /// TODO: Fix ugly allocation
     let old_stop_words = settings_diff.old.stop_words.as_ref();
-    let old_separators: Option<Vec<_>> =
-        settings_diff.old.allowed_separators.map(|s| s.iter().map(String::as_str).collect());
+    let old_separators: Option<Vec<_>> = settings_diff
+        .old
+        .allowed_separators
+        .as_ref()
+        .map(|s| s.iter().map(String::as_str).collect());
     let old_dictionary: Option<Vec<_>> =
-        settings_diff.old.dictionary.map(|s| s.iter().map(String::as_str).collect());
+        settings_diff.old.dictionary.as_ref().map(|s| s.iter().map(String::as_str).collect());
     let mut del_builder = tokenizer_builder(
         old_stop_words,
         old_separators.as_deref(),
@@ -68,12 +72,15 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     );
     let del_tokenizer = del_builder.build();
 
-    // TODO: Fix ugly allocation
+    /// TODO: Fix ugly allocation
     let new_stop_words = settings_diff.new.stop_words.as_ref();
-    let new_separators: Option<Vec<_>> =
-        settings_diff.new.allowed_separators.map(|s| s.iter().map(String::as_str).collect());
+    let new_separators: Option<Vec<_>> = settings_diff
+        .new
+        .allowed_separators
+        .as_ref()
+        .map(|s| s.iter().map(String::as_str).collect());
     let new_dictionary: Option<Vec<_>> =
-        settings_diff.new.dictionary.map(|s| s.iter().map(String::as_str).collect());
+        settings_diff.new.dictionary.as_ref().map(|s| s.iter().map(String::as_str).collect());
     let mut add_builder = tokenizer_builder(
         new_stop_words,
         new_separators.as_deref(),
@@ -92,10 +99,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         let obkv = KvReader::<FieldId>::new(value);
 
         // if the searchable fields didn't change, skip the searchable indexing for this document.
-        if !searchable_fields_changed(
-            &KvReader::<FieldId>::new(value),
-            &settings_diff.new.searchable_fields_ids,
-        ) {
+        if !force_reindexing && !searchable_fields_changed(&obkv, settings_diff) {
             continue;
         }
 
@@ -180,8 +184,9 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
 /// Check if any searchable fields of a document changed.
 fn searchable_fields_changed(
     obkv: &KvReader<FieldId>,
-    searchable_fields: &Option<Vec<FieldId>>,
+    settings_diff: &InnerIndexSettingsDiff,
 ) -> bool {
+    let searchable_fields = &settings_diff.new.searchable_fields_ids;
     for (field_id, field_bytes) in obkv.iter() {
         if searchable_fields.as_ref().map_or(true, |sf| sf.contains(&field_id)) {
             let del_add = KvReaderDelAdd::new(field_bytes);
@@ -262,12 +267,14 @@ fn lang_safe_tokens_from_document<'a>(
         // then we don't rerun the extraction.
         if !script_language.is_empty() {
             // build a new temporary tokenizer including the allow list.
-            // TODO: Fix ugly allocation
+            /// TODO: Fix ugly allocation
             let stop_words = settings.stop_words.as_ref();
-            let separators: Option<Vec<_>> =
-                settings.allowed_separators.map(|s| s.iter().map(String::as_str).collect());
+            let separators: Option<Vec<_>> = settings
+                .allowed_separators
+                .as_ref()
+                .map(|s| s.iter().map(String::as_str).collect());
             let dictionary: Option<Vec<_>> =
-                settings.dictionary.map(|s| s.iter().map(String::as_str).collect());
+                settings.dictionary.as_ref().map(|s| s.iter().map(String::as_str).collect());
             let mut builder =
                 tokenizer_builder(stop_words, separators.as_deref(), dictionary.as_deref(), None);
             let tokenizer = builder.build();

@@ -11,7 +11,7 @@ use super::helpers::{
 };
 use crate::error::SerializationError;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
-use crate::proximity::{index_proximity, MAX_DISTANCE};
+use crate::proximity::{index_proximity, ProximityPrecision, MAX_DISTANCE};
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::{DocumentId, Result};
@@ -24,9 +24,20 @@ use crate::{DocumentId, Result};
 pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
     docid_word_positions: grenad::Reader<R>,
     indexer: GrenadParameters,
-    _settings_diff: &InnerIndexSettingsDiff,
+    settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<grenad::Reader<BufReader<File>>> {
     puffin::profile_function!();
+    let any_deletion = settings_diff.old.proximity_precision == ProximityPrecision::ByWord;
+    let any_addition = settings_diff.new.proximity_precision == ProximityPrecision::ByWord;
+
+    // early return if the data shouldn't be deleted nor created.
+    if !any_deletion && !any_addition {
+        return tempfile::tempfile()
+            .map_err(Into::into)
+            .map(BufReader::new)
+            .and_then(grenad::Reader::new)
+            .map_err(Into::into);
+    }
 
     let max_memory = indexer.max_memory_by_thread();
 
@@ -79,6 +90,10 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
 
         let (del, add): (Result<_>, Result<_>) = rayon::join(
             || {
+                if !any_deletion {
+                    return Ok(());
+                }
+
                 // deletions
                 if let Some(deletion) = KvReaderDelAdd::new(value).get(DelAdd::Deletion) {
                     for (position, word) in KvReaderU16::new(deletion).iter() {
@@ -108,6 +123,10 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
                 Ok(())
             },
             || {
+                if !any_addition {
+                    return Ok(());
+                }
+
                 // additions
                 if let Some(addition) = KvReaderDelAdd::new(value).get(DelAdd::Addition) {
                     for (position, word) in KvReaderU16::new(addition).iter() {

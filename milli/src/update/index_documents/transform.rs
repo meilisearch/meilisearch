@@ -1,12 +1,11 @@
 use std::borrow::Cow;
 use std::collections::btree_map::Entry as BEntry;
 use std::collections::hash_map::Entry as HEntry;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Seek};
 
 use fxhash::FxHashMap;
-use heed::RoTxn;
 use itertools::Itertools;
 use obkv::{KvReader, KvReaderU16, KvWriter};
 use roaring::RoaringBitmap;
@@ -814,7 +813,8 @@ impl<'a, 'i> Transform<'a, 'i> {
         let settings_diff = InnerIndexSettingsDiff {
             old: old_inner_settings,
             new: new_inner_settings,
-            embedding_configs_updated: true,
+            embedding_configs_updated: false,
+            settings_update_only: false,
         };
 
         Ok(TransformOutput {
@@ -844,13 +844,16 @@ impl<'a, 'i> Transform<'a, 'i> {
                 obkv_writer.insert(id, val)?;
             }
         }
-        let new_obkv = KvReader::<FieldId>::new(&obkv_writer.into_inner()?);
+        let data = obkv_writer.into_inner()?;
+        let new_obkv = KvReader::<FieldId>::new(&data);
 
         // take the non-flattened version if flatten_from_fields_ids_map returns None.
-        let old_flattened = Self::flatten_from_fields_ids_map(&old_obkv, &mut old_fields_ids_map)?
-            .map_or_else(|| old_obkv, |bytes| KvReader::<FieldId>::new(&bytes));
-        let new_flattened = Self::flatten_from_fields_ids_map(&new_obkv, &mut new_fields_ids_map)?
-            .map_or_else(|| new_obkv, |bytes| KvReader::<FieldId>::new(&bytes));
+        let old_flattened = Self::flatten_from_fields_ids_map(&old_obkv, &mut old_fields_ids_map)?;
+        let old_flattened =
+            old_flattened.as_deref().map_or_else(|| old_obkv, KvReader::<FieldId>::new);
+        let new_flattened = Self::flatten_from_fields_ids_map(&new_obkv, &mut new_fields_ids_map)?;
+        let new_flattened =
+            new_flattened.as_deref().map_or_else(|| new_obkv, KvReader::<FieldId>::new);
 
         original_obkv_buffer.clear();
         flattened_obkv_buffer.clear();

@@ -1010,6 +1010,13 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             }
             Setting::NotSet => false,
         };
+
+        // if any changes force a reindexing
+        // clear the vector database.
+        if update {
+            self.index.vector_arroy.clear(self.wtxn)?;
+        }
+
         Ok(update)
     }
 
@@ -1077,6 +1084,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             old: old_inner_settings,
             new: new_inner_settings,
             embedding_configs_updated,
+            settings_update_only: true,
         };
 
         if inner_settings_diff.any_reindexing_needed() {
@@ -1087,20 +1095,23 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     }
 }
 
-pub(crate) struct InnerIndexSettingsDiff {
-    pub old: InnerIndexSettings,
-    pub new: InnerIndexSettings,
+#[derive(Clone)]
+pub struct InnerIndexSettingsDiff {
+    pub(crate) old: InnerIndexSettings,
+    pub(crate) new: InnerIndexSettings,
 
     // TODO: compare directly the embedders.
-    pub embedding_configs_updated: bool,
+    pub(crate) embedding_configs_updated: bool,
+
+    pub(crate) settings_update_only: bool,
 }
 
 impl InnerIndexSettingsDiff {
-    fn any_reindexing_needed(&self) -> bool {
+    pub fn any_reindexing_needed(&self) -> bool {
         self.reindex_searchable() || self.reindex_facets() || self.reindex_vectors()
     }
 
-    fn reindex_searchable(&self) -> bool {
+    pub fn reindex_searchable(&self) -> bool {
         self.old
             .fields_ids_map
             .iter()
@@ -1115,13 +1126,13 @@ impl InnerIndexSettingsDiff {
             || self.old.proximity_precision != self.new.proximity_precision
     }
 
-    fn reindex_facets(&self) -> bool {
-        let existing_fields = self.new.existing_fields;
+    pub fn reindex_facets(&self) -> bool {
+        let existing_fields = &self.new.existing_fields;
         if existing_fields.iter().any(|field| field.contains('.')) {
             return true;
         }
 
-        let old_faceted_fields = self.old.user_defined_faceted_fields;
+        let old_faceted_fields = &self.old.user_defined_faceted_fields;
         if old_faceted_fields.iter().any(|field| field.contains('.')) {
             return true;
         }
@@ -1129,13 +1140,13 @@ impl InnerIndexSettingsDiff {
         // If there is new faceted fields we indicate that we must reindex as we must
         // index new fields as facets. It means that the distinct attribute,
         // an Asc/Desc criterion or a filtered attribute as be added or removed.
-        let new_faceted_fields = self.new.user_defined_faceted_fields;
+        let new_faceted_fields = &self.new.user_defined_faceted_fields;
         if new_faceted_fields.iter().any(|field| field.contains('.')) {
             return true;
         }
 
         let faceted_updated =
-            (&existing_fields - &old_faceted_fields) != (&existing_fields - &new_faceted_fields);
+            (existing_fields - old_faceted_fields) != (existing_fields - new_faceted_fields);
 
         self.old
             .fields_ids_map
@@ -1145,8 +1156,12 @@ impl InnerIndexSettingsDiff {
             || faceted_updated
     }
 
-    fn reindex_vectors(&self) -> bool {
+    pub fn reindex_vectors(&self) -> bool {
         self.embedding_configs_updated
+    }
+
+    pub fn settings_update_only(&self) -> bool {
+        self.settings_update_only
     }
 }
 

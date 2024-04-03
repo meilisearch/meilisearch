@@ -6,7 +6,6 @@ mod typed_chunk;
 
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Seek};
-use std::iter::FromIterator;
 use std::num::NonZeroU32;
 use std::result::Result as StdResult;
 
@@ -281,7 +280,7 @@ where
 
         let TransformOutput {
             primary_key,
-            settings_diff,
+            mut settings_diff,
             field_distribution,
             documents_count,
             original_documents,
@@ -319,13 +318,8 @@ where
         ) = crossbeam_channel::unbounded();
 
         // get the primary key field id
-        let primary_key_id = output.settings_diff.new.fields_ids_map.id(&primary_key).unwrap();
+        let primary_key_id = settings_diff.new.fields_ids_map.id(&primary_key).unwrap();
 
-        // get searchable fields for word databases
-        let searchable_fields =
-            self.index.searchable_fields_ids(self.wtxn)?.map(HashSet::from_iter);
-        // get filterable fields for facet databases
-        let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
         // get the fid of the `_geo.lat` and `_geo.lng` fields.
         let mut field_id_map = self.index.fields_ids_map(self.wtxn)?;
 
@@ -347,12 +341,6 @@ where
             }
             None => None,
         };
-
-        let stop_words = self.index.stop_words(self.wtxn)?;
-        let separators = self.index.allowed_separators(self.wtxn)?;
-        let dictionary = self.index.dictionary(self.wtxn)?;
-        let exact_attributes = self.index.exact_attributes_ids(self.wtxn)?;
-        let proximity_precision = self.index.proximity_precision(self.wtxn)?.unwrap_or_default();
 
         let pool_params = GrenadParameters {
             chunk_compression_type: self.indexer_config.chunk_compression_type,

@@ -17,8 +17,9 @@ use crate::error::UserError;
 use crate::prompt::Prompt;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::index_documents::helpers::try_split_at;
+use crate::update::settings::InnerIndexSettingsDiff;
 use crate::vector::Embedder;
-use crate::{DocumentId, FieldsIdsMap, InternalError, Result, VectorOrArrayOfVectors};
+use crate::{DocumentId, InternalError, Result, VectorOrArrayOfVectors};
 
 /// The length of the elements that are always in the buffer when inserting new values.
 const TRUNCATE_SIZE: usize = size_of::<DocumentId>();
@@ -71,11 +72,14 @@ impl VectorStateDelta {
 pub fn extract_vector_points<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
-    field_id_map: &FieldsIdsMap,
+    settings_diff: &InnerIndexSettingsDiff,
     prompt: &Prompt,
     embedder_name: &str,
 ) -> Result<ExtractedVectorPoints> {
     puffin::profile_function!();
+
+    let old_fields_ids_map = &settings_diff.old.fields_ids_map;
+    let new_fields_ids_map = &settings_diff.new.fields_ids_map;
 
     // (docid, _index) -> KvWriterDelAdd -> Vector
     let mut manual_vectors_writer = create_writer(
@@ -98,8 +102,6 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
         tempfile::tempfile()?,
     );
 
-    let vectors_fid = field_id_map.id("_vectors");
-
     let mut key_buffer = Vec::new();
     let mut cursor = obkv_documents.into_cursor()?;
     while let Some((key, value)) = cursor.move_on_next()? {
@@ -116,15 +118,29 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
         // lazily get it when needed
         let document_id = || -> Value { from_utf8(external_id_bytes).unwrap().into() };
 
-        let vectors_field = vectors_fid
-            .and_then(|vectors_fid| obkv.get(vectors_fid))
-            .map(KvReaderDelAdd::new)
-            .map(|obkv| to_vector_maps(obkv, document_id))
-            .transpose()?;
+        // the vector field id may have changed
+        let old_vectors_fid = old_fields_ids_map.id("_vectors");
+        // filter the old vector fid if the settings has been changed forcing reindexing.
+        let old_vectors_fid = old_vectors_fid.filter(|_| !settings_diff.reindex_vectors());
 
-        let (del_map, add_map) = vectors_field.unzip();
-        let del_map = del_map.flatten();
-        let add_map = add_map.flatten();
+        let new_vectors_fid = new_fields_ids_map.id("_vectors");
+        let vectors_field = {
+            let del = old_vectors_fid
+                .and_then(|vectors_fid| obkv.get(vectors_fid))
+                .map(KvReaderDelAdd::new)
+                .map(|obkv| to_vector_map(obkv, DelAdd::Deletion, &document_id))
+                .transpose()?
+                .flatten();
+            let add = new_vectors_fid
+                .and_then(|vectors_fid| obkv.get(vectors_fid))
+                .map(KvReaderDelAdd::new)
+                .map(|obkv| to_vector_map(obkv, DelAdd::Addition, &document_id))
+                .transpose()?
+                .flatten();
+            (del, add)
+        };
+
+        let (del_map, add_map) = vectors_field;
 
         let del_value = del_map.and_then(|mut map| map.remove(embedder_name));
         let add_value = add_map.and_then(|mut map| map.remove(embedder_name));
@@ -155,7 +171,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                     VectorStateDelta::NowGenerated(prompt.render(
                         obkv,
                         DelAdd::Addition,
-                        field_id_map,
+                        &new_fields_ids_map,
                     )?)
                 } else {
                     VectorStateDelta::NowRemoved
@@ -182,9 +198,10 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
 
                 if document_is_kept {
                     // Don't give up if the old prompt was failing
-                    let old_prompt =
-                        prompt.render(obkv, DelAdd::Deletion, field_id_map).unwrap_or_default();
-                    let new_prompt = prompt.render(obkv, DelAdd::Addition, field_id_map)?;
+                    let old_prompt = prompt
+                        .render(obkv, DelAdd::Deletion, &old_fields_ids_map)
+                        .unwrap_or_default();
+                    let new_prompt = prompt.render(obkv, DelAdd::Addition, &new_fields_ids_map)?;
                     if old_prompt != new_prompt {
                         tracing::trace!(
                             "🚀 Changing prompt from\n{old_prompt}\n===to===\n{new_prompt}"
@@ -218,15 +235,6 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
         // docid -> prompt
         prompts: writer_into_reader(prompts_writer)?,
     })
-}
-
-fn to_vector_maps(
-    obkv: KvReaderDelAdd,
-    document_id: impl Fn() -> Value,
-) -> Result<(Option<serde_json::Map<String, Value>>, Option<serde_json::Map<String, Value>>)> {
-    let del = to_vector_map(obkv, DelAdd::Deletion, &document_id)?;
-    let add = to_vector_map(obkv, DelAdd::Addition, &document_id)?;
-    Ok((del, add))
 }
 
 fn to_vector_map(

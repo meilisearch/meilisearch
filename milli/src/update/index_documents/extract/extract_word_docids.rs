@@ -121,16 +121,16 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         let (w, fid) = StrBEU16Codec::bytes_decode(key)
             .map_err(|_| SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
 
-        if let Some(word) = word {
-            if word.as_str() != w {
-                docids_into_writers(&word, &deletions, &additions, &mut word_docids_writer);
+        if let Some(current) = word.as_ref() {
+            if current != w {
+                docids_into_writers(&current, &deletions, &additions, &mut word_docids_writer)?;
                 docids_into_writers(
-                    &word,
+                    &current,
                     &exact_deletions,
                     &exact_additions,
                     &mut exact_word_docids_writer,
-                );
-                let word = Some(w.to_string());
+                )?;
+                word = Some(w.to_string());
                 // clear buffers
                 deletions.clear();
                 additions.clear();
@@ -138,7 +138,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
                 exact_additions.clear();
             }
         } else {
-            let word = Some(w.to_string());
+            word = Some(w.to_string());
         }
 
         // merge all deletions
@@ -169,13 +169,13 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     }
 
     if let Some(word) = word {
-        docids_into_writers(&word, &deletions, &additions, &mut word_docids_writer);
+        docids_into_writers(&word, &deletions, &additions, &mut word_docids_writer)?;
         docids_into_writers(
             &word,
             &exact_deletions,
             &exact_additions,
             &mut exact_word_docids_writer,
-        );
+        )?;
     }
 
     Ok((
@@ -253,7 +253,7 @@ where
             CboRoaringBitmapCodec::bytes_encode(deletions).map_err(|_| {
                 SerializationError::Encoding { db_name: Some(DOCID_WORD_POSITIONS) }
             })?,
-        );
+        )?;
     }
     // additions:
     if !additions.is_empty() {
@@ -262,7 +262,7 @@ where
             CboRoaringBitmapCodec::bytes_encode(additions).map_err(|_| {
                 SerializationError::Encoding { db_name: Some(DOCID_WORD_POSITIONS) }
             })?,
-        );
+        )?;
     }
 
     // insert everything in the same writer.

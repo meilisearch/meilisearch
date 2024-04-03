@@ -9,7 +9,6 @@ mod extract_word_docids;
 mod extract_word_pair_proximity_docids;
 mod extract_word_position_docids;
 
-use std::collections::HashSet;
 use std::fs::File;
 use std::io::BufReader;
 
@@ -30,7 +29,6 @@ use self::extract_word_pair_proximity_docids::extract_word_pair_proximity_docids
 use self::extract_word_position_docids::extract_word_position_docids;
 use super::helpers::{as_cloneable_grenad, CursorClonableMmap, GrenadParameters};
 use super::{helpers, TypedChunk};
-use crate::proximity::ProximityPrecision;
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::{FieldId, Result};
 
@@ -200,12 +198,14 @@ fn run_extraction_task<FE, FS, M>(
     M: Send,
 {
     let current_span = tracing::Span::current();
+    /// TODO: remove clone
+    let settings_diff = settings_diff.clone();
 
     rayon::spawn(move || {
         let child_span = tracing::trace_span!(target: "indexing::extract::details", parent: &current_span, "extract_multiple_chunks");
         let _entered = child_span.enter();
         puffin::profile_scope!("extract_multiple_chunks", name);
-        match extract_fn(chunk, indexer, settings_diff) {
+        match extract_fn(chunk, indexer, &settings_diff) {
             Ok(chunk) => {
                 let _ = lmdb_writer_sx.send(Ok(serialize_fn(chunk)));
             }
@@ -235,50 +235,54 @@ fn send_original_documents_data(
         .thread_name(|index| format!("embedding-request-{index}"))
         .build()?;
 
-    rayon::spawn(move || {
-        for (name, (embedder, prompt)) in embedders {
-            let result = extract_vector_points(
-                documents_chunk_cloned.clone(),
-                indexer,
-                &field_id_map,
-                &prompt,
-                &name,
-            );
-            match result {
-                Ok(ExtractedVectorPoints { manual_vectors, remove_vectors, prompts }) => {
-                    let embeddings = match extract_embeddings(
+    if settings_diff.reindex_vectors() || !settings_diff.settings_update_only() {
+        /// TODO: remove clone
+        let settings_diff = settings_diff.clone();
+        rayon::spawn(move || {
+            for (name, (embedder, prompt)) in settings_diff.new.embedding_configs.clone() {
+                let result = extract_vector_points(
+                    documents_chunk_cloned.clone(),
+                    indexer,
+                    &settings_diff,
+                    &prompt,
+                    &name,
+                );
+                match result {
+                    Ok(ExtractedVectorPoints { manual_vectors, remove_vectors, prompts }) => {
+                        let embeddings = match extract_embeddings(
                         prompts,
                         indexer,
                         embedder.clone(),
                         &request_threads,
                     ) {
-                        Ok(results) => Some(results),
-                        Err(error) => {
-                            let _ = lmdb_writer_sx_cloned.send(Err(error));
-                            None
-                        }
-                    };
+                                Ok(results) => Some(results),
+                                Err(error) => {
+                                    let _ = lmdb_writer_sx_cloned.send(Err(error));
+                                    None
+                                }
+                            };
 
-                    if !(remove_vectors.is_empty()
-                        && manual_vectors.is_empty()
-                        && embeddings.as_ref().map_or(true, |e| e.is_empty()))
-                    {
-                        let _ = lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints {
-                            remove_vectors,
-                            embeddings,
-                            expected_dimension: embedder.dimensions(),
-                            manual_vectors,
-                            embedder_name: name,
-                        }));
+                        if !(remove_vectors.is_empty()
+                            && manual_vectors.is_empty()
+                            && embeddings.as_ref().map_or(true, |e| e.is_empty()))
+                        {
+                            let _ = lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints {
+                                remove_vectors,
+                                embeddings,
+                                expected_dimension: embedder.dimensions(),
+                                manual_vectors,
+                                embedder_name: name,
+                            }));
+                        }
+                    }
+
+                    Err(error) => {
+                        let _ = lmdb_writer_sx_cloned.send(Err(error));
                     }
                 }
-
-                Err(error) => {
-                    let _ = lmdb_writer_sx_cloned.send(Err(error));
-                }
             }
-        }
-    });
+        });
+    }
 
     // TODO: create a custom internal error
     let _ = lmdb_writer_sx.send(Ok(TypedChunk::Documents(original_documents_chunk)));
