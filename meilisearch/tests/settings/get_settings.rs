@@ -113,7 +113,8 @@ async fn secrets_are_hidden_in_settings() {
                 "default": {
                     "source": "rest",
                     "url": "https://localhost:7777",
-                    "apiKey": "My super secret value you will never guess"
+                    "apiKey": "My super secret value you will never guess",
+                    "dimensions": 4,
                 }
             }
         }))
@@ -184,6 +185,7 @@ async fn secrets_are_hidden_in_settings() {
         "default": {
           "source": "rest",
           "apiKey": "My suXXXXXX...",
+          "dimensions": 4,
           "documentTemplate": "{% for field in fields %} {{ field.name }}: {{ field.value }}\n{% endfor %}",
           "url": "https://localhost:7777",
           "query": null,

@@ -252,7 +252,7 @@ where
             let number_of_documents = self.index.number_of_documents(self.wtxn)?;
             return Ok(DocumentAdditionResult { indexed_documents: 0, number_of_documents });
         }
-        let mut output = self
+        let output = self
             .transform
             .take()
             .expect("Invalid document addition state")

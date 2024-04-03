@@ -55,7 +55,6 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     let mut value_buffer = Vec::new();
 
     // initialize tokenizer.
-    /// TODO: Fix ugly allocation
     let old_stop_words = settings_diff.old.stop_words.as_ref();
     let old_separators: Option<Vec<_>> = settings_diff
         .old
@@ -72,7 +71,6 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     );
     let del_tokenizer = del_builder.build();
 
-    /// TODO: Fix ugly allocation
     let new_stop_words = settings_diff.new.stop_words.as_ref();
     let new_separators: Option<Vec<_>> = settings_diff
         .new
@@ -267,7 +265,6 @@ fn lang_safe_tokens_from_document<'a>(
         // then we don't rerun the extraction.
         if !script_language.is_empty() {
             // build a new temporary tokenizer including the allow list.
-            /// TODO: Fix ugly allocation
             let stop_words = settings.stop_words.as_ref();
             let separators: Option<Vec<_>> = settings
                 .allowed_separators

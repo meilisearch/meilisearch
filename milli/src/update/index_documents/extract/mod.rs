@@ -198,7 +198,6 @@ fn run_extraction_task<FE, FS, M>(
     M: Send,
 {
     let current_span = tracing::Span::current();
-    /// TODO: remove clone
     let settings_diff = settings_diff.clone();
 
     rayon::spawn(move || {
@@ -236,7 +235,6 @@ fn send_original_documents_data(
         .build()?;
 
     if settings_diff.reindex_vectors() || !settings_diff.settings_update_only() {
-        /// TODO: remove clone
         let settings_diff = settings_diff.clone();
         rayon::spawn(move || {
             for (name, (embedder, prompt)) in settings_diff.new.embedding_configs.clone() {
@@ -250,17 +248,17 @@ fn send_original_documents_data(
                 match result {
                     Ok(ExtractedVectorPoints { manual_vectors, remove_vectors, prompts }) => {
                         let embeddings = match extract_embeddings(
-                        prompts,
-                        indexer,
-                        embedder.clone(),
-                        &request_threads,
-                    ) {
-                                Ok(results) => Some(results),
-                                Err(error) => {
-                                    let _ = lmdb_writer_sx_cloned.send(Err(error));
-                                    None
-                                }
-                            };
+                            prompts,
+                            indexer,
+                            embedder.clone(),
+                            &request_threads,
+                        ) {
+                            Ok(results) => Some(results),
+                            Err(error) => {
+                                let _ = lmdb_writer_sx_cloned.send(Err(error));
+                                None
+                            }
+                        };
 
                         if !(remove_vectors.is_empty()
                             && manual_vectors.is_empty()
