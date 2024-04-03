@@ -13,7 +13,7 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
-use meilisearch_types::milli::score_details::{self, ScoreDetails, ScoringStrategy};
+use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{FacetValueHit, OrderBy, SearchForFacetValues, TimeBudget};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -368,8 +368,6 @@ pub struct SearchHit {
     pub ranking_score: Option<f64>,
     #[serde(rename = "_rankingScoreDetails", skip_serializing_if = "Option::is_none")]
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
-    #[serde(rename = "_semanticScore", skip_serializing_if = "Option::is_none")]
-    pub semantic_score: Option<f32>,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -683,16 +681,6 @@ pub fn perform_search(
             insert_geo_distance(sort, &mut document);
         }
 
-        let mut semantic_score = None;
-        for details in &score {
-            if let ScoreDetails::Vector(score_details::Vector { similarity: Some(similarity) }) =
-                details
-            {
-                semantic_score = Some(*similarity);
-                break;
-            }
-        }
-
         let ranking_score =
             query.show_ranking_score.then(|| ScoreDetails::global_score(score.iter()));
         let ranking_score_details =
@@ -704,7 +692,6 @@ pub fn perform_search(
             matches_position,
             ranking_score_details,
             ranking_score,
-            semantic_score,
         };
         documents.push(hit);
     }
