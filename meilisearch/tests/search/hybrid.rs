@@ -278,6 +278,100 @@ async fn query_combination() {
         .await;
 
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"][0], @r###"{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":1.0,"_semanticScore":1.0}"###);
-    snapshot!(response["semanticHitCount"], @"1");
+    snapshot!(response["hits"], @r###"[{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":1.0},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":1.0},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":1.0}]"###);
+    snapshot!(response["semanticHitCount"], @"null");
+
+    // same with a different semantic ratio
+    let (response, code) = index
+        .search_post(json!({"hybrid": {"semanticRatio": 0.76}, "showRankingScore": true}))
+        .await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(response["hits"], @r###"[{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":1.0},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":1.0},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":1.0}]"###);
+    snapshot!(response["semanticHitCount"], @"null");
+
+    // wrong vector dimensions
+    let (response, code) = index
+    .search_post(json!({"vector": [1.0, 0.0, 1.0], "hybrid": {"semanticRatio": 1.0}, "showRankingScore": true}))
+    .await;
+
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Invalid vector dimensions: expected: `2`, found: `3`.",
+      "code": "invalid_vector_dimensions",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_vector_dimensions"
+    }
+    "###);
+
+    // full vector
+    let (response, code) = index
+    .search_post(json!({"vector": [1.0, 0.0], "hybrid": {"semanticRatio": 1.0}, "showRankingScore": true}))
+    .await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":0.7773500680923462,"_semanticScore":0.77735007},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":0.7236068248748779,"_semanticScore":0.7236068},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":0.6581138968467712,"_semanticScore":0.6581139}]"###);
+    snapshot!(response["semanticHitCount"], @"3");
+
+    // full keyword, without a query
+    let (response, code) = index
+    .search_post(json!({"vector": [1.0, 0.0], "hybrid": {"semanticRatio": 0.0}, "showRankingScore": true}))
+    .await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(response["hits"], @r###"[{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":1.0},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":1.0},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":1.0}]"###);
+    snapshot!(response["semanticHitCount"], @"null");
+
+    // query + vector, full keyword => keyword
+    let (response, code) = index
+    .search_post(json!({"q": "Captain", "vector": [1.0, 0.0], "hybrid": {"semanticRatio": 0.0}, "showRankingScore": true}))
+    .await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":0.996969696969697},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":0.996969696969697},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":0.8848484848484849}]"###);
+    snapshot!(response["semanticHitCount"], @"null");
+
+    // query + vector, no hybrid keyword =>
+    let (response, code) = index
+        .search_post(json!({"q": "Captain", "vector": [1.0, 0.0], "showRankingScore": true}))
+        .await;
+
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Invalid request: missing `hybrid` parameter when both `q` and `vector` are present.",
+      "code": "missing_search_hybrid",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_search_hybrid"
+    }
+    "###);
+
+    // full vector, without a vector => error
+    let (response, code) = index
+        .search_post(
+            json!({"q": "Captain", "hybrid": {"semanticRatio": 1.0}, "showRankingScore": true}),
+        )
+        .await;
+
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Error while generating embeddings: user error: attempt to embed the following text in a configuration where embeddings must be user provided: \"Captain\"",
+      "code": "vector_embedding_error",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+    }
+    "###);
+
+    // hybrid without a vector => full keyword
+    let (response, code) = index
+        .search_post(
+            json!({"q": "Planet", "hybrid": {"semanticRatio": 0.99}, "showRankingScore": true}),
+        )
+        .await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":0.9848484848484848}]"###);
+    snapshot!(response["semanticHitCount"], @"0");
 }
