@@ -84,45 +84,73 @@ impl ScoreWithRatioResult {
         }
     }
 
-    fn merge(left: Self, right: Self, from: usize, length: usize) -> SearchResult {
-        let mut documents_ids =
-            Vec::with_capacity(left.document_scores.len() + right.document_scores.len());
-        let mut document_scores =
-            Vec::with_capacity(left.document_scores.len() + right.document_scores.len());
+    fn merge(
+        vector_results: Self,
+        keyword_results: Self,
+        from: usize,
+        length: usize,
+    ) -> (SearchResult, u32) {
+        #[derive(Clone, Copy)]
+        enum ResultSource {
+            Semantic,
+            Keyword,
+        }
+        let mut semantic_hit_count = 0;
+
+        let mut documents_ids = Vec::with_capacity(
+            vector_results.document_scores.len() + keyword_results.document_scores.len(),
+        );
+        let mut document_scores = Vec::with_capacity(
+            vector_results.document_scores.len() + keyword_results.document_scores.len(),
+        );
 
         let mut documents_seen = RoaringBitmap::new();
-        for (docid, (main_score, _sub_score)) in left
+        for ((docid, (main_score, _sub_score)), source) in vector_results
             .document_scores
             .into_iter()
-            .merge_by(right.document_scores.into_iter(), |(_, left), (_, right)| {
-                // the first value is the one with the greatest score
-                compare_scores(left, right).is_ge()
-            })
+            .zip(std::iter::repeat(ResultSource::Semantic))
+            .merge_by(
+                keyword_results
+                    .document_scores
+                    .into_iter()
+                    .zip(std::iter::repeat(ResultSource::Keyword)),
+                |((_, left), _), ((_, right), _)| {
+                    // the first value is the one with the greatest score
+                    compare_scores(left, right).is_ge()
+                },
+            )
             // remove documents we already saw
-            .filter(|(docid, _)| documents_seen.insert(*docid))
+            .filter(|((docid, _), _)| documents_seen.insert(*docid))
             // start skipping **after** the filter
             .skip(from)
             // take **after** skipping
             .take(length)
         {
+            if let ResultSource::Semantic = source {
+                semantic_hit_count += 1;
+            }
             documents_ids.push(docid);
             // TODO: pass both scores to documents_score in some way?
             document_scores.push(main_score);
         }
 
-        SearchResult {
-            matching_words: right.matching_words,
-            candidates: left.candidates | right.candidates,
-            documents_ids,
-            document_scores,
-            degraded: left.degraded | right.degraded,
-            used_negative_operator: left.used_negative_operator | right.used_negative_operator,
-        }
+        (
+            SearchResult {
+                matching_words: keyword_results.matching_words,
+                candidates: vector_results.candidates | keyword_results.candidates,
+                documents_ids,
+                document_scores,
+                degraded: vector_results.degraded | keyword_results.degraded,
+                used_negative_operator: vector_results.used_negative_operator
+                    | keyword_results.used_negative_operator,
+            },
+            semantic_hit_count,
+        )
     }
 }
 
 impl<'a> Search<'a> {
-    pub fn execute_hybrid(&self, semantic_ratio: f32) -> Result<SearchResult> {
+    pub fn execute_hybrid(&self, semantic_ratio: f32) -> Result<(SearchResult, Option<u32>)> {
         // TODO: find classier way to achieve that than to reset vector and query params
         // create separate keyword and semantic searches
         let mut search = Search {
@@ -148,14 +176,16 @@ impl<'a> Search<'a> {
 
         // completely skip semantic search if the results of the keyword search are good enough
         if self.results_good_enough(&keyword_results, semantic_ratio) {
-            return Ok(keyword_results);
+            return Ok((keyword_results, Some(0)));
         }
 
         // no vector search against placeholder search
-        let Some(query) = search.query.take() else { return Ok(keyword_results) };
+        let Some(query) = search.query.take() else {
+            return Ok((keyword_results, Some(0)));
+        };
         // no embedder, no semantic search
         let Some(SemanticSearch { vector, embedder_name, embedder }) = semantic else {
-            return Ok(keyword_results);
+            return Ok((keyword_results, Some(0)));
         };
 
         let vector_query = match vector {
@@ -166,7 +196,7 @@ impl<'a> Search<'a> {
                     Ok(embedding) => embedding,
                     Err(error) => {
                         tracing::error!(error=%error, "Embedding failed");
-                        return Ok(keyword_results);
+                        return Ok((keyword_results, Some(0)));
                     }
                 }
             }
@@ -181,10 +211,10 @@ impl<'a> Search<'a> {
         let keyword_results = ScoreWithRatioResult::new(keyword_results, 1.0 - semantic_ratio);
         let vector_results = ScoreWithRatioResult::new(vector_results, semantic_ratio);
 
-        let merge_results =
+        let (merge_results, semantic_hit_count) =
             ScoreWithRatioResult::merge(vector_results, keyword_results, self.offset, self.limit);
         assert!(merge_results.documents_ids.len() <= self.limit);
-        Ok(merge_results)
+        Ok((merge_results, Some(semantic_hit_count)))
     }
 
     fn results_good_enough(&self, keyword_results: &SearchResult, semantic_ratio: f32) -> bool {

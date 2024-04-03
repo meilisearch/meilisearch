@@ -760,6 +760,7 @@ impl SearchAggregator {
             query: _,
             processing_time_ms,
             hits_info: _,
+            semantic_hit_count: _,
             facet_distribution: _,
             facet_stats: _,
             degraded,

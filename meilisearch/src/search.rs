@@ -385,6 +385,9 @@ pub struct SearchResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facet_stats: Option<BTreeMap<String, FacetStats>>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub semantic_hit_count: Option<u32>,
+
     // These fields are only used for analytics purposes
     #[serde(skip)]
     pub degraded: bool,
@@ -553,16 +556,23 @@ pub fn perform_search(
     let (search, is_finite_pagination, max_total_hits, offset) =
         prepare_search(index, &rtxn, &query, &search_kind, time_budget)?;
 
-    let milli::SearchResult {
-        documents_ids,
-        matching_words,
-        candidates,
-        document_scores,
-        degraded,
-        used_negative_operator,
-        ..
-    } = match &search_kind {
-        SearchKind::KeywordOnly | SearchKind::SemanticOnly { .. } => search.execute()?,
+    let (
+        milli::SearchResult {
+            documents_ids,
+            matching_words,
+            candidates,
+            document_scores,
+            degraded,
+            used_negative_operator,
+        },
+        semantic_hit_count,
+    ) = match &search_kind {
+        SearchKind::KeywordOnly => (search.execute()?, None),
+        SearchKind::SemanticOnly { .. } => {
+            let results = search.execute()?;
+            let semantic_hit_count = results.document_scores.len() as u32;
+            (results, Some(semantic_hit_count))
+        }
         SearchKind::Hybrid { semantic_ratio, .. } => search.execute_hybrid(*semantic_ratio)?,
     };
 
@@ -760,6 +770,7 @@ pub fn perform_search(
         facet_stats,
         degraded,
         used_negative_operator,
+        semantic_hit_count,
     };
     Ok(result)
 }
