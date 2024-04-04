@@ -1040,6 +1040,7 @@ async fn experimental_feature_vector_store() {
     let (response, code) = index
         .search_post(json!({
             "vector": [1.0, 2.0, 3.0],
+            "showRankingScore": true
         }))
         .await;
     meili_snap::snapshot!(code, @"400 Bad Request");
@@ -1082,6 +1083,7 @@ async fn experimental_feature_vector_store() {
     let (response, code) = index
         .search_post(json!({
             "vector": [1.0, 2.0, 3.0],
+            "showRankingScore": true,
         }))
         .await;
 
@@ -1099,7 +1101,7 @@ async fn experimental_feature_vector_store() {
             3
           ]
         },
-        "_semanticScore": 1.0
+        "_rankingScore": 1.0
       },
       {
         "title": "Captain Marvel",
@@ -1111,7 +1113,7 @@ async fn experimental_feature_vector_store() {
             54
           ]
         },
-        "_semanticScore": 0.9129112
+        "_rankingScore": 0.9129111766815186
       },
       {
         "title": "Gläss",
@@ -1123,7 +1125,7 @@ async fn experimental_feature_vector_store() {
             90
           ]
         },
-        "_semanticScore": 0.8106413
+        "_rankingScore": 0.8106412887573242
       },
       {
         "title": "How to Train Your Dragon: The Hidden World",
@@ -1135,7 +1137,7 @@ async fn experimental_feature_vector_store() {
             32
           ]
         },
-        "_semanticScore": 0.74120104
+        "_rankingScore": 0.7412010431289673
       },
       {
         "title": "Escape Room",
@@ -1146,7 +1148,8 @@ async fn experimental_feature_vector_store() {
             -23,
             32
           ]
-        }
+        },
+        "_rankingScore": 0.6972063183784485
       }
     ]
     "###);

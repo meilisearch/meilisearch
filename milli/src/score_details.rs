@@ -98,9 +98,9 @@ impl ScoreDetails {
             ScoreDetails::ExactWords(e) => RankOrValue::Rank(e.rank()),
             ScoreDetails::Sort(sort) => RankOrValue::Sort(sort),
             ScoreDetails::GeoSort(geosort) => RankOrValue::GeoSort(geosort),
-            ScoreDetails::Vector(vector) => RankOrValue::Score(
-                vector.value_similarity.as_ref().map(|(_, s)| *s as f64).unwrap_or(0.0f64),
-            ),
+            ScoreDetails::Vector(vector) => {
+                RankOrValue::Score(vector.similarity.as_ref().map(|s| *s as f64).unwrap_or(0.0f64))
+            }
             ScoreDetails::Skipped => RankOrValue::Rank(Rank { rank: 0, max_rank: 1 }),
         }
     }
@@ -249,16 +249,13 @@ impl ScoreDetails {
                     order += 1;
                 }
                 ScoreDetails::Vector(s) => {
-                    let vector = format!("vectorSort({:?})", s.target_vector);
-                    let value = s.value_similarity.as_ref().map(|(v, _)| v);
-                    let similarity = s.value_similarity.as_ref().map(|(_, s)| s);
+                    let similarity = s.similarity.as_ref();
 
                     let details = serde_json::json!({
                         "order": order,
-                        "value": value,
                         "similarity": similarity,
                     });
-                    details_map.insert(vector, details);
+                    details_map.insert("vectorSort".into(), details);
                     order += 1;
                 }
                 ScoreDetails::Skipped => {
@@ -494,8 +491,7 @@ impl PartialOrd for GeoSort {
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Vector {
-    pub target_vector: Vec<f32>,
-    pub value_similarity: Option<(Vec<f32>, f32)>,
+    pub similarity: Option<f32>,
 }
 
 impl GeoSort {

@@ -1,19 +1,20 @@
 use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use deserr::Deserr;
 use either::Either;
-use index_scheduler::RoFeatures;
 use indexmap::IndexMap;
 use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
-use meilisearch_types::milli::score_details::{self, ScoreDetails, ScoringStrategy};
-use meilisearch_types::milli::vector::DistributionShift;
+use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
+use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{FacetValueHit, OrderBy, SearchForFacetValues, TimeBudget};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
@@ -90,11 +91,73 @@ pub struct SearchQuery {
 #[derive(Debug, Clone, Default, PartialEq, Deserr)]
 #[deserr(error = DeserrJsonError<InvalidHybridQuery>, rename_all = camelCase, deny_unknown_fields)]
 pub struct HybridQuery {
-    /// TODO validate that sementic ratio is between 0.0 and 1,0
     #[deserr(default, error = DeserrJsonError<InvalidSearchSemanticRatio>, default)]
     pub semantic_ratio: SemanticRatio,
     #[deserr(default, error = DeserrJsonError<InvalidEmbedder>, default)]
     pub embedder: Option<String>,
+}
+
+pub enum SearchKind {
+    KeywordOnly,
+    SemanticOnly { embedder_name: String, embedder: Arc<Embedder> },
+    Hybrid { embedder_name: String, embedder: Arc<Embedder>, semantic_ratio: f32 },
+}
+impl SearchKind {
+    pub(crate) fn semantic(
+        index_scheduler: &index_scheduler::IndexScheduler,
+        index: &Index,
+        embedder_name: Option<&str>,
+        vector_len: Option<usize>,
+    ) -> Result<Self, ResponseError> {
+        let (embedder_name, embedder) =
+            Self::embedder(index_scheduler, index, embedder_name, vector_len)?;
+        Ok(Self::SemanticOnly { embedder_name, embedder })
+    }
+
+    pub(crate) fn hybrid(
+        index_scheduler: &index_scheduler::IndexScheduler,
+        index: &Index,
+        embedder_name: Option<&str>,
+        semantic_ratio: f32,
+        vector_len: Option<usize>,
+    ) -> Result<Self, ResponseError> {
+        let (embedder_name, embedder) =
+            Self::embedder(index_scheduler, index, embedder_name, vector_len)?;
+        Ok(Self::Hybrid { embedder_name, embedder, semantic_ratio })
+    }
+
+    fn embedder(
+        index_scheduler: &index_scheduler::IndexScheduler,
+        index: &Index,
+        embedder_name: Option<&str>,
+        vector_len: Option<usize>,
+    ) -> Result<(String, Arc<Embedder>), ResponseError> {
+        let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
+        let embedders = index_scheduler.embedders(embedder_configs)?;
+
+        let embedder_name = embedder_name.unwrap_or_else(|| embedders.get_default_embedder_name());
+
+        let embedder = embedders.get(embedder_name);
+
+        let embedder = embedder
+            .ok_or(milli::UserError::InvalidEmbedder(embedder_name.to_owned()))
+            .map_err(milli::Error::from)?
+            .0;
+
+        if let Some(vector_len) = vector_len {
+            if vector_len != embedder.dimensions() {
+                return Err(meilisearch_types::milli::Error::UserError(
+                    meilisearch_types::milli::UserError::InvalidVectorDimensions {
+                        expected: embedder.dimensions(),
+                        found: vector_len,
+                    },
+                )
+                .into());
+            }
+        }
+
+        Ok((embedder_name.to_owned(), embedder))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Deserr)]
@@ -305,8 +368,6 @@ pub struct SearchHit {
     pub ranking_score: Option<f64>,
     #[serde(rename = "_rankingScoreDetails", skip_serializing_if = "Option::is_none")]
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
-    #[serde(rename = "_semanticScore", skip_serializing_if = "Option::is_none")]
-    pub semantic_score: Option<f32>,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -314,8 +375,6 @@ pub struct SearchHit {
 pub struct SearchResult {
     pub hits: Vec<SearchHit>,
     pub query: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub vector: Option<Vec<f32>>,
     pub processing_time_ms: u128,
     #[serde(flatten)]
     pub hits_info: HitsInfo,
@@ -323,6 +382,9 @@ pub struct SearchResult {
     pub facet_distribution: Option<BTreeMap<String, IndexMap<String, u64>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facet_stats: Option<BTreeMap<String, FacetStats>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub semantic_hit_count: Option<u32>,
 
     // These fields are only used for analytics purposes
     #[serde(skip)]
@@ -386,46 +448,35 @@ fn prepare_search<'t>(
     index: &'t Index,
     rtxn: &'t RoTxn,
     query: &'t SearchQuery,
-    features: RoFeatures,
-    distribution: Option<DistributionShift>,
+    search_kind: &SearchKind,
     time_budget: TimeBudget,
 ) -> Result<(milli::Search<'t>, bool, usize, usize), MeilisearchHttpError> {
     let mut search = index.search(rtxn);
     search.time_budget(time_budget);
 
-    if query.vector.is_some() {
-        features.check_vector("Passing `vector` as a query parameter")?;
-    }
-
-    if query.hybrid.is_some() {
-        features.check_vector("Passing `hybrid` as a query parameter")?;
-    }
-
-    if query.hybrid.is_none() && query.q.is_some() && query.vector.is_some() {
-        return Err(MeilisearchHttpError::MissingSearchHybrid);
-    }
-
-    search.distribution_shift(distribution);
-
-    if let Some(ref vector) = query.vector {
-        match &query.hybrid {
-            // If semantic ratio is 0.0, only the query search will impact the search results,
-            // skip the vector
-            Some(hybrid) if *hybrid.semantic_ratio == 0.0 => (),
-            _otherwise => {
-                search.vector(vector.clone());
-            }
-        }
-    }
-
-    if let Some(ref q) = query.q {
-        match &query.hybrid {
-            // If semantic ratio is 1.0, only the vector search will impact the search results,
-            // skip the query
-            Some(hybrid) if *hybrid.semantic_ratio == 1.0 => (),
-            _otherwise => {
+    match search_kind {
+        SearchKind::KeywordOnly => {
+            if let Some(q) = &query.q {
                 search.query(q);
             }
+        }
+        SearchKind::SemanticOnly { embedder_name, embedder } => {
+            let vector = match query.vector.clone() {
+                Some(vector) => vector,
+                None => embedder
+                    .embed_one(query.q.clone().unwrap())
+                    .map_err(milli::vector::Error::from)
+                    .map_err(milli::Error::from)?,
+            };
+
+            search.semantic(embedder_name.clone(), embedder.clone(), Some(vector));
+        }
+        SearchKind::Hybrid { embedder_name, embedder, semantic_ratio: _ } => {
+            if let Some(q) = &query.q {
+                search.query(q);
+            }
+            // will be embedded in hybrid search if necessary
+            search.semantic(embedder_name.clone(), embedder.clone(), query.vector.clone());
         }
     }
 
@@ -448,10 +499,6 @@ fn prepare_search<'t>(
     } else {
         ScoringStrategy::Skip
     });
-
-    if let Some(HybridQuery { embedder: Some(embedder), .. }) = &query.hybrid {
-        search.embedder_name(embedder);
-    }
 
     // compute the offset on the limit depending on the pagination mode.
     let (offset, limit) = if is_finite_pagination {
@@ -495,8 +542,7 @@ fn prepare_search<'t>(
 pub fn perform_search(
     index: &Index,
     query: SearchQuery,
-    features: RoFeatures,
-    distribution: Option<DistributionShift>,
+    search_kind: SearchKind,
 ) -> Result<SearchResult, MeilisearchHttpError> {
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
@@ -506,22 +552,26 @@ pub fn perform_search(
     };
 
     let (search, is_finite_pagination, max_total_hits, offset) =
-        prepare_search(index, &rtxn, &query, features, distribution, time_budget)?;
+        prepare_search(index, &rtxn, &query, &search_kind, time_budget)?;
 
-    let milli::SearchResult {
-        documents_ids,
-        matching_words,
-        candidates,
-        document_scores,
-        degraded,
-        used_negative_operator,
-        ..
-    } = match &query.hybrid {
-        Some(hybrid) => match *hybrid.semantic_ratio {
-            ratio if ratio == 0.0 || ratio == 1.0 => search.execute()?,
-            ratio => search.execute_hybrid(ratio)?,
+    let (
+        milli::SearchResult {
+            documents_ids,
+            matching_words,
+            candidates,
+            document_scores,
+            degraded,
+            used_negative_operator,
         },
-        None => search.execute()?,
+        semantic_hit_count,
+    ) = match &search_kind {
+        SearchKind::KeywordOnly => (search.execute()?, None),
+        SearchKind::SemanticOnly { .. } => {
+            let results = search.execute()?;
+            let semantic_hit_count = results.document_scores.len() as u32;
+            (results, Some(semantic_hit_count))
+        }
+        SearchKind::Hybrid { semantic_ratio, .. } => search.execute_hybrid(*semantic_ratio)?,
     };
 
     let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
@@ -631,18 +681,6 @@ pub fn perform_search(
             insert_geo_distance(sort, &mut document);
         }
 
-        let mut semantic_score = None;
-        for details in &score {
-            if let ScoreDetails::Vector(score_details::Vector {
-                target_vector: _,
-                value_similarity: Some((_matching_vector, similarity)),
-            }) = details
-            {
-                semantic_score = Some(*similarity);
-                break;
-            }
-        }
-
         let ranking_score =
             query.show_ranking_score.then(|| ScoreDetails::global_score(score.iter()));
         let ranking_score_details =
@@ -654,7 +692,6 @@ pub fn perform_search(
             matches_position,
             ranking_score_details,
             ranking_score,
-            semantic_score,
         };
         documents.push(hit);
     }
@@ -715,12 +752,12 @@ pub fn perform_search(
         hits: documents,
         hits_info,
         query: query.q.unwrap_or_default(),
-        vector: query.vector,
         processing_time_ms: before_search.elapsed().as_millis(),
         facet_distribution,
         facet_stats,
         degraded,
         used_negative_operator,
+        semantic_hit_count,
     };
     Ok(result)
 }
@@ -730,7 +767,7 @@ pub fn perform_facet_search(
     search_query: SearchQuery,
     facet_query: Option<String>,
     facet_name: String,
-    features: RoFeatures,
+    search_kind: SearchKind,
 ) -> Result<FacetSearchResult, MeilisearchHttpError> {
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
@@ -739,10 +776,12 @@ pub fn perform_facet_search(
         None => TimeBudget::default(),
     };
 
-    let (search, _, _, _) =
-        prepare_search(index, &rtxn, &search_query, features, None, time_budget)?;
-    let mut facet_search =
-        SearchForFacetValues::new(facet_name, search, search_query.hybrid.is_some());
+    let (search, _, _, _) = prepare_search(index, &rtxn, &search_query, &search_kind, time_budget)?;
+    let mut facet_search = SearchForFacetValues::new(
+        facet_name,
+        search,
+        matches!(search_kind, SearchKind::Hybrid { .. }),
+    );
     if let Some(facet_query) = &facet_query {
         facet_search.query(facet_query);
     }

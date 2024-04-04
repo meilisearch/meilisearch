@@ -196,7 +196,7 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     InvalidPromptForEmbeddings(String, crate::prompt::error::NewPromptError),
     #[error("Too many embedders in the configuration. Found {0}, but limited to 256.")]
     TooManyEmbedders(usize),
-    #[error("Cannot find embedder with name {0}.")]
+    #[error("Cannot find embedder with name `{0}`.")]
     InvalidEmbedder(String),
     #[error("Too many vectors for document with id {0}: found {1}, but limited to 256.")]
     TooManyVectors(String, usize),

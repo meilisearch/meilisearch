@@ -1,26 +1,26 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
-use index_scheduler::IndexScheduler;
+use index_scheduler::{IndexScheduler, RoFeatures};
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli;
-use meilisearch_types::milli::vector::DistributionShift;
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
-use tracing::{debug, warn};
+use tracing::debug;
 
 use crate::analytics::{Analytics, SearchAggregator};
+use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::metrics::MEILISEARCH_DEGRADED_SEARCH_REQUESTS;
 use crate::search::{
-    add_search_rules, perform_search, HybridQuery, MatchingStrategy, SearchQuery, SemanticRatio,
-    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    add_search_rules, perform_search, HybridQuery, MatchingStrategy, SearchKind, SearchQuery,
+    SemanticRatio, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
     DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
@@ -204,12 +204,11 @@ pub async fn search_with_url_query(
     let index = index_scheduler.index(&index_uid)?;
     let features = index_scheduler.features();
 
-    let distribution = embed(&mut query, index_scheduler.get_ref(), &index)?;
+    let search_kind = search_kind(&query, index_scheduler.get_ref(), &index, features)?;
 
     let _permit = search_queue.try_get_search_permit().await?;
     let search_result =
-        tokio::task::spawn_blocking(move || perform_search(&index, query, features, distribution))
-            .await?;
+        tokio::task::spawn_blocking(move || perform_search(&index, query, search_kind)).await?;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
@@ -245,12 +244,11 @@ pub async fn search_with_post(
 
     let features = index_scheduler.features();
 
-    let distribution = embed(&mut query, index_scheduler.get_ref(), &index)?;
+    let search_kind = search_kind(&query, index_scheduler.get_ref(), &index, features)?;
 
     let _permit = search_queue.try_get_search_permit().await?;
     let search_result =
-        tokio::task::spawn_blocking(move || perform_search(&index, query, features, distribution))
-            .await?;
+        tokio::task::spawn_blocking(move || perform_search(&index, query, search_kind)).await?;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
         if search_result.degraded {
@@ -265,76 +263,58 @@ pub async fn search_with_post(
     Ok(HttpResponse::Ok().json(search_result))
 }
 
-pub fn embed(
-    query: &mut SearchQuery,
+pub fn search_kind(
+    query: &SearchQuery,
     index_scheduler: &IndexScheduler,
     index: &milli::Index,
-) -> Result<Option<DistributionShift>, ResponseError> {
-    match (&query.hybrid, &query.vector, &query.q) {
-        (Some(HybridQuery { semantic_ratio: _, embedder }), None, Some(q))
-            if !q.trim().is_empty() =>
-        {
-            let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
-            let embedders = index_scheduler.embedders(embedder_configs)?;
+    features: RoFeatures,
+) -> Result<SearchKind, ResponseError> {
+    if query.vector.is_some() {
+        features.check_vector("Passing `vector` as a query parameter")?;
+    }
 
-            let embedder = if let Some(embedder_name) = embedder {
-                embedders.get(embedder_name)
-            } else {
-                embedders.get_default()
-            };
+    if query.hybrid.is_some() {
+        features.check_vector("Passing `hybrid` as a query parameter")?;
+    }
 
-            let embedder = embedder
-                .ok_or(milli::UserError::InvalidEmbedder("default".to_owned()))
-                .map_err(milli::Error::from)?
-                .0;
-
-            let distribution = embedder.distribution();
-
-            let embeddings = embedder
-                .embed(vec![q.to_owned()])
-                .map_err(milli::vector::Error::from)
-                .map_err(milli::Error::from)?
-                .pop()
-                .expect("No vector returned from embedding");
-
-            if embeddings.iter().nth(1).is_some() {
-                warn!("Ignoring embeddings past the first one in long search query");
-                query.vector = Some(embeddings.iter().next().unwrap().to_vec());
-            } else {
-                query.vector = Some(embeddings.into_inner());
-            }
-            Ok(distribution)
+    // regardless of anything, always do a keyword search when we don't have a vector and the query is whitespace or missing
+    if query.vector.is_none() {
+        match &query.q {
+            Some(q) if q.trim().is_empty() => return Ok(SearchKind::KeywordOnly),
+            None => return Ok(SearchKind::KeywordOnly),
+            _ => {}
         }
-        (Some(hybrid), vector, _) => {
-            let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
-            let embedders = index_scheduler.embedders(embedder_configs)?;
+    }
 
-            let embedder = if let Some(embedder_name) = &hybrid.embedder {
-                embedders.get(embedder_name)
-            } else {
-                embedders.get_default()
-            };
-
-            let embedder = embedder
-                .ok_or(milli::UserError::InvalidEmbedder("default".to_owned()))
-                .map_err(milli::Error::from)?
-                .0;
-
-            if let Some(vector) = vector {
-                if vector.len() != embedder.dimensions() {
-                    return Err(meilisearch_types::milli::Error::UserError(
-                        meilisearch_types::milli::UserError::InvalidVectorDimensions {
-                            expected: embedder.dimensions(),
-                            found: vector.len(),
-                        },
-                    )
-                    .into());
-                }
-            }
-
-            Ok(embedder.distribution())
+    match &query.hybrid {
+        Some(HybridQuery { semantic_ratio, embedder }) if **semantic_ratio == 1.0 => {
+            Ok(SearchKind::semantic(
+                index_scheduler,
+                index,
+                embedder.as_deref(),
+                query.vector.as_ref().map(Vec::len),
+            )?)
         }
-        _ => Ok(None),
+        Some(HybridQuery { semantic_ratio, embedder: _ }) if **semantic_ratio == 0.0 => {
+            Ok(SearchKind::KeywordOnly)
+        }
+        Some(HybridQuery { semantic_ratio, embedder }) => Ok(SearchKind::hybrid(
+            index_scheduler,
+            index,
+            embedder.as_deref(),
+            **semantic_ratio,
+            query.vector.as_ref().map(Vec::len),
+        )?),
+        None => match (query.q.as_deref(), query.vector.as_deref()) {
+            (_query, None) => Ok(SearchKind::KeywordOnly),
+            (None, Some(_vector)) => Ok(SearchKind::semantic(
+                index_scheduler,
+                index,
+                None,
+                query.vector.as_ref().map(Vec::len),
+            )?),
+            (Some(_), Some(_)) => Err(MeilisearchHttpError::MissingSearchHybrid.into()),
+        },
     }
 }
 

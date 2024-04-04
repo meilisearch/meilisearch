@@ -12,6 +12,7 @@ use tracing::debug;
 use crate::analytics::{Analytics, FacetSearchAggregator};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
+use crate::routes::indexes::search::search_kind;
 use crate::search::{
     add_search_rules, perform_facet_search, HybridQuery, MatchingStrategy, SearchQuery,
     DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
@@ -73,9 +74,10 @@ pub async fn search(
 
     let index = index_scheduler.index(&index_uid)?;
     let features = index_scheduler.features();
+    let search_kind = search_kind(&search_query, &index_scheduler, &index, features)?;
     let _permit = search_queue.try_get_search_permit().await?;
     let search_result = tokio::task::spawn_blocking(move || {
-        perform_facet_search(&index, search_query, facet_query, facet_name, features)
+        perform_facet_search(&index, search_query, facet_query, facet_name, search_kind)
     })
     .await?;
 

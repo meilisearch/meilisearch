@@ -143,7 +143,7 @@ impl EmbeddingConfigs {
 
     /// Get the default embedder configuration, if any.
     pub fn get_default(&self) -> Option<(Arc<Embedder>, Arc<Prompt>)> {
-        self.get_default_embedder_name().and_then(|default| self.get(&default))
+        self.get(self.get_default_embedder_name())
     }
 
     /// Get the name of the default embedder configuration.
@@ -153,14 +153,14 @@ impl EmbeddingConfigs {
     /// - If there is only one embedder, it is always the default.
     /// - If there are multiple embedders and one of them is called `default`, then that one is the default embedder.
     /// - In all other cases, there is no default embedder.
-    pub fn get_default_embedder_name(&self) -> Option<String> {
+    pub fn get_default_embedder_name(&self) -> &str {
         let mut it = self.0.keys();
         let first_name = it.next();
         let second_name = it.next();
         match (first_name, second_name) {
-            (None, _) => None,
-            (Some(first), None) => Some(first.to_owned()),
-            (Some(_), Some(_)) => Some("default".to_owned()),
+            (None, _) => "default",
+            (Some(first), None) => first,
+            (Some(_), Some(_)) => "default",
         }
     }
 }
@@ -235,6 +235,17 @@ impl Embedder {
             Embedder::UserProvided(embedder) => embedder.embed(texts),
             Embedder::Rest(embedder) => embedder.embed(texts),
         }
+    }
+
+    pub fn embed_one(&self, text: String) -> std::result::Result<Embedding, EmbedError> {
+        let mut embeddings = self.embed(vec![text])?;
+        let embeddings = embeddings.pop().ok_or_else(EmbedError::missing_embedding)?;
+        Ok(if embeddings.iter().nth(1).is_some() {
+            tracing::warn!("Ignoring embeddings past the first one in long search query");
+            embeddings.iter().next().unwrap().to_vec()
+        } else {
+            embeddings.into_inner()
+        })
     }
 
     /// Embed multiple chunks of texts.

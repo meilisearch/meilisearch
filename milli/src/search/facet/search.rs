@@ -92,9 +92,15 @@ impl<'a> SearchForFacetValues<'a> {
             None => return Ok(Vec::new()),
         };
 
-        let search_candidates = self
-            .search_query
-            .execute_for_candidates(self.is_hybrid || self.search_query.vector.is_some())?;
+        let search_candidates = self.search_query.execute_for_candidates(
+            self.is_hybrid
+                || self
+                    .search_query
+                    .semantic
+                    .as_ref()
+                    .and_then(|semantic| semantic.vector.as_ref())
+                    .is_some(),
+        )?;
 
         let mut results = match index.sort_facet_values_by(rtxn)?.get(&self.facet) {
             OrderBy::Lexicographic => ValuesCollection::by_lexicographic(self.max_values),
