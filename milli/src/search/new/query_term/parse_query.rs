@@ -6,7 +6,19 @@ use charabia::{SeparatorKind, TokenKind};
 use super::compute_derivations::partially_initialized_term_from_word;
 use super::{LocatedQueryTerm, ZeroTypoTerm};
 use crate::search::new::query_term::{Lazy, Phrase, QueryTerm};
+use crate::search::new::Word;
 use crate::{Result, SearchContext, MAX_WORD_LENGTH};
+
+#[derive(Clone)]
+/// Extraction of the content of a query.
+pub struct ExtractedTokens {
+    /// The terms to search for in the database.
+    pub query_terms: Vec<LocatedQueryTerm>,
+    /// The words that must not appear in the results.
+    pub negative_words: Vec<Word>,
+    /// The phrases that must not appear in the results.
+    pub negative_phrases: Vec<LocatedQueryTerm>,
+}
 
 /// Convert the tokenised search query into a list of located query terms.
 #[tracing::instrument(level = "trace", skip_all, target = "search::query")]
@@ -14,12 +26,17 @@ pub fn located_query_terms_from_tokens(
     ctx: &mut SearchContext,
     query: NormalizedTokenIter,
     words_limit: Option<usize>,
-) -> Result<Vec<LocatedQueryTerm>> {
+) -> Result<ExtractedTokens> {
     let nbr_typos = number_of_typos_allowed(ctx)?;
 
-    let mut located_terms = Vec::new();
+    let mut query_terms = Vec::new();
 
+    let mut negative_phrase = false;
     let mut phrase: Option<PhraseBuilder> = None;
+    let mut encountered_whitespace = true;
+    let mut negative_next_token = false;
+    let mut negative_words = Vec::new();
+    let mut negative_phrases = Vec::new();
 
     let parts_limit = words_limit.unwrap_or(usize::MAX);
 
@@ -31,9 +48,10 @@ pub fn located_query_terms_from_tokens(
         if token.lemma().is_empty() {
             continue;
         }
+
         // early return if word limit is exceeded
-        if located_terms.len() >= parts_limit {
-            return Ok(located_terms);
+        if query_terms.len() >= parts_limit {
+            return Ok(ExtractedTokens { query_terms, negative_words, negative_phrases });
         }
 
         match token.kind {
@@ -46,6 +64,11 @@ pub fn located_query_terms_from_tokens(
                 // 3. if the word is the last token of the query we push it as a prefix word.
                 if let Some(phrase) = &mut phrase {
                     phrase.push_word(ctx, &token, position)
+                } else if negative_next_token {
+                    let word = token.lemma().to_string();
+                    let word = Word::Original(ctx.word_interner.insert(word));
+                    negative_words.push(word);
+                    negative_next_token = false;
                 } else if peekable.peek().is_some() {
                     match token.kind {
                         TokenKind::Word => {
@@ -61,9 +84,9 @@ pub fn located_query_terms_from_tokens(
                                 value: ctx.term_interner.push(term),
                                 positions: position..=position,
                             };
-                            located_terms.push(located_term);
+                            query_terms.push(located_term);
                         }
-                        TokenKind::StopWord | TokenKind::Separator(_) | TokenKind::Unknown => {}
+                        TokenKind::StopWord | TokenKind::Separator(_) | TokenKind::Unknown => (),
                     }
                 } else {
                     let word = token.lemma();
@@ -78,7 +101,7 @@ pub fn located_query_terms_from_tokens(
                         value: ctx.term_interner.push(term),
                         positions: position..=position,
                     };
-                    located_terms.push(located_term);
+                    query_terms.push(located_term);
                 }
             }
             TokenKind::Separator(separator_kind) => {
@@ -94,7 +117,14 @@ pub fn located_query_terms_from_tokens(
                     let phrase = if separator_kind == SeparatorKind::Hard {
                         if let Some(phrase) = phrase {
                             if let Some(located_query_term) = phrase.build(ctx) {
-                                located_terms.push(located_query_term)
+                                // as we are evaluating a negative operator we put the phrase
+                                // in the negative one *but* we don't reset the negative operator
+                                // as we are immediatly starting a new negative phrase.
+                                if negative_phrase {
+                                    negative_phrases.push(located_query_term);
+                                } else {
+                                    query_terms.push(located_query_term);
+                                }
                             }
                             Some(PhraseBuilder::empty())
                         } else {
@@ -115,26 +145,49 @@ pub fn located_query_terms_from_tokens(
                         // Per the check above, quote_count > 0
                         quote_count -= 1;
                         if let Some(located_query_term) = phrase.build(ctx) {
-                            located_terms.push(located_query_term)
+                            // we were evaluating a negative operator so we
+                            // put the phrase in the negative phrases
+                            if negative_phrase {
+                                negative_phrases.push(located_query_term);
+                                negative_phrase = false;
+                            } else {
+                                query_terms.push(located_query_term);
+                            }
                         }
                     }
 
                     // Start new phrase if the token ends with an opening quote
-                    (quote_count % 2 == 1).then_some(PhraseBuilder::empty())
+                    if quote_count % 2 == 1 {
+                        negative_phrase = negative_next_token;
+                        Some(PhraseBuilder::empty())
+                    } else {
+                        None
+                    }
                 };
+
+                negative_next_token =
+                    phrase.is_none() && token.lemma() == "-" && encountered_whitespace;
             }
             _ => (),
         }
+
+        encountered_whitespace =
+            token.lemma().chars().last().filter(|c| c.is_whitespace()).is_some();
     }
 
     // If a quote is never closed, we consider all of the end of the query as a phrase.
     if let Some(phrase) = phrase.take() {
         if let Some(located_query_term) = phrase.build(ctx) {
-            located_terms.push(located_query_term);
+            // put the phrase in the negative set if we are evaluating a negative operator.
+            if negative_phrase {
+                negative_phrases.push(located_query_term);
+            } else {
+                query_terms.push(located_query_term);
+            }
         }
     }
 
-    Ok(located_terms)
+    Ok(ExtractedTokens { query_terms, negative_words, negative_phrases })
 }
 
 pub fn number_of_typos_allowed<'ctx>(
@@ -315,8 +368,10 @@ mod tests {
         let rtxn = index.read_txn()?;
         let mut ctx = SearchContext::new(&index, &rtxn);
         // panics with `attempt to add with overflow` before <https://github.com/meilisearch/meilisearch/issues/3785>
-        let located_query_terms = located_query_terms_from_tokens(&mut ctx, tokens, None)?;
-        assert!(located_query_terms.is_empty());
+        let ExtractedTokens { query_terms, .. } =
+            located_query_terms_from_tokens(&mut ctx, tokens, None)?;
+        assert!(query_terms.is_empty());
+
         Ok(())
     }
 }

@@ -583,6 +583,7 @@ pub struct SearchAggregator {
     total_received: usize,
     total_succeeded: usize,
     total_degraded: usize,
+    total_used_negative_operator: usize,
     time_spent: BinaryHeap<usize>,
 
     // sort
@@ -763,11 +764,15 @@ impl SearchAggregator {
             facet_distribution: _,
             facet_stats: _,
             degraded,
+            used_negative_operator,
         } = result;
 
         self.total_succeeded = self.total_succeeded.saturating_add(1);
         if *degraded {
             self.total_degraded = self.total_degraded.saturating_add(1);
+        }
+        if *used_negative_operator {
+            self.total_used_negative_operator = self.total_used_negative_operator.saturating_add(1);
         }
         self.time_spent.push(*processing_time_ms as usize);
     }
@@ -811,6 +816,7 @@ impl SearchAggregator {
             embedder,
             hybrid,
             total_degraded,
+            total_used_negative_operator,
         } = other;
 
         if self.timestamp.is_none() {
@@ -826,6 +832,8 @@ impl SearchAggregator {
         self.total_received = self.total_received.saturating_add(total_received);
         self.total_succeeded = self.total_succeeded.saturating_add(total_succeeded);
         self.total_degraded = self.total_degraded.saturating_add(total_degraded);
+        self.total_used_negative_operator =
+            self.total_used_negative_operator.saturating_add(total_used_negative_operator);
         self.time_spent.append(time_spent);
 
         // sort
@@ -932,6 +940,7 @@ impl SearchAggregator {
             embedder,
             hybrid,
             total_degraded,
+            total_used_negative_operator,
         } = self;
 
         if total_received == 0 {
@@ -952,6 +961,7 @@ impl SearchAggregator {
                     "total_failed": total_received.saturating_sub(total_succeeded), // just to be sure we never panics
                     "total_received": total_received,
                     "total_degraded": total_degraded,
+                    "total_used_negative_operator": total_used_negative_operator,
                 },
                 "sort": {
                     "with_geoPoint": sort_with_geo_point,

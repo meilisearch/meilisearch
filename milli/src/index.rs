@@ -2435,6 +2435,7 @@ pub(crate) mod tests {
             document_scores: _,
             mut documents_ids,
             degraded: _,
+            used_negative_operator: _,
         } = search.execute().unwrap();
         let primary_key_id = index.fields_ids_map(&rtxn).unwrap().id("primary_key").unwrap();
         documents_ids.sort_unstable();
