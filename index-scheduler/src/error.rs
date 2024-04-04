@@ -138,6 +138,8 @@ pub enum Error {
     CreateBatch(Box<Self>),
     #[error("Corrupted task queue.")]
     CorruptedTaskQueue,
+    #[error("Corrupted index.")]
+    CorruptedIndex,
     #[error(transparent)]
     TaskDatabaseUpdate(Box<Self>),
     #[error(transparent)]
@@ -192,6 +194,7 @@ impl Error {
             | Error::Anyhow(_) => true,
             Error::CreateBatch(_)
             | Error::CorruptedTaskQueue
+            | Error::CorruptedIndex
             | Error::TaskDatabaseUpdate(_)
             | Error::HeedTransaction(_) => false,
             #[cfg(test)]
@@ -242,6 +245,7 @@ impl ErrorCode for Error {
             Error::CorruptedDump => Code::Internal,
             Error::TaskDatabaseUpdate(_) => Code::Internal,
             Error::CreateBatch(_) => Code::Internal,
+            Error::CorruptedIndex => Code::Internal,
 
             // This one should never be seen by the end user
             Error::AbortedTask => Code::Internal,

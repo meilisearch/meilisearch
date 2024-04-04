@@ -1019,6 +1019,13 @@ impl IndexScheduler {
                     .set_currently_updating_index(Some((index_uid.clone(), index.clone())));
 
                 let mut index_wtxn = index.write_txn()?;
+
+                if index.is_corrupted(&index_wtxn)? {
+                    tracing::error!("Aborting task due to corrupted index");
+                    index_wtxn.abort();
+                    return Err(crate::Error::CorruptedIndex);
+                }
+
                 let tasks = self.apply_index_operation(&mut index_wtxn, &index, op)?;
 
                 index.check_document_facet_consistency(&index_wtxn)?.check();

@@ -73,6 +73,8 @@ pub mod main_key {
     pub const PROXIMITY_PRECISION: &str = "proximity-precision";
     pub const EMBEDDING_CONFIGS: &str = "embedding_configs";
     pub const SEARCH_CUTOFF: &str = "search_cutoff";
+
+    pub const CORRUPTED: &str = "corrupted";
 }
 
 pub mod db_name {
@@ -1716,6 +1718,14 @@ impl Index {
 
         Ok(DocumentFacetConsistency { documents, facets, facet_exists })
     }
+
+    pub fn mark_as_corrupted(&self, wtxn: &mut RwTxn<'_>) -> Result<()> {
+        Ok(self.main.remap_types::<Str, Str>().put(wtxn, main_key::CORRUPTED, "corrupted")?)
+    }
+
+    pub fn is_corrupted(&self, txn: &RoTxn<'_>) -> Result<bool> {
+        Ok(self.main.remap_types::<Str, Str>().get(txn, main_key::CORRUPTED)?.is_some())
+    }
 }
 
 pub struct DocumentFacetConsistency {
@@ -1727,20 +1737,22 @@ pub struct DocumentFacetConsistency {
 impl DocumentFacetConsistency {
     pub fn check(&self) {
         let mut inconsistencies = 0;
-        for ((field_name, facet), facet_exists) in self.facets.iter().zip(self.facet_exists.iter())
+        for ((field_name, facet), _facet_exists) in self.facets.iter().zip(self.facet_exists.iter())
         {
             if field_name == "_geo" {
                 continue;
             }
 
-            let documents = self.documents.clone() & facet_exists;
-            let missing_in_facets = &documents - facet;
+            // only check the internal ids missing in documents as it is the grave condition
+            // let documents = self.documents.clone() & facet_exists;
+            let documents = self.documents.clone();
+            // let missing_in_facets = &documents - facet;
             let missing_in_documents = facet - documents;
 
-            for id in missing_in_facets {
+            /*for id in missing_in_facets {
                 tracing::error!(id, field_name, "Missing in facets");
                 inconsistencies += 1;
-            }
+            }*/
             for id in missing_in_documents {
                 tracing::error!(id, field_name, "Missing in documents");
                 inconsistencies += 1;

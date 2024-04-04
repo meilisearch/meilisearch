@@ -1186,8 +1186,48 @@ impl IndexScheduler {
             };
 
             match res {
-                Ok(_) => tracing::info!("Created a dump after failed task"),
-                Err(error) => tracing::error!(%error, "Could not create a dump after failed task"),
+                Ok(_) => tracing::info!("Created a dump after panicked task"),
+                Err(error) => {
+                    tracing::error!(%error, "Could not create a dump after panicked task")
+                }
+            }
+
+            let snap_batch = batch::Batch::SnapshotCreation(vec![Task {
+                uid: u32::MAX,
+                enqueued_at: OffsetDateTime::now_utc(),
+                started_at: Some(OffsetDateTime::now_utc()),
+                finished_at: None,
+                error: None,
+                canceled_by: None,
+                details: None,
+                status: Status::Processing,
+                kind: KindWithContent::SnapshotCreation,
+            }]);
+
+            let res = {
+                let cloned_index_scheduler = self.private_clone();
+                let handle = std::thread::Builder::new()
+                    .name(String::from("batch-operation"))
+                    .spawn(move || cloned_index_scheduler.process_batch(snap_batch))
+                    .unwrap();
+                handle.join().unwrap_or(Err(Error::ProcessBatchPanicked))
+            };
+
+            match res {
+                Ok(_) => tracing::info!("Created a snapshot after panicked task"),
+                Err(error) => {
+                    tracing::error!(%error, "Could not create a snapshot after panicked task")
+                }
+            }
+
+            {
+                if let Some(index_uid) = index_uid.as_deref() {
+                    if let Ok(index) = self.index(index_uid) {
+                        let mut index_wtxn = index.write_txn()?;
+                        index.mark_as_corrupted(&mut index_wtxn)?;
+                        index_wtxn.commit()?;
+                    }
+                }
             }
 
             let user = std::env::var("MEILI_LOUIS_PUSHOVER_USER").unwrap();
@@ -1198,7 +1238,7 @@ impl IndexScheduler {
                     "token": app,
                     "user": user,
                     "title": "Issue 138 db inconsistency",
-                    "message": "A dump has been created",
+                    "message": "Dump and snapshot created, the index has been marked as corrupted",
                 }),
             ) {
                 tracing::error!(%error, "could not send pushover")
