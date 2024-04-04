@@ -184,6 +184,110 @@ async fn phrase_search_with_stop_word() {
         .await;
 }
 
+#[actix_rt::test]
+async fn negative_phrase_search() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(0).await;
+
+    index
+        .search(json!({"q": "-\"train your dragon\"" }), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            let hits = response["hits"].as_array().unwrap();
+            assert_eq!(hits.len(), 4);
+            assert_eq!(hits[0]["id"], "287947");
+            assert_eq!(hits[1]["id"], "299537");
+            assert_eq!(hits[2]["id"], "522681");
+            assert_eq!(hits[3]["id"], "450465");
+        })
+        .await;
+}
+
+#[actix_rt::test]
+async fn negative_word_search() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(0).await;
+
+    index
+        .search(json!({"q": "-escape" }), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            let hits = response["hits"].as_array().unwrap();
+            assert_eq!(hits.len(), 4);
+            assert_eq!(hits[0]["id"], "287947");
+            assert_eq!(hits[1]["id"], "299537");
+            assert_eq!(hits[2]["id"], "166428");
+            assert_eq!(hits[3]["id"], "450465");
+        })
+        .await;
+
+    // Everything that contains derivates of escape but not escape: nothing
+    index
+        .search(json!({"q": "-escape escape" }), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            let hits = response["hits"].as_array().unwrap();
+            assert_eq!(hits.len(), 0);
+        })
+        .await;
+}
+
+#[actix_rt::test]
+async fn non_negative_search() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(0).await;
+
+    index
+        .search(json!({"q": "- escape" }), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            let hits = response["hits"].as_array().unwrap();
+            assert_eq!(hits.len(), 1);
+            assert_eq!(hits[0]["id"], "522681");
+        })
+        .await;
+
+    index
+        .search(json!({"q": "- \"train your dragon\"" }), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            let hits = response["hits"].as_array().unwrap();
+            assert_eq!(hits.len(), 1);
+            assert_eq!(hits[0]["id"], "166428");
+        })
+        .await;
+}
+
+#[actix_rt::test]
+async fn negative_special_cases_search() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(0).await;
+
+    index.update_settings(json!({"synonyms": { "escape": ["glass"] }})).await;
+    index.wait_task(1).await;
+
+    // There is a synonym for escape -> glass but we don't want "escape", only the derivates: glass
+    index
+        .search(json!({"q": "-escape escape" }), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            let hits = response["hits"].as_array().unwrap();
+            assert_eq!(hits.len(), 1);
+            assert_eq!(hits[0]["id"], "450465");
+        })
+        .await;
+}
+
 #[cfg(feature = "default")]
 #[actix_rt::test]
 async fn test_kanji_language_detection() {
