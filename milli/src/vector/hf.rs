@@ -89,11 +89,11 @@ impl Embedder {
             let config = api.get("config.json").map_err(NewEmbedderError::api_get)?;
             let tokenizer = api.get("tokenizer.json").map_err(NewEmbedderError::api_get)?;
             let (weights, source) = {
-                api.get("pytorch_model.bin")
-                    .map(|filename| (filename, WeightSource::Pytorch))
+                api.get("model.safetensors")
+                    .map(|filename| (filename, WeightSource::Safetensors))
                     .or_else(|_| {
-                        api.get("model.safetensors")
-                            .map(|filename| (filename, WeightSource::Safetensors))
+                        api.get("pytorch_model.bin")
+                            .map(|filename| (filename, WeightSource::Pytorch))
                     })
                     .map_err(NewEmbedderError::api_get)?
             };
