@@ -962,13 +962,18 @@ impl IndexScheduler {
 
                 let mut index_wtxn = index.write_txn()?;
 
+                let mut tasks = self.apply_index_operation(&mut index_wtxn, &index, op)?;
+
                 if index.is_corrupted(&index_wtxn)? {
                     tracing::error!("Aborting task due to corrupted index");
                     index_wtxn.abort();
-                    return Err(crate::Error::CorruptedIndex);
-                }
+                    for task in tasks.iter_mut() {
+                        task.status = Status::Failed;
+                        task.error = Some(Error::CorruptedIndex.into());
+                    }
 
-                let tasks = self.apply_index_operation(&mut index_wtxn, &index, op)?;
+                    return Ok(tasks);
+                }
 
                 index.check_document_facet_consistency(&index_wtxn)?.check();
 
