@@ -277,7 +277,7 @@ pub fn search_kind(
         features.check_vector("Passing `hybrid` as a query parameter")?;
     }
 
-    // regardless of anything, always do a semantic search when we don't have a vector and the query is whitespace or missing
+    // regardless of anything, always do a keyword search when we don't have a vector and the query is whitespace or missing
     if query.vector.is_none() {
         match &query.q {
             Some(q) if q.trim().is_empty() => return Ok(SearchKind::KeywordOnly),
