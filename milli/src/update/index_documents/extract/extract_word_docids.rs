@@ -14,6 +14,7 @@ use crate::error::SerializationError;
 use crate::heed_codec::StrBEU16Codec;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
 use crate::update::del_add::{is_noop_del_add_obkv, DelAdd, KvReaderDelAdd, KvWriterDelAdd};
+use crate::update::index_documents::helpers::sorter_into_reader;
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::update::MergeFn;
 use crate::{CboRoaringBitmapCodec, DocumentId, FieldId, Result};
@@ -45,7 +46,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
-        max_memory,
+        max_memory.map(|m| m / 3),
     );
     let mut key_buffer = Vec::new();
     let mut del_words = BTreeSet::new();
@@ -93,25 +94,27 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         tempfile::tempfile()?,
     );
 
-    let mut word_docids_writer = create_writer(
+    let mut word_docids_sorter = create_sorter(
+        grenad::SortAlgorithm::Unstable,
+        merge_deladd_cbo_roaring_bitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
-        tempfile::tempfile()?,
+        indexer.max_nb_chunks,
+        max_memory.map(|m| m / 3),
     );
 
-    let mut exact_word_docids_writer = create_writer(
+    let mut exact_word_docids_sorter = create_sorter(
+        grenad::SortAlgorithm::Unstable,
+        merge_deladd_cbo_roaring_bitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
-        tempfile::tempfile()?,
+        indexer.max_nb_chunks,
+        max_memory.map(|m| m / 3),
     );
 
-    let mut word: Option<String> = None;
-    let mut deletions = RoaringBitmap::new();
-    let mut additions = RoaringBitmap::new();
-    let mut exact_deletions = RoaringBitmap::new();
-    let mut exact_additions = RoaringBitmap::new();
     let mut iter = word_fid_docids_sorter.into_stream_merger_iter()?;
-    // TODO: replace sorters by writers by accumulating values into a buffer before inserting them.
+    let mut buffer = Vec::new();
+    // NOTE: replacing sorters by bitmap merging is less efficient, so, use sorters.
     while let Some((key, value)) = iter.next()? {
         // only keep the value if their is a change to apply in the DB.
         if !is_noop_del_add_obkv(KvReaderDelAdd::new(value)) {
@@ -121,66 +124,36 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         let (w, fid) = StrBEU16Codec::bytes_decode(key)
             .map_err(|_| SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
 
-        if let Some(current) = word.as_ref() {
-            if current != w {
-                docids_into_writers(&current, &deletions, &additions, &mut word_docids_writer)?;
-                docids_into_writers(
-                    &current,
-                    &exact_deletions,
-                    &exact_additions,
-                    &mut exact_word_docids_writer,
-                )?;
-                word = Some(w.to_string());
-                // clear buffers
-                deletions.clear();
-                additions.clear();
-                exact_deletions.clear();
-                exact_additions.clear();
-            }
-        } else {
-            word = Some(w.to_string());
-        }
-
         // merge all deletions
         let obkv = KvReaderDelAdd::new(value);
         if let Some(value) = obkv.get(DelAdd::Deletion) {
             let delete_from_exact = settings_diff.old.exact_attributes.contains(&fid);
-            let docids = CboRoaringBitmapCodec::bytes_decode(value).map_err(|_| {
-                SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) }
-            })?;
+            buffer.clear();
+            let mut obkv = KvWriterDelAdd::new(&mut buffer);
+            obkv.insert(DelAdd::Deletion, value)?;
             if delete_from_exact {
-                exact_deletions |= docids;
+                exact_word_docids_sorter.insert(w, obkv.into_inner().unwrap())?;
             } else {
-                deletions |= docids
+                word_docids_sorter.insert(w, obkv.into_inner().unwrap())?;
             }
         }
         // merge all additions
         if let Some(value) = obkv.get(DelAdd::Addition) {
             let add_in_exact = settings_diff.new.exact_attributes.contains(&fid);
-            let docids = CboRoaringBitmapCodec::bytes_decode(value).map_err(|_| {
-                SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) }
-            })?;
+            buffer.clear();
+            let mut obkv = KvWriterDelAdd::new(&mut buffer);
+            obkv.insert(DelAdd::Addition, value)?;
             if add_in_exact {
-                exact_additions |= docids;
+                exact_word_docids_sorter.insert(w, obkv.into_inner().unwrap())?;
             } else {
-                additions |= docids
+                word_docids_sorter.insert(w, obkv.into_inner().unwrap())?;
             }
         }
     }
 
-    if let Some(word) = word {
-        docids_into_writers(&word, &deletions, &additions, &mut word_docids_writer)?;
-        docids_into_writers(
-            &word,
-            &exact_deletions,
-            &exact_additions,
-            &mut exact_word_docids_writer,
-        )?;
-    }
-
     Ok((
-        writer_into_reader(word_docids_writer)?,
-        writer_into_reader(exact_word_docids_writer)?,
+        sorter_into_reader(word_docids_sorter, indexer)?,
+        sorter_into_reader(exact_word_docids_sorter, indexer)?,
         writer_into_reader(word_fid_docids_writer)?,
     ))
 }
