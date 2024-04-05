@@ -9,7 +9,6 @@ assignees: ''
 
 Related product team resources: [PRD]() (_internal only_)
 Related product discussion:
-Related spec: WIP
 
 ## Motivation
 
