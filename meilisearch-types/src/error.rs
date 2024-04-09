@@ -246,7 +246,7 @@ InvalidSearchCropMarker               , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchFacets                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchSemanticRatio            , InvalidRequest       , BAD_REQUEST ;
 InvalidFacetSearchFacetName           , InvalidRequest       , BAD_REQUEST ;
-InvalidRecommendId                    , InvalidRequest       , BAD_REQUEST ;
+InvalidSimilarId                      , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchFilter                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSimilarFilter                  , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchHighlightPostTag         , InvalidRequest       , BAD_REQUEST ;
@@ -490,6 +490,17 @@ impl fmt::Display for deserr_codes::InvalidSearchSemanticRatio {
         write!(
             f,
             "the value of `semanticRatio` is invalid, expected a float between `0.0` and `1.0`."
+        )
+    }
+}
+
+impl fmt::Display for deserr_codes::InvalidSimilarId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "the value of `id` is invalid. \
+            A document identifier can be of type integer or string, \
+            only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."
         )
     }
 }
