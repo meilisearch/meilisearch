@@ -24,6 +24,7 @@ pub mod facet;
 mod fst_utils;
 pub mod hybrid;
 pub mod new;
+pub mod recommend;
 
 #[derive(Debug, Clone)]
 pub struct SemanticSearch {

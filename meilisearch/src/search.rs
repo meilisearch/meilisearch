@@ -312,6 +312,27 @@ impl SearchQueryWithIndex {
     }
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Deserr)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+pub struct RecommendQuery {
+    #[deserr(default, error = DeserrJsonError<InvalidRecommendId>)]
+    pub id: String,
+    #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
+    pub offset: usize,
+    #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
+    pub limit: usize,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
+    pub filter: Option<Value>,
+    #[deserr(default, error = DeserrJsonError<InvalidEmbedder>, default)]
+    pub embedder: Option<String>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
+    pub attributes_to_retrieve: Option<BTreeSet<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>, default)]
+    pub show_ranking_score: bool,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>, default)]
+    pub show_ranking_score_details: bool,
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Deserr)]
 #[deserr(rename_all = camelCase)]
 pub enum MatchingStrategy {
@@ -391,6 +412,16 @@ pub struct SearchResult {
     pub degraded: bool,
     #[serde(skip)]
     pub used_negative_operator: bool,
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RecommendResult {
+    pub hits: Vec<SearchHit>,
+    pub id: String,
+    pub processing_time_ms: u128,
+    #[serde(flatten)]
+    pub hits_info: HitsInfo,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -794,6 +825,131 @@ pub fn perform_facet_search(
         facet_query,
         processing_time_ms: before_search.elapsed().as_millis(),
     })
+}
+
+pub fn perform_recommend(
+    index: &Index,
+    query: RecommendQuery,
+    embedder_name: String,
+    embedder: Arc<Embedder>,
+) -> Result<RecommendResult, MeilisearchHttpError> {
+    let before_search = Instant::now();
+    let rtxn = index.read_txn()?;
+
+    let internal_id = index
+        .external_documents_ids()
+        .get(&rtxn, &query.id)?
+        .ok_or_else(|| MeilisearchHttpError::DocumentNotFound(query.id.clone()))?;
+
+    let mut recommend = milli::Recommend::new(
+        internal_id,
+        query.offset,
+        query.limit,
+        index,
+        &rtxn,
+        embedder_name,
+        embedder,
+    );
+
+    if let Some(ref filter) = query.filter {
+        if let Some(facets) = parse_filter(filter)? {
+            recommend.filter(facets);
+        }
+    }
+
+    let milli::SearchResult {
+        documents_ids,
+        matching_words: _,
+        candidates,
+        document_scores,
+        degraded: _,
+        used_negative_operator: _,
+    } = recommend.execute()?;
+
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+
+    let displayed_ids = index
+        .displayed_fields_ids(&rtxn)?
+        .map(|fields| fields.into_iter().collect::<BTreeSet<_>>())
+        .unwrap_or_else(|| fields_ids_map.iter().map(|(id, _)| id).collect());
+
+    let fids = |attrs: &BTreeSet<String>| {
+        let mut ids = BTreeSet::new();
+        for attr in attrs {
+            if attr == "*" {
+                ids = displayed_ids.clone();
+                break;
+            }
+
+            if let Some(id) = fields_ids_map.id(attr) {
+                ids.insert(id);
+            }
+        }
+        ids
+    };
+
+    // The attributes to retrieve are the ones explicitly marked as to retrieve (all by default),
+    // but these attributes must be also be present
+    // - in the fields_ids_map
+    // - in the displayed attributes
+    let to_retrieve_ids: BTreeSet<_> = query
+        .attributes_to_retrieve
+        .as_ref()
+        .map(fids)
+        .unwrap_or_else(|| displayed_ids.clone())
+        .intersection(&displayed_ids)
+        .cloned()
+        .collect();
+
+    let mut documents = Vec::new();
+    let documents_iter = index.documents(&rtxn, documents_ids)?;
+
+    for ((_id, obkv), score) in documents_iter.into_iter().zip(document_scores.into_iter()) {
+        // First generate a document with all the displayed fields
+        let displayed_document = make_document(&displayed_ids, &fields_ids_map, obkv)?;
+
+        // select the attributes to retrieve
+        let attributes_to_retrieve = to_retrieve_ids
+            .iter()
+            .map(|&fid| fields_ids_map.name(fid).expect("Missing field name"));
+        let document =
+            permissive_json_pointer::select_values(&displayed_document, attributes_to_retrieve);
+
+        let ranking_score =
+            query.show_ranking_score.then(|| ScoreDetails::global_score(score.iter()));
+        let ranking_score_details =
+            query.show_ranking_score_details.then(|| ScoreDetails::to_json_map(score.iter()));
+
+        let hit = SearchHit {
+            document,
+            formatted: Default::default(),
+            matches_position: None,
+            ranking_score_details,
+            ranking_score,
+        };
+        documents.push(hit);
+    }
+
+    let max_total_hits = index
+        .pagination_max_total_hits(&rtxn)
+        .map_err(milli::Error::from)?
+        .map(|x| x as usize)
+        .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
+
+    let number_of_hits = min(candidates.len() as usize, max_total_hits);
+    let hits_info = HitsInfo::OffsetLimit {
+        limit: query.limit,
+        offset: query.offset,
+        estimated_total_hits: number_of_hits,
+    };
+
+    let result = RecommendResult {
+        hits: documents,
+        hits_info,
+        id: query.id,
+        processing_time_ms: before_search.elapsed().as_millis(),
+    };
+    Ok(result)
 }
 
 fn insert_geo_distance(sorts: &[String], document: &mut Document) {
