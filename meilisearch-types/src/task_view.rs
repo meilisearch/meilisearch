@@ -86,7 +86,8 @@ impl From<Details> for DetailsView {
                     ..DetailsView::default()
                 }
             }
-            Details::SettingsUpdate { settings } => {
+            Details::SettingsUpdate { mut settings } => {
+                settings.hide_secrets();
                 DetailsView { settings: Some(settings), ..DetailsView::default() }
             }
             Details::IndexInfo { primary_key } => {

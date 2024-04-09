@@ -240,6 +240,7 @@ pub(crate) mod tests {
     use super::super::super::located_query_terms_from_tokens;
     use super::*;
     use crate::index::tests::TempIndex;
+    use crate::search::new::query_term::ExtractedTokens;
 
     pub(crate) fn temp_index_with_documents() -> TempIndex {
         let temp_index = TempIndex::new();
@@ -261,7 +262,8 @@ pub(crate) mod tests {
         let mut builder = TokenizerBuilder::default();
         let tokenizer = builder.build();
         let tokens = tokenizer.tokenize("split this world");
-        let query_terms = located_query_terms_from_tokens(&mut ctx, tokens, None).unwrap();
+        let ExtractedTokens { query_terms, .. } =
+            located_query_terms_from_tokens(&mut ctx, tokens, None).unwrap();
         let matching_words = MatchingWords::new(ctx, query_terms);
 
         assert_eq!(

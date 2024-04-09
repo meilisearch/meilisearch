@@ -54,6 +54,7 @@ const MEILI_EXPERIMENTAL_LOGS_MODE: &str = "MEILI_EXPERIMENTAL_LOGS_MODE";
 const MEILI_EXPERIMENTAL_REPLICATION_PARAMETERS: &str = "MEILI_EXPERIMENTAL_REPLICATION_PARAMETERS";
 const MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE: &str = "MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE";
 const MEILI_EXPERIMENTAL_ENABLE_METRICS: &str = "MEILI_EXPERIMENTAL_ENABLE_METRICS";
+const MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE: &str = "MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE";
 const MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE: &str =
     "MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE";
 const MEILI_EXPERIMENTAL_MAX_NUMBER_OF_BATCHED_TASKS: &str =
@@ -344,6 +345,15 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_enable_metrics: bool,
 
+    /// Experimental search queue size. For more information, see: <https://github.com/orgs/meilisearch/discussions/729>
+    ///
+    /// Lets you customize the size of the search queue. Meilisearch processes your search requests as fast as possible but once the
+    /// queue is full it starts returning HTTP 503, Service Unavailable.
+    /// The default value is 1000.
+    #[clap(long, env = MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE, default_value_t = 1000)]
+    #[serde(default)]
+    pub experimental_search_queue_size: usize,
+
     /// Experimental logs mode feature. For more information, see: <https://github.com/orgs/meilisearch/discussions/723>
     ///
     /// Change the mode of the logs on the console.
@@ -473,6 +483,7 @@ impl Opt {
             #[cfg(feature = "analytics")]
             no_analytics,
             experimental_enable_metrics,
+            experimental_search_queue_size,
             experimental_logs_mode,
             experimental_enable_logs_route,
             experimental_replication_parameters,
@@ -533,6 +544,10 @@ impl Opt {
             experimental_enable_metrics.to_string(),
         );
         export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE,
+            experimental_search_queue_size.to_string(),
+        );
+        export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_LOGS_MODE,
             experimental_logs_mode.to_string(),
         );
@@ -564,11 +579,11 @@ impl Opt {
                     }
                     if self.ssl_require_auth {
                         let verifier = AllowAnyAuthenticatedClient::new(client_auth_roots);
-                        config.with_client_cert_verifier(verifier)
+                        config.with_client_cert_verifier(Arc::from(verifier))
                     } else {
                         let verifier =
                             AllowAnyAnonymousOrAuthenticatedClient::new(client_auth_roots);
-                        config.with_client_cert_verifier(verifier)
+                        config.with_client_cert_verifier(Arc::from(verifier))
                     }
                 }
                 None => config.with_no_client_auth(),

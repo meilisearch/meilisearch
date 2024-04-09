@@ -7,7 +7,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::facet_values_sort::FacetValuesSort;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::update::Setting;
-use meilisearch_types::settings::{settings, RankingRuleView, Settings, Unchecked};
+use meilisearch_types::settings::{settings, RankingRuleView, SecretPolicy, Settings, Unchecked};
 use meilisearch_types::tasks::KindWithContent;
 use serde_json::json;
 use tracing::debug;
@@ -134,7 +134,7 @@ macro_rules! make_setting_route {
 
                 let index = index_scheduler.index(&index_uid)?;
                 let rtxn = index.read_txn()?;
-                let settings = settings(&index, &rtxn)?;
+                let settings = settings(&index, &rtxn, meilisearch_types::settings::SecretPolicy::HideSecrets)?;
 
                 debug!(returns = ?settings, "Update settings");
                 let mut json = serde_json::json!(&settings);
@@ -604,6 +604,8 @@ fn embedder_analytics(
                 EmbedderSource::OpenAi => sources.insert("openAi"),
                 EmbedderSource::HuggingFace => sources.insert("huggingFace"),
                 EmbedderSource::UserProvided => sources.insert("userProvided"),
+                EmbedderSource::Ollama => sources.insert("ollama"),
+                EmbedderSource::Rest => sources.insert("rest"),
             };
         }
     };
@@ -622,6 +624,25 @@ fn embedder_analytics(
         }
     )
 }
+
+make_setting_route!(
+    "/search-cutoff-ms",
+    put,
+    u64,
+    meilisearch_types::deserr::DeserrJsonError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsSearchCutoffMs,
+    >,
+    search_cutoff_ms,
+    "searchCutoffMs",
+    analytics,
+    |setting: &Option<u64>, req: &HttpRequest| {
+        analytics.publish(
+            "Search Cutoff Updated".to_string(),
+            serde_json::json!({"search_cutoff_ms": setting }),
+            Some(req),
+        );
+    }
+);
 
 macro_rules! generate_configure {
     ($($mod:ident),*) => {
@@ -653,7 +674,8 @@ generate_configure!(
     typo_tolerance,
     pagination,
     faceting,
-    embedders
+    embedders,
+    search_cutoff_ms
 );
 
 pub async fn update_all(
@@ -764,7 +786,8 @@ pub async fn update_all(
             "synonyms": {
                 "total": new_settings.synonyms.as_ref().set().map(|synonyms| synonyms.len()),
             },
-            "embedders": crate::routes::indexes::settings::embedder_analytics(new_settings.embedders.as_ref().set())
+            "embedders": crate::routes::indexes::settings::embedder_analytics(new_settings.embedders.as_ref().set()),
+            "search_cutoff_ms": new_settings.search_cutoff_ms.as_ref().set(),
         }),
         Some(&req),
     );
@@ -796,7 +819,7 @@ pub async fn get_all(
 
     let index = index_scheduler.index(&index_uid)?;
     let rtxn = index.read_txn()?;
-    let new_settings = settings(&index, &rtxn)?;
+    let new_settings = settings(&index, &rtxn, SecretPolicy::HideSecrets)?;
     debug!(returns = ?new_settings, "Get all settings");
     Ok(HttpResponse::Ok().json(new_settings))
 }

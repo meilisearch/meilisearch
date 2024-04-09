@@ -291,7 +291,11 @@ fn export_a_dump(
         }
 
         // 4.2. Dump the settings
-        let settings = meilisearch_types::settings::settings(&index, &rtxn)?;
+        let settings = meilisearch_types::settings::settings(
+            &index,
+            &rtxn,
+            meilisearch_types::settings::SecretPolicy::RevealSecrets,
+        )?;
         index_dumper.settings(&settings)?;
         count += 1;
     }

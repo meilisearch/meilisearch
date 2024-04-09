@@ -2646,6 +2646,13 @@ mod tests {
                         api_key: Setting::NotSet,
                         dimensions: Setting::Set(3),
                         document_template: Setting::NotSet,
+                        url: Setting::NotSet,
+                        query: Setting::NotSet,
+                        input_field: Setting::NotSet,
+                        path_to_embeddings: Setting::NotSet,
+                        embedding_object: Setting::NotSet,
+                        input_type: Setting::NotSet,
+                        distribution: Setting::NotSet,
                     }),
                 );
                 settings.set_embedder_settings(embedders);
@@ -2665,7 +2672,16 @@ mod tests {
                .unwrap();
 
         let rtxn = index.read_txn().unwrap();
-        let res = index.search(&rtxn).vector([0.0, 1.0, 2.0].to_vec()).execute().unwrap();
+        let mut embedding_configs = index.embedding_configs(&rtxn).unwrap();
+        let (embedder_name, embedder) = embedding_configs.pop().unwrap();
+        let embedder =
+            std::sync::Arc::new(crate::vector::Embedder::new(embedder.embedder_options).unwrap());
+        assert_eq!("manual", embedder_name);
+        let res = index
+            .search(&rtxn)
+            .semantic(embedder_name, embedder, Some([0.0, 1.0, 2.0].to_vec()))
+            .execute()
+            .unwrap();
         assert_eq!(res.documents_ids.len(), 3);
     }
 

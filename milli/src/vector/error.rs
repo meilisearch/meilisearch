@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use hf_hub::api::sync::ApiError;
 
 use crate::error::FaultSource;
-use crate::vector::openai::OpenAiError;
 
 #[derive(Debug, thiserror::Error)]
 #[error("Error while generating embeddings: {inner}")]
@@ -51,26 +50,36 @@ pub enum EmbedErrorKind {
     TensorValue(candle_core::Error),
     #[error("could not run model: {0}")]
     ModelForward(candle_core::Error),
-    #[error("could not reach OpenAI: {0}")]
-    OpenAiNetwork(reqwest::Error),
-    #[error("unexpected response from OpenAI: {0}")]
-    OpenAiUnexpected(reqwest::Error),
-    #[error("could not authenticate against OpenAI: {0}")]
-    OpenAiAuth(OpenAiError),
-    #[error("sent too many requests to OpenAI: {0}")]
-    OpenAiTooManyRequests(OpenAiError),
-    #[error("received internal error from OpenAI: {0:?}")]
-    OpenAiInternalServerError(Option<OpenAiError>),
-    #[error("sent too many tokens in a request to OpenAI: {0}")]
-    OpenAiTooManyTokens(OpenAiError),
-    #[error("received unhandled HTTP status code {0} from OpenAI")]
-    OpenAiUnhandledStatusCode(u16),
     #[error("attempt to embed the following text in a configuration where embeddings must be user provided: {0:?}")]
     ManualEmbed(String),
-    #[error("could not initialize asynchronous runtime: {0}")]
-    OpenAiRuntimeInit(std::io::Error),
-    #[error("initializing web client for sending embedding requests failed: {0}")]
-    InitWebClient(reqwest::Error),
+    #[error("model not found. Meilisearch will not automatically download models from the Ollama library, please pull the model manually: {0:?}")]
+    OllamaModelNotFoundError(Option<String>),
+    #[error("error deserialization the response body as JSON: {0}")]
+    RestResponseDeserialization(std::io::Error),
+    #[error("component `{0}` not found in path `{1}` in response: `{2}`")]
+    RestResponseMissingEmbeddings(String, String, String),
+    #[error("unexpected format of the embedding response: {0}")]
+    RestResponseFormat(serde_json::Error),
+    #[error("expected a response containing {0} embeddings, got only {1}")]
+    RestResponseEmbeddingCount(usize, usize),
+    #[error("could not authenticate against embedding server: {0:?}")]
+    RestUnauthorized(Option<String>),
+    #[error("sent too many requests to embedding server: {0:?}")]
+    RestTooManyRequests(Option<String>),
+    #[error("sent a bad request to embedding server: {0:?}")]
+    RestBadRequest(Option<String>),
+    #[error("received internal error from embedding server: {0:?}")]
+    RestInternalServerError(u16, Option<String>),
+    #[error("received HTTP {0} from embedding server: {0:?}")]
+    RestOtherStatusCode(u16, Option<String>),
+    #[error("could not reach embedding server: {0}")]
+    RestNetwork(ureq::Transport),
+    #[error("was expected '{}' to be an object in query '{0}'", .1.join("."))]
+    RestNotAnObject(serde_json::Value, Vec<String>),
+    #[error("while embedding tokenized, was expecting embeddings of dimension `{0}`, got embeddings of dimensions `{1}`")]
+    OpenAiUnexpectedDimension(usize, usize),
+    #[error("no embedding was produced")]
+    MissingEmbedding,
 }
 
 impl EmbedError {
@@ -90,44 +99,101 @@ impl EmbedError {
         Self { kind: EmbedErrorKind::ModelForward(inner), fault: FaultSource::Runtime }
     }
 
-    pub fn openai_network(inner: reqwest::Error) -> Self {
-        Self { kind: EmbedErrorKind::OpenAiNetwork(inner), fault: FaultSource::Runtime }
-    }
-
-    pub fn openai_unexpected(inner: reqwest::Error) -> EmbedError {
-        Self { kind: EmbedErrorKind::OpenAiUnexpected(inner), fault: FaultSource::Bug }
-    }
-
-    pub(crate) fn openai_auth_error(inner: OpenAiError) -> EmbedError {
-        Self { kind: EmbedErrorKind::OpenAiAuth(inner), fault: FaultSource::User }
-    }
-
-    pub(crate) fn openai_too_many_requests(inner: OpenAiError) -> EmbedError {
-        Self { kind: EmbedErrorKind::OpenAiTooManyRequests(inner), fault: FaultSource::Runtime }
-    }
-
-    pub(crate) fn openai_internal_server_error(inner: Option<OpenAiError>) -> EmbedError {
-        Self { kind: EmbedErrorKind::OpenAiInternalServerError(inner), fault: FaultSource::Runtime }
-    }
-
-    pub(crate) fn openai_too_many_tokens(inner: OpenAiError) -> EmbedError {
-        Self { kind: EmbedErrorKind::OpenAiTooManyTokens(inner), fault: FaultSource::Bug }
-    }
-
-    pub(crate) fn openai_unhandled_status_code(code: u16) -> EmbedError {
-        Self { kind: EmbedErrorKind::OpenAiUnhandledStatusCode(code), fault: FaultSource::Bug }
-    }
-
     pub(crate) fn embed_on_manual_embedder(texts: String) -> EmbedError {
         Self { kind: EmbedErrorKind::ManualEmbed(texts), fault: FaultSource::User }
     }
 
-    pub(crate) fn openai_runtime_init(inner: std::io::Error) -> EmbedError {
-        Self { kind: EmbedErrorKind::OpenAiRuntimeInit(inner), fault: FaultSource::Runtime }
+    pub(crate) fn ollama_model_not_found(inner: Option<String>) -> EmbedError {
+        Self { kind: EmbedErrorKind::OllamaModelNotFoundError(inner), fault: FaultSource::User }
     }
 
-    pub fn openai_initialize_web_client(inner: reqwest::Error) -> Self {
-        Self { kind: EmbedErrorKind::InitWebClient(inner), fault: FaultSource::Runtime }
+    pub(crate) fn rest_response_deserialization(error: std::io::Error) -> EmbedError {
+        Self {
+            kind: EmbedErrorKind::RestResponseDeserialization(error),
+            fault: FaultSource::Runtime,
+        }
+    }
+
+    pub(crate) fn rest_response_missing_embeddings<S: AsRef<str>>(
+        response: serde_json::Value,
+        component: &str,
+        response_field: &[S],
+    ) -> EmbedError {
+        let response_field: Vec<&str> = response_field.iter().map(AsRef::as_ref).collect();
+        let response_field = response_field.join(".");
+
+        Self {
+            kind: EmbedErrorKind::RestResponseMissingEmbeddings(
+                component.to_owned(),
+                response_field,
+                serde_json::to_string_pretty(&response).unwrap_or_default(),
+            ),
+            fault: FaultSource::Undecided,
+        }
+    }
+
+    pub(crate) fn rest_response_format(error: serde_json::Error) -> EmbedError {
+        Self { kind: EmbedErrorKind::RestResponseFormat(error), fault: FaultSource::Undecided }
+    }
+
+    pub(crate) fn rest_response_embedding_count(expected: usize, got: usize) -> EmbedError {
+        Self {
+            kind: EmbedErrorKind::RestResponseEmbeddingCount(expected, got),
+            fault: FaultSource::Runtime,
+        }
+    }
+
+    pub(crate) fn rest_unauthorized(error_response: Option<String>) -> EmbedError {
+        Self { kind: EmbedErrorKind::RestUnauthorized(error_response), fault: FaultSource::User }
+    }
+
+    pub(crate) fn rest_too_many_requests(error_response: Option<String>) -> EmbedError {
+        Self {
+            kind: EmbedErrorKind::RestTooManyRequests(error_response),
+            fault: FaultSource::Runtime,
+        }
+    }
+
+    pub(crate) fn rest_bad_request(error_response: Option<String>) -> EmbedError {
+        Self { kind: EmbedErrorKind::RestBadRequest(error_response), fault: FaultSource::User }
+    }
+
+    pub(crate) fn rest_internal_server_error(
+        code: u16,
+        error_response: Option<String>,
+    ) -> EmbedError {
+        Self {
+            kind: EmbedErrorKind::RestInternalServerError(code, error_response),
+            fault: FaultSource::Runtime,
+        }
+    }
+
+    pub(crate) fn rest_other_status_code(code: u16, error_response: Option<String>) -> EmbedError {
+        Self {
+            kind: EmbedErrorKind::RestOtherStatusCode(code, error_response),
+            fault: FaultSource::Undecided,
+        }
+    }
+
+    pub(crate) fn rest_network(transport: ureq::Transport) -> EmbedError {
+        Self { kind: EmbedErrorKind::RestNetwork(transport), fault: FaultSource::Runtime }
+    }
+
+    pub(crate) fn rest_not_an_object(
+        query: serde_json::Value,
+        input_path: Vec<String>,
+    ) -> EmbedError {
+        Self { kind: EmbedErrorKind::RestNotAnObject(query, input_path), fault: FaultSource::User }
+    }
+
+    pub(crate) fn openai_unexpected_dimension(expected: usize, got: usize) -> EmbedError {
+        Self {
+            kind: EmbedErrorKind::OpenAiUnexpectedDimension(expected, got),
+            fault: FaultSource::Runtime,
+        }
+    }
+    pub(crate) fn missing_embedding() -> EmbedError {
+        Self { kind: EmbedErrorKind::MissingEmbedding, fault: FaultSource::Undecided }
     }
 }
 
@@ -188,15 +254,11 @@ impl NewEmbedderError {
         Self { kind: NewEmbedderErrorKind::LoadModel(inner), fault: FaultSource::Runtime }
     }
 
-    pub fn hf_could_not_determine_dimension(inner: EmbedError) -> NewEmbedderError {
+    pub fn could_not_determine_dimension(inner: EmbedError) -> NewEmbedderError {
         Self {
             kind: NewEmbedderErrorKind::CouldNotDetermineDimension(inner),
             fault: FaultSource::Runtime,
         }
-    }
-
-    pub fn openai_invalid_api_key_format(inner: reqwest::header::InvalidHeaderValue) -> Self {
-        Self { kind: NewEmbedderErrorKind::InvalidApiKeyFormat(inner), fault: FaultSource::User }
     }
 }
 
@@ -244,7 +306,4 @@ pub enum NewEmbedderErrorKind {
     CouldNotDetermineDimension(EmbedError),
     #[error("loading model failed: {0}")]
     LoadModel(candle_core::Error),
-    // openai
-    #[error("The API key passed to Authorization error was in an invalid format: {0}")]
-    InvalidApiKeyFormat(reqwest::header::InvalidHeaderValue),
 }

@@ -238,6 +238,12 @@ fn send_original_documents_data(
 
     let documents_chunk_cloned = original_documents_chunk.clone();
     let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
+
+    let request_threads = rayon::ThreadPoolBuilder::new()
+        .num_threads(crate::vector::REQUEST_PARALLELISM)
+        .thread_name(|index| format!("embedding-request-{index}"))
+        .build()?;
+
     rayon::spawn(move || {
         for (name, (embedder, prompt)) in embedders {
             let result = extract_vector_points(
@@ -249,7 +255,12 @@ fn send_original_documents_data(
             );
             match result {
                 Ok(ExtractedVectorPoints { manual_vectors, remove_vectors, prompts }) => {
-                    let embeddings = match extract_embeddings(prompts, indexer, embedder.clone()) {
+                    let embeddings = match extract_embeddings(
+                        prompts,
+                        indexer,
+                        embedder.clone(),
+                        &request_threads,
+                    ) {
                         Ok(results) => Some(results),
                         Err(error) => {
                             let _ = lmdb_writer_sx_cloned.send(Err(error));

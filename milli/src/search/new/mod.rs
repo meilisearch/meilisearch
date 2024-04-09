@@ -33,7 +33,9 @@ use interner::{DedupInterner, Interner};
 pub use logger::visual::VisualSearchLogger;
 pub use logger::{DefaultSearchLogger, SearchLogger};
 use query_graph::{QueryGraph, QueryNode};
-use query_term::{located_query_terms_from_tokens, LocatedQueryTerm, Phrase, QueryTerm};
+use query_term::{
+    located_query_terms_from_tokens, ExtractedTokens, LocatedQueryTerm, Phrase, QueryTerm,
+};
 use ranking_rules::{
     BoxRankingRule, PlaceholderQuery, RankingRule, RankingRuleOutput, RankingRuleQueryTrait,
 };
@@ -50,9 +52,10 @@ use self::vector_sort::VectorSort;
 use crate::error::FieldIdMapMissingEntry;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::apply_distinct_rule;
-use crate::vector::DistributionShift;
+use crate::vector::Embedder;
 use crate::{
-    AscDesc, DocumentId, FieldId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError,
+    AscDesc, DocumentId, FieldId, Filter, Index, Member, Result, TermsMatchingStrategy, TimeBudget,
+    UserError,
 };
 
 /// A structure used throughout the execution of a search query.
@@ -208,6 +211,35 @@ fn resolve_universe(
     )
 }
 
+#[tracing::instrument(level = "trace", skip_all, target = "search")]
+fn resolve_negative_words(
+    ctx: &mut SearchContext,
+    negative_words: &[Word],
+) -> Result<RoaringBitmap> {
+    let mut negative_bitmap = RoaringBitmap::new();
+    for &word in negative_words {
+        if let Some(bitmap) = ctx.word_docids(word)? {
+            negative_bitmap |= bitmap;
+        }
+    }
+    Ok(negative_bitmap)
+}
+
+#[tracing::instrument(level = "trace", skip_all, target = "search")]
+fn resolve_negative_phrases(
+    ctx: &mut SearchContext,
+    negative_phrases: &[LocatedQueryTerm],
+) -> Result<RoaringBitmap> {
+    let mut negative_bitmap = RoaringBitmap::new();
+    for term in negative_phrases {
+        let query_term = ctx.term_interner.get(term.value);
+        if let Some(phrase) = query_term.original_phrase() {
+            negative_bitmap |= ctx.get_phrase_docids(phrase)?;
+        }
+    }
+    Ok(negative_bitmap)
+}
+
 /// Return the list of initialised ranking rules to be used for a placeholder search.
 fn get_ranking_rules_for_placeholder_search<'ctx>(
     ctx: &SearchContext<'ctx>,
@@ -266,8 +298,8 @@ fn get_ranking_rules_for_vector<'ctx>(
     geo_strategy: geo_sort::Strategy,
     limit_plus_offset: usize,
     target: &[f32],
-    distribution_shift: Option<DistributionShift>,
     embedder_name: &str,
+    embedder: &Embedder,
 ) -> Result<Vec<BoxRankingRule<'ctx, PlaceholderQuery>>> {
     // query graph search
 
@@ -293,8 +325,8 @@ fn get_ranking_rules_for_vector<'ctx>(
                         target.to_vec(),
                         vector_candidates,
                         limit_plus_offset,
-                        distribution_shift,
                         embedder_name,
+                        embedder,
                     )?;
                     ranking_rules.push(Box::new(vector_sort));
                     vector = true;
@@ -516,8 +548,9 @@ pub fn execute_vector_search(
     geo_strategy: geo_sort::Strategy,
     from: usize,
     length: usize,
-    distribution_shift: Option<DistributionShift>,
     embedder_name: &str,
+    embedder: &Embedder,
+    time_budget: TimeBudget,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
@@ -529,15 +562,15 @@ pub fn execute_vector_search(
         geo_strategy,
         from + length,
         vector,
-        distribution_shift,
         embedder_name,
+        embedder,
     )?;
 
     let mut placeholder_search_logger = logger::DefaultSearchLogger;
     let placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery> =
         &mut placeholder_search_logger;
 
-    let BucketSortOutput { docids, scores, all_candidates } = bucket_sort(
+    let BucketSortOutput { docids, scores, all_candidates, degraded } = bucket_sort(
         ctx,
         ranking_rules,
         &PlaceholderQuery,
@@ -546,6 +579,7 @@ pub fn execute_vector_search(
         length,
         scoring_strategy,
         placeholder_search_logger,
+        time_budget,
     )?;
 
     Ok(PartialSearchResult {
@@ -553,6 +587,8 @@ pub fn execute_vector_search(
         document_scores: scores,
         documents_ids: docids,
         located_query_terms: None,
+        degraded,
+        used_negative_operator: false,
     })
 }
 
@@ -572,9 +608,11 @@ pub fn execute_search(
     words_limit: Option<usize>,
     placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery>,
     query_graph_logger: &mut dyn SearchLogger<QueryGraph>,
+    time_budget: TimeBudget,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
+    let mut used_negative_operator = false;
     let mut located_query_terms = None;
     let query_terms = if let Some(query) = query {
         let span = tracing::trace_span!(target: "search::tokens", "tokenizer_builder");
@@ -615,7 +653,16 @@ pub fn execute_search(
         let tokens = tokenizer.tokenize(query);
         drop(entered);
 
-        let query_terms = located_query_terms_from_tokens(ctx, tokens, words_limit)?;
+        let ExtractedTokens { query_terms, negative_words, negative_phrases } =
+            located_query_terms_from_tokens(ctx, tokens, words_limit)?;
+        used_negative_operator = !negative_words.is_empty() || !negative_phrases.is_empty();
+
+        let ignored_documents = resolve_negative_words(ctx, &negative_words)?;
+        let ignored_phrases = resolve_negative_phrases(ctx, &negative_phrases)?;
+
+        universe -= ignored_documents;
+        universe -= ignored_phrases;
+
         if query_terms.is_empty() {
             // Do a placeholder search instead
             None
@@ -625,6 +672,7 @@ pub fn execute_search(
     } else {
         None
     };
+
     let bucket_sort_output = if let Some(query_terms) = query_terms {
         let (graph, new_located_query_terms) = QueryGraph::from_query(ctx, &query_terms)?;
         located_query_terms = Some(new_located_query_terms);
@@ -648,6 +696,7 @@ pub fn execute_search(
             length,
             scoring_strategy,
             query_graph_logger,
+            time_budget,
         )?
     } else {
         let ranking_rules =
@@ -661,10 +710,11 @@ pub fn execute_search(
             length,
             scoring_strategy,
             placeholder_search_logger,
+            time_budget,
         )?
     };
 
-    let BucketSortOutput { docids, scores, mut all_candidates } = bucket_sort_output;
+    let BucketSortOutput { docids, scores, mut all_candidates, degraded } = bucket_sort_output;
     let fields_ids_map = ctx.index.fields_ids_map(ctx.txn)?;
 
     // The candidates is the universe unless the exhaustive number of hits
@@ -682,6 +732,8 @@ pub fn execute_search(
         document_scores: scores,
         documents_ids: docids,
         located_query_terms,
+        degraded,
+        used_negative_operator,
     })
 }
 
@@ -742,4 +794,7 @@ pub struct PartialSearchResult {
     pub candidates: RoaringBitmap,
     pub documents_ids: Vec<DocumentId>,
     pub document_scores: Vec<Vec<ScoreDetails>>,
+
+    pub degraded: bool,
+    pub used_negative_operator: bool,
 }

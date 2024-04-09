@@ -1301,8 +1301,8 @@ impl IndexScheduler {
 
         wtxn.commit().map_err(Error::HeedTransaction)?;
 
-        // Once the tasks are commited, we should delete all the update files associated ASAP to avoid leaking files in case of a restart
-        tracing::debug!("Deleting the upadate files");
+        // Once the tasks are committed, we should delete all the update files associated ASAP to avoid leaking files in case of a restart
+        tracing::debug!("Deleting the update files");
 
         //We take one read transaction **per thread**. Then, every thread is going to pull out new IDs from the roaring bitmap with the help of an atomic shared index into the bitmap
         let idx = AtomicU32::new(0);
@@ -1332,7 +1332,7 @@ impl IndexScheduler {
         Ok(TickOutcome::TickAgain(processed_tasks))
     }
 
-    /// Once the tasks changes have been commited we must send all the tasks that were updated to our webhook if there is one.
+    /// Once the tasks changes have been committed we must send all the tasks that were updated to our webhook if there is one.
     fn notify_webhook(&self, updated: &RoaringBitmap) -> Result<()> {
         if let Some(ref url) = self.webhook_url {
             struct TaskReader<'a, 'b> {
@@ -3026,6 +3026,66 @@ mod tests {
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
+    }
+
+    #[test]
+    fn test_settings_update() {
+        use meilisearch_types::settings::{Settings, Unchecked};
+        use milli::update::Setting;
+
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        let mut new_settings: Box<Settings<Unchecked>> = Box::default();
+        let mut embedders = BTreeMap::default();
+        let embedding_settings = milli::vector::settings::EmbeddingSettings {
+            source: Setting::Set(milli::vector::settings::EmbedderSource::Rest),
+            api_key: Setting::Set(S("My super secret")),
+            url: Setting::Set(S("http://localhost:7777")),
+            ..Default::default()
+        };
+        embedders.insert(S("default"), Setting::Set(embedding_settings));
+        new_settings.embedders = Setting::Set(embedders);
+
+        index_scheduler
+            .register(
+                KindWithContent::SettingsUpdate {
+                    index_uid: S("doggos"),
+                    new_settings,
+                    is_deletion: false,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        index_scheduler.assert_internally_consistent();
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_settings_task");
+
+        {
+            let rtxn = index_scheduler.read_txn().unwrap();
+            let task = index_scheduler.get_task(&rtxn, 0).unwrap().unwrap();
+            let task = meilisearch_types::task_view::TaskView::from_task(&task);
+            insta::assert_json_snapshot!(task.details);
+        }
+
+        handle.advance_n_successful_batches(1);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "settings_update_processed");
+
+        {
+            let rtxn = index_scheduler.read_txn().unwrap();
+            let task = index_scheduler.get_task(&rtxn, 0).unwrap().unwrap();
+            let task = meilisearch_types::task_view::TaskView::from_task(&task);
+            insta::assert_json_snapshot!(task.details);
+        }
+
+        // has everything being pushed successfully in milli?
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+
+        let configs = index.embedding_configs(&rtxn).unwrap();
+        let (_, embedding_config) = configs.first().unwrap();
+        insta::assert_json_snapshot!(embedding_config.embedder_options);
     }
 
     #[test]

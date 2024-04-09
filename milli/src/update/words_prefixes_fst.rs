@@ -20,7 +20,7 @@ impl<'t, 'i> WordsPrefixesFst<'t, 'i> {
 
     /// Set the number of words required to make a prefix be part of the words prefixes
     /// database. If a word prefix is supposed to match more than this number of words in the
-    /// dictionnary, therefore this prefix is added to the words prefixes datastructures.
+    /// dictionary, therefore this prefix is added to the words prefixes datastructures.
     ///
     /// Default value is 100. This value must be higher than 50 and will be clamped
     /// to this bound otherwise.

@@ -61,7 +61,7 @@ pub enum IndexDocumentsMethod {
 #[cfg_attr(test, derive(serde::Serialize))]
 #[non_exhaustive]
 pub enum UpdateFormat {
-    /// The given update is a real **comma seperated** CSV with headers on the first line.
+    /// The given update is a real **comma separated** CSV with headers on the first line.
     Csv,
     /// The given update is a JSON array with documents inside.
     Json,

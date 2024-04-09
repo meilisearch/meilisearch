@@ -13,10 +13,11 @@ use crate::analytics::{Analytics, MultiSearchAggregator};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::indexes::search::embed;
+use crate::routes::indexes::search::search_kind;
 use crate::search::{
     add_search_rules, perform_search, SearchQueryWithIndex, SearchResultWithIndex,
 };
+use crate::search_queue::SearchQueue;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(SeqHandler(multi_search_with_post))));
@@ -35,6 +36,7 @@ pub struct SearchQueries {
 
 pub async fn multi_search_with_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
+    search_queue: Data<SearchQueue>,
     params: AwebJson<SearchQueries, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
@@ -43,6 +45,10 @@ pub async fn multi_search_with_post(
 
     let mut multi_aggregate = MultiSearchAggregator::from_queries(&queries, &req);
     let features = index_scheduler.features();
+
+    // Since we don't want to process half of the search requests and then get a permit refused
+    // we're going to get one permit for the whole duration of the multi-search request.
+    let _permit = search_queue.try_get_search_permit().await?;
 
     // Explicitly expect a `(ResponseError, usize)` for the error type rather than `ResponseError` only,
     // so that `?` doesn't work if it doesn't use `with_index`, ensuring that it is not forgotten in case of code
@@ -75,15 +81,13 @@ pub async fn multi_search_with_post(
                 })
                 .with_index(query_index)?;
 
-            let distribution = embed(&mut query, index_scheduler.get_ref(), &index)
-                .await
+            let search_kind = search_kind(&query, index_scheduler.get_ref(), &index, features)
                 .with_index(query_index)?;
 
-            let search_result = tokio::task::spawn_blocking(move || {
-                perform_search(&index, query, features, distribution)
-            })
-            .await
-            .with_index(query_index)?;
+            let search_result =
+                tokio::task::spawn_blocking(move || perform_search(&index, query, search_kind))
+                    .await
+                    .with_index(query_index)?;
 
             search_results.push(SearchResultWithIndex {
                 index_uid: index_uid.into_inner(),

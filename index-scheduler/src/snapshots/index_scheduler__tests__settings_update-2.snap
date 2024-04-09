@@ -1,0 +1,13 @@
+---
+source: index-scheduler/src/lib.rs
+expression: task.details
+---
+{
+  "embedders": {
+    "default": {
+      "source": "rest",
+      "apiKey": "MyXXXX...",
+      "url": "http://localhost:7777"
+    }
+  }
+}

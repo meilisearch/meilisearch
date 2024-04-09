@@ -65,9 +65,6 @@ where
                         .with_label_values(&[&request_method, request_path])
                         .start_timer(),
                 );
-                crate::metrics::MEILISEARCH_HTTP_REQUESTS_TOTAL
-                    .with_label_values(&[&request_method, request_path])
-                    .inc();
             }
         };
 
@@ -75,6 +72,14 @@ where
 
         Box::pin(async move {
             let res = fut.await?;
+
+            crate::metrics::MEILISEARCH_HTTP_REQUESTS_TOTAL
+                .with_label_values(&[
+                    res.request().method().as_str(),
+                    res.request().path(),
+                    res.status().as_str(),
+                ])
+                .inc();
 
             if let Some(histogram_timer) = histogram_timer {
                 histogram_timer.observe_duration();

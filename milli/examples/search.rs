@@ -6,7 +6,7 @@ use std::time::Instant;
 use heed::EnvOpenOptions;
 use milli::{
     execute_search, filtered_universe, DefaultSearchLogger, GeoSortStrategy, Index, SearchContext,
-    SearchLogger, TermsMatchingStrategy,
+    SearchLogger, TermsMatchingStrategy, TimeBudget,
 };
 
 #[global_allocator]
@@ -65,6 +65,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 None,
                 &mut DefaultSearchLogger,
                 logger,
+                TimeBudget::max(),
             )?;
             if let Some((logger, dir)) = detailed_logger {
                 logger.finish(&mut ctx, Path::new(dir))?;
