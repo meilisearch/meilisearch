@@ -239,18 +239,23 @@ InvalidIndexUid                       , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToSearchOn     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToCrop         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToHighlight    , InvalidRequest       , BAD_REQUEST ;
+InvalidSimilarAttributesToRetrieve    , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToRetrieve     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchCropLength               , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchCropMarker               , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchFacets                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchSemanticRatio            , InvalidRequest       , BAD_REQUEST ;
 InvalidFacetSearchFacetName           , InvalidRequest       , BAD_REQUEST ;
+InvalidRecommendId                    , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchFilter                   , InvalidRequest       , BAD_REQUEST ;
+InvalidSimilarFilter                  , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchHighlightPostTag         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchHighlightPreTag          , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchHitsPerPage              , InvalidRequest       , BAD_REQUEST ;
+InvalidSimilarLimit                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchLimit                    , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchMatchingStrategy         , InvalidRequest       , BAD_REQUEST ;
+InvalidSimilarOffset                  , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchOffset                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchPage                     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchQ                        , InvalidRequest       , BAD_REQUEST ;
@@ -259,7 +264,9 @@ InvalidFacetSearchName                , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchVector                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowMatchesPosition      , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowRankingScore         , InvalidRequest       , BAD_REQUEST ;
+InvalidSimilarShowRankingScore        , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowRankingScoreDetails  , InvalidRequest       , BAD_REQUEST ;
+InvalidSimilarShowRankingScoreDetails , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchSort                     , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDisplayedAttributes    , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDistinctAttribute      , InvalidRequest       , BAD_REQUEST ;
@@ -322,7 +329,8 @@ UnretrievableErrorCode                , InvalidRequest       , BAD_REQUEST ;
 UnsupportedMediaType                  , InvalidRequest       , UNSUPPORTED_MEDIA_TYPE ;
 
 // Experimental features
-VectorEmbeddingError                  , InvalidRequest       , BAD_REQUEST
+VectorEmbeddingError                  , InvalidRequest       , BAD_REQUEST ;
+NotFoundSimilarId                     , InvalidRequest       , BAD_REQUEST
 }
 
 impl ErrorCode for JoinError {
