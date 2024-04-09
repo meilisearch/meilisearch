@@ -530,11 +530,15 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
     Ok(())
 }
 
-pub fn filtered_universe(ctx: &SearchContext, filters: &Option<Filter>) -> Result<RoaringBitmap> {
+pub fn filtered_universe(
+    index: &Index,
+    txn: &RoTxn<'_>,
+    filters: &Option<Filter>,
+) -> Result<RoaringBitmap> {
     Ok(if let Some(filters) = filters {
-        filters.evaluate(ctx.txn, ctx.index)?
+        filters.evaluate(txn, index)?
     } else {
-        ctx.index.documents_ids(ctx.txn)?
+        index.documents_ids(txn)?
     })
 }
 

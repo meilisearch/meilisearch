@@ -126,7 +126,7 @@ impl SearchKind {
         Ok(Self::Hybrid { embedder_name, embedder, semantic_ratio })
     }
 
-    fn embedder(
+    pub(crate) fn embedder(
         index_scheduler: &index_scheduler::IndexScheduler,
         index: &Index,
         embedder_name: Option<&str>,
