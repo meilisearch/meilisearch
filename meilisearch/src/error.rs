@@ -61,6 +61,10 @@ pub enum MeilisearchHttpError {
     Join(#[from] JoinError),
     #[error("Invalid request: missing `hybrid` parameter when both `q` and `vector` are present.")]
     MissingSearchHybrid,
+    #[error("Invalid request: `prompt` parameter is required when `context` is present.")]
+    RecommendMissingPrompt,
+    #[error("Invalid request: one of the `prompt` or `id` parameters is required.")]
+    RecommendMissingPromptOrId,
 }
 
 impl ErrorCode for MeilisearchHttpError {
@@ -89,6 +93,8 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::DocumentFormat(e) => e.error_code(),
             MeilisearchHttpError::Join(_) => Code::Internal,
             MeilisearchHttpError::MissingSearchHybrid => Code::MissingSearchHybrid,
+            MeilisearchHttpError::RecommendMissingPrompt => Code::MissingPrompt,
+            MeilisearchHttpError::RecommendMissingPromptOrId => Code::MissingPromptOrId,
         }
     }
 }

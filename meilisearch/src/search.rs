@@ -316,7 +316,7 @@ impl SearchQueryWithIndex {
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct RecommendQuery {
     #[deserr(default, error = DeserrJsonError<InvalidRecommendId>)]
-    pub id: String,
+    pub id: Option<String>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
@@ -331,6 +331,11 @@ pub struct RecommendQuery {
     pub show_ranking_score: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>, default)]
     pub show_ranking_score_details: bool,
+
+    #[deserr(default, error = DeserrJsonError<InvalidRecommendPrompt>)]
+    pub prompt: Option<String>,
+    #[deserr(default, error = DeserrJsonError<InvalidRecommendContext>)]
+    pub context: Option<Value>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Deserr)]
@@ -418,7 +423,8 @@ pub struct SearchResult {
 #[serde(rename_all = "camelCase")]
 pub struct RecommendResult {
     pub hits: Vec<SearchHit>,
-    pub id: String,
+    pub id: Option<String>,
+    pub prompt: Option<String>,
     pub processing_time_ms: u128,
     #[serde(flatten)]
     pub hits_info: HitsInfo,
@@ -836,20 +842,41 @@ pub fn perform_recommend(
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
 
-    let internal_id = index
-        .external_documents_ids()
-        .get(&rtxn, &query.id)?
-        .ok_or_else(|| MeilisearchHttpError::DocumentNotFound(query.id.clone()))?;
+    let internal_id = query
+        .id
+        .as_deref()
+        .map(|id| -> Result<_, MeilisearchHttpError> {
+            Ok(index
+                .external_documents_ids()
+                .get(&rtxn, id)?
+                .ok_or_else(|| MeilisearchHttpError::DocumentNotFound(id.to_owned()))?)
+        })
+        .transpose()?;
 
-    let mut recommend = milli::Recommend::new(
-        internal_id,
-        query.offset,
-        query.limit,
-        index,
-        &rtxn,
-        embedder_name,
-        embedder,
-    );
+    let mut recommend = match (query.prompt.as_deref(), internal_id, query.context) {
+        (None, Some(internal_id), None) => milli::Recommend::with_docid(
+            internal_id,
+            query.offset,
+            query.limit,
+            index,
+            &rtxn,
+            embedder_name,
+            embedder,
+        ),
+        (Some(prompt), internal_id, context) => milli::Recommend::with_prompt(
+            prompt,
+            internal_id,
+            context,
+            query.offset,
+            query.limit,
+            index,
+            &rtxn,
+            embedder_name,
+            embedder,
+        ),
+        (None, _, Some(_)) => return Err(MeilisearchHttpError::RecommendMissingPrompt.into()),
+        (None, None, None) => return Err(MeilisearchHttpError::RecommendMissingPromptOrId.into()),
+    };
 
     if let Some(ref filter) = query.filter {
         if let Some(facets) = parse_filter(filter)? {
@@ -947,6 +974,7 @@ pub fn perform_recommend(
         hits: documents,
         hits_info,
         id: query.id,
+        prompt: query.prompt,
         processing_time_ms: before_search.elapsed().as_millis(),
     };
     Ok(result)

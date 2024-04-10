@@ -29,7 +29,7 @@ impl ParsedValue {
 }
 
 impl<'a> Document<'a> {
-    pub fn new(
+    pub fn from_deladd_obkv(
         data: obkv::KvReaderU16<'a>,
         side: DelAdd,
         inverted_field_map: &'a FieldsIdsMap,
@@ -40,6 +40,20 @@ impl<'a> Document<'a> {
             let Some(raw) = obkv.get(side) else {
                 continue;
             };
+            let Some(name) = inverted_field_map.name(fid) else {
+                continue;
+            };
+            out_data.insert(name, (raw, ParsedValue::empty()));
+        }
+        Self(out_data)
+    }
+
+    pub fn from_doc_obkv(
+        data: obkv::KvReaderU16<'a>,
+        inverted_field_map: &'a FieldsIdsMap,
+    ) -> Self {
+        let mut out_data = BTreeMap::new();
+        for (fid, raw) in data {
             let Some(name) = inverted_field_map.name(fid) else {
                 continue;
             };

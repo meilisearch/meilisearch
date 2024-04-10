@@ -2,6 +2,7 @@ mod context;
 mod document;
 pub(crate) mod error;
 mod fields;
+pub mod recommend;
 mod template_checker;
 
 use std::convert::TryFrom;
@@ -9,7 +10,7 @@ use std::convert::TryFrom;
 use error::{NewPromptError, RenderPromptError};
 
 use self::context::Context;
-use self::document::Document;
+pub use self::document::Document;
 use crate::update::del_add::DelAdd;
 use crate::FieldsIdsMap;
 
@@ -95,7 +96,7 @@ impl Prompt {
         side: DelAdd,
         field_id_map: &FieldsIdsMap,
     ) -> Result<String, RenderPromptError> {
-        let document = Document::new(document, side, field_id_map);
+        let document = Document::from_deladd_obkv(document, side, field_id_map);
         let context = Context::new(&document, field_id_map);
 
         self.template.render(&context).map_err(RenderPromptError::missing_context)
