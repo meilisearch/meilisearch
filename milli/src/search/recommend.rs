@@ -171,7 +171,14 @@ impl<'a> Recommend<'a> {
         let mut document_scores = Vec::with_capacity(self.limit);
 
         // skip offset +1 to skip the target document that is normally returned
-        for (docid, distance) in results.into_iter().skip(self.offset + 1) {
+        for (docid, distance) in results.into_iter().skip(self.offset) {
+            if documents_ids.len() == self.limit {
+                break;
+            }
+            if id == docid {
+                continue;
+            }
+
             documents_ids.push(docid);
 
             let score = 1.0 - distance;
