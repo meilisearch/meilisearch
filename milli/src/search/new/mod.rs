@@ -568,6 +568,7 @@ pub fn execute_vector_search(
     embedder_name: &str,
     embedder: &Embedder,
     time_budget: TimeBudget,
+    ranking_score_threshold: Option<f64>,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
@@ -597,6 +598,7 @@ pub fn execute_vector_search(
         scoring_strategy,
         placeholder_search_logger,
         time_budget,
+        ranking_score_threshold,
     )?;
 
     Ok(PartialSearchResult {
@@ -626,6 +628,7 @@ pub fn execute_search(
     placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery>,
     query_graph_logger: &mut dyn SearchLogger<QueryGraph>,
     time_budget: TimeBudget,
+    ranking_score_threshold: Option<f64>,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
@@ -714,6 +717,7 @@ pub fn execute_search(
             scoring_strategy,
             query_graph_logger,
             time_budget,
+            ranking_score_threshold,
         )?
     } else {
         let ranking_rules =
@@ -728,6 +732,7 @@ pub fn execute_search(
             scoring_strategy,
             placeholder_search_logger,
             time_budget,
+            ranking_score_threshold,
         )?
     };
 
