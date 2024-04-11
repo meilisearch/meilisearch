@@ -66,6 +66,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 &mut DefaultSearchLogger,
                 logger,
                 TimeBudget::max(),
+                None,
             )?;
             if let Some((logger, dir)) = detailed_logger {
                 logger.finish(&mut ctx, Path::new(dir))?;

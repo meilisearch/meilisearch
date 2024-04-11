@@ -672,6 +672,7 @@ impl SearchAggregator {
             matching_strategy,
             attributes_to_search_on,
             hybrid,
+            ranking_score_threshold,
         } = query;
 
         let mut ret = Self::default();
@@ -1083,6 +1084,7 @@ impl MultiSearchAggregator {
                     matching_strategy: _,
                     attributes_to_search_on: _,
                     hybrid: _,
+                    ranking_score_threshold: _,
                 } = query;
 
                 index_uid.as_str()
@@ -1230,6 +1232,7 @@ impl FacetSearchAggregator {
             matching_strategy,
             attributes_to_search_on,
             hybrid,
+            ranking_score_threshold,
         } = query;
 
         let mut ret = Self::default();

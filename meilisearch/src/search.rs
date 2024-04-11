@@ -86,6 +86,26 @@ pub struct SearchQuery {
     pub matching_strategy: MatchingStrategy,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>, default)]
     pub attributes_to_search_on: Option<Vec<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>, default)]
+    pub ranking_score_threshold: Option<RankingScoreThreshold>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Deserr)]
+#[deserr(try_from(f64) = TryFrom::try_from -> InvalidSearchRankingScoreThreshold)]
+pub struct RankingScoreThreshold(f64);
+
+impl std::convert::TryFrom<f64> for RankingScoreThreshold {
+    type Error = InvalidSearchRankingScoreThreshold;
+
+    fn try_from(f: f64) -> Result<Self, Self::Error> {
+        // the suggested "fix" is: `!(0.0..=1.0).contains(&f)`` which is allegedly less readable
+        #[allow(clippy::manual_range_contains)]
+        if f > 1.0 || f < 0.0 {
+            Err(InvalidSearchRankingScoreThreshold)
+        } else {
+            Ok(RankingScoreThreshold(f))
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserr)]
@@ -251,6 +271,8 @@ pub struct SearchQueryWithIndex {
     pub matching_strategy: MatchingStrategy,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>, default)]
     pub attributes_to_search_on: Option<Vec<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>, default)]
+    pub ranking_score_threshold: Option<RankingScoreThreshold>,
 }
 
 impl SearchQueryWithIndex {
@@ -279,6 +301,7 @@ impl SearchQueryWithIndex {
             matching_strategy,
             attributes_to_search_on,
             hybrid,
+            ranking_score_threshold,
         } = self;
         (
             index_uid,
@@ -305,6 +328,7 @@ impl SearchQueryWithIndex {
                 matching_strategy,
                 attributes_to_search_on,
                 hybrid,
+                ranking_score_threshold,
                 // do not use ..Default::default() here,
                 // rather add any missing field from `SearchQuery` to `SearchQueryWithIndex`
             },
@@ -453,6 +477,7 @@ fn prepare_search<'t>(
 ) -> Result<(milli::Search<'t>, bool, usize, usize), MeilisearchHttpError> {
     let mut search = index.search(rtxn);
     search.time_budget(time_budget);
+    search.ranking_score_threshold(query.ranking_score_threshold.map(|rst| rst.0));
 
     match search_kind {
         SearchKind::KeywordOnly => {
@@ -494,11 +519,16 @@ fn prepare_search<'t>(
         .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
 
     search.exhaustive_number_hits(is_finite_pagination);
-    search.scoring_strategy(if query.show_ranking_score || query.show_ranking_score_details {
-        ScoringStrategy::Detailed
-    } else {
-        ScoringStrategy::Skip
-    });
+    search.scoring_strategy(
+        if query.show_ranking_score
+            || query.show_ranking_score_details
+            || query.ranking_score_threshold.is_some()
+        {
+            ScoringStrategy::Detailed
+        } else {
+            ScoringStrategy::Skip
+        },
+    );
 
     // compute the offset on the limit depending on the pagination mode.
     let (offset, limit) = if is_finite_pagination {

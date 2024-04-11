@@ -19,9 +19,10 @@ use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::metrics::MEILISEARCH_DEGRADED_SEARCH_REQUESTS;
 use crate::search::{
-    add_search_rules, perform_search, HybridQuery, MatchingStrategy, SearchKind, SearchQuery,
-    SemanticRatio, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
-    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
+    add_search_rules, perform_search, HybridQuery, MatchingStrategy, RankingScoreThreshold,
+    SearchKind, SearchQuery, SemanticRatio, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
+    DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
 
@@ -82,6 +83,21 @@ pub struct SearchQueryGet {
     pub hybrid_embedder: Option<String>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchSemanticRatio>)]
     pub hybrid_semantic_ratio: Option<SemanticRatioGet>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchRankingScoreThreshold>, default)]
+    pub ranking_score_threshold: Option<RankingScoreThresholdGet>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, deserr::Deserr)]
+#[deserr(try_from(String) = TryFrom::try_from -> InvalidSearchRankingScoreThreshold)]
+pub struct RankingScoreThresholdGet(RankingScoreThreshold);
+
+impl std::convert::TryFrom<String> for RankingScoreThresholdGet {
+    type Error = InvalidSearchRankingScoreThreshold;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        let f: f64 = s.parse().map_err(|_| InvalidSearchRankingScoreThreshold)?;
+        Ok(RankingScoreThresholdGet(RankingScoreThreshold::try_from(f)?))
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, deserr::Deserr)]
@@ -152,6 +168,7 @@ impl From<SearchQueryGet> for SearchQuery {
             matching_strategy: other.matching_strategy,
             attributes_to_search_on: other.attributes_to_search_on.map(|o| o.into_iter().collect()),
             hybrid,
+            ranking_score_threshold: other.ranking_score_threshold.map(|o| o.0),
         }
     }
 }
