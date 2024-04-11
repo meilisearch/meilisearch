@@ -241,6 +241,7 @@ InvalidSearchAttributesToCrop         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToHighlight    , InvalidRequest       , BAD_REQUEST ;
 InvalidSimilarAttributesToRetrieve    , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToRetrieve     , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchRankingScoreThreshold    , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchCropLength               , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchCropMarker               , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchFacets                   , InvalidRequest       , BAD_REQUEST ;
@@ -501,6 +502,15 @@ impl fmt::Display for deserr_codes::InvalidSimilarId {
             "the value of `id` is invalid. \
             A document identifier can be of type integer or string, \
             only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."
+        )
+    }
+}
+
+impl fmt::Display for deserr_codes::InvalidSearchRankingScoreThreshold {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "the value of `rankingScoreThreshold` is invalid, expected a float between `0.0` and `1.0`."
         )
     }
 }
