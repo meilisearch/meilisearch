@@ -49,6 +49,7 @@ pub struct Search<'a> {
     index: &'a Index,
     semantic: Option<SemanticSearch>,
     time_budget: TimeBudget,
+    ranking_score_threshold: Option<f64>,
 }
 
 impl<'a> Search<'a> {
@@ -69,6 +70,7 @@ impl<'a> Search<'a> {
             index,
             semantic: None,
             time_budget: TimeBudget::max(),
+            ranking_score_threshold: None,
         }
     }
 
@@ -145,6 +147,14 @@ impl<'a> Search<'a> {
         self
     }
 
+    pub fn ranking_score_threshold(
+        &mut self,
+        ranking_score_threshold: Option<f64>,
+    ) -> &mut Search<'a> {
+        self.ranking_score_threshold = ranking_score_threshold;
+        self
+    }
+
     pub fn execute_for_candidates(&self, has_vector_search: bool) -> Result<RoaringBitmap> {
         if has_vector_search {
             let ctx = SearchContext::new(self.index, self.rtxn);
@@ -183,6 +193,7 @@ impl<'a> Search<'a> {
                     embedder_name,
                     embedder,
                     self.time_budget.clone(),
+                    self.ranking_score_threshold,
                 )?
             }
             _ => execute_search(
@@ -200,6 +211,7 @@ impl<'a> Search<'a> {
                 &mut DefaultSearchLogger,
                 &mut DefaultSearchLogger,
                 self.time_budget.clone(),
+                self.ranking_score_threshold,
             )?,
         };
 
@@ -238,6 +250,7 @@ impl fmt::Debug for Search<'_> {
             index: _,
             semantic,
             time_budget,
+            ranking_score_threshold,
         } = self;
         f.debug_struct("Search")
             .field("query", query)
@@ -256,6 +269,7 @@ impl fmt::Debug for Search<'_> {
                 &semantic.as_ref().map(|semantic| &semantic.embedder_name),
             )
             .field("time_budget", time_budget)
+            .field("ranking_score_threshold", ranking_score_threshold)
             .finish()
     }
 }

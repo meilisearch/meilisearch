@@ -523,6 +523,7 @@ mod tests {
                 &mut crate::DefaultSearchLogger,
                 &mut crate::DefaultSearchLogger,
                 TimeBudget::max(),
+                None,
             )
             .unwrap();
 
