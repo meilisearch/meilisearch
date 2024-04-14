@@ -134,7 +134,7 @@ impl<'t> Matcher<'t, '_> {
             for (token_position, word_position, word) in words_positions {
                 partial = match partial.match_token(word) {
                     // token matches the partial match, but the match is not full,
-                    // we temporarly save the current token then we try to match the next one.
+                    // we temporarily save the current token then we try to match the next one.
                     Some(MatchType::Partial(partial)) => {
                         potential_matches.push((token_position, word_position, partial.char_len()));
                         partial
@@ -722,7 +722,7 @@ mod tests {
             @"…void void void void void split the world void void"
         );
 
-        // Text containing matches with diferent density.
+        // Text containing matches with different density.
         let text = "split void the void void world void void void void void void void void void void split the world void void";
         let mut matcher = builder.build(text);
         // crop should return 10 last words with a marker at the start.

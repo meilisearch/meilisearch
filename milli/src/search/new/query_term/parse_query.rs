@@ -119,7 +119,7 @@ pub fn located_query_terms_from_tokens(
                             if let Some(located_query_term) = phrase.build(ctx) {
                                 // as we are evaluating a negative operator we put the phrase
                                 // in the negative one *but* we don't reset the negative operator
-                                // as we are immediatly starting a new negative phrase.
+                                // as we are immediately starting a new negative phrase.
                                 if negative_phrase {
                                     negative_phrases.push(located_query_term);
                                 } else {
