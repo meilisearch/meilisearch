@@ -36,7 +36,7 @@ pub struct ExtractedFacetValues {
 
 /// Extracts the facet values of each faceted field of each document.
 ///
-/// Returns the generated grenad reader containing the docid the fid and the orginal value as key
+/// Returns the generated grenad reader containing the docid the fid and the original value as key
 /// and the normalized value as value extracted from the given chunk of documents.
 /// We need the fid of the geofields to correctly parse them as numbers if they were sent as strings initially.
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
