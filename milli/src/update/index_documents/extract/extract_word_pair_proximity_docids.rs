@@ -32,11 +32,12 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
 
     // early return if the data shouldn't be deleted nor created.
     if !any_deletion && !any_addition {
-        return tempfile::tempfile()
-            .map_err(Into::into)
-            .map(BufReader::new)
-            .and_then(grenad::Reader::new)
-            .map_err(Into::into);
+        let writer = create_writer(
+            indexer.chunk_compression_type,
+            indexer.chunk_compression_level,
+            tempfile::tempfile()?,
+        );
+        return writer_into_reader(writer);
     }
 
     let max_memory = indexer.max_memory_by_thread();
