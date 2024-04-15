@@ -807,7 +807,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             fst_new_external_documents_ids_builder.insert(key, value)
         })?;
 
-        let old_inner_settings = InnerIndexSettings::from_index(&self.index, wtxn)?;
+        let old_inner_settings = InnerIndexSettings::from_index(self.index, wtxn)?;
         let mut new_inner_settings = old_inner_settings.clone();
         new_inner_settings.fields_ids_map = self.fields_ids_map;
         let settings_diff = InnerIndexSettingsDiff {

@@ -171,7 +171,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                     VectorStateDelta::NowGenerated(prompt.render(
                         obkv,
                         DelAdd::Addition,
-                        &new_fields_ids_map,
+                        new_fields_ids_map,
                     )?)
                 } else {
                     VectorStateDelta::NowRemoved
@@ -199,9 +199,9 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                 if document_is_kept {
                     // Don't give up if the old prompt was failing
                     let old_prompt = prompt
-                        .render(obkv, DelAdd::Deletion, &old_fields_ids_map)
+                        .render(obkv, DelAdd::Deletion, old_fields_ids_map)
                         .unwrap_or_default();
-                    let new_prompt = prompt.render(obkv, DelAdd::Addition, &new_fields_ids_map)?;
+                    let new_prompt = prompt.render(obkv, DelAdd::Addition, new_fields_ids_map)?;
                     if old_prompt != new_prompt {
                         tracing::trace!(
                             "🚀 Changing prompt from\n{old_prompt}\n===to===\n{new_prompt}"

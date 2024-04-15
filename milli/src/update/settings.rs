@@ -1044,7 +1044,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     {
         self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
-        let old_inner_settings = InnerIndexSettings::from_index(&self.index, &self.wtxn)?;
+        let old_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn)?;
 
         // never trigger re-indexing
         self.update_displayed()?;
@@ -1078,7 +1078,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         // 3. Keep the old vectors but reattempt indexing on a prompt change: only actually changed prompt will need embedding + storage
         let embedding_configs_updated = self.update_embedding_configs()?;
 
-        let new_inner_settings = InnerIndexSettings::from_index(&self.index, &self.wtxn)?;
+        let new_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn)?;
         let inner_settings_diff = InnerIndexSettingsDiff {
             old: old_inner_settings,
             new: new_inner_settings,
