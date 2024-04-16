@@ -296,10 +296,7 @@ pub struct Stats {
 async fn get_stats(
     index_scheduler: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<IndexScheduler>>,
     auth_controller: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<AuthController>>,
-    req: HttpRequest,
-    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    analytics.publish("Stats Seen".to_string(), json!({ "per_index_uid": false }), Some(&req));
     let filters = index_scheduler.filters();
 
     let stats = create_all_stats((*index_scheduler).clone(), (*auth_controller).clone(), filters)?;
