@@ -355,11 +355,7 @@ struct VersionResponse {
 
 async fn get_version(
     _index_scheduler: GuardedData<ActionPolicy<{ actions::VERSION }>, Data<IndexScheduler>>,
-    req: HttpRequest,
-    analytics: web::Data<dyn Analytics>,
 ) -> HttpResponse {
-    analytics.publish("Version Seen".to_string(), json!(null), Some(&req));
-
     let build_info = build_info::BuildInfo::from_build();
 
     HttpResponse::Ok().json(VersionResponse {
