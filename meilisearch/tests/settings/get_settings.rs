@@ -213,6 +213,7 @@ async fn secrets_are_hidden_in_settings() {
         "default": {
           "source": "rest",
           "apiKey": "My suXXXXXX...",
+          "dimensions": 4,
           "url": "https://localhost:7777"
         }
       }

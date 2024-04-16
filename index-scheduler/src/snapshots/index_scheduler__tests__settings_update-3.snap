@@ -6,7 +6,7 @@ expression: embedding_config.embedder_options
   "Rest": {
     "api_key": "My super secret",
     "distribution": null,
-    "dimensions": null,
+    "dimensions": 4,
     "url": "http://localhost:7777",
     "query": null,
     "input_field": [
