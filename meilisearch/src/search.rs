@@ -475,7 +475,7 @@ pub struct SearchHit {
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     pub hits: Vec<SearchHit>,
@@ -496,6 +496,46 @@ pub struct SearchResult {
     pub degraded: bool,
     #[serde(skip)]
     pub used_negative_operator: bool,
+}
+
+impl fmt::Debug for SearchResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let SearchResult {
+            hits,
+            query,
+            processing_time_ms,
+            hits_info,
+            facet_distribution,
+            facet_stats,
+            semantic_hit_count,
+            degraded,
+            used_negative_operator,
+        } = self;
+
+        let mut debug = f.debug_struct("SearchResult");
+        // The most important thing when looking at a search result is the time it took to process
+        debug.field("processing_time_ms", &processing_time_ms);
+        debug.field("hits", &format!("[{} hits returned]", hits.len()));
+        debug.field("query", &query);
+        debug.field("hits_info", &hits_info);
+        if *used_negative_operator {
+            debug.field("used_negative_operator", used_negative_operator);
+        }
+        if *degraded {
+            debug.field("degraded", degraded);
+        }
+        if let Some(facet_distribution) = facet_distribution {
+            debug.field("facet_distribution", &facet_distribution);
+        }
+        if let Some(facet_stats) = facet_stats {
+            debug.field("facet_stats", &facet_stats);
+        }
+        if let Some(semantic_hit_count) = semantic_hit_count {
+            debug.field("semantic_hit_count", &semantic_hit_count);
+        }
+
+        debug.finish()
+    }
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
