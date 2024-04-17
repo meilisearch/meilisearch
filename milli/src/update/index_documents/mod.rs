@@ -412,7 +412,7 @@ where
                         lmdb_writer_sx.clone(),
                         primary_key_id,
                         geo_fields_ids,
-                        &settings_diff,
+                        settings_diff.clone(),
                         max_positions_per_attributes,
                     )
                 });

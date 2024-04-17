@@ -44,7 +44,7 @@ pub(crate) fn data_from_obkv_documents(
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     primary_key_id: FieldId,
     geo_fields_ids: Option<(FieldId, FieldId)>,
-    settings_diff: &Arc<InnerIndexSettingsDiff>,
+    settings_diff: Arc<InnerIndexSettingsDiff>,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<()> {
     puffin::profile_function!();
@@ -58,7 +58,7 @@ pub(crate) fn data_from_obkv_documents(
                         original_documents_chunk,
                         indexer,
                         lmdb_writer_sx.clone(),
-                        settings_diff,
+                        settings_diff.clone(),
                     )
                 })
                 .collect::<Result<()>>()
@@ -73,7 +73,7 @@ pub(crate) fn data_from_obkv_documents(
                         lmdb_writer_sx.clone(),
                         primary_key_id,
                         geo_fields_ids,
-                        settings_diff,
+                        settings_diff.clone(),
                         max_positions_per_attributes,
                     )
                 })
@@ -86,7 +86,7 @@ pub(crate) fn data_from_obkv_documents(
                         run_extraction_task::<_, _, grenad::Reader<BufReader<File>>>(
                             docid_word_positions_chunk.clone(),
                             indexer,
-                            settings_diff,
+                            settings_diff.clone(),
                             lmdb_writer_sx.clone(),
                             extract_fid_word_count_docids,
                             TypedChunk::FieldIdWordCountDocids,
@@ -103,7 +103,7 @@ pub(crate) fn data_from_obkv_documents(
                         >(
                             docid_word_positions_chunk.clone(),
                             indexer,
-                            settings_diff,
+                            settings_diff.clone(),
                             lmdb_writer_sx.clone(),
                             extract_word_docids,
                             |(
@@ -123,7 +123,7 @@ pub(crate) fn data_from_obkv_documents(
                         run_extraction_task::<_, _, grenad::Reader<BufReader<File>>>(
                             docid_word_positions_chunk.clone(),
                             indexer,
-                            settings_diff,
+                            settings_diff.clone(),
                             lmdb_writer_sx.clone(),
                             extract_word_position_docids,
                             TypedChunk::WordPositionDocids,
@@ -137,7 +137,7 @@ pub(crate) fn data_from_obkv_documents(
                         >(
                             fid_docid_facet_strings_chunk.clone(),
                             indexer,
-                            settings_diff,
+                            settings_diff.clone(),
                             lmdb_writer_sx.clone(),
                             extract_facet_string_docids,
                             TypedChunk::FieldIdFacetStringDocids,
@@ -147,7 +147,7 @@ pub(crate) fn data_from_obkv_documents(
                         run_extraction_task::<_, _, grenad::Reader<BufReader<File>>>(
                             fid_docid_facet_numbers_chunk.clone(),
                             indexer,
-                            settings_diff,
+                            settings_diff.clone(),
                             lmdb_writer_sx.clone(),
                             extract_facet_number_docids,
                             TypedChunk::FieldIdFacetNumberDocids,
@@ -157,7 +157,7 @@ pub(crate) fn data_from_obkv_documents(
                         run_extraction_task::<_, _, grenad::Reader<BufReader<File>>>(
                             docid_word_positions_chunk.clone(),
                             indexer,
-                            settings_diff,
+                            settings_diff.clone(),
                             lmdb_writer_sx.clone(),
                             extract_word_pair_proximity_docids,
                             TypedChunk::WordPairProximityDocids,
@@ -181,7 +181,7 @@ pub(crate) fn data_from_obkv_documents(
 fn run_extraction_task<FE, FS, M>(
     chunk: grenad::Reader<CursorClonableMmap>,
     indexer: GrenadParameters,
-    settings_diff: &Arc<InnerIndexSettingsDiff>,
+    settings_diff: Arc<InnerIndexSettingsDiff>,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     extract_fn: FE,
     serialize_fn: FS,
@@ -199,7 +199,6 @@ fn run_extraction_task<FE, FS, M>(
     M: Send,
 {
     let current_span = tracing::Span::current();
-    let settings_diff = settings_diff.clone();
 
     rayon::spawn(move || {
         let child_span = tracing::trace_span!(target: "indexing::extract::details", parent: &current_span, "extract_multiple_chunks");
@@ -222,7 +221,7 @@ fn send_original_documents_data(
     original_documents_chunk: Result<grenad::Reader<BufReader<File>>>,
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
-    settings_diff: &Arc<InnerIndexSettingsDiff>,
+    settings_diff: Arc<InnerIndexSettingsDiff>,
 ) -> Result<()> {
     let original_documents_chunk =
         original_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
@@ -302,7 +301,7 @@ fn send_and_extract_flattened_documents_data(
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     primary_key_id: FieldId,
     geo_fields_ids: Option<(FieldId, FieldId)>,
-    settings_diff: &InnerIndexSettingsDiff,
+    settings_diff: Arc<InnerIndexSettingsDiff>,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<(
     grenad::Reader<CursorClonableMmap>,
@@ -331,7 +330,7 @@ fn send_and_extract_flattened_documents_data(
                     extract_docid_word_positions(
                         flattened_documents_chunk.clone(),
                         indexer,
-                        settings_diff,
+                        &settings_diff,
                         max_positions_per_attributes,
                     )?;
 
@@ -354,7 +353,7 @@ fn send_and_extract_flattened_documents_data(
                 } = extract_fid_docid_facet_values(
                     flattened_documents_chunk.clone(),
                     indexer,
-                    settings_diff,
+                    &settings_diff,
                     geo_fields_ids,
                 )?;
 
