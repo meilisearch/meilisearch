@@ -678,6 +678,23 @@ impl Index {
             .get(rtxn, main_key::USER_DEFINED_SEARCHABLE_FIELDS_KEY)
     }
 
+    /// Identical to `user_defined_searchable_fields`, but returns ids instead.
+    pub fn user_defined_searchable_fields_ids(&self, rtxn: &RoTxn) -> Result<Option<Vec<FieldId>>> {
+        match self.user_defined_searchable_fields(rtxn)? {
+            Some(fields) => {
+                let fields_ids_map = self.fields_ids_map(rtxn)?;
+                let mut fields_ids = Vec::new();
+                for name in fields {
+                    if let Some(field_id) = fields_ids_map.id(name) {
+                        fields_ids.push(field_id);
+                    }
+                }
+                Ok(Some(fields_ids))
+            }
+            None => Ok(None),
+        }
+    }
+
     /* filterable fields */
 
     /// Writes the filterable fields names in the database.
@@ -824,11 +841,11 @@ impl Index {
 
     /// Identical to `user_defined_faceted_fields`, but returns ids instead.
     pub fn user_defined_faceted_fields_ids(&self, rtxn: &RoTxn) -> Result<HashSet<FieldId>> {
-        let fields = self.faceted_fields(rtxn)?;
+        let fields = self.user_defined_faceted_fields(rtxn)?;
         let fields_ids_map = self.fields_ids_map(rtxn)?;
 
         let mut fields_ids = HashSet::new();
-        for name in fields.into_iter() {
+        for name in fields {
             if let Some(field_id) = fields_ids_map.id(&name) {
                 fields_ids.insert(field_id);
             }

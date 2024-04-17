@@ -9,9 +9,9 @@ mod extract_word_docids;
 mod extract_word_pair_proximity_docids;
 mod extract_word_position_docids;
 
-use std::collections::HashSet;
 use std::fs::File;
 use std::io::BufReader;
+use std::sync::Arc;
 
 use crossbeam_channel::Sender;
 use rayon::prelude::*;
@@ -30,9 +30,8 @@ use self::extract_word_pair_proximity_docids::extract_word_pair_proximity_docids
 use self::extract_word_position_docids::extract_word_position_docids;
 use super::helpers::{as_cloneable_grenad, CursorClonableMmap, GrenadParameters};
 use super::{helpers, TypedChunk};
-use crate::proximity::ProximityPrecision;
-use crate::vector::EmbeddingConfigs;
-use crate::{FieldId, FieldsIdsMap, Result};
+use crate::update::settings::InnerIndexSettingsDiff;
+use crate::{FieldId, Result};
 
 /// Extract data for each databases from obkv documents in parallel.
 /// Send data in grenad file over provided Sender.
@@ -43,18 +42,10 @@ pub(crate) fn data_from_obkv_documents(
     flattened_obkv_chunks: impl Iterator<Item = Result<grenad::Reader<BufReader<File>>>> + Send,
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
-    searchable_fields: Option<HashSet<FieldId>>,
-    faceted_fields: HashSet<FieldId>,
     primary_key_id: FieldId,
     geo_fields_ids: Option<(FieldId, FieldId)>,
-    field_id_map: FieldsIdsMap,
-    stop_words: Option<fst::Set<Vec<u8>>>,
-    allowed_separators: Option<&[&str]>,
-    dictionary: Option<&[&str]>,
+    settings_diff: Arc<InnerIndexSettingsDiff>,
     max_positions_per_attributes: Option<u32>,
-    exact_attributes: HashSet<FieldId>,
-    proximity_precision: ProximityPrecision,
-    embedders: EmbeddingConfigs,
 ) -> Result<()> {
     puffin::profile_function!();
 
@@ -67,8 +58,7 @@ pub(crate) fn data_from_obkv_documents(
                         original_documents_chunk,
                         indexer,
                         lmdb_writer_sx.clone(),
-                        field_id_map.clone(),
-                        embedders.clone(),
+                        settings_diff.clone(),
                     )
                 })
                 .collect::<Result<()>>()
@@ -81,13 +71,9 @@ pub(crate) fn data_from_obkv_documents(
                         flattened_obkv_chunks,
                         indexer,
                         lmdb_writer_sx.clone(),
-                        &searchable_fields,
-                        &faceted_fields,
                         primary_key_id,
                         geo_fields_ids,
-                        &stop_words,
-                        &allowed_separators,
-                        &dictionary,
+                        settings_diff.clone(),
                         max_positions_per_attributes,
                     )
                 })
@@ -100,13 +86,12 @@ pub(crate) fn data_from_obkv_documents(
                         run_extraction_task::<_, _, grenad::Reader<BufReader<File>>>(
                             docid_word_positions_chunk.clone(),
                             indexer,
+                            settings_diff.clone(),
                             lmdb_writer_sx.clone(),
                             extract_fid_word_count_docids,
                             TypedChunk::FieldIdWordCountDocids,
                             "field-id-wordcount-docids",
                         );
-
-                        let exact_attributes = exact_attributes.clone();
                         run_extraction_task::<
                             _,
                             _,
@@ -118,10 +103,9 @@ pub(crate) fn data_from_obkv_documents(
                         >(
                             docid_word_positions_chunk.clone(),
                             indexer,
+                            settings_diff.clone(),
                             lmdb_writer_sx.clone(),
-                            move |doc_word_pos, indexer| {
-                                extract_word_docids(doc_word_pos, indexer, &exact_attributes)
-                            },
+                            extract_word_docids,
                             |(
                                 word_docids_reader,
                                 exact_word_docids_reader,
@@ -139,6 +123,7 @@ pub(crate) fn data_from_obkv_documents(
                         run_extraction_task::<_, _, grenad::Reader<BufReader<File>>>(
                             docid_word_positions_chunk.clone(),
                             indexer,
+                            settings_diff.clone(),
                             lmdb_writer_sx.clone(),
                             extract_word_position_docids,
                             TypedChunk::WordPositionDocids,
@@ -152,6 +137,7 @@ pub(crate) fn data_from_obkv_documents(
                         >(
                             fid_docid_facet_strings_chunk.clone(),
                             indexer,
+                            settings_diff.clone(),
                             lmdb_writer_sx.clone(),
                             extract_facet_string_docids,
                             TypedChunk::FieldIdFacetStringDocids,
@@ -161,22 +147,22 @@ pub(crate) fn data_from_obkv_documents(
                         run_extraction_task::<_, _, grenad::Reader<BufReader<File>>>(
                             fid_docid_facet_numbers_chunk.clone(),
                             indexer,
+                            settings_diff.clone(),
                             lmdb_writer_sx.clone(),
                             extract_facet_number_docids,
                             TypedChunk::FieldIdFacetNumberDocids,
                             "field-id-facet-number-docids",
                         );
 
-                        if proximity_precision == ProximityPrecision::ByWord {
-                            run_extraction_task::<_, _, grenad::Reader<BufReader<File>>>(
-                                docid_word_positions_chunk.clone(),
-                                indexer,
-                                lmdb_writer_sx.clone(),
-                                extract_word_pair_proximity_docids,
-                                TypedChunk::WordPairProximityDocids,
-                                "word-pair-proximity-docids",
-                            );
-                        }
+                        run_extraction_task::<_, _, grenad::Reader<BufReader<File>>>(
+                            docid_word_positions_chunk.clone(),
+                            indexer,
+                            settings_diff.clone(),
+                            lmdb_writer_sx.clone(),
+                            extract_word_pair_proximity_docids,
+                            TypedChunk::WordPairProximityDocids,
+                            "word-pair-proximity-docids",
+                        );
                     }
 
                     Ok(())
@@ -195,12 +181,17 @@ pub(crate) fn data_from_obkv_documents(
 fn run_extraction_task<FE, FS, M>(
     chunk: grenad::Reader<CursorClonableMmap>,
     indexer: GrenadParameters,
+    settings_diff: Arc<InnerIndexSettingsDiff>,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     extract_fn: FE,
     serialize_fn: FS,
     name: &'static str,
 ) where
-    FE: Fn(grenad::Reader<CursorClonableMmap>, GrenadParameters) -> Result<M>
+    FE: Fn(
+            grenad::Reader<CursorClonableMmap>,
+            GrenadParameters,
+            &InnerIndexSettingsDiff,
+        ) -> Result<M>
         + Sync
         + Send
         + 'static,
@@ -213,7 +204,7 @@ fn run_extraction_task<FE, FS, M>(
         let child_span = tracing::trace_span!(target: "indexing::extract::details", parent: &current_span, "extract_multiple_chunks");
         let _entered = child_span.enter();
         puffin::profile_scope!("extract_multiple_chunks", name);
-        match extract_fn(chunk, indexer) {
+        match extract_fn(chunk, indexer, &settings_diff) {
             Ok(chunk) => {
                 let _ = lmdb_writer_sx.send(Ok(serialize_fn(chunk)));
             }
@@ -230,8 +221,7 @@ fn send_original_documents_data(
     original_documents_chunk: Result<grenad::Reader<BufReader<File>>>,
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
-    field_id_map: FieldsIdsMap,
-    embedders: EmbeddingConfigs,
+    settings_diff: Arc<InnerIndexSettingsDiff>,
 ) -> Result<()> {
     let original_documents_chunk =
         original_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
@@ -244,50 +234,53 @@ fn send_original_documents_data(
         .thread_name(|index| format!("embedding-request-{index}"))
         .build()?;
 
-    rayon::spawn(move || {
-        for (name, (embedder, prompt)) in embedders {
-            let result = extract_vector_points(
-                documents_chunk_cloned.clone(),
-                indexer,
-                &field_id_map,
-                &prompt,
-                &name,
-            );
-            match result {
-                Ok(ExtractedVectorPoints { manual_vectors, remove_vectors, prompts }) => {
-                    let embeddings = match extract_embeddings(
-                        prompts,
-                        indexer,
-                        embedder.clone(),
-                        &request_threads,
-                    ) {
-                        Ok(results) => Some(results),
-                        Err(error) => {
-                            let _ = lmdb_writer_sx_cloned.send(Err(error));
-                            None
-                        }
-                    };
+    if settings_diff.reindex_vectors() || !settings_diff.settings_update_only() {
+        let settings_diff = settings_diff.clone();
+        rayon::spawn(move || {
+            for (name, (embedder, prompt)) in settings_diff.new.embedding_configs.clone() {
+                let result = extract_vector_points(
+                    documents_chunk_cloned.clone(),
+                    indexer,
+                    &settings_diff,
+                    &prompt,
+                    &name,
+                );
+                match result {
+                    Ok(ExtractedVectorPoints { manual_vectors, remove_vectors, prompts }) => {
+                        let embeddings = match extract_embeddings(
+                            prompts,
+                            indexer,
+                            embedder.clone(),
+                            &request_threads,
+                        ) {
+                            Ok(results) => Some(results),
+                            Err(error) => {
+                                let _ = lmdb_writer_sx_cloned.send(Err(error));
+                                None
+                            }
+                        };
 
-                    if !(remove_vectors.is_empty()
-                        && manual_vectors.is_empty()
-                        && embeddings.as_ref().map_or(true, |e| e.is_empty()))
-                    {
-                        let _ = lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints {
-                            remove_vectors,
-                            embeddings,
-                            expected_dimension: embedder.dimensions(),
-                            manual_vectors,
-                            embedder_name: name,
-                        }));
+                        if !(remove_vectors.is_empty()
+                            && manual_vectors.is_empty()
+                            && embeddings.as_ref().map_or(true, |e| e.is_empty()))
+                        {
+                            let _ = lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints {
+                                remove_vectors,
+                                embeddings,
+                                expected_dimension: embedder.dimensions(),
+                                manual_vectors,
+                                embedder_name: name,
+                            }));
+                        }
+                    }
+
+                    Err(error) => {
+                        let _ = lmdb_writer_sx_cloned.send(Err(error));
                     }
                 }
-
-                Err(error) => {
-                    let _ = lmdb_writer_sx_cloned.send(Err(error));
-                }
             }
-        }
-    });
+        });
+    }
 
     // TODO: create a custom internal error
     let _ = lmdb_writer_sx.send(Ok(TypedChunk::Documents(original_documents_chunk)));
@@ -306,13 +299,9 @@ fn send_and_extract_flattened_documents_data(
     flattened_documents_chunk: Result<grenad::Reader<BufReader<File>>>,
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
-    searchable_fields: &Option<HashSet<FieldId>>,
-    faceted_fields: &HashSet<FieldId>,
     primary_key_id: FieldId,
     geo_fields_ids: Option<(FieldId, FieldId)>,
-    stop_words: &Option<fst::Set<Vec<u8>>>,
-    allowed_separators: &Option<&[&str]>,
-    dictionary: &Option<&[&str]>,
+    settings_diff: Arc<InnerIndexSettingsDiff>,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<(
     grenad::Reader<CursorClonableMmap>,
@@ -341,10 +330,7 @@ fn send_and_extract_flattened_documents_data(
                     extract_docid_word_positions(
                         flattened_documents_chunk.clone(),
                         indexer,
-                        searchable_fields,
-                        stop_words.as_ref(),
-                        *allowed_separators,
-                        *dictionary,
+                        &settings_diff,
                         max_positions_per_attributes,
                     )?;
 
@@ -367,7 +353,7 @@ fn send_and_extract_flattened_documents_data(
                 } = extract_fid_docid_facet_values(
                     flattened_documents_chunk.clone(),
                     indexer,
-                    faceted_fields,
+                    &settings_diff,
                     geo_fields_ids,
                 )?;
 

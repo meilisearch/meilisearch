@@ -71,8 +71,8 @@ pub enum DelAddOperation {
 /// putting each deletion obkv's keys under an DelAdd::Deletion
 /// and putting each addition obkv's keys under an DelAdd::Addition
 pub fn del_add_from_two_obkvs<K: obkv::Key + PartialOrd + Ord>(
-    deletion: obkv::KvReader<K>,
-    addition: obkv::KvReader<K>,
+    deletion: &obkv::KvReader<K>,
+    addition: &obkv::KvReader<K>,
     buffer: &mut Vec<u8>,
 ) -> Result<(), std::io::Error> {
     use itertools::merge_join_by;

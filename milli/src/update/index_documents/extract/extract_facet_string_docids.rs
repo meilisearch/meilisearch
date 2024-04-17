@@ -15,6 +15,7 @@ use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::index_documents::helpers::{
     merge_deladd_btreeset_string, merge_deladd_cbo_roaring_bitmaps,
 };
+use crate::update::settings::InnerIndexSettingsDiff;
 use crate::{FieldId, Result, MAX_FACET_VALUE_LENGTH};
 
 /// Extracts the facet string and the documents ids where this facet string appear.
@@ -25,6 +26,7 @@ use crate::{FieldId, Result, MAX_FACET_VALUE_LENGTH};
 pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
     docid_fid_facet_string: grenad::Reader<R>,
     indexer: GrenadParameters,
+    _settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<(grenad::Reader<BufReader<File>>, grenad::Reader<BufReader<File>>)> {
     puffin::profile_function!();
 
