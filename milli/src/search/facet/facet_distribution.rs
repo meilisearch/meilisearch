@@ -97,6 +97,7 @@ impl<'a> FacetDistribution<'a> {
     ) -> heed::Result<()> {
         match facet_type {
             FacetType::Number => {
+                let mut lexicographic_distribution = BTreeMap::new();
                 let mut key_buffer: Vec<_> = field_id.to_be_bytes().to_vec();
 
                 let distribution_prelength = distribution.len();
@@ -111,14 +112,17 @@ impl<'a> FacetDistribution<'a> {
 
                     for result in iter {
                         let ((_, _, value), ()) = result?;
-                        *distribution.entry(value.to_string()).or_insert(0) += 1;
+                        *lexicographic_distribution.entry(value.to_string()).or_insert(0) += 1;
 
-                        if distribution.len() - distribution_prelength == self.max_values_per_facet
+                        if lexicographic_distribution.len() - distribution_prelength
+                            == self.max_values_per_facet
                         {
                             break;
                         }
                     }
                 }
+
+                distribution.extend(lexicographic_distribution);
             }
             FacetType::String => {
                 let mut normalized_distribution = BTreeMap::new();
