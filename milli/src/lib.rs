@@ -128,7 +128,7 @@ impl fmt::Debug for TimeBudget {
 
 impl Default for TimeBudget {
     fn default() -> Self {
-        Self::new(std::time::Duration::from_millis(150))
+        Self::new(std::time::Duration::from_millis(1500))
     }
 }
 
