@@ -85,5 +85,4 @@ impl Analytics for MockAnalytics {
     }
     fn get_fetch_documents(&self, _documents_query: &DocumentFetchKind, _request: &HttpRequest) {}
     fn post_fetch_documents(&self, _documents_query: &DocumentFetchKind, _request: &HttpRequest) {}
-    fn health_seen(&self, _request: &HttpRequest) {}
 }

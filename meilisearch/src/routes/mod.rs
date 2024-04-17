@@ -8,11 +8,9 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::tasks::{Kind, Status, Task, TaskId};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use time::OffsetDateTime;
 use tracing::debug;
 
-use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::search_queue::SearchQueue;
@@ -376,14 +374,10 @@ struct KeysResponse {
 }
 
 pub async fn get_health(
-    req: HttpRequest,
     index_scheduler: Data<IndexScheduler>,
     auth_controller: Data<AuthController>,
     search_queue: Data<SearchQueue>,
-    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    analytics.health_seen(&req);
-
     search_queue.health().unwrap();
     index_scheduler.health().unwrap();
     auth_controller.health().unwrap();
