@@ -11,6 +11,7 @@ mod extract_word_position_docids;
 
 use std::fs::File;
 use std::io::BufReader;
+use std::sync::Arc;
 
 use crossbeam_channel::Sender;
 use rayon::prelude::*;
@@ -43,7 +44,7 @@ pub(crate) fn data_from_obkv_documents(
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     primary_key_id: FieldId,
     geo_fields_ids: Option<(FieldId, FieldId)>,
-    settings_diff: &InnerIndexSettingsDiff,
+    settings_diff: &Arc<InnerIndexSettingsDiff>,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<()> {
     puffin::profile_function!();
@@ -180,7 +181,7 @@ pub(crate) fn data_from_obkv_documents(
 fn run_extraction_task<FE, FS, M>(
     chunk: grenad::Reader<CursorClonableMmap>,
     indexer: GrenadParameters,
-    settings_diff: &InnerIndexSettingsDiff,
+    settings_diff: &Arc<InnerIndexSettingsDiff>,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     extract_fn: FE,
     serialize_fn: FS,
@@ -221,7 +222,7 @@ fn send_original_documents_data(
     original_documents_chunk: Result<grenad::Reader<BufReader<File>>>,
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
-    settings_diff: &InnerIndexSettingsDiff,
+    settings_diff: &Arc<InnerIndexSettingsDiff>,
 ) -> Result<()> {
     let original_documents_chunk =
         original_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;

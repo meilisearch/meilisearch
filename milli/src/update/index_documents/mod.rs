@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::{Read, Seek};
 use std::num::NonZeroU32;
 use std::result::Result as StdResult;
+use std::sync::Arc;
 
 use crossbeam_channel::{Receiver, Sender};
 use grenad::{Merger, MergerBuilder};
@@ -291,6 +292,8 @@ where
         // because they might have changed due to the nested documents flattening.
         settings_diff.new.recompute_facets(self.wtxn, self.index)?;
         settings_diff.new.recompute_searchables(self.wtxn, self.index)?;
+
+        let settings_diff = Arc::new(settings_diff);
 
         let backup_pool;
         let pool = match self.indexer_config.thread_pool {

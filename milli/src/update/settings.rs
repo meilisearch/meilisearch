@@ -1094,7 +1094,6 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     }
 }
 
-#[derive(Clone)]
 pub struct InnerIndexSettingsDiff {
     pub(crate) old: InnerIndexSettings,
     pub(crate) new: InnerIndexSettings,

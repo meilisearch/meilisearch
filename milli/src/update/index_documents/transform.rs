@@ -829,6 +829,9 @@ impl<'a, 'i> Transform<'a, 'i> {
         })
     }
 
+    /// Rebind the field_ids of the provided document to their values
+    /// based on the field_ids_maps difference between the old and the new settings,
+    /// then fill the provided buffers with delta documents using KvWritterDelAdd.
     fn rebind_existing_document(
         old_obkv: KvReader<FieldId>,
         settings_diff: &InnerIndexSettingsDiff,
