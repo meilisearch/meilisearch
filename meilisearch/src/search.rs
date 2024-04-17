@@ -1,3 +1,4 @@
+use core::fmt;
 use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
@@ -39,7 +40,7 @@ pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 pub const DEFAULT_SEMANTIC_RATIO: fn() -> SemanticRatio = || SemanticRatio(0.5);
 
-#[derive(Debug, Clone, Default, PartialEq, Deserr)]
+#[derive(Clone, Default, PartialEq, Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
@@ -86,6 +87,110 @@ pub struct SearchQuery {
     pub matching_strategy: MatchingStrategy,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>, default)]
     pub attributes_to_search_on: Option<Vec<String>>,
+}
+
+// Since this structure is logged A LOT we're going to reduce the number of things it logs to the bare minimum.
+// - Only what IS used, we know everything else is set to None so there is no need to print it
+// - Re-order the most important field to debug first
+impl fmt::Debug for SearchQuery {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            q,
+            vector,
+            hybrid,
+            offset,
+            limit,
+            page,
+            hits_per_page,
+            attributes_to_retrieve,
+            attributes_to_crop,
+            crop_length,
+            attributes_to_highlight,
+            show_matches_position,
+            show_ranking_score,
+            show_ranking_score_details,
+            filter,
+            sort,
+            facets,
+            highlight_pre_tag,
+            highlight_post_tag,
+            crop_marker,
+            matching_strategy,
+            attributes_to_search_on,
+        } = self;
+
+        let mut debug = f.debug_struct("SearchQuery");
+
+        // First, everything related to the number of documents to retrieve
+        debug.field("limit", &limit).field("offset", &offset);
+        if let Some(page) = page {
+            debug.field("page", &page);
+        }
+        if let Some(hits_per_page) = hits_per_page {
+            debug.field("hits_per_page", &hits_per_page);
+        }
+
+        // Then, everything related to the queries
+        if let Some(q) = q {
+            debug.field("q", &q);
+        }
+        if let Some(v) = vector {
+            if v.len() < 10 {
+                debug.field("vector", &v);
+            } else {
+                debug.field(
+                    "vector",
+                    &format!("[{}, {}, {}, ... {} dimensions]", v[0], v[1], v[2], v.len()),
+                );
+            }
+        }
+        if let Some(hybrid) = hybrid {
+            debug.field("hybrid", &hybrid);
+        }
+        if let Some(attributes_to_search_on) = attributes_to_search_on {
+            debug.field("attributes_to_search_on", &attributes_to_search_on);
+        }
+        if let Some(filter) = filter {
+            debug.field("filter", &filter);
+        }
+        if let Some(sort) = sort {
+            debug.field("sort", &sort);
+        }
+        if let Some(facets) = facets {
+            debug.field("facets", &facets);
+        }
+        debug.field("matching_strategy", &matching_strategy);
+
+        // Then everything related to the formatting
+        debug.field("crop_length", &crop_length);
+        if *show_matches_position {
+            debug.field("show_matches_position", show_matches_position);
+        }
+        if *show_ranking_score {
+            debug.field("show_ranking_score", show_ranking_score);
+        }
+        if *show_ranking_score_details {
+            debug.field("self.show_ranking_score_details", show_ranking_score_details);
+        }
+        debug.field("crop_length", &crop_length);
+        if let Some(facets) = facets {
+            debug.field("facets", &facets);
+        }
+        if let Some(attributes_to_retrieve) = attributes_to_retrieve {
+            debug.field("attributes_to_retrieve", &attributes_to_retrieve);
+        }
+        if let Some(attributes_to_crop) = attributes_to_crop {
+            debug.field("attributes_to_crop", &attributes_to_crop);
+        }
+        if let Some(attributes_to_highlight) = attributes_to_highlight {
+            debug.field("attributes_to_highlight", &attributes_to_highlight);
+        }
+        debug.field("highlight_pre_tag", &highlight_pre_tag);
+        debug.field("highlight_post_tag", &highlight_post_tag);
+        debug.field("crop_marker", &crop_marker);
+
+        debug.finish()
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserr)]
