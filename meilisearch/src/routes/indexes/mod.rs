@@ -269,12 +269,8 @@ impl From<index_scheduler::IndexStats> for IndexStats {
 pub async fn get_index_stats(
     index_scheduler: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    req: HttpRequest,
-    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
-    analytics.publish("Stats Seen".to_string(), json!({ "per_index_uid": true }), Some(&req));
-
     let stats = IndexStats::from(index_scheduler.index_stats(&index_uid)?);
 
     debug!(returns = ?stats, "Get index stats");

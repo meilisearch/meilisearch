@@ -8,11 +8,9 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::tasks::{Kind, Status, Task, TaskId};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use time::OffsetDateTime;
 use tracing::debug;
 
-use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::search_queue::SearchQueue;
@@ -296,10 +294,7 @@ pub struct Stats {
 async fn get_stats(
     index_scheduler: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<IndexScheduler>>,
     auth_controller: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<AuthController>>,
-    req: HttpRequest,
-    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    analytics.publish("Stats Seen".to_string(), json!({ "per_index_uid": false }), Some(&req));
     let filters = index_scheduler.filters();
 
     let stats = create_all_stats((*index_scheduler).clone(), (*auth_controller).clone(), filters)?;
@@ -355,11 +350,7 @@ struct VersionResponse {
 
 async fn get_version(
     _index_scheduler: GuardedData<ActionPolicy<{ actions::VERSION }>, Data<IndexScheduler>>,
-    req: HttpRequest,
-    analytics: web::Data<dyn Analytics>,
 ) -> HttpResponse {
-    analytics.publish("Version Seen".to_string(), json!(null), Some(&req));
-
     let build_info = build_info::BuildInfo::from_build();
 
     HttpResponse::Ok().json(VersionResponse {
@@ -383,14 +374,10 @@ struct KeysResponse {
 }
 
 pub async fn get_health(
-    req: HttpRequest,
     index_scheduler: Data<IndexScheduler>,
     auth_controller: Data<AuthController>,
     search_queue: Data<SearchQueue>,
-    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    analytics.health_seen(&req);
-
     search_queue.health().unwrap();
     index_scheduler.health().unwrap();
     auth_controller.health().unwrap();

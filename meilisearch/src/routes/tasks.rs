@@ -270,12 +270,8 @@ pub struct AllTasks {
 async fn get_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, Data<IndexScheduler>>,
     params: AwebQueryParameter<TasksFilterQuery, DeserrQueryParamError>,
-    req: HttpRequest,
-    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let mut params = params.into_inner();
-    analytics.get_tasks(&params, &req);
-
     // We +1 just to know if there is more after this "page" or not.
     params.limit.0 = params.limit.0.saturating_add(1);
     let limit = params.limit.0;
@@ -298,8 +294,6 @@ async fn get_tasks(
 async fn get_task(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, Data<IndexScheduler>>,
     task_uid: web::Path<String>,
-    req: HttpRequest,
-    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let task_uid_string = task_uid.into_inner();
 
@@ -309,8 +303,6 @@ async fn get_task(
             return Err(index_scheduler::Error::InvalidTaskUids { task_uid: task_uid_string }.into())
         }
     };
-
-    analytics.publish("Tasks Seen".to_string(), json!({ "per_task_uid": true }), Some(&req));
 
     let query = index_scheduler::Query { uids: Some(vec![task_uid]), ..Query::default() };
     let filters = index_scheduler.filters();
