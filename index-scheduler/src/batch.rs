@@ -13,7 +13,7 @@ We can combine the two tasks in a single batch:
 1. import documents X and Y
 
 Processing this batch is functionally equivalent to processing the two
-tasks individally, but should be much faster since we are only performing
+tasks individually, but should be much faster since we are only performing
 one indexing operation.
 */
 
