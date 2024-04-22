@@ -6,6 +6,7 @@ use std::num::ParseIntError;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::{env, fmt, fs};
 
@@ -666,15 +667,23 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
     type Error = anyhow::Error;
 
     fn try_from(other: &IndexerOpts) -> Result<Self, Self::Error> {
+        let pool_panic_catched = Arc::new(AtomicBool::new(false));
         let thread_pool = rayon::ThreadPoolBuilder::new()
             .thread_name(|index| format!("indexing-thread:{index}"))
             .num_threads(*other.max_indexing_threads)
+            .panic_handler({
+                // TODO What should we do with this Box<dyn Any + Send>.
+                //      So, let's just set a value to true to cancel the task with a message for now.
+                let panic_cathed = pool_panic_catched.clone();
+                move |_result| panic_cathed.store(true, Ordering::SeqCst)
+            })
             .build()?;
 
         Ok(Self {
             log_every_n: Some(DEFAULT_LOG_EVERY_N),
             max_memory: other.max_indexing_memory.map(|b| b.get_bytes() as usize),
             thread_pool: Some(thread_pool),
+            pool_panic_catched,
             max_positions_per_attributes: None,
             skip_index_budget: other.skip_index_budget,
             ..Default::default()

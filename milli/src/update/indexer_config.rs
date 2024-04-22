@@ -1,3 +1,6 @@
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+
 use grenad::CompressionType;
 use rayon::ThreadPool;
 
@@ -10,6 +13,9 @@ pub struct IndexerConfig {
     pub chunk_compression_type: CompressionType,
     pub chunk_compression_level: Option<u32>,
     pub thread_pool: Option<ThreadPool>,
+    /// Set to true if the thread pool catched a panic
+    /// and we must abort the task
+    pub pool_panic_catched: Arc<AtomicBool>,
     pub max_positions_per_attributes: Option<u32>,
     pub skip_index_budget: bool,
 }
@@ -24,6 +30,7 @@ impl Default for IndexerConfig {
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
             thread_pool: None,
+            pool_panic_catched: Arc::default(),
             max_positions_per_attributes: None,
             skip_index_budget: false,
         }

@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::{Read, Seek};
 use std::num::NonZeroU32;
 use std::result::Result as StdResult;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use crossbeam_channel::{Receiver, Sender};
@@ -296,20 +297,24 @@ where
         let settings_diff = Arc::new(settings_diff);
 
         let backup_pool;
+        let pool_catched_panic = self.indexer_config.pool_panic_catched.clone();
         let pool = match self.indexer_config.thread_pool {
             Some(ref pool) => pool,
-            #[cfg(not(test))]
             None => {
-                // We initialize a bakcup pool with the default
+                // We initialize a backup pool with the default
                 // settings if none have already been set.
-                backup_pool = rayon::ThreadPoolBuilder::new().build()?;
-                &backup_pool
-            }
-            #[cfg(test)]
-            None => {
-                // We initialize a bakcup pool with the default
-                // settings if none have already been set.
-                backup_pool = rayon::ThreadPoolBuilder::new().num_threads(1).build()?;
+                let mut pool_builder = rayon::ThreadPoolBuilder::new();
+                pool_builder = pool_builder.panic_handler({
+                    let catched_panic = pool_catched_panic.clone();
+                    move |_result| catched_panic.store(true, Ordering::SeqCst)
+                });
+
+                #[cfg(test)]
+                {
+                    pool_builder = pool_builder.num_threads(1);
+                }
+
+                backup_pool = pool_builder.build()?;
                 &backup_pool
             }
         };
