@@ -49,6 +49,8 @@ pub enum InternalError {
     InvalidDatabaseTyping,
     #[error(transparent)]
     RayonThreadPool(#[from] ThreadPoolBuildError),
+    #[error("A panic occured. Read the logs to find more information about it.")]
+    PanicInThreadPool,
     #[error(transparent)]
     SerdeJson(#[from] serde_json::Error),
     #[error(transparent)]

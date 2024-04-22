@@ -540,6 +540,11 @@ where
             Ok(())
         })?;
 
+        // While reseting the pool panic catcher we return an error if we catched one.
+        if pool_catched_panic.swap(false, Ordering::SeqCst) {
+            return Err(InternalError::PanicInThreadPool.into());
+        }
+
         // We write the field distribution into the main database
         self.index.put_field_distribution(self.wtxn, &field_distribution)?;
 
@@ -568,6 +573,11 @@ where
                 }
                 Result::Ok(())
             })?;
+
+            // While reseting the pool panic catcher we return an error if we catched one.
+            if pool_catched_panic.swap(false, Ordering::SeqCst) {
+                return Err(InternalError::PanicInThreadPool.into());
+            }
         }
 
         self.execute_prefix_databases(
