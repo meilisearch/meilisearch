@@ -3,7 +3,7 @@ use std::convert::Infallible;
 use std::fmt;
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
-use std::ops::ControlFlow;
+use std::ops::{ControlFlow, Deref};
 use std::str::FromStr;
 
 use deserr::{DeserializeError, Deserr, ErrorKind, MergeWithError, ValuePointerRef};
@@ -143,21 +143,13 @@ impl MergeWithError<milli::CriterionError> for DeserrJsonError<InvalidSettingsRa
 )]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct Settings<T> {
-    #[serde(
-        default,
-        serialize_with = "serialize_with_wildcard",
-        skip_serializing_if = "Setting::is_not_set"
-    )]
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsDisplayedAttributes>)]
-    pub displayed_attributes: Setting<Vec<String>>,
+    pub displayed_attributes: WildcardSetting,
 
-    #[serde(
-        default,
-        serialize_with = "serialize_with_wildcard",
-        skip_serializing_if = "Setting::is_not_set"
-    )]
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsSearchableAttributes>)]
-    pub searchable_attributes: Setting<Vec<String>>,
+    pub searchable_attributes: WildcardSetting,
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsFilterableAttributes>)]
@@ -251,8 +243,8 @@ impl<T> Settings<T> {
 impl Settings<Checked> {
     pub fn cleared() -> Settings<Checked> {
         Settings {
-            displayed_attributes: Setting::Reset,
-            searchable_attributes: Setting::Reset,
+            displayed_attributes: Setting::Reset.into(),
+            searchable_attributes: Setting::Reset.into(),
             filterable_attributes: Setting::Reset,
             sortable_attributes: Setting::Reset,
             ranking_rules: Setting::Reset,
@@ -319,7 +311,7 @@ impl Settings<Checked> {
 
 impl Settings<Unchecked> {
     pub fn check(self) -> Settings<Checked> {
-        let displayed_attributes = match self.displayed_attributes {
+        let displayed_attributes = match self.displayed_attributes.0 {
             Setting::Set(fields) => {
                 if fields.iter().any(|f| f == "*") {
                     Setting::Reset
@@ -330,7 +322,7 @@ impl Settings<Unchecked> {
             otherwise => otherwise,
         };
 
-        let searchable_attributes = match self.searchable_attributes {
+        let searchable_attributes = match self.searchable_attributes.0 {
             Setting::Set(fields) => {
                 if fields.iter().any(|f| f == "*") {
                     Setting::Reset
@@ -342,8 +334,8 @@ impl Settings<Unchecked> {
         };
 
         Settings {
-            displayed_attributes,
-            searchable_attributes,
+            displayed_attributes: displayed_attributes.into(),
+            searchable_attributes: searchable_attributes.into(),
             filterable_attributes: self.filterable_attributes,
             sortable_attributes: self.sortable_attributes,
             ranking_rules: self.ranking_rules,
@@ -412,13 +404,13 @@ pub fn apply_settings_to_builder(
         _kind,
     } = settings;
 
-    match searchable_attributes {
+    match searchable_attributes.deref() {
         Setting::Set(ref names) => builder.set_searchable_fields(names.clone()),
         Setting::Reset => builder.reset_searchable_fields(),
         Setting::NotSet => (),
     }
 
-    match displayed_attributes {
+    match displayed_attributes.deref() {
         Setting::Set(ref names) => builder.set_displayed_fields(names.clone()),
         Setting::Reset => builder.reset_displayed_fields(),
         Setting::NotSet => (),
@@ -690,11 +682,13 @@ pub fn settings(
         displayed_attributes: match displayed_attributes {
             Some(attrs) => Setting::Set(attrs),
             None => Setting::Reset,
-        },
+        }
+        .into(),
         searchable_attributes: match searchable_attributes {
-            Some(attrs) => Setting::Set(attrs),
+            Some(attrs) => Setting::Set(attrs).into(),
             None => Setting::Reset,
-        },
+        }
+        .into(),
         filterable_attributes: Setting::Set(filterable_attributes),
         sortable_attributes: Setting::Set(sortable_attributes),
         ranking_rules: Setting::Set(criteria.iter().map(|c| c.clone().into()).collect()),
@@ -848,6 +842,41 @@ impl From<ProximityPrecisionView> for ProximityPrecision {
     }
 }
 
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+pub struct WildcardSetting(Setting<Vec<String>>);
+
+impl From<Setting<Vec<String>>> for WildcardSetting {
+    fn from(setting: Setting<Vec<String>>) -> Self {
+        Self(setting)
+    }
+}
+
+impl Serialize for WildcardSetting {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serialize_with_wildcard(&self.0, serializer)
+    }
+}
+
+impl<E: deserr::DeserializeError> Deserr<E> for WildcardSetting {
+    fn deserialize_from_value<V: deserr::IntoValue>(
+        value: deserr::Value<V>,
+        location: ValuePointerRef<'_>,
+    ) -> Result<Self, E> {
+        Ok(Self(Setting::deserialize_from_value(value, location)?))
+    }
+}
+
+impl std::ops::Deref for WildcardSetting {
+    type Target = Setting<Vec<String>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod test {
     use super::*;
@@ -856,8 +885,8 @@ pub(crate) mod test {
     fn test_setting_check() {
         // test no changes
         let settings = Settings {
-            displayed_attributes: Setting::Set(vec![String::from("hello")]),
-            searchable_attributes: Setting::Set(vec![String::from("hello")]),
+            displayed_attributes: Setting::Set(vec![String::from("hello")]).into(),
+            searchable_attributes: Setting::Set(vec![String::from("hello")]).into(),
             filterable_attributes: Setting::NotSet,
             sortable_attributes: Setting::NotSet,
             ranking_rules: Setting::NotSet,
@@ -883,8 +912,9 @@ pub(crate) mod test {
         // test wildcard
         // test no changes
         let settings = Settings {
-            displayed_attributes: Setting::Set(vec![String::from("*")]),
-            searchable_attributes: Setting::Set(vec![String::from("hello"), String::from("*")]),
+            displayed_attributes: Setting::Set(vec![String::from("*")]).into(),
+            searchable_attributes: Setting::Set(vec![String::from("hello"), String::from("*")])
+                .into(),
             filterable_attributes: Setting::NotSet,
             sortable_attributes: Setting::NotSet,
             ranking_rules: Setting::NotSet,
@@ -904,7 +934,7 @@ pub(crate) mod test {
         };
 
         let checked = settings.check();
-        assert_eq!(checked.displayed_attributes, Setting::Reset);
-        assert_eq!(checked.searchable_attributes, Setting::Reset);
+        assert_eq!(checked.displayed_attributes, Setting::Reset.into());
+        assert_eq!(checked.searchable_attributes, Setting::Reset.into());
     }
 }

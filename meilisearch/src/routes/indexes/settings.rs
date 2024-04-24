@@ -138,7 +138,7 @@ macro_rules! make_setting_route {
 
                 debug!(returns = ?settings, "Update settings");
 
-                Ok(HttpResponse::Ok().json(settings.$attr))
+                Ok(HttpResponse::Ok().json(dbg!(settings.$attr)))
             }
 
             pub fn resources() -> Resource {

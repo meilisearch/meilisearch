@@ -256,8 +256,8 @@ pub(crate) mod test {
 
     pub fn create_test_settings() -> Settings<Checked> {
         let settings = Settings {
-            displayed_attributes: Setting::Set(vec![S("race"), S("name")]),
-            searchable_attributes: Setting::Set(vec![S("name"), S("race")]),
+            displayed_attributes: Setting::Set(vec![S("race"), S("name")]).into(),
+            searchable_attributes: Setting::Set(vec![S("name"), S("race")]).into(),
             filterable_attributes: Setting::Set(btreeset! { S("race"), S("age") }),
             sortable_attributes: Setting::Set(btreeset! { S("age") }),
             ranking_rules: Setting::NotSet,
