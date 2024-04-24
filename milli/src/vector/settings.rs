@@ -335,7 +335,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 source: Setting::Set(EmbedderSource::Ollama),
                 model: Setting::Set(options.embedding_model.to_owned()),
                 revision: Setting::NotSet,
-                api_key: Setting::NotSet,
+                api_key: options.api_key.map(Setting::Set).unwrap_or_default(),
                 dimensions: Setting::NotSet,
                 document_template: Setting::Set(prompt.template),
                 url: Setting::NotSet,
