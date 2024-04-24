@@ -3,6 +3,8 @@ use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
 use super::error::{EmbedError, EmbedErrorKind, NewEmbedderError, NewEmbedderErrorKind};
 use super::rest::{Embedder as RestEmbedder, EmbedderOptions as RestEmbedderOptions};
 use super::{DistributionShift, Embeddings};
+use crate::error::FaultSource;
+use crate::ThreadPoolNoAbort;
 
 #[derive(Debug)]
 pub struct Embedder {
@@ -71,11 +73,16 @@ impl Embedder {
     pub fn embed_chunks(
         &self,
         text_chunks: Vec<Vec<String>>,
-        threads: &rayon::ThreadPool,
+        threads: &ThreadPoolNoAbort,
     ) -> Result<Vec<Vec<Embeddings<f32>>>, EmbedError> {
-        threads.install(move || {
-            text_chunks.into_par_iter().map(move |chunk| self.embed(chunk)).collect()
-        })
+        threads
+            .install(move || {
+                text_chunks.into_par_iter().map(move |chunk| self.embed(chunk)).collect()
+            })
+            .map_err(|error| EmbedError {
+                kind: EmbedErrorKind::PanicInThreadPool(error),
+                fault: FaultSource::Bug,
+            })?
     }
 
     pub fn chunk_count_hint(&self) -> usize {

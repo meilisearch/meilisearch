@@ -13,6 +13,7 @@ use byte_unit::{Byte, ByteError};
 use clap::Parser;
 use meilisearch_types::features::InstanceTogglableFeatures;
 use meilisearch_types::milli::update::IndexerConfig;
+use meilisearch_types::milli::ThreadPoolNoAbortBuilder;
 use rustls::server::{
     AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, ServerSessionMemoryCache,
 };
@@ -666,7 +667,7 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
     type Error = anyhow::Error;
 
     fn try_from(other: &IndexerOpts) -> Result<Self, Self::Error> {
-        let thread_pool = rayon::ThreadPoolBuilder::new()
+        let thread_pool = ThreadPoolNoAbortBuilder::new()
             .thread_name(|index| format!("indexing-thread:{index}"))
             .num_threads(*other.max_indexing_threads)
             .build()?;

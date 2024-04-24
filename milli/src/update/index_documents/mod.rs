@@ -33,6 +33,7 @@ use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
 use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
+use crate::thread_pool_no_abort::ThreadPoolNoAbortBuilder;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
@@ -298,18 +299,18 @@ where
         let backup_pool;
         let pool = match self.indexer_config.thread_pool {
             Some(ref pool) => pool,
-            #[cfg(not(test))]
             None => {
-                // We initialize a bakcup pool with the default
+                // We initialize a backup pool with the default
                 // settings if none have already been set.
-                backup_pool = rayon::ThreadPoolBuilder::new().build()?;
-                &backup_pool
-            }
-            #[cfg(test)]
-            None => {
-                // We initialize a bakcup pool with the default
-                // settings if none have already been set.
-                backup_pool = rayon::ThreadPoolBuilder::new().num_threads(1).build()?;
+                #[allow(unused_mut)]
+                let mut pool_builder = ThreadPoolNoAbortBuilder::new();
+
+                #[cfg(test)]
+                {
+                    pool_builder = pool_builder.num_threads(1);
+                }
+
+                backup_pool = pool_builder.build()?;
                 &backup_pool
             }
         };
@@ -533,7 +534,7 @@ where
             }
 
             Ok(())
-        })?;
+        }).map_err(InternalError::from)??;
 
         // We write the field distribution into the main database
         self.index.put_field_distribution(self.wtxn, &field_distribution)?;
@@ -562,7 +563,8 @@ where
                     writer.build(wtxn, &mut rng, None)?;
                 }
                 Result::Ok(())
-            })?;
+            })
+            .map_err(InternalError::from)??;
         }
 
         self.execute_prefix_databases(

@@ -217,9 +217,7 @@ fn add_memory_samples(
     memory_counters: &mut Option<MemoryCounterHandles>,
     last_memory: &mut MemoryStats,
 ) -> Option<MemoryStats> {
-    let Some(stats) = memory else {
-        return None;
-    };
+    let stats = memory?;
 
     let memory_counters =
         memory_counters.get_or_insert_with(|| MemoryCounterHandles::new(profile, main));

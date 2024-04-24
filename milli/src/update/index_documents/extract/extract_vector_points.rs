@@ -19,7 +19,7 @@ use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::index_documents::helpers::try_split_at;
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::vector::Embedder;
-use crate::{DocumentId, InternalError, Result, VectorOrArrayOfVectors};
+use crate::{DocumentId, InternalError, Result, ThreadPoolNoAbort, VectorOrArrayOfVectors};
 
 /// The length of the elements that are always in the buffer when inserting new values.
 const TRUNCATE_SIZE: usize = size_of::<DocumentId>();
@@ -347,7 +347,7 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
     prompt_reader: grenad::Reader<R>,
     indexer: GrenadParameters,
     embedder: Arc<Embedder>,
-    request_threads: &rayon::ThreadPool,
+    request_threads: &ThreadPoolNoAbort,
 ) -> Result<grenad::Reader<BufReader<File>>> {
     puffin::profile_function!();
     let n_chunks = embedder.chunk_count_hint(); // chunk level parallelism

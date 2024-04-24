@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use self::error::{EmbedError, NewEmbedderError};
 use crate::prompt::{Prompt, PromptData};
+use crate::ThreadPoolNoAbort;
 
 pub mod error;
 pub mod hf;
@@ -254,7 +255,7 @@ impl Embedder {
     pub fn embed_chunks(
         &self,
         text_chunks: Vec<Vec<String>>,
-        threads: &rayon::ThreadPool,
+        threads: &ThreadPoolNoAbort,
     ) -> std::result::Result<Vec<Vec<Embeddings<f32>>>, EmbedError> {
         match self {
             Embedder::HuggingFace(embedder) => embedder.embed_chunks(text_chunks),
