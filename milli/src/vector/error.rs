@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use hf_hub::api::sync::ApiError;
 
 use crate::error::FaultSource;
+use crate::PanicCatched;
 
 #[derive(Debug, thiserror::Error)]
 #[error("Error while generating embeddings: {inner}")]
@@ -80,6 +81,8 @@ pub enum EmbedErrorKind {
     OpenAiUnexpectedDimension(usize, usize),
     #[error("no embedding was produced")]
     MissingEmbedding,
+    #[error(transparent)]
+    PanicInThreadPool(#[from] PanicCatched),
 }
 
 impl EmbedError {

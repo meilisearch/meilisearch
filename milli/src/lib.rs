@@ -21,6 +21,7 @@ pub mod prompt;
 pub mod proximity;
 pub mod score_details;
 mod search;
+mod thread_pool_no_abort;
 pub mod update;
 pub mod vector;
 
@@ -42,6 +43,7 @@ pub use search::new::{
     SearchLogger, VisualSearchLogger,
 };
 use serde_json::Value;
+pub use thread_pool_no_abort::{PanicCatched, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 pub use {charabia as tokenizer, heed};
 
 pub use self::asc_desc::{AscDesc, AscDescError, Member, SortError};

@@ -31,7 +31,7 @@ use self::extract_word_position_docids::extract_word_position_docids;
 use super::helpers::{as_cloneable_grenad, CursorClonableMmap, GrenadParameters};
 use super::{helpers, TypedChunk};
 use crate::update::settings::InnerIndexSettingsDiff;
-use crate::{FieldId, Result};
+use crate::{FieldId, Result, ThreadPoolNoAbortBuilder};
 
 /// Extract data for each databases from obkv documents in parallel.
 /// Send data in grenad file over provided Sender.
@@ -229,7 +229,7 @@ fn send_original_documents_data(
     let documents_chunk_cloned = original_documents_chunk.clone();
     let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
 
-    let request_threads = rayon::ThreadPoolBuilder::new()
+    let request_threads = ThreadPoolNoAbortBuilder::new()
         .num_threads(crate::vector::REQUEST_PARALLELISM)
         .thread_name(|index| format!("embedding-request-{index}"))
         .build()?;

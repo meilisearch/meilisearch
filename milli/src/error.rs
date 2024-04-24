@@ -9,6 +9,7 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::documents::{self, DocumentsBatchCursorError};
+use crate::thread_pool_no_abort::PanicCatched;
 use crate::{CriterionError, DocumentId, FieldId, Object, SortError};
 
 pub fn is_reserved_keyword(keyword: &str) -> bool {
@@ -49,8 +50,8 @@ pub enum InternalError {
     InvalidDatabaseTyping,
     #[error(transparent)]
     RayonThreadPool(#[from] ThreadPoolBuildError),
-    #[error("A panic occured. Read the logs to find more information about it")]
-    PanicInThreadPool,
+    #[error(transparent)]
+    PanicInThreadPool(#[from] PanicCatched),
     #[error(transparent)]
     SerdeJson(#[from] serde_json::Error),
     #[error(transparent)]

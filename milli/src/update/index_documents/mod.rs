@@ -8,7 +8,6 @@ use std::collections::{HashMap, HashSet};
 use std::io::{Read, Seek};
 use std::num::NonZeroU32;
 use std::result::Result as StdResult;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use crossbeam_channel::{Receiver, Sender};
@@ -34,6 +33,7 @@ use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
 use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
+use crate::thread_pool_no_abort::ThreadPoolNoAbortBuilder;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
@@ -297,17 +297,13 @@ where
         let settings_diff = Arc::new(settings_diff);
 
         let backup_pool;
-        let pool_catched_panic = self.indexer_config.pool_panic_catched.clone();
         let pool = match self.indexer_config.thread_pool {
             Some(ref pool) => pool,
             None => {
                 // We initialize a backup pool with the default
                 // settings if none have already been set.
-                let mut pool_builder = rayon::ThreadPoolBuilder::new();
-                pool_builder = pool_builder.panic_handler({
-                    let catched_panic = pool_catched_panic.clone();
-                    move |_result| catched_panic.store(true, Ordering::SeqCst)
-                });
+                #[allow(unused_mut)]
+                let mut pool_builder = ThreadPoolNoAbortBuilder::new();
 
                 #[cfg(test)]
                 {
@@ -538,12 +534,7 @@ where
             }
 
             Ok(())
-        })?;
-
-        // While reseting the pool panic catcher we return an error if we catched one.
-        if pool_catched_panic.swap(false, Ordering::SeqCst) {
-            return Err(InternalError::PanicInThreadPool.into());
-        }
+        }).map_err(InternalError::from)??;
 
         // We write the field distribution into the main database
         self.index.put_field_distribution(self.wtxn, &field_distribution)?;
@@ -572,12 +563,8 @@ where
                     writer.build(wtxn, &mut rng, None)?;
                 }
                 Result::Ok(())
-            })?;
-
-            // While reseting the pool panic catcher we return an error if we catched one.
-            if pool_catched_panic.swap(false, Ordering::SeqCst) {
-                return Err(InternalError::PanicInThreadPool.into());
-            }
+            })
+            .map_err(InternalError::from)??;
         }
 
         self.execute_prefix_databases(
