@@ -137,10 +137,8 @@ macro_rules! make_setting_route {
                 let settings = settings(&index, &rtxn, meilisearch_types::settings::SecretPolicy::HideSecrets)?;
 
                 debug!(returns = ?settings, "Update settings");
-                let mut json = serde_json::json!(&settings);
-                let val = json[$camelcase_attr].take();
 
-                Ok(HttpResponse::Ok().json(val))
+                Ok(HttpResponse::Ok().json(settings.$attr))
             }
 
             pub fn resources() -> Resource {
