@@ -198,11 +198,16 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
 
                 if document_is_kept {
                     // Don't give up if the old prompt was failing
-                    let old_prompt = prompt
-                        .render(obkv, DelAdd::Deletion, old_fields_ids_map)
-                        .unwrap_or_default();
+                    let old_prompt = Some(prompt)
+                        // TODO: this filter works because we erase the vec database when a embedding setting changes.
+                        // When vector pipeline will be optimized, this should be removed.
+                        .filter(|_| !settings_diff.reindex_vectors())
+                        .map(|p| {
+                            p.render(obkv, DelAdd::Deletion, old_fields_ids_map).unwrap_or_default()
+                        });
                     let new_prompt = prompt.render(obkv, DelAdd::Addition, new_fields_ids_map)?;
-                    if old_prompt != new_prompt {
+                    if old_prompt.as_ref() != Some(&new_prompt) {
+                        let old_prompt = old_prompt.unwrap_or_default();
                         tracing::trace!(
                             "🚀 Changing prompt from\n{old_prompt}\n===to===\n{new_prompt}"
                         );
@@ -224,6 +229,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
             &mut manual_vectors_writer,
             &mut key_buffer,
             delta,
+            settings_diff,
         )?;
     }
 
@@ -264,10 +270,15 @@ fn push_vectors_diff(
     manual_vectors_writer: &mut Writer<BufWriter<File>>,
     key_buffer: &mut Vec<u8>,
     delta: VectorStateDelta,
+    settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<()> {
     puffin::profile_function!();
     let (must_remove, prompt, (mut del_vectors, mut add_vectors)) = delta.into_values();
-    if must_remove {
+    if must_remove
+    // TODO: the below condition works because we erase the vec database when a embedding setting changes.
+    // When vector pipeline will be optimized, this should be removed.
+    && !settings_diff.reindex_vectors()
+    {
         key_buffer.truncate(TRUNCATE_SIZE);
         remove_vectors_writer.insert(&key_buffer, [])?;
     }
@@ -295,12 +306,16 @@ fn push_vectors_diff(
         match eob {
             EitherOrBoth::Both(_, _) => (), // no need to touch anything
             EitherOrBoth::Left(vector) => {
-                // We insert only the Del part of the Obkv to inform
-                // that we only want to remove all those vectors.
-                let mut obkv = KvWriterDelAdd::memory();
-                obkv.insert(DelAdd::Deletion, cast_slice(&vector))?;
-                let bytes = obkv.into_inner()?;
-                manual_vectors_writer.insert(&key_buffer, bytes)?;
+                // TODO: the below condition works because we erase the vec database when a embedding setting changes.
+                // When vector pipeline will be optimized, this should be removed.
+                if !settings_diff.reindex_vectors() {
+                    // We insert only the Del part of the Obkv to inform
+                    // that we only want to remove all those vectors.
+                    let mut obkv = KvWriterDelAdd::memory();
+                    obkv.insert(DelAdd::Deletion, cast_slice(&vector))?;
+                    let bytes = obkv.into_inner()?;
+                    manual_vectors_writer.insert(&key_buffer, bytes)?;
+                }
             }
             EitherOrBoth::Right(vector) => {
                 // We insert only the Add part of the Obkv to inform
