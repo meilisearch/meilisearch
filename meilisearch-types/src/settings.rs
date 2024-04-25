@@ -685,7 +685,7 @@ pub fn settings(
         }
         .into(),
         searchable_attributes: match searchable_attributes {
-            Some(attrs) => Setting::Set(attrs).into(),
+            Some(attrs) => Setting::Set(attrs),
             None => Setting::Reset,
         }
         .into(),
