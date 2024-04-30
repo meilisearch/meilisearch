@@ -57,3 +57,5 @@ greek = ["milli/greek"]
 khmer = ["milli/khmer"]
 # allow vietnamese specialized tokenization
 vietnamese = ["milli/vietnamese"]
+# force swedish character recomposition
+swedish-recomposition = ["milli/swedish-recomposition"]
