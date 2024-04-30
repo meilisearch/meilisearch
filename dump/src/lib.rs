@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 mod error;
+mod new_writer;
 mod reader;
 mod writer;
 
