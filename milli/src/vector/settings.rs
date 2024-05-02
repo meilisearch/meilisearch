@@ -301,10 +301,14 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
     fn from(value: EmbeddingConfig) -> Self {
         let EmbeddingConfig { embedder_options, prompt } = value;
         match embedder_options {
-            super::EmbedderOptions::HuggingFace(options) => Self {
+            super::EmbedderOptions::HuggingFace(super::hf::EmbedderOptions {
+                model,
+                revision,
+                distribution,
+            }) => Self {
                 source: Setting::Set(EmbedderSource::HuggingFace),
-                model: Setting::Set(options.model),
-                revision: options.revision.map(Setting::Set).unwrap_or_default(),
+                model: Setting::Set(model),
+                revision: revision.map(Setting::Set).unwrap_or_default(),
                 api_key: Setting::NotSet,
                 dimensions: Setting::NotSet,
                 document_template: Setting::Set(prompt.template),
@@ -314,14 +318,19 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 path_to_embeddings: Setting::NotSet,
                 embedding_object: Setting::NotSet,
                 input_type: Setting::NotSet,
-                distribution: options.distribution.map(Setting::Set).unwrap_or_default(),
+                distribution: distribution.map(Setting::Set).unwrap_or_default(),
             },
-            super::EmbedderOptions::OpenAi(options) => Self {
+            super::EmbedderOptions::OpenAi(super::openai::EmbedderOptions {
+                api_key,
+                embedding_model,
+                dimensions,
+                distribution,
+            }) => Self {
                 source: Setting::Set(EmbedderSource::OpenAi),
-                model: Setting::Set(options.embedding_model.name().to_owned()),
+                model: Setting::Set(embedding_model.name().to_owned()),
                 revision: Setting::NotSet,
-                api_key: options.api_key.map(Setting::Set).unwrap_or_default(),
-                dimensions: options.dimensions.map(Setting::Set).unwrap_or_default(),
+                api_key: api_key.map(Setting::Set).unwrap_or_default(),
+                dimensions: dimensions.map(Setting::Set).unwrap_or_default(),
                 document_template: Setting::Set(prompt.template),
                 url: Setting::NotSet,
                 query: Setting::NotSet,
@@ -329,29 +338,37 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 path_to_embeddings: Setting::NotSet,
                 embedding_object: Setting::NotSet,
                 input_type: Setting::NotSet,
-                distribution: options.distribution.map(Setting::Set).unwrap_or_default(),
+                distribution: distribution.map(Setting::Set).unwrap_or_default(),
             },
-            super::EmbedderOptions::Ollama(options) => Self {
+            super::EmbedderOptions::Ollama(super::ollama::EmbedderOptions {
+                embedding_model,
+                url,
+                api_key,
+                distribution,
+            }) => Self {
                 source: Setting::Set(EmbedderSource::Ollama),
-                model: Setting::Set(options.embedding_model.to_owned()),
+                model: Setting::Set(embedding_model),
                 revision: Setting::NotSet,
-                api_key: options.api_key.map(Setting::Set).unwrap_or_default(),
+                api_key: api_key.map(Setting::Set).unwrap_or_default(),
                 dimensions: Setting::NotSet,
                 document_template: Setting::Set(prompt.template),
-                url: Setting::NotSet,
+                url: url.map(Setting::Set).unwrap_or_default(),
                 query: Setting::NotSet,
                 input_field: Setting::NotSet,
                 path_to_embeddings: Setting::NotSet,
                 embedding_object: Setting::NotSet,
                 input_type: Setting::NotSet,
-                distribution: options.distribution.map(Setting::Set).unwrap_or_default(),
+                distribution: distribution.map(Setting::Set).unwrap_or_default(),
             },
-            super::EmbedderOptions::UserProvided(options) => Self {
+            super::EmbedderOptions::UserProvided(super::manual::EmbedderOptions {
+                dimensions,
+                distribution,
+            }) => Self {
                 source: Setting::Set(EmbedderSource::UserProvided),
                 model: Setting::NotSet,
                 revision: Setting::NotSet,
                 api_key: Setting::NotSet,
-                dimensions: Setting::Set(options.dimensions),
+                dimensions: Setting::Set(dimensions),
                 document_template: Setting::NotSet,
                 url: Setting::NotSet,
                 query: Setting::NotSet,
@@ -359,7 +376,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 path_to_embeddings: Setting::NotSet,
                 embedding_object: Setting::NotSet,
                 input_type: Setting::NotSet,
-                distribution: options.distribution.map(Setting::Set).unwrap_or_default(),
+                distribution: distribution.map(Setting::Set).unwrap_or_default(),
             },
             super::EmbedderOptions::Rest(super::rest::EmbedderOptions {
                 api_key,
