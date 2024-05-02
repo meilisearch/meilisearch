@@ -367,12 +367,6 @@ async fn get_version(
     })
 }
 
-#[derive(Serialize)]
-struct KeysResponse {
-    private: Option<String>,
-    public: Option<String>,
-}
-
 pub async fn get_health(
     index_scheduler: Data<IndexScheduler>,
     auth_controller: Data<AuthController>,
