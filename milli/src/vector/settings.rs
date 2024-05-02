@@ -338,7 +338,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 api_key: options.api_key.map(Setting::Set).unwrap_or_default(),
                 dimensions: Setting::NotSet,
                 document_template: Setting::Set(prompt.template),
-                url: Setting::NotSet,
+                url: options.url.map(Setting::Set).unwrap_or_default(),
                 query: Setting::NotSet,
                 input_field: Setting::NotSet,
                 path_to_embeddings: Setting::NotSet,
