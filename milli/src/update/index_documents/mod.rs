@@ -6,9 +6,9 @@ mod typed_chunk;
 
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Seek};
-use std::iter::FromIterator;
 use std::num::NonZeroU32;
 use std::result::Result as StdResult;
+use std::sync::Arc;
 
 use crossbeam_channel::{Receiver, Sender};
 use grenad::{Merger, MergerBuilder};
@@ -33,6 +33,7 @@ use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
 use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
+use crate::thread_pool_no_abort::ThreadPoolNoAbortBuilder;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
@@ -259,21 +260,6 @@ where
             .expect("Invalid document addition state")
             .output_from_sorter(self.wtxn, &self.progress)?;
 
-        let new_facets = output.compute_real_facets(self.wtxn, self.index)?;
-        self.index.put_faceted_fields(self.wtxn, &new_facets)?;
-
-        // in case new fields were introduced we're going to recreate the searchable fields.
-        if let Some(faceted_fields) = self.index.user_defined_searchable_fields(self.wtxn)? {
-            // we can't keep references on the faceted fields while we update the index thus we need to own it.
-            let faceted_fields: Vec<String> =
-                faceted_fields.into_iter().map(str::to_string).collect();
-            self.index.put_all_searchable_fields_from_fields_ids_map(
-                self.wtxn,
-                &faceted_fields.iter().map(String::as_ref).collect::<Vec<_>>(),
-                &output.fields_ids_map,
-            )?;
-        }
-
         let indexed_documents = output.documents_count as u64;
         let number_of_documents = self.execute_raw(output)?;
 
@@ -296,32 +282,35 @@ where
 
         let TransformOutput {
             primary_key,
-            fields_ids_map,
+            mut settings_diff,
             field_distribution,
             documents_count,
             original_documents,
             flattened_documents,
         } = output;
 
-        // The fields_ids_map is put back to the store now so the rest of the transaction sees an
-        // up to date field map.
-        self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
+        // update the internal facet and searchable list,
+        // because they might have changed due to the nested documents flattening.
+        settings_diff.new.recompute_facets(self.wtxn, self.index)?;
+        settings_diff.new.recompute_searchables(self.wtxn, self.index)?;
+
+        let settings_diff = Arc::new(settings_diff);
 
         let backup_pool;
         let pool = match self.indexer_config.thread_pool {
             Some(ref pool) => pool,
-            #[cfg(not(test))]
             None => {
-                // We initialize a bakcup pool with the default
+                // We initialize a backup pool with the default
                 // settings if none have already been set.
-                backup_pool = rayon::ThreadPoolBuilder::new().build()?;
-                &backup_pool
-            }
-            #[cfg(test)]
-            None => {
-                // We initialize a bakcup pool with the default
-                // settings if none have already been set.
-                backup_pool = rayon::ThreadPoolBuilder::new().num_threads(1).build()?;
+                #[allow(unused_mut)]
+                let mut pool_builder = ThreadPoolNoAbortBuilder::new();
+
+                #[cfg(test)]
+                {
+                    pool_builder = pool_builder.num_threads(1);
+                }
+
+                backup_pool = pool_builder.build()?;
                 &backup_pool
             }
         };
@@ -333,13 +322,8 @@ where
         ) = crossbeam_channel::unbounded();
 
         // get the primary key field id
-        let primary_key_id = fields_ids_map.id(&primary_key).unwrap();
+        let primary_key_id = settings_diff.new.fields_ids_map.id(&primary_key).unwrap();
 
-        // get searchable fields for word databases
-        let searchable_fields =
-            self.index.searchable_fields_ids(self.wtxn)?.map(HashSet::from_iter);
-        // get filterable fields for facet databases
-        let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
         // get the fid of the `_geo.lat` and `_geo.lng` fields.
         let mut field_id_map = self.index.fields_ids_map(self.wtxn)?;
 
@@ -361,12 +345,6 @@ where
             }
             None => None,
         };
-
-        let stop_words = self.index.stop_words(self.wtxn)?;
-        let separators = self.index.allowed_separators(self.wtxn)?;
-        let dictionary = self.index.dictionary(self.wtxn)?;
-        let exact_attributes = self.index.exact_attributes_ids(self.wtxn)?;
-        let proximity_precision = self.index.proximity_precision(self.wtxn)?.unwrap_or_default();
 
         let pool_params = GrenadParameters {
             chunk_compression_type: self.indexer_config.chunk_compression_type,
@@ -400,8 +378,6 @@ where
 
         let max_positions_per_attributes = self.indexer_config.max_positions_per_attributes;
 
-        let cloned_embedder = self.embedders.clone();
-
         let mut final_documents_ids = RoaringBitmap::new();
         let mut databases_seen = 0;
         let mut word_position_docids = None;
@@ -410,7 +386,6 @@ where
         let mut exact_word_docids = None;
         let mut chunk_accumulator = ChunkAccumulator::default();
         let mut dimension = HashMap::new();
-        let stop_words = stop_words.map(|sw| sw.map_data(Vec::from).unwrap());
 
         let current_span = tracing::Span::current();
 
@@ -428,10 +403,6 @@ where
                 let flattened_chunk_iter =
                     grenad_obkv_into_chunks(flattened_documents, pool_params, documents_chunk_size);
 
-                let separators: Option<Vec<_>> =
-                    separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
-                let dictionary: Option<Vec<_>> =
-                    dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
                 let result = original_chunk_iter.and_then(|original_chunk| {
                     let flattened_chunk = flattened_chunk_iter?;
                     // extract all databases from the chunked obkv douments
@@ -440,18 +411,10 @@ where
                         flattened_chunk,
                         pool_params,
                         lmdb_writer_sx.clone(),
-                        searchable_fields,
-                        faceted_fields,
                         primary_key_id,
                         geo_fields_ids,
-                        field_id_map,
-                        stop_words,
-                        separators.as_deref(),
-                        dictionary.as_deref(),
+                        settings_diff.clone(),
                         max_positions_per_attributes,
-                        exact_attributes,
-                        proximity_precision,
-                        cloned_embedder,
                     )
                 });
 
@@ -571,7 +534,7 @@ where
             }
 
             Ok(())
-        })?;
+        }).map_err(InternalError::from)??;
 
         // We write the field distribution into the main database
         self.index.put_field_distribution(self.wtxn, &field_distribution)?;
@@ -600,7 +563,8 @@ where
                     writer.build(wtxn, &mut rng, None)?;
                 }
                 Result::Ok(())
-            })?;
+            })
+            .map_err(InternalError::from)??;
         }
 
         self.execute_prefix_databases(

@@ -1,0 +1,72 @@
+{
+  "name": "settings-add-embeddings-hf",
+  "run_count": 5,
+  "extra_cli_args": [
+    "--max-indexing-threads=4"
+  ],
+  "assets": {
+    "movies-100.json": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/movies-100.json",
+      "sha256": "d215e395e4240f12f03b8f1f68901eac82d9e7ded5b462cbf4a6b8efde76c6c6"
+    }
+  },
+  "commands": [
+    {
+      "route": "experimental-features",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "vectorStore": true
+        }
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "indexes/movies/settings",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "searchableAttributes": [
+            "title",
+            "overview"
+          ],
+          "filterableAttributes": [
+            "genres",
+            "release_date"
+          ],
+          "sortableAttributes": [
+            "release_date"
+          ]
+        }
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "movies-100.json"
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "route": "indexes/movies/settings",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "embedders": {
+            "default": {
+              "source": "huggingFace",
+              "model": null,
+              "revision": null,
+              "documentTemplate": null,
+              "distribution": null
+            }
+          }
+        }
+      },
+      "synchronous": "WaitForTask"
+    }
+  ]
+}

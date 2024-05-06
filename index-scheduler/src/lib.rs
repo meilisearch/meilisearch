@@ -3041,6 +3041,7 @@ mod tests {
             source: Setting::Set(milli::vector::settings::EmbedderSource::Rest),
             api_key: Setting::Set(S("My super secret")),
             url: Setting::Set(S("http://localhost:7777")),
+            dimensions: Setting::Set(4),
             ..Default::default()
         };
         embedders.insert(S("default"), Setting::Set(embedding_settings));

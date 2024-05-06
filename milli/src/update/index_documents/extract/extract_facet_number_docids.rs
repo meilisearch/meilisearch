@@ -10,6 +10,7 @@ use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FieldDocIdFacetF64Codec, OrderedF64Codec,
 };
 use crate::update::del_add::{KvReaderDelAdd, KvWriterDelAdd};
+use crate::update::settings::InnerIndexSettingsDiff;
 use crate::Result;
 
 /// Extracts the facet number and the documents ids where this facet number appear.
@@ -20,6 +21,7 @@ use crate::Result;
 pub fn extract_facet_number_docids<R: io::Read + io::Seek>(
     fid_docid_facet_number: grenad::Reader<R>,
     indexer: GrenadParameters,
+    _settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<grenad::Reader<BufReader<File>>> {
     puffin::profile_function!();
 

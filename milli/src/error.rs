@@ -9,6 +9,7 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::documents::{self, DocumentsBatchCursorError};
+use crate::thread_pool_no_abort::PanicCatched;
 use crate::{CriterionError, DocumentId, FieldId, Object, SortError};
 
 pub fn is_reserved_keyword(keyword: &str) -> bool {
@@ -39,16 +40,18 @@ pub enum InternalError {
     Fst(#[from] fst::Error),
     #[error(transparent)]
     DocumentsError(#[from] documents::Error),
-    #[error("Invalid compression type have been specified to grenad.")]
+    #[error("Invalid compression type have been specified to grenad")]
     GrenadInvalidCompressionType,
-    #[error("Invalid grenad file with an invalid version format.")]
+    #[error("Invalid grenad file with an invalid version format")]
     GrenadInvalidFormatVersion,
-    #[error("Invalid merge while processing {process}.")]
+    #[error("Invalid merge while processing {process}")]
     IndexingMergingKeys { process: &'static str },
     #[error("{}", HeedError::InvalidDatabaseTyping)]
     InvalidDatabaseTyping,
     #[error(transparent)]
     RayonThreadPool(#[from] ThreadPoolBuildError),
+    #[error(transparent)]
+    PanicInThreadPool(#[from] PanicCatched),
     #[error(transparent)]
     SerdeJson(#[from] serde_json::Error),
     #[error(transparent)]
@@ -57,9 +60,9 @@ pub enum InternalError {
     Store(#[from] MdbError),
     #[error(transparent)]
     Utf8(#[from] str::Utf8Error),
-    #[error("An indexation process was explicitly aborted.")]
+    #[error("An indexation process was explicitly aborted")]
     AbortedIndexation,
-    #[error("The matching words list contains at least one invalid member.")]
+    #[error("The matching words list contains at least one invalid member")]
     InvalidMatchingWords,
     #[error(transparent)]
     ArroyError(#[from] arroy::Error),
