@@ -315,11 +315,7 @@ impl<'ctx> SearchContext<'ctx> {
                         .map_err(heed::Error::Decoding)?
                 } else {
                     // Compute the distance at the attribute level and store it in the cache.
-                    let fids = if let Some(fids) = self.index.searchable_fields_ids(self.txn)? {
-                        fids
-                    } else {
-                        self.index.fields_ids_map(self.txn)?.ids().collect()
-                    };
+                    let fids = self.index.searchable_fields_ids(self.txn)?;
                     let mut docids = RoaringBitmap::new();
                     for fid in fids {
                         // for each field, intersect left word bitmap and right word bitmap,
@@ -408,11 +404,7 @@ impl<'ctx> SearchContext<'ctx> {
             let prefix_docids = match proximity_precision {
                 ProximityPrecision::ByAttribute => {
                     // Compute the distance at the attribute level and store it in the cache.
-                    let fids = if let Some(fids) = self.index.searchable_fields_ids(self.txn)? {
-                        fids
-                    } else {
-                        self.index.fields_ids_map(self.txn)?.ids().collect()
-                    };
+                    let fids = self.index.searchable_fields_ids(self.txn)?;
                     let mut prefix_docids = RoaringBitmap::new();
                     // for each field, intersect left word bitmap and right word bitmap,
                     // then merge the result in a global bitmap before storing it in the cache.

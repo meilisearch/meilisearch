@@ -468,14 +468,9 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             Setting::Set(ref fields) => {
                 // Check to see if the searchable fields changed before doing anything else
                 let old_fields = self.index.searchable_fields(self.wtxn)?;
-                let did_change = match old_fields {
-                    // If old_fields is Some, let's check to see if the fields actually changed
-                    Some(old_fields) => {
-                        let new_fields = fields.iter().map(String::as_str).collect::<Vec<_>>();
-                        new_fields != old_fields
-                    }
-                    // If old_fields is None, the fields have changed (because they are being set)
-                    None => true,
+                let did_change = {
+                    let new_fields = fields.iter().map(String::as_str).collect::<Vec<_>>();
+                    new_fields != old_fields
                 };
                 if !did_change {
                     return Ok(false);
@@ -1172,7 +1167,7 @@ pub(crate) struct InnerIndexSettings {
     pub user_defined_faceted_fields: HashSet<String>,
     pub user_defined_searchable_fields: Option<Vec<String>>,
     pub faceted_fields_ids: HashSet<FieldId>,
-    pub searchable_fields_ids: Option<Vec<FieldId>>,
+    pub searchable_fields_ids: Vec<FieldId>,
     pub exact_attributes: HashSet<FieldId>,
     pub proximity_precision: ProximityPrecision,
     pub embedding_configs: EmbeddingConfigs,
@@ -1517,6 +1512,7 @@ mod tests {
     use big_s::S;
     use heed::types::Bytes;
     use maplit::{btreemap, btreeset, hashset};
+    use meili_snap::snapshot;
 
     use super::*;
     use crate::error::Error;
@@ -1576,7 +1572,7 @@ mod tests {
         // Check that the searchable field have been reset and documents are found now.
         let rtxn = index.read_txn().unwrap();
         let searchable_fields = index.searchable_fields(&rtxn).unwrap();
-        assert_eq!(searchable_fields, None);
+        snapshot!(format!("{searchable_fields:?}"), @r###"["name", "id", "age"]"###);
         let result = index.search(&rtxn).query("23").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 1);
         let documents = index.documents(&rtxn, result.documents_ids).unwrap();

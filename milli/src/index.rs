@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::convert::TryInto;
 use std::fs::File;
 use std::path::Path;
 
@@ -25,8 +26,9 @@ use crate::proximity::ProximityPrecision;
 use crate::vector::EmbeddingConfig;
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
-    FacetDistribution, FieldDistribution, FieldId, FieldIdWordCountCodec, GeoPoint, ObkvCodec,
-    Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, BEU16, BEU32, BEU64,
+    FacetDistribution, FieldDistribution, FieldId, FieldIdWordCountCodec, FieldidsWeightsMap,
+    GeoPoint, ObkvCodec, Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec,
+    BEU16, BEU32, BEU64,
 };
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
@@ -42,6 +44,7 @@ pub mod main_key {
     pub const SORTABLE_FIELDS_KEY: &str = "sortable-fields";
     pub const FIELD_DISTRIBUTION_KEY: &str = "fields-distribution";
     pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
+    pub const FIELDIDS_WEIGHTS_MAP_KEY: &str = "fieldids-weights-map";
     pub const GEO_FACETED_DOCUMENTS_IDS_KEY: &str = "geo-faceted-documents-ids";
     pub const GEO_RTREE_KEY: &str = "geo-rtree";
     pub const PRIMARY_KEY_KEY: &str = "primary-key";
@@ -414,6 +417,32 @@ impl Index {
             .unwrap_or_default())
     }
 
+    /* fieldids weights map */
+    // This maps the fields ids to their weights.
+    // Their weights is defined by the ordering of the searchable attributes.
+
+    /// Writes the fieldids weights map which associates the field ids to their weights
+    pub(crate) fn put_fieldids_weights_map(
+        &self,
+        wtxn: &mut RwTxn,
+        map: &FieldidsWeightsMap,
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, SerdeJson<_>>().put(
+            wtxn,
+            main_key::FIELDIDS_WEIGHTS_MAP_KEY,
+            map,
+        )
+    }
+
+    /// Get the fieldids weights map which associates the field ids to their weights
+    pub fn fieldids_weights_map(&self, rtxn: &RoTxn) -> heed::Result<FieldidsWeightsMap> {
+        Ok(self
+            .main
+            .remap_types::<Str, SerdeJson<_>>()
+            .get(rtxn, main_key::FIELDIDS_WEIGHTS_MAP_KEY)?
+            .unwrap_or_default())
+    }
+
     /* geo rtree */
 
     /// Writes the provided `rtree` which associates coordinates to documents ids.
@@ -578,9 +607,11 @@ impl Index {
         wtxn: &mut RwTxn,
         user_fields: &[&str],
         fields_ids_map: &FieldsIdsMap,
-    ) -> heed::Result<()> {
+    ) -> Result<()> {
         // We can write the user defined searchable fields as-is.
         self.put_user_defined_searchable_fields(wtxn, user_fields)?;
+
+        let mut weights = self.fieldids_weights_map(&wtxn)?;
 
         // Now we generate the real searchable fields:
         // 1. Take the user defined searchable fields as-is to keep the priority defined by the attributes criterion.
@@ -589,17 +620,23 @@ impl Index {
         // (ie doggo.name is a subset of doggo) then we push it at the end of the fields.
         let mut real_fields = user_fields.to_vec();
 
-        for field_from_map in fields_ids_map.names() {
-            for user_field in user_fields {
+        for (id, field_from_map) in fields_ids_map.iter() {
+            for (weight, user_field) in user_fields.iter().enumerate() {
                 if crate::is_faceted_by(field_from_map, user_field)
                     && !user_fields.contains(&field_from_map)
                 {
                     real_fields.push(field_from_map);
+
+                    let weight: u16 =
+                        weight.try_into().map_err(|_| UserError::AttributeLimitReached)?;
+                    weights.insert(id, weight as u16);
                 }
             }
         }
 
-        self.put_searchable_fields(wtxn, &real_fields)
+        self.put_searchable_fields(wtxn, &real_fields)?;
+        self.put_fieldids_weights_map(wtxn, &weights)?;
+        Ok(())
     }
 
     pub(crate) fn delete_all_searchable_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
@@ -623,28 +660,31 @@ impl Index {
     }
 
     /// Returns the searchable fields, those are the fields that are indexed,
-    /// if the searchable fields aren't there it means that **all** the fields are indexed.
-    pub fn searchable_fields<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<Option<Vec<&'t str>>> {
+    pub fn searchable_fields<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<Vec<Cow<'t, str>>> {
         self.main
             .remap_types::<Str, SerdeBincode<Vec<&'t str>>>()
-            .get(rtxn, main_key::SEARCHABLE_FIELDS_KEY)
+            .get(rtxn, main_key::SEARCHABLE_FIELDS_KEY)?
+            .map(|fields| Ok(fields.into_iter().map(|field| Cow::Borrowed(field)).collect()))
+            .unwrap_or_else(|| {
+                Ok(self
+                    .fields_ids_map(rtxn)?
+                    .names()
+                    .map(|field| Cow::Owned(field.to_string()))
+                    .collect())
+            })
     }
 
     /// Identical to `searchable_fields`, but returns the ids instead.
-    pub fn searchable_fields_ids(&self, rtxn: &RoTxn) -> Result<Option<Vec<FieldId>>> {
-        match self.searchable_fields(rtxn)? {
-            Some(fields) => {
-                let fields_ids_map = self.fields_ids_map(rtxn)?;
-                let mut fields_ids = Vec::new();
-                for name in fields {
-                    if let Some(field_id) = fields_ids_map.id(name) {
-                        fields_ids.push(field_id);
-                    }
-                }
-                Ok(Some(fields_ids))
+    pub fn searchable_fields_ids(&self, rtxn: &RoTxn) -> Result<Vec<FieldId>> {
+        let fields = self.searchable_fields(rtxn)?;
+        let fields_ids_map = self.fields_ids_map(rtxn)?;
+        let mut fields_ids = Vec::new();
+        for name in fields {
+            if let Some(field_id) = fields_ids_map.id(&name) {
+                fields_ids.push(field_id);
             }
-            None => Ok(None),
         }
+        Ok(fields_ids)
     }
 
     /// Writes the searchable fields, when this list is specified, only these are indexed.
@@ -1710,10 +1750,14 @@ pub(crate) mod tests {
             ]))
             .unwrap();
 
-        db_snap!(index, field_distribution, 1);
+        db_snap!(index, field_distribution, @r###"
+        age              1      |
+        id               2      |
+        name             2      |
+        "###);
 
         db_snap!(index, word_docids,
-            @r###"
+        @r###"
         1                [0, ]
         2                [1, ]
         20               [1, ]
@@ -1721,18 +1765,6 @@ pub(crate) mod tests {
         kevin            [0, ]
         "###
         );
-
-        db_snap!(index, field_distribution);
-
-        db_snap!(index, field_distribution,
-            @r###"
-        age              1      |
-        id               2      |
-        name             2      |
-        "###
-        );
-
-        // snapshot_index!(&index, "1", include: "^field_distribution$");
 
         // we add all the documents a second time. we are supposed to get the same
         // field_distribution in the end
@@ -1820,7 +1852,7 @@ pub(crate) mod tests {
         // ensure we get the right real searchable fields + user defined searchable fields
         let rtxn = index.read_txn().unwrap();
 
-        let real = index.searchable_fields(&rtxn).unwrap().unwrap();
+        let real = index.searchable_fields(&rtxn).unwrap();
         assert_eq!(real, &["doggo", "name", "doggo.name", "doggo.age"]);
 
         let user_defined = index.user_defined_searchable_fields(&rtxn).unwrap().unwrap();
@@ -1840,7 +1872,7 @@ pub(crate) mod tests {
         // ensure we get the right real searchable fields + user defined searchable fields
         let rtxn = index.read_txn().unwrap();
 
-        let real = index.searchable_fields(&rtxn).unwrap().unwrap();
+        let real = index.searchable_fields(&rtxn).unwrap();
         assert_eq!(real, &["doggo", "name"]);
         let user_defined = index.user_defined_searchable_fields(&rtxn).unwrap().unwrap();
         assert_eq!(user_defined, &["doggo", "name"]);
@@ -1856,7 +1888,7 @@ pub(crate) mod tests {
         // ensure we get the right real searchable fields + user defined searchable fields
         let rtxn = index.read_txn().unwrap();
 
-        let real = index.searchable_fields(&rtxn).unwrap().unwrap();
+        let real = index.searchable_fields(&rtxn).unwrap();
         assert_eq!(real, &["doggo", "name", "doggo.name", "doggo.age"]);
 
         let user_defined = index.user_defined_searchable_fields(&rtxn).unwrap().unwrap();

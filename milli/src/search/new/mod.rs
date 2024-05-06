@@ -96,27 +96,22 @@ impl<'ctx> SearchContext<'ctx> {
                 contains_wildcard = true;
                 continue;
             }
-            let searchable_contains_name =
-                searchable_names.as_ref().map(|sn| sn.iter().any(|name| name == field_name));
+            let searchable_contains_name = searchable_names.iter().any(|name| name == field_name);
             let fid = match (fids_map.id(field_name), searchable_contains_name) {
                 // The Field id exist and the field is searchable
-                (Some(fid), Some(true)) | (Some(fid), None) => fid,
+                (Some(fid), true) => fid,
                 // The field is searchable but the Field id doesn't exist => Internal Error
-                (None, Some(true)) => {
+                (None, true) => {
                     return Err(FieldIdMapMissingEntry::FieldName {
                         field_name: field_name.to_string(),
                         process: "search",
                     }
                     .into())
                 }
-                // The field is not searchable, but the searchableAttributes are set to * => ignore field
-                (None, None) => continue,
                 // The field is not searchable => User error
-                (_fid, Some(false)) => {
-                    let (valid_fields, hidden_fields) = match searchable_names {
-                        Some(sn) => self.index.remove_hidden_fields(self.txn, sn)?,
-                        None => self.index.remove_hidden_fields(self.txn, fids_map.names())?,
-                    };
+                (_fid, false) => {
+                    let (valid_fields, hidden_fields) =
+                        self.index.remove_hidden_fields(self.txn, searchable_names)?;
 
                     let field = field_name.to_string();
                     return Err(UserError::InvalidSearchableAttribute {

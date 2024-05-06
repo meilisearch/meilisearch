@@ -77,17 +77,7 @@ impl RankingRuleGraphTrait for FidGraph {
         }
 
         // always lookup the max_fid if we don't already and add an artificial condition for max scoring
-        let max_fid: Option<u16> = {
-            if let Some(max_fid) = ctx
-                .index
-                .searchable_fields_ids(ctx.txn)?
-                .map(|field_ids| field_ids.into_iter().max())
-            {
-                max_fid
-            } else {
-                ctx.index.fields_ids_map(ctx.txn)?.ids().max()
-            }
-        };
+        let max_fid: Option<u16> = ctx.index.searchable_fields_ids(ctx.txn)?.into_iter().max();
 
         if let Some(max_fid) = max_fid {
             if !all_fields.contains(&max_fid) {
