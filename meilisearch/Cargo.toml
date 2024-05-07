@@ -75,7 +75,7 @@ reqwest = { version = "0.11.23", features = [
     "rustls-tls",
     "json",
 ], default-features = false }
-rustls = "0.21.6"
+rustls = "0.21.12"
 rustls-pemfile = "1.0.2"
 segment = { version = "0.2.3", optional = true }
 serde = { version = "1.0.195", features = ["derive"] }

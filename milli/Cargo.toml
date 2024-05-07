@@ -85,7 +85,7 @@ liquid = "0.26.4"
 arroy = "0.2.0"
 rand = "0.8.5"
 tracing = "0.1.40"
-ureq = { version = "2.9.6", features = ["json"] }
+ureq = { version = "2.9.7", features = ["json"] }
 url = "2.5.0"
 
 [dev-dependencies]

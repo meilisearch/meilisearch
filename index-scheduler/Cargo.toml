@@ -37,7 +37,7 @@ time = { version = "0.3.31", features = [
     "macros",
 ] }
 tracing = "0.1.40"
-ureq = "2.9.1"
+ureq = "2.9.7"
 uuid = { version = "1.6.1", features = ["serde", "v4"] }
 
 [dev-dependencies]
