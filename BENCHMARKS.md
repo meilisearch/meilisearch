@@ -187,8 +187,8 @@ They are JSON files with the following structure (comments are not actually supp
   },
   // Core of the workload.
   // A list of commands to run sequentially.
-  // A command is a request to the Meilisearch instance that is executed while the profiling runs.
-  "commands": [
+  // Optional: A precommand is a request to the Meilisearch instance that is executed before the profiling runs.
+  "precommands": [
     {
       // Meilisearch route to call. `http://localhost:7700/` will be prepended.
       "route": "indexes/movies/settings",
@@ -224,8 +224,11 @@ They are JSON files with the following structure (comments are not actually supp
       // - DontWait: run the next command without waiting the response to this one.
       // - WaitForResponse: run the next command as soon as the response from the server is received.
       // - WaitForTask: run the next command once **all** the Meilisearch tasks created up to now have finished processing.
-      "synchronous": "DontWait"
-    },
+      "synchronous": "WaitForTask"
+    }
+  ],
+  // A command is a request to the Meilisearch instance that is executed while the profiling runs.
+  "commands": [
     {
       "route": "indexes/movies/documents",
       "method": "POST",
