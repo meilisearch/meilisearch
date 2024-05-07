@@ -22,6 +22,8 @@ pub struct Workload {
     pub run_count: u16,
     pub extra_cli_args: Vec<String>,
     pub assets: BTreeMap<String, Asset>,
+    #[serde(default)]
+    pub precommands: Vec<super::command::Command>,
     pub commands: Vec<super::command::Command>,
 }
 
@@ -36,6 +38,15 @@ async fn run_commands(
 ) -> anyhow::Result<JoinHandle<anyhow::Result<File>>> {
     let report_folder = &args.report_folder;
     let workload_name = &workload.name;
+
+    for batch in workload
+        .precommands
+        .as_slice()
+        .split_inclusive(|command| !matches!(command.synchronous, SyncMode::DontWait))
+    {
+        super::command::run_batch(meili_client, batch, &workload.assets, &args.asset_folder)
+            .await?;
+    }
 
     std::fs::create_dir_all(report_folder)
         .with_context(|| format!("could not create report directory at {report_folder}"))?;
