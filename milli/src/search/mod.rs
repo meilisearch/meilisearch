@@ -147,7 +147,7 @@ impl<'a> Search<'a> {
 
     pub fn execute_for_candidates(&self, has_vector_search: bool) -> Result<RoaringBitmap> {
         if has_vector_search {
-            let ctx = SearchContext::new(self.index, self.rtxn);
+            let ctx = SearchContext::new(self.index, self.rtxn)?;
             filtered_universe(&ctx, &self.filter)
         } else {
             Ok(self.execute()?.candidates)
@@ -155,7 +155,7 @@ impl<'a> Search<'a> {
     }
 
     pub fn execute(&self) -> Result<SearchResult> {
-        let mut ctx = SearchContext::new(self.index, self.rtxn);
+        let mut ctx = SearchContext::new(self.index, self.rtxn)?;
 
         if let Some(searchable_attributes) = self.searchable_attributes {
             ctx.searchable_attributes(searchable_attributes)?;

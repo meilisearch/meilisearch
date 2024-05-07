@@ -28,7 +28,7 @@ use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdWordCountCodec, FieldidsWeightsMap,
     GeoPoint, ObkvCodec, Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec,
-    BEU16, BEU32, BEU64,
+    Weight, BEU16, BEU32, BEU64,
 };
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
@@ -443,6 +443,27 @@ impl Index {
             .unwrap_or_default())
     }
 
+    pub fn searchable_fields_and_weights<'a>(
+        &self,
+        rtxn: &'a RoTxn,
+    ) -> heed::Result<Vec<(Cow<'a, str>, FieldId, Weight)>> {
+        let fid_map = self.fields_ids_map(rtxn)?;
+        let weight_map = self.fieldids_weights_map(rtxn)?;
+        let searchable = self.searchable_fields(rtxn)?;
+
+        Ok(searchable
+            .into_iter()
+            .map(|field| {
+                // the searchable attributes are a subset of the field id map
+                let fid = fid_map.id(&field).unwrap();
+                // all the searchable fields have a weight
+                let weight = weight_map.weight(fid).unwrap();
+
+                (field, fid, weight)
+            })
+            .collect())
+    }
+
     /* geo rtree */
 
     /// Writes the provided `rtree` which associates coordinates to documents ids.
@@ -605,9 +626,25 @@ impl Index {
     pub(crate) fn put_all_searchable_fields_from_fields_ids_map(
         &self,
         wtxn: &mut RwTxn,
-        user_fields: &[&str],
+        user_fields: Option<&[&str]>,
         fields_ids_map: &FieldsIdsMap,
     ) -> Result<()> {
+        // Special case if there is no user defined fields.
+        // Then the whole field id map is marked as searchable.
+        if user_fields.is_none() {
+            let mut weights = self.fieldids_weights_map(&wtxn)?;
+            let mut searchable = Vec::new();
+            for (weight, (fid, name)) in fields_ids_map.iter().enumerate() {
+                searchable.push(name);
+                weights.insert(fid, weight as u16);
+            }
+            self.put_searchable_fields(wtxn, &searchable)?;
+            self.put_fieldids_weights_map(wtxn, &weights)?;
+            return Ok(());
+        }
+
+        let user_fields = user_fields.unwrap();
+
         // We can write the user defined searchable fields as-is.
         self.put_user_defined_searchable_fields(wtxn, user_fields)?;
 
@@ -617,13 +654,13 @@ impl Index {
         // 1. Take the user defined searchable fields as-is to keep the priority defined by the attributes criterion.
         // 2. Iterate over the user defined searchable fields.
         // 3. If a user defined field is a subset of a field defined in the fields_ids_map
-        // (ie doggo.name is a subset of doggo) then we push it at the end of the fields.
-        let mut real_fields = user_fields.to_vec();
+        // (ie doggo.name is a subset of doggo) right after doggo and with the same weight.
+        let mut real_fields = Vec::new();
 
         for (id, field_from_map) in fields_ids_map.iter() {
             for (weight, user_field) in user_fields.iter().enumerate() {
                 if crate::is_faceted_by(field_from_map, user_field)
-                    && !user_fields.contains(&field_from_map)
+                    && !real_fields.contains(&field_from_map)
                 {
                     real_fields.push(field_from_map);
 
@@ -2427,6 +2464,14 @@ pub(crate) mod tests {
         11                       0
         4                        1
         "###);
+        db_snap!(index, fields_ids_map, @r###"
+        0   primary_key      |
+        "###);
+        db_snap!(index, searchable_fields, @r###"["primary_key"]"###);
+        db_snap!(index, fieldids_weights_map, @r###"
+        fid weight
+        0   0   |
+        "###);
 
         index
             .add_documents(documents!([
@@ -2442,6 +2487,16 @@ pub(crate) mod tests {
         11                       0
         4                        1
         "###);
+        db_snap!(index, fields_ids_map, @r###"
+        0   primary_key      |
+        1   a                |
+        "###);
+        db_snap!(index, searchable_fields, @r###"["primary_key", "a"]"###);
+        db_snap!(index, fieldids_weights_map, @r###"
+        fid weight
+        0   0   |
+        1   1   |
+        "###);
 
         index.delete_documents(Default::default());
 
@@ -2451,6 +2506,16 @@ pub(crate) mod tests {
         1                        2
         11                       0
         4                        1
+        "###);
+        db_snap!(index, fields_ids_map, @r###"
+        0   primary_key      |
+        1   a                |
+        "###);
+        db_snap!(index, searchable_fields, @r###"["primary_key", "a"]"###);
+        db_snap!(index, fieldids_weights_map, @r###"
+        fid weight
+        0   0   |
+        1   1   |
         "###);
 
         index
@@ -2466,6 +2531,16 @@ pub(crate) mod tests {
         1                        2
         11                       0
         4                        1
+        "###);
+        db_snap!(index, fields_ids_map, @r###"
+        0   primary_key      |
+        1   a                |
+        "###);
+        db_snap!(index, searchable_fields, @r###"["primary_key", "a"]"###);
+        db_snap!(index, fieldids_weights_map, @r###"
+        fid weight
+        0   0   |
+        1   1   |
         "###);
 
         let rtxn = index.read_txn().unwrap();

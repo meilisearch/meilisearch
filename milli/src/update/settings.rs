@@ -496,7 +496,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
                 self.index.put_all_searchable_fields_from_fields_ids_map(
                     self.wtxn,
-                    &names,
+                    Some(&names),
                     &new_fields_ids_map,
                 )?;
                 self.index.put_fields_ids_map(self.wtxn, &new_fields_ids_map)?;
@@ -1228,18 +1228,19 @@ impl InnerIndexSettings {
 
     // find and insert the new field ids
     pub fn recompute_searchables(&mut self, wtxn: &mut heed::RwTxn, index: &Index) -> Result<()> {
+        let searchable_fields = self
+            .user_defined_searchable_fields
+            .as_ref()
+            .map(|searchable| searchable.iter().map(|s| s.as_str()).collect::<Vec<_>>());
+
         // in case new fields were introduced we're going to recreate the searchable fields.
-        if let Some(searchable_fields) = self.user_defined_searchable_fields.as_ref() {
-            let searchable_fields =
-                searchable_fields.iter().map(String::as_ref).collect::<Vec<_>>();
-            index.put_all_searchable_fields_from_fields_ids_map(
-                wtxn,
-                &searchable_fields,
-                &self.fields_ids_map,
-            )?;
-            let searchable_fields_ids = index.searchable_fields_ids(wtxn)?;
-            self.searchable_fields_ids = searchable_fields_ids;
-        }
+        index.put_all_searchable_fields_from_fields_ids_map(
+            wtxn,
+            searchable_fields.as_deref(),
+            &self.fields_ids_map,
+        )?;
+        let searchable_fields_ids = index.searchable_fields_ids(wtxn)?;
+        self.searchable_fields_ids = searchable_fields_ids;
 
         Ok(())
     }
