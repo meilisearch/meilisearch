@@ -11,7 +11,7 @@
       "sha256": "28c359a0956958af0ba204ec11bad3045a0864a10b4838914fea25a01724f84b"
     }
   },
-  "commands": [
+  "precommands": [
     {
       "route": "indexes/peoples/settings",
       "method": "PATCH",
@@ -59,7 +59,9 @@
         "asset": "150k-people.json"
       },
       "synchronous": "WaitForTask"
-    },
+    }
+  ],
+  "commands": [
     {
       "route": "indexes/peoples/settings",
       "method": "PATCH",
