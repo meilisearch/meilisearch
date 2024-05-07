@@ -11,7 +11,7 @@
       "sha256": "d215e395e4240f12f03b8f1f68901eac82d9e7ded5b462cbf4a6b8efde76c6c6"
     }
   },
-  "commands": [
+  "precommands": [
     {
       "route": "experimental-features",
       "method": "PATCH",
@@ -55,7 +55,9 @@
         }
       },
       "synchronous": "WaitForTask"
-    },
+    }
+  ],
+  "commands": [
     {
       "route": "indexes/movies/documents",
       "method": "POST",
