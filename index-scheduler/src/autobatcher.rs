@@ -24,6 +24,7 @@ enum AutobatchKind {
         allow_index_creation: bool,
         primary_key: Option<String>,
     },
+    DocumentEdition,
     DocumentDeletion,
     DocumentDeletionByFilter,
     DocumentClear,
@@ -63,6 +64,7 @@ impl From<KindWithContent> for AutobatchKind {
                 primary_key,
                 ..
             } => AutobatchKind::DocumentImport { method, allow_index_creation, primary_key },
+            KindWithContent::DocumentEdition { .. } => AutobatchKind::DocumentEdition,
             KindWithContent::DocumentDeletion { .. } => AutobatchKind::DocumentDeletion,
             KindWithContent::DocumentClear { .. } => AutobatchKind::DocumentClear,
             KindWithContent::DocumentDeletionByFilter { .. } => {
@@ -97,6 +99,9 @@ pub enum BatchKind {
         allow_index_creation: bool,
         primary_key: Option<String>,
         operation_ids: Vec<TaskId>,
+    },
+    DocumentEdition {
+        id: TaskId,
     },
     DocumentDeletion {
         deletion_ids: Vec<TaskId>,
@@ -199,6 +204,7 @@ impl BatchKind {
                 }),
                 allow_index_creation,
             ),
+            K::DocumentEdition => (Break(BatchKind::DocumentEdition { id: task_id }), false),
             K::DocumentDeletion => {
                 (Continue(BatchKind::DocumentDeletion { deletion_ids: vec![task_id] }), false)
             }
@@ -222,7 +228,7 @@ impl BatchKind {
 
         match (self, kind) {
             // We don't batch any of these operations
-            (this, K::IndexCreation | K::IndexUpdate | K::IndexSwap | K::DocumentDeletionByFilter) => Break(this),
+            (this, K::IndexCreation | K::IndexUpdate | K::IndexSwap | K::DocumentEdition | K::DocumentDeletionByFilter) => Break(this),
             // We must not batch tasks that don't have the same index creation rights if the index doesn't already exists.
             (this, kind) if !index_already_exists && this.allow_index_creation() == Some(false) && kind.allow_index_creation() == Some(true) => {
                 Break(this)
@@ -519,6 +525,7 @@ impl BatchKind {
                 | BatchKind::IndexDeletion { .. }
                 | BatchKind::IndexUpdate { .. }
                 | BatchKind::IndexSwap { .. }
+                | BatchKind::DocumentEdition { .. }
                 | BatchKind::DocumentDeletionByFilter { .. },
                 _,
             ) => {
