@@ -98,7 +98,7 @@ pub enum KindWithContent {
     },
     DocumentEdition {
         index_uid: String,
-        filter_expr: serde_json::Value,
+        filter_expr: Option<serde_json::Value>,
         edition_code: String,
     },
     DocumentDeletion {
@@ -214,7 +214,7 @@ impl KindWithContent {
             KindWithContent::DocumentEdition { index_uid: _, edition_code, filter_expr } => {
                 Some(Details::DocumentEdition {
                     edited_documents: None,
-                    original_filter: filter_expr.to_string(),
+                    original_filter: filter_expr.as_ref().map(|v| v.to_string()),
                     edition_code: edition_code.clone(),
                 })
             }
@@ -269,7 +269,7 @@ impl KindWithContent {
             KindWithContent::DocumentEdition { index_uid: _, filter_expr, edition_code } => {
                 Some(Details::DocumentEdition {
                     edited_documents: Some(0),
-                    original_filter: filter_expr.to_string(),
+                    original_filter: filter_expr.as_ref().map(|v| v.to_string()),
                     edition_code: edition_code.clone(),
                 })
             }
@@ -524,17 +524,48 @@ impl std::error::Error for ParseTaskKindError {}
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum Details {
-    DocumentAdditionOrUpdate { received_documents: u64, indexed_documents: Option<u64> },
-    DocumentEdition { edited_documents: Option<u64>, original_filter: String, edition_code: String },
-    SettingsUpdate { settings: Box<Settings<Unchecked>> },
-    IndexInfo { primary_key: Option<String> },
-    DocumentDeletion { provided_ids: usize, deleted_documents: Option<u64> },
-    DocumentDeletionByFilter { original_filter: String, deleted_documents: Option<u64> },
-    ClearAll { deleted_documents: Option<u64> },
-    TaskCancelation { matched_tasks: u64, canceled_tasks: Option<u64>, original_filter: String },
-    TaskDeletion { matched_tasks: u64, deleted_tasks: Option<u64>, original_filter: String },
-    Dump { dump_uid: Option<String> },
-    IndexSwap { swaps: Vec<IndexSwap> },
+    DocumentAdditionOrUpdate {
+        received_documents: u64,
+        indexed_documents: Option<u64>,
+    },
+    DocumentEdition {
+        edited_documents: Option<u64>,
+        original_filter: Option<String>,
+        edition_code: String,
+    },
+    SettingsUpdate {
+        settings: Box<Settings<Unchecked>>,
+    },
+    IndexInfo {
+        primary_key: Option<String>,
+    },
+    DocumentDeletion {
+        provided_ids: usize,
+        deleted_documents: Option<u64>,
+    },
+    DocumentDeletionByFilter {
+        original_filter: String,
+        deleted_documents: Option<u64>,
+    },
+    ClearAll {
+        deleted_documents: Option<u64>,
+    },
+    TaskCancelation {
+        matched_tasks: u64,
+        canceled_tasks: Option<u64>,
+        original_filter: String,
+    },
+    TaskDeletion {
+        matched_tasks: u64,
+        deleted_tasks: Option<u64>,
+        original_filter: String,
+    },
+    Dump {
+        dump_uid: Option<String>,
+    },
+    IndexSwap {
+        swaps: Vec<IndexSwap>,
+    },
 }
 
 impl Details {

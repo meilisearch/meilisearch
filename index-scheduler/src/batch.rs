@@ -1751,42 +1751,40 @@ fn delete_document_by_filter<'a>(
 
 fn edit_documents_by_function<'a>(
     wtxn: &mut RwTxn<'a>,
-    filter: &serde_json::Value,
+    filter: &Option<serde_json::Value>,
     code: &str,
     indexer_config: &IndexerConfig,
     must_stop_processing: MustStopProcessing,
     index: &'a Index,
 ) -> Result<u64> {
-    let filter = Filter::from_json(filter)?;
-    Ok(if let Some(filter) = filter {
-        let candidates = filter.evaluate(wtxn, index).map_err(|err| match err {
+    let candidates = match filter.as_ref().map(Filter::from_json) {
+        Some(Ok(Some(filter))) => filter.evaluate(wtxn, index).map_err(|err| match err {
             milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
                 Error::from(err).with_custom_error_code(Code::InvalidDocumentFilter)
             }
             e => e.into(),
-        })?;
+        })?,
+        None | Some(Ok(None)) => index.documents_ids(wtxn)?,
+        Some(Err(e)) => return Err(e.into()),
+    };
 
-        let config = IndexDocumentsConfig {
-            update_method: IndexDocumentsMethod::ReplaceDocuments,
-            ..Default::default()
-        };
+    let config = IndexDocumentsConfig {
+        update_method: IndexDocumentsMethod::ReplaceDocuments,
+        ..Default::default()
+    };
 
-        let mut builder = milli::update::IndexDocuments::new(
-            wtxn,
-            index,
-            indexer_config,
-            config,
-            |indexing_step| tracing::debug!(update = ?indexing_step),
-            || must_stop_processing.get(),
-        )?;
+    let mut builder = milli::update::IndexDocuments::new(
+        wtxn,
+        index,
+        indexer_config,
+        config,
+        |indexing_step| tracing::debug!(update = ?indexing_step),
+        || must_stop_processing.get(),
+    )?;
 
-        todo!("edit documents with the code and reinsert them in the builder")
-        // let (new_builder, count) = builder.remove_documents_from_db_no_batch(&candidates)?;
-        // builder = new_builder;
+    let (new_builder, count) = builder.edit_documents(&candidates, code)?;
+    builder = new_builder;
 
-        // let _ = builder.execute()?;
-        // count
-    } else {
-        0
-    })
+    let _ = builder.execute()?;
+    Ok(count.unwrap())
 }

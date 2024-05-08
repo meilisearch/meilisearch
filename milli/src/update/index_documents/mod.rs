@@ -40,7 +40,7 @@ use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
 use crate::vector::EmbeddingConfigs;
-use crate::{CboRoaringBitmapCodec, Index, Result};
+use crate::{fields_ids_map, CboRoaringBitmapCodec, Index, Result};
 
 static MERGED_DATABASE_COUNT: usize = 7;
 static PREFIX_DATABASE_COUNT: usize = 4;
@@ -170,6 +170,62 @@ where
         self.added_documents += indexed_documents;
 
         Ok((self, Ok(indexed_documents)))
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents")]
+    pub fn edit_documents(
+        mut self,
+        documents: &RoaringBitmap,
+        code: &str,
+    ) -> Result<(Self, StdResult<u64, UserError>)> {
+        // Early return when there is no document to add
+        if documents.is_empty() {
+            return Ok((self, Ok(0)));
+        }
+
+        let mut lua = piccolo::Lua::core();
+        let executor = lua.enter(|ctx| ctx.stash(piccolo::Executor::new(ctx)));
+        let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
+
+        for docid in documents {
+            let document = match self.index.documents.get(self.wtxn, &docid)? {
+                Some(document) => document,
+                None => panic!("a document should always exists"),
+            };
+
+            lua.try_enter(|ctx| {
+                let closure = match piccolo::Closure::load(
+                    ctx,
+                    None,
+                    ("return ".to_string() + code).as_bytes(),
+                ) {
+                    Ok(closure) => closure,
+                    Err(_) => piccolo::Closure::load(ctx, None, code.as_bytes())?,
+                };
+                let function = piccolo::Function::Closure(closure);
+
+                let table = piccolo::Table::new(&ctx);
+                table.set(ctx, "internal-id", docid)?;
+                table.set(ctx, "title", "hello")?;
+                table.set(ctx, "description", "world")?;
+                dbg!(&table);
+                ctx.set_global("doc", table)?;
+
+                ctx.fetch(&executor).restart(ctx, function, ());
+                Ok(())
+            })
+            .unwrap();
+
+            lua.execute::<()>(&executor).unwrap();
+            lua.try_enter(|ctx| {
+                let value = ctx.get_global("doc");
+                dbg!(value);
+                Ok(())
+            })
+            .unwrap();
+        }
+
+        Ok((self, Ok(documents.len())))
     }
 
     pub fn with_embedders(mut self, embedders: EmbeddingConfigs) -> Self {

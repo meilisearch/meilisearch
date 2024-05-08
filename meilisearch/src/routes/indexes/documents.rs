@@ -579,7 +579,7 @@ pub async fn delete_documents_by_filter(
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct DocumentEditionByFunction {
     #[deserr(error = DeserrJsonError<InvalidDocumentFilter>, missing_field_error = DeserrJsonError::missing_document_filter)]
-    filter: Value,
+    filter: Option<Value>,
     #[deserr(error = DeserrJsonError<InvalidDocumentFilter>, missing_field_error = DeserrJsonError::missing_document_filter)]
     function: String,
 }
@@ -599,12 +599,14 @@ pub async fn edit_documents_by_function(
 
     // analytics.delete_documents(DocumentDeletionKind::PerFilter, &req);
 
-    // we ensure the filter is well formed before enqueuing it
-    || -> Result<_, ResponseError> {
-        Ok(crate::search::parse_filter(&filter)?.ok_or(MeilisearchHttpError::EmptyFilter)?)
-    }()
-    // and whatever was the error, the error code should always be an InvalidDocumentFilter
-    .map_err(|err| ResponseError::from_msg(err.message, Code::InvalidDocumentFilter))?;
+    if let Some(ref filter) = filter {
+        // we ensure the filter is well formed before enqueuing it
+        || -> Result<_, ResponseError> {
+            Ok(crate::search::parse_filter(filter)?.ok_or(MeilisearchHttpError::EmptyFilter)?)
+        }()
+        // and whatever was the error, the error code should always be an InvalidDocumentFilter
+        .map_err(|err| ResponseError::from_msg(err.message, Code::InvalidDocumentFilter))?;
+    }
     let task =
         KindWithContent::DocumentEdition { index_uid, filter_expr: filter, edition_code: function };
 

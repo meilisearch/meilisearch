@@ -93,7 +93,7 @@ impl From<Details> for DetailsView {
             Details::DocumentEdition { edited_documents, original_filter, edition_code } => {
                 DetailsView {
                     edited_documents: Some(edited_documents),
-                    original_filter: Some(Some(original_filter)),
+                    original_filter: Some(original_filter),
                     edition_code: Some(edition_code),
                     ..DetailsView::default()
                 }
