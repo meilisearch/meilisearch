@@ -1988,6 +1988,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "gc-arena"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24d4a9d8c3c1ef4301b8afc383e53e102a13f9947da2181bf82828480dcc5165"
+dependencies = [
+ "allocator-api2",
+ "gc-arena-derive",
+ "hashbrown",
+ "sptr",
+]
+
+[[package]]
+name = "gc-arena-derive"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c952d28a64896b1c4ac382dcd7beeaeaabc13e8c7c7f800ea2938abd828ed30"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.60",
+ "synstructure",
+]
+
+[[package]]
 name = "gemm"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3511,6 +3535,7 @@ dependencies = [
  "obkv",
  "once_cell",
  "ordered-float",
+ "piccolo",
  "puffin",
  "rand",
  "rand_pcg",
@@ -4012,6 +4037,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90fcb95eef784c2ac79119d1dd819e162b5da872ce6f3c3abe1e8ca1c082f72b"
 dependencies = [
  "siphasher 0.3.11",
+]
+
+[[package]]
+name = "piccolo"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93dd1815b42446904bb2689d1c5d7680e8c68113d5b15a5a3297ba6c7a5f84af"
+dependencies = [
+ "ahash",
+ "allocator-api2",
+ "anyhow",
+ "gc-arena",
+ "hashbrown",
+ "rand",
+ "thiserror",
 ]
 
 [[package]]
@@ -4898,6 +4938,12 @@ dependencies = [
  "serde",
  "unicode-segmentation",
 ]
+
+[[package]]
+name = "sptr"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b9b39299b249ad65f3b7e96443bad61c02ca5cd3589f46cb6d610a0fd6c0d6a"
 
 [[package]]
 name = "stable_deref_trait"
