@@ -54,6 +54,8 @@ pub struct DetailsView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub indexed_documents: Option<Option<u64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub edited_documents: Option<Option<u64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub primary_key: Option<Option<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provided_ids: Option<usize>,
@@ -69,6 +71,8 @@ pub struct DetailsView {
     pub original_filter: Option<Option<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dump_uid: Option<Option<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edition_code: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(flatten)]
     pub settings: Option<Box<Settings<Unchecked>>>,
@@ -86,6 +90,11 @@ impl From<Details> for DetailsView {
                     ..DetailsView::default()
                 }
             }
+            Details::DocumentEdition { edited_documents, edition_code } => DetailsView {
+                edited_documents: Some(edited_documents),
+                edition_code: Some(edition_code),
+                ..DetailsView::default()
+            },
             Details::SettingsUpdate { mut settings } => {
                 settings.hide_secrets();
                 DetailsView { settings: Some(settings), ..DetailsView::default() }

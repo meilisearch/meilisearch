@@ -166,6 +166,7 @@ impl From<KindWithContent> for KindDump {
                 documents_count,
                 allow_index_creation,
             },
+            KindWithContent::DocumentEdition { .. } => todo!(),
             KindWithContent::DocumentDeletion { documents_ids, .. } => {
                 KindDump::DocumentDeletion { documents_ids }
             }

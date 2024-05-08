@@ -48,6 +48,7 @@ impl Task {
             | TaskDeletion { .. }
             | IndexSwap { .. } => None,
             DocumentAdditionOrUpdate { index_uid, .. }
+            | DocumentEdition { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
             | DocumentDeletionByFilter { index_uid, .. }
             | DocumentClear { index_uid }
@@ -67,7 +68,8 @@ impl Task {
     pub fn content_uuid(&self) -> Option<Uuid> {
         match self.kind {
             KindWithContent::DocumentAdditionOrUpdate { content_file, .. } => Some(content_file),
-            KindWithContent::DocumentDeletion { .. }
+            KindWithContent::DocumentEdition { .. }
+            | KindWithContent::DocumentDeletion { .. }
             | KindWithContent::DocumentDeletionByFilter { .. }
             | KindWithContent::DocumentClear { .. }
             | KindWithContent::SettingsUpdate { .. }
@@ -93,6 +95,10 @@ pub enum KindWithContent {
         content_file: Uuid,
         documents_count: u64,
         allow_index_creation: bool,
+    },
+    DocumentEdition {
+        index_uid: String,
+        edition_code: String,
     },
     DocumentDeletion {
         index_uid: String,
@@ -150,6 +156,7 @@ impl KindWithContent {
     pub fn as_kind(&self) -> Kind {
         match self {
             KindWithContent::DocumentAdditionOrUpdate { .. } => Kind::DocumentAdditionOrUpdate,
+            KindWithContent::DocumentEdition { .. } => Kind::DocumentEdition,
             KindWithContent::DocumentDeletion { .. } => Kind::DocumentDeletion,
             KindWithContent::DocumentDeletionByFilter { .. } => Kind::DocumentDeletion,
             KindWithContent::DocumentClear { .. } => Kind::DocumentDeletion,
@@ -174,6 +181,7 @@ impl KindWithContent {
             | TaskCancelation { .. }
             | TaskDeletion { .. } => vec![],
             DocumentAdditionOrUpdate { index_uid, .. }
+            | DocumentEdition { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
             | DocumentDeletionByFilter { index_uid, .. }
             | DocumentClear { index_uid }
@@ -200,6 +208,12 @@ impl KindWithContent {
                 Some(Details::DocumentAdditionOrUpdate {
                     received_documents: *documents_count,
                     indexed_documents: None,
+                })
+            }
+            KindWithContent::DocumentEdition { edition_code, .. } => {
+                Some(Details::DocumentEdition {
+                    edited_documents: None,
+                    edition_code: edition_code.clone(),
                 })
             }
             KindWithContent::DocumentDeletion { index_uid: _, documents_ids } => {
@@ -248,6 +262,12 @@ impl KindWithContent {
                 Some(Details::DocumentAdditionOrUpdate {
                     received_documents: *documents_count,
                     indexed_documents: Some(0),
+                })
+            }
+            KindWithContent::DocumentEdition { edition_code, .. } => {
+                Some(Details::DocumentEdition {
+                    edited_documents: Some(0),
+                    edition_code: edition_code.clone(),
                 })
             }
             KindWithContent::DocumentDeletion { index_uid: _, documents_ids } => {
@@ -299,6 +319,12 @@ impl From<&KindWithContent> for Option<Details> {
                 Some(Details::DocumentAdditionOrUpdate {
                     received_documents: *documents_count,
                     indexed_documents: None,
+                })
+            }
+            KindWithContent::DocumentEdition { edition_code, .. } => {
+                Some(Details::DocumentEdition {
+                    edited_documents: None,
+                    edition_code: edition_code.clone(),
                 })
             }
             KindWithContent::DocumentDeletion { .. } => None,
@@ -394,6 +420,7 @@ impl std::error::Error for ParseTaskStatusError {}
 #[serde(rename_all = "camelCase")]
 pub enum Kind {
     DocumentAdditionOrUpdate,
+    DocumentEdition,
     DocumentDeletion,
     SettingsUpdate,
     IndexCreation,
@@ -410,6 +437,7 @@ impl Kind {
     pub fn related_to_one_index(&self) -> bool {
         match self {
             Kind::DocumentAdditionOrUpdate
+            | Kind::DocumentEdition
             | Kind::DocumentDeletion
             | Kind::SettingsUpdate
             | Kind::IndexCreation
@@ -427,6 +455,7 @@ impl Display for Kind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Kind::DocumentAdditionOrUpdate => write!(f, "documentAdditionOrUpdate"),
+            Kind::DocumentEdition => write!(f, "documentEdition"),
             Kind::DocumentDeletion => write!(f, "documentDeletion"),
             Kind::SettingsUpdate => write!(f, "settingsUpdate"),
             Kind::IndexCreation => write!(f, "indexCreation"),
@@ -454,6 +483,8 @@ impl FromStr for Kind {
             Ok(Kind::IndexDeletion)
         } else if kind.eq_ignore_ascii_case("documentAdditionOrUpdate") {
             Ok(Kind::DocumentAdditionOrUpdate)
+        } else if kind.eq_ignore_ascii_case("documentEdition") {
+            Ok(Kind::DocumentEdition)
         } else if kind.eq_ignore_ascii_case("documentDeletion") {
             Ok(Kind::DocumentDeletion)
         } else if kind.eq_ignore_ascii_case("settingsUpdate") {
@@ -496,6 +527,7 @@ impl std::error::Error for ParseTaskKindError {}
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum Details {
     DocumentAdditionOrUpdate { received_documents: u64, indexed_documents: Option<u64> },
+    DocumentEdition { edited_documents: Option<u64>, edition_code: String },
     SettingsUpdate { settings: Box<Settings<Unchecked>> },
     IndexInfo { primary_key: Option<String> },
     DocumentDeletion { provided_ids: usize, deleted_documents: Option<u64> },
@@ -514,6 +546,7 @@ impl Details {
             Self::DocumentAdditionOrUpdate { indexed_documents, .. } => {
                 *indexed_documents = Some(0)
             }
+            Self::DocumentEdition { edited_documents, .. } => *edited_documents = Some(0),
             Self::DocumentDeletion { deleted_documents, .. } => *deleted_documents = Some(0),
             Self::DocumentDeletionByFilter { deleted_documents, .. } => {
                 *deleted_documents = Some(0)

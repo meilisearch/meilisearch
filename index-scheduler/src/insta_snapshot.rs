@@ -177,6 +177,12 @@ fn snapshot_details(d: &Details) -> String {
         } => {
             format!("{{ received_documents: {received_documents}, indexed_documents: {indexed_documents:?} }}")
         }
+        Details::DocumentEdition {
+            edited_documents,
+            edition_code,
+        } => {
+            format!("{{ edited_documents: {edited_documents:?}, edition_code: {edition_code:?} }}")
+        }
         Details::SettingsUpdate { settings } => {
             format!("{{ settings: {settings:?} }}")
         }
