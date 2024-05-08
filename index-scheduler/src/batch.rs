@@ -1410,8 +1410,55 @@ impl IndexScheduler {
 
                 Ok(tasks)
             }
-            IndexOperation::DocumentEdition { .. } => {
-                todo!()
+            IndexOperation::DocumentEdition { mut task, .. } => {
+                let (filter, edition_code) =
+                    if let KindWithContent::DocumentEdition { filter_expr, edition_code, .. } =
+                        &task.kind
+                    {
+                        (filter_expr, edition_code)
+                    } else {
+                        unreachable!()
+                    };
+                let edited_documents = edit_documents_by_function(
+                    index_wtxn,
+                    filter,
+                    edition_code,
+                    self.index_mapper.indexer_config(),
+                    self.must_stop_processing.clone(),
+                    index,
+                );
+                let (original_filter, edition_code) =
+                    if let Some(Details::DocumentEdition {
+                        original_filter, edition_code, ..
+                    }) = task.details
+                    {
+                        (original_filter, edition_code)
+                    } else {
+                        // In the case of a `documentDeleteByFilter` the details MUST be set
+                        unreachable!();
+                    };
+
+                match edited_documents {
+                    Ok(edited_documents) => {
+                        task.status = Status::Succeeded;
+                        task.details = Some(Details::DocumentEdition {
+                            original_filter,
+                            edition_code,
+                            edited_documents: Some(edited_documents),
+                        });
+                    }
+                    Err(e) => {
+                        task.status = Status::Failed;
+                        task.details = Some(Details::DocumentEdition {
+                            original_filter,
+                            edition_code,
+                            edited_documents: Some(0),
+                        });
+                        task.error = Some(e.into());
+                    }
+                }
+
+                Ok(vec![task])
             }
             IndexOperation::IndexDocumentDeletionByFilter { mut task, index_uid: _ } => {
                 let filter =
@@ -1697,6 +1744,48 @@ fn delete_document_by_filter<'a>(
 
         let _ = builder.execute()?;
         count
+    } else {
+        0
+    })
+}
+
+fn edit_documents_by_function<'a>(
+    wtxn: &mut RwTxn<'a>,
+    filter: &serde_json::Value,
+    code: &str,
+    indexer_config: &IndexerConfig,
+    must_stop_processing: MustStopProcessing,
+    index: &'a Index,
+) -> Result<u64> {
+    let filter = Filter::from_json(filter)?;
+    Ok(if let Some(filter) = filter {
+        let candidates = filter.evaluate(wtxn, index).map_err(|err| match err {
+            milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
+                Error::from(err).with_custom_error_code(Code::InvalidDocumentFilter)
+            }
+            e => e.into(),
+        })?;
+
+        let config = IndexDocumentsConfig {
+            update_method: IndexDocumentsMethod::ReplaceDocuments,
+            ..Default::default()
+        };
+
+        let mut builder = milli::update::IndexDocuments::new(
+            wtxn,
+            index,
+            indexer_config,
+            config,
+            |indexing_step| tracing::debug!(update = ?indexing_step),
+            || must_stop_processing.get(),
+        )?;
+
+        todo!("edit documents with the code and reinsert them in the builder")
+        // let (new_builder, count) = builder.remove_documents_from_db_no_batch(&candidates)?;
+        // builder = new_builder;
+
+        // let _ = builder.execute()?;
+        // count
     } else {
         0
     })

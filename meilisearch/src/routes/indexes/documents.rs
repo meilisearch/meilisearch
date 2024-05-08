@@ -82,6 +82,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         web::resource("/delete-batch").route(web::post().to(SeqHandler(delete_documents_batch))),
     )
     .service(web::resource("/delete").route(web::post().to(SeqHandler(delete_documents_by_filter))))
+    .service(web::resource("/edit").route(web::post().to(SeqHandler(edit_documents_by_function))))
     .service(web::resource("/fetch").route(web::post().to(SeqHandler(documents_by_query_post))))
     .service(
         web::resource("/{document_id}")
@@ -562,6 +563,50 @@ pub async fn delete_documents_by_filter(
     // and whatever was the error, the error code should always be an InvalidDocumentFilter
     .map_err(|err| ResponseError::from_msg(err.message, Code::InvalidDocumentFilter))?;
     let task = KindWithContent::DocumentDeletionByFilter { index_uid, filter_expr: filter };
+
+    let uid = get_task_id(&req, &opt)?;
+    let dry_run = is_dry_run(&req, &opt)?;
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
+            .await??
+            .into();
+
+    debug!(returns = ?task, "Delete documents by filter");
+    Ok(HttpResponse::Accepted().json(task))
+}
+
+#[derive(Debug, Deserr)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+pub struct DocumentEditionByFunction {
+    #[deserr(error = DeserrJsonError<InvalidDocumentFilter>, missing_field_error = DeserrJsonError::missing_document_filter)]
+    filter: Value,
+    #[deserr(error = DeserrJsonError<InvalidDocumentFilter>, missing_field_error = DeserrJsonError::missing_document_filter)]
+    function: String,
+}
+
+pub async fn edit_documents_by_function(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
+    body: AwebJson<DocumentEditionByFunction, DeserrJsonError>,
+    req: HttpRequest,
+    opt: web::Data<Opt>,
+    _analytics: web::Data<dyn Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    debug!(parameters = ?body, "Edit documents by function");
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+    let index_uid = index_uid.into_inner();
+    let DocumentEditionByFunction { filter, function } = body.into_inner();
+
+    // analytics.delete_documents(DocumentDeletionKind::PerFilter, &req);
+
+    // we ensure the filter is well formed before enqueuing it
+    || -> Result<_, ResponseError> {
+        Ok(crate::search::parse_filter(&filter)?.ok_or(MeilisearchHttpError::EmptyFilter)?)
+    }()
+    // and whatever was the error, the error code should always be an InvalidDocumentFilter
+    .map_err(|err| ResponseError::from_msg(err.message, Code::InvalidDocumentFilter))?;
+    let task =
+        KindWithContent::DocumentEdition { index_uid, filter_expr: filter, edition_code: function };
 
     let uid = get_task_id(&req, &opt)?;
     let dry_run = is_dry_run(&req, &opt)?;
