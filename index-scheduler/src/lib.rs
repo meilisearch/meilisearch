@@ -4744,6 +4744,7 @@ mod tests {
           "types": {
             "documentAdditionOrUpdate": 0,
             "documentDeletion": 0,
+            "documentEdition": 0,
             "dumpCreation": 0,
             "indexCreation": 3,
             "indexDeletion": 0,
@@ -4775,6 +4776,7 @@ mod tests {
           "types": {
             "documentAdditionOrUpdate": 0,
             "documentDeletion": 0,
+            "documentEdition": 0,
             "dumpCreation": 0,
             "indexCreation": 3,
             "indexDeletion": 0,
@@ -4813,6 +4815,7 @@ mod tests {
           "types": {
             "documentAdditionOrUpdate": 0,
             "documentDeletion": 0,
+            "documentEdition": 0,
             "dumpCreation": 0,
             "indexCreation": 3,
             "indexDeletion": 0,
@@ -4852,6 +4855,7 @@ mod tests {
           "types": {
             "documentAdditionOrUpdate": 0,
             "documentDeletion": 0,
+            "documentEdition": 0,
             "dumpCreation": 0,
             "indexCreation": 3,
             "indexDeletion": 0,
