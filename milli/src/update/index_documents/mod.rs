@@ -16,7 +16,7 @@ use grenad::{Merger, MergerBuilder};
 use heed::types::Str;
 use heed::Database;
 use rand::SeedableRng;
-use rhai::{Engine, Scope};
+use rhai::{Dynamic, Engine, Scope};
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use slice_group_by::GroupBy;
@@ -239,11 +239,13 @@ where
             let mut scope = Scope::new();
             scope.push("doc", document);
 
-            let new_document = engine.eval_ast_with_scope::<rhai::Map>(&mut scope, &ast).unwrap();
+            let _ = engine.eval_ast_with_scope::<Dynamic>(&mut scope, &ast).unwrap();
+            let new_document = scope.remove("doc").unwrap();
             let new_document = rhaimap_to_object(new_document);
 
             assert_eq!(
-                document_id, new_document[primary_key],
+                Some(&document_id),
+                new_document.get(primary_key),
                 "you cannot change the document id when editing documents"
             );
             documents_batch_builder.append_json_object(&new_document)?;

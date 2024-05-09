@@ -599,6 +599,11 @@ pub async fn edit_documents_by_function(
 
     // analytics.delete_documents(DocumentDeletionKind::PerFilter, &req);
 
+    let engine = milli::rhai::Engine::new();
+    if let Err(e) = engine.compile(&function) {
+        return Err(ResponseError::from_msg(e.to_string(), Code::BadRequest));
+    }
+
     if let Some(ref filter) = filter {
         // we ensure the filter is well formed before enqueuing it
         || -> Result<_, ResponseError> {
