@@ -41,7 +41,7 @@ use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
 use crate::vector::EmbeddingConfigs;
-use crate::{CboRoaringBitmapCodec, FieldsIdsMap, Index, Object, Result};
+use crate::{all_obkv_to_json, CboRoaringBitmapCodec, FieldsIdsMap, Index, Object, Result};
 
 static MERGED_DATABASE_COUNT: usize = 7;
 static PREFIX_DATABASE_COUNT: usize = 4;
@@ -184,7 +184,7 @@ where
             return Ok((self, Ok(0)));
         }
 
-        /// Transform every field of a raw obkv store into a JSON Object.
+        /// Transform every field of a raw obkv store into a Rhai Map.
         pub fn all_obkv_to_rhaimap(
             obkv: obkv::KvReaderU16,
             fields_ids_map: &FieldsIdsMap,
@@ -225,30 +225,33 @@ where
         let mut documents_batch_builder = tempfile::tempfile().map(DocumentsBatchBuilder::new)?;
 
         for docid in documents {
-            let (document, document_id) = match self.index.documents.get(self.wtxn, &docid)? {
-                Some(obkv) => {
-                    let document_id_bytes = obkv.get(primary_key_id).unwrap();
-                    let document_id: serde_json::Value =
-                        serde_json::from_slice(document_id_bytes).unwrap();
-                    let document = all_obkv_to_rhaimap(obkv, &fields_ids_map)?;
-                    (document, document_id)
-                }
-                None => panic!("documents must exist"),
-            };
+            let (document, document_object, document_id) =
+                match self.index.documents.get(self.wtxn, &docid)? {
+                    Some(obkv) => {
+                        let document_id_bytes = obkv.get(primary_key_id).unwrap();
+                        let document_id: serde_json::Value =
+                            serde_json::from_slice(document_id_bytes).unwrap();
+                        let document = all_obkv_to_rhaimap(obkv, &fields_ids_map)?;
+                        let document_object = all_obkv_to_json(obkv, &fields_ids_map)?;
+                        (document, document_object, document_id)
+                    }
+                    None => panic!("documents must exist"),
+                };
 
             let mut scope = Scope::new();
             scope.push("doc", document);
-
             let _ = engine.eval_ast_with_scope::<Dynamic>(&mut scope, &ast).unwrap();
             let new_document = scope.remove("doc").unwrap();
             let new_document = rhaimap_to_object(new_document);
 
-            assert_eq!(
-                Some(&document_id),
-                new_document.get(primary_key),
-                "you cannot change the document id when editing documents"
-            );
-            documents_batch_builder.append_json_object(&new_document)?;
+            if document_object != new_document {
+                assert_eq!(
+                    Some(&document_id),
+                    new_document.get(primary_key),
+                    "you cannot change the document id when editing documents"
+                );
+                documents_batch_builder.append_json_object(&new_document)?;
+            }
         }
 
         let file = documents_batch_builder.into_inner()?;
