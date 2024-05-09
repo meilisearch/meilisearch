@@ -87,7 +87,7 @@ rand = "0.8.5"
 tracing = "0.1.40"
 ureq = { version = "2.9.7", features = ["json"] }
 url = "2.5.0"
-piccolo = "0.3.1"
+rhai = { version = "1.18.0", features = ["serde", "no_module", "no_custom_syntax"] }
 
 [dev-dependencies]
 mimalloc = { version = "0.1.39", default-features = false }
