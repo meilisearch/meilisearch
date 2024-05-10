@@ -34,7 +34,7 @@ use meilisearch_types::milli::update::{
 use meilisearch_types::milli::vector::parsed_vectors::{
     ExplicitVectors, VectorOrArrayOfVectors, RESERVED_VECTORS_FIELD_NAME,
 };
-use meilisearch_types::milli::{self, Filter};
+use meilisearch_types::milli::{self, Filter, Object};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::{compression, Index, VERSION_FILE_NAME};
@@ -1411,37 +1411,43 @@ impl IndexScheduler {
                 Ok(tasks)
             }
             IndexOperation::DocumentEdition { mut task, .. } => {
-                let (filter, function) =
-                    if let KindWithContent::DocumentEdition { filter_expr, function, .. } =
-                        &task.kind
+                let (filter, context, function) =
+                    if let KindWithContent::DocumentEdition {
+                        filter_expr, context, function, ..
+                    } = &task.kind
                     {
-                        (filter_expr, function)
+                        (filter_expr, context, function)
                     } else {
                         unreachable!()
                     };
                 let edited_documents = edit_documents_by_function(
                     index_wtxn,
                     filter,
+                    context.clone(),
                     function,
                     self.index_mapper.indexer_config(),
                     self.must_stop_processing.clone(),
                     index,
                 );
-                let (original_filter, function) =
-                    if let Some(Details::DocumentEdition { original_filter, function, .. }) =
-                        task.details
-                    {
-                        (original_filter, function)
-                    } else {
-                        // In the case of a `documentDeleteByFilter` the details MUST be set
-                        unreachable!();
-                    };
+                let (original_filter, context, function) = if let Some(Details::DocumentEdition {
+                    original_filter,
+                    context,
+                    function,
+                    ..
+                }) = task.details
+                {
+                    (original_filter, context, function)
+                } else {
+                    // In the case of a `documentDeleteByFilter` the details MUST be set
+                    unreachable!();
+                };
 
                 match edited_documents {
                     Ok(edited_documents) => {
                         task.status = Status::Succeeded;
                         task.details = Some(Details::DocumentEdition {
                             original_filter,
+                            context,
                             function,
                             edited_documents: Some(edited_documents),
                         });
@@ -1450,6 +1456,7 @@ impl IndexScheduler {
                         task.status = Status::Failed;
                         task.details = Some(Details::DocumentEdition {
                             original_filter,
+                            context,
                             function,
                             edited_documents: Some(0),
                         });
@@ -1751,6 +1758,7 @@ fn delete_document_by_filter<'a>(
 fn edit_documents_by_function<'a>(
     wtxn: &mut RwTxn<'a>,
     filter: &Option<serde_json::Value>,
+    context: Option<Object>,
     code: &str,
     indexer_config: &IndexerConfig,
     must_stop_processing: MustStopProcessing,
@@ -1781,7 +1789,7 @@ fn edit_documents_by_function<'a>(
         || must_stop_processing.get(),
     )?;
 
-    let (new_builder, count) = builder.edit_documents(&candidates, code)?;
+    let (new_builder, count) = builder.edit_documents(&candidates, context, code)?;
     builder = new_builder;
 
     let _ = builder.execute()?;

@@ -580,6 +580,8 @@ pub async fn delete_documents_by_filter(
 pub struct DocumentEditionByFunction {
     #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
     filter: Option<Value>,
+    #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
+    context: Option<Value>,
     #[deserr(error = DeserrJsonError<InvalidDocumentFilter>, missing_field_error = DeserrJsonError::missing_document_filter)]
     function: String,
 }
@@ -595,7 +597,7 @@ pub async fn edit_documents_by_function(
     debug!(parameters = ?body, "Edit documents by function");
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let index_uid = index_uid.into_inner();
-    let DocumentEditionByFunction { filter, function } = body.into_inner();
+    let DocumentEditionByFunction { filter, context, function } = body.into_inner();
 
     // analytics.delete_documents(DocumentDeletionKind::PerFilter, &req);
 
@@ -612,8 +614,15 @@ pub async fn edit_documents_by_function(
         // and whatever was the error, the error code should always be an InvalidDocumentFilter
         .map_err(|err| ResponseError::from_msg(err.message, Code::InvalidDocumentFilter))?;
     }
-    let task =
-        KindWithContent::DocumentEdition { index_uid, filter_expr: filter, function: function };
+    let task = KindWithContent::DocumentEdition {
+        index_uid,
+        filter_expr: filter,
+        context: context.map(|v| match v {
+            serde_json::Value::Object(m) => m,
+            _ => panic!("The context must be an Object"),
+        }),
+        function,
+    };
 
     let uid = get_task_id(&req, &opt)?;
     let dry_run = is_dry_run(&req, &opt)?;

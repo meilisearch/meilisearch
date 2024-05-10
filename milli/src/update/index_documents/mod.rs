@@ -16,7 +16,7 @@ use grenad::{Merger, MergerBuilder};
 use heed::types::Str;
 use heed::Database;
 use rand::SeedableRng;
-use rhai::{Dynamic, Engine, Scope};
+use rhai::{Dynamic, Engine, OptimizationLevel, Scope};
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use slice_group_by::GroupBy;
@@ -177,6 +177,7 @@ where
     pub fn edit_documents(
         self,
         documents: &RoaringBitmap,
+        context: Option<Object>,
         code: &str,
     ) -> Result<(Self, StdResult<u64, UserError>)> {
         // Early return when there is no document to add
@@ -218,6 +219,7 @@ where
         }
 
         let mut engine = Engine::new();
+        engine.set_optimization_level(OptimizationLevel::Full);
         //It is an arbitrary value. We need to let users define this in the settings.
         engine.set_max_operations(1_000_000);
 
@@ -226,6 +228,11 @@ where
         let primary_key = self.index.primary_key(self.wtxn)?.unwrap();
         let primary_key_id = fields_ids_map.id(primary_key).unwrap();
         let mut documents_batch_builder = tempfile::tempfile().map(DocumentsBatchBuilder::new)?;
+
+        let context: Dynamic = match context {
+            Some(context) => serde_json::from_value(context.into()).unwrap(),
+            None => Dynamic::from(()),
+        };
 
         for docid in documents {
             let (document, document_object, document_id) =
@@ -242,6 +249,7 @@ where
                 };
 
             let mut scope = Scope::new();
+            scope.push_constant_dynamic("context", context.clone());
             scope.push("doc", document);
             let _ = engine.eval_ast_with_scope::<Dynamic>(&mut scope, &ast).unwrap();
             let new_document = scope.remove("doc").unwrap();

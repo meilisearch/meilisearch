@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use enum_iterator::Sequence;
 use milli::update::IndexDocumentsMethod;
+use milli::Object;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize, Serializer};
 use time::{Duration, OffsetDateTime};
@@ -99,6 +100,7 @@ pub enum KindWithContent {
     DocumentEdition {
         index_uid: String,
         filter_expr: Option<serde_json::Value>,
+        context: Option<milli::Object>,
         function: String,
     },
     DocumentDeletion {
@@ -211,10 +213,11 @@ impl KindWithContent {
                     indexed_documents: None,
                 })
             }
-            KindWithContent::DocumentEdition { index_uid: _, function, filter_expr } => {
+            KindWithContent::DocumentEdition { index_uid: _, filter_expr, context, function } => {
                 Some(Details::DocumentEdition {
                     edited_documents: None,
                     original_filter: filter_expr.as_ref().map(|v| v.to_string()),
+                    context: context.clone(),
                     function: function.clone(),
                 })
             }
@@ -266,10 +269,11 @@ impl KindWithContent {
                     indexed_documents: Some(0),
                 })
             }
-            KindWithContent::DocumentEdition { index_uid: _, filter_expr, function } => {
+            KindWithContent::DocumentEdition { index_uid: _, filter_expr, context, function } => {
                 Some(Details::DocumentEdition {
                     edited_documents: Some(0),
                     original_filter: filter_expr.as_ref().map(|v| v.to_string()),
+                    context: context.clone(),
                     function: function.clone(),
                 })
             }
@@ -531,6 +535,7 @@ pub enum Details {
     DocumentEdition {
         edited_documents: Option<u64>,
         original_filter: Option<String>,
+        context: Option<Object>,
         function: String,
     },
     SettingsUpdate {
