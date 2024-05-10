@@ -72,7 +72,7 @@ pub struct DetailsView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dump_uid: Option<Option<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub edition_code: Option<String>,
+    pub function: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(flatten)]
     pub settings: Option<Box<Settings<Unchecked>>>,
@@ -90,11 +90,11 @@ impl From<Details> for DetailsView {
                     ..DetailsView::default()
                 }
             }
-            Details::DocumentEdition { edited_documents, original_filter, edition_code } => {
+            Details::DocumentEdition { edited_documents, original_filter, function } => {
                 DetailsView {
                     edited_documents: Some(edited_documents),
                     original_filter: Some(original_filter),
-                    edition_code: Some(edition_code),
+                    function: Some(function),
                     ..DetailsView::default()
                 }
             }
