@@ -1368,7 +1368,7 @@ impl IndexScheduler {
                     } else {
                         unreachable!()
                     };
-                let edited_documents = edit_documents_by_function(
+                let result_count = edit_documents_by_function(
                     index_wtxn,
                     filter,
                     context.clone(),
@@ -1390,13 +1390,14 @@ impl IndexScheduler {
                     unreachable!();
                 };
 
-                match edited_documents {
-                    Ok(edited_documents) => {
+                match result_count {
+                    Ok((deleted_documents, edited_documents)) => {
                         task.status = Status::Succeeded;
                         task.details = Some(Details::DocumentEdition {
                             original_filter,
                             context,
                             function,
+                            deleted_documents: Some(deleted_documents),
                             edited_documents: Some(edited_documents),
                         });
                     }
@@ -1406,6 +1407,7 @@ impl IndexScheduler {
                             original_filter,
                             context,
                             function,
+                            deleted_documents: Some(0),
                             edited_documents: Some(0),
                         });
                         task.error = Some(e.into());
@@ -1711,7 +1713,7 @@ fn edit_documents_by_function<'a>(
     indexer_config: &IndexerConfig,
     must_stop_processing: MustStopProcessing,
     index: &'a Index,
-) -> Result<u64> {
+) -> Result<(u64, u64)> {
     let candidates = match filter.as_ref().map(Filter::from_json) {
         Some(Ok(Some(filter))) => filter.evaluate(wtxn, index).map_err(|err| match err {
             milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
