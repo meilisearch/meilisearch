@@ -217,7 +217,10 @@ where
             output
         }
 
-        let engine = Engine::new();
+        let mut engine = Engine::new();
+        //It is an arbitrary value. We need to let users define this in the settings.
+        engine.set_max_operations(1_000_000);
+
         let ast = engine.compile(code).unwrap();
         let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
         let primary_key = self.index.primary_key(self.wtxn)?.unwrap();
