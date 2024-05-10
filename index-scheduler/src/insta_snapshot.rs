@@ -179,10 +179,10 @@ fn snapshot_details(d: &Details) -> String {
         }
         Details::DocumentEdition {
             edited_documents,
-            edition_code,
+            function,
             original_filter,
         } => {
-            format!("{{ edited_documents: {edited_documents:?}, edition_code: {edition_code:?}, original_filter: {original_filter:?} }}")
+            format!("{{ edited_documents: {edited_documents:?}, function: {function:?}, original_filter: {original_filter:?} }}")
         }
         Details::SettingsUpdate { settings } => {
             format!("{{ settings: {settings:?} }}")

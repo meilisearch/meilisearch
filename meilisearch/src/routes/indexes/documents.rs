@@ -613,7 +613,7 @@ pub async fn edit_documents_by_function(
         .map_err(|err| ResponseError::from_msg(err.message, Code::InvalidDocumentFilter))?;
     }
     let task =
-        KindWithContent::DocumentEdition { index_uid, filter_expr: filter, edition_code: function };
+        KindWithContent::DocumentEdition { index_uid, filter_expr: filter, function: function };
 
     let uid = get_task_id(&req, &opt)?;
     let dry_run = is_dry_run(&req, &opt)?;

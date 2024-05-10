@@ -1411,28 +1411,27 @@ impl IndexScheduler {
                 Ok(tasks)
             }
             IndexOperation::DocumentEdition { mut task, .. } => {
-                let (filter, edition_code) =
-                    if let KindWithContent::DocumentEdition { filter_expr, edition_code, .. } =
+                let (filter, function) =
+                    if let KindWithContent::DocumentEdition { filter_expr, function, .. } =
                         &task.kind
                     {
-                        (filter_expr, edition_code)
+                        (filter_expr, function)
                     } else {
                         unreachable!()
                     };
                 let edited_documents = edit_documents_by_function(
                     index_wtxn,
                     filter,
-                    edition_code,
+                    function,
                     self.index_mapper.indexer_config(),
                     self.must_stop_processing.clone(),
                     index,
                 );
-                let (original_filter, edition_code) =
-                    if let Some(Details::DocumentEdition {
-                        original_filter, edition_code, ..
-                    }) = task.details
+                let (original_filter, function) =
+                    if let Some(Details::DocumentEdition { original_filter, function, .. }) =
+                        task.details
                     {
-                        (original_filter, edition_code)
+                        (original_filter, function)
                     } else {
                         // In the case of a `documentDeleteByFilter` the details MUST be set
                         unreachable!();
@@ -1443,7 +1442,7 @@ impl IndexScheduler {
                         task.status = Status::Succeeded;
                         task.details = Some(Details::DocumentEdition {
                             original_filter,
-                            edition_code,
+                            function,
                             edited_documents: Some(edited_documents),
                         });
                     }
@@ -1451,7 +1450,7 @@ impl IndexScheduler {
                         task.status = Status::Failed;
                         task.details = Some(Details::DocumentEdition {
                             original_filter,
-                            edition_code,
+                            function,
                             edited_documents: Some(0),
                         });
                         task.error = Some(e.into());

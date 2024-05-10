@@ -99,7 +99,7 @@ pub enum KindWithContent {
     DocumentEdition {
         index_uid: String,
         filter_expr: Option<serde_json::Value>,
-        edition_code: String,
+        function: String,
     },
     DocumentDeletion {
         index_uid: String,
@@ -211,11 +211,11 @@ impl KindWithContent {
                     indexed_documents: None,
                 })
             }
-            KindWithContent::DocumentEdition { index_uid: _, edition_code, filter_expr } => {
+            KindWithContent::DocumentEdition { index_uid: _, function, filter_expr } => {
                 Some(Details::DocumentEdition {
                     edited_documents: None,
                     original_filter: filter_expr.as_ref().map(|v| v.to_string()),
-                    edition_code: edition_code.clone(),
+                    function: function.clone(),
                 })
             }
             KindWithContent::DocumentDeletion { index_uid: _, documents_ids } => {
@@ -266,11 +266,11 @@ impl KindWithContent {
                     indexed_documents: Some(0),
                 })
             }
-            KindWithContent::DocumentEdition { index_uid: _, filter_expr, edition_code } => {
+            KindWithContent::DocumentEdition { index_uid: _, filter_expr, function } => {
                 Some(Details::DocumentEdition {
                     edited_documents: Some(0),
                     original_filter: filter_expr.as_ref().map(|v| v.to_string()),
-                    edition_code: edition_code.clone(),
+                    function: function.clone(),
                 })
             }
             KindWithContent::DocumentDeletion { index_uid: _, documents_ids } => {
@@ -531,7 +531,7 @@ pub enum Details {
     DocumentEdition {
         edited_documents: Option<u64>,
         original_filter: Option<String>,
-        edition_code: String,
+        function: String,
     },
     SettingsUpdate {
         settings: Box<Settings<Unchecked>>,
