@@ -179,10 +179,10 @@ where
         documents: &RoaringBitmap,
         context: Option<Object>,
         code: &str,
-    ) -> Result<(Self, StdResult<u64, UserError>)> {
+    ) -> Result<(Self, StdResult<(u64, u64), UserError>)> {
         // Early return when there is no document to add
         if documents.is_empty() {
-            return Ok((self, Ok(0)));
+            return Ok((self, Ok((0, 0))));
         }
 
         /// Transform every field of a raw obkv store into a Rhai Map.
@@ -228,6 +228,7 @@ where
         let primary_key = self.index.primary_key(self.wtxn)?.unwrap();
         let primary_key_id = fields_ids_map.id(primary_key).unwrap();
         let mut documents_batch_builder = tempfile::tempfile().map(DocumentsBatchBuilder::new)?;
+        let mut documents_to_remove = RoaringBitmap::new();
 
         let context: Dynamic = match context {
             Some(context) => serde_json::from_value(context.into()).unwrap(),
@@ -252,8 +253,19 @@ where
             scope.push_constant_dynamic("context", context.clone());
             scope.push("doc", document);
             let _ = engine.eval_ast_with_scope::<Dynamic>(&mut scope, &ast).unwrap();
-            let new_document = scope.remove("doc").unwrap();
-            let new_document = rhaimap_to_object(new_document);
+            let new_document = match scope.remove::<Dynamic>("doc") {
+                // If the "doc" variable has been removed from the scope
+                // or set to (), we effectively delete the document.
+                Some(doc) if doc.is_unit() => {
+                    documents_to_remove.push(docid);
+                    continue;
+                }
+                None => unreachable!(),
+                Some(document) => match document.try_cast() {
+                    Some(document) => rhaimap_to_object(document),
+                    None => panic!("Why is \"doc\" no longer a Map?"),
+                },
+            };
 
             if document_object != new_document {
                 assert_eq!(
@@ -268,7 +280,10 @@ where
         let file = documents_batch_builder.into_inner()?;
         let reader = DocumentsBatchReader::from_reader(file)?;
 
-        self.add_documents(reader)
+        let (this, removed) = self.remove_documents_from_db_no_batch(&documents_to_remove)?;
+        let (this, result) = this.add_documents(reader)?;
+
+        Ok((this, result.map(|added| (removed, added))))
     }
 
     pub fn with_embedders(mut self, embedders: EmbeddingConfigs) -> Self {

@@ -178,12 +178,15 @@ fn snapshot_details(d: &Details) -> String {
             format!("{{ received_documents: {received_documents}, indexed_documents: {indexed_documents:?} }}")
         }
         Details::DocumentEdition {
+            deleted_documents,
             edited_documents,
             original_filter,
             context,
             function,
         } => {
-            format!("{{ edited_documents: {edited_documents:?}, context: {context:?}, function: {function:?}, original_filter: {original_filter:?} }}")
+            format!(
+                "{{ deleted_documents: {deleted_documents:?}, edited_documents: {edited_documents:?}, context: {context:?}, function: {function:?}, original_filter: {original_filter:?} }}"
+            )
         }
         Details::SettingsUpdate { settings } => {
             format!("{{ settings: {settings:?} }}")

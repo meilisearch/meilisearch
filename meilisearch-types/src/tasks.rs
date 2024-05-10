@@ -215,6 +215,7 @@ impl KindWithContent {
             }
             KindWithContent::DocumentEdition { index_uid: _, filter_expr, context, function } => {
                 Some(Details::DocumentEdition {
+                    deleted_documents: None,
                     edited_documents: None,
                     original_filter: filter_expr.as_ref().map(|v| v.to_string()),
                     context: context.clone(),
@@ -271,6 +272,7 @@ impl KindWithContent {
             }
             KindWithContent::DocumentEdition { index_uid: _, filter_expr, context, function } => {
                 Some(Details::DocumentEdition {
+                    deleted_documents: Some(0),
                     edited_documents: Some(0),
                     original_filter: filter_expr.as_ref().map(|v| v.to_string()),
                     context: context.clone(),
@@ -533,6 +535,7 @@ pub enum Details {
         indexed_documents: Option<u64>,
     },
     DocumentEdition {
+        deleted_documents: Option<u64>,
         edited_documents: Option<u64>,
         original_filter: Option<String>,
         context: Option<Object>,

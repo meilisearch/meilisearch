@@ -93,15 +93,20 @@ impl From<Details> for DetailsView {
                     ..DetailsView::default()
                 }
             }
-            Details::DocumentEdition { edited_documents, original_filter, context, function } => {
-                DetailsView {
-                    edited_documents: Some(edited_documents),
-                    original_filter: Some(original_filter),
-                    context: Some(context),
-                    function: Some(function),
-                    ..DetailsView::default()
-                }
-            }
+            Details::DocumentEdition {
+                deleted_documents,
+                edited_documents,
+                original_filter,
+                context,
+                function,
+            } => DetailsView {
+                deleted_documents: Some(deleted_documents),
+                edited_documents: Some(edited_documents),
+                original_filter: Some(original_filter),
+                context: Some(context),
+                function: Some(function),
+                ..DetailsView::default()
+            },
             Details::SettingsUpdate { mut settings } => {
                 settings.hide_secrets();
                 DetailsView { settings: Some(settings), ..DetailsView::default() }
