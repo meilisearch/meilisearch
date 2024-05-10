@@ -1,3 +1,4 @@
+use milli::Object;
 use serde::Serialize;
 use time::{Duration, OffsetDateTime};
 
@@ -72,6 +73,8 @@ pub struct DetailsView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dump_uid: Option<Option<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub context: Option<Option<Object>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub function: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(flatten)]
@@ -90,10 +93,11 @@ impl From<Details> for DetailsView {
                     ..DetailsView::default()
                 }
             }
-            Details::DocumentEdition { edited_documents, original_filter, function } => {
+            Details::DocumentEdition { edited_documents, original_filter, context, function } => {
                 DetailsView {
                     edited_documents: Some(edited_documents),
                     original_filter: Some(original_filter),
+                    context: Some(context),
                     function: Some(function),
                     ..DetailsView::default()
                 }
