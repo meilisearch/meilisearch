@@ -236,6 +236,10 @@ where
         };
 
         for docid in documents {
+            if (self.should_abort)() {
+                return Err(Error::InternalError(InternalError::AbortedIndexation));
+            }
+
             let (document, document_object, document_id) =
                 match self.index.documents.get(self.wtxn, &docid)? {
                     Some(obkv) => {
