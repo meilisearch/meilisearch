@@ -79,12 +79,11 @@ hf-hub = { git = "https://github.com/dureuill/hf-hub.git", branch = "rust_tls", 
 tiktoken-rs = "0.5.9"
 liquid = "0.26.6"
 arroy = "0.4.0"
+rhai = { version = "1.18.0", features = ["serde", "no_module", "no_custom_syntax", "no_time", "sync"] }
 rand = "0.8.5"
 tracing = "0.1.40"
 ureq = { version = "2.10.0", features = ["json"] }
 url = "2.5.2"
-rhai = { version = "1.18.0", features = ["serde", "no_module", "no_custom_syntax"] }
-rhai = { version = "1.18.0", features = ["serde", "no_module", "no_custom_syntax", "no_time"] }
 
 [dev-dependencies]
 mimalloc = { version = "0.1.43", default-features = false }

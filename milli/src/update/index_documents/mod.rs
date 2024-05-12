@@ -1,6 +1,7 @@
 mod enrich;
 mod extract;
 mod helpers;
+mod parallel;
 mod transform;
 mod typed_chunk;
 
@@ -16,6 +17,7 @@ use grenad::{Merger, MergerBuilder};
 use heed::types::Str;
 use heed::Database;
 use rand::SeedableRng;
+use rayon::iter::{ParallelBridge, ParallelIterator};
 use rhai::{Dynamic, Engine, OptimizationLevel, Scope};
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
@@ -37,11 +39,12 @@ use crate::documents::{obkv_to_object, DocumentsBatchBuilder, DocumentsBatchRead
 use crate::error::{Error, InternalError, UserError};
 use crate::thread_pool_no_abort::ThreadPoolNoAbortBuilder;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
+use crate::update::index_documents::parallel::ImmutableObkvs;
 use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
 use crate::vector::EmbeddingConfigs;
-use crate::{all_obkv_to_json, CboRoaringBitmapCodec, FieldsIdsMap, Index, Object, Result};
+use crate::{CboRoaringBitmapCodec, FieldsIdsMap, Index, Object, Result};
 
 static MERGED_DATABASE_COUNT: usize = 7;
 static PREFIX_DATABASE_COUNT: usize = 4;
@@ -185,30 +188,6 @@ where
             return Ok((self, Ok((0, 0))));
         }
 
-        /// Transform every field of a raw obkv store into a Rhai Map.
-        pub fn all_obkv_to_rhaimap(
-            obkv: obkv::KvReaderU16,
-            fields_ids_map: &FieldsIdsMap,
-        ) -> Result<rhai::Map> {
-            let all_keys = obkv.iter().map(|(k, _v)| k).collect::<Vec<_>>();
-            all_keys
-                .iter()
-                .copied()
-                .flat_map(|id| obkv.get(id).map(|value| (id, value)))
-                .map(|(id, value)| {
-                    let name = fields_ids_map.name(id).ok_or(
-                        crate::error::FieldIdMapMissingEntry::FieldId {
-                            field_id: id,
-                            process: "allobkv_to_rhaimap",
-                        },
-                    )?;
-                    let value = serde_json::from_slice(value)
-                        .map_err(crate::error::InternalError::SerdeJson)?;
-                    Ok((name.into(), value))
-                })
-                .collect()
-        }
-
         fn rhaimap_to_object(map: rhai::Map) -> Object {
             let mut output = Object::new();
             for (key, value) in map {
@@ -220,13 +199,12 @@ where
 
         let mut engine = Engine::new();
         engine.set_optimization_level(OptimizationLevel::Full);
-        //It is an arbitrary value. We need to let users define this in the settings.
+        // It is an arbitrary value. We need to let users define this in the settings.
         engine.set_max_operations(1_000_000);
 
         let ast = engine.compile(code).unwrap();
         let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
         let primary_key = self.index.primary_key(self.wtxn)?.unwrap();
-        let primary_key_id = fields_ids_map.id(primary_key).unwrap();
         let mut documents_batch_builder = tempfile::tempfile().map(DocumentsBatchBuilder::new)?;
         let mut documents_to_remove = RoaringBitmap::new();
 
@@ -235,51 +213,79 @@ where
             None => Dynamic::from(()),
         };
 
-        for docid in documents {
-            if (self.should_abort)() {
-                return Err(Error::InternalError(InternalError::AbortedIndexation));
-            }
+        enum DocumentEdition {
+            Deleted(crate::DocumentId),
+            Edited(Object),
+            Nothing,
+        }
 
-            let (document, document_object, document_id) =
-                match self.index.documents.get(self.wtxn, &docid)? {
-                    Some(obkv) => {
-                        let document_id_bytes = obkv.get(primary_key_id).unwrap();
-                        let document_id: serde_json::Value =
-                            serde_json::from_slice(document_id_bytes).unwrap();
-                        let document = all_obkv_to_rhaimap(obkv, &fields_ids_map)?;
-                        let document_object = all_obkv_to_json(obkv, &fields_ids_map)?;
-                        (document, document_object, document_id)
-                    }
-                    None => panic!("documents must exist"),
-                };
+        let immutable_obkvs = ImmutableObkvs::new(
+            self.wtxn,
+            self.index.documents,
+            fields_ids_map.clone(),
+            documents.clone(),
+        )?;
+
+        let processing = documents.into_iter().par_bridge().map(|docid| {
+            let rhai_document = immutable_obkvs.rhai_map(docid)?.unwrap();
+            let json_document = immutable_obkvs.json_map(docid)?.unwrap();
+            let document_id = &json_document[primary_key];
 
             let mut scope = Scope::new();
             scope.push_constant_dynamic("context", context.clone());
-            scope.push("doc", document);
+            scope.push("doc", rhai_document);
             let _ = engine.eval_ast_with_scope::<Dynamic>(&mut scope, &ast).unwrap();
-            let new_document = match scope.remove::<Dynamic>("doc") {
+
+            match scope.remove::<Dynamic>("doc") {
                 // If the "doc" variable has been removed from the scope
                 // or set to (), we effectively delete the document.
                 Some(doc) if doc.is_unit() => {
-                    documents_to_remove.push(docid);
-                    continue;
+                    return Ok(DocumentEdition::Deleted(docid));
                 }
                 None => unreachable!(),
                 Some(document) => match document.try_cast() {
-                    Some(document) => rhaimap_to_object(document),
+                    Some(document) => {
+                        let new_document = rhaimap_to_object(document);
+                        if json_document != new_document {
+                            assert_eq!(
+                                Some(document_id),
+                                new_document.get(primary_key),
+                                "you cannot change the document id when editing documents"
+                            );
+                            return Ok(DocumentEdition::Edited(new_document));
+                        }
+                    }
                     None => panic!("Why is \"doc\" no longer a Map?"),
                 },
-            };
-
-            if document_object != new_document {
-                assert_eq!(
-                    Some(&document_id),
-                    new_document.get(primary_key),
-                    "you cannot change the document id when editing documents"
-                );
-                documents_batch_builder.append_json_object(&new_document)?;
             }
-        }
+
+            Ok(DocumentEdition::Nothing) as Result<_>
+        });
+
+        std::thread::scope(|s| {
+            let (send, recv) = std::sync::mpsc::sync_channel(100);
+            s.spawn(move || processing.for_each(|el| drop(send.send(el))));
+
+            for result in recv {
+                if (self.should_abort)() {
+                    return Err(Error::InternalError(InternalError::AbortedIndexation));
+                }
+
+                match result? {
+                    DocumentEdition::Deleted(docid) => {
+                        documents_to_remove.push(docid);
+                    }
+                    DocumentEdition::Edited(new_document) => {
+                        documents_batch_builder.append_json_object(&new_document)?;
+                    }
+                    DocumentEdition::Nothing => (),
+                }
+            }
+
+            Ok(())
+        })?;
+
+        drop(immutable_obkvs);
 
         let file = documents_batch_builder.into_inner()?;
         let reader = DocumentsBatchReader::from_reader(file)?;
