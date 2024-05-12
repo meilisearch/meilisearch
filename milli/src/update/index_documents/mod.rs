@@ -43,7 +43,7 @@ use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
 use crate::vector::EmbeddingConfigs;
-use crate::{CboRoaringBitmapCodec, FieldsIdsMap, Index, Object, Result};
+use crate::{CboRoaringBitmapCodec, Index, Object, Result};
 
 static MERGED_DATABASE_COUNT: usize = 7;
 static PREFIX_DATABASE_COUNT: usize = 4;
@@ -263,11 +263,8 @@ where
             Ok(DocumentEdition::Nothing) as Result<_>
         });
 
-        std::thread::scope(|s| {
-            let (send, recv) = std::sync::mpsc::sync_channel(100);
-            s.spawn(move || processing.for_each(|el| drop(send.send(el))));
-
-            for result in recv {
+        rayon_par_bridge::par_bridge(100, processing, |iterator| {
+            for result in iterator {
                 if (self.should_abort)() {
                     return Err(Error::InternalError(InternalError::AbortedIndexation));
                 }
@@ -285,8 +282,6 @@ where
 
             Ok(())
         })?;
-
-        drop(immutable_obkvs);
 
         let file = documents_batch_builder.into_inner()?;
         let reader = DocumentsBatchReader::from_reader(file)?;
