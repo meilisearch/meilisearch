@@ -84,6 +84,7 @@ rand = "0.8.5"
 tracing = "0.1.40"
 ureq = { version = "2.10.0", features = ["json"] }
 url = "2.5.2"
+rayon-par-bridge = "0.1.0"
 
 [dev-dependencies]
 mimalloc = { version = "0.1.43", default-features = false }

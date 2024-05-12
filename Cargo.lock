@@ -3510,6 +3510,7 @@ dependencies = [
  "rand",
  "rand_pcg",
  "rayon",
+ "rayon-par-bridge",
  "rhai",
  "roaring",
  "rstar",
@@ -4287,6 +4288,15 @@ checksum = "1465873a3dfdaa8ae7cb14b4383657caab0b3e8a0aa9ae8e04b044854c8dfce2"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
+]
+
+[[package]]
+name = "rayon-par-bridge"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb6a14d8f65834aca6b0fe4cbbd7a27e639cd3efb1f2a32de9942368f1991de8"
+dependencies = [
+ "rayon",
 ]
 
 [[package]]
