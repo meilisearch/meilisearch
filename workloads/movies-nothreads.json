@@ -11,7 +11,7 @@
       "sha256": "5b6e4cb660bc20327776e8a33ea197b43d9ec84856710ead1cc87ab24df77de1"
     }
   },
-  "commands": [
+  "precommands": [
     {
       "route": "indexes/movies/settings",
       "method": "PATCH",
@@ -30,8 +30,10 @@
           ]
         }
       },
-      "synchronous": "DontWait"
-    },
+      "synchronous": "WaitForTask"
+    }
+  ],
+  "commands": [
     {
       "route": "indexes/movies/documents",
       "method": "POST",
