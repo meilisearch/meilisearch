@@ -2662,17 +2662,18 @@ pub(crate) mod tests {
                 settings.set_filterable_fields(HashSet::from([S("age")]));
             })
             .unwrap();
+        // The order of the field id map shouldn't change
         db_snap!(index, fields_ids_map, @r###"
         0   name             |
-        1   realName         |
-        2   id               |
-        3   age              |
+        1   id               |
+        2   age              |
+        3   realName         |
         "###);
         db_snap!(index, searchable_fields, @r###"["name", "realName"]"###);
         db_snap!(index, fieldids_weights_map, @r###"
         fid weight
         0   0   |
-        1   1   |
+        3   1   |
         "###);
     }
 }

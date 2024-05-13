@@ -12,6 +12,7 @@ use time::OffsetDateTime;
 use super::index_documents::{IndexDocumentsConfig, Transform};
 use super::IndexerConfig;
 use crate::criterion::Criterion;
+use crate::documents::FieldIdMapper;
 use crate::error::UserError;
 use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
 use crate::order_by_map::OrderByMap;
@@ -461,8 +462,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(true)
     }
 
-    /// Updates the index's searchable attributes. This causes the field map to be recomputed to
-    /// reflect the order of the searchable attributes.
+    /// Updates the index's searchable attributes.
     fn update_searchable(&mut self) -> Result<bool> {
         match self.searchable_fields {
             Setting::Set(ref fields) => {
@@ -480,17 +480,20 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 // ids for any settings that uses the facets. (distinct_fields, filterable_fields).
                 let old_fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
 
-                let mut new_fields_ids_map = FieldsIdsMap::new();
-                // fields are deduplicated, only the first occurrence is taken into account
-                let names = fields.iter().unique().map(String::as_str).collect::<Vec<_>>();
+                // Since we're updating the settings we can only add new fields at the end of the field id map
+                let mut new_fields_ids_map = old_fields_ids_map.clone();
+                let names = fields
+                    .iter()
+                    // fields are deduplicated, only the first occurrence is taken into account
+                    .unique()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>();
 
                 // Add all the searchable attributes to the field map, and then add the
                 // remaining fields from the old field map to the new one
                 for name in names.iter() {
-                    new_fields_ids_map.insert(name).ok_or(UserError::AttributeLimitReached)?;
-                }
-
-                for (_, name) in old_fields_ids_map.iter() {
+                    // The fields ids map won't change the field id of already present elements thus only the
+                    // new fields will be inserted.
                     new_fields_ids_map.insert(name).ok_or(UserError::AttributeLimitReached)?;
                 }
 
