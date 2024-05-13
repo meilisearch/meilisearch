@@ -71,13 +71,13 @@ puffin = { version = "0.16.0", features = ["serialization"] }
 rand = "0.8.5"
 rayon = "1.8.0"
 regex = "1.10.2"
-reqwest = { version = "0.11.23", features = [
+reqwest = { version = "0.12.4", features = [
     "rustls-tls",
     "json",
 ], default-features = false }
 rustls = "0.21.12"
 rustls-pemfile = "1.0.2"
-segment = { version = "0.2.3", optional = true }
+segment = { version = "0.2.4", optional = true }
 serde = { version = "1.0.195", features = ["derive"] }
 serde_json = { version = "1.0.111", features = ["preserve_order"] }
 sha2 = "0.10.8"
