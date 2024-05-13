@@ -2627,4 +2627,52 @@ pub(crate) mod tests {
 
         db_snap!(index, geo_faceted_documents_ids); // ensure that no documents were inserted
     }
+
+    #[test]
+    fn swapping_searchable_attributes() {
+        // See https://github.com/meilisearch/meilisearch/issues/4484
+
+        let index = TempIndex::new();
+
+        index
+            .update_settings(|settings| {
+                settings.set_searchable_fields(vec![S("name")]);
+                settings.set_filterable_fields(HashSet::from([S("age")]));
+            })
+            .unwrap();
+
+        index
+            .add_documents(documents!({ "id": 1, "name": "Many", "age": 28, "realName": "Maxime" }))
+            .unwrap();
+        db_snap!(index, fields_ids_map, @r###"
+        0   name             |
+        1   id               |
+        2   age              |
+        3   realName         |
+        "###);
+        db_snap!(index, searchable_fields, @r###"["name"]"###);
+        db_snap!(index, fieldids_weights_map, @r###"
+        fid weight
+        0   0   |
+        "###);
+
+        index
+            .update_settings(|settings| {
+                settings.set_searchable_fields(vec![S("name"), S("realName")]);
+                settings.set_filterable_fields(HashSet::from([S("age")]));
+            })
+            .unwrap();
+        db_snap!(index, fields_ids_map, @r###"
+        0   name             |
+        1   realName         |
+        2   id               |
+        3   age              |
+        "###);
+        db_snap!(index, searchable_fields, @r###"["name", "realName"]"###);
+        db_snap!(index, fieldids_weights_map, @r###"
+        fid weight
+        0   0   |
+        1   1   |
+        "###);
+    }
 }
