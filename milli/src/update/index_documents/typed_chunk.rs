@@ -193,6 +193,10 @@ pub(crate) fn write_typed_chunk_into_index(
             let span = tracing::trace_span!(target: "indexing::write_db", "documents");
             let _entered = span.enter();
 
+            let fields_ids_map = index.fields_ids_map(wtxn)?;
+            let vectors_fid =
+                fields_ids_map.id(crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME);
+
             let mut builder = MergerBuilder::new(keep_latest_obkv as MergeFn);
             for typed_chunk in typed_chunks {
                 let TypedChunk::Documents(chunk) = typed_chunk else {
@@ -206,6 +210,8 @@ pub(crate) fn write_typed_chunk_into_index(
 
             let mut docids = index.documents_ids(wtxn)?;
             let mut iter = merger.into_stream_merger_iter()?;
+
+            let mut vectors_buffer = Vec::new();
             while let Some((key, reader)) = iter.next()? {
                 let mut writer: KvWriter<_, FieldId> = KvWriter::memory();
                 let reader: KvReader<FieldId> = KvReader::new(reader);
@@ -219,6 +225,24 @@ pub(crate) fn write_typed_chunk_into_index(
                     let del_add_reader = KvReaderDelAdd::new(value);
 
                     if let Some(addition) = del_add_reader.get(DelAdd::Addition) {
+                        let addition = match vectors_fid {
+                            // for the "_vectors" field, only keep vectors that are marked as userProvided
+                            Some(vectors_fid) if vectors_fid == field_id => 'vectors: {
+                                vectors_buffer.clear();
+                                let Ok(mut vectors) =
+                                    crate::vector::parsed_vectors::ParsedVectors::from_bytes(
+                                        addition,
+                                    )
+                                else {
+                                    break 'vectors addition;
+                                };
+                                vectors.retain_user_provided_vectors();
+                                serde_json::to_writer(&mut vectors_buffer, &vectors.0)
+                                    .map_err(InternalError::SerdeJson)?;
+                                &vectors_buffer
+                            }
+                            _ => addition,
+                        };
                         writer.insert(field_id, addition)?;
                     }
                 }
