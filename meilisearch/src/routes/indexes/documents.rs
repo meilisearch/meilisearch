@@ -587,7 +587,7 @@ pub struct DocumentEditionByFunction {
 }
 
 pub async fn edit_documents_by_function(
-    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ALL }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     body: AwebJson<DocumentEditionByFunction, DeserrJsonError>,
     req: HttpRequest,
