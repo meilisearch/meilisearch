@@ -132,17 +132,17 @@ fn test_attribute_fid_simple() {
 fn test_attribute_fid_ngrams() {
     let index = create_index();
     db_snap!(index, fields_ids_map, @r###"
-    0   title            |
-    1   description      |
-    2   plot             |
-    3   id               |
+    0   id               |
+    1   title            |
+    2   description      |
+    3   plot             |
     "###);
     db_snap!(index, searchable_fields, @r###"["title", "description", "plot"]"###);
     db_snap!(index, fieldids_weights_map, @r###"
     fid weight
-    0   0   |
-    1   1   |
-    2   2   |
+    1   0   |
+    2   1   |
+    3   2   |
     "###);
 
     let txn = index.read_txn().unwrap();

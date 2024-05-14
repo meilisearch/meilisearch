@@ -85,6 +85,9 @@ impl SearchQueue {
                 },
 
                 search_request = receive_new_searches.recv() => {
+                    if search_request.is_none() {
+                        continue;
+                    }
                     // this unwrap is safe because we're sure the `SearchQueue` still lives somewhere in actix-web
                     let search_request = search_request.unwrap();
                     if searches_running < usize::from(parallelism) && queue.is_empty() {

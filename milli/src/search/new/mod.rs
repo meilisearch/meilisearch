@@ -76,7 +76,7 @@ impl<'ctx> SearchContext<'ctx> {
 
         let mut exact = Vec::new();
         let mut tolerant = Vec::new();
-        for (name, fid, weight) in searchable_fids {
+        for (_name, fid, weight) in searchable_fids {
             if exact_attributes_ids.contains(&fid) {
                 exact.push((fid, weight));
             } else {
@@ -96,22 +96,26 @@ impl<'ctx> SearchContext<'ctx> {
         })
     }
 
-    // TODO: TAMO continue here
     pub fn searchable_attributes(&mut self, attributes_to_search_on: &'ctx [String]) -> Result<()> {
-        if attributes_to_search_on.contains(&String::from("*")) {
-            return Ok(());
-        }
-
-        let fids_map = self.index.fields_ids_map(self.txn)?;
+        let user_defined_searchable = self.index.user_defined_searchable_fields(self.txn)?;
         let searchable_names = self.index.searchable_fields_and_weights(self.txn)?;
         let exact_attributes_ids = self.index.exact_attributes_ids(self.txn)?;
 
+        let mut wildcard = false;
+
         let mut restricted_fids = SearchableFids::default();
         for field_name in attributes_to_search_on {
+            if field_name == "*" {
+                wildcard = true;
+                // we cannot early exit as we want to returns error in case of unknown fields
+                continue;
+            }
             let searchable_weight = searchable_names.iter().find(|(name, _, _)| name == field_name);
             let (fid, weight) = match searchable_weight {
                 // The Field id exist and the field is searchable
                 Some((_name, fid, weight)) => (*fid, *weight),
+                // The field is not searchable but the user didn't define any searchable attributes
+                None if user_defined_searchable.is_none() => continue,
                 // The field is not searchable => User error
                 None => {
                     let (valid_fields, hidden_fields) = self.index.remove_hidden_fields(
@@ -136,7 +140,16 @@ impl<'ctx> SearchContext<'ctx> {
             };
         }
 
-        self.searchable_fids = restricted_fids;
+        if wildcard {
+            let (exact, tolerant) = searchable_names
+                .iter()
+                .map(|(_name, fid, weight)| (*fid, *weight))
+                .partition(|(fid, _weight)| exact_attributes_ids.contains(fid));
+
+            self.searchable_fids = SearchableFids { tolerant, exact };
+        } else {
+            self.searchable_fids = restricted_fids;
+        }
 
         Ok(())
     }

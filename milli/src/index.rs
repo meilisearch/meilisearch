@@ -2722,8 +2722,8 @@ pub(crate) mod tests {
         // We should find tamo first
         insta::assert_debug_snapshot!(results.documents_ids, @r###"
         [
-            0,
             1,
+            0,
         ]
         "###);
     }

@@ -12,7 +12,6 @@ use time::OffsetDateTime;
 use super::index_documents::{IndexDocumentsConfig, Transform};
 use super::IndexerConfig;
 use crate::criterion::Criterion;
-use crate::documents::FieldIdMapper;
 use crate::error::UserError;
 use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
 use crate::order_by_map::OrderByMap;
@@ -1562,8 +1561,9 @@ mod tests {
         // we must find the appropriate document.
         let result = index.search(&rtxn).query(r#""kevin""#).execute().unwrap();
         let documents = index.documents(&rtxn, result.documents_ids).unwrap();
+        let fid_map = index.fields_ids_map(&rtxn).unwrap();
         assert_eq!(documents.len(), 1);
-        assert_eq!(documents[0].1.get(0), Some(&br#""kevin""#[..]));
+        assert_eq!(documents[0].1.get(fid_map.id("name").unwrap()), Some(&br#""kevin""#[..]));
         drop(rtxn);
 
         // We change the searchable fields to be the "name" field only.
@@ -1575,12 +1575,16 @@ mod tests {
 
         // Check that the searchable field have been reset and documents are found now.
         let rtxn = index.read_txn().unwrap();
+        let fid_map = index.fields_ids_map(&rtxn).unwrap();
+        let user_defined_searchable_fields = index.user_defined_searchable_fields(&rtxn).unwrap();
+        snapshot!(format!("{user_defined_searchable_fields:?}"), @"None");
+        // the searchable fields should contain all the fields
         let searchable_fields = index.searchable_fields(&rtxn).unwrap();
-        snapshot!(format!("{searchable_fields:?}"), @r###"["name", "id", "age"]"###);
+        snapshot!(format!("{searchable_fields:?}"), @r###"["id", "name", "age"]"###);
         let result = index.search(&rtxn).query("23").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 1);
         let documents = index.documents(&rtxn, result.documents_ids).unwrap();
-        assert_eq!(documents[0].1.get(0), Some(&br#""kevin""#[..]));
+        assert_eq!(documents[0].1.get(fid_map.id("name").unwrap()), Some(&br#""kevin""#[..]));
     }
 
     #[test]

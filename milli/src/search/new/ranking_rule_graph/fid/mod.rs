@@ -7,12 +7,12 @@ use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::resolve_query_graph::compute_query_term_subset_docids_within_field_id;
 use crate::search::new::SearchContext;
-use crate::Result;
+use crate::{FieldId, Result};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct FidCondition {
     term: LocatedQueryTermSubset,
-    fid: u16,
+    fid: Option<FieldId>,
 }
 
 pub enum FidGraph {}
@@ -26,13 +26,16 @@ impl RankingRuleGraphTrait for FidGraph {
         universe: &RoaringBitmap,
     ) -> Result<ComputedCondition> {
         let FidCondition { term, .. } = condition;
-        // maybe compute_query_term_subset_docids_within_field_id should accept a universe as argument
-        let mut docids = compute_query_term_subset_docids_within_field_id(
-            ctx,
-            &term.term_subset,
-            condition.fid,
-        )?;
-        docids &= universe;
+
+        let docids = if let Some(fid) = condition.fid {
+            // maybe compute_query_term_subset_docids_within_field_id should accept a universe as argument
+            let mut docids =
+                compute_query_term_subset_docids_within_field_id(ctx, &term.term_subset, fid)?;
+            docids &= universe;
+            docids
+        } else {
+            RoaringBitmap::new()
+        };
 
         Ok(ComputedCondition {
             docids,
@@ -68,24 +71,27 @@ impl RankingRuleGraphTrait for FidGraph {
             all_fields.extend(fields);
         }
 
+        let weights_map = ctx.index.fieldids_weights_map(ctx.txn)?;
+
         let mut edges = vec![];
         for fid in all_fields.iter().copied() {
+            let weight = weights_map.weight(fid).unwrap();
             edges.push((
-                fid as u32 * term.term_ids.len() as u32,
-                conditions_interner.insert(FidCondition { term: term.clone(), fid }),
+                weight as u32 * term.term_ids.len() as u32,
+                conditions_interner.insert(FidCondition { term: term.clone(), fid: Some(fid) }),
             ));
         }
 
         // always lookup the max_fid if we don't already and add an artificial condition for max scoring
-        let max_fid: Option<u16> = ctx.index.searchable_fields_ids(ctx.txn)?.into_iter().max();
+        let max_weight: Option<u16> = weights_map.max_weight();
 
-        if let Some(max_fid) = max_fid {
-            if !all_fields.contains(&max_fid) {
+        if let Some(max_weight) = max_weight {
+            if !all_fields.contains(&max_weight) {
                 edges.push((
-                    max_fid as u32 * term.term_ids.len() as u32, // TODO improve the fid score i.e. fid^10.
+                    max_weight as u32 * term.term_ids.len() as u32, // TODO improve the fid score i.e. fid^10.
                     conditions_interner.insert(FidCondition {
                         term: term.clone(), // TODO remove this ugly clone
-                        fid: max_fid,
+                        fid: None,
                     }),
                 ));
             }
