@@ -234,16 +234,23 @@ pub(crate) fn write_typed_chunk_into_index(
                                         addition,
                                     )
                                 else {
-                                    break 'vectors addition;
+                                    break 'vectors Some(addition);
                                 };
                                 vectors.retain_user_provided_vectors();
-                                serde_json::to_writer(&mut vectors_buffer, &vectors.0)
+                                let crate::vector::parsed_vectors::ParsedVectors(vectors) = vectors;
+                                if vectors.is_empty() {
+                                    break 'vectors None;
+                                }
+
+                                serde_json::to_writer(&mut vectors_buffer, &vectors)
                                     .map_err(InternalError::SerdeJson)?;
-                                &vectors_buffer
+                                Some(vectors_buffer.as_slice())
                             }
-                            _ => addition,
+                            _ => Some(addition),
                         };
-                        writer.insert(field_id, addition)?;
+                        if let Some(addition) = addition {
+                            writer.insert(field_id, addition)?;
+                        }
                     }
                 }
 
