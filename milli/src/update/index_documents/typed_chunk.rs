@@ -234,11 +234,13 @@ pub(crate) fn write_typed_chunk_into_index(
                                         addition,
                                     )
                                 else {
+                                    // if the `_vectors` field cannot be parsed as map of vectors, just write it as-is
                                     break 'vectors Some(addition);
                                 };
                                 vectors.retain_user_provided_vectors();
                                 let crate::vector::parsed_vectors::ParsedVectors(vectors) = vectors;
                                 if vectors.is_empty() {
+                                    // skip writing empty `_vectors` map
                                     break 'vectors None;
                                 }
 
