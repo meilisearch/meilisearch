@@ -120,7 +120,7 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     #[error("The `_vectors.{subfield}` field in the document with id: `{document_id}` is not an array. Was expecting an array of floats or an array of arrays of floats but instead got `{value}`.")]
     InvalidVectorsType { document_id: Value, value: Value, subfield: String },
     #[error("The `_vectors` field in the document with id: `{document_id}` is not an object. Was expecting an object with a key for each embedder with manually provided vectors, but instead got `{value}`")]
-    InvalidVectorsMapType { document_id: Value, value: Value },
+    InvalidVectorsMapType { document_id: String, value: Value },
     #[error("{0}")]
     InvalidFilter(String),
     #[error("Invalid type for filter subexpression: expected: {}, found: {1}.", .0.join(", "))]

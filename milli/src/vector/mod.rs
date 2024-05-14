@@ -148,6 +148,10 @@ impl EmbeddingConfigs {
         self.get(self.get_default_embedder_name())
     }
 
+    pub fn inner_as_ref(&self) -> &HashMap<String, (Arc<Embedder>, Arc<Prompt>)> {
+        &self.0
+    }
+
     /// Get the name of the default embedder configuration.
     ///
     /// The default embedder is determined as follows:
