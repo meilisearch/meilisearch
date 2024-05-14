@@ -178,8 +178,7 @@ pub struct SearchableFids {
 
 impl SearchableFids {
     pub fn contains(&self, fid: &FieldId) -> bool {
-        self.tolerant.iter().find(|(id, _)| id == fid).is_some()
-            || self.exact.iter().find(|(id, _)| id == fid).is_some()
+        self.tolerant.iter().any(|(id, _)| id == fid) || self.exact.iter().any(|(id, _)| id == fid)
     }
 }
 

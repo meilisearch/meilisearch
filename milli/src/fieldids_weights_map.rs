@@ -26,7 +26,7 @@ impl FieldidsWeightsMap {
         self.map.values().copied().max()
     }
 
-    pub fn ids<'a>(&'a self) -> impl Iterator<Item = FieldId> + 'a {
+    pub fn ids(&self) -> impl Iterator<Item = FieldId> + '_ {
         self.map.keys().copied()
     }
 }

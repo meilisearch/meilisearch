@@ -101,7 +101,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
 
     let mut ranking_rule_universes: Vec<RoaringBitmap> =
         vec![RoaringBitmap::default(); ranking_rules_len];
-    ranking_rule_universes[0] = universe.clone();
+    ranking_rule_universes[0].clone_from(universe);
     let mut cur_ranking_rule_index = 0;
 
     /// Finish iterating over the current ranking rule, yielding
@@ -232,7 +232,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         }
 
         cur_ranking_rule_index += 1;
-        ranking_rule_universes[cur_ranking_rule_index] = next_bucket.candidates.clone();
+        ranking_rule_universes[cur_ranking_rule_index].clone_from(&next_bucket.candidates);
         logger.start_iteration_ranking_rule(
             cur_ranking_rule_index,
             ranking_rules[cur_ranking_rule_index].as_ref(),

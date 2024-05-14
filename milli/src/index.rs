@@ -632,7 +632,7 @@ impl Index {
         // Special case if there is no user defined fields.
         // Then the whole field id map is marked as searchable.
         if user_fields.is_none() {
-            let mut weights = self.fieldids_weights_map(&wtxn)?;
+            let mut weights = self.fieldids_weights_map(wtxn)?;
             let mut searchable = Vec::new();
             for (weight, (fid, name)) in fields_ids_map.iter().enumerate() {
                 searchable.push(name);
@@ -648,7 +648,7 @@ impl Index {
         // We can write the user defined searchable fields as-is.
         self.put_user_defined_searchable_fields(wtxn, user_fields)?;
 
-        let mut weights = self.fieldids_weights_map(&wtxn)?;
+        let mut weights = self.fieldids_weights_map(wtxn)?;
 
         // Now we generate the real searchable fields:
         // 1. Take the user defined searchable fields as-is to keep the priority defined by the attributes criterion.
@@ -666,7 +666,7 @@ impl Index {
 
                     let weight: u16 =
                         weight.try_into().map_err(|_| UserError::AttributeLimitReached)?;
-                    weights.insert(id, weight as u16);
+                    weights.insert(id, weight);
                 }
             }
         }
@@ -701,7 +701,7 @@ impl Index {
         self.main
             .remap_types::<Str, SerdeBincode<Vec<&'t str>>>()
             .get(rtxn, main_key::SEARCHABLE_FIELDS_KEY)?
-            .map(|fields| Ok(fields.into_iter().map(|field| Cow::Borrowed(field)).collect()))
+            .map(|fields| Ok(fields.into_iter().map(Cow::Borrowed).collect()))
             .unwrap_or_else(|| {
                 Ok(self
                     .fields_ids_map(rtxn)?
