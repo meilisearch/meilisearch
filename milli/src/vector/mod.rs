@@ -13,6 +13,7 @@ pub mod error;
 pub mod hf;
 pub mod manual;
 pub mod openai;
+pub mod parsed_vectors;
 pub mod settings;
 
 pub mod ollama;
