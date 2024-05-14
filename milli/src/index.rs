@@ -2662,6 +2662,7 @@ pub(crate) mod tests {
                 settings.set_filterable_fields(HashSet::from([S("age")]));
             })
             .unwrap();
+
         // The order of the field id map shouldn't change
         db_snap!(index, fields_ids_map, @r###"
         0   name             |
@@ -2674,6 +2675,56 @@ pub(crate) mod tests {
         fid weight
         0   0   |
         3   1   |
+        "###);
+    }
+
+    #[test]
+    fn attribute_weights_after_swapping_searchable_attributes() {
+        // See https://github.com/meilisearch/meilisearch/issues/4484
+
+        let index = TempIndex::new();
+
+        index
+            .update_settings(|settings| {
+                settings.set_searchable_fields(vec![S("name"), S("beverage")]);
+            })
+            .unwrap();
+
+        index
+            .add_documents(documents!([
+                { "id": 0, "name": "kefir", "beverage": "water" },
+                { "id": 1, "name": "tamo",  "beverage": "kefir" }
+            ]))
+            .unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let mut search = index.search(&rtxn);
+        let results = search.query("kefir").execute().unwrap();
+
+        // We should find kefir the dog first
+        insta::assert_debug_snapshot!(results.documents_ids, @r###"
+        [
+            0,
+            1,
+        ]
+        "###);
+
+        index
+            .update_settings(|settings| {
+                settings.set_searchable_fields(vec![S("beverage"), S("name")]);
+            })
+            .unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let mut search = index.search(&rtxn);
+        let results = search.query("kefir").execute().unwrap();
+
+        // We should find tamo first
+        insta::assert_debug_snapshot!(results.documents_ids, @r###"
+        [
+            0,
+            1,
+        ]
         "###);
     }
 }
