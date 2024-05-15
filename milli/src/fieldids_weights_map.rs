@@ -21,9 +21,9 @@ impl FieldidsWeightsMap {
 
     /// Create the map from the fields ids maps.
     /// Should only be called in the case there are NO searchable attributes.
-    /// The weights and the fields ids will have the same values.
+    /// All the fields will be inserted in the order of the fields ids map with a weight of 0.
     pub fn from_field_id_map_without_searchable(fid_map: &FieldsIdsMap) -> Self {
-        FieldidsWeightsMap { map: fid_map.ids().map(|fid| (fid, fid)).collect() }
+        FieldidsWeightsMap { map: fid_map.ids().map(|fid| (fid, 0)).collect() }
     }
 
     /// Removes a field id from the map, returning the associated weight previously in the map.

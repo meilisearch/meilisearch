@@ -2492,7 +2492,7 @@ pub(crate) mod tests {
         db_snap!(index, fieldids_weights_map, @r###"
         fid weight
         0   0   |
-        1   1   |
+        1   0   |
         "###);
 
         index.delete_documents(Default::default());
@@ -2512,7 +2512,7 @@ pub(crate) mod tests {
         db_snap!(index, fieldids_weights_map, @r###"
         fid weight
         0   0   |
-        1   1   |
+        1   0   |
         "###);
 
         index
@@ -2537,7 +2537,7 @@ pub(crate) mod tests {
         db_snap!(index, fieldids_weights_map, @r###"
         fid weight
         0   0   |
-        1   1   |
+        1   0   |
         "###);
 
         let rtxn = index.read_txn().unwrap();

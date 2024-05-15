@@ -1587,8 +1587,8 @@ mod tests {
         db_snap!(index, fieldids_weights_map, @r###"
         fid weight
         0   0   |
-        1   1   |
-        2   2   |
+        1   0   |
+        2   0   |
         "###);
 
         // Check that the searchable field have been reset and documents are found now.
