@@ -66,7 +66,7 @@ pub struct SearchContext<'ctx> {
     pub phrase_interner: DedupInterner<Phrase>,
     pub term_interner: Interner<QueryTerm>,
     pub phrase_docids: PhraseDocIdsCache,
-    pub searchable_fids: SearchableFids,
+    pub restricted_fids: Option<RestrictedFids>,
 }
 
 impl<'ctx> SearchContext<'ctx> {
@@ -92,7 +92,7 @@ impl<'ctx> SearchContext<'ctx> {
             phrase_interner: <_>::default(),
             term_interner: <_>::default(),
             phrase_docids: <_>::default(),
-            searchable_fids: SearchableFids { tolerant, exact },
+            restricted_fids: None,
         })
     }
 
@@ -103,7 +103,7 @@ impl<'ctx> SearchContext<'ctx> {
 
         let mut wildcard = false;
 
-        let mut restricted_fids = SearchableFids::default();
+        let mut restricted_fids = RestrictedFids::default();
         for field_name in attributes_to_search_on {
             if field_name == "*" {
                 wildcard = true;
@@ -141,14 +141,9 @@ impl<'ctx> SearchContext<'ctx> {
         }
 
         if wildcard {
-            let (exact, tolerant) = searchable_names
-                .iter()
-                .map(|(_name, fid, weight)| (*fid, *weight))
-                .partition(|(fid, _weight)| exact_attributes_ids.contains(fid));
-
-            self.searchable_fids = SearchableFids { tolerant, exact };
+            self.restricted_fids = None;
         } else {
-            self.searchable_fids = restricted_fids;
+            self.restricted_fids = Some(restricted_fids);
         }
 
         Ok(())
@@ -171,12 +166,12 @@ impl Word {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct SearchableFids {
+pub struct RestrictedFids {
     pub tolerant: Vec<(FieldId, Weight)>,
     pub exact: Vec<(FieldId, Weight)>,
 }
 
-impl SearchableFids {
+impl RestrictedFids {
     pub fn contains(&self, fid: &FieldId) -> bool {
         self.tolerant.iter().any(|(id, _)| id == fid) || self.exact.iter().any(|(id, _)| id == fid)
     }
