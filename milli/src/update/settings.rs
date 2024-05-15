@@ -475,33 +475,25 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                     return Ok(false);
                 }
 
-                // every time the searchable attributes are updated, we need to update the
-                // ids for any settings that uses the facets. (distinct_fields, filterable_fields).
-                let old_fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
-
                 // Since we're updating the settings we can only add new fields at the end of the field id map
-                let mut new_fields_ids_map = old_fields_ids_map.clone();
-                let names = fields
-                    .iter()
-                    // fields are deduplicated, only the first occurrence is taken into account
-                    .unique()
-                    .map(String::as_str)
-                    .collect::<Vec<_>>();
+                let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
+                // fields are deduplicated, only the first occurrence is taken into account
+                let names = fields.iter().unique().map(String::as_str).collect::<Vec<_>>();
 
                 // Add all the searchable attributes to the field map, and then add the
                 // remaining fields from the old field map to the new one
                 for name in names.iter() {
                     // The fields ids map won't change the field id of already present elements thus only the
                     // new fields will be inserted.
-                    new_fields_ids_map.insert(name).ok_or(UserError::AttributeLimitReached)?;
+                    fields_ids_map.insert(name).ok_or(UserError::AttributeLimitReached)?;
                 }
 
                 self.index.put_all_searchable_fields_from_fields_ids_map(
                     self.wtxn,
                     Some(&names),
-                    &new_fields_ids_map,
+                    &fields_ids_map,
                 )?;
-                self.index.put_fields_ids_map(self.wtxn, &new_fields_ids_map)?;
+                self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
                 Ok(true)
             }
             Setting::Reset => Ok(self.index.delete_all_searchable_fields(self.wtxn)?),

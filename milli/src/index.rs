@@ -26,9 +26,9 @@ use crate::proximity::ProximityPrecision;
 use crate::vector::EmbeddingConfig;
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
-    FacetDistribution, FieldDistribution, FieldId, FieldIdWordCountCodec, FieldidsWeightsMap,
-    GeoPoint, ObkvCodec, Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec,
-    Weight, BEU16, BEU32, BEU64,
+    FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
+    FieldidsWeightsMap, GeoPoint, ObkvCodec, Result, RoaringBitmapCodec, RoaringBitmapLenCodec,
+    Search, U8StrStrCodec, Weight, BEU16, BEU32, BEU64,
 };
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
@@ -446,22 +446,25 @@ impl Index {
     pub fn searchable_fields_and_weights<'a>(
         &self,
         rtxn: &'a RoTxn,
-    ) -> heed::Result<Vec<(Cow<'a, str>, FieldId, Weight)>> {
+    ) -> Result<Vec<(Cow<'a, str>, FieldId, Weight)>> {
         let fid_map = self.fields_ids_map(rtxn)?;
         let weight_map = self.fieldids_weights_map(rtxn)?;
         let searchable = self.searchable_fields(rtxn)?;
 
-        Ok(searchable
+        searchable
             .into_iter()
-            .map(|field| {
-                // the searchable attributes are a subset of the field id map
-                let fid = fid_map.id(&field).unwrap();
-                // all the searchable fields have a weight
-                let weight = weight_map.weight(fid).unwrap();
+            .map(|field| -> Result<_> {
+                let fid = fid_map.id(&field).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
+                    field_name: field.to_string(),
+                    process: "searchable_fields_and_weights",
+                })?;
+                let weight = weight_map
+                    .weight(fid)
+                    .ok_or(InternalError::FieldidsWeightsMapMissingEntry { key: fid })?;
 
-                (field, fid, weight)
+                Ok((field, fid, weight))
             })
-            .collect())
+            .collect()
     }
 
     /* geo rtree */

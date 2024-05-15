@@ -7,7 +7,7 @@ use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::resolve_query_graph::compute_query_term_subset_docids_within_field_id;
 use crate::search::new::SearchContext;
-use crate::{FieldId, Result};
+use crate::{FieldId, InternalError, Result};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct FidCondition {
@@ -29,10 +29,9 @@ impl RankingRuleGraphTrait for FidGraph {
 
         let docids = if let Some(fid) = condition.fid {
             // maybe compute_query_term_subset_docids_within_field_id should accept a universe as argument
-            let mut docids =
+            let docids =
                 compute_query_term_subset_docids_within_field_id(ctx, &term.term_subset, fid)?;
-            docids &= universe;
-            docids
+            docids & universe
         } else {
             RoaringBitmap::new()
         };
@@ -75,7 +74,9 @@ impl RankingRuleGraphTrait for FidGraph {
 
         let mut edges = vec![];
         for fid in all_fields.iter().copied() {
-            let weight = weights_map.weight(fid).unwrap();
+            let weight = weights_map
+                .weight(fid)
+                .ok_or(InternalError::FieldidsWeightsMapMissingEntry { key: fid })?;
             edges.push((
                 weight as u32 * term.term_ids.len() as u32,
                 conditions_interner.insert(FidCondition { term: term.clone(), fid: Some(fid) }),
