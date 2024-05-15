@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{FieldId, Weight};
+use crate::{FieldId, FieldsIdsMap, Weight};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct FieldidsWeightsMap {
@@ -17,6 +17,13 @@ impl FieldidsWeightsMap {
     /// If the map did have this key present, the value is updated, and the old value is returned.
     pub fn insert(&mut self, fid: FieldId, weight: Weight) -> Option<Weight> {
         self.map.insert(fid, weight)
+    }
+
+    /// Create the map from the fields ids maps.
+    /// Should only be called in the case there are NO searchable attributes.
+    /// The weights and the fields ids will have the same values.
+    pub fn from_field_id_map_without_searchable(fid_map: &FieldsIdsMap) -> Self {
+        FieldidsWeightsMap { map: fid_map.ids().map(|fid| (fid, fid)).collect() }
     }
 
     /// Removes a field id from the map, returning the associated weight previously in the map.

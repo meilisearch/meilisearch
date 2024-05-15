@@ -436,11 +436,20 @@ impl Index {
 
     /// Get the fieldids weights map which associates the field ids to their weights
     pub fn fieldids_weights_map(&self, rtxn: &RoTxn) -> heed::Result<FieldidsWeightsMap> {
-        Ok(self
-            .main
+        self.main
             .remap_types::<Str, SerdeJson<_>>()
             .get(rtxn, main_key::FIELDIDS_WEIGHTS_MAP_KEY)?
-            .unwrap_or_default())
+            .map(Ok)
+            .unwrap_or_else(|| {
+                Ok(FieldidsWeightsMap::from_field_id_map_without_searchable(
+                    &self.fields_ids_map(rtxn)?,
+                ))
+            })
+    }
+
+    /// Delete the fieldsids weights map
+    pub fn delete_fieldids_weights_map(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::FIELDIDS_WEIGHTS_MAP_KEY)
     }
 
     pub fn searchable_fields_and_weights<'a>(
@@ -629,29 +638,13 @@ impl Index {
     pub(crate) fn put_all_searchable_fields_from_fields_ids_map(
         &self,
         wtxn: &mut RwTxn,
-        user_fields: Option<&[&str]>,
+        user_fields: &[&str],
         fields_ids_map: &FieldsIdsMap,
     ) -> Result<()> {
-        // Special case if there is no user defined fields.
-        // Then the whole field id map is marked as searchable.
-        if user_fields.is_none() {
-            let mut weights = self.fieldids_weights_map(wtxn)?;
-            let mut searchable = Vec::new();
-            for (weight, (fid, name)) in fields_ids_map.iter().enumerate() {
-                searchable.push(name);
-                weights.insert(fid, weight as u16);
-            }
-            self.put_searchable_fields(wtxn, &searchable)?;
-            self.put_fieldids_weights_map(wtxn, &weights)?;
-            return Ok(());
-        }
-
-        let user_fields = user_fields.unwrap();
-
         // We can write the user defined searchable fields as-is.
         self.put_user_defined_searchable_fields(wtxn, user_fields)?;
 
-        let mut weights = self.fieldids_weights_map(wtxn)?;
+        let mut weights = FieldidsWeightsMap::default();
 
         // Now we generate the real searchable fields:
         // 1. Take the user defined searchable fields as-is to keep the priority defined by the attributes criterion.
@@ -682,6 +675,7 @@ impl Index {
     pub(crate) fn delete_all_searchable_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
         let did_delete_searchable = self.delete_searchable_fields(wtxn)?;
         let did_delete_user_defined = self.delete_user_defined_searchable_fields(wtxn)?;
+        self.delete_fieldids_weights_map(wtxn)?;
         Ok(did_delete_searchable || did_delete_user_defined)
     }
 

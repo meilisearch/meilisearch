@@ -490,7 +490,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
                 self.index.put_all_searchable_fields_from_fields_ids_map(
                     self.wtxn,
-                    Some(&names),
+                    &names,
                     &fields_ids_map,
                 )?;
                 self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
@@ -1228,11 +1228,13 @@ impl InnerIndexSettings {
             .map(|searchable| searchable.iter().map(|s| s.as_str()).collect::<Vec<_>>());
 
         // in case new fields were introduced we're going to recreate the searchable fields.
-        index.put_all_searchable_fields_from_fields_ids_map(
-            wtxn,
-            searchable_fields.as_deref(),
-            &self.fields_ids_map,
-        )?;
+        if let Some(searchable_fields) = searchable_fields {
+            index.put_all_searchable_fields_from_fields_ids_map(
+                wtxn,
+                &searchable_fields,
+                &self.fields_ids_map,
+            )?;
+        }
         let searchable_fields_ids = index.searchable_fields_ids(wtxn)?;
         self.searchable_fields_ids = searchable_fields_ids;
 
@@ -1513,7 +1515,7 @@ mod tests {
     use crate::error::Error;
     use crate::index::tests::TempIndex;
     use crate::update::ClearDocuments;
-    use crate::{Criterion, Filter, SearchResult};
+    use crate::{db_snap, Criterion, Filter, SearchResult};
 
     #[test]
     fn set_and_reset_searchable_fields() {
@@ -1542,6 +1544,17 @@ mod tests {
 
         wtxn.commit().unwrap();
 
+        db_snap!(index, fields_ids_map, @r###"
+        0   id               |
+        1   name             |
+        2   age              |
+        "###);
+        db_snap!(index, searchable_fields, @r###"["name"]"###);
+        db_snap!(index, fieldids_weights_map, @r###"
+        fid weight
+        1   0   |
+        "###);
+
         // Check that the searchable field is correctly set to "name" only.
         let rtxn = index.read_txn().unwrap();
         // When we search for something that is not in
@@ -1564,6 +1577,19 @@ mod tests {
                 settings.reset_searchable_fields();
             })
             .unwrap();
+
+        db_snap!(index, fields_ids_map, @r###"
+        0   id               |
+        1   name             |
+        2   age              |
+        "###);
+        db_snap!(index, searchable_fields, @r###"["id", "name", "age"]"###);
+        db_snap!(index, fieldids_weights_map, @r###"
+        fid weight
+        0   0   |
+        1   1   |
+        2   2   |
+        "###);
 
         // Check that the searchable field have been reset and documents are found now.
         let rtxn = index.read_txn().unwrap();
