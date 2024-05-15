@@ -158,7 +158,7 @@ impl<'a> Search<'a> {
         let mut ctx = SearchContext::new(self.index, self.rtxn)?;
 
         if let Some(searchable_attributes) = self.searchable_attributes {
-            ctx.searchable_attributes(searchable_attributes)?;
+            ctx.attributes_to_search_on(searchable_attributes)?;
         }
 
         let universe = filtered_universe(&ctx, &self.filter)?;

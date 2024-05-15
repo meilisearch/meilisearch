@@ -96,9 +96,12 @@ impl<'ctx> SearchContext<'ctx> {
         })
     }
 
-    pub fn searchable_attributes(&mut self, attributes_to_search_on: &'ctx [String]) -> Result<()> {
+    pub fn attributes_to_search_on(
+        &mut self,
+        attributes_to_search_on: &'ctx [String],
+    ) -> Result<()> {
         let user_defined_searchable = self.index.user_defined_searchable_fields(self.txn)?;
-        let searchable_names = self.index.searchable_fields_and_weights(self.txn)?;
+        let searchable_fields_weights = self.index.searchable_fields_and_weights(self.txn)?;
         let exact_attributes_ids = self.index.exact_attributes_ids(self.txn)?;
 
         let mut wildcard = false;
@@ -110,7 +113,8 @@ impl<'ctx> SearchContext<'ctx> {
                 // we cannot early exit as we want to returns error in case of unknown fields
                 continue;
             }
-            let searchable_weight = searchable_names.iter().find(|(name, _, _)| name == field_name);
+            let searchable_weight =
+                searchable_fields_weights.iter().find(|(name, _, _)| name == field_name);
             let (fid, weight) = match searchable_weight {
                 // The Field id exist and the field is searchable
                 Some((_name, fid, weight)) => (*fid, *weight),
@@ -120,7 +124,7 @@ impl<'ctx> SearchContext<'ctx> {
                 None => {
                     let (valid_fields, hidden_fields) = self.index.remove_hidden_fields(
                         self.txn,
-                        searchable_names.iter().map(|(name, _, _)| name),
+                        searchable_fields_weights.iter().map(|(name, _, _)| name),
                     )?;
 
                     let field = field_name.to_string();
