@@ -147,3 +147,62 @@ impl VectorOrArrayOfVectors {
         Self { inner: Some(either::Either::Right(array_of_vec)) }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::VectorOrArrayOfVectors;
+
+    #[test]
+    fn array_of_vectors() {
+        let null: VectorOrArrayOfVectors = serde_json::from_str("null").unwrap();
+        let empty: VectorOrArrayOfVectors = serde_json::from_str("[]").unwrap();
+        let one: VectorOrArrayOfVectors = serde_json::from_str("[0.1]").unwrap();
+        let two: VectorOrArrayOfVectors = serde_json::from_str("[0.1, 0.2]").unwrap();
+        let one_vec: VectorOrArrayOfVectors = serde_json::from_str("[[0.1, 0.2]]").unwrap();
+        let two_vecs: VectorOrArrayOfVectors =
+            serde_json::from_str("[[0.1, 0.2], [0.3, 0.4]]").unwrap();
+
+        insta::assert_json_snapshot!(null.into_array_of_vectors(), @"null");
+        // 👇 is the the intended behavior? would rather expect [] here, but changing that is a breaking change...
+        insta::assert_json_snapshot!(empty.into_array_of_vectors(), @r###"
+        [
+          []
+        ]
+        "###);
+        insta::assert_json_snapshot!(one.into_array_of_vectors(), @r###"
+        [
+          [
+            0.1
+          ]
+        ]
+        "###);
+        insta::assert_json_snapshot!(two.into_array_of_vectors(), @r###"
+        [
+          [
+            0.1,
+            0.2
+          ]
+        ]
+        "###);
+        insta::assert_json_snapshot!(one_vec.into_array_of_vectors(), @r###"
+        [
+          [
+            0.1,
+            0.2
+          ]
+        ]
+        "###);
+        insta::assert_json_snapshot!(two_vecs.into_array_of_vectors(), @r###"
+        [
+          [
+            0.1,
+            0.2
+          ],
+          [
+            0.3,
+            0.4
+          ]
+        ]
+        "###);
+    }
+}
