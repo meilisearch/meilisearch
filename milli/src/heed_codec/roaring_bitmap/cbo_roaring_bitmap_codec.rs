@@ -195,7 +195,7 @@ mod tests {
     fn merge_cbo_roaring_bitmaps() {
         let mut buffer = Vec::new();
 
-        let small_data = vec![
+        let small_data = [
             RoaringBitmap::from_sorted_iter(1..4).unwrap(),
             RoaringBitmap::from_sorted_iter(2..5).unwrap(),
             RoaringBitmap::from_sorted_iter(4..6).unwrap(),
@@ -209,7 +209,7 @@ mod tests {
         let expected = RoaringBitmap::from_sorted_iter(1..6).unwrap();
         assert_eq!(bitmap, expected);
 
-        let medium_data = vec![
+        let medium_data = [
             RoaringBitmap::from_sorted_iter(1..4).unwrap(),
             RoaringBitmap::from_sorted_iter(2..5).unwrap(),
             RoaringBitmap::from_sorted_iter(4..8).unwrap(),

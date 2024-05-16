@@ -1,3 +1,4 @@
+use milli::Object;
 use serde::Serialize;
 use time::{Duration, OffsetDateTime};
 
@@ -54,6 +55,8 @@ pub struct DetailsView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub indexed_documents: Option<Option<u64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub edited_documents: Option<Option<u64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub primary_key: Option<Option<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provided_ids: Option<usize>,
@@ -69,6 +72,10 @@ pub struct DetailsView {
     pub original_filter: Option<Option<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dump_uid: Option<Option<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context: Option<Option<Object>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub function: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(flatten)]
     pub settings: Option<Box<Settings<Unchecked>>>,
@@ -86,6 +93,20 @@ impl From<Details> for DetailsView {
                     ..DetailsView::default()
                 }
             }
+            Details::DocumentEdition {
+                deleted_documents,
+                edited_documents,
+                original_filter,
+                context,
+                function,
+            } => DetailsView {
+                deleted_documents: Some(deleted_documents),
+                edited_documents: Some(edited_documents),
+                original_filter: Some(original_filter),
+                context: Some(context),
+                function: Some(function),
+                ..DetailsView::default()
+            },
             Details::SettingsUpdate { mut settings } => {
                 settings.hide_secrets();
                 DetailsView { settings: Some(settings), ..DetailsView::default() }

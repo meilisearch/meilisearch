@@ -31,7 +31,7 @@ use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::update::{
     IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings as MilliSettings,
 };
-use meilisearch_types::milli::{self, Filter};
+use meilisearch_types::milli::{self, Filter, Object};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::{compression, Index, VERSION_FILE_NAME};
@@ -103,6 +103,10 @@ pub(crate) enum IndexOperation {
         operations: Vec<DocumentOperation>,
         tasks: Vec<Task>,
     },
+    DocumentEdition {
+        index_uid: String,
+        task: Task,
+    },
     IndexDocumentDeletionByFilter {
         index_uid: String,
         task: Task,
@@ -161,7 +165,8 @@ impl Batch {
                 | IndexOperation::DocumentClear { tasks, .. } => {
                     RoaringBitmap::from_iter(tasks.iter().map(|task| task.uid))
                 }
-                IndexOperation::IndexDocumentDeletionByFilter { task, .. } => {
+                IndexOperation::DocumentEdition { task, .. }
+                | IndexOperation::IndexDocumentDeletionByFilter { task, .. } => {
                     RoaringBitmap::from_sorted_iter(std::iter::once(task.uid)).unwrap()
                 }
                 IndexOperation::SettingsAndDocumentOperation {
@@ -225,6 +230,7 @@ impl IndexOperation {
     pub fn index_uid(&self) -> &str {
         match self {
             IndexOperation::DocumentOperation { index_uid, .. }
+            | IndexOperation::DocumentEdition { index_uid, .. }
             | IndexOperation::IndexDocumentDeletionByFilter { index_uid, .. }
             | IndexOperation::DocumentClear { index_uid, .. }
             | IndexOperation::Settings { index_uid, .. }
@@ -239,6 +245,9 @@ impl fmt::Display for IndexOperation {
         match self {
             IndexOperation::DocumentOperation { .. } => {
                 f.write_str("IndexOperation::DocumentOperation")
+            }
+            IndexOperation::DocumentEdition { .. } => {
+                f.write_str("IndexOperation::DocumentEdition")
             }
             IndexOperation::IndexDocumentDeletionByFilter { .. } => {
                 f.write_str("IndexOperation::IndexDocumentDeletionByFilter")
@@ -283,6 +292,21 @@ impl IndexScheduler {
                     KindWithContent::DocumentDeletionByFilter { index_uid, .. } => {
                         Ok(Some(Batch::IndexOperation {
                             op: IndexOperation::IndexDocumentDeletionByFilter {
+                                index_uid: index_uid.clone(),
+                                task,
+                            },
+                            must_create_index: false,
+                        }))
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            BatchKind::DocumentEdition { id } => {
+                let task = self.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
+                match &task.kind {
+                    KindWithContent::DocumentEdition { index_uid, .. } => {
+                        Ok(Some(Batch::IndexOperation {
+                            op: IndexOperation::DocumentEdition {
                                 index_uid: index_uid.clone(),
                                 task,
                             },
@@ -1334,6 +1358,64 @@ impl IndexScheduler {
 
                 Ok(tasks)
             }
+            IndexOperation::DocumentEdition { mut task, .. } => {
+                let (filter, context, function) =
+                    if let KindWithContent::DocumentEdition {
+                        filter_expr, context, function, ..
+                    } = &task.kind
+                    {
+                        (filter_expr, context, function)
+                    } else {
+                        unreachable!()
+                    };
+                let result_count = edit_documents_by_function(
+                    index_wtxn,
+                    filter,
+                    context.clone(),
+                    function,
+                    self.index_mapper.indexer_config(),
+                    self.must_stop_processing.clone(),
+                    index,
+                );
+                let (original_filter, context, function) = if let Some(Details::DocumentEdition {
+                    original_filter,
+                    context,
+                    function,
+                    ..
+                }) = task.details
+                {
+                    (original_filter, context, function)
+                } else {
+                    // In the case of a `documentDeleteByFilter` the details MUST be set
+                    unreachable!();
+                };
+
+                match result_count {
+                    Ok((deleted_documents, edited_documents)) => {
+                        task.status = Status::Succeeded;
+                        task.details = Some(Details::DocumentEdition {
+                            original_filter,
+                            context,
+                            function,
+                            deleted_documents: Some(deleted_documents),
+                            edited_documents: Some(edited_documents),
+                        });
+                    }
+                    Err(e) => {
+                        task.status = Status::Failed;
+                        task.details = Some(Details::DocumentEdition {
+                            original_filter,
+                            context,
+                            function,
+                            deleted_documents: Some(0),
+                            edited_documents: Some(0),
+                        });
+                        task.error = Some(e.into());
+                    }
+                }
+
+                Ok(vec![task])
+            }
             IndexOperation::IndexDocumentDeletionByFilter { mut task, index_uid: _ } => {
                 let filter =
                     if let KindWithContent::DocumentDeletionByFilter { filter_expr, .. } =
@@ -1621,4 +1703,45 @@ fn delete_document_by_filter<'a>(
     } else {
         0
     })
+}
+
+fn edit_documents_by_function<'a>(
+    wtxn: &mut RwTxn<'a>,
+    filter: &Option<serde_json::Value>,
+    context: Option<Object>,
+    code: &str,
+    indexer_config: &IndexerConfig,
+    must_stop_processing: MustStopProcessing,
+    index: &'a Index,
+) -> Result<(u64, u64)> {
+    let candidates = match filter.as_ref().map(Filter::from_json) {
+        Some(Ok(Some(filter))) => filter.evaluate(wtxn, index).map_err(|err| match err {
+            milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
+                Error::from(err).with_custom_error_code(Code::InvalidDocumentFilter)
+            }
+            e => e.into(),
+        })?,
+        None | Some(Ok(None)) => index.documents_ids(wtxn)?,
+        Some(Err(e)) => return Err(e.into()),
+    };
+
+    let config = IndexDocumentsConfig {
+        update_method: IndexDocumentsMethod::ReplaceDocuments,
+        ..Default::default()
+    };
+
+    let mut builder = milli::update::IndexDocuments::new(
+        wtxn,
+        index,
+        indexer_config,
+        config,
+        |indexing_step| tracing::debug!(update = ?indexing_step),
+        || must_stop_processing.get(),
+    )?;
+
+    let (new_builder, count) = builder.edit_documents(&candidates, context, code)?;
+    builder = new_builder;
+
+    let _ = builder.execute()?;
+    Ok(count.unwrap())
 }
