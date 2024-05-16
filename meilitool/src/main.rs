@@ -80,9 +80,7 @@ fn main() -> anyhow::Result<()> {
 /// Clears the task queue located at `db_path`.
 fn clear_task_queue(db_path: PathBuf) -> anyhow::Result<()> {
     let path = db_path.join("tasks");
-    let env = EnvOpenOptions::new()
-        .max_dbs(100)
-        .open(&path)
+    let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&path) }
         .with_context(|| format!("While trying to open {:?}", path.display()))?;
 
     eprintln!("Deleting tasks from the database...");
@@ -193,9 +191,7 @@ fn export_a_dump(
         FileStore::new(db_path.join("update_files")).context("While opening the FileStore")?;
 
     let index_scheduler_path = db_path.join("tasks");
-    let env = EnvOpenOptions::new()
-        .max_dbs(100)
-        .open(&index_scheduler_path)
+    let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&index_scheduler_path) }
         .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
     eprintln!("Dumping the keys...");

@@ -785,10 +785,12 @@ impl IndexScheduler {
                 let dst = temp_snapshot_dir.path().join("auth");
                 fs::create_dir_all(&dst)?;
                 // TODO We can't use the open_auth_store_env function here but we should
-                let auth = milli::heed::EnvOpenOptions::new()
-                    .map_size(1024 * 1024 * 1024) // 1 GiB
-                    .max_dbs(2)
-                    .open(&self.auth_path)?;
+                let auth = unsafe {
+                    milli::heed::EnvOpenOptions::new()
+                        .map_size(1024 * 1024 * 1024) // 1 GiB
+                        .max_dbs(2)
+                        .open(&self.auth_path)
+                }?;
                 auth.copy_to_file(dst.join("data.mdb"), CompactionOption::Enabled)?;
 
                 // 5. Copy and tarball the flat snapshot
