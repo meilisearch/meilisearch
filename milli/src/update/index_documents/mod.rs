@@ -3260,6 +3260,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "all-tokenizations")]
     fn stored_detected_script_and_language_should_not_return_deleted_documents() {
         use charabia::{Language, Script};
         let index = TempIndex::new();

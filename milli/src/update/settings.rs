@@ -461,50 +461,39 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(true)
     }
 
-    /// Updates the index's searchable attributes. This causes the field map to be recomputed to
-    /// reflect the order of the searchable attributes.
+    /// Updates the index's searchable attributes.
     fn update_searchable(&mut self) -> Result<bool> {
         match self.searchable_fields {
             Setting::Set(ref fields) => {
                 // Check to see if the searchable fields changed before doing anything else
                 let old_fields = self.index.searchable_fields(self.wtxn)?;
-                let did_change = match old_fields {
-                    // If old_fields is Some, let's check to see if the fields actually changed
-                    Some(old_fields) => {
-                        let new_fields = fields.iter().map(String::as_str).collect::<Vec<_>>();
-                        new_fields != old_fields
-                    }
-                    // If old_fields is None, the fields have changed (because they are being set)
-                    None => true,
+                let did_change = {
+                    let new_fields = fields.iter().map(String::as_str).collect::<Vec<_>>();
+                    new_fields != old_fields
                 };
                 if !did_change {
                     return Ok(false);
                 }
 
-                // every time the searchable attributes are updated, we need to update the
-                // ids for any settings that uses the facets. (distinct_fields, filterable_fields).
-                let old_fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
-
-                let mut new_fields_ids_map = FieldsIdsMap::new();
+                // Since we're updating the settings we can only add new fields at the end of the field id map
+                let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
                 // fields are deduplicated, only the first occurrence is taken into account
                 let names = fields.iter().unique().map(String::as_str).collect::<Vec<_>>();
 
                 // Add all the searchable attributes to the field map, and then add the
                 // remaining fields from the old field map to the new one
                 for name in names.iter() {
-                    new_fields_ids_map.insert(name).ok_or(UserError::AttributeLimitReached)?;
-                }
-
-                for (_, name) in old_fields_ids_map.iter() {
-                    new_fields_ids_map.insert(name).ok_or(UserError::AttributeLimitReached)?;
+                    // The fields ids map won't change the field id of already present elements thus only the
+                    // new fields will be inserted.
+                    fields_ids_map.insert(name).ok_or(UserError::AttributeLimitReached)?;
                 }
 
                 self.index.put_all_searchable_fields_from_fields_ids_map(
                     self.wtxn,
                     &names,
-                    &new_fields_ids_map,
+                    &fields_ids_map,
                 )?;
-                self.index.put_fields_ids_map(self.wtxn, &new_fields_ids_map)?;
+                self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
                 Ok(true)
             }
             Setting::Reset => Ok(self.index.delete_all_searchable_fields(self.wtxn)?),
@@ -1172,7 +1161,7 @@ pub(crate) struct InnerIndexSettings {
     pub user_defined_faceted_fields: HashSet<String>,
     pub user_defined_searchable_fields: Option<Vec<String>>,
     pub faceted_fields_ids: HashSet<FieldId>,
-    pub searchable_fields_ids: Option<Vec<FieldId>>,
+    pub searchable_fields_ids: Vec<FieldId>,
     pub exact_attributes: HashSet<FieldId>,
     pub proximity_precision: ProximityPrecision,
     pub embedding_configs: EmbeddingConfigs,
@@ -1233,18 +1222,21 @@ impl InnerIndexSettings {
 
     // find and insert the new field ids
     pub fn recompute_searchables(&mut self, wtxn: &mut heed::RwTxn, index: &Index) -> Result<()> {
+        let searchable_fields = self
+            .user_defined_searchable_fields
+            .as_ref()
+            .map(|searchable| searchable.iter().map(|s| s.as_str()).collect::<Vec<_>>());
+
         // in case new fields were introduced we're going to recreate the searchable fields.
-        if let Some(searchable_fields) = self.user_defined_searchable_fields.as_ref() {
-            let searchable_fields =
-                searchable_fields.iter().map(String::as_ref).collect::<Vec<_>>();
+        if let Some(searchable_fields) = searchable_fields {
             index.put_all_searchable_fields_from_fields_ids_map(
                 wtxn,
                 &searchable_fields,
                 &self.fields_ids_map,
             )?;
-            let searchable_fields_ids = index.searchable_fields_ids(wtxn)?;
-            self.searchable_fields_ids = searchable_fields_ids;
         }
+        let searchable_fields_ids = index.searchable_fields_ids(wtxn)?;
+        self.searchable_fields_ids = searchable_fields_ids;
 
         Ok(())
     }
@@ -1517,12 +1509,13 @@ mod tests {
     use big_s::S;
     use heed::types::Bytes;
     use maplit::{btreemap, btreeset, hashset};
+    use meili_snap::snapshot;
 
     use super::*;
     use crate::error::Error;
     use crate::index::tests::TempIndex;
     use crate::update::ClearDocuments;
-    use crate::{Criterion, Filter, SearchResult};
+    use crate::{db_snap, Criterion, Filter, SearchResult};
 
     #[test]
     fn set_and_reset_searchable_fields() {
@@ -1551,6 +1544,17 @@ mod tests {
 
         wtxn.commit().unwrap();
 
+        db_snap!(index, fields_ids_map, @r###"
+        0   id               |
+        1   name             |
+        2   age              |
+        "###);
+        db_snap!(index, searchable_fields, @r###"["name"]"###);
+        db_snap!(index, fieldids_weights_map, @r###"
+        fid weight
+        1   0   |
+        "###);
+
         // Check that the searchable field is correctly set to "name" only.
         let rtxn = index.read_txn().unwrap();
         // When we search for something that is not in
@@ -1562,8 +1566,9 @@ mod tests {
         // we must find the appropriate document.
         let result = index.search(&rtxn).query(r#""kevin""#).execute().unwrap();
         let documents = index.documents(&rtxn, result.documents_ids).unwrap();
+        let fid_map = index.fields_ids_map(&rtxn).unwrap();
         assert_eq!(documents.len(), 1);
-        assert_eq!(documents[0].1.get(0), Some(&br#""kevin""#[..]));
+        assert_eq!(documents[0].1.get(fid_map.id("name").unwrap()), Some(&br#""kevin""#[..]));
         drop(rtxn);
 
         // We change the searchable fields to be the "name" field only.
@@ -1573,14 +1578,31 @@ mod tests {
             })
             .unwrap();
 
+        db_snap!(index, fields_ids_map, @r###"
+        0   id               |
+        1   name             |
+        2   age              |
+        "###);
+        db_snap!(index, searchable_fields, @r###"["id", "name", "age"]"###);
+        db_snap!(index, fieldids_weights_map, @r###"
+        fid weight
+        0   0   |
+        1   0   |
+        2   0   |
+        "###);
+
         // Check that the searchable field have been reset and documents are found now.
         let rtxn = index.read_txn().unwrap();
+        let fid_map = index.fields_ids_map(&rtxn).unwrap();
+        let user_defined_searchable_fields = index.user_defined_searchable_fields(&rtxn).unwrap();
+        snapshot!(format!("{user_defined_searchable_fields:?}"), @"None");
+        // the searchable fields should contain all the fields
         let searchable_fields = index.searchable_fields(&rtxn).unwrap();
-        assert_eq!(searchable_fields, None);
+        snapshot!(format!("{searchable_fields:?}"), @r###"["id", "name", "age"]"###);
         let result = index.search(&rtxn).query("23").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 1);
         let documents = index.documents(&rtxn, result.documents_ids).unwrap();
-        assert_eq!(documents[0].1.get(0), Some(&br#""kevin""#[..]));
+        assert_eq!(documents[0].1.get(fid_map.id("name").unwrap()), Some(&br#""kevin""#[..]));
     }
 
     #[test]

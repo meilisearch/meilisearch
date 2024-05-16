@@ -28,6 +28,7 @@ pub mod vector;
 #[cfg(test)]
 #[macro_use]
 pub mod snapshot_tests;
+mod fieldids_weights_map;
 
 use std::collections::{BTreeMap, HashMap};
 use std::convert::{TryFrom, TryInto};
@@ -52,6 +53,7 @@ pub use self::error::{
     Error, FieldIdMapMissingEntry, InternalError, SerializationError, UserError,
 };
 pub use self::external_documents_ids::ExternalDocumentsIds;
+pub use self::fieldids_weights_map::FieldidsWeightsMap;
 pub use self::fields_ids_map::FieldsIdsMap;
 pub use self::heed_codec::{
     BEU16StrCodec, BEU32StrCodec, BoRoaringBitmapCodec, BoRoaringBitmapLenCodec,
@@ -77,6 +79,7 @@ pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
 pub type FastMap8<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher64>>;
 pub type FieldDistribution = BTreeMap<String, u64>;
 pub type FieldId = u16;
+pub type Weight = u16;
 pub type Object = serde_json::Map<String, serde_json::Value>;
 pub type Position = u32;
 pub type RelativePosition = u16;

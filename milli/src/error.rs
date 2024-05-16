@@ -32,6 +32,8 @@ pub enum InternalError {
     DatabaseClosing,
     #[error("Missing {} in the {db_name} database.", key.unwrap_or("key"))]
     DatabaseMissingEntry { db_name: &'static str, key: Option<&'static str> },
+    #[error("Missing {key} in the fieldids weights mapping.")]
+    FieldidsWeightsMapMissingEntry { key: FieldId },
     #[error(transparent)]
     FieldIdMapMissingEntry(#[from] FieldIdMapMissingEntry),
     #[error("Missing {key} in the field id mapping.")]

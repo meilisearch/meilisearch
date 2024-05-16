@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use actix_rt::time::sleep;
 use meili_snap::{json_string, snapshot};
 use meilisearch::option::ScheduleSnapshot;
 use meilisearch::Opt;
@@ -53,11 +52,29 @@ async fn perform_snapshot() {
 
     index.load_test_set().await;
 
-    server.index("test1").create(Some("prim")).await;
+    let (task, code) = server.index("test1").create(Some("prim")).await;
+    meili_snap::snapshot!(code, @"202 Accepted");
 
-    index.wait_task(2).await;
+    index.wait_task(task.uid()).await;
 
-    sleep(Duration::from_secs(2)).await;
+    // wait for the _next task_ to process, aka the snapshot that should be enqueued at some point
+
+    println!("waited for the next task to finish");
+    let now = std::time::Instant::now();
+    let next_task = task.uid() + 1;
+    loop {
+        let (value, code) = index.get_task(next_task).await;
+        dbg!(&value);
+        if code != 404 && value["status"].as_str() == Some("succeeded") {
+            break;
+        }
+
+        if now.elapsed() > Duration::from_secs(30) {
+            panic!("The snapshot didn't schedule in 30s even though it was supposed to be scheduled every 2s: {}",
+                serde_json::to_string_pretty(&value).unwrap()
+            );
+        }
+    }
 
     let temp = tempfile::tempdir().unwrap();
 

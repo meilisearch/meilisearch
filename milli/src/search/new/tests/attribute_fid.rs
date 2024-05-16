@@ -1,5 +1,5 @@
 use crate::index::tests::TempIndex;
-use crate::{Criterion, Search, SearchResult, TermsMatchingStrategy};
+use crate::{db_snap, Criterion, Search, SearchResult, TermsMatchingStrategy};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -131,6 +131,19 @@ fn test_attribute_fid_simple() {
 #[test]
 fn test_attribute_fid_ngrams() {
     let index = create_index();
+    db_snap!(index, fields_ids_map, @r###"
+    0   id               |
+    1   title            |
+    2   description      |
+    3   plot             |
+    "###);
+    db_snap!(index, searchable_fields, @r###"["title", "description", "plot"]"###);
+    db_snap!(index, fieldids_weights_map, @r###"
+    fid weight
+    1   0   |
+    2   1   |
+    3   2   |
+    "###);
 
     let txn = index.read_txn().unwrap();
 

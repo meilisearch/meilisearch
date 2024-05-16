@@ -921,7 +921,7 @@ async fn test_score_details() {
                         "order": 3,
                         "attributeRankingOrderScore": 1.0,
                         "queryWordDistanceScore": 0.8095238095238095,
-                        "score": 0.9727891156462584
+                        "score": 0.8095238095238095
                       },
                       "exactness": {
                         "order": 4,

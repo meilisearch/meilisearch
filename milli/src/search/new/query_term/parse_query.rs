@@ -366,7 +366,7 @@ mod tests {
         let tokens = tokenizer.tokenize(".");
         let index = temp_index_with_documents();
         let rtxn = index.read_txn()?;
-        let mut ctx = SearchContext::new(&index, &rtxn);
+        let mut ctx = SearchContext::new(&index, &rtxn)?;
         // panics with `attempt to add with overflow` before <https://github.com/meilisearch/meilisearch/issues/3785>
         let ExtractedTokens { query_terms, .. } =
             located_query_terms_from_tokens(&mut ctx, tokens, None)?;

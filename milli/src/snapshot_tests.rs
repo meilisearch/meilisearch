@@ -308,6 +308,25 @@ pub fn snap_fields_ids_map(index: &Index) -> String {
     }
     snap
 }
+pub fn snap_fieldids_weights_map(index: &Index) -> String {
+    let rtxn = index.read_txn().unwrap();
+    let weights_map = index.fieldids_weights_map(&rtxn).unwrap();
+
+    let mut snap = String::new();
+    writeln!(&mut snap, "fid weight").unwrap();
+    let mut field_ids: Vec<_> = weights_map.ids().collect();
+    field_ids.sort();
+    for field_id in field_ids {
+        let weight = weights_map.weight(field_id).unwrap();
+        writeln!(&mut snap, "{field_id:<3} {weight:<3} |").unwrap();
+    }
+    snap
+}
+pub fn snap_searchable_fields(index: &Index) -> String {
+    let rtxn = index.read_txn().unwrap();
+    let searchable_fields = index.searchable_fields(&rtxn).unwrap();
+    format!("{searchable_fields:?}")
+}
 pub fn snap_geo_faceted_documents_ids(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
     let geo_faceted_documents_ids = index.geo_faceted_documents_ids(&rtxn).unwrap();
@@ -468,6 +487,12 @@ macro_rules! full_snap_of_db {
     }};
     ($index:ident, fields_ids_map) => {{
         $crate::snapshot_tests::snap_fields_ids_map(&$index)
+    }};
+    ($index:ident, fieldids_weights_map) => {{
+        $crate::snapshot_tests::snap_fieldids_weights_map(&$index)
+    }};
+    ($index:ident, searchable_fields) => {{
+        $crate::snapshot_tests::snap_searchable_fields(&$index)
     }};
     ($index:ident, geo_faceted_documents_ids) => {{
         $crate::snapshot_tests::snap_geo_faceted_documents_ids(&$index)

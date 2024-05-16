@@ -506,7 +506,7 @@ mod tests {
 
     impl<'a> MatcherBuilder<'a> {
         fn new_test(rtxn: &'a heed::RoTxn, index: &'a TempIndex, query: &str) -> Self {
-            let mut ctx = SearchContext::new(index, rtxn);
+            let mut ctx = SearchContext::new(index, rtxn).unwrap();
             let universe = filtered_universe(&ctx, &None).unwrap();
             let crate::search::PartialSearchResult { located_query_terms, .. } = execute_search(
                 &mut ctx,

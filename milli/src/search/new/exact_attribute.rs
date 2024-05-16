@@ -184,13 +184,7 @@ impl State {
             return Ok(State::Empty(query_graph.clone()));
         }
 
-        let searchable_fields_ids = {
-            if let Some(fids) = ctx.index.searchable_fields_ids(ctx.txn)? {
-                fids
-            } else {
-                ctx.index.fields_ids_map(ctx.txn)?.ids().collect()
-            }
-        };
+        let searchable_fields_ids = ctx.index.searchable_fields_ids(ctx.txn)?;
 
         let mut candidates_per_attribute = Vec::with_capacity(searchable_fields_ids.len());
         // then check that there exists at least one attribute that has all of the terms

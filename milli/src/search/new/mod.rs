@@ -49,13 +49,12 @@ pub use self::geo_sort::Strategy as GeoSortStrategy;
 use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
 use self::vector_sort::VectorSort;
-use crate::error::FieldIdMapMissingEntry;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::apply_distinct_rule;
 use crate::vector::Embedder;
 use crate::{
     AscDesc, DocumentId, FieldId, Filter, Index, Member, Result, TermsMatchingStrategy, TimeBudget,
-    UserError,
+    UserError, Weight,
 };
 
 /// A structure used throughout the execution of a search query.
@@ -71,8 +70,21 @@ pub struct SearchContext<'ctx> {
 }
 
 impl<'ctx> SearchContext<'ctx> {
-    pub fn new(index: &'ctx Index, txn: &'ctx RoTxn<'ctx>) -> Self {
-        Self {
+    pub fn new(index: &'ctx Index, txn: &'ctx RoTxn<'ctx>) -> Result<Self> {
+        let searchable_fids = index.searchable_fields_and_weights(txn)?;
+        let exact_attributes_ids = index.exact_attributes_ids(txn)?;
+
+        let mut exact = Vec::new();
+        let mut tolerant = Vec::new();
+        for (_name, fid, weight) in searchable_fids {
+            if exact_attributes_ids.contains(&fid) {
+                exact.push((fid, weight));
+            } else {
+                tolerant.push((fid, weight));
+            }
+        }
+
+        Ok(Self {
             index,
             txn,
             db_cache: <_>::default(),
@@ -81,42 +93,39 @@ impl<'ctx> SearchContext<'ctx> {
             term_interner: <_>::default(),
             phrase_docids: <_>::default(),
             restricted_fids: None,
-        }
+        })
     }
 
-    pub fn searchable_attributes(&mut self, searchable_attributes: &'ctx [String]) -> Result<()> {
-        let fids_map = self.index.fields_ids_map(self.txn)?;
-        let searchable_names = self.index.searchable_fields(self.txn)?;
+    pub fn attributes_to_search_on(
+        &mut self,
+        attributes_to_search_on: &'ctx [String],
+    ) -> Result<()> {
+        let user_defined_searchable = self.index.user_defined_searchable_fields(self.txn)?;
+        let searchable_fields_weights = self.index.searchable_fields_and_weights(self.txn)?;
         let exact_attributes_ids = self.index.exact_attributes_ids(self.txn)?;
 
+        let mut wildcard = false;
+
         let mut restricted_fids = RestrictedFids::default();
-        let mut contains_wildcard = false;
-        for field_name in searchable_attributes {
+        for field_name in attributes_to_search_on {
             if field_name == "*" {
-                contains_wildcard = true;
+                wildcard = true;
+                // we cannot early exit as we want to returns error in case of unknown fields
                 continue;
             }
-            let searchable_contains_name =
-                searchable_names.as_ref().map(|sn| sn.iter().any(|name| name == field_name));
-            let fid = match (fids_map.id(field_name), searchable_contains_name) {
+            let searchable_weight =
+                searchable_fields_weights.iter().find(|(name, _, _)| name == field_name);
+            let (fid, weight) = match searchable_weight {
                 // The Field id exist and the field is searchable
-                (Some(fid), Some(true)) | (Some(fid), None) => fid,
-                // The field is searchable but the Field id doesn't exist => Internal Error
-                (None, Some(true)) => {
-                    return Err(FieldIdMapMissingEntry::FieldName {
-                        field_name: field_name.to_string(),
-                        process: "search",
-                    }
-                    .into())
-                }
-                // The field is not searchable, but the searchableAttributes are set to * => ignore field
-                (None, None) => continue,
+                Some((_name, fid, weight)) => (*fid, *weight),
+                // The field is not searchable but the user didn't define any searchable attributes
+                None if user_defined_searchable.is_none() => continue,
                 // The field is not searchable => User error
-                (_fid, Some(false)) => {
-                    let (valid_fields, hidden_fields) = match searchable_names {
-                        Some(sn) => self.index.remove_hidden_fields(self.txn, sn)?,
-                        None => self.index.remove_hidden_fields(self.txn, fids_map.names())?,
-                    };
+                None => {
+                    let (valid_fields, hidden_fields) = self.index.remove_hidden_fields(
+                        self.txn,
+                        searchable_fields_weights.iter().map(|(name, _, _)| name),
+                    )?;
 
                     let field = field_name.to_string();
                     return Err(UserError::InvalidSearchableAttribute {
@@ -129,13 +138,17 @@ impl<'ctx> SearchContext<'ctx> {
             };
 
             if exact_attributes_ids.contains(&fid) {
-                restricted_fids.exact.push(fid);
+                restricted_fids.exact.push((fid, weight));
             } else {
-                restricted_fids.tolerant.push(fid);
+                restricted_fids.tolerant.push((fid, weight));
             };
         }
 
-        self.restricted_fids = (!contains_wildcard).then_some(restricted_fids);
+        if wildcard {
+            self.restricted_fids = None;
+        } else {
+            self.restricted_fids = Some(restricted_fids);
+        }
 
         Ok(())
     }
@@ -158,13 +171,13 @@ impl Word {
 
 #[derive(Debug, Clone, Default)]
 pub struct RestrictedFids {
-    pub tolerant: Vec<FieldId>,
-    pub exact: Vec<FieldId>,
+    pub tolerant: Vec<(FieldId, Weight)>,
+    pub exact: Vec<(FieldId, Weight)>,
 }
 
 impl RestrictedFids {
     pub fn contains(&self, fid: &FieldId) -> bool {
-        self.tolerant.contains(fid) || self.exact.contains(fid)
+        self.tolerant.iter().any(|(id, _)| id == fid) || self.exact.iter().any(|(id, _)| id == fid)
     }
 }
 
