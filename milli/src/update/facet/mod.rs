@@ -379,7 +379,7 @@ pub(crate) mod test_helpers {
             let mut options = heed::EnvOpenOptions::new();
             let options = options.map_size(4096 * 4 * 1000 * 100);
             let tempdir = tempfile::TempDir::new().unwrap();
-            let env = options.open(tempdir.path()).unwrap();
+            let env = unsafe { options.open(tempdir.path()) }.unwrap();
             let mut wtxn = env.write_txn().unwrap();
             let content = env.create_database(&mut wtxn, None).unwrap();
             wtxn.commit().unwrap();

@@ -423,7 +423,6 @@ impl ErrorCode for HeedError {
             HeedError::Mdb(_)
             | HeedError::Encoding(_)
             | HeedError::Decoding(_)
-            | HeedError::InvalidDatabaseTyping
             | HeedError::DatabaseClosing
             | HeedError::BadOpenOptions { .. } => Code::Internal,
         }
