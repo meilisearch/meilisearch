@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
@@ -124,12 +125,23 @@ pub struct Pagination {
     pub limit: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct PaginationView<T> {
-    pub results: Vec<T>,
+#[derive(Clone, Serialize)]
+pub struct PaginationView<T: Serialize> {
+    pub results: T,
     pub offset: usize,
     pub limit: usize,
     pub total: usize,
+}
+
+impl<T: Serialize> fmt::Debug for PaginationView<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PaginationView")
+            .field("offset", &self.offset)
+            .field("limit", &self.limit)
+            .field("total", &self.total)
+            .field("results", &"[...]")
+            .finish()
+    }
 }
 
 impl Pagination {
@@ -137,7 +149,7 @@ impl Pagination {
     pub fn auto_paginate_sized<T>(
         self,
         content: impl IntoIterator<Item = T> + ExactSizeIterator,
-    ) -> PaginationView<T>
+    ) -> PaginationView<Vec<T>>
     where
         T: Serialize,
     {
@@ -151,7 +163,7 @@ impl Pagination {
         self,
         total: usize,
         content: impl IntoIterator<Item = T>,
-    ) -> PaginationView<T>
+    ) -> PaginationView<Vec<T>>
     where
         T: Serialize,
     {
@@ -161,7 +173,7 @@ impl Pagination {
 
     /// Given the data already paginated + the total number of elements, it stores
     /// everything in a [PaginationResult].
-    pub fn format_with<T>(self, total: usize, results: Vec<T>) -> PaginationView<T>
+    pub fn format_with<T>(self, total: usize, results: Vec<T>) -> PaginationView<Vec<T>>
     where
         T: Serialize,
     {
@@ -169,8 +181,8 @@ impl Pagination {
     }
 }
 
-impl<T> PaginationView<T> {
-    pub fn new(offset: usize, limit: usize, total: usize, results: Vec<T>) -> Self {
+impl<T: Serialize> PaginationView<T> {
+    pub fn new(offset: usize, limit: usize, total: usize, results: T) -> Self {
         Self { offset, limit, results, total }
     }
 }

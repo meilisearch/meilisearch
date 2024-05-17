@@ -453,10 +453,12 @@ impl IndexScheduler {
             )
         };
 
-        let env = heed::EnvOpenOptions::new()
-            .max_dbs(11)
-            .map_size(budget.task_db_size)
-            .open(options.tasks_path)?;
+        let env = unsafe {
+            heed::EnvOpenOptions::new()
+                .max_dbs(11)
+                .map_size(budget.task_db_size)
+                .open(options.tasks_path)
+        }?;
 
         let features = features::FeatureData::new(&env, options.instance_features)?;
 
@@ -585,9 +587,9 @@ impl IndexScheduler {
     }
 
     fn is_good_heed(tasks_path: &Path, map_size: usize) -> bool {
-        if let Ok(env) =
+        if let Ok(env) = unsafe {
             heed::EnvOpenOptions::new().map_size(clamp_to_page_size(map_size)).open(tasks_path)
-        {
+        } {
             env.prepare_for_closing().wait();
             true
         } else {
