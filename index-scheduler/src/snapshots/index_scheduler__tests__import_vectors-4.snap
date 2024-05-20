@@ -1,0 +1,23 @@
+---
+source: index-scheduler/src/lib.rs
+expression: fakerest_config.embedder_options
+---
+{
+  "Rest": {
+    "api_key": "My super secret",
+    "distribution": null,
+    "dimensions": 384,
+    "url": "http://localhost:7777",
+    "query": null,
+    "input_field": [
+      "input"
+    ],
+    "path_to_embeddings": [
+      "data"
+    ],
+    "embedding_object": [
+      "embedding"
+    ],
+    "input_type": "text"
+  }
+}

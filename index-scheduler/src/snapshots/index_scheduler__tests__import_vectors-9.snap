@@ -1,0 +1,19 @@
+---
+source: index-scheduler/src/lib.rs
+expression: doc
+---
+{
+  "doggo": "Intel",
+  "breed": "beagle",
+  "_vectors": {
+    "A_fakerest": {
+      "embeddings": "[vector]",
+      "userProvided": true
+    },
+    "noise": [
+      0.1,
+      0.2,
+      0.3
+    ]
+  }
+}

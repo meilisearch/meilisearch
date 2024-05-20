@@ -1774,6 +1774,7 @@ mod tests {
     use big_s::S;
     use crossbeam::channel::RecvTimeoutError;
     use file_store::File;
+    use insta::assert_json_snapshot;
     use meili_snap::{json_string, snapshot};
     use meilisearch_auth::AuthFilter;
     use meilisearch_types::document_formats::DocumentFormatError;
@@ -4981,5 +4982,234 @@ mod tests {
 
         ----------------------------------------------------------------------
         "###);
+    }
+
+    #[test]
+    fn import_vectors() {
+        use meilisearch_types::settings::{Settings, Unchecked};
+        use milli::update::Setting;
+
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        let mut new_settings: Box<Settings<Unchecked>> = Box::default();
+        let mut embedders = BTreeMap::default();
+        let embedding_settings = milli::vector::settings::EmbeddingSettings {
+            source: Setting::Set(milli::vector::settings::EmbedderSource::Rest),
+            api_key: Setting::Set(S("My super secret")),
+            url: Setting::Set(S("http://localhost:7777")),
+            dimensions: Setting::Set(384),
+            ..Default::default()
+        };
+        embedders.insert(S("A_fakerest"), Setting::Set(embedding_settings));
+
+        let embedding_settings = milli::vector::settings::EmbeddingSettings {
+            source: Setting::Set(milli::vector::settings::EmbedderSource::HuggingFace),
+            model: Setting::Set(S("sentence-transformers/all-MiniLM-L6-v2")),
+            revision: Setting::Set(S("e4ce9877abf3edfe10b0d82785e83bdcb973e22e")),
+            document_template: Setting::Set(S("{{doc.doggo}} the {{doc.breed}} best doggo")),
+            ..Default::default()
+        };
+        embedders.insert(S("B_small_hf"), Setting::Set(embedding_settings));
+
+        new_settings.embedders = Setting::Set(embedders);
+
+        index_scheduler
+            .register(
+                KindWithContent::SettingsUpdate {
+                    index_uid: S("doggos"),
+                    new_settings,
+                    is_deletion: false,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        index_scheduler.assert_internally_consistent();
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_settings_task_vectors");
+
+        {
+            let rtxn = index_scheduler.read_txn().unwrap();
+            let task = index_scheduler.get_task(&rtxn, 0).unwrap().unwrap();
+            let task = meilisearch_types::task_view::TaskView::from_task(&task);
+            insta::assert_json_snapshot!(task.details);
+        }
+
+        handle.advance_n_successful_batches(1);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "settings_update_processed_vectors");
+
+        {
+            let rtxn = index_scheduler.read_txn().unwrap();
+            let task = index_scheduler.get_task(&rtxn, 0).unwrap().unwrap();
+            let task = meilisearch_types::task_view::TaskView::from_task(&task);
+            insta::assert_json_snapshot!(task.details);
+        }
+
+        let (fakerest_name, simple_hf_name, beagle_embed, lab_embed, patou_embed) = {
+            let index = index_scheduler.index("doggos").unwrap();
+            let rtxn = index.read_txn().unwrap();
+
+            let configs = index.embedding_configs(&rtxn).unwrap();
+            // for consistency with the below
+            #[allow(clippy::get_first)]
+            let (name, fakerest_config) = configs.get(0).unwrap();
+            insta::assert_json_snapshot!(name, @r###""A_fakerest""###);
+            insta::assert_json_snapshot!(fakerest_config.embedder_options);
+            let fakerest_name = name.clone();
+
+            let (name, simple_hf_config) = configs.get(1).unwrap();
+            insta::assert_json_snapshot!(name, @r###""B_small_hf""###);
+            insta::assert_json_snapshot!(simple_hf_config.embedder_options);
+            let simple_hf_name = name.clone();
+
+            let configs = index_scheduler.embedders(configs).unwrap();
+            let (hf_embedder, _) = configs.get(&simple_hf_name).unwrap();
+            let beagle_embed = hf_embedder.embed_one(S("Intel the beagle best doggo")).unwrap();
+            let lab_embed = hf_embedder.embed_one(S("Max the lab best doggo")).unwrap();
+            let patou_embed = hf_embedder.embed_one(S("kefir the patou best doggo")).unwrap();
+            (fakerest_name, simple_hf_name, beagle_embed, lab_embed, patou_embed)
+        };
+
+        // add one doc, specifying vectors
+
+        let doc = serde_json::json!(
+                    {
+                        "id": 0,
+                        "doggo": "Intel",
+                        "breed": "beagle",
+                        "_vectors": {
+                            &fakerest_name: {
+                                // this will never trigger regeneration, which is good because we can't actually generate with
+                                // this embedder
+                                "userProvided": true,
+                                "embeddings": beagle_embed,
+                            },
+                            &simple_hf_name: {
+                                // this will be regenerated on updates
+                                "userProvided": false,
+                                "embeddings": lab_embed,
+                            },
+                            "noise": [0.1, 0.2, 0.3]
+                        }
+                    }
+        );
+
+        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0u128).unwrap();
+        let documents_count = read_json(doc.to_string().as_bytes(), &mut file).unwrap();
+        assert_eq!(documents_count, 1);
+        file.persist().unwrap();
+
+        index_scheduler
+            .register(
+                KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method: UpdateDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        index_scheduler.assert_internally_consistent();
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after adding Intel");
+
+        handle.advance_one_successful_batch();
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "adding Intel succeeds");
+
+        // check embeddings
+        {
+            let index = index_scheduler.index("doggos").unwrap();
+            let rtxn = index.read_txn().unwrap();
+
+            let embeddings = index.embeddings(&rtxn, 0).unwrap();
+
+            assert_json_snapshot!(embeddings[&simple_hf_name][0] == lab_embed, @"true");
+            assert_json_snapshot!(embeddings[&fakerest_name][0] == beagle_embed, @"true");
+
+            let doc = index.documents(&rtxn, std::iter::once(0)).unwrap()[0].1;
+            let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+            let doc = obkv_to_json(
+                &[
+                    fields_ids_map.id("doggo").unwrap(),
+                    fields_ids_map.id("breed").unwrap(),
+                    fields_ids_map.id("_vectors").unwrap(),
+                ],
+                &fields_ids_map,
+                doc,
+            )
+            .unwrap();
+            assert_json_snapshot!(doc, {"._vectors.A_fakerest.embeddings" => "[vector]"});
+        }
+
+        // update the doc, specifying vectors
+
+        let doc = serde_json::json!(
+                    {
+                        "id": 0,
+                        "doggo": "kefir",
+                        "breed": "patou",
+                    }
+        );
+
+        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(1u128).unwrap();
+        let documents_count = read_json(doc.to_string().as_bytes(), &mut file).unwrap();
+        assert_eq!(documents_count, 1);
+        file.persist().unwrap();
+
+        index_scheduler
+            .register(
+                KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: None,
+                    method: UpdateDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        index_scheduler.assert_internally_consistent();
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "Intel to kefir");
+
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "Intel to kefir succeeds");
+
+        {
+            // check embeddings
+            {
+                let index = index_scheduler.index("doggos").unwrap();
+                let rtxn = index.read_txn().unwrap();
+
+                let embeddings = index.embeddings(&rtxn, 0).unwrap();
+
+                // automatically changed to patou
+                assert_json_snapshot!(embeddings[&simple_hf_name][0] == patou_embed, @"true");
+                // remained beagle because set to userProvided
+                assert_json_snapshot!(embeddings[&fakerest_name][0] == beagle_embed, @"true");
+
+                let doc = index.documents(&rtxn, std::iter::once(0)).unwrap()[0].1;
+                let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let doc = obkv_to_json(
+                    &[
+                        fields_ids_map.id("doggo").unwrap(),
+                        fields_ids_map.id("breed").unwrap(),
+                        fields_ids_map.id("_vectors").unwrap(),
+                    ],
+                    &fields_ids_map,
+                    doc,
+                )
+                .unwrap();
+                assert_json_snapshot!(doc, {"._vectors.A_fakerest.embeddings" => "[vector]"});
+            }
+        }
     }
 }

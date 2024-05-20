@@ -1,0 +1,11 @@
+---
+source: index-scheduler/src/lib.rs
+expression: simple_hf_config.embedder_options
+---
+{
+  "HuggingFace": {
+    "model": "sentence-transformers/all-MiniLM-L6-v2",
+    "revision": "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
+    "distribution": null
+  }
+}
