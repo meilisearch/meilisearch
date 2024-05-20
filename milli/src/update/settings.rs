@@ -1161,6 +1161,11 @@ impl InnerIndexSettingsDiff {
     pub fn settings_update_only(&self) -> bool {
         self.settings_update_only
     }
+
+    pub fn run_geo_indexing(&self) -> bool {
+        self.old.geo_fields_ids != self.new.geo_fields_ids
+            || (!self.settings_update_only && self.new.geo_fields_ids.is_some())
+    }
 }
 
 #[derive(Clone)]
@@ -1177,6 +1182,7 @@ pub(crate) struct InnerIndexSettings {
     pub proximity_precision: ProximityPrecision,
     pub embedding_configs: EmbeddingConfigs,
     pub existing_fields: HashSet<String>,
+    pub geo_fields_ids: Option<(FieldId, FieldId)>,
 }
 
 impl InnerIndexSettings {
@@ -1200,6 +1206,24 @@ impl InnerIndexSettings {
             .into_iter()
             .filter_map(|(field, count)| (count != 0).then_some(field))
             .collect();
+        // index.fields_ids_map($a)? ==>> fields_ids_map
+        let geo_fields_ids = match fields_ids_map.id("_geo") {
+            Some(gfid) => {
+                let is_sortable = index.sortable_fields_ids(rtxn)?.contains(&gfid);
+                let is_filterable = index.filterable_fields_ids(rtxn)?.contains(&gfid);
+                // if `_geo` is faceted then we get the `lat` and `lng`
+                if is_sortable || is_filterable {
+                    let field_ids = fields_ids_map
+                        .insert("_geo.lat")
+                        .zip(fields_ids_map.insert("_geo.lng"))
+                        .ok_or(UserError::AttributeLimitReached)?;
+                    Some(field_ids)
+                } else {
+                    None
+                }
+            }
+            None => None,
+        };
 
         Ok(Self {
             stop_words,
@@ -1214,6 +1238,7 @@ impl InnerIndexSettings {
             proximity_precision,
             embedding_configs,
             existing_fields,
+            geo_fields_ids,
         })
     }
 

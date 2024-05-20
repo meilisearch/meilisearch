@@ -8,6 +8,7 @@ use super::helpers::{create_writer, writer_into_reader, GrenadParameters};
 use crate::error::GeoError;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::index_documents::extract_finite_float_from_value;
+use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
 use crate::{FieldId, InternalError, Result};
 
 /// Extracts the geographical coordinates contained in each document under the `_geo` field.
@@ -18,7 +19,7 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
     primary_key_id: FieldId,
-    (lat_fid, lng_fid): (FieldId, FieldId),
+    settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<grenad::Reader<BufReader<File>>> {
     puffin::profile_function!();
 
@@ -40,47 +41,27 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
             serde_json::from_slice(document_id).unwrap()
         };
 
-        // first we get the two fields
-        match (obkv.get(lat_fid), obkv.get(lng_fid)) {
-            (Some(lat), Some(lng)) => {
-                let deladd_lat_obkv = KvReaderDelAdd::new(lat);
-                let deladd_lng_obkv = KvReaderDelAdd::new(lng);
+        // extract old version
+        let del_lat_lng =
+            extract_lat_lng(&obkv, &settings_diff.old, DelAdd::Deletion, &document_id)?;
+        // extract new version
+        let add_lat_lng =
+            extract_lat_lng(&obkv, &settings_diff.new, DelAdd::Addition, &document_id)?;
 
-                // then we extract the values
-                let del_lat_lng = deladd_lat_obkv
-                    .get(DelAdd::Deletion)
-                    .zip(deladd_lng_obkv.get(DelAdd::Deletion))
-                    .map(|(lat, lng)| extract_lat_lng(lat, lng, document_id))
-                    .transpose()?;
-                let add_lat_lng = deladd_lat_obkv
-                    .get(DelAdd::Addition)
-                    .zip(deladd_lng_obkv.get(DelAdd::Addition))
-                    .map(|(lat, lng)| extract_lat_lng(lat, lng, document_id))
-                    .transpose()?;
-
-                if del_lat_lng != add_lat_lng {
-                    let mut obkv = KvWriterDelAdd::memory();
-                    if let Some([lat, lng]) = del_lat_lng {
-                        #[allow(clippy::drop_non_drop)]
-                        let bytes: [u8; 16] = concat_arrays![lat.to_ne_bytes(), lng.to_ne_bytes()];
-                        obkv.insert(DelAdd::Deletion, bytes)?;
-                    }
-                    if let Some([lat, lng]) = add_lat_lng {
-                        #[allow(clippy::drop_non_drop)]
-                        let bytes: [u8; 16] = concat_arrays![lat.to_ne_bytes(), lng.to_ne_bytes()];
-                        obkv.insert(DelAdd::Addition, bytes)?;
-                    }
-                    let bytes = obkv.into_inner()?;
-                    writer.insert(docid_bytes, bytes)?;
-                }
+        if del_lat_lng != add_lat_lng {
+            let mut obkv = KvWriterDelAdd::memory();
+            if let Some([lat, lng]) = del_lat_lng {
+                #[allow(clippy::drop_non_drop)]
+                let bytes: [u8; 16] = concat_arrays![lat.to_ne_bytes(), lng.to_ne_bytes()];
+                obkv.insert(DelAdd::Deletion, bytes)?;
             }
-            (None, Some(_)) => {
-                return Err(GeoError::MissingLatitude { document_id: document_id() }.into())
+            if let Some([lat, lng]) = add_lat_lng {
+                #[allow(clippy::drop_non_drop)]
+                let bytes: [u8; 16] = concat_arrays![lat.to_ne_bytes(), lng.to_ne_bytes()];
+                obkv.insert(DelAdd::Addition, bytes)?;
             }
-            (Some(_), None) => {
-                return Err(GeoError::MissingLongitude { document_id: document_id() }.into())
-            }
-            (None, None) => (),
+            let bytes = obkv.into_inner()?;
+            writer.insert(docid_bytes, bytes)?;
         }
     }
 
@@ -88,16 +69,37 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
 }
 
 /// Extract the finite floats lat and lng from two bytes slices.
-fn extract_lat_lng(lat: &[u8], lng: &[u8], document_id: impl Fn() -> Value) -> Result<[f64; 2]> {
-    let lat = extract_finite_float_from_value(
-        serde_json::from_slice(lat).map_err(InternalError::SerdeJson)?,
-    )
-    .map_err(|lat| GeoError::BadLatitude { document_id: document_id(), value: lat })?;
+fn extract_lat_lng(
+    document: &obkv::KvReader<FieldId>,
+    settings: &InnerIndexSettings,
+    deladd: DelAdd,
+    document_id: impl Fn() -> Value,
+) -> Result<Option<[f64; 2]>> {
+    match settings.geo_fields_ids {
+        Some((lat_fid, lng_fid)) => {
+            let lat = document.get(lat_fid).map(KvReaderDelAdd::new).and_then(|r| r.get(deladd));
+            let lng = document.get(lng_fid).map(KvReaderDelAdd::new).and_then(|r| r.get(deladd));
+            let (lat, lng) = match (lat, lng) {
+                (Some(lat), Some(lng)) => (lat, lng),
+                (Some(lat), None) => {
+                    return Err(GeoError::MissingLatitude { document_id: document_id() }.into())
+                }
+                (None, Some(lng)) => {
+                    return Err(GeoError::MissingLongitude { document_id: document_id() }.into())
+                }
+                (None, None) => return Ok(None),
+            };
+            let lat = extract_finite_float_from_value(
+                serde_json::from_slice(lat).map_err(InternalError::SerdeJson)?,
+            )
+            .map_err(|lat| GeoError::BadLatitude { document_id: document_id(), value: lat })?;
 
-    let lng = extract_finite_float_from_value(
-        serde_json::from_slice(lng).map_err(InternalError::SerdeJson)?,
-    )
-    .map_err(|lng| GeoError::BadLongitude { document_id: document_id(), value: lng })?;
-
-    Ok([lat, lng])
+            let lng = extract_finite_float_from_value(
+                serde_json::from_slice(lng).map_err(InternalError::SerdeJson)?,
+            )
+            .map_err(|lng| GeoError::BadLongitude { document_id: document_id(), value: lng })?;
+            Ok(Some([lat, lng]))
+        }
+        None => Ok(None),
+    }
 }

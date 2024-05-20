@@ -327,25 +327,6 @@ where
         // get the fid of the `_geo.lat` and `_geo.lng` fields.
         let mut field_id_map = self.index.fields_ids_map(self.wtxn)?;
 
-        // self.index.fields_ids_map($a)? ==>> field_id_map
-        let geo_fields_ids = match field_id_map.id("_geo") {
-            Some(gfid) => {
-                let is_sortable = self.index.sortable_fields_ids(self.wtxn)?.contains(&gfid);
-                let is_filterable = self.index.filterable_fields_ids(self.wtxn)?.contains(&gfid);
-                // if `_geo` is faceted then we get the `lat` and `lng`
-                if is_sortable || is_filterable {
-                    let field_ids = field_id_map
-                        .insert("_geo.lat")
-                        .zip(field_id_map.insert("_geo.lng"))
-                        .ok_or(UserError::AttributeLimitReached)?;
-                    Some(field_ids)
-                } else {
-                    None
-                }
-            }
-            None => None,
-        };
-
         let pool_params = GrenadParameters {
             chunk_compression_type: self.indexer_config.chunk_compression_type,
             chunk_compression_level: self.indexer_config.chunk_compression_level,
@@ -412,7 +393,6 @@ where
                         pool_params,
                         lmdb_writer_sx.clone(),
                         primary_key_id,
-                        geo_fields_ids,
                         settings_diff.clone(),
                         max_positions_per_attributes,
                     )
