@@ -378,9 +378,9 @@ dependencies = [
 
 [[package]]
 name = "arroy"
-version = "0.3.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73897699bf04bac935c0b120990d2a511e91e563e0f9769f9c8bb983d98dfbc9"
+checksum = "efddeb1e7c32a551cc07ef4c3e181e3cd5478fdaf4f0bd799983171c1f6efe57"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -1536,9 +1536,9 @@ checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 
 [[package]]
 name = "doxygen-rs"
-version = "0.4.2"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "415b6ec780d34dcf624666747194393603d0373b7141eef01d12ee58881507d9"
+checksum = "bff670ea0c9bbb8414e7efa6e23ebde2b8f520a7eef78273a3918cf1903e7505"
 dependencies = [
  "phf",
 ]
@@ -2262,11 +2262,12 @@ checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
 
 [[package]]
 name = "heed"
-version = "0.20.1"
+version = "0.20.0-alpha.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f7acb9683d7c7068aa46d47557bfa4e35a277964b350d9504a87b03610163fd"
+checksum = "9648a50991c86df7d00c56c268c27754fcf4c80be2ba57fc4a00dc928c6fe934"
 dependencies = [
  "bitflags 2.5.0",
+ "bytemuck",
  "byteorder",
  "heed-traits",
  "heed-types",
@@ -2280,15 +2281,15 @@ dependencies = [
 
 [[package]]
 name = "heed-traits"
-version = "0.20.0"
+version = "0.20.0-alpha.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb3130048d404c57ce5a1ac61a903696e8fcde7e8c2991e9fcfc1f27c3ef74ff"
+checksum = "5ab0b7d9cde969ad36dde692e487dc89d97f7168bf6a7bd3b894ad4bf7278298"
 
 [[package]]
 name = "heed-types"
-version = "0.20.0"
+version = "0.20.0-alpha.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3cb0d6ba3700c9a57e83c013693e3eddb68a6d9b6781cacafc62a0d992e8ddb3"
+checksum = "f0cb3567a7363f28b597bf6e9897b9466397951dd0e52df2c8196dd8a71af44a"
 dependencies = [
  "bincode",
  "byteorder",
@@ -3188,13 +3189,14 @@ checksum = "f9d642685b028806386b2b6e75685faadd3eb65a85fff7df711ce18446a422da"
 
 [[package]]
 name = "lmdb-master-sys"
-version = "0.2.0"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc9048db3a58c0732d7236abc4909058f9d2708cfb6d7d047eb895fddec6419a"
+checksum = "629c123f5321b48fa4f8f4d3b868165b748d9ba79c7103fb58e3a94f736bcedd"
 dependencies = [
  "cc",
  "doxygen-rs",
  "libc",
+ "pkg-config",
 ]
 
 [[package]]
@@ -3346,7 +3348,6 @@ dependencies = [
  "rayon",
  "regex",
  "reqwest",
- "roaring",
  "rustls 0.21.12",
  "rustls-pemfile",
  "segment",
@@ -4416,6 +4417,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "retain_mut"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c31b5c4033f8fdde8700e4657be2c497e7288f01515be52168c631e2e4d4086"
+
+[[package]]
 name = "ring"
 version = "0.17.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4432,12 +4439,13 @@ dependencies = [
 
 [[package]]
 name = "roaring"
-version = "0.10.3"
+version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1c77081a55300e016cb86f2864415b7518741879db925b8d488a0ee0d2da6bf"
+checksum = "6106b5cf8587f5834158895e9715a3c6c9716c8aefab57f1f7680917191c7873"
 dependencies = [
  "bytemuck",
  "byteorder",
+ "retain_mut",
  "serde",
 ]
 

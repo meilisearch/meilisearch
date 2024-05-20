@@ -556,7 +556,7 @@ where
                 let writer_index = (embedder_index as u16) << 8;
                 for k in 0..=u8::MAX {
                     let writer =
-                        arroy::Writer::new(vector_arroy, writer_index | (k as u16), dimension);
+                        arroy::Writer::new(vector_arroy, writer_index | (k as u16), dimension)?;
                     if writer.is_empty(wtxn)? {
                         break;
                     }

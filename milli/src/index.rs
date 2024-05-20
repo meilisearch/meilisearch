@@ -184,7 +184,7 @@ impl Index {
 
         options.max_dbs(25);
 
-        let env = unsafe { options.open(path) }?;
+        let env = options.open(path)?;
         let mut wtxn = env.write_txn()?;
         let main = env.database_options().name(MAIN).create(&mut wtxn)?;
         let word_docids = env.create_database(&mut wtxn, Some(WORD_DOCIDS))?;
@@ -292,11 +292,6 @@ impl Index {
     /// Create a read transaction to be able to read the index.
     pub fn read_txn(&self) -> heed::Result<RoTxn> {
         self.env.read_txn()
-    }
-
-    /// Create a static read transaction to be able to read the index without keeping a reference to it.
-    pub fn static_read_txn(&self) -> heed::Result<RoTxn<'static>> {
-        self.env.clone().static_read_txn()
     }
 
     /// Returns the canonicalized path where the heed `Env` of this `Index` lives.

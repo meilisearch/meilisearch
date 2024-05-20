@@ -48,6 +48,8 @@ pub enum InternalError {
     GrenadInvalidFormatVersion,
     #[error("Invalid merge while processing {process}")]
     IndexingMergingKeys { process: &'static str },
+    #[error("{}", HeedError::InvalidDatabaseTyping)]
+    InvalidDatabaseTyping,
     #[error(transparent)]
     RayonThreadPool(#[from] ThreadPoolBuildError),
     #[error(transparent)]
@@ -427,6 +429,7 @@ impl From<HeedError> for Error {
             // TODO use the encoding
             HeedError::Encoding(_) => InternalError(Serialization(Encoding { db_name: None })),
             HeedError::Decoding(_) => InternalError(Serialization(Decoding { db_name: None })),
+            HeedError::InvalidDatabaseTyping => InternalError(InvalidDatabaseTyping),
             HeedError::DatabaseClosing => InternalError(DatabaseClosing),
             HeedError::BadOpenOptions { .. } => UserError(InvalidLmdbOpenOptions),
         }

@@ -661,7 +661,7 @@ pub(crate) fn write_typed_chunk_into_index(
             )?;
             let writer_index = (embedder_index as u16) << 8;
             // FIXME: allow customizing distance
-            let writers: Vec<_> = (0..=u8::MAX)
+            let writers: std::result::Result<Vec<_>, _> = (0..=u8::MAX)
                 .map(|k| {
                     arroy::Writer::new(
                         index.vector_arroy,
@@ -670,6 +670,7 @@ pub(crate) fn write_typed_chunk_into_index(
                     )
                 })
                 .collect();
+            let writers = writers?;
 
             // remove vectors for docids we want them removed
             let merger = remove_vectors_builder.build();
