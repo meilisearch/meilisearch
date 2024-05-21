@@ -81,10 +81,10 @@ fn extract_lat_lng(
             let lng = document.get(lng_fid).map(KvReaderDelAdd::new).and_then(|r| r.get(deladd));
             let (lat, lng) = match (lat, lng) {
                 (Some(lat), Some(lng)) => (lat, lng),
-                (Some(lat), None) => {
+                (Some(_), None) => {
                     return Err(GeoError::MissingLatitude { document_id: document_id() }.into())
                 }
-                (None, Some(lng)) => {
+                (None, Some(_)) => {
                     return Err(GeoError::MissingLongitude { document_id: document_id() }.into())
                 }
                 (None, None) => return Ok(None),

@@ -142,17 +142,6 @@ async fn bug_4640() {
                 {
                   "hits": [
                     {
-                      "id": 1,
-                      "name": "Taco Truck",
-                      "address": "444 Salsa Street, Burritoville",
-                      "type": "Mexican",
-                      "rating": 9,
-                      "_geo": {
-                        "lat": 34.0522,
-                        "lng": -118.2437
-                      }
-                    },
-                    {
                       "id": 2,
                       "name": "La Bella Italia",
                       "address": "456 Elm Street, Townsville",
@@ -162,13 +151,32 @@ async fn bug_4640() {
                         "lat": "45.4777599",
                         "lng": "9.1967508"
                       }
+                    },
+                    {
+                      "id": 1,
+                      "name": "Taco Truck",
+                      "address": "444 Salsa Street, Burritoville",
+                      "type": "Mexican",
+                      "rating": 9,
+                      "_geo": {
+                        "lat": 34.0522,
+                        "lng": -118.2437
+                      },
+                      "_geoDistance": 9714063
+                    },
+                    {
+                      "id": 3,
+                      "name": "Crêpe Truck",
+                      "address": "2 Billig Avenue, Rouenville",
+                      "type": "French",
+                      "rating": 10
                     }
                   ],
                   "query": "",
                   "processingTimeMs": "[time]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 2
+                  "estimatedTotalHits": 3
                 }
                 "###);
             },

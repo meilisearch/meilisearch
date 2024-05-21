@@ -1191,7 +1191,7 @@ impl InnerIndexSettings {
         let stop_words = stop_words.map(|sw| sw.map_data(Vec::from).unwrap());
         let allowed_separators = index.allowed_separators(rtxn)?;
         let dictionary = index.dictionary(rtxn)?;
-        let fields_ids_map = index.fields_ids_map(rtxn)?;
+        let mut fields_ids_map = index.fields_ids_map(rtxn)?;
         let user_defined_searchable_fields = index.user_defined_searchable_fields(rtxn)?;
         let user_defined_searchable_fields =
             user_defined_searchable_fields.map(|sf| sf.into_iter().map(String::from).collect());

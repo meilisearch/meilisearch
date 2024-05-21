@@ -45,7 +45,6 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
     settings_diff: &InnerIndexSettingsDiff,
-    geo_fields_ids: Option<(FieldId, FieldId)>,
 ) -> Result<ExtractedFacetValues> {
     puffin::profile_function!();
 
@@ -127,12 +126,18 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
                     add_exists.insert(document);
                 }
 
-                let geo_support =
-                    geo_fields_ids.map_or(false, |(lat, lng)| field_id == lat || field_id == lng);
+                let del_geo_support = settings_diff
+                    .old
+                    .geo_fields_ids
+                    .map_or(false, |(lat, lng)| field_id == lat || field_id == lng);
+                let add_geo_support = settings_diff
+                    .new
+                    .geo_fields_ids
+                    .map_or(false, |(lat, lng)| field_id == lat || field_id == lng);
                 let del_filterable_values =
-                    del_value.map(|value| extract_facet_values(&value, geo_support));
+                    del_value.map(|value| extract_facet_values(&value, del_geo_support));
                 let add_filterable_values =
-                    add_value.map(|value| extract_facet_values(&value, geo_support));
+                    add_value.map(|value| extract_facet_values(&value, add_geo_support));
 
                 // Those closures are just here to simplify things a bit.
                 let mut insert_numbers_diff = |del_numbers, add_numbers| {

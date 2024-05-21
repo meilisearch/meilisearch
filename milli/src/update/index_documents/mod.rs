@@ -324,9 +324,6 @@ where
         // get the primary key field id
         let primary_key_id = settings_diff.new.fields_ids_map.id(&primary_key).unwrap();
 
-        // get the fid of the `_geo.lat` and `_geo.lng` fields.
-        let mut field_id_map = self.index.fields_ids_map(self.wtxn)?;
-
         let pool_params = GrenadParameters {
             chunk_compression_type: self.indexer_config.chunk_compression_type,
             chunk_compression_level: self.indexer_config.chunk_compression_level,

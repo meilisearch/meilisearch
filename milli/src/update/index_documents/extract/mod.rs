@@ -310,6 +310,7 @@ fn send_and_extract_flattened_documents_data(
     if settings_diff.run_geo_indexing() {
         let documents_chunk_cloned = flattened_documents_chunk.clone();
         let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
+        let settings_diff = settings_diff.clone();
         rayon::spawn(move || {
             let result =
                 extract_geo_points(documents_chunk_cloned, indexer, primary_key_id, &settings_diff);
@@ -351,7 +352,6 @@ fn send_and_extract_flattened_documents_data(
                     flattened_documents_chunk.clone(),
                     indexer,
                     &settings_diff,
-                    geo_fields_ids,
                 )?;
 
                 // send fid_docid_facet_numbers_chunk to DB writer
