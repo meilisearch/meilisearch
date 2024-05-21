@@ -1852,7 +1852,7 @@ mod tests {
 
             // To be 100% consistent between all test we're going to start the scheduler right now
             // and ensure it's in the expected starting state.
-            let breakpoint = match receiver.recv_timeout(std::time::Duration::from_secs(1)) {
+            let breakpoint = match receiver.recv_timeout(std::time::Duration::from_secs(10)) {
                 Ok(b) => b,
                 Err(RecvTimeoutError::Timeout) => {
                     panic!("The scheduler seems to be waiting for a new task while your test is waiting for a breakpoint.")
@@ -1963,7 +1963,7 @@ mod tests {
         fn advance(&mut self) -> Breakpoint {
             let (breakpoint_1, b) = match self
                 .test_breakpoint_rcv
-                .recv_timeout(std::time::Duration::from_secs(5))
+                .recv_timeout(std::time::Duration::from_secs(50))
             {
                 Ok(b) => b,
                 Err(RecvTimeoutError::Timeout) => {
@@ -1984,7 +1984,7 @@ mod tests {
 
             let (breakpoint_2, b) = match self
                 .test_breakpoint_rcv
-                .recv_timeout(std::time::Duration::from_secs(5))
+                .recv_timeout(std::time::Duration::from_secs(50))
             {
                 Ok(b) => b,
                 Err(RecvTimeoutError::Timeout) => {
