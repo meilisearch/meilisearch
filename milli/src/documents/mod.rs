@@ -12,7 +12,10 @@ use bimap::BiHashMap;
 pub use builder::DocumentsBatchBuilder;
 pub use enriched::{EnrichedDocument, EnrichedDocumentsBatchCursor, EnrichedDocumentsBatchReader};
 use obkv::KvReader;
-pub use primary_key::{DocumentIdExtractionError, FieldIdMapper, PrimaryKey, DEFAULT_PRIMARY_KEY};
+pub use primary_key::{
+    validate_document_id_value, DocumentIdExtractionError, FieldIdMapper, PrimaryKey,
+    DEFAULT_PRIMARY_KEY,
+};
 pub use reader::{DocumentsBatchCursor, DocumentsBatchCursorError, DocumentsBatchReader};
 use serde::{Deserialize, Serialize};
 
