@@ -19,6 +19,7 @@ use crate::order_by_map::OrderByMap;
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
+use crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME;
 use crate::vector::settings::{check_set, check_unset, EmbedderSource, EmbeddingSettings};
 use crate::vector::{Embedder, EmbeddingConfig, EmbeddingConfigs};
 use crate::{FieldId, FieldsIdsMap, Index, Result};
@@ -490,6 +491,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 self.index.put_all_searchable_fields_from_fields_ids_map(
                     self.wtxn,
                     &names,
+                    &fields_ids_map.nested_ids(RESERVED_VECTORS_FIELD_NAME),
                     &fields_ids_map,
                 )?;
                 self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
@@ -1252,6 +1254,8 @@ pub(crate) struct InnerIndexSettings {
     pub embedding_configs: EmbeddingConfigs,
     pub existing_fields: HashSet<String>,
     pub geo_fields_ids: Option<(FieldId, FieldId)>,
+    pub non_searchable_fields_ids: Vec<FieldId>,
+    pub non_faceted_fields_ids: Vec<FieldId>,
 }
 
 impl InnerIndexSettings {
@@ -1265,8 +1269,8 @@ impl InnerIndexSettings {
         let user_defined_searchable_fields =
             user_defined_searchable_fields.map(|sf| sf.into_iter().map(String::from).collect());
         let user_defined_faceted_fields = index.user_defined_faceted_fields(rtxn)?;
-        let searchable_fields_ids = index.searchable_fields_ids(rtxn)?;
-        let faceted_fields_ids = index.faceted_fields_ids(rtxn)?;
+        let mut searchable_fields_ids = index.searchable_fields_ids(rtxn)?;
+        let mut faceted_fields_ids = index.faceted_fields_ids(rtxn)?;
         let exact_attributes = index.exact_attributes_ids(rtxn)?;
         let proximity_precision = index.proximity_precision(rtxn)?.unwrap_or_default();
         let embedding_configs = embedders(index.embedding_configs(rtxn)?)?;
@@ -1294,6 +1298,10 @@ impl InnerIndexSettings {
             None => None,
         };
 
+        let vectors_fids = fields_ids_map.nested_ids(RESERVED_VECTORS_FIELD_NAME);
+        searchable_fields_ids.retain(|id| !vectors_fids.contains(id));
+        faceted_fields_ids.retain(|id| !vectors_fids.contains(id));
+
         Ok(Self {
             stop_words,
             allowed_separators,
@@ -1308,6 +1316,8 @@ impl InnerIndexSettings {
             embedding_configs,
             existing_fields,
             geo_fields_ids,
+            non_searchable_fields_ids: vectors_fids.clone(),
+            non_faceted_fields_ids: vectors_fids.clone(),
         })
     }
 
@@ -1315,9 +1325,10 @@ impl InnerIndexSettings {
     pub fn recompute_facets(&mut self, wtxn: &mut heed::RwTxn, index: &Index) -> Result<()> {
         let new_facets = self
             .fields_ids_map
-            .names()
-            .filter(|&field| crate::is_faceted(field, &self.user_defined_faceted_fields))
-            .map(|field| field.to_string())
+            .iter()
+            .filter(|(fid, _field)| !self.non_faceted_fields_ids.contains(fid))
+            .filter(|(_fid, field)| crate::is_faceted(field, &self.user_defined_faceted_fields))
+            .map(|(_fid, field)| field.to_string())
             .collect();
         index.put_faceted_fields(wtxn, &new_facets)?;
 
@@ -1337,6 +1348,7 @@ impl InnerIndexSettings {
             index.put_all_searchable_fields_from_fields_ids_map(
                 wtxn,
                 &searchable_fields,
+                &self.non_searchable_fields_ids,
                 &self.fields_ids_map,
             )?;
         }
