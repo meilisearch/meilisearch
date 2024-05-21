@@ -6,6 +6,7 @@ mod typed_chunk;
 
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Seek};
+use std::iter;
 use std::num::NonZeroU32;
 use std::result::Result as StdResult;
 use std::sync::Arc;
@@ -373,8 +374,11 @@ where
             }
         };
 
-        let original_documents = grenad::Reader::new(original_documents)?;
         let flattened_documents = grenad::Reader::new(flattened_documents)?;
+        let original_documents = match original_documents {
+            Some(original_documents) => Some(grenad::Reader::new(original_documents)?),
+            None => None,
+        };
 
         let max_positions_per_attributes = self.indexer_config.max_positions_per_attributes;
 
@@ -393,11 +397,21 @@ where
         pool.install(|| {
             rayon::spawn(move || {
                 let child_span = tracing::trace_span!(target: "indexing::details", parent: &current_span, "extract_and_send_grenad_chunks");
-            let _enter = child_span.enter();
-            puffin::profile_scope!("extract_and_send_grenad_chunks");
+                let _enter = child_span.enter();
+                puffin::profile_scope!("extract_and_send_grenad_chunks");
                 // split obkv file into several chunks
                 let original_chunk_iter =
-                    grenad_obkv_into_chunks(original_documents, pool_params, documents_chunk_size);
+                    match original_documents {
+                        Some(original_documents) => {
+                            grenad_obkv_into_chunks(
+                                original_documents,
+                                pool_params,
+                                documents_chunk_size
+                            )
+                            .map(either::Either::Left)
+                        },
+                        None => Ok(either::Right(iter::empty())),
+                    };
 
                 // split obkv file into several chunks
                 let flattened_chunk_iter =

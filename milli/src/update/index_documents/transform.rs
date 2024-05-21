@@ -33,7 +33,7 @@ pub struct TransformOutput {
     pub settings_diff: InnerIndexSettingsDiff,
     pub field_distribution: FieldDistribution,
     pub documents_count: usize,
-    pub original_documents: File,
+    pub original_documents: Option<File>,
     pub flattened_documents: File,
 }
 
@@ -822,7 +822,9 @@ impl<'a, 'i> Transform<'a, 'i> {
             settings_diff,
             field_distribution,
             documents_count: self.documents_count,
-            original_documents: original_documents.into_inner().map_err(|err| err.into_error())?,
+            original_documents: Some(
+                original_documents.into_inner().map_err(|err| err.into_error())?,
+            ),
             flattened_documents: flattened_documents
                 .into_inner()
                 .map_err(|err| err.into_error())?,
@@ -891,14 +893,18 @@ impl<'a, 'i> Transform<'a, 'i> {
         let documents_count = documents_ids.len() as usize;
 
         // We initialize the sorter with the user indexing settings.
-        let mut original_sorter = create_sorter(
-            grenad::SortAlgorithm::Stable,
-            keep_first,
-            self.indexer_settings.chunk_compression_type,
-            self.indexer_settings.chunk_compression_level,
-            self.indexer_settings.max_nb_chunks,
-            self.indexer_settings.max_memory.map(|mem| mem / 2),
-        );
+        let mut original_sorter = if settings_diff.reindex_vectors() {
+            Some(create_sorter(
+                grenad::SortAlgorithm::Stable,
+                keep_first,
+                self.indexer_settings.chunk_compression_type,
+                self.indexer_settings.chunk_compression_level,
+                self.indexer_settings.max_nb_chunks,
+                self.indexer_settings.max_memory.map(|mem| mem / 2),
+            ))
+        } else {
+            None
+        };
 
         // We initialize the sorter with the user indexing settings.
         let mut flattened_sorter = create_sorter(
@@ -929,7 +935,9 @@ impl<'a, 'i> Transform<'a, 'i> {
             document_sorter_key_buffer.clear();
             document_sorter_key_buffer.extend_from_slice(&docid.to_be_bytes());
             document_sorter_key_buffer.extend_from_slice(external_id.as_bytes());
-            original_sorter.insert(&document_sorter_key_buffer, &original_obkv_buffer)?;
+            if let Some(original_sorter) = original_sorter.as_mut() {
+                original_sorter.insert(&document_sorter_key_buffer, &original_obkv_buffer)?;
+            }
             flattened_sorter.insert(docid.to_be_bytes(), &flattened_obkv_buffer)?;
         }
 
@@ -941,16 +949,18 @@ impl<'a, 'i> Transform<'a, 'i> {
         };
 
         // Once we have written all the documents, we merge everything into a Reader.
-        let original_documents = sorter_into_reader(original_sorter, grenad_params)?;
-
         let flattened_documents = sorter_into_reader(flattened_sorter, grenad_params)?;
+        let original_documents = match original_sorter {
+            Some(original_sorter) => Some(sorter_into_reader(original_sorter, grenad_params)?),
+            None => None,
+        };
 
         Ok(TransformOutput {
             primary_key,
             field_distribution,
             settings_diff,
             documents_count,
-            original_documents: original_documents.into_inner().into_inner(),
+            original_documents: original_documents.map(|od| od.into_inner().into_inner()),
             flattened_documents: flattened_documents.into_inner().into_inner(),
         })
     }
