@@ -1099,6 +1099,7 @@ impl InnerIndexSettingsDiff {
     }
 
     pub fn reindex_searchable(&self) -> bool {
+        // TODO no longer useful after Tamo's PR
         self.old
             .fields_ids_map
             .iter()

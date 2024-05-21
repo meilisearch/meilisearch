@@ -360,7 +360,10 @@ where
                 let min_chunk_size = 1024 * 512; // 512KiB
 
                 // compute the chunk size from the number of available threads and the inputed data size.
-                let total_size = flattened_documents.metadata().map(|m| m.len());
+                let total_size = match flattened_documents.as_ref() {
+                    Some(flattened_documents) => flattened_documents.metadata().map(|m| m.len()),
+                    None => Ok(default_chunk_size as u64),
+                };
                 let current_num_threads = pool.current_num_threads();
                 // if we have more than 2 thread, create a number of chunk equal to 3/4 threads count
                 let chunk_count = if current_num_threads > 2 {
@@ -374,9 +377,12 @@ where
             }
         };
 
-        let flattened_documents = grenad::Reader::new(flattened_documents)?;
         let original_documents = match original_documents {
             Some(original_documents) => Some(grenad::Reader::new(original_documents)?),
+            None => None,
+        };
+        let flattened_documents = match flattened_documents {
+            Some(flattened_documents) => Some(grenad::Reader::new(flattened_documents)?),
             None => None,
         };
 
@@ -400,22 +406,20 @@ where
                 let _enter = child_span.enter();
                 puffin::profile_scope!("extract_and_send_grenad_chunks");
                 // split obkv file into several chunks
-                let original_chunk_iter =
-                    match original_documents {
-                        Some(original_documents) => {
-                            grenad_obkv_into_chunks(
-                                original_documents,
-                                pool_params,
-                                documents_chunk_size
-                            )
-                            .map(either::Either::Left)
-                        },
-                        None => Ok(either::Right(iter::empty())),
-                    };
+                let original_chunk_iter = match original_documents {
+                    Some(original_documents) => {
+                        grenad_obkv_into_chunks(original_documents,pool_params,documents_chunk_size).map(either::Left)
+                    },
+                    None => Ok(either::Right(iter::empty())),
+                };
 
                 // split obkv file into several chunks
-                let flattened_chunk_iter =
-                    grenad_obkv_into_chunks(flattened_documents, pool_params, documents_chunk_size);
+                let flattened_chunk_iter = match flattened_documents {
+                    Some(flattened_documents) => {
+                        grenad_obkv_into_chunks(flattened_documents, pool_params, documents_chunk_size).map(either::Left)
+                    },
+                    None => Ok(either::Right(iter::empty())),
+                };
 
                 let result = original_chunk_iter.and_then(|original_chunk| {
                     let flattened_chunk = flattened_chunk_iter?;

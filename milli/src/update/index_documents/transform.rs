@@ -34,7 +34,7 @@ pub struct TransformOutput {
     pub field_distribution: FieldDistribution,
     pub documents_count: usize,
     pub original_documents: Option<File>,
-    pub flattened_documents: File,
+    pub flattened_documents: Option<File>,
 }
 
 /// Extract the external ids, deduplicate and compute the new internal documents ids
@@ -825,9 +825,9 @@ impl<'a, 'i> Transform<'a, 'i> {
             original_documents: Some(
                 original_documents.into_inner().map_err(|err| err.into_error())?,
             ),
-            flattened_documents: flattened_documents
-                .into_inner()
-                .map_err(|err| err.into_error())?,
+            flattened_documents: Some(
+                flattened_documents.into_inner().map_err(|err| err.into_error())?,
+            ),
         })
     }
 
@@ -840,6 +840,9 @@ impl<'a, 'i> Transform<'a, 'i> {
         original_obkv_buffer: &mut Vec<u8>,
         flattened_obkv_buffer: &mut Vec<u8>,
     ) -> Result<()> {
+        /// TODO do a XOR of the faceted fields
+        /// TODO if reindex_searchable returns true store all searchables else none
+        /// TODO no longer useful after Tamo's PR
         let mut old_fields_ids_map = settings_diff.old.fields_ids_map.clone();
         let mut new_fields_ids_map = settings_diff.new.fields_ids_map.clone();
         let mut obkv_writer = KvWriter::<_, FieldId>::memory();
@@ -907,14 +910,19 @@ impl<'a, 'i> Transform<'a, 'i> {
         };
 
         // We initialize the sorter with the user indexing settings.
-        let mut flattened_sorter = create_sorter(
-            grenad::SortAlgorithm::Stable,
-            keep_first,
-            self.indexer_settings.chunk_compression_type,
-            self.indexer_settings.chunk_compression_level,
-            self.indexer_settings.max_nb_chunks,
-            self.indexer_settings.max_memory.map(|mem| mem / 2),
-        );
+        let mut flattened_sorter =
+            if settings_diff.reindex_searchable() || settings_diff.reindex_facets() {
+                Some(create_sorter(
+                    grenad::SortAlgorithm::Stable,
+                    keep_first,
+                    self.indexer_settings.chunk_compression_type,
+                    self.indexer_settings.chunk_compression_level,
+                    self.indexer_settings.max_nb_chunks,
+                    self.indexer_settings.max_memory.map(|mem| mem / 2),
+                ))
+            } else {
+                None
+            };
 
         let mut original_obkv_buffer = Vec::new();
         let mut flattened_obkv_buffer = Vec::new();
@@ -938,7 +946,9 @@ impl<'a, 'i> Transform<'a, 'i> {
             if let Some(original_sorter) = original_sorter.as_mut() {
                 original_sorter.insert(&document_sorter_key_buffer, &original_obkv_buffer)?;
             }
-            flattened_sorter.insert(docid.to_be_bytes(), &flattened_obkv_buffer)?;
+            if let Some(flattened_sorter) = flattened_sorter.as_mut() {
+                flattened_sorter.insert(docid.to_be_bytes(), &flattened_obkv_buffer)?;
+            }
         }
 
         let grenad_params = GrenadParameters {
@@ -949,7 +959,10 @@ impl<'a, 'i> Transform<'a, 'i> {
         };
 
         // Once we have written all the documents, we merge everything into a Reader.
-        let flattened_documents = sorter_into_reader(flattened_sorter, grenad_params)?;
+        let flattened_documents = match flattened_sorter {
+            Some(flattened_sorter) => Some(sorter_into_reader(flattened_sorter, grenad_params)?),
+            None => None,
+        };
         let original_documents = match original_sorter {
             Some(original_sorter) => Some(sorter_into_reader(original_sorter, grenad_params)?),
             None => None,
@@ -961,7 +974,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             settings_diff,
             documents_count,
             original_documents: original_documents.map(|od| od.into_inner().into_inner()),
-            flattened_documents: flattened_documents.into_inner().into_inner(),
+            flattened_documents: flattened_documents.map(|fd| fd.into_inner().into_inner()),
         })
     }
 }
