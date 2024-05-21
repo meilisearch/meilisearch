@@ -43,7 +43,6 @@ pub(crate) fn data_from_obkv_documents(
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     primary_key_id: FieldId,
-    geo_fields_ids: Option<(FieldId, FieldId)>,
     settings_diff: Arc<InnerIndexSettingsDiff>,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<()> {
@@ -72,7 +71,6 @@ pub(crate) fn data_from_obkv_documents(
                         indexer,
                         lmdb_writer_sx.clone(),
                         primary_key_id,
-                        geo_fields_ids,
                         settings_diff.clone(),
                         max_positions_per_attributes,
                     )
@@ -300,7 +298,6 @@ fn send_and_extract_flattened_documents_data(
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     primary_key_id: FieldId,
-    geo_fields_ids: Option<(FieldId, FieldId)>,
     settings_diff: Arc<InnerIndexSettingsDiff>,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<(
@@ -310,12 +307,13 @@ fn send_and_extract_flattened_documents_data(
     let flattened_documents_chunk =
         flattened_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
 
-    if let Some(geo_fields_ids) = geo_fields_ids {
+    if settings_diff.run_geo_indexing() {
         let documents_chunk_cloned = flattened_documents_chunk.clone();
         let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
+        let settings_diff = settings_diff.clone();
         rayon::spawn(move || {
             let result =
-                extract_geo_points(documents_chunk_cloned, indexer, primary_key_id, geo_fields_ids);
+                extract_geo_points(documents_chunk_cloned, indexer, primary_key_id, &settings_diff);
             let _ = match result {
                 Ok(geo_points) => lmdb_writer_sx_cloned.send(Ok(TypedChunk::GeoPoints(geo_points))),
                 Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
@@ -354,7 +352,6 @@ fn send_and_extract_flattened_documents_data(
                     flattened_documents_chunk.clone(),
                     indexer,
                     &settings_diff,
-                    geo_fields_ids,
                 )?;
 
                 // send fid_docid_facet_numbers_chunk to DB writer
