@@ -384,7 +384,6 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidGeoField { .. } => Code::InvalidDocumentGeoField,
                     UserError::InvalidVectorDimensions { .. } => Code::InvalidVectorDimensions,
                     UserError::InvalidVectorsMapType { .. } => Code::InvalidVectorsType,
-                    UserError::InvalidVectorsType { .. } => Code::InvalidVectorsType,
                     UserError::TooManyVectors(_, _) => Code::TooManyVectors,
                     UserError::SortError(_) => Code::InvalidSearchSort,
                     UserError::InvalidMinTypoWordLenSetting(_, _) => {
