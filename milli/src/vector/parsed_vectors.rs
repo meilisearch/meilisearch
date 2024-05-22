@@ -136,19 +136,19 @@ fn to_vector_map(
 #[serde(transparent)]
 pub struct VectorOrArrayOfVectors {
     #[serde(with = "either::serde_untagged_optional")]
-    inner: Option<either::Either<Embedding, Vec<Embedding>>>,
+    inner: Option<either::Either<Vec<Embedding>, Embedding>>,
 }
 
 impl VectorOrArrayOfVectors {
     pub fn into_array_of_vectors(self) -> Option<Vec<Embedding>> {
         match self.inner? {
-            either::Either::Left(vector) => Some(vec![vector]),
-            either::Either::Right(vectors) => Some(vectors),
+            either::Either::Left(vectors) => Some(vectors),
+            either::Either::Right(vector) => Some(vec![vector]),
         }
     }
 
     pub fn from_array_of_vectors(array_of_vec: Vec<Embedding>) -> Self {
-        Self { inner: Some(either::Either::Right(array_of_vec)) }
+        Self { inner: Some(either::Either::Left(array_of_vec)) }
     }
 }
 
@@ -167,12 +167,7 @@ mod test {
             serde_json::from_str("[[0.1, 0.2], [0.3, 0.4]]").unwrap();
 
         insta::assert_json_snapshot!(null.into_array_of_vectors(), @"null");
-        // 👇 is the the intended behavior? would rather expect [] here, but changing that is a breaking change...
-        insta::assert_json_snapshot!(empty.into_array_of_vectors(), @r###"
-        [
-          []
-        ]
-        "###);
+        insta::assert_json_snapshot!(empty.into_array_of_vectors(), @"[]");
         insta::assert_json_snapshot!(one.into_array_of_vectors(), @r###"
         [
           [
