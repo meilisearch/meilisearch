@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use obkv::KvReader;
 use serde_json::{from_slice, Value};
@@ -89,10 +89,14 @@ impl ParsedVectors {
         Ok(ParsedVectors(value))
     }
 
-    pub fn retain_user_provided_vectors(&mut self) {
-        self.0.retain(|_k, v| match v {
+    pub fn retain_user_provided_vectors(&mut self, embedders: &BTreeSet<String>) {
+        self.0.retain(|k, v| match v {
             Vectors::ImplicitlyUserProvided(_) => true,
-            Vectors::Explicit(ExplicitVectors { embeddings: _, user_provided }) => *user_provided,
+            Vectors::Explicit(ExplicitVectors { embeddings: _, user_provided }) => {
+                *user_provided
+                // if the embedder is not in the config, then never touch it
+                || !embedders.contains(k)
+            }
         });
     }
 }

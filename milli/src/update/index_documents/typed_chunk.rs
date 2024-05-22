@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::{self, BufReader};
@@ -211,6 +211,8 @@ pub(crate) fn write_typed_chunk_into_index(
             let mut docids = index.documents_ids(wtxn)?;
             let mut iter = merger.into_stream_merger_iter()?;
 
+            let embedders: BTreeSet<_> =
+                index.embedding_configs(wtxn)?.into_iter().map(|(k, _v)| k).collect();
             let mut vectors_buffer = Vec::new();
             while let Some((key, reader)) = iter.next()? {
                 let mut writer: KvWriter<_, FieldId> = KvWriter::memory();
@@ -225,9 +227,8 @@ pub(crate) fn write_typed_chunk_into_index(
                     let del_add_reader = KvReaderDelAdd::new(value);
 
                     if let Some(addition) = del_add_reader.get(DelAdd::Addition) {
-                        let addition = match vectors_fid {
-                            // for the "_vectors" field, only keep vectors that are marked as userProvided
-                            Some(vectors_fid) if vectors_fid == field_id => 'vectors: {
+                        let addition = if vectors_fid == Some(field_id) {
+                            'vectors: {
                                 vectors_buffer.clear();
                                 let Ok(mut vectors) =
                                     crate::vector::parsed_vectors::ParsedVectors::from_bytes(
@@ -237,7 +238,7 @@ pub(crate) fn write_typed_chunk_into_index(
                                     // if the `_vectors` field cannot be parsed as map of vectors, just write it as-is
                                     break 'vectors Some(addition);
                                 };
-                                vectors.retain_user_provided_vectors();
+                                vectors.retain_user_provided_vectors(&embedders);
                                 let crate::vector::parsed_vectors::ParsedVectors(vectors) = vectors;
                                 if vectors.is_empty() {
                                     // skip writing empty `_vectors` map
@@ -248,8 +249,10 @@ pub(crate) fn write_typed_chunk_into_index(
                                     .map_err(InternalError::SerdeJson)?;
                                 Some(vectors_buffer.as_slice())
                             }
-                            _ => Some(addition),
+                        } else {
+                            Some(addition)
                         };
+
                         if let Some(addition) = addition {
                             writer.insert(field_id, addition)?;
                         }
