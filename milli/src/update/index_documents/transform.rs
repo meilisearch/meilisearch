@@ -840,9 +840,9 @@ impl<'a, 'i> Transform<'a, 'i> {
         original_obkv_buffer: &mut Vec<u8>,
         flattened_obkv_buffer: &mut Vec<u8>,
     ) -> Result<()> {
-        /// TODO do a XOR of the faceted fields
-        /// TODO if reindex_searchable returns true store all searchables else none
-        /// TODO no longer useful after Tamo's PR
+        // TODO do a XOR of the faceted fields
+        // TODO if reindex_searchable returns true store all searchables else none
+        // TODO no longer useful after Tamo's PR
         let mut old_fields_ids_map = settings_diff.old.fields_ids_map.clone();
         let mut new_fields_ids_map = settings_diff.new.fields_ids_map.clone();
         let mut obkv_writer = KvWriter::<_, FieldId>::memory();

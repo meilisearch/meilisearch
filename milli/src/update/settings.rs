@@ -1099,14 +1099,8 @@ impl InnerIndexSettingsDiff {
     }
 
     pub fn reindex_searchable(&self) -> bool {
-        // TODO no longer useful after Tamo's PR
-        self.old
-            .fields_ids_map
-            .iter()
-            .zip(self.new.fields_ids_map.iter())
-            .any(|(old, new)| old != new)
-            || self.old.stop_words.as_ref().map(|set| set.as_fst().as_bytes())
-                != self.new.stop_words.as_ref().map(|set| set.as_fst().as_bytes())
+        self.old.stop_words.as_ref().map(|set| set.as_fst().as_bytes())
+            != self.new.stop_words.as_ref().map(|set| set.as_fst().as_bytes())
             || self.old.allowed_separators != self.new.allowed_separators
             || self.old.dictionary != self.new.dictionary
             || self.old.user_defined_searchable_fields != self.new.user_defined_searchable_fields
