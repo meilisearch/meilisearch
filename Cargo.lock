@@ -2455,6 +2455,7 @@ name = "index-scheduler"
 version = "1.9.0"
 dependencies = [
  "anyhow",
+ "arroy",
  "big_s",
  "bincode",
  "crossbeam",
@@ -2465,6 +2466,7 @@ dependencies = [
  "file-store",
  "flate2",
  "insta",
+ "maplit",
  "meili-snap",
  "meilisearch-auth",
  "meilisearch-types",

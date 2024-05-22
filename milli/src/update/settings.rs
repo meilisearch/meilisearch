@@ -6,6 +6,7 @@ use std::sync::Arc;
 use charabia::{Normalize, Tokenizer, TokenizerBuilder};
 use deserr::{DeserializeError, Deserr};
 use itertools::{EitherOrBoth, Itertools};
+use roaring::RoaringBitmap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use time::OffsetDateTime;
 
@@ -926,8 +927,13 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             Setting::Set(configs) => {
                 let mut changed = false;
                 let old_configs = self.index.embedding_configs(self.wtxn)?;
-                let old_configs: BTreeMap<String, Setting<EmbeddingSettings>> =
-                    old_configs.into_iter().map(|(k, v)| (k, Setting::Set(v.into()))).collect();
+                let old_configs: BTreeMap<String, (Setting<EmbeddingSettings>, RoaringBitmap)> =
+                    old_configs
+                        .into_iter()
+                        .map(|(name, setting, user_defined)| {
+                            (name, (Setting::Set(setting.into()), user_defined))
+                        })
+                        .collect();
 
                 let mut new_configs = BTreeMap::new();
                 for joined in old_configs
@@ -936,15 +942,19 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 {
                     match joined {
                         // updated config
-                        EitherOrBoth::Both((name, mut old), (_, new)) => {
+                        EitherOrBoth::Both((name, (mut old, user_defined)), (_, new)) => {
                             changed |= EmbeddingSettings::apply_and_need_reindex(&mut old, new);
                             if changed {
-                                tracing::debug!(embedder = name, "need reindex");
+                                tracing::debug!(
+                                    embedder = name,
+                                    documents = user_defined.len(),
+                                    "need reindex"
+                                );
                             } else {
                                 tracing::debug!(embedder = name, "skip reindex");
                             }
                             let new = validate_embedding_settings(old, &name)?;
-                            new_configs.insert(name, new);
+                            new_configs.insert(name, (new, user_defined));
                         }
                         // unchanged config
                         EitherOrBoth::Left((name, setting)) => {
@@ -961,21 +971,23 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                             );
                             let setting = validate_embedding_settings(setting, &name)?;
                             changed = true;
-                            new_configs.insert(name, setting);
+                            new_configs.insert(name, (setting, RoaringBitmap::new()));
                         }
                     }
                 }
-                let new_configs: Vec<(String, EmbeddingConfig)> = new_configs
+                let new_configs: Vec<(String, EmbeddingConfig, RoaringBitmap)> = new_configs
                     .into_iter()
-                    .filter_map(|(name, setting)| match setting {
-                        Setting::Set(value) => Some((name, value.into())),
+                    .filter_map(|(name, (setting, user_defined))| match setting {
+                        Setting::Set(settings) => Some((name, settings.into(), user_defined)),
                         Setting::Reset => None,
-                        Setting::NotSet => Some((name, EmbeddingSettings::default().into())),
+                        Setting::NotSet => {
+                            Some((name, EmbeddingSettings::default().into(), user_defined))
+                        }
                     })
                     .collect();
 
                 self.index.embedder_category_id.clear(self.wtxn)?;
-                for (index, (embedder_name, _)) in new_configs.iter().enumerate() {
+                for (index, (embedder_name, _, _)) in new_configs.iter().enumerate() {
                     self.index.embedder_category_id.put_with_flags(
                         self.wtxn,
                         heed::PutFlags::APPEND,
@@ -1359,10 +1371,12 @@ impl InnerIndexSettings {
     }
 }
 
-fn embedders(embedding_configs: Vec<(String, EmbeddingConfig)>) -> Result<EmbeddingConfigs> {
+fn embedders(
+    embedding_configs: Vec<(String, EmbeddingConfig, RoaringBitmap)>,
+) -> Result<EmbeddingConfigs> {
     let res: Result<_> = embedding_configs
         .into_iter()
-        .map(|(name, EmbeddingConfig { embedder_options, prompt })| {
+        .map(|(name, EmbeddingConfig { embedder_options, prompt }, _)| {
             let prompt = Arc::new(prompt.try_into().map_err(crate::Error::from)?);
 
             let embedder = Arc::new(

@@ -17,6 +17,13 @@ pub enum Vectors {
 }
 
 impl Vectors {
+    pub fn is_user_provided(&self) -> bool {
+        match self {
+            Vectors::ImplicitlyUserProvided(_) => true,
+            Vectors::Explicit(ExplicitVectors { user_provided, .. }) => *user_provided,
+        }
+    }
+
     pub fn into_array_of_vectors(self) -> Vec<Embedding> {
         match self {
             Vectors::ImplicitlyUserProvided(embeddings)
@@ -89,15 +96,8 @@ impl ParsedVectors {
         Ok(ParsedVectors(value))
     }
 
-    pub fn retain_user_provided_vectors(&mut self, embedders: &BTreeSet<String>) {
-        self.0.retain(|k, v| match v {
-            Vectors::ImplicitlyUserProvided(_) => true,
-            Vectors::Explicit(ExplicitVectors { embeddings: _, user_provided }) => {
-                *user_provided
-                // if the embedder is not in the config, then never touch it
-                || !embedders.contains(k)
-            }
-        });
+    pub fn retain_not_embedded_vectors(&mut self, embedders: &BTreeSet<String>) {
+        self.0.retain(|k, _v| !embedders.contains(k))
     }
 }
 

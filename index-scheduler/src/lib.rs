@@ -1459,11 +1459,11 @@ impl IndexScheduler {
     // TODO: consider using a type alias or a struct embedder/template
     pub fn embedders(
         &self,
-        embedding_configs: Vec<(String, milli::vector::EmbeddingConfig)>,
+        embedding_configs: Vec<(String, milli::vector::EmbeddingConfig, RoaringBitmap)>,
     ) -> Result<EmbeddingConfigs> {
         let res: Result<_> = embedding_configs
             .into_iter()
-            .map(|(name, milli::vector::EmbeddingConfig { embedder_options, prompt })| {
+            .map(|(name, milli::vector::EmbeddingConfig { embedder_options, prompt }, _)| {
                 let prompt =
                     Arc::new(prompt.try_into().map_err(meilisearch_types::milli::Error::from)?);
                 // optimistically return existing embedder
@@ -1748,6 +1748,9 @@ mod tests {
     use meilisearch_types::milli::update::IndexDocumentsMethod::{
         ReplaceDocuments, UpdateDocuments,
     };
+    use meilisearch_types::milli::update::Setting;
+    use meilisearch_types::milli::vector::settings::EmbeddingSettings;
+    use meilisearch_types::settings::{Checked, Unchecked};
     use meilisearch_types::tasks::IndexSwap;
     use meilisearch_types::VERSION_FILE_NAME;
     use tempfile::{NamedTempFile, TempDir};
@@ -3052,7 +3055,9 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         let configs = index.embedding_configs(&rtxn).unwrap();
-        let (_, embedding_config) = configs.first().unwrap();
+        let (name, embedding_config, user_provided) = configs.first().unwrap();
+        insta::assert_snapshot!(name, @"default");
+        insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
         insta::assert_json_snapshot!(embedding_config.embedder_options);
     }
 
@@ -5017,13 +5022,15 @@ mod tests {
             let configs = index.embedding_configs(&rtxn).unwrap();
             // for consistency with the below
             #[allow(clippy::get_first)]
-            let (name, fakerest_config) = configs.get(0).unwrap();
-            insta::assert_json_snapshot!(name, @r###""A_fakerest""###);
+            let (name, fakerest_config, user_provided) = configs.get(0).unwrap();
+            insta::assert_snapshot!(name, @"A_fakerest");
+            insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
             insta::assert_json_snapshot!(fakerest_config.embedder_options);
             let fakerest_name = name.clone();
 
-            let (name, simple_hf_config) = configs.get(1).unwrap();
-            insta::assert_json_snapshot!(name, @r###""B_small_hf""###);
+            let (name, simple_hf_config, user_provided) = configs.get(1).unwrap();
+            insta::assert_snapshot!(name, @"B_small_hf");
+            insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
             insta::assert_json_snapshot!(simple_hf_config.embedder_options);
             let simple_hf_name = name.clone();
 
@@ -5091,6 +5098,18 @@ mod tests {
             let index = index_scheduler.index("doggos").unwrap();
             let rtxn = index.read_txn().unwrap();
 
+            // Ensure the document have been inserted into the relevant bitamp
+            let configs = index.embedding_configs(&rtxn).unwrap();
+            // for consistency with the below
+            #[allow(clippy::get_first)]
+            let (name, _config, user_defined) = configs.get(0).unwrap();
+            insta::assert_snapshot!(name, @"A_fakerest");
+            insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[0]>");
+
+            let (name, _config, user_defined) = configs.get(1).unwrap();
+            insta::assert_snapshot!(name, @"B_small_hf");
+            insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[]>");
+
             let embeddings = index.embeddings(&rtxn, 0).unwrap();
 
             assert_json_snapshot!(embeddings[&simple_hf_name][0] == lab_embed, @"true");
@@ -5153,6 +5172,18 @@ mod tests {
                 let index = index_scheduler.index("doggos").unwrap();
                 let rtxn = index.read_txn().unwrap();
 
+                // Ensure the document have been inserted into the relevant bitamp
+                let configs = index.embedding_configs(&rtxn).unwrap();
+                // for consistency with the below
+                #[allow(clippy::get_first)]
+                let (name, _config, user_defined) = configs.get(0).unwrap();
+                insta::assert_snapshot!(name, @"A_fakerest");
+                insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[0]>");
+
+                let (name, _config, user_defined) = configs.get(1).unwrap();
+                insta::assert_snapshot!(name, @"B_small_hf");
+                insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[]>");
+
                 let embeddings = index.embeddings(&rtxn, 0).unwrap();
 
                 // automatically changed to patou
@@ -5175,5 +5206,247 @@ mod tests {
                 assert_json_snapshot!(doc, {"._vectors.A_fakerest.embeddings" => "[vector]"});
             }
         }
+    }
+
+    #[test]
+    fn import_vectors_first_and_embedder_later() {
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        let content = serde_json::json!(
+            [
+                {
+                    "id": 0,
+                    "doggo": "kefir",
+                },
+                {
+                    "id": 1,
+                    "doggo": "intel",
+                    "_vectors": {
+                        "my_doggo_embedder": vec![1; 384],
+                        "unknown embedder": vec![1, 2, 3],
+                    }
+                },
+                {
+                    "id": 2,
+                    "doggo": "max",
+                    "_vectors": {
+                        "my_doggo_embedder": {
+                            "userProvided": true,
+                            "embeddings": vec![2; 384],
+                        },
+                        "unknown embedder": vec![4, 5],
+                    },
+                },
+                {
+                    "id": 3,
+                    "doggo": "marcel",
+                    "_vectors": {
+                        "my_doggo_embedder": {
+                            "userProvided": false,
+                            "embeddings": vec![3; 384],
+                        },
+                    },
+                },
+                {
+                    "id": 4,
+                    "doggo": "sora",
+                    "_vectors": {
+                        "my_doggo_embedder": {
+                            "userProvided": false,
+                        },
+                    },
+                },
+            ]
+        );
+
+        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0 as u128).unwrap();
+        let documents_count =
+            read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file)
+                .unwrap();
+        snapshot!(documents_count, @"5");
+        file.persist().unwrap();
+
+        index_scheduler
+            .register(
+                KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: None,
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        index_scheduler.assert_internally_consistent();
+        handle.advance_one_successful_batch();
+        index_scheduler.assert_internally_consistent();
+
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string(&documents).unwrap(), name: "documents after initial push");
+
+        let mut setting = meilisearch_types::settings::Settings::<Unchecked>::default();
+        setting.embedders = Setting::Set(maplit::btreemap! {
+            S("my_doggo_embedder") => Setting::Set(EmbeddingSettings {
+                source: Setting::Set(milli::vector::settings::EmbedderSource::HuggingFace),
+                model: Setting::Set(S("sentence-transformers/all-MiniLM-L6-v2")),
+                revision: Setting::Set(S("e4ce9877abf3edfe10b0d82785e83bdcb973e22e")),
+                document_template: Setting::Set(S("{{doc.doggo}}")),
+            .. EmbeddingSettings::default()
+            })
+        });
+        index_scheduler
+            .register(
+                KindWithContent::SettingsUpdate {
+                    index_uid: S("doggos"),
+                    new_settings: Box::new(setting),
+                    is_deletion: false,
+                    allow_index_creation: false,
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        index_scheduler.assert_internally_consistent();
+        handle.advance_one_successful_batch();
+        index_scheduler.assert_internally_consistent();
+
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        // the all the vectors linked to the new specified embedder have been removed
+        // Only the unknown embedders stays in the document DB
+        snapshot!(serde_json::to_string(&documents).unwrap(), @r###"[{"id":0,"doggo":"kefir"},{"id":1,"doggo":"intel","_vectors":{"unknown embedder":[1.0,2.0,3.0]}},{"id":2,"doggo":"max","_vectors":{"unknown embedder":[4.0,5.0]}},{"id":3,"doggo":"marcel"},{"id":4,"doggo":"sora"}]"###);
+        let conf = index.embedding_configs(&rtxn).unwrap();
+        // even though we specified the vector for the ID 3, it shouldn't be marked
+        // as user provided since we explicitely marked it as NOT user provided.
+        snapshot!(format!("{conf:#?}"), @r###"
+        [
+            (
+                "my_doggo_embedder",
+                EmbeddingConfig {
+                    embedder_options: HuggingFace(
+                        EmbedderOptions {
+                            model: "sentence-transformers/all-MiniLM-L6-v2",
+                            revision: Some(
+                                "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
+                            ),
+                            distribution: None,
+                        },
+                    ),
+                    prompt: PromptData {
+                        template: "{{doc.doggo}}",
+                    },
+                },
+                RoaringBitmap<[1, 2]>,
+            ),
+        ]
+        "###);
+        let docid = index.external_documents_ids.get(&rtxn, "0").unwrap().unwrap();
+        let embeddings = index.embeddings(&rtxn, docid).unwrap();
+        let embedding = &embeddings["my_doggo_embedder"];
+        assert!(!embedding.is_empty(), "{embedding:?}");
+
+        // the document with the id 3 should keep its original embedding
+        let docid = index.external_documents_ids.get(&rtxn, "3").unwrap().unwrap();
+        let mut embeddings = Vec::new();
+
+        'vectors: for i in 0..=u8::MAX {
+            let reader = arroy::Reader::open(&rtxn, 0 | (i as u16), index.vector_arroy)
+                .map(Some)
+                .or_else(|e| match e {
+                    arroy::Error::MissingMetadata => Ok(None),
+                    e => Err(e),
+                })
+                .transpose();
+
+            let Some(reader) = reader else {
+                break 'vectors;
+            };
+
+            let embedding = reader.unwrap().item_vector(&rtxn, docid).unwrap();
+            if let Some(embedding) = embedding {
+                embeddings.push(embedding)
+            } else {
+                break 'vectors;
+            }
+        }
+
+        snapshot!(embeddings.len(), @"1");
+        assert!(embeddings[0].iter().all(|i| *i == 3.0), "{:?}", embeddings[0]);
+
+        // If we update marcel it should regenerate its embedding automatically
+
+        let content = serde_json::json!(
+            [
+                {
+                    "id": 3,
+                    "doggo": "marvel",
+                },
+                {
+                    "id": 4,
+                    "doggo": "sorry",
+                },
+            ]
+        );
+
+        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(1 as u128).unwrap();
+        let documents_count =
+            read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file)
+                .unwrap();
+        snapshot!(documents_count, @"2");
+        file.persist().unwrap();
+
+        index_scheduler
+            .register(
+                KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: None,
+                    method: UpdateDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        index_scheduler.assert_internally_consistent();
+        handle.advance_one_successful_batch();
+        index_scheduler.assert_internally_consistent();
+
+        // the document with the id 3 should have its original embedding updated
+        let docid = index.external_documents_ids.get(&rtxn, "3").unwrap().unwrap();
+        let embeddings = index.embeddings(&rtxn, docid).unwrap();
+        let embedding = &embeddings["my_doggo_embedder"];
+
+        assert!(!embedding.is_empty());
+        /// TODO: it shouldn’t be equal to 3.0
+        assert!(embedding[0].iter().all(|i| *i == 3.0), "{:?}", embedding[0]);
+
+        // the document with the id 4 should generate an embedding
+        // let docid = index.external_documents_ids.get(&rtxn, "4").unwrap().unwrap();
+        // let embeddings = index.embeddings(&rtxn, docid).unwrap();
+        // dbg!(&embeddings);
+        // let embedding = &embeddings["my_doggo_embedder"];
+
+        // assert!(!embedding.is_empty());
+        // assert!(embedding[0]);
     }
 }

@@ -501,6 +501,8 @@ where
                                 embeddings,
                                 manual_vectors,
                                 embedder_name,
+                                user_defined,
+                                remove_from_user_defined,
                             } => {
                                 dimension.insert(embedder_name.clone(), expected_dimension);
                                 TypedChunk::VectorPoints {
@@ -509,6 +511,8 @@ where
                                     expected_dimension,
                                     manual_vectors,
                                     embedder_name,
+                                    user_defined,
+                                    remove_from_user_defined,
                                 }
                             }
                             otherwise => otherwise,
@@ -2616,10 +2620,11 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
         let mut embedding_configs = index.embedding_configs(&rtxn).unwrap();
-        let (embedder_name, embedder) = embedding_configs.pop().unwrap();
+        let (embedder_name, embedder, user_defined) = embedding_configs.pop().unwrap();
+        insta::assert_snapshot!(embedder_name, @"manual");
+        insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[0, 1, 2]>");
         let embedder =
             std::sync::Arc::new(crate::vector::Embedder::new(embedder.embedder_options).unwrap());
-        assert_eq!("manual", embedder_name);
         let res = index
             .search(&rtxn)
             .semantic(embedder_name, embedder, Some([0.0, 1.0, 2.0].to_vec()))

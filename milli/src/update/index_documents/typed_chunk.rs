@@ -90,6 +90,8 @@ pub(crate) enum TypedChunk {
         expected_dimension: usize,
         manual_vectors: grenad::Reader<BufReader<File>>,
         embedder_name: String,
+        user_defined: RoaringBitmap,
+        remove_from_user_defined: RoaringBitmap,
     },
     ScriptLanguageDocids(HashMap<(Script, Language), (RoaringBitmap, RoaringBitmap)>),
 }
@@ -155,7 +157,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let mut iter = merger.into_stream_merger_iter()?;
 
             let embedders: BTreeSet<_> =
-                index.embedding_configs(wtxn)?.into_iter().map(|(k, _v)| k).collect();
+                index.embedding_configs(wtxn)?.into_iter().map(|(name, _, _)| name).collect();
             let mut vectors_buffer = Vec::new();
             while let Some((key, reader)) = iter.next()? {
                 let mut writer: KvWriter<_, FieldId> = KvWriter::memory();
@@ -181,7 +183,7 @@ pub(crate) fn write_typed_chunk_into_index(
                                     // if the `_vectors` field cannot be parsed as map of vectors, just write it as-is
                                     break 'vectors Some(addition);
                                 };
-                                vectors.retain_user_provided_vectors(&embedders);
+                                vectors.retain_not_embedded_vectors(&embedders);
                                 let crate::vector::parsed_vectors::ParsedVectors(vectors) = vectors;
                                 if vectors.is_empty() {
                                     // skip writing empty `_vectors` map
@@ -619,6 +621,8 @@ pub(crate) fn write_typed_chunk_into_index(
             let mut remove_vectors_builder = MergerBuilder::new(keep_first as MergeFn);
             let mut manual_vectors_builder = MergerBuilder::new(keep_first as MergeFn);
             let mut embeddings_builder = MergerBuilder::new(keep_first as MergeFn);
+            let mut user_defined = RoaringBitmap::new();
+            let mut remove_from_user_defined = RoaringBitmap::new();
             let mut params = None;
             for typed_chunk in typed_chunks {
                 let TypedChunk::VectorPoints {
@@ -627,6 +631,8 @@ pub(crate) fn write_typed_chunk_into_index(
                     embeddings,
                     expected_dimension,
                     embedder_name,
+                    user_defined: ud,
+                    remove_from_user_defined: rud,
                 } = typed_chunk
                 else {
                     unreachable!();
@@ -639,10 +645,20 @@ pub(crate) fn write_typed_chunk_into_index(
                 if let Some(embeddings) = embeddings {
                     embeddings_builder.push(embeddings.into_cursor()?);
                 }
+                user_defined |= ud;
+                remove_from_user_defined |= rud;
             }
 
             // typed chunks has always at least 1 chunk.
             let Some((expected_dimension, embedder_name)) = params else { unreachable!() };
+
+            let mut embedding_configs = index.embedding_configs(&wtxn)?;
+            let (_name, _conf, ud) =
+                embedding_configs.iter_mut().find(|config| config.0 == embedder_name).unwrap();
+            *ud -= remove_from_user_defined;
+            *ud |= user_defined;
+
+            index.put_embedding_configs(wtxn, embedding_configs)?;
 
             let embedder_index = index.embedder_category_id.get(wtxn, &embedder_name)?.ok_or(
                 InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },

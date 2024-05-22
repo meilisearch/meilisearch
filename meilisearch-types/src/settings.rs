@@ -672,7 +672,7 @@ pub fn settings(
     let embedders: BTreeMap<_, _> = index
         .embedding_configs(rtxn)?
         .into_iter()
-        .map(|(name, config)| (name, Setting::Set(config.into())))
+        .map(|(name, config, _)| (name, Setting::Set(config.into())))
         .collect();
     let embedders = if embedders.is_empty() { Setting::NotSet } else { Setting::Set(embedders) };
 

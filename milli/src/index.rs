@@ -1572,16 +1572,18 @@ impl Index {
         Ok(script_language)
     }
 
+    /// Put the embedding configs:
+    /// 1. The name of the embedder
+    /// 2. The configuration option for this embedder
+    /// 3. The list of documents with a user provided embedding
     pub(crate) fn put_embedding_configs(
         &self,
         wtxn: &mut RwTxn<'_>,
-        configs: Vec<(String, EmbeddingConfig)>,
+        configs: Vec<(String, EmbeddingConfig, RoaringBitmap)>,
     ) -> heed::Result<()> {
-        self.main.remap_types::<Str, SerdeJson<Vec<(String, EmbeddingConfig)>>>().put(
-            wtxn,
-            main_key::EMBEDDING_CONFIGS,
-            &configs,
-        )
+        self.main
+            .remap_types::<Str, SerdeJson<Vec<(String, EmbeddingConfig, RoaringBitmap)>>>()
+            .put(wtxn, main_key::EMBEDDING_CONFIGS, &configs)
     }
 
     pub(crate) fn delete_embedding_configs(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
@@ -1591,10 +1593,10 @@ impl Index {
     pub fn embedding_configs(
         &self,
         rtxn: &RoTxn<'_>,
-    ) -> Result<Vec<(String, crate::vector::EmbeddingConfig)>> {
+    ) -> Result<Vec<(String, EmbeddingConfig, RoaringBitmap)>> {
         Ok(self
             .main
-            .remap_types::<Str, SerdeJson<Vec<(String, EmbeddingConfig)>>>()
+            .remap_types::<Str, SerdeJson<Vec<(String, EmbeddingConfig, RoaringBitmap)>>>()
             .get(rtxn, main_key::EMBEDDING_CONFIGS)?
             .unwrap_or_default())
     }
