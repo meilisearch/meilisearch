@@ -31,7 +31,9 @@ use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::update::{
     IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings as MilliSettings,
 };
-use meilisearch_types::milli::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME;
+use meilisearch_types::milli::vector::parsed_vectors::{
+    ExplicitVectors, VectorOrArrayOfVectors, RESERVED_VECTORS_FIELD_NAME,
+};
 use meilisearch_types::milli::{self, Filter};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
@@ -955,12 +957,13 @@ impl IndexScheduler {
                             for (embedder_name, embeddings) in embeddings {
                                 // don't change the entry if it already exists, because it was user-provided
                                 vectors.entry(embedder_name).or_insert_with(|| {
-
-                                        let embeddings = milli::vector::parsed_vectors::ExplicitVectors {
-                                            embeddings: milli::vector::parsed_vectors::VectorOrArrayOfVectors::from_array_of_vectors(embeddings),
-                                            user_provided: false,
-                                        };
-                                        serde_json::to_value(embeddings).unwrap()
+                                    let embeddings = ExplicitVectors {
+                                        embeddings: VectorOrArrayOfVectors::from_array_of_vectors(
+                                            embeddings,
+                                        ),
+                                        user_provided: false,
+                                    };
+                                    serde_json::to_value(embeddings).unwrap()
                                 });
                             }
                         }

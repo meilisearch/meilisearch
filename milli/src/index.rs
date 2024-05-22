@@ -23,7 +23,7 @@ use crate::heed_codec::{
 };
 use crate::order_by_map::OrderByMap;
 use crate::proximity::ProximityPrecision;
-use crate::vector::EmbeddingConfig;
+use crate::vector::{Embedding, EmbeddingConfig};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
@@ -1611,7 +1611,7 @@ impl Index {
         &self,
         rtxn: &RoTxn<'_>,
         docid: DocumentId,
-    ) -> Result<BTreeMap<String, Vec<crate::vector::Embedding>>> {
+    ) -> Result<BTreeMap<String, Vec<Embedding>>> {
         let mut res = BTreeMap::new();
         for row in self.embedder_category_id.iter(rtxn)? {
             let (embedder_name, embedder_id) = row?;

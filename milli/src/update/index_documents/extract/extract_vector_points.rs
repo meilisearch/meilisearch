@@ -89,7 +89,7 @@ struct EmbedderVectorExtractor {
 pub fn extract_vector_points<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
-    settings_diff: Arc<InnerIndexSettingsDiff>,
+    settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<Vec<ExtractedVectorPoints>> {
     puffin::profile_function!();
 
@@ -257,8 +257,6 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
             )?;
         }
     }
-
-    /////
 
     let mut results = Vec::new();
 

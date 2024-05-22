@@ -241,7 +241,7 @@ fn send_original_documents_data(
         let original_documents_chunk = original_documents_chunk.clone();
         let lmdb_writer_sx = lmdb_writer_sx.clone();
         rayon::spawn(move || {
-            match extract_vector_points(original_documents_chunk.clone(), indexer, settings_diff) {
+            match extract_vector_points(original_documents_chunk.clone(), indexer, &settings_diff) {
                 Ok(extracted_vectors) => {
                     for ExtractedVectorPoints {
                         manual_vectors,
