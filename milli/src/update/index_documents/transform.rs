@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::collections::btree_map::Entry as BEntry;
 use std::collections::hash_map::Entry as HEntry;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{Read, Seek};
 
@@ -20,13 +20,13 @@ use super::{IndexDocumentsMethod, IndexerConfig};
 use crate::documents::{DocumentsBatchIndex, EnrichedDocument, EnrichedDocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
 use crate::index::{db_name, main_key};
-use crate::update::del_add::{
-    del_add_from_two_obkvs, into_del_add_obkv, DelAdd, DelAddOperation, KvReaderDelAdd,
-};
+use crate::update::del_add::{into_del_add_obkv, DelAdd, DelAddOperation, KvReaderDelAdd};
 use crate::update::index_documents::GrenadParameters;
 use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
 use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
-use crate::{FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldsIdsMap, Index, Result};
+use crate::{
+    is_faceted_by, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldsIdsMap, Index, Result,
+};
 
 pub struct TransformOutput {
     pub primary_key: String,
@@ -808,11 +808,15 @@ impl<'a, 'i> Transform<'a, 'i> {
         })?;
 
         let old_inner_settings = InnerIndexSettings::from_index(self.index, wtxn)?;
+        let fields_ids_map = self.fields_ids_map;
+        let primary_key_id = self.index.primary_key(wtxn)?.and_then(|name| fields_ids_map.id(name));
         let mut new_inner_settings = old_inner_settings.clone();
-        new_inner_settings.fields_ids_map = self.fields_ids_map;
+        new_inner_settings.fields_ids_map = fields_ids_map;
+
         let settings_diff = InnerIndexSettingsDiff {
             old: old_inner_settings,
             new: new_inner_settings,
+            primary_key_id,
             embedding_configs_updated: false,
             settings_update_only: false,
         };
@@ -837,37 +841,66 @@ impl<'a, 'i> Transform<'a, 'i> {
     fn rebind_existing_document(
         old_obkv: KvReader<FieldId>,
         settings_diff: &InnerIndexSettingsDiff,
-        original_obkv_buffer: &mut Vec<u8>,
-        flattened_obkv_buffer: &mut Vec<u8>,
+        modified_faceted_fields: &HashSet<String>,
+        original_obkv_buffer: Option<&mut Vec<u8>>,
+        flattened_obkv_buffer: Option<&mut Vec<u8>>,
     ) -> Result<()> {
-        // TODO do a XOR of the faceted fields
-        // TODO if reindex_searchable returns true store all searchables else none
-        // TODO no longer useful after Tamo's PR
-        let mut old_fields_ids_map = settings_diff.old.fields_ids_map.clone();
-        let mut new_fields_ids_map = settings_diff.new.fields_ids_map.clone();
+        // Always keep the primary key.
+        let is_primary_key = |id: FieldId| -> bool { settings_diff.primary_key_id == Some(id) };
+
+        // If only the `searchableAttributes` has been changed, keep only the searchable fields.
+        let must_reindex_searchables = settings_diff.reindex_searchable();
+        let necessary_searchable_field = |id: FieldId| -> bool {
+            must_reindex_searchables
+                && (settings_diff.old.searchable_fields_ids.contains(&id)
+                    || settings_diff.new.searchable_fields_ids.contains(&id))
+        };
+
+        // If only a faceted field has been added, keep only this field.
+        let must_reindex_facets = settings_diff.reindex_facets();
+        let necessary_faceted_field = |id: FieldId| -> bool {
+            let field_name = settings_diff.new.fields_ids_map.name(id).unwrap();
+            must_reindex_facets
+                && modified_faceted_fields
+                    .iter()
+                    .any(|long| is_faceted_by(long, field_name) || is_faceted_by(field_name, long))
+        };
+
+        // Alway provide all fields when vectors are involved because
+        // we need the fields for the prompt/templating.
+        let reindex_vectors = settings_diff.reindex_vectors();
+
         let mut obkv_writer = KvWriter::<_, FieldId>::memory();
-        // We iterate over the new `FieldsIdsMap` ids in order and construct the new obkv.
-        for (id, name) in new_fields_ids_map.iter() {
-            if let Some(val) = old_fields_ids_map.id(name).and_then(|id| old_obkv.get(id)) {
+        for (id, val) in old_obkv.iter() {
+            if is_primary_key(id)
+                || necessary_searchable_field(id)
+                || necessary_faceted_field(id)
+                || reindex_vectors
+            {
                 obkv_writer.insert(id, val)?;
             }
         }
         let data = obkv_writer.into_inner()?;
-        let new_obkv = KvReader::<FieldId>::new(&data);
+        let obkv = KvReader::<FieldId>::new(&data);
 
-        // take the non-flattened version if flatten_from_fields_ids_map returns None.
-        let old_flattened = Self::flatten_from_fields_ids_map(&old_obkv, &mut old_fields_ids_map)?;
-        let old_flattened =
-            old_flattened.as_deref().map_or_else(|| old_obkv, KvReader::<FieldId>::new);
-        let new_flattened = Self::flatten_from_fields_ids_map(&new_obkv, &mut new_fields_ids_map)?;
-        let new_flattened =
-            new_flattened.as_deref().map_or_else(|| new_obkv, KvReader::<FieldId>::new);
+        if let Some(original_obkv_buffer) = original_obkv_buffer {
+            original_obkv_buffer.clear();
+            into_del_add_obkv(obkv, DelAddOperation::DeletionAndAddition, original_obkv_buffer)?;
+        }
 
-        original_obkv_buffer.clear();
-        flattened_obkv_buffer.clear();
+        if let Some(flattened_obkv_buffer) = flattened_obkv_buffer {
+            // take the non-flattened version if flatten_from_fields_ids_map returns None.
+            let mut fields_ids_map = settings_diff.new.fields_ids_map.clone();
+            let flattened = Self::flatten_from_fields_ids_map(&obkv, &mut fields_ids_map)?;
+            let flattened = flattened.as_deref().map_or(obkv, KvReader::new);
 
-        del_add_from_two_obkvs(&old_obkv, &new_obkv, original_obkv_buffer)?;
-        del_add_from_two_obkvs(&old_flattened, &new_flattened, flattened_obkv_buffer)?;
+            flattened_obkv_buffer.clear();
+            into_del_add_obkv(
+                flattened,
+                DelAddOperation::DeletionAndAddition,
+                flattened_obkv_buffer,
+            )?;
+        }
 
         Ok(())
     }
@@ -924,30 +957,34 @@ impl<'a, 'i> Transform<'a, 'i> {
                 None
             };
 
-        let mut original_obkv_buffer = Vec::new();
-        let mut flattened_obkv_buffer = Vec::new();
-        let mut document_sorter_key_buffer = Vec::new();
-        for result in self.index.external_documents_ids().iter(wtxn)? {
-            let (external_id, docid) = result?;
-            let old_obkv = self.index.documents.get(wtxn, &docid)?.ok_or(
-                InternalError::DatabaseMissingEntry { db_name: db_name::DOCUMENTS, key: None },
-            )?;
+        if original_sorter.is_some() || flattened_sorter.is_some() {
+            let modified_faceted_fields = settings_diff.modified_faceted_fields();
+            let mut original_obkv_buffer = Vec::new();
+            let mut flattened_obkv_buffer = Vec::new();
+            let mut document_sorter_key_buffer = Vec::new();
+            for result in self.index.external_documents_ids().iter(wtxn)? {
+                let (external_id, docid) = result?;
+                let old_obkv = self.index.documents.get(wtxn, &docid)?.ok_or(
+                    InternalError::DatabaseMissingEntry { db_name: db_name::DOCUMENTS, key: None },
+                )?;
 
-            Self::rebind_existing_document(
-                old_obkv,
-                &settings_diff,
-                &mut original_obkv_buffer,
-                &mut flattened_obkv_buffer,
-            )?;
+                Self::rebind_existing_document(
+                    old_obkv,
+                    &settings_diff,
+                    &modified_faceted_fields,
+                    Some(&mut original_obkv_buffer).filter(|_| original_sorter.is_some()),
+                    Some(&mut flattened_obkv_buffer).filter(|_| flattened_sorter.is_some()),
+                )?;
 
-            document_sorter_key_buffer.clear();
-            document_sorter_key_buffer.extend_from_slice(&docid.to_be_bytes());
-            document_sorter_key_buffer.extend_from_slice(external_id.as_bytes());
-            if let Some(original_sorter) = original_sorter.as_mut() {
-                original_sorter.insert(&document_sorter_key_buffer, &original_obkv_buffer)?;
-            }
-            if let Some(flattened_sorter) = flattened_sorter.as_mut() {
-                flattened_sorter.insert(docid.to_be_bytes(), &flattened_obkv_buffer)?;
+                if let Some(original_sorter) = original_sorter.as_mut() {
+                    document_sorter_key_buffer.clear();
+                    document_sorter_key_buffer.extend_from_slice(&docid.to_be_bytes());
+                    document_sorter_key_buffer.extend_from_slice(external_id.as_bytes());
+                    original_sorter.insert(&document_sorter_key_buffer, &original_obkv_buffer)?;
+                }
+                if let Some(flattened_sorter) = flattened_sorter.as_mut() {
+                    flattened_sorter.insert(docid.to_be_bytes(), &flattened_obkv_buffer)?;
+                }
             }
         }
 

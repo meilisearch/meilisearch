@@ -680,6 +680,26 @@ async fn search_facet_distribution() {
             },
         )
         .await;
+
+    index.update_settings(json!({"filterableAttributes": ["doggos.name"]})).await;
+    index.wait_task(5).await;
+
+    index
+        .search(
+            json!({
+                "facets": ["doggos.name"]
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                let dist = response["facetDistribution"].as_object().unwrap();
+                assert_eq!(dist.len(), 1);
+                assert_eq!(
+                    dist["doggos.name"],
+                    json!({ "bobby": 1, "buddy": 1, "gros bill": 1, "turbo": 1, "fast": 1})
+                );
+            },
+        )
+        .await;
 }
 
 #[actix_rt::test]

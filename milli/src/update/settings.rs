@@ -1067,10 +1067,17 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         // 3. Keep the old vectors but reattempt indexing on a prompt change: only actually changed prompt will need embedding + storage
         let embedding_configs_updated = self.update_embedding_configs()?;
 
-        let new_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn)?;
+        let mut new_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn)?;
+        new_inner_settings.recompute_facets(self.wtxn, self.index)?;
+
+        let primary_key_id = self
+            .index
+            .primary_key(self.wtxn)?
+            .and_then(|name| new_inner_settings.fields_ids_map.id(name));
         let inner_settings_diff = InnerIndexSettingsDiff {
             old: old_inner_settings,
             new: new_inner_settings,
+            primary_key_id,
             embedding_configs_updated,
             settings_update_only: true,
         };
@@ -1086,10 +1093,9 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 pub struct InnerIndexSettingsDiff {
     pub(crate) old: InnerIndexSettings,
     pub(crate) new: InnerIndexSettings,
-
+    pub(crate) primary_key_id: Option<FieldId>,
     // TODO: compare directly the embedders.
     pub(crate) embedding_configs_updated: bool,
-
     pub(crate) settings_update_only: bool,
 }
 
@@ -1127,15 +1133,7 @@ impl InnerIndexSettingsDiff {
             return true;
         }
 
-        let faceted_updated =
-            (existing_fields - old_faceted_fields) != (existing_fields - new_faceted_fields);
-
-        self.old
-            .fields_ids_map
-            .iter()
-            .zip(self.new.fields_ids_map.iter())
-            .any(|(old, new)| old != new)
-            || faceted_updated
+        (existing_fields - old_faceted_fields) != (existing_fields - new_faceted_fields)
     }
 
     pub fn reindex_vectors(&self) -> bool {
@@ -1144,6 +1142,10 @@ impl InnerIndexSettingsDiff {
 
     pub fn settings_update_only(&self) -> bool {
         self.settings_update_only
+    }
+
+    pub fn modified_faceted_fields(&self) -> HashSet<String> {
+        &self.old.user_defined_faceted_fields ^ &self.new.user_defined_faceted_fields
     }
 }
 
