@@ -18,12 +18,9 @@ pub enum DashboardClient {
 }
 
 impl DashboardClient {
-    pub fn new(dashboard_url: &str, api_key: Option<&str>) -> anyhow::Result<Self> {
-        let dashboard_client = Client::new(
-            Some(format!("{}/api/v1", dashboard_url)),
-            api_key,
-            Some(std::time::Duration::from_secs(60)),
-        )?;
+    pub fn new(dashboard_url: String, api_key: Option<&str>) -> anyhow::Result<Self> {
+        let dashboard_client =
+            Client::new(Some(dashboard_url), api_key, Some(std::time::Duration::from_secs(60)))?;
 
         Ok(Self::Client(dashboard_client))
     }
@@ -36,7 +33,7 @@ impl DashboardClient {
         let Self::Client(dashboard_client) = self else { return Ok(()) };
 
         let response = dashboard_client
-            .put("machine")
+            .put("/api/v1/machine")
             .json(&json!({"hostname": env.hostname}))
             .send()
             .await
@@ -62,7 +59,7 @@ impl DashboardClient {
         let Self::Client(dashboard_client) = self else { return Ok(Uuid::now_v7()) };
 
         let response = dashboard_client
-            .put("invocation")
+            .put("/api/v1/invocation")
             .json(&json!({
                 "commit": {
                     "sha1": build_info.commit_sha1,
@@ -97,7 +94,7 @@ impl DashboardClient {
         let Self::Client(dashboard_client) = self else { return Ok(Uuid::now_v7()) };
 
         let response = dashboard_client
-            .put("workload")
+            .put("/api/v1/workload")
             .json(&json!({
                 "invocation_uuid": invocation_uuid,
                 "name": &workload.name,
@@ -124,7 +121,7 @@ impl DashboardClient {
         let Self::Client(dashboard_client) = self else { return Ok(()) };
 
         let response = dashboard_client
-            .put("run")
+            .put("/api/v1/run")
             .json(&json!({
                 "workload_uuid": workload_uuid,
                 "data": report
@@ -159,7 +156,7 @@ impl DashboardClient {
     pub async fn mark_as_failed(&self, invocation_uuid: Uuid, failure_reason: Option<String>) {
         if let DashboardClient::Client(client) = self {
             let response = client
-                .post("cancel-invocation")
+                .post("/api/v1/cancel-invocation")
                 .json(&json!({
                     "invocation_uuid": invocation_uuid,
                     "failure_reason": failure_reason,
@@ -185,5 +182,29 @@ impl DashboardClient {
         }
 
         tracing::warn!(%invocation_uuid, "marked invocation as failed or canceled");
+    }
+
+    /// Result URL in markdown
+    pub(crate) fn result_url(
+        &self,
+        workload_name: &str,
+        build_info: &build_info::BuildInfo,
+        baseline_branch: &str,
+    ) -> String {
+        let Self::Client(client) = self else { return Default::default() };
+        let Some(base_url) = client.base_url() else { return Default::default() };
+
+        let Some(commit_sha1) = build_info.commit_sha1 else { return Default::default() };
+
+        // https://bench.meilisearch.dev/view_spans?commit_sha1=500ddc76b549fb9f1af54b2dd6abfa15960381bb&workload_name=settings-add-remove-filters.json&target_branch=reduce-transform-disk-usage&baseline_branch=main
+        let mut url = format!(
+            "{base_url}/view_spans?commit_sha1={commit_sha1}&workload_name={workload_name}"
+        );
+
+        if let Some(target_branch) = build_info.branch {
+            url += &format!("&target_branch={target_branch}&baseline_branch={baseline_branch}");
+        }
+
+        format!("[{workload_name} compared with {baseline_branch}]({url})")
     }
 }

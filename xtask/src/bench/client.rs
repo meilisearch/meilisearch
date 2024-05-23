@@ -55,6 +55,10 @@ impl Client {
     pub fn delete(&self, route: &str) -> reqwest::RequestBuilder {
         self.request(reqwest::Method::DELETE, route)
     }
+
+    pub fn base_url(&self) -> Option<&str> {
+        self.base_url.as_deref()
+    }
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
