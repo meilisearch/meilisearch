@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::{self, BufReader};
@@ -193,6 +193,10 @@ pub(crate) fn write_typed_chunk_into_index(
             let span = tracing::trace_span!(target: "indexing::write_db", "documents");
             let _entered = span.enter();
 
+            let fields_ids_map = index.fields_ids_map(wtxn)?;
+            let vectors_fid =
+                fields_ids_map.id(crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME);
+
             let mut builder = MergerBuilder::new(keep_latest_obkv as MergeFn);
             for typed_chunk in typed_chunks {
                 let TypedChunk::Documents(chunk) = typed_chunk else {
@@ -206,6 +210,10 @@ pub(crate) fn write_typed_chunk_into_index(
 
             let mut docids = index.documents_ids(wtxn)?;
             let mut iter = merger.into_stream_merger_iter()?;
+
+            let embedders: BTreeSet<_> =
+                index.embedding_configs(wtxn)?.into_iter().map(|(k, _v)| k).collect();
+            let mut vectors_buffer = Vec::new();
             while let Some((key, reader)) = iter.next()? {
                 let mut writer: KvWriter<_, FieldId> = KvWriter::memory();
                 let reader: KvReader<FieldId> = KvReader::new(reader);
@@ -219,7 +227,35 @@ pub(crate) fn write_typed_chunk_into_index(
                     let del_add_reader = KvReaderDelAdd::new(value);
 
                     if let Some(addition) = del_add_reader.get(DelAdd::Addition) {
-                        writer.insert(field_id, addition)?;
+                        let addition = if vectors_fid == Some(field_id) {
+                            'vectors: {
+                                vectors_buffer.clear();
+                                let Ok(mut vectors) =
+                                    crate::vector::parsed_vectors::ParsedVectors::from_bytes(
+                                        addition,
+                                    )
+                                else {
+                                    // if the `_vectors` field cannot be parsed as map of vectors, just write it as-is
+                                    break 'vectors Some(addition);
+                                };
+                                vectors.retain_user_provided_vectors(&embedders);
+                                let crate::vector::parsed_vectors::ParsedVectors(vectors) = vectors;
+                                if vectors.is_empty() {
+                                    // skip writing empty `_vectors` map
+                                    break 'vectors None;
+                                }
+
+                                serde_json::to_writer(&mut vectors_buffer, &vectors)
+                                    .map_err(InternalError::SerdeJson)?;
+                                Some(vectors_buffer.as_slice())
+                            }
+                        } else {
+                            Some(addition)
+                        };
+
+                        if let Some(addition) = addition {
+                            writer.insert(field_id, addition)?;
+                        }
                     }
                 }
 

@@ -23,7 +23,7 @@ use crate::heed_codec::{
 };
 use crate::order_by_map::OrderByMap;
 use crate::proximity::ProximityPrecision;
-use crate::vector::EmbeddingConfig;
+use crate::vector::{Embedding, EmbeddingConfig};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
@@ -1605,6 +1605,44 @@ impl Index {
 
     pub(crate) fn delete_search_cutoff(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
         self.main.remap_key_type::<Str>().delete(wtxn, main_key::SEARCH_CUTOFF)
+    }
+
+    pub fn embeddings(
+        &self,
+        rtxn: &RoTxn<'_>,
+        docid: DocumentId,
+    ) -> Result<BTreeMap<String, Vec<Embedding>>> {
+        let mut res = BTreeMap::new();
+        for row in self.embedder_category_id.iter(rtxn)? {
+            let (embedder_name, embedder_id) = row?;
+            let embedder_id = (embedder_id as u16) << 8;
+            let mut embeddings = Vec::new();
+            'vectors: for i in 0..=u8::MAX {
+                let reader = arroy::Reader::open(rtxn, embedder_id | (i as u16), self.vector_arroy)
+                    .map(Some)
+                    .or_else(|e| match e {
+                        arroy::Error::MissingMetadata => Ok(None),
+                        e => Err(e),
+                    })
+                    .transpose();
+
+                let Some(reader) = reader else {
+                    break 'vectors;
+                };
+
+                let embedding = reader?.item_vector(rtxn, docid)?;
+                if let Some(embedding) = embedding {
+                    embeddings.push(embedding)
+                } else {
+                    break 'vectors;
+                }
+            }
+
+            if !embeddings.is_empty() {
+                res.insert(embedder_name.to_owned(), embeddings);
+            }
+        }
+        Ok(res)
     }
 }
 

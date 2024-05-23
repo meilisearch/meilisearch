@@ -895,9 +895,9 @@ async fn test_score_details() {
                     "id": "166428",
                     "_vectors": {
                       "manual": [
-                        -100,
-                        231,
-                        32
+                        -100.0,
+                        231.0,
+                        32.0
                       ]
                     },
                     "_rankingScoreDetails": {
@@ -1096,9 +1096,9 @@ async fn experimental_feature_vector_store() {
         "id": "287947",
         "_vectors": {
           "manual": [
-            1,
-            2,
-            3
+            1.0,
+            2.0,
+            3.0
           ]
         },
         "_rankingScore": 1.0
@@ -1108,9 +1108,9 @@ async fn experimental_feature_vector_store() {
         "id": "299537",
         "_vectors": {
           "manual": [
-            1,
-            2,
-            54
+            1.0,
+            2.0,
+            54.0
           ]
         },
         "_rankingScore": 0.9129111766815186
@@ -1120,9 +1120,9 @@ async fn experimental_feature_vector_store() {
         "id": "450465",
         "_vectors": {
           "manual": [
-            -100,
-            340,
-            90
+            -100.0,
+            340.0,
+            90.0
           ]
         },
         "_rankingScore": 0.8106412887573242
@@ -1132,9 +1132,9 @@ async fn experimental_feature_vector_store() {
         "id": "166428",
         "_vectors": {
           "manual": [
-            -100,
-            231,
-            32
+            -100.0,
+            231.0,
+            32.0
           ]
         },
         "_rankingScore": 0.7412010431289673
@@ -1144,9 +1144,9 @@ async fn experimental_feature_vector_store() {
         "id": "522681",
         "_vectors": {
           "manual": [
-            10,
-            -23,
-            32
+            10.0,
+            -23.0,
+            32.0
           ]
         },
         "_rankingScore": 0.6972063183784485
@@ -1405,9 +1405,9 @@ async fn simple_search_with_strange_synonyms() {
                 "id": "166428",
                 "_vectors": {
                   "manual": [
-                    -100,
-                    231,
-                    32
+                    -100.0,
+                    231.0,
+                    32.0
                   ]
                 }
               }
@@ -1426,9 +1426,9 @@ async fn simple_search_with_strange_synonyms() {
                 "id": "166428",
                 "_vectors": {
                   "manual": [
-                    -100,
-                    231,
-                    32
+                    -100.0,
+                    231.0,
+                    32.0
                   ]
                 }
               }
@@ -1447,9 +1447,9 @@ async fn simple_search_with_strange_synonyms() {
                 "id": "166428",
                 "_vectors": {
                   "manual": [
-                    -100,
-                    231,
-                    32
+                    -100.0,
+                    231.0,
+                    32.0
                   ]
                 }
               }

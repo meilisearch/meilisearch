@@ -198,6 +198,140 @@ pub(crate) mod test {
     use crate::reader::v6::RuntimeTogglableFeatures;
 
     #[test]
+    fn import_dump_v6_with_vectors() {
+        // dump containing two indexes
+        //
+        // "vector", configured with an embedder
+        // contains:
+        // - one document with an overriden vector,
+        // - one document with a natural vector
+        // - one document with a _vectors map containing one additional embedder name and a natural vector
+        // - one document with a _vectors map containing one additional embedder name and an overriden vector
+        //
+        // "novector", no embedder
+        // contains:
+        // - a document without vector
+        // - a document with a random _vectors field
+        let dump = File::open("tests/assets/v6-with-vectors.dump").unwrap();
+        let mut dump = DumpReader::open(dump).unwrap();
+
+        // top level infos
+        insta::assert_display_snapshot!(dump.date().unwrap(), @"2024-05-16 15:51:34.151044 +00:00:00");
+        insta::assert_debug_snapshot!(dump.instance_uid().unwrap(), @"None");
+
+        // tasks
+        let tasks = dump.tasks().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"278f63325ef06ca04d01df98d8207b94");
+        assert_eq!(update_files.len(), 10);
+        assert!(update_files[0].is_none()); // the dump creation
+        assert!(update_files[1].is_none());
+        assert!(update_files[2].is_none());
+        assert!(update_files[3].is_none());
+        assert!(update_files[4].is_none());
+        assert!(update_files[5].is_none());
+        assert!(update_files[6].is_none());
+        assert!(update_files[7].is_none());
+        assert!(update_files[8].is_none());
+        assert!(update_files[9].is_none());
+
+        // indexes
+        let mut indexes = dump.indexes().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        // the index are not ordered in any way by default
+        indexes.sort_by_key(|index| index.metadata().uid.to_string());
+
+        let mut vector_index = indexes.pop().unwrap();
+        let mut novector_index = indexes.pop().unwrap();
+        assert!(indexes.is_empty());
+
+        // vector
+
+        insta::assert_json_snapshot!(vector_index.metadata(), @r###"
+        {
+          "uid": "vector",
+          "primaryKey": "id",
+          "createdAt": "2024-05-16T15:33:17.240962Z",
+          "updatedAt": "2024-05-16T15:40:55.723052Z"
+        }
+        "###);
+
+        {
+            let documents: Result<Vec<_>> = vector_index.documents().unwrap().collect();
+            let mut documents = documents.unwrap();
+            assert_eq!(documents.len(), 4);
+
+            documents.sort_by_key(|doc| doc.get("id").unwrap().to_string());
+
+            {
+                let document = documents.pop().unwrap();
+                insta::assert_json_snapshot!(document);
+            }
+
+            {
+                let document = documents.pop().unwrap();
+                insta::assert_json_snapshot!(document);
+            }
+
+            {
+                let document = documents.pop().unwrap();
+                insta::assert_json_snapshot!(document);
+            }
+
+            {
+                let document = documents.pop().unwrap();
+                insta::assert_json_snapshot!(document);
+            }
+        }
+
+        // novector
+
+        insta::assert_json_snapshot!(novector_index.metadata(), @r###"
+        {
+          "uid": "novector",
+          "primaryKey": "id",
+          "createdAt": "2024-05-16T15:33:03.568055Z",
+          "updatedAt": "2024-05-16T15:33:07.530217Z"
+        }
+        "###);
+
+        insta::assert_json_snapshot!(novector_index.settings().unwrap().embedders, @"null");
+
+        {
+            let documents: Result<Vec<_>> = novector_index.documents().unwrap().collect();
+            let mut documents = documents.unwrap();
+            assert_eq!(documents.len(), 2);
+
+            documents.sort_by_key(|doc| doc.get("id").unwrap().to_string());
+
+            {
+                let document = documents.pop().unwrap();
+                insta::assert_json_snapshot!(document, @r###"
+                {
+                  "id": "e1",
+                  "other": "random1",
+                  "_vectors": "toto"
+                }
+                "###);
+            }
+
+            {
+                let document = documents.pop().unwrap();
+                insta::assert_json_snapshot!(document, @r###"
+                {
+                  "id": "e0",
+                  "other": "random0"
+                }
+                "###);
+            }
+        }
+
+        assert_eq!(
+            dump.features().unwrap().unwrap(),
+            RuntimeTogglableFeatures { vector_store: true, ..Default::default() }
+        );
+    }
+
+    #[test]
     fn import_dump_v6_experimental() {
         let dump = File::open("tests/assets/v6-with-experimental.dump").unwrap();
         let mut dump = DumpReader::open(dump).unwrap();

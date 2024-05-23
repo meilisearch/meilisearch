@@ -226,27 +226,31 @@ fn send_original_documents_data(
     let original_documents_chunk =
         original_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
 
-    let documents_chunk_cloned = original_documents_chunk.clone();
-    let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
-
     let request_threads = ThreadPoolNoAbortBuilder::new()
         .num_threads(crate::vector::REQUEST_PARALLELISM)
         .thread_name(|index| format!("embedding-request-{index}"))
         .build()?;
 
-    if settings_diff.reindex_vectors() || !settings_diff.settings_update_only() {
+    let index_vectors = (settings_diff.reindex_vectors() || !settings_diff.settings_update_only())
+        // no point in indexing vectors without embedders
+        && (!settings_diff.new.embedding_configs.inner_as_ref().is_empty());
+
+    if index_vectors {
         let settings_diff = settings_diff.clone();
+
+        let original_documents_chunk = original_documents_chunk.clone();
+        let lmdb_writer_sx = lmdb_writer_sx.clone();
         rayon::spawn(move || {
-            for (name, (embedder, prompt)) in settings_diff.new.embedding_configs.clone() {
-                let result = extract_vector_points(
-                    documents_chunk_cloned.clone(),
-                    indexer,
-                    &settings_diff,
-                    &prompt,
-                    &name,
-                );
-                match result {
-                    Ok(ExtractedVectorPoints { manual_vectors, remove_vectors, prompts }) => {
+            match extract_vector_points(original_documents_chunk.clone(), indexer, &settings_diff) {
+                Ok(extracted_vectors) => {
+                    for ExtractedVectorPoints {
+                        manual_vectors,
+                        remove_vectors,
+                        prompts,
+                        embedder_name,
+                        embedder,
+                    } in extracted_vectors
+                    {
                         let embeddings = match extract_embeddings(
                             prompts,
                             indexer,
@@ -255,28 +259,26 @@ fn send_original_documents_data(
                         ) {
                             Ok(results) => Some(results),
                             Err(error) => {
-                                let _ = lmdb_writer_sx_cloned.send(Err(error));
+                                let _ = lmdb_writer_sx.send(Err(error));
                                 None
                             }
                         };
-
                         if !(remove_vectors.is_empty()
                             && manual_vectors.is_empty()
                             && embeddings.as_ref().map_or(true, |e| e.is_empty()))
                         {
-                            let _ = lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints {
+                            let _ = lmdb_writer_sx.send(Ok(TypedChunk::VectorPoints {
                                 remove_vectors,
                                 embeddings,
                                 expected_dimension: embedder.dimensions(),
                                 manual_vectors,
-                                embedder_name: name,
+                                embedder_name,
                             }));
                         }
                     }
-
-                    Err(error) => {
-                        let _ = lmdb_writer_sx_cloned.send(Err(error));
-                    }
+                }
+                Err(error) => {
+                    let _ = lmdb_writer_sx.send(Err(error));
                 }
             }
         });

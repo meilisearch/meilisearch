@@ -362,35 +362,6 @@ pub fn normalize_facet(original: &str) -> String {
     CompatibilityDecompositionNormalizer.normalize_str(original.trim()).to_lowercase()
 }
 
-/// Represents either a vector or an array of multiple vectors.
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
-#[serde(transparent)]
-pub struct VectorOrArrayOfVectors {
-    #[serde(with = "either::serde_untagged_optional")]
-    inner: Option<either::Either<Vec<f32>, Vec<Vec<f32>>>>,
-}
-
-impl VectorOrArrayOfVectors {
-    pub fn into_array_of_vectors(self) -> Option<Vec<Vec<f32>>> {
-        match self.inner? {
-            either::Either::Left(vector) => Some(vec![vector]),
-            either::Either::Right(vectors) => Some(vectors),
-        }
-    }
-}
-
-/// Normalize a vector by dividing the dimensions by the length of it.
-pub fn normalize_vector(mut vector: Vec<f32>) -> Vec<f32> {
-    let squared: f32 = vector.iter().map(|x| x * x).sum();
-    let length = squared.sqrt();
-    if length <= f32::EPSILON {
-        vector
-    } else {
-        vector.iter_mut().for_each(|x| *x /= length);
-        vector
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use serde_json::json;
