@@ -632,7 +632,7 @@ version = "1.8.0"
 dependencies = [
  "anyhow",
  "time",
- "vergen-git2",
+ "vergen-gitcl",
 ]
 
 [[package]]
@@ -816,10 +816,6 @@ name = "cc"
 version = "1.0.94"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "17f6e324229dc011159fcc089755d1e2e216a90d43a7dea6853ca740b84f35e7"
-dependencies = [
- "jobserver",
- "libc",
-]
 
 [[package]]
 name = "cedarwood"
@@ -2110,19 +2106,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6c80984affa11d98d1b88b66ac8853f143217b399d3c74116778ff8fdb4ed2e"
 
 [[package]]
-name = "git2"
-version = "0.18.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b3ba52851e73b46a4c3df1d89343741112003f0f6f13beb0dfac9e457c3fdcd"
-dependencies = [
- "bitflags 2.5.0",
- "libc",
- "libgit2-sys",
- "log",
- "url",
-]
-
-[[package]]
 name = "glob"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2572,15 +2555,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "jobserver"
-version = "0.1.28"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab46a6e9526ddef3ae7f787c06f0f2600639ba80ea3eade3d8e670a2230f51d6"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "js-sys"
 version = "0.3.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2665,18 +2639,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c198f91728a82281a64e1f4f9eeb25d82cb32a5de251c6bd1b5154d63a8e7bd"
 
 [[package]]
-name = "libgit2-sys"
-version = "0.16.2+1.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee4126d8b4ee5c9d9ea891dd875cfdc1e9d0950437179104b183d7d8a74d24e8"
-dependencies = [
- "cc",
- "libc",
- "libz-sys",
- "pkg-config",
-]
-
-[[package]]
 name = "libloading"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2711,18 +2673,6 @@ dependencies = [
  "bindgen",
  "errno",
  "libc",
-]
-
-[[package]]
-name = "libz-sys"
-version = "1.1.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "037731f5d3aaa87a5675e895b63ddff1a87624bc29f77004ea829809654e48f6"
-dependencies = [
- "cc",
- "libc",
- "pkg-config",
- "vcpkg",
 ]
 
 [[package]]
@@ -5536,12 +5486,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "830b7e5d4d90034032940e4ace0d9a9a057e7a45cd94e6c007832e39edb82f6d"
 
 [[package]]
-name = "vcpkg"
-version = "0.2.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
-
-[[package]]
 name = "vergen"
 version = "9.0.0-beta.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5555,14 +5499,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "vergen-git2"
+name = "vergen-gitcl"
 version = "1.0.0-beta.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8875c5d71074bb67118774e3d795ab6fe77c3ae3161cb54e19104cabc49487f1"
+checksum = "237ec19e307c303b26fdd234aa89bdf629dd7d91189dddff8591e531b05901bb"
 dependencies = [
  "anyhow",
  "derive_builder 0.13.1",
- "git2",
  "rustversion",
  "time",
  "vergen",
