@@ -6,6 +6,7 @@ mod env_info;
 mod meili_process;
 mod workload;
 
+use std::io::LineWriter;
 use std::path::PathBuf;
 
 use anyhow::Context;
@@ -90,6 +91,7 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
 
     let subscriber = tracing_subscriber::registry().with(
         tracing_subscriber::fmt::layer()
+            .with_writer(|| LineWriter::new(std::io::stderr()))
             .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
             .with_filter(filter),
     );
@@ -110,7 +112,7 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
     let dashboard_client = if args.no_dashboard {
         dashboard::DashboardClient::new_dry()
     } else {
-        dashboard::DashboardClient::new(&args.dashboard_url, args.api_key.as_deref())?
+        dashboard::DashboardClient::new(args.dashboard_url.clone(), args.api_key.as_deref())?
     };
 
     // reporting uses its own client because keeping the stream open to wait for entries
@@ -136,7 +138,7 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
         let commit_message = build_info.commit_msg.context("missing commit message")?.split('\n').next().unwrap();
         let max_workloads = args.workload_file.len();
         let reason: Option<&str> = args.reason.as_deref();
-        let invocation_uuid = dashboard_client.create_invocation( build_info, commit_message, env, max_workloads, reason).await?;
+        let invocation_uuid = dashboard_client.create_invocation(build_info.clone(), commit_message, env, max_workloads, reason).await?;
 
         tracing::info!(workload_count = args.workload_file.len(), "handling workload files");
 
@@ -144,6 +146,7 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
         let workload_runs = tokio::spawn(
             {
                 let dashboard_client = dashboard_client.clone();
+                let mut dashboard_urls = Vec::new();
                 async move {
             for workload_file in args.workload_file.iter() {
                 let workload: Workload = serde_json::from_reader(
@@ -151,6 +154,8 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
                         .with_context(|| format!("error opening {}", workload_file.display()))?,
                 )
                 .with_context(|| format!("error parsing {} as JSON", workload_file.display()))?;
+
+                let workload_name = workload.name.clone();
 
                 workload::execute(
                     &assets_client,
@@ -163,8 +168,23 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
                     &args,
                 )
                 .await?;
+
+                let result_url = dashboard_client.result_url(&workload_name, &build_info, "main");
+
+                if !result_url.is_empty() {
+                dashboard_urls.push(result_url);
+                }
+
+                if let Some(branch) = build_info.branch {
+                    let result_url = dashboard_client.result_url(&workload_name, &build_info, branch);
+
+
+                    if !result_url.is_empty() {
+                    dashboard_urls.push(result_url);
+                    }
+                }
             }
-            Ok::<(), anyhow::Error>(())
+            Ok::<_, anyhow::Error>(dashboard_urls)
         }});
 
         // handle ctrl-c
@@ -176,13 +196,19 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
 
         // wait for the end of the main task, handle result
         match workload_runs.await {
-            Ok(Ok(_)) => {
+            Ok(Ok(urls)) => {
                 tracing::info!("Success");
+                println!("☀️ Benchmark invocation completed, please find the results for your workloads below:");
+                for url in urls {
+                    println!("- {url}");
+                }
                 Ok::<(), anyhow::Error>(())
             }
             Ok(Err(error)) => {
                 tracing::error!(%invocation_uuid, error = %error, "invocation failed, attempting to report the failure to dashboard");
                 dashboard_client.mark_as_failed(invocation_uuid, Some(error.to_string())).await;
+                println!("☔️ Benchmark invocation failed...");
+                println!("{error}");
                 tracing::warn!(%invocation_uuid, "invocation marked as failed following error");
                 Err(error)
             },
@@ -191,10 +217,20 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
                     Ok(panic) => {
                         tracing::error!("invocation panicked, attempting to report the failure to dashboard");
                         dashboard_client.mark_as_failed( invocation_uuid, Some("Panicked".into())).await;
+                        println!("‼️ Benchmark invocation panicked 😱");
+                        let msg = match panic.downcast_ref::<&'static str>() {
+                            Some(s) => *s,
+                            None => match panic.downcast_ref::<String>() {
+                                Some(s) => &s[..],
+                                None => "Box<dyn Any>",
+                            },
+                        };
+                        println!("panicked at {msg}");
                         std::panic::resume_unwind(panic)
                     }
                     Err(_) => {
                         tracing::warn!("task was canceled");
+                        println!("🚫 Benchmark invocation was canceled");
                         Ok(())
                     }
                 }
