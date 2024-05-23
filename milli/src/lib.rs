@@ -354,8 +354,7 @@ pub fn is_faceted(field: &str, faceted_fields: impl IntoIterator<Item = impl AsR
 /// assert!(!is_faceted_by("animaux.chien", "animaux.chie"));
 /// ```
 pub fn is_faceted_by(field: &str, facet: &str) -> bool {
-    field.starts_with(facet)
-        && field[facet.len()..].chars().next().map(|c| c == '.').unwrap_or(true)
+    field.starts_with(facet) && field[facet.len()..].chars().next().map_or(true, |c| c == '.')
 }
 
 pub fn normalize_facet(original: &str) -> String {
