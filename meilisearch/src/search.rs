@@ -570,8 +570,8 @@ pub struct FacetSearchResult {
 }
 
 /// Incorporate search rules in search query
-pub fn add_search_rules(query: &mut SearchQuery, rules: IndexSearchRules) {
-    query.filter = match (query.filter.take(), rules.filter) {
+pub fn add_search_rules(filter: &mut Option<Value>, rules: IndexSearchRules) {
+    *filter = match (filter.take(), rules.filter) {
         (None, rules_filter) => rules_filter,
         (filter, None) => filter,
         (Some(filter), Some(rules_filter)) => {
