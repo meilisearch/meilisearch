@@ -28,8 +28,6 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     _settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<(grenad::Reader<BufReader<File>>, grenad::Reader<BufReader<File>>)> {
-    puffin::profile_function!();
-
     let max_memory = indexer.max_memory_by_thread();
     let options = NormalizerOption { lossy: true, ..Default::default() };
 

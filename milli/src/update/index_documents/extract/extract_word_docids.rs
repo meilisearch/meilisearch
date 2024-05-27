@@ -36,8 +36,6 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     grenad::Reader<BufReader<File>>,
     grenad::Reader<BufReader<File>>,
 )> {
-    puffin::profile_function!();
-
     let max_memory = indexer.max_memory_by_thread();
 
     let mut word_fid_docids_sorter = create_sorter(
@@ -167,8 +165,6 @@ fn words_into_sorter(
     add_words: &BTreeSet<Vec<u8>>,
     word_fid_docids_sorter: &mut grenad::Sorter<MergeFn>,
 ) -> Result<()> {
-    puffin::profile_function!();
-
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};
 

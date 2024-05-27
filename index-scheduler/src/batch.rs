@@ -529,8 +529,6 @@ impl IndexScheduler {
         #[cfg(test)]
         self.maybe_fail(crate::tests::FailureLocation::InsideCreateBatch)?;
 
-        puffin::profile_function!();
-
         let enqueued = &self.get_status(rtxn, Status::Enqueued)?;
         let to_cancel = self.get_kind(rtxn, Kind::TaskCancelation)? & enqueued;
 
@@ -638,8 +636,6 @@ impl IndexScheduler {
             self.maybe_fail(crate::tests::FailureLocation::PanicInsideProcessBatch)?;
             self.breakpoint(crate::Breakpoint::InsideProcessBatch);
         }
-
-        puffin::profile_function!(batch.to_string());
 
         match batch {
             Batch::TaskCancelation { mut task, previous_started_at, previous_processing_tasks } => {
@@ -1226,8 +1222,6 @@ impl IndexScheduler {
         index: &'i Index,
         operation: IndexOperation,
     ) -> Result<Vec<Task>> {
-        puffin::profile_function!();
-
         match operation {
             IndexOperation::DocumentClear { mut tasks, .. } => {
                 let count = milli::update::ClearDocuments::new(index_wtxn, index).execute()?;

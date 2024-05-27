@@ -47,8 +47,6 @@ pub(crate) fn data_from_obkv_documents(
     settings_diff: Arc<InnerIndexSettingsDiff>,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<()> {
-    puffin::profile_function!();
-
     let (original_pipeline_result, flattened_pipeline_result): (Result<_>, Result<_>) = rayon::join(
         || {
             original_obkv_chunks
@@ -90,7 +88,6 @@ pub(crate) fn data_from_obkv_documents(
                             lmdb_writer_sx.clone(),
                             extract_fid_word_count_docids,
                             TypedChunk::FieldIdWordCountDocids,
-                            "field-id-wordcount-docids",
                         );
                         run_extraction_task::<
                             _,
@@ -117,7 +114,6 @@ pub(crate) fn data_from_obkv_documents(
                                     word_fid_docids_reader,
                                 }
                             },
-                            "word-docids",
                         );
 
                         run_extraction_task::<_, _, grenad::Reader<BufReader<File>>>(
@@ -127,7 +123,6 @@ pub(crate) fn data_from_obkv_documents(
                             lmdb_writer_sx.clone(),
                             extract_word_position_docids,
                             TypedChunk::WordPositionDocids,
-                            "word-position-docids",
                         );
 
                         run_extraction_task::<
@@ -141,7 +136,6 @@ pub(crate) fn data_from_obkv_documents(
                             lmdb_writer_sx.clone(),
                             extract_facet_string_docids,
                             TypedChunk::FieldIdFacetStringDocids,
-                            "field-id-facet-string-docids",
                         );
 
                         run_extraction_task::<_, _, grenad::Reader<BufReader<File>>>(
@@ -151,7 +145,6 @@ pub(crate) fn data_from_obkv_documents(
                             lmdb_writer_sx.clone(),
                             extract_facet_number_docids,
                             TypedChunk::FieldIdFacetNumberDocids,
-                            "field-id-facet-number-docids",
                         );
 
                         run_extraction_task::<_, _, grenad::Reader<BufReader<File>>>(
@@ -161,7 +154,6 @@ pub(crate) fn data_from_obkv_documents(
                             lmdb_writer_sx.clone(),
                             extract_word_pair_proximity_docids,
                             TypedChunk::WordPairProximityDocids,
-                            "word-pair-proximity-docids",
                         );
                     }
 
@@ -185,7 +177,6 @@ fn run_extraction_task<FE, FS, M>(
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     extract_fn: FE,
     serialize_fn: FS,
-    name: &'static str,
 ) where
     FE: Fn(
             grenad::Reader<CursorClonableMmap>,
@@ -203,7 +194,7 @@ fn run_extraction_task<FE, FS, M>(
     rayon::spawn(move || {
         let child_span = tracing::trace_span!(target: "indexing::extract::details", parent: &current_span, "extract_multiple_chunks");
         let _entered = child_span.enter();
-        puffin::profile_scope!("extract_multiple_chunks", name);
+
         match extract_fn(chunk, indexer, &settings_diff) {
             Ok(chunk) => {
                 let _ = lmdb_writer_sx.send(Ok(serialize_fn(chunk)));

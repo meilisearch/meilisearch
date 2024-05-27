@@ -61,7 +61,6 @@ pub fn sorter_into_reader(
     sorter: grenad::Sorter<MergeFn>,
     indexer: GrenadParameters,
 ) -> Result<grenad::Reader<BufReader<File>>> {
-    puffin::profile_function!();
     let mut writer = create_writer(
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
@@ -182,8 +181,6 @@ where
     FS: for<'a> Fn(&'a [u8], &'a mut Vec<u8>) -> Result<&'a [u8]>,
     FM: for<'a> Fn(&[u8], &[u8], &'a mut Vec<u8>) -> Result<Option<&'a [u8]>>,
 {
-    puffin::profile_function!();
-
     let mut buffer = Vec::new();
     let database = database.remap_types::<Bytes, Bytes>();
 

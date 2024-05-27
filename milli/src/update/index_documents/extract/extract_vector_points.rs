@@ -91,8 +91,6 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<Vec<ExtractedVectorPoints>> {
-    puffin::profile_function!();
-
     let reindex_vectors = settings_diff.reindex_vectors();
 
     let old_fields_ids_map = &settings_diff.old.fields_ids_map;
@@ -295,7 +293,6 @@ fn push_vectors_diff(
     delta: VectorStateDelta,
     reindex_vectors: bool,
 ) -> Result<()> {
-    puffin::profile_function!();
     let (must_remove, prompt, (mut del_vectors, mut add_vectors)) = delta.into_values();
     if must_remove
     // TODO: the below condition works because we erase the vec database when a embedding setting changes.
@@ -367,7 +364,6 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
     embedder: Arc<Embedder>,
     request_threads: &ThreadPoolNoAbort,
 ) -> Result<grenad::Reader<BufReader<File>>> {
-    puffin::profile_function!();
     let n_chunks = embedder.chunk_count_hint(); // chunk level parallelism
     let n_vectors_per_chunk = embedder.prompt_count_in_chunk_hint(); // number of vectors in a single chunk
 

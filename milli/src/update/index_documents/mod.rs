@@ -141,8 +141,6 @@ where
         mut self,
         reader: DocumentsBatchReader<R>,
     ) -> Result<(Self, StdResult<u64, UserError>)> {
-        puffin::profile_function!();
-
         // Early return when there is no document to add
         if reader.is_empty() {
             return Ok((self, Ok(0)));
@@ -187,8 +185,6 @@ where
         mut self,
         to_delete: Vec<String>,
     ) -> Result<(Self, StdResult<u64, UserError>)> {
-        puffin::profile_function!();
-
         // Early return when there is no document to add
         if to_delete.is_empty() {
             // Maintains Invariant: remove documents actually always returns Ok for the inner result
@@ -223,8 +219,6 @@ where
         mut self,
         to_delete: &RoaringBitmap,
     ) -> Result<(Self, u64)> {
-        puffin::profile_function!();
-
         // Early return when there is no document to add
         if to_delete.is_empty() {
             return Ok((self, 0));
@@ -249,8 +243,6 @@ where
         name = "index_documents"
     )]
     pub fn execute(mut self) -> Result<DocumentAdditionResult> {
-        puffin::profile_function!();
-
         if self.added_documents == 0 && self.deleted_documents == 0 {
             let number_of_documents = self.index.number_of_documents(self.wtxn)?;
             return Ok(DocumentAdditionResult { indexed_documents: 0, number_of_documents });
@@ -279,8 +271,6 @@ where
         FP: Fn(UpdateIndexingStep) + Sync,
         FA: Fn() -> bool + Sync,
     {
-        puffin::profile_function!();
-
         let TransformOutput {
             primary_key,
             mut settings_diff,
@@ -404,7 +394,7 @@ where
             rayon::spawn(move || {
                 let child_span = tracing::trace_span!(target: "indexing::details", parent: &current_span, "extract_and_send_grenad_chunks");
                 let _enter = child_span.enter();
-                puffin::profile_scope!("extract_and_send_grenad_chunks");
+
                 // split obkv file into several chunks
                 let original_chunk_iter = match original_documents {
                     Some(original_documents) => {
@@ -612,8 +602,6 @@ where
         FP: Fn(UpdateIndexingStep) + Sync,
         FA: Fn() -> bool + Sync,
     {
-        puffin::profile_function!();
-
         // Merged databases are already been indexed, we start from this count;
         let mut databases_seen = MERGED_DATABASE_COUNT;
 
@@ -657,7 +645,6 @@ where
         {
             let span = tracing::trace_span!(target: "indexing::details", "compute_prefix_diffs");
             let _entered = span.enter();
-            puffin::profile_scope!("compute_prefix_diffs");
 
             current_prefix_fst = self.index.words_prefixes_fst(self.wtxn)?;
 
@@ -797,8 +784,6 @@ fn execute_word_prefix_docids(
     common_prefix_fst_words: &[&[String]],
     del_prefix_fst_words: &HashSet<Vec<u8>>,
 ) -> Result<()> {
-    puffin::profile_function!();
-
     let mut builder = WordPrefixDocids::new(txn, word_docids_db, word_prefix_docids_db);
     builder.chunk_compression_type = indexer_config.chunk_compression_type;
     builder.chunk_compression_level = indexer_config.chunk_compression_level;

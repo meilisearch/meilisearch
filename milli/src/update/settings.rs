@@ -398,8 +398,6 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         FP: Fn(UpdateIndexingStep) + Sync,
         FA: Fn() -> bool + Sync,
     {
-        puffin::profile_function!();
-
         // if the settings are set before any document update, we don't need to do anything, and
         // will set the primary key during the first document addition.
         if self.index.number_of_documents(self.wtxn)? == 0 {
