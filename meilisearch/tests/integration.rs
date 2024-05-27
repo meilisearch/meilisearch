@@ -8,6 +8,7 @@ mod index;
 mod logs;
 mod search;
 mod settings;
+mod similar;
 mod snapshot;
 mod stats;
 mod swap_indexes;
