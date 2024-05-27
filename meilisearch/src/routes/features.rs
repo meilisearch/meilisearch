@@ -47,8 +47,6 @@ pub struct RuntimeTogglableFeatures {
     pub metrics: Option<bool>,
     #[deserr(default)]
     pub logs_route: Option<bool>,
-    #[deserr(default)]
-    pub export_puffin_reports: Option<bool>,
 }
 
 async fn patch_features(
@@ -68,21 +66,13 @@ async fn patch_features(
         vector_store: new_features.0.vector_store.unwrap_or(old_features.vector_store),
         metrics: new_features.0.metrics.unwrap_or(old_features.metrics),
         logs_route: new_features.0.logs_route.unwrap_or(old_features.logs_route),
-        export_puffin_reports: new_features
-            .0
-            .export_puffin_reports
-            .unwrap_or(old_features.export_puffin_reports),
     };
 
     // explicitly destructure for analytics rather than using the `Serialize` implementation, because
     // the it renames to camelCase, which we don't want for analytics.
     // **Do not** ignore fields with `..` or `_` here, because we want to add them in the future.
-    let meilisearch_types::features::RuntimeTogglableFeatures {
-        vector_store,
-        metrics,
-        logs_route,
-        export_puffin_reports,
-    } = new_features;
+    let meilisearch_types::features::RuntimeTogglableFeatures { vector_store, metrics, logs_route } =
+        new_features;
 
     analytics.publish(
         "Experimental features Updated".to_string(),
@@ -90,7 +80,6 @@ async fn patch_features(
             "vector_store": vector_store,
             "metrics": metrics,
             "logs_route": logs_route,
-            "export_puffin_reports": export_puffin_reports,
         }),
         Some(&req),
     );
