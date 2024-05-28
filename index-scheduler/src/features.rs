@@ -68,19 +68,6 @@ impl RoFeatures {
             .into())
         }
     }
-
-    pub fn check_puffin(&self) -> Result<()> {
-        if self.runtime.export_puffin_reports {
-            Ok(())
-        } else {
-            Err(FeatureNotEnabledError {
-                disabled_action: "Outputting Puffin reports to disk",
-                feature: "export puffin reports",
-                issue_link: "https://github.com/meilisearch/product/discussions/693",
-            }
-            .into())
-        }
-    }
 }
 
 impl FeatureData {

@@ -29,8 +29,6 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     settings_diff: &InnerIndexSettingsDiff,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<(grenad::Reader<BufReader<File>>, ScriptLanguageDocidsMap)> {
-    puffin::profile_function!();
-
     let max_positions_per_attributes = max_positions_per_attributes
         .map_or(MAX_POSITION_PER_ATTRIBUTE, |max| max.min(MAX_POSITION_PER_ATTRIBUTE));
     let max_memory = indexer.max_memory_by_thread();

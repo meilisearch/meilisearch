@@ -98,8 +98,7 @@ async fn secrets_are_hidden_in_settings() {
     {
       "vectorStore": true,
       "metrics": false,
-      "logsRoute": false,
-      "exportPuffinReports": false
+      "logsRoute": false
     }
     "###);
 

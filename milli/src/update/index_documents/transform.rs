@@ -161,8 +161,6 @@ impl<'a, 'i> Transform<'a, 'i> {
         FP: Fn(UpdateIndexingStep) + Sync,
         FA: Fn() -> bool + Sync,
     {
-        puffin::profile_function!();
-
         let (mut cursor, fields_index) = reader.into_cursor_and_fields_index();
         let external_documents_ids = self.index.external_documents_ids();
         let mapping = create_fields_mapping(&mut self.fields_ids_map, &fields_index)?;
@@ -375,8 +373,6 @@ impl<'a, 'i> Transform<'a, 'i> {
     where
         FA: Fn() -> bool + Sync,
     {
-        puffin::profile_function!();
-
         // there may be duplicates in the documents to remove.
         to_remove.sort_unstable();
         to_remove.dedup();
@@ -466,8 +462,6 @@ impl<'a, 'i> Transform<'a, 'i> {
     where
         FA: Fn() -> bool + Sync,
     {
-        puffin::profile_function!();
-
         let mut documents_deleted = 0;
         let mut document_sorter_value_buffer = Vec::new();
         let mut document_sorter_key_buffer = Vec::new();
@@ -686,8 +680,6 @@ impl<'a, 'i> Transform<'a, 'i> {
     where
         F: Fn(UpdateIndexingStep) + Sync,
     {
-        puffin::profile_function!();
-
         let primary_key = self
             .index
             .primary_key(wtxn)?

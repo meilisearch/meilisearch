@@ -118,65 +118,6 @@ impl TypedChunk {
     }
 }
 
-impl TypedChunk {
-    pub fn to_debug_string(&self) -> String {
-        match self {
-            TypedChunk::FieldIdDocidFacetStrings(grenad) => {
-                format!("FieldIdDocidFacetStrings {{ number_of_entries: {} }}", grenad.len())
-            }
-            TypedChunk::FieldIdDocidFacetNumbers(grenad) => {
-                format!("FieldIdDocidFacetNumbers {{ number_of_entries: {} }}", grenad.len())
-            }
-            TypedChunk::Documents(grenad) => {
-                format!("Documents {{ number_of_entries: {} }}", grenad.len())
-            }
-            TypedChunk::FieldIdWordCountDocids(grenad) => {
-                format!("FieldIdWordcountDocids {{ number_of_entries: {} }}", grenad.len())
-            }
-            TypedChunk::WordDocids {
-                word_docids_reader,
-                exact_word_docids_reader,
-                word_fid_docids_reader,
-            } => format!(
-                "WordDocids {{ word_docids_reader: {}, exact_word_docids_reader: {}, word_fid_docids_reader: {} }}",
-                word_docids_reader.len(),
-                exact_word_docids_reader.len(),
-                word_fid_docids_reader.len()
-            ),
-            TypedChunk::WordPositionDocids(grenad) => {
-                format!("WordPositionDocids {{ number_of_entries: {} }}", grenad.len())
-            }
-            TypedChunk::WordPairProximityDocids(grenad) => {
-                format!("WordPairProximityDocids {{ number_of_entries: {} }}", grenad.len())
-            }
-            TypedChunk::FieldIdFacetStringDocids((grenad, _)) => {
-                format!("FieldIdFacetStringDocids {{ number_of_entries: {} }}", grenad.len())
-            }
-            TypedChunk::FieldIdFacetNumberDocids(grenad) => {
-                format!("FieldIdFacetNumberDocids {{ number_of_entries: {} }}", grenad.len())
-            }
-            TypedChunk::FieldIdFacetExistsDocids(grenad) => {
-                format!("FieldIdFacetExistsDocids {{ number_of_entries: {} }}", grenad.len())
-            }
-            TypedChunk::FieldIdFacetIsNullDocids(grenad) => {
-                format!("FieldIdFacetIsNullDocids {{ number_of_entries: {} }}", grenad.len())
-            }
-            TypedChunk::FieldIdFacetIsEmptyDocids(grenad) => {
-                format!("FieldIdFacetIsEmptyDocids {{ number_of_entries: {} }}", grenad.len())
-            }
-            TypedChunk::GeoPoints(grenad) => {
-                format!("GeoPoints {{ number_of_entries: {} }}", grenad.len())
-            }
-            TypedChunk::VectorPoints{ remove_vectors, manual_vectors, embeddings, expected_dimension, embedder_name } => {
-                format!("VectorPoints {{ remove_vectors: {}, manual_vectors: {}, embeddings: {}, dimension: {}, embedder_name: {} }}", remove_vectors.len(), manual_vectors.len(), embeddings.as_ref().map(|e| e.len()).unwrap_or_default(), expected_dimension, embedder_name)
-            }
-            TypedChunk::ScriptLanguageDocids(sl_map) => {
-                format!("ScriptLanguageDocids {{ number_of_entries: {} }}", sl_map.len())
-            }
-        }
-    }
-}
-
 /// Write typed chunk in the corresponding LMDB database of the provided index.
 /// Return new documents seen.
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::write_db")]
@@ -185,8 +126,6 @@ pub(crate) fn write_typed_chunk_into_index(
     index: &Index,
     wtxn: &mut RwTxn,
 ) -> Result<(RoaringBitmap, bool)> {
-    puffin::profile_function!(typed_chunks[0].to_debug_string());
-
     let mut is_merged_database = false;
     match typed_chunks[0] {
         TypedChunk::Documents(_) => {
@@ -877,7 +816,6 @@ where
     FS: for<'a> Fn(&'a [u8], &'a mut Vec<u8>) -> Result<&'a [u8]>,
     FM: for<'a> Fn(&[u8], &[u8], &'a mut Vec<u8>) -> Result<Option<&'a [u8]>>,
 {
-    puffin::profile_function!();
     let mut buffer = Vec::new();
     let database = database.remap_types::<Bytes, Bytes>();
 

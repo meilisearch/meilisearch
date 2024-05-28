@@ -29,8 +29,6 @@ pub fn enrich_documents_batch<R: Read + Seek>(
     autogenerate_docids: bool,
     reader: DocumentsBatchReader<R>,
 ) -> Result<StdResult<EnrichedDocumentsBatchReader<R>, UserError>> {
-    puffin::profile_function!();
-
     let (mut cursor, mut documents_batch_index) = reader.into_cursor_and_fields_index();
 
     let mut external_ids = tempfile::tempfile().map(BufWriter::new).map(grenad::Writer::new)?;

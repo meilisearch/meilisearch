@@ -18,8 +18,7 @@ async fn index_with_documents_user_provided<'a>(
     {
       "vectorStore": true,
       "metrics": false,
-      "logsRoute": false,
-      "exportPuffinReports": false
+      "logsRoute": false
     }
     "###);
 
@@ -47,8 +46,7 @@ async fn index_with_documents_hf<'a>(server: &'a Server, documents: &Value) -> I
     {
       "vectorStore": true,
       "metrics": false,
-      "logsRoute": false,
-      "exportPuffinReports": false
+      "logsRoute": false
     }
     "###);
 

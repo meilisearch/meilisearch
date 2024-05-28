@@ -33,7 +33,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub type TaskId = u32;
 
 use std::collections::{BTreeMap, HashMap};
-use std::fs::File;
 use std::io::{self, BufReader, Read};
 use std::ops::{Bound, RangeBounds};
 use std::path::{Path, PathBuf};
@@ -59,7 +58,6 @@ use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfi
 use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
-use puffin::FrameView;
 use rayon::current_num_threads;
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use roaring::RoaringBitmap;
@@ -344,9 +342,6 @@ pub struct IndexScheduler {
     /// The Authorization header to send to the webhook URL.
     pub(crate) webhook_authorization_header: Option<String>,
 
-    /// A frame to output the indexation profiling files to disk.
-    pub(crate) puffin_frame: Arc<puffin::GlobalFrameView>,
-
     /// The path used to create the dumps.
     pub(crate) dumps_path: PathBuf,
 
@@ -401,7 +396,6 @@ impl IndexScheduler {
             cleanup_enabled: self.cleanup_enabled,
             max_number_of_tasks: self.max_number_of_tasks,
             max_number_of_batched_tasks: self.max_number_of_batched_tasks,
-            puffin_frame: self.puffin_frame.clone(),
             snapshots_path: self.snapshots_path.clone(),
             dumps_path: self.dumps_path.clone(),
             auth_path: self.auth_path.clone(),
@@ -500,7 +494,6 @@ impl IndexScheduler {
             env,
             // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
             wake_up: Arc::new(SignalEvent::auto(true)),
-            puffin_frame: Arc::new(puffin::GlobalFrameView::default()),
             autobatching_enabled: options.autobatching_enabled,
             cleanup_enabled: options.cleanup_enabled,
             max_number_of_tasks: options.max_number_of_tasks,
@@ -621,10 +614,6 @@ impl IndexScheduler {
                 run.wake_up.wait();
 
                 loop {
-                    let puffin_enabled = run.features().check_puffin().is_ok();
-                    puffin::set_scopes_on(puffin_enabled);
-                    puffin::GlobalProfiler::lock().new_frame();
-
                     match run.tick() {
                         Ok(TickOutcome::TickAgain(_)) => (),
                         Ok(TickOutcome::WaitForSignal) => run.wake_up.wait(),
@@ -634,31 +623,6 @@ impl IndexScheduler {
                             if !e.is_recoverable() {
                                 std::thread::sleep(Duration::from_secs(1));
                             }
-                        }
-                    }
-
-                    // Let's write the previous frame to disk but only if
-                    // the user wanted to profile with puffin.
-                    if puffin_enabled {
-                        let mut frame_view = run.puffin_frame.lock();
-                        if !frame_view.is_empty() {
-                            let now = OffsetDateTime::now_utc();
-                            let mut file = match File::create(format!("{}.puffin", now)) {
-                                Ok(file) => file,
-                                Err(e) => {
-                                    tracing::error!("{e}");
-                                    continue;
-                                }
-                            };
-                            if let Err(e) = frame_view.save_to_writer(&mut file) {
-                                tracing::error!("{e}");
-                            }
-                            if let Err(e) = file.sync_all() {
-                                tracing::error!("{e}");
-                            }
-                            // We erase this frame view as it is no more useful. We want to
-                            // measure the new frames now that we exported the previous ones.
-                            *frame_view = FrameView::default();
                         }
                     }
                 }
