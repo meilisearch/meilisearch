@@ -1112,6 +1112,26 @@ impl InnerIndexSettingsDiff {
             || self.old.proximity_precision != self.new.proximity_precision
     }
 
+    /// Returns only the additional searchable fields if any
+    /// other searchable field has been modified, returns None.
+    pub fn only_additional_fields(&self) -> Option<HashSet<String>> {
+        match (&self.old.user_defined_searchable_fields, &self.new.user_defined_searchable_fields) {
+            (None, None) | (Some(_), None) => None,
+            (None, Some(new)) => Some(new.iter().cloned().collect()),
+            (Some(old), Some(new)) => {
+                let old: HashSet<_> = old.iter().cloned().collect();
+                let new: HashSet<_> = new.iter().cloned().collect();
+                if old.difference(&new).next().is_none() {
+                    // if no field has been removed
+                    // return only the additional ones
+                    Some(&new - &old)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
     pub fn reindex_facets(&self) -> bool {
         let existing_fields = &self.new.existing_fields;
         if existing_fields.iter().any(|field| field.contains('.')) {
