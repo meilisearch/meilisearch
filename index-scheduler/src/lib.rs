@@ -1750,7 +1750,7 @@ mod tests {
     };
     use meilisearch_types::milli::update::Setting;
     use meilisearch_types::milli::vector::settings::EmbeddingSettings;
-    use meilisearch_types::settings::{Checked, Unchecked};
+    use meilisearch_types::settings::Unchecked;
     use meilisearch_types::tasks::IndexSwap;
     use meilisearch_types::VERSION_FILE_NAME;
     use tempfile::{NamedTempFile, TempDir};
@@ -5432,21 +5432,29 @@ mod tests {
         index_scheduler.assert_internally_consistent();
 
         // the document with the id 3 should have its original embedding updated
+        let rtxn = index.read_txn().unwrap();
         let docid = index.external_documents_ids.get(&rtxn, "3").unwrap().unwrap();
+        let doc = index.documents(&rtxn, Some(docid)).unwrap()[0];
+        let doc = obkv_to_json(&field_ids, &field_ids_map, doc.1).unwrap();
+        snapshot!(json_string!(doc), @r###"
+        {
+          "id": 3,
+          "doggo": "marvel"
+        }
+        "###);
+
         let embeddings = index.embeddings(&rtxn, docid).unwrap();
         let embedding = &embeddings["my_doggo_embedder"];
 
         assert!(!embedding.is_empty());
-        /// TODO: it shouldn’t be equal to 3.0
-        assert!(embedding[0].iter().all(|i| *i == 3.0), "{:?}", embedding[0]);
+        assert!(!embedding[0].iter().all(|i| *i == 3.0), "{:?}", embedding[0]);
 
         // the document with the id 4 should generate an embedding
-        // let docid = index.external_documents_ids.get(&rtxn, "4").unwrap().unwrap();
-        // let embeddings = index.embeddings(&rtxn, docid).unwrap();
-        // dbg!(&embeddings);
-        // let embedding = &embeddings["my_doggo_embedder"];
+        let docid = index.external_documents_ids.get(&rtxn, "4").unwrap().unwrap();
+        let embeddings = index.embeddings(&rtxn, docid).unwrap();
+        dbg!(&embeddings);
+        let embedding = &embeddings["my_doggo_embedder"];
 
-        // assert!(!embedding.is_empty());
-        // assert!(embedding[0]);
+        assert!(!embedding.is_empty());
     }
 }
