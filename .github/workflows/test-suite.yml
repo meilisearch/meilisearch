@@ -56,6 +56,12 @@ jobs:
       matrix:
         os: [macos-12, windows-2022]
     steps:
+      - name: Check free disk space on C
+        run: |
+          fsutil volume diskfree c:
+      - name: Check free disk space on D
+        run: |
+          fsutil volume diskfree d:
       - uses: actions/checkout@v3
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.7.1
@@ -63,11 +69,23 @@ jobs:
         with:
           toolchain: stable
           override: true
+      - name: Check free disk space on C
+        run: |
+          fsutil volume diskfree c:
+      - name: Check free disk space on D
+        run: |
+          fsutil volume diskfree d:
       - name: Run cargo check without any default features
         uses: actions-rs/cargo@v1
         with:
           command: build
           args: --locked --release --no-default-features --all
+      - name: Check free disk space on C
+        run: |
+          fsutil volume diskfree c:
+      - name: Check free disk space on D
+        run: |
+          fsutil volume diskfree d:
       - name: Run cargo test
         uses: actions-rs/cargo@v1
         with:
