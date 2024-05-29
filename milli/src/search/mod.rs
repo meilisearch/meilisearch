@@ -276,6 +276,8 @@ pub enum TermsMatchingStrategy {
     Last,
     // all words are mandatory
     All,
+    // remove more frequent word first
+    Frequency,
 }
 
 impl Default for TermsMatchingStrategy {

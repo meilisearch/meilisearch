@@ -164,6 +164,21 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                     }
                     costs
                 }
+                TermsMatchingStrategy::Frequency => {
+                    let removal_order =
+                        query_graph.removal_order_for_terms_matching_strategy_frequency(ctx)?;
+                    let mut forbidden_nodes =
+                        SmallBitmap::for_interned_values_in(&query_graph.nodes);
+                    let mut costs = query_graph.nodes.map(|_| None);
+                    // FIXME: this works because only words uses termsmatchingstrategy at the moment.
+                    for ns in removal_order {
+                        for n in ns.iter() {
+                            *costs.get_mut(n) = Some((1, forbidden_nodes.clone()));
+                        }
+                        forbidden_nodes.union(&ns);
+                    }
+                    costs
+                }
                 TermsMatchingStrategy::All => query_graph.nodes.map(|_| None),
             }
         } else {

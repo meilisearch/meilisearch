@@ -159,6 +159,7 @@ pub fn expected_order(
 
     match optional_words {
         TermsMatchingStrategy::Last => groups.into_iter().flatten().collect(),
+        TermsMatchingStrategy::Frequency => groups.into_iter().flatten().collect(),
         TermsMatchingStrategy::All => {
             groups.into_iter().flatten().filter(|d| d.word_rank == 0).collect()
         }
