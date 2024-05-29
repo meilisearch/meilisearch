@@ -1142,6 +1142,11 @@ impl InnerIndexSettingsDiff {
         self.settings_update_only
     }
 
+    pub fn run_geo_indexing(&self) -> bool {
+        self.old.geo_fields_ids != self.new.geo_fields_ids
+            || (!self.settings_update_only && self.new.geo_fields_ids.is_some())
+    }
+
     pub fn modified_faceted_fields(&self) -> HashSet<String> {
         &self.old.user_defined_faceted_fields ^ &self.new.user_defined_faceted_fields
     }
@@ -1161,6 +1166,7 @@ pub(crate) struct InnerIndexSettings {
     pub proximity_precision: ProximityPrecision,
     pub embedding_configs: EmbeddingConfigs,
     pub existing_fields: HashSet<String>,
+    pub geo_fields_ids: Option<(FieldId, FieldId)>,
 }
 
 impl InnerIndexSettings {
@@ -1169,7 +1175,7 @@ impl InnerIndexSettings {
         let stop_words = stop_words.map(|sw| sw.map_data(Vec::from).unwrap());
         let allowed_separators = index.allowed_separators(rtxn)?;
         let dictionary = index.dictionary(rtxn)?;
-        let fields_ids_map = index.fields_ids_map(rtxn)?;
+        let mut fields_ids_map = index.fields_ids_map(rtxn)?;
         let user_defined_searchable_fields = index.user_defined_searchable_fields(rtxn)?;
         let user_defined_searchable_fields =
             user_defined_searchable_fields.map(|sf| sf.into_iter().map(String::from).collect());
@@ -1184,6 +1190,24 @@ impl InnerIndexSettings {
             .into_iter()
             .filter_map(|(field, count)| (count != 0).then_some(field))
             .collect();
+        // index.fields_ids_map($a)? ==>> fields_ids_map
+        let geo_fields_ids = match fields_ids_map.id("_geo") {
+            Some(gfid) => {
+                let is_sortable = index.sortable_fields_ids(rtxn)?.contains(&gfid);
+                let is_filterable = index.filterable_fields_ids(rtxn)?.contains(&gfid);
+                // if `_geo` is faceted then we get the `lat` and `lng`
+                if is_sortable || is_filterable {
+                    let field_ids = fields_ids_map
+                        .insert("_geo.lat")
+                        .zip(fields_ids_map.insert("_geo.lng"))
+                        .ok_or(UserError::AttributeLimitReached)?;
+                    Some(field_ids)
+                } else {
+                    None
+                }
+            }
+            None => None,
+        };
 
         Ok(Self {
             stop_words,
@@ -1198,6 +1222,7 @@ impl InnerIndexSettings {
             proximity_precision,
             embedding_configs,
             existing_fields,
+            geo_fields_ids,
         })
     }
 
