@@ -4,11 +4,7 @@ use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
-use meilisearch_types::error::deserr_codes::{
-    InvalidEmbedder, InvalidSimilarAttributesToRetrieve, InvalidSimilarFilter, InvalidSimilarId,
-    InvalidSimilarLimit, InvalidSimilarOffset, InvalidSimilarRankingScoreThreshold,
-    InvalidSimilarShowRankingScore, InvalidSimilarShowRankingScoreDetails,
-};
+use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{ErrorCode as _, ResponseError};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
@@ -122,6 +118,8 @@ pub struct SimilarQueryGet {
     limit: Param<usize>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarAttributesToRetrieve>)]
     attributes_to_retrieve: Option<CS<String>>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidSimilarRetrieveVectors>)]
+    retrieve_vectors: Param<bool>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarFilter>)]
     filter: Option<String>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarShowRankingScore>)]
@@ -156,6 +154,7 @@ impl TryFrom<SimilarQueryGet> for SimilarQuery {
             offset,
             limit,
             attributes_to_retrieve,
+            retrieve_vectors,
             filter,
             show_ranking_score,
             show_ranking_score_details,
@@ -180,6 +179,7 @@ impl TryFrom<SimilarQueryGet> for SimilarQuery {
             filter,
             embedder,
             attributes_to_retrieve: attributes_to_retrieve.map(|o| o.into_iter().collect()),
+            retrieve_vectors: retrieve_vectors.0,
             show_ranking_score: show_ranking_score.0,
             show_ranking_score_details: show_ranking_score_details.0,
             ranking_score_threshold: ranking_score_threshold.map(|x| x.0),

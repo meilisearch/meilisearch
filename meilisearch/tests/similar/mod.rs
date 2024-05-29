@@ -557,7 +557,7 @@ async fn limit_and_offset() {
     index.wait_task(value.uid()).await;
 
     index
-        .similar(json!({"id": 143, "limit": 1}), |response, code| {
+        .similar(json!({"id": 143, "limit": 1, "retrieveVectors": true}), |response, code| {
             snapshot!(code, @"200 OK");
             snapshot!(json_string!(response["hits"]), @r###"
             [
@@ -567,9 +567,9 @@ async fn limit_and_offset() {
                 "id": "522681",
                 "_vectors": {
                   "manual": [
-                    0.1,
-                    0.6,
-                    0.8
+                    0.10000000149011612,
+                    0.6000000238418579,
+                    0.800000011920929
                   ]
                 }
               }

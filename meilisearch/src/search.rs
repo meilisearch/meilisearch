@@ -59,6 +59,8 @@ pub struct SearchQuery {
     pub hits_per_page: Option<usize>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchRetrieveVectors>)]
+    pub retrieve_vectors: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
     pub attributes_to_crop: Option<Vec<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
@@ -141,6 +143,7 @@ impl fmt::Debug for SearchQuery {
             page,
             hits_per_page,
             attributes_to_retrieve,
+            retrieve_vectors,
             attributes_to_crop,
             crop_length,
             attributes_to_highlight,
@@ -172,6 +175,9 @@ impl fmt::Debug for SearchQuery {
         // Then, everything related to the queries
         if let Some(q) = q {
             debug.field("q", &q);
+        }
+        if *retrieve_vectors {
+            debug.field("retrieve_vectors", &retrieve_vectors);
         }
         if let Some(v) = vector {
             if v.len() < 10 {
@@ -370,6 +376,8 @@ pub struct SearchQueryWithIndex {
     pub hits_per_page: Option<usize>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchRetrieveVectors>)]
+    pub retrieve_vectors: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
     pub attributes_to_crop: Option<Vec<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
@@ -413,6 +421,7 @@ impl SearchQueryWithIndex {
             page,
             hits_per_page,
             attributes_to_retrieve,
+            retrieve_vectors,
             attributes_to_crop,
             crop_length,
             attributes_to_highlight,
@@ -440,6 +449,7 @@ impl SearchQueryWithIndex {
                 page,
                 hits_per_page,
                 attributes_to_retrieve,
+                retrieve_vectors,
                 attributes_to_crop,
                 crop_length,
                 attributes_to_highlight,
@@ -478,6 +488,8 @@ pub struct SimilarQuery {
     pub embedder: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSimilarRetrieveVectors>)]
+    pub retrieve_vectors: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarShowRankingScore>, default)]
     pub show_ranking_score: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarShowRankingScoreDetails>, default)]
@@ -847,6 +859,7 @@ pub fn perform_search(
         page,
         hits_per_page,
         attributes_to_retrieve,
+        retrieve_vectors,
         attributes_to_crop,
         crop_length,
         attributes_to_highlight,
@@ -870,6 +883,7 @@ pub fn perform_search(
 
     let format = AttributesFormat {
         attributes_to_retrieve,
+        retrieve_vectors,
         attributes_to_highlight,
         attributes_to_crop,
         crop_length,
@@ -953,6 +967,7 @@ pub fn perform_search(
 
 struct AttributesFormat {
     attributes_to_retrieve: Option<BTreeSet<String>>,
+    retrieve_vectors: bool,
     attributes_to_highlight: Option<HashSet<String>>,
     attributes_to_crop: Option<Vec<String>>,
     crop_length: usize,
@@ -1000,6 +1015,9 @@ fn make_hits(
         .intersection(&displayed_ids)
         .cloned()
         .collect();
+    let is_vectors_displayed =
+        fields_ids_map.id("_vectors").is_some_and(|fid| displayed_ids.contains(&fid));
+    let retrieve_vectors = format.retrieve_vectors && is_vectors_displayed;
     let attr_to_highlight = format.attributes_to_highlight.unwrap_or_default();
     let attr_to_crop = format.attributes_to_crop.unwrap_or_default();
     let formatted_options = compute_formatted_options(
@@ -1034,7 +1052,7 @@ fn make_hits(
     formatter_builder.highlight_suffix(format.highlight_post_tag);
     let mut documents = Vec::new();
     let documents_iter = index.documents(rtxn, documents_ids)?;
-    for ((_id, obkv), score) in documents_iter.into_iter().zip(document_scores.into_iter()) {
+    for ((id, obkv), score) in documents_iter.into_iter().zip(document_scores.into_iter()) {
         // First generate a document with all the displayed fields
         let displayed_document = make_document(&displayed_ids, &fields_ids_map, obkv)?;
 
@@ -1044,6 +1062,19 @@ fn make_hits(
             .map(|&fid| fields_ids_map.name(fid).expect("Missing field name"));
         let mut document =
             permissive_json_pointer::select_values(&displayed_document, attributes_to_retrieve);
+
+        if retrieve_vectors {
+            let mut vectors = serde_json::Map::new();
+            for (name, mut vector) in index.embeddings(&rtxn, id)? {
+                if vector.len() == 1 {
+                    let vector = vector.pop().unwrap();
+                    vectors.insert(name.into(), vector.into());
+                } else {
+                    vectors.insert(name.into(), vector.into());
+                }
+            }
+            document.insert("_vectors".into(), vectors.into());
+        }
 
         let (matches_position, formatted) = format_fields(
             &displayed_document,
@@ -1125,6 +1156,7 @@ pub fn perform_similar(
         filter: _,
         embedder: _,
         attributes_to_retrieve,
+        retrieve_vectors,
         show_ranking_score,
         show_ranking_score_details,
         ranking_score_threshold,
@@ -1171,6 +1203,7 @@ pub fn perform_similar(
 
     let format = AttributesFormat {
         attributes_to_retrieve,
+        retrieve_vectors,
         attributes_to_highlight: None,
         attributes_to_crop: None,
         crop_length: DEFAULT_CROP_LENGTH(),

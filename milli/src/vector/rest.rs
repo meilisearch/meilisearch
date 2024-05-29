@@ -163,6 +163,7 @@ impl Embedder {
         text_chunks: Vec<Vec<String>>,
         threads: &ThreadPoolNoAbort,
     ) -> Result<Vec<Vec<Embeddings<f32>>>, EmbedError> {
+        dbg!(&text_chunks);
         threads
             .install(move || {
                 text_chunks.into_par_iter().map(move |chunk| self.embed(chunk)).collect()
@@ -230,6 +231,7 @@ where
             input_value
         }
         [input] => {
+            dbg!(&options);
             let mut body = options.query.clone();
 
             body.as_object_mut()

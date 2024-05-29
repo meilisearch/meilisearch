@@ -124,7 +124,7 @@ async fn simple_search() {
 
     let (response, code) = index
         .search_post(
-            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.2}}),
+            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.2}, "retrieveVectors": true}),
         )
         .await;
     snapshot!(code, @"200 OK");
@@ -133,7 +133,7 @@ async fn simple_search() {
 
     let (response, code) = index
         .search_post(
-            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.5}, "showRankingScore": true}),
+            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.5}, "showRankingScore": true, "retrieveVectors": true}),
         )
         .await;
     snapshot!(code, @"200 OK");
@@ -142,7 +142,7 @@ async fn simple_search() {
 
     let (response, code) = index
         .search_post(
-            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.8}, "showRankingScore": true}),
+            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.8}, "showRankingScore": true, "retrieveVectors": true}),
         )
         .await;
     snapshot!(code, @"200 OK");

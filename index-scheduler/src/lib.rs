@@ -5045,25 +5045,25 @@ mod tests {
         // add one doc, specifying vectors
 
         let doc = serde_json::json!(
-                    {
-                        "id": 0,
-                        "doggo": "Intel",
-                        "breed": "beagle",
-                        "_vectors": {
-                            &fakerest_name: {
-                                // this will never trigger regeneration, which is good because we can't actually generate with
-                                // this embedder
-                                "userProvided": true,
-                                "embeddings": beagle_embed,
-                            },
-                            &simple_hf_name: {
-                                // this will be regenerated on updates
-                                "userProvided": false,
-                                "embeddings": lab_embed,
-                            },
-                            "noise": [0.1, 0.2, 0.3]
-                        }
-                    }
+            {
+                "id": 0,
+                "doggo": "Intel",
+                "breed": "beagle",
+                "_vectors": {
+                    &fakerest_name: {
+                        // this will never trigger regeneration, which is good because we can't actually generate with
+                        // this embedder
+                        "userProvided": true,
+                        "embeddings": beagle_embed,
+                    },
+                    &simple_hf_name: {
+                        // this will be regenerated on updates
+                        "userProvided": false,
+                        "embeddings": lab_embed,
+                    },
+                    "noise": [0.1, 0.2, 0.3]
+                }
+            }
         );
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0u128).unwrap();
@@ -5163,7 +5163,9 @@ mod tests {
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "Intel to kefir");
 
-        handle.advance_one_successful_batch();
+        println!("HEEEEERE");
+        // handle.advance_one_successful_batch();
+        handle.advance_one_failed_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "Intel to kefir succeeds");
 
         {
