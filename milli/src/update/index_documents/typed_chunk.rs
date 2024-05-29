@@ -123,8 +123,10 @@ impl TypedChunk {
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::write_db")]
 pub(crate) fn write_typed_chunk_into_index(
     typed_chunks: Vec<TypedChunk>,
-    index: &Index,
     wtxn: &mut RwTxn,
+    index: &Index,
+    settings_diff: &InnerIndexSettingsDiff,
+    typed_chunks: Vec<TypedChunk>,
 ) -> Result<(RoaringBitmap, bool)> {
     let mut is_merged_database = false;
     match typed_chunks[0] {
