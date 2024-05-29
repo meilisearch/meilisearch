@@ -60,7 +60,7 @@ impl<'a> PrimaryKey<'a> {
                 Some(document_id_bytes) => {
                     let document_id = serde_json::from_slice(document_id_bytes)
                         .map_err(InternalError::SerdeJson)?;
-                    match validate_document_id_value(document_id)? {
+                    match validate_document_id_value(document_id) {
                         Ok(document_id) => Ok(Ok(document_id)),
                         Err(user_error) => {
                             Ok(Err(DocumentIdExtractionError::InvalidDocumentId(user_error)))
@@ -88,7 +88,7 @@ impl<'a> PrimaryKey<'a> {
                 }
 
                 match matching_documents_ids.pop() {
-                    Some(document_id) => match validate_document_id_value(document_id)? {
+                    Some(document_id) => match validate_document_id_value(document_id) {
                         Ok(document_id) => Ok(Ok(document_id)),
                         Err(user_error) => {
                             Ok(Err(DocumentIdExtractionError::InvalidDocumentId(user_error)))
@@ -159,14 +159,14 @@ fn validate_document_id(document_id: &str) -> Option<&str> {
     }
 }
 
-pub fn validate_document_id_value(document_id: Value) -> Result<StdResult<String, UserError>> {
+pub fn validate_document_id_value(document_id: Value) -> StdResult<String, UserError> {
     match document_id {
         Value::String(string) => match validate_document_id(&string) {
-            Some(s) if s.len() == string.len() => Ok(Ok(string)),
-            Some(s) => Ok(Ok(s.to_string())),
-            None => Ok(Err(UserError::InvalidDocumentId { document_id: Value::String(string) })),
+            Some(s) if s.len() == string.len() => Ok(string),
+            Some(s) => Ok(s.to_string()),
+            None => Err(UserError::InvalidDocumentId { document_id: Value::String(string) }),
         },
-        Value::Number(number) if number.is_i64() => Ok(Ok(number.to_string())),
-        content => Ok(Err(UserError::InvalidDocumentId { document_id: content })),
+        Value::Number(number) if number.is_i64() => Ok(number.to_string()),
+        content => Err(UserError::InvalidDocumentId { document_id: content }),
     }
 }

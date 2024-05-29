@@ -49,19 +49,8 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         ctx: &mut SearchContext<'_>,
         vector_candidates: &RoaringBitmap,
     ) -> Result<()> {
-        let writer_index = (self.embedder_index as u16) << 8;
-        let readers: std::result::Result<Vec<_>, _> = (0..=u8::MAX)
-            .map_while(|k| {
-                arroy::Reader::open(ctx.txn, writer_index | (k as u16), ctx.index.vector_arroy)
-                    .map(Some)
-                    .or_else(|e| match e {
-                        arroy::Error::MissingMetadata => Ok(None),
-                        e => Err(e),
-                    })
-                    .transpose()
-            })
-            .collect();
-
+        let readers: std::result::Result<Vec<_>, _> =
+            ctx.index.arroy_readers(ctx.txn, self.embedder_index).collect();
         let readers = readers?;
 
         let target = &self.target;

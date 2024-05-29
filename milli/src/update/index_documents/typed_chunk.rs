@@ -634,16 +634,9 @@ pub(crate) fn write_typed_chunk_into_index(
             let embedder_index = index.embedder_category_id.get(wtxn, &embedder_name)?.ok_or(
                 InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },
             )?;
-            let writer_index = (embedder_index as u16) << 8;
             // FIXME: allow customizing distance
-            let writers: Vec<_> = (0..=u8::MAX)
-                .map(|k| {
-                    arroy::Writer::new(
-                        index.vector_arroy,
-                        writer_index | (k as u16),
-                        expected_dimension,
-                    )
-                })
+            let writers: Vec<_> = crate::vector::arroy_db_range_for_embedder(embedder_index)
+                .map(|k| arroy::Writer::new(index.vector_arroy, k, expected_dimension))
                 .collect();
 
             // remove vectors for docids we want them removed

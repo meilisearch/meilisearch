@@ -561,10 +561,8 @@ where
             )?;
 
             pool.install(|| {
-                let writer_index = (embedder_index as u16) << 8;
-                for k in 0..=u8::MAX {
-                    let writer =
-                        arroy::Writer::new(vector_arroy, writer_index | (k as u16), dimension);
+                for k in crate::vector::arroy_db_range_for_embedder(embedder_index) {
+                    let writer = arroy::Writer::new(vector_arroy, k, dimension);
                     if writer.is_empty(wtxn)? {
                         break;
                     }

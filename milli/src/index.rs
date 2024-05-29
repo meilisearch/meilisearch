@@ -1595,6 +1595,22 @@ impl Index {
             .unwrap_or_default())
     }
 
+    pub fn arroy_readers<'a>(
+        &'a self,
+        rtxn: &'a RoTxn<'a>,
+        embedder_id: u8,
+    ) -> impl Iterator<Item = Result<arroy::Reader<arroy::distances::Angular>>> + 'a {
+        crate::vector::arroy_db_range_for_embedder(embedder_id).map_while(move |k| {
+            arroy::Reader::open(rtxn, k, self.vector_arroy)
+                .map(Some)
+                .or_else(|e| match e {
+                    arroy::Error::MissingMetadata => Ok(None),
+                    e => Err(e.into()),
+                })
+                .transpose()
+        })
+    }
+
     pub(crate) fn put_search_cutoff(&self, wtxn: &mut RwTxn<'_>, cutoff: u64) -> heed::Result<()> {
         self.main.remap_types::<Str, BEU64>().put(wtxn, main_key::SEARCH_CUTOFF, &cutoff)
     }

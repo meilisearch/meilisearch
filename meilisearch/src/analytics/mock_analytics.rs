@@ -26,6 +26,18 @@ impl SearchAggregator {
 }
 
 #[derive(Default)]
+pub struct SimilarAggregator;
+
+#[allow(dead_code)]
+impl SimilarAggregator {
+    pub fn from_query(_: &dyn Any, _: &dyn Any) -> Self {
+        Self
+    }
+
+    pub fn succeed(&mut self, _: &dyn Any) {}
+}
+
+#[derive(Default)]
 pub struct MultiSearchAggregator;
 
 #[allow(dead_code)]
@@ -66,6 +78,8 @@ impl Analytics for MockAnalytics {
     fn publish(&self, _event_name: String, _send: Value, _request: Option<&HttpRequest>) {}
     fn get_search(&self, _aggregate: super::SearchAggregator) {}
     fn post_search(&self, _aggregate: super::SearchAggregator) {}
+    fn get_similar(&self, _aggregate: super::SimilarAggregator) {}
+    fn post_similar(&self, _aggregate: super::SimilarAggregator) {}
     fn post_multi_search(&self, _aggregate: super::MultiSearchAggregator) {}
     fn post_facet_search(&self, _aggregate: super::FacetSearchAggregator) {}
     fn add_documents(
