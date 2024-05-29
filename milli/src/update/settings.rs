@@ -9,6 +9,7 @@ use itertools::{EitherOrBoth, Itertools};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use time::OffsetDateTime;
 
+use super::del_add::DelAddOperation;
 use super::index_documents::{IndexDocumentsConfig, Transform};
 use super::IndexerConfig;
 use crate::criterion::Criterion;
@@ -1112,6 +1113,31 @@ impl InnerIndexSettingsDiff {
             || self.old.proximity_precision != self.new.proximity_precision
     }
 
+    pub fn reindex_searchable_id(&self, id: FieldId) -> Option<DelAddOperation> {
+        if self.old.stop_words.as_ref().map(|set| set.as_fst().as_bytes())
+            != self.new.stop_words.as_ref().map(|set| set.as_fst().as_bytes())
+            || self.old.allowed_separators != self.new.allowed_separators
+            || self.old.dictionary != self.new.dictionary
+            || self.old.exact_attributes != self.new.exact_attributes
+            // Here we can be much more optimal by just deleting the proximity database
+            || self.old.proximity_precision != self.new.proximity_precision
+        {
+            Some(DelAddOperation::DeletionAndAddition)
+        } else if let Some(only_additional_fields) = self.only_additional_fields() {
+            let additional_field = self.new.fields_ids_map.name(id).unwrap();
+            if only_additional_fields.contains(additional_field) {
+                Some(DelAddOperation::Addition)
+            } else {
+                None
+            }
+        } else if self.old.user_defined_searchable_fields != self.new.user_defined_searchable_fields
+        {
+            Some(DelAddOperation::DeletionAndAddition)
+        } else {
+            None
+        }
+    }
+
     /// Returns only the additional searchable fields.
     /// If any other searchable field has been modified, returns None.
     pub fn only_additional_fields(&self) -> Option<HashSet<String>> {
@@ -1599,7 +1625,7 @@ mod tests {
         // When we search for something that is not in
         // the searchable fields it must not return any document.
         let result = index.search(&rtxn).query("23").execute().unwrap();
-        assert!(result.documents_ids.is_empty());
+        assert_eq!(result.documents_ids, Vec::<u32>::new());
 
         // When we search for something that is in the searchable fields
         // we must find the appropriate document.

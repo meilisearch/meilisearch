@@ -843,29 +843,6 @@ impl<'a, 'i> Transform<'a, 'i> {
         // Always keep the primary key.
         let is_primary_key = |id: FieldId| -> bool { settings_diff.primary_key_id == Some(id) };
 
-        // If only the `searchableAttributes` has been changed, keep only the searchable fields.
-        // However, if only new searchable attributes are added, this function will
-        // return false has fields do not need to be reindexed.
-        let must_reindex_searchables = settings_diff.reindex_searchable();
-        let must_index_only_additional_searchables = &settings_diff.only_additional_fields();
-        let necessary_searchable_field_to_reindex = move |id: FieldId| -> bool {
-            must_index_only_additional_searchables.is_none()
-                && must_reindex_searchables
-                && (settings_diff.old.searchable_fields_ids.contains(&id)
-                    || settings_diff.new.searchable_fields_ids.contains(&id))
-        };
-
-        // If only new `searchableAttributes` are present, keep only those ones.
-        let additional_searchable_field_only = move |id: FieldId| -> bool {
-            match must_index_only_additional_searchables {
-                Some(additional_fields) => {
-                    let additional_field = settings_diff.new.fields_ids_map.name(id).unwrap();
-                    additional_fields.contains(additional_field)
-                }
-                None => false,
-            }
-        };
-
         // If only a faceted field has been added, keep only this field.
         let must_reindex_facets = settings_diff.reindex_facets();
         let necessary_faceted_field = |id: FieldId| -> bool {
@@ -880,20 +857,16 @@ impl<'a, 'i> Transform<'a, 'i> {
         // we need the fields for the prompt/templating.
         let reindex_vectors = settings_diff.reindex_vectors();
 
-        // The set of additional searchable fields only,
-        // the only purpose of these fields is to be indexed from scratch.
-        let mut additional_searchables_only = HashSet::new();
+        // The operations that we must perform on the different fields.
+        let mut operations = HashMap::new();
 
         let mut obkv_writer = KvWriter::<_, FieldId>::memory();
         for (id, val) in old_obkv.iter() {
-            if is_primary_key(id)
-                || necessary_searchable_field_to_reindex(id)
-                || necessary_faceted_field(id)
-                || reindex_vectors
-            {
+            if is_primary_key(id) || necessary_faceted_field(id) || reindex_vectors {
+                operations.insert(id, DelAddOperation::DeletionAndAddition);
                 obkv_writer.insert(id, val)?;
-            } else if additional_searchable_field_only(id) {
-                additional_searchables_only.insert(id);
+            } else if let Some(operation) = settings_diff.reindex_searchable_id(id) {
+                operations.insert(id, operation);
                 obkv_writer.insert(id, val)?;
             }
         }
@@ -913,13 +886,7 @@ impl<'a, 'i> Transform<'a, 'i> {
 
             flattened_obkv_buffer.clear();
             into_del_add_obkv_conditional_operation(flattened, flattened_obkv_buffer, |id| {
-                // If the field is only required because it is an additional
-                // searchable field only define it as an DelAdd::Addition only.
-                if additional_searchables_only.contains(&id) {
-                    DelAddOperation::Addition
-                } else {
-                    DelAddOperation::DeletionAndAddition
-                }
+                operations.get(&id).copied().unwrap_or(DelAddOperation::DeletionAndAddition)
             })?;
         }
 
