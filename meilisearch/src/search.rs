@@ -424,6 +424,8 @@ pub enum MatchingStrategy {
     Last,
     /// All query words are mandatory
     All,
+    /// Remove query words from the most frequent to the least
+    Frequency,
 }
 
 impl Default for MatchingStrategy {
@@ -437,6 +439,7 @@ impl From<MatchingStrategy> for TermsMatchingStrategy {
         match other {
             MatchingStrategy::Last => Self::Last,
             MatchingStrategy::All => Self::All,
+            MatchingStrategy::Frequency => Self::Frequency,
         }
     }
 }
