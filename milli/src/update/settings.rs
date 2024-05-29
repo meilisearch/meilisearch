@@ -1166,6 +1166,10 @@ impl InnerIndexSettingsDiff {
         self.old.geo_fields_ids != self.new.geo_fields_ids
             || (!self.settings_update_only && self.new.geo_fields_ids.is_some())
     }
+
+    pub fn modified_faceted_fields(&self) -> HashSet<String> {
+        &self.old.user_defined_faceted_fields ^ &self.new.user_defined_faceted_fields
+    }
 }
 
 #[derive(Clone)]
