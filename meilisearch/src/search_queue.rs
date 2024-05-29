@@ -85,8 +85,13 @@ impl SearchQueue {
                 },
 
                 search_request = receive_new_searches.recv() => {
-                    // this unwrap is safe because we're sure the `SearchQueue` still lives somewhere in actix-web
-                    let search_request = search_request.unwrap();
+                    let search_request = match search_request {
+                        Some(search_request) => search_request,
+                        // This should never happen while actix-web is running, but it's not a reason to crash
+                        // and it can generate a lot of noise in the tests.
+                        None => continue,
+                    };
+
                     if searches_running < usize::from(parallelism) && queue.is_empty() {
                         searches_running += 1;
                         // if the search requests die it's not a hard error on our side

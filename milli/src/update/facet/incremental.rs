@@ -499,7 +499,7 @@ impl FacetsUpdateIncrementalInner {
                     ModificationResult::Expand | ModificationResult::Reduce { .. }
                 )
             {
-                // if any modification occured, insert it in the database.
+                // if any modification occurred, insert it in the database.
                 self.db.put(txn, &insertion_key.as_ref(), &updated_value)?;
                 Ok(insertion_key_modification)
             } else {

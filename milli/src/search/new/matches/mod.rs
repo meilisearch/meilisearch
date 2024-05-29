@@ -134,7 +134,7 @@ impl<'t> Matcher<'t, '_> {
             for (token_position, word_position, word) in words_positions {
                 partial = match partial.match_token(word) {
                     // token matches the partial match, but the match is not full,
-                    // we temporarly save the current token then we try to match the next one.
+                    // we temporarily save the current token then we try to match the next one.
                     Some(MatchType::Partial(partial)) => {
                         potential_matches.push((token_position, word_position, partial.char_len()));
                         partial
@@ -506,7 +506,7 @@ mod tests {
 
     impl<'a> MatcherBuilder<'a> {
         fn new_test(rtxn: &'a heed::RoTxn, index: &'a TempIndex, query: &str) -> Self {
-            let mut ctx = SearchContext::new(index, rtxn);
+            let mut ctx = SearchContext::new(index, rtxn).unwrap();
             let universe = filtered_universe(&ctx, &None).unwrap();
             let crate::search::PartialSearchResult { located_query_terms, .. } = execute_search(
                 &mut ctx,
@@ -722,7 +722,7 @@ mod tests {
             @"…void void void void void split the world void void"
         );
 
-        // Text containing matches with diferent density.
+        // Text containing matches with different density.
         let text = "split void the void void world void void void void void void void void void void split the world void void";
         let mut matcher = builder.build(text);
         // crop should return 10 last words with a marker at the start.

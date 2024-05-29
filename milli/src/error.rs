@@ -32,6 +32,8 @@ pub enum InternalError {
     DatabaseClosing,
     #[error("Missing {} in the {db_name} database.", key.unwrap_or("key"))]
     DatabaseMissingEntry { db_name: &'static str, key: Option<&'static str> },
+    #[error("Missing {key} in the fieldids weights mapping.")]
+    FieldidsWeightsMapMissingEntry { key: FieldId },
     #[error(transparent)]
     FieldIdMapMissingEntry(#[from] FieldIdMapMissingEntry),
     #[error("Missing {key} in the field id mapping.")]
@@ -46,8 +48,6 @@ pub enum InternalError {
     GrenadInvalidFormatVersion,
     #[error("Invalid merge while processing {process}")]
     IndexingMergingKeys { process: &'static str },
-    #[error("{}", HeedError::InvalidDatabaseTyping)]
-    InvalidDatabaseTyping,
     #[error(transparent)]
     RayonThreadPool(#[from] ThreadPoolBuildError),
     #[error(transparent)]
@@ -117,10 +117,8 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     InvalidGeoField(#[from] GeoError),
     #[error("Invalid vector dimensions: expected: `{}`, found: `{}`.", .expected, .found)]
     InvalidVectorDimensions { expected: usize, found: usize },
-    #[error("The `_vectors.{subfield}` field in the document with id: `{document_id}` is not an array. Was expecting an array of floats or an array of arrays of floats but instead got `{value}`.")]
-    InvalidVectorsType { document_id: Value, value: Value, subfield: String },
     #[error("The `_vectors` field in the document with id: `{document_id}` is not an object. Was expecting an object with a key for each embedder with manually provided vectors, but instead got `{value}`")]
-    InvalidVectorsMapType { document_id: Value, value: Value },
+    InvalidVectorsMapType { document_id: String, value: Value },
     #[error("{0}")]
     InvalidFilter(String),
     #[error("Invalid type for filter subexpression: expected: {}, found: {1}.", .0.join(", "))]
@@ -427,7 +425,6 @@ impl From<HeedError> for Error {
             // TODO use the encoding
             HeedError::Encoding(_) => InternalError(Serialization(Encoding { db_name: None })),
             HeedError::Decoding(_) => InternalError(Serialization(Decoding { db_name: None })),
-            HeedError::InvalidDatabaseTyping => InternalError(InvalidDatabaseTyping),
             HeedError::DatabaseClosing => InternalError(DatabaseClosing),
             HeedError::BadOpenOptions { .. } => UserError(InvalidLmdbOpenOptions),
         }

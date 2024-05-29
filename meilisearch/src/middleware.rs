@@ -59,10 +59,12 @@ where
             let request_path = req.path();
             let is_registered_resource = req.resource_map().has_resource(request_path);
             if is_registered_resource {
+                let request_pattern = req.match_pattern();
+                let metric_path = request_pattern.as_ref().map_or(request_path, String::as_str);
                 let request_method = req.method().to_string();
                 histogram_timer = Some(
                     crate::metrics::MEILISEARCH_HTTP_RESPONSE_TIME_SECONDS
-                        .with_label_values(&[&request_method, request_path])
+                        .with_label_values(&[&request_method, metric_path])
                         .start_timer(),
                 );
             }

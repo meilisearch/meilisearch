@@ -57,7 +57,6 @@ impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
         common_prefix_fst_words: &[&[String]],
         del_prefix_fst_words: &HashSet<Vec<u8>>,
     ) -> Result<()> {
-        puffin::profile_function!();
         debug!("Computing and writing the word levels integers docids into LMDB on disk...");
 
         let mut prefix_integer_docids_sorter = create_sorter(

@@ -6,6 +6,7 @@ mod typed_chunk;
 
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Seek};
+use std::iter;
 use std::num::NonZeroU32;
 use std::result::Result as StdResult;
 use std::sync::Arc;
@@ -140,8 +141,6 @@ where
         mut self,
         reader: DocumentsBatchReader<R>,
     ) -> Result<(Self, StdResult<u64, UserError>)> {
-        puffin::profile_function!();
-
         // Early return when there is no document to add
         if reader.is_empty() {
             return Ok((self, Ok(0)));
@@ -186,8 +185,6 @@ where
         mut self,
         to_delete: Vec<String>,
     ) -> Result<(Self, StdResult<u64, UserError>)> {
-        puffin::profile_function!();
-
         // Early return when there is no document to add
         if to_delete.is_empty() {
             // Maintains Invariant: remove documents actually always returns Ok for the inner result
@@ -222,8 +219,6 @@ where
         mut self,
         to_delete: &RoaringBitmap,
     ) -> Result<(Self, u64)> {
-        puffin::profile_function!();
-
         // Early return when there is no document to add
         if to_delete.is_empty() {
             return Ok((self, 0));
@@ -248,8 +243,6 @@ where
         name = "index_documents"
     )]
     pub fn execute(mut self) -> Result<DocumentAdditionResult> {
-        puffin::profile_function!();
-
         if self.added_documents == 0 && self.deleted_documents == 0 {
             let number_of_documents = self.index.number_of_documents(self.wtxn)?;
             return Ok(DocumentAdditionResult { indexed_documents: 0, number_of_documents });
@@ -278,8 +271,6 @@ where
         FP: Fn(UpdateIndexingStep) + Sync,
         FA: Fn() -> bool + Sync,
     {
-        puffin::profile_function!();
-
         let TransformOutput {
             primary_key,
             mut settings_diff,
@@ -337,7 +328,10 @@ where
                 let min_chunk_size = 1024 * 512; // 512KiB
 
                 // compute the chunk size from the number of available threads and the inputed data size.
-                let total_size = flattened_documents.metadata().map(|m| m.len());
+                let total_size = match flattened_documents.as_ref() {
+                    Some(flattened_documents) => flattened_documents.metadata().map(|m| m.len()),
+                    None => Ok(default_chunk_size as u64),
+                };
                 let current_num_threads = pool.current_num_threads();
                 // if we have more than 2 thread, create a number of chunk equal to 3/4 threads count
                 let chunk_count = if current_num_threads > 2 {
@@ -351,8 +345,14 @@ where
             }
         };
 
-        let original_documents = grenad::Reader::new(original_documents)?;
-        let flattened_documents = grenad::Reader::new(flattened_documents)?;
+        let original_documents = match original_documents {
+            Some(original_documents) => Some(grenad::Reader::new(original_documents)?),
+            None => None,
+        };
+        let flattened_documents = match flattened_documents {
+            Some(flattened_documents) => Some(grenad::Reader::new(flattened_documents)?),
+            None => None,
+        };
 
         let max_positions_per_attributes = self.indexer_config.max_positions_per_attributes;
 
@@ -371,15 +371,23 @@ where
         pool.install(|| {
             rayon::spawn(move || {
                 let child_span = tracing::trace_span!(target: "indexing::details", parent: &current_span, "extract_and_send_grenad_chunks");
-            let _enter = child_span.enter();
-            puffin::profile_scope!("extract_and_send_grenad_chunks");
-                // split obkv file into several chunks
-                let original_chunk_iter =
-                    grenad_obkv_into_chunks(original_documents, pool_params, documents_chunk_size);
+                let _enter = child_span.enter();
 
                 // split obkv file into several chunks
-                let flattened_chunk_iter =
-                    grenad_obkv_into_chunks(flattened_documents, pool_params, documents_chunk_size);
+                let original_chunk_iter = match original_documents {
+                    Some(original_documents) => {
+                        grenad_obkv_into_chunks(original_documents,pool_params,documents_chunk_size).map(either::Left)
+                    },
+                    None => Ok(either::Right(iter::empty())),
+                };
+
+                // split obkv file into several chunks
+                let flattened_chunk_iter = match flattened_documents {
+                    Some(flattened_documents) => {
+                        grenad_obkv_into_chunks(flattened_documents, pool_params, documents_chunk_size).map(either::Left)
+                    },
+                    None => Ok(either::Right(iter::empty())),
+                };
 
                 let result = original_chunk_iter.and_then(|original_chunk| {
                     let flattened_chunk = flattened_chunk_iter?;
@@ -533,7 +541,7 @@ where
                 let writer_index = (embedder_index as u16) << 8;
                 for k in 0..=u8::MAX {
                     let writer =
-                        arroy::Writer::new(vector_arroy, writer_index | (k as u16), dimension)?;
+                        arroy::Writer::new(vector_arroy, writer_index | (k as u16), dimension);
                     if writer.is_empty(wtxn)? {
                         break;
                     }
@@ -571,8 +579,6 @@ where
         FP: Fn(UpdateIndexingStep) + Sync,
         FA: Fn() -> bool + Sync,
     {
-        puffin::profile_function!();
-
         // Merged databases are already been indexed, we start from this count;
         let mut databases_seen = MERGED_DATABASE_COUNT;
 
@@ -616,7 +622,6 @@ where
         {
             let span = tracing::trace_span!(target: "indexing::details", "compute_prefix_diffs");
             let _entered = span.enter();
-            puffin::profile_scope!("compute_prefix_diffs");
 
             current_prefix_fst = self.index.words_prefixes_fst(self.wtxn)?;
 
@@ -756,8 +761,6 @@ fn execute_word_prefix_docids(
     common_prefix_fst_words: &[&[String]],
     del_prefix_fst_words: &HashSet<Vec<u8>>,
 ) -> Result<()> {
-    puffin::profile_function!();
-
     let mut builder = WordPrefixDocids::new(txn, word_docids_db, word_prefix_docids_db);
     builder.chunk_compression_type = indexer_config.chunk_compression_type;
     builder.chunk_compression_level = indexer_config.chunk_compression_level;
@@ -3237,6 +3240,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "all-tokenizations")]
     fn stored_detected_script_and_language_should_not_return_deleted_documents() {
         use charabia::{Language, Script};
         let index = TempIndex::new();

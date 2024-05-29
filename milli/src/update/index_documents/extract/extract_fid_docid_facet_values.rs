@@ -37,7 +37,7 @@ pub struct ExtractedFacetValues {
 
 /// Extracts the facet values of each faceted field of each document.
 ///
-/// Returns the generated grenad reader containing the docid the fid and the orginal value as key
+/// Returns the generated grenad reader containing the docid the fid and the original value as key
 /// and the normalized value as value extracted from the given chunk of documents.
 /// We need the fid of the geofields to correctly parse them as numbers if they were sent as strings initially.
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
@@ -46,8 +46,6 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<ExtractedFacetValues> {
-    puffin::profile_function!();
-
     let max_memory = indexer.max_memory_by_thread();
 
     let mut fid_docid_facet_numbers_sorter = create_sorter(

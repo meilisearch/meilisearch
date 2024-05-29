@@ -25,8 +25,6 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     _settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<grenad::Reader<BufReader<File>>> {
-    puffin::profile_function!();
-
     let max_memory = indexer.max_memory_by_thread();
 
     let mut word_position_docids_sorter = create_sorter(
@@ -104,8 +102,6 @@ fn words_position_into_sorter(
     add_word_positions: &BTreeSet<(u16, Vec<u8>)>,
     word_position_docids_sorter: &mut grenad::Sorter<MergeFn>,
 ) -> Result<()> {
-    puffin::profile_function!();
-
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};
 

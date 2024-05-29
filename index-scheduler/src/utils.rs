@@ -272,9 +272,9 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
     }
     for index_uid in index_uids {
         if index_uid == swap.0 {
-            *index_uid = swap.1.to_owned();
+            swap.1.clone_into(index_uid);
         } else if index_uid == swap.1 {
-            *index_uid = swap.0.to_owned();
+            swap.0.clone_into(index_uid);
         }
     }
 }

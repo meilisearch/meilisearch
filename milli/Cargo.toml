@@ -30,7 +30,7 @@ grenad = { version = "0.4.6", default-features = false, features = [
     "rayon",
     "tempfile",
 ] }
-heed = { version = "0.20.0-alpha.9", default-features = false, features = [
+heed = { version = "0.20.1", default-features = false, features = [
     "serde-json",
     "serde-bincode",
     "read-txn-no-tls",
@@ -67,9 +67,6 @@ filter-parser = { path = "../filter-parser" }
 # documents words self-join
 itertools = "0.11.0"
 
-# profiling
-puffin = "0.16.0"
-
 csv = "1.3.0"
 candle-core = { version = "0.4.1" }
 candle-transformers = { version = "0.4.1" }
@@ -82,10 +79,10 @@ hf-hub = { git = "https://github.com/dureuill/hf-hub.git", branch = "rust_tls", 
 ] }
 tiktoken-rs = "0.5.8"
 liquid = "0.26.4"
-arroy = "0.2.0"
+arroy = "0.3.1"
 rand = "0.8.5"
 tracing = "0.1.40"
-ureq = { version = "2.9.6", features = ["json"] }
+ureq = { version = "2.9.7", features = ["json"] }
 url = "2.5.0"
 
 [dev-dependencies]

@@ -21,8 +21,6 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
     primary_key_id: FieldId,
     settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<grenad::Reader<BufReader<File>>> {
-    puffin::profile_function!();
-
     let mut writer = create_writer(
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,

@@ -42,7 +42,7 @@ fn facet_number_values<'a>(
 }
 
 /// Define the strategy used by the geo sort.
-/// The paramater represents the cache size, and, in the case of the Dynamic strategy,
+/// The parameter represents the cache size, and, in the case of the Dynamic strategy,
 /// the point where we move from using the iterative strategy to the rtree.
 #[derive(Debug, Clone, Copy)]
 pub enum Strategy {

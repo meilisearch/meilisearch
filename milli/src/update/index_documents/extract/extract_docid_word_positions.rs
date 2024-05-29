@@ -29,8 +29,6 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     settings_diff: &InnerIndexSettingsDiff,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<(grenad::Reader<BufReader<File>>, ScriptLanguageDocidsMap)> {
-    puffin::profile_function!();
-
     let max_positions_per_attributes = max_positions_per_attributes
         .map_or(MAX_POSITION_PER_ATTRIBUTE, |max| max.min(MAX_POSITION_PER_ATTRIBUTE));
     let max_memory = indexer.max_memory_by_thread();
@@ -186,7 +184,7 @@ fn searchable_fields_changed(
 ) -> bool {
     let searchable_fields = &settings_diff.new.searchable_fields_ids;
     for (field_id, field_bytes) in obkv.iter() {
-        if searchable_fields.as_ref().map_or(true, |sf| sf.contains(&field_id)) {
+        if searchable_fields.contains(&field_id) {
             let del_add = KvReaderDelAdd::new(field_bytes);
             match (del_add.get(DelAdd::Deletion), del_add.get(DelAdd::Addition)) {
                 // if both fields are None, check the next field.
@@ -298,7 +296,7 @@ fn lang_safe_tokens_from_document<'a>(
 /// Extract words mapped with their positions of a document.
 fn tokens_from_document<'a>(
     obkv: &KvReader<FieldId>,
-    searchable_fields: &Option<Vec<FieldId>>,
+    searchable_fields: &[FieldId],
     tokenizer: &Tokenizer,
     max_positions_per_attributes: u32,
     del_add: DelAdd,
@@ -309,7 +307,7 @@ fn tokens_from_document<'a>(
     let mut document_writer = KvWriterU16::new(&mut buffers.obkv_buffer);
     for (field_id, field_bytes) in obkv.iter() {
         // if field is searchable.
-        if searchable_fields.as_ref().map_or(true, |sf| sf.contains(&field_id)) {
+        if searchable_fields.as_ref().contains(&field_id) {
             // extract deletion or addition only.
             if let Some(field_bytes) = KvReaderDelAdd::new(field_bytes).get(del_add) {
                 // parse json.

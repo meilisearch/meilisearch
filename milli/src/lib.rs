@@ -28,6 +28,7 @@ pub mod vector;
 #[cfg(test)]
 #[macro_use]
 pub mod snapshot_tests;
+mod fieldids_weights_map;
 
 use std::collections::{BTreeMap, HashMap};
 use std::convert::{TryFrom, TryInto};
@@ -52,6 +53,7 @@ pub use self::error::{
     Error, FieldIdMapMissingEntry, InternalError, SerializationError, UserError,
 };
 pub use self::external_documents_ids::ExternalDocumentsIds;
+pub use self::fieldids_weights_map::FieldidsWeightsMap;
 pub use self::fields_ids_map::FieldsIdsMap;
 pub use self::heed_codec::{
     BEU16StrCodec, BEU32StrCodec, BoRoaringBitmapCodec, BoRoaringBitmapLenCodec,
@@ -77,6 +79,7 @@ pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
 pub type FastMap8<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher64>>;
 pub type FieldDistribution = BTreeMap<String, u64>;
 pub type FieldId = u16;
+pub type Weight = u16;
 pub type Object = serde_json::Map<String, serde_json::Value>;
 pub type Position = u32;
 pub type RelativePosition = u16;
@@ -351,41 +354,11 @@ pub fn is_faceted(field: &str, faceted_fields: impl IntoIterator<Item = impl AsR
 /// assert!(!is_faceted_by("animaux.chien", "animaux.chie"));
 /// ```
 pub fn is_faceted_by(field: &str, facet: &str) -> bool {
-    field.starts_with(facet)
-        && field[facet.len()..].chars().next().map(|c| c == '.').unwrap_or(true)
+    field.starts_with(facet) && field[facet.len()..].chars().next().map_or(true, |c| c == '.')
 }
 
 pub fn normalize_facet(original: &str) -> String {
     CompatibilityDecompositionNormalizer.normalize_str(original.trim()).to_lowercase()
-}
-
-/// Represents either a vector or an array of multiple vectors.
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
-#[serde(transparent)]
-pub struct VectorOrArrayOfVectors {
-    #[serde(with = "either::serde_untagged_optional")]
-    inner: Option<either::Either<Vec<f32>, Vec<Vec<f32>>>>,
-}
-
-impl VectorOrArrayOfVectors {
-    pub fn into_array_of_vectors(self) -> Option<Vec<Vec<f32>>> {
-        match self.inner? {
-            either::Either::Left(vector) => Some(vec![vector]),
-            either::Either::Right(vectors) => Some(vectors),
-        }
-    }
-}
-
-/// Normalize a vector by dividing the dimensions by the length of it.
-pub fn normalize_vector(mut vector: Vec<f32>) -> Vec<f32> {
-    let squared: f32 = vector.iter().map(|x| x * x).sum();
-    let length = squared.sqrt();
-    if length <= f32::EPSILON {
-        vector
-    } else {
-        vector.iter_mut().for_each(|x| *x /= length);
-        vector
-    }
 }
 
 #[cfg(test)]

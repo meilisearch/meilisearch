@@ -203,7 +203,7 @@ fn parse_csv_header(header: &str) -> (&str, AllowedType) {
             "string" => (field_name, AllowedType::String),
             "boolean" => (field_name, AllowedType::Boolean),
             "number" => (field_name, AllowedType::Number),
-            // if the pattern isn't reconized, we keep the whole field.
+            // if the pattern isn't recognized, we keep the whole field.
             _otherwise => (header, AllowedType::String),
         },
         None => (header, AllowedType::String),

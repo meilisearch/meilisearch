@@ -730,7 +730,7 @@ pub fn perform_search(
         let mut ids = BTreeSet::new();
         for attr in attrs {
             if attr == "*" {
-                ids = displayed_ids.clone();
+                ids.clone_from(&displayed_ids);
                 break;
             }
 

@@ -13,7 +13,7 @@ We can combine the two tasks in a single batch:
 1. import documents X and Y
 
 Processing this batch is functionally equivalent to processing the two
-tasks individally, but should be much faster since we are only performing
+tasks individually, but should be much faster since we are only performing
 one indexing operation.
 */
 
@@ -30,6 +30,9 @@ use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
 use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::update::{
     IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings as MilliSettings,
+};
+use meilisearch_types::milli::vector::parsed_vectors::{
+    ExplicitVectors, VectorOrArrayOfVectors, RESERVED_VECTORS_FIELD_NAME,
 };
 use meilisearch_types::milli::{self, Filter};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
@@ -526,8 +529,6 @@ impl IndexScheduler {
         #[cfg(test)]
         self.maybe_fail(crate::tests::FailureLocation::InsideCreateBatch)?;
 
-        puffin::profile_function!();
-
         let enqueued = &self.get_status(rtxn, Status::Enqueued)?;
         let to_cancel = self.get_kind(rtxn, Kind::TaskCancelation)? & enqueued;
 
@@ -635,8 +636,6 @@ impl IndexScheduler {
             self.maybe_fail(crate::tests::FailureLocation::PanicInsideProcessBatch)?;
             self.breakpoint(crate::Breakpoint::InsideProcessBatch);
         }
-
-        puffin::profile_function!(batch.to_string());
 
         match batch {
             Batch::TaskCancelation { mut task, previous_started_at, previous_processing_tasks } => {
@@ -785,10 +784,12 @@ impl IndexScheduler {
                 let dst = temp_snapshot_dir.path().join("auth");
                 fs::create_dir_all(&dst)?;
                 // TODO We can't use the open_auth_store_env function here but we should
-                let auth = milli::heed::EnvOpenOptions::new()
-                    .map_size(1024 * 1024 * 1024) // 1 GiB
-                    .max_dbs(2)
-                    .open(&self.auth_path)?;
+                let auth = unsafe {
+                    milli::heed::EnvOpenOptions::new()
+                        .map_size(1024 * 1024 * 1024) // 1 GiB
+                        .max_dbs(2)
+                        .open(&self.auth_path)
+                }?;
                 auth.copy_to_file(dst.join("data.mdb"), CompactionOption::Enabled)?;
 
                 // 5. Copy and tarball the flat snapshot
@@ -914,8 +915,55 @@ impl IndexScheduler {
                         if self.must_stop_processing.get() {
                             return Err(Error::AbortedTask);
                         }
-                        let (_id, doc) = ret?;
-                        let document = milli::obkv_to_json(&all_fields, &fields_ids_map, doc)?;
+
+                        let (id, doc) = ret?;
+
+                        let mut document = milli::obkv_to_json(&all_fields, &fields_ids_map, doc)?;
+
+                        'inject_vectors: {
+                            let embeddings = index.embeddings(&rtxn, id)?;
+
+                            if embeddings.is_empty() {
+                                break 'inject_vectors;
+                            }
+
+                            let vectors = document
+                                .entry(RESERVED_VECTORS_FIELD_NAME.to_owned())
+                                .or_insert(serde_json::Value::Object(Default::default()));
+
+                            let serde_json::Value::Object(vectors) = vectors else {
+                                return Err(milli::Error::UserError(
+                                    milli::UserError::InvalidVectorsMapType {
+                                        document_id: {
+                                            if let Ok(Some(Ok(index))) = index
+                                                .external_id_of(&rtxn, std::iter::once(id))
+                                                .map(|it| it.into_iter().next())
+                                            {
+                                                index
+                                            } else {
+                                                format!("internal docid={id}")
+                                            }
+                                        },
+                                        value: vectors.clone(),
+                                    },
+                                )
+                                .into());
+                            };
+
+                            for (embedder_name, embeddings) in embeddings {
+                                // don't change the entry if it already exists, because it was user-provided
+                                vectors.entry(embedder_name).or_insert_with(|| {
+                                    let embeddings = ExplicitVectors {
+                                        embeddings: VectorOrArrayOfVectors::from_array_of_vectors(
+                                            embeddings,
+                                        ),
+                                        user_provided: false,
+                                    };
+                                    serde_json::to_value(embeddings).unwrap()
+                                });
+                            }
+                        }
+
                         index_dumper.push_document(&document)?;
                     }
 
@@ -1174,8 +1222,6 @@ impl IndexScheduler {
         index: &'i Index,
         operation: IndexOperation,
     ) -> Result<Vec<Task>> {
-        puffin::profile_function!();
-
         match operation {
             IndexOperation::DocumentClear { mut tasks, .. } => {
                 let count = milli::update::ClearDocuments::new(index_wtxn, index).execute()?;

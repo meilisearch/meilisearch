@@ -75,9 +75,9 @@ async fn simple_search_single_index() {
             "id": "450465",
             "_vectors": {
               "manual": [
-                -100,
-                340,
-                90
+                -100.0,
+                340.0,
+                90.0
               ]
             }
           }
@@ -96,9 +96,9 @@ async fn simple_search_single_index() {
             "id": "299537",
             "_vectors": {
               "manual": [
-                1,
-                2,
-                54
+                1.0,
+                2.0,
+                54.0
               ]
             }
           }
@@ -194,9 +194,9 @@ async fn simple_search_two_indexes() {
             "id": "450465",
             "_vectors": {
               "manual": [
-                -100,
-                340,
-                90
+                -100.0,
+                340.0,
+                90.0
               ]
             }
           }
@@ -227,9 +227,9 @@ async fn simple_search_two_indexes() {
             "cattos": "pésti",
             "_vectors": {
               "manual": [
-                1,
-                2,
-                3
+                1.0,
+                2.0,
+                3.0
               ]
             }
           },
@@ -249,9 +249,9 @@ async fn simple_search_two_indexes() {
             ],
             "_vectors": {
               "manual": [
-                1,
-                2,
-                54
+                1.0,
+                2.0,
+                54.0
               ]
             }
           }

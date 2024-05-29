@@ -568,7 +568,7 @@ pub mod tests {
         insta::assert_display_snapshot!(p(r"title = 'foo\\\\'"), @r#"{title} = {foo\\}"#);
         insta::assert_display_snapshot!(p(r"title = 'foo\\\\\\'"), @r#"{title} = {foo\\\}"#);
         insta::assert_display_snapshot!(p(r"title = 'foo\\\\\\\\'"), @r#"{title} = {foo\\\\}"#);
-        // but it also works with other sequencies
+        // but it also works with other sequences
         insta::assert_display_snapshot!(p(r#"title = 'foo\x20\n\t\"\'"'"#), @"{title} = {foo \n\t\"\'\"}");
     }
 

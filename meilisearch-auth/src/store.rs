@@ -49,7 +49,7 @@ pub fn open_auth_store_env(path: &Path) -> milli::heed::Result<milli::heed::Env>
     let mut options = EnvOpenOptions::new();
     options.map_size(AUTH_STORE_SIZE); // 1GB
     options.max_dbs(2);
-    options.open(path)
+    unsafe { options.open(path) }
 }
 
 impl HeedAuthStore {

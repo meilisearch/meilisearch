@@ -1,0 +1,20 @@
+---
+source: index-scheduler/src/lib.rs
+expression: task.details
+---
+{
+  "embedders": {
+    "A_fakerest": {
+      "source": "rest",
+      "apiKey": "MyXXXX...",
+      "dimensions": 384,
+      "url": "http://localhost:7777"
+    },
+    "B_small_hf": {
+      "source": "huggingFace",
+      "model": "sentence-transformers/all-MiniLM-L6-v2",
+      "revision": "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
+      "documentTemplate": "{{doc.doggo}} the {{doc.breed}} best doggo"
+    }
+  }
+}
