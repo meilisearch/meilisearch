@@ -67,7 +67,7 @@ pub async fn multi_search_with_post(
             // Apply search rules from tenant token
             if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid)
             {
-                add_search_rules(&mut query, search_rules);
+                add_search_rules(&mut query.filter, search_rules);
             }
 
             let index = index_scheduler

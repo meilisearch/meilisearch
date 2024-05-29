@@ -24,6 +24,7 @@ pub mod facet;
 mod fst_utils;
 pub mod hybrid;
 pub mod new;
+pub mod similar;
 
 #[derive(Debug, Clone)]
 pub struct SemanticSearch {
@@ -148,7 +149,7 @@ impl<'a> Search<'a> {
     pub fn execute_for_candidates(&self, has_vector_search: bool) -> Result<RoaringBitmap> {
         if has_vector_search {
             let ctx = SearchContext::new(self.index, self.rtxn)?;
-            filtered_universe(&ctx, &self.filter)
+            filtered_universe(ctx.index, ctx.txn, &self.filter)
         } else {
             Ok(self.execute()?.candidates)
         }
@@ -161,7 +162,7 @@ impl<'a> Search<'a> {
             ctx.attributes_to_search_on(searchable_attributes)?;
         }
 
-        let universe = filtered_universe(&ctx, &self.filter)?;
+        let universe = filtered_universe(ctx.index, ctx.txn, &self.filter)?;
         let PartialSearchResult {
             located_query_terms,
             candidates,

@@ -380,6 +380,43 @@ impl Index<'_> {
         self.service.get(url).await
     }
 
+    /// Performs both GET and POST similar queries
+    pub async fn similar(
+        &self,
+        query: Value,
+        test: impl Fn(Value, StatusCode) + UnwindSafe + Clone,
+    ) {
+        let post = self.similar_post(query.clone()).await;
+
+        let query = yaup::to_string(&query).unwrap();
+        let get = self.similar_get(&query).await;
+
+        insta::allow_duplicates! {
+            let (response, code) = post;
+            let t = test.clone();
+            if let Err(e) = catch_unwind(move || t(response, code)) {
+                eprintln!("Error with post search");
+                resume_unwind(e);
+            }
+
+            let (response, code) = get;
+            if let Err(e) = catch_unwind(move || test(response, code)) {
+                eprintln!("Error with get search");
+                resume_unwind(e);
+            }
+        }
+    }
+
+    pub async fn similar_post(&self, query: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/similar", urlencode(self.uid.as_ref()));
+        self.service.post_encoded(url, query, self.encoder).await
+    }
+
+    pub async fn similar_get(&self, query: &str) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/similar?{}", urlencode(self.uid.as_ref()), query);
+        self.service.get(url).await
+    }
+
     pub async fn facet_search(&self, query: Value) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/facet-search", urlencode(self.uid.as_ref()));
         self.service.post_encoded(url, query, self.encoder).await

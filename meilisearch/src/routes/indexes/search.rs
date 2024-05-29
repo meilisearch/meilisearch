@@ -196,7 +196,7 @@ pub async fn search_with_url_query(
 
     // Tenant token search_rules.
     if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
-        add_search_rules(&mut query, search_rules);
+        add_search_rules(&mut query.filter, search_rules);
     }
 
     let mut aggregate = SearchAggregator::from_query(&query, &req);
@@ -235,7 +235,7 @@ pub async fn search_with_post(
 
     // Tenant token search_rules.
     if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
-        add_search_rules(&mut query, search_rules);
+        add_search_rules(&mut query.filter, search_rules);
     }
 
     let mut aggregate = SearchAggregator::from_query(&query, &req);

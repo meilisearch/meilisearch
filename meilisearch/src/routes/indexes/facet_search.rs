@@ -69,7 +69,7 @@ pub async fn search(
 
     // Tenant token search_rules.
     if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
-        add_search_rules(&mut search_query, search_rules);
+        add_search_rules(&mut search_query.filter, search_rules);
     }
 
     let index = index_scheduler.index(&index_uid)?;

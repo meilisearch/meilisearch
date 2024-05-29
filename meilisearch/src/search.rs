@@ -11,7 +11,7 @@ use indexmap::IndexMap;
 use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
-use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
@@ -231,7 +231,7 @@ impl SearchKind {
         Ok(Self::Hybrid { embedder_name, embedder, semantic_ratio })
     }
 
-    fn embedder(
+    pub(crate) fn embedder(
         index_scheduler: &index_scheduler::IndexScheduler,
         index: &Index,
         embedder_name: Option<&str>,
@@ -417,6 +417,59 @@ impl SearchQueryWithIndex {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Deserr)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+pub struct SimilarQuery {
+    #[deserr(error = DeserrJsonError<InvalidSimilarId>)]
+    pub id: ExternalDocumentId,
+    #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSimilarOffset>)]
+    pub offset: usize,
+    #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSimilarLimit>)]
+    pub limit: usize,
+    #[deserr(default, error = DeserrJsonError<InvalidSimilarFilter>)]
+    pub filter: Option<Value>,
+    #[deserr(default, error = DeserrJsonError<InvalidEmbedder>, default)]
+    pub embedder: Option<String>,
+    #[deserr(default, error = DeserrJsonError<InvalidSimilarAttributesToRetrieve>)]
+    pub attributes_to_retrieve: Option<BTreeSet<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSimilarShowRankingScore>, default)]
+    pub show_ranking_score: bool,
+    #[deserr(default, error = DeserrJsonError<InvalidSimilarShowRankingScoreDetails>, default)]
+    pub show_ranking_score_details: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserr)]
+#[deserr(try_from(Value) = TryFrom::try_from -> InvalidSimilarId)]
+pub struct ExternalDocumentId(String);
+
+impl AsRef<str> for ExternalDocumentId {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl ExternalDocumentId {
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl TryFrom<String> for ExternalDocumentId {
+    type Error = InvalidSimilarId;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        serde_json::Value::String(value).try_into()
+    }
+}
+
+impl TryFrom<Value> for ExternalDocumentId {
+    type Error = InvalidSimilarId;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        Ok(Self(milli::documents::validate_document_id_value(value).map_err(|_| InvalidSimilarId)?))
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Deserr)]
 #[deserr(rename_all = camelCase)]
 pub enum MatchingStrategy {
@@ -540,6 +593,16 @@ impl fmt::Debug for SearchResult {
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct SimilarResult {
+    pub hits: Vec<SearchHit>,
+    pub id: String,
+    pub processing_time_ms: u128,
+    #[serde(flatten)]
+    pub hits_info: HitsInfo,
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchResultWithIndex {
     pub index_uid: String,
     #[serde(flatten)]
@@ -570,8 +633,8 @@ pub struct FacetSearchResult {
 }
 
 /// Incorporate search rules in search query
-pub fn add_search_rules(query: &mut SearchQuery, rules: IndexSearchRules) {
-    query.filter = match (query.filter.take(), rules.filter) {
+pub fn add_search_rules(filter: &mut Option<Value>, rules: IndexSearchRules) {
+    *filter = match (filter.take(), rules.filter) {
         (None, rules_filter) => rules_filter,
         (filter, None) => filter,
         (Some(filter), Some(rules_filter)) => {
@@ -719,131 +782,52 @@ pub fn perform_search(
         SearchKind::Hybrid { semantic_ratio, .. } => search.execute_hybrid(*semantic_ratio)?,
     };
 
-    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let SearchQuery {
+        q,
+        vector: _,
+        hybrid: _,
+        // already computed from prepare_search
+        offset: _,
+        limit,
+        page,
+        hits_per_page,
+        attributes_to_retrieve,
+        attributes_to_crop,
+        crop_length,
+        attributes_to_highlight,
+        show_matches_position,
+        show_ranking_score,
+        show_ranking_score_details,
+        filter: _,
+        sort,
+        facets,
+        highlight_pre_tag,
+        highlight_post_tag,
+        crop_marker,
+        matching_strategy: _,
+        attributes_to_search_on: _,
+    } = query;
 
-    let displayed_ids = index
-        .displayed_fields_ids(&rtxn)?
-        .map(|fields| fields.into_iter().collect::<BTreeSet<_>>())
-        .unwrap_or_else(|| fields_ids_map.iter().map(|(id, _)| id).collect());
-
-    let fids = |attrs: &BTreeSet<String>| {
-        let mut ids = BTreeSet::new();
-        for attr in attrs {
-            if attr == "*" {
-                ids.clone_from(&displayed_ids);
-                break;
-            }
-
-            if let Some(id) = fields_ids_map.id(attr) {
-                ids.insert(id);
-            }
-        }
-        ids
+    let format = AttributesFormat {
+        attributes_to_retrieve,
+        attributes_to_highlight,
+        attributes_to_crop,
+        crop_length,
+        crop_marker,
+        highlight_pre_tag,
+        highlight_post_tag,
+        show_matches_position,
+        sort,
+        show_ranking_score,
+        show_ranking_score_details,
     };
 
-    // The attributes to retrieve are the ones explicitly marked as to retrieve (all by default),
-    // but these attributes must be also be present
-    // - in the fields_ids_map
-    // - in the displayed attributes
-    let to_retrieve_ids: BTreeSet<_> = query
-        .attributes_to_retrieve
-        .as_ref()
-        .map(fids)
-        .unwrap_or_else(|| displayed_ids.clone())
-        .intersection(&displayed_ids)
-        .cloned()
-        .collect();
-
-    let attr_to_highlight = query.attributes_to_highlight.unwrap_or_default();
-
-    let attr_to_crop = query.attributes_to_crop.unwrap_or_default();
-
-    // Attributes in `formatted_options` correspond to the attributes that will be in `_formatted`
-    // These attributes are:
-    // - the attributes asked to be highlighted or cropped (with `attributesToCrop` or `attributesToHighlight`)
-    // - the attributes asked to be retrieved: these attributes will not be highlighted/cropped
-    // But these attributes must be also present in displayed attributes
-    let formatted_options = compute_formatted_options(
-        &attr_to_highlight,
-        &attr_to_crop,
-        query.crop_length,
-        &to_retrieve_ids,
-        &fields_ids_map,
-        &displayed_ids,
-    );
-
-    let mut tokenizer_builder = TokenizerBuilder::default();
-    tokenizer_builder.create_char_map(true);
-
-    let script_lang_map = index.script_language(&rtxn)?;
-    if !script_lang_map.is_empty() {
-        tokenizer_builder.allow_list(&script_lang_map);
-    }
-
-    let separators = index.allowed_separators(&rtxn)?;
-    let separators: Option<Vec<_>> =
-        separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
-    if let Some(ref separators) = separators {
-        tokenizer_builder.separators(separators);
-    }
-
-    let dictionary = index.dictionary(&rtxn)?;
-    let dictionary: Option<Vec<_>> =
-        dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
-    if let Some(ref dictionary) = dictionary {
-        tokenizer_builder.words_dict(dictionary);
-    }
-
-    let mut formatter_builder = MatcherBuilder::new(matching_words, tokenizer_builder.build());
-    formatter_builder.crop_marker(query.crop_marker);
-    formatter_builder.highlight_prefix(query.highlight_pre_tag);
-    formatter_builder.highlight_suffix(query.highlight_post_tag);
-
-    let mut documents = Vec::new();
-    let documents_iter = index.documents(&rtxn, documents_ids)?;
-
-    for ((_id, obkv), score) in documents_iter.into_iter().zip(document_scores.into_iter()) {
-        // First generate a document with all the displayed fields
-        let displayed_document = make_document(&displayed_ids, &fields_ids_map, obkv)?;
-
-        // select the attributes to retrieve
-        let attributes_to_retrieve = to_retrieve_ids
-            .iter()
-            .map(|&fid| fields_ids_map.name(fid).expect("Missing field name"));
-        let mut document =
-            permissive_json_pointer::select_values(&displayed_document, attributes_to_retrieve);
-
-        let (matches_position, formatted) = format_fields(
-            &displayed_document,
-            &fields_ids_map,
-            &formatter_builder,
-            &formatted_options,
-            query.show_matches_position,
-            &displayed_ids,
-        )?;
-
-        if let Some(sort) = query.sort.as_ref() {
-            insert_geo_distance(sort, &mut document);
-        }
-
-        let ranking_score =
-            query.show_ranking_score.then(|| ScoreDetails::global_score(score.iter()));
-        let ranking_score_details =
-            query.show_ranking_score_details.then(|| ScoreDetails::to_json_map(score.iter()));
-
-        let hit = SearchHit {
-            document,
-            formatted,
-            matches_position,
-            ranking_score_details,
-            ranking_score,
-        };
-        documents.push(hit);
-    }
+    let documents =
+        make_hits(index, &rtxn, format, matching_words, documents_ids, document_scores)?;
 
     let number_of_hits = min(candidates.len() as usize, max_total_hits);
     let hits_info = if is_finite_pagination {
-        let hits_per_page = query.hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
+        let hits_per_page = hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
         // If hit_per_page is 0, then pages can't be computed and so we respond 0.
         let total_pages = (number_of_hits + hits_per_page.saturating_sub(1))
             .checked_div(hits_per_page)
@@ -851,15 +835,15 @@ pub fn perform_search(
 
         HitsInfo::Pagination {
             hits_per_page,
-            page: query.page.unwrap_or(1),
+            page: page.unwrap_or(1),
             total_pages,
             total_hits: number_of_hits,
         }
     } else {
-        HitsInfo::OffsetLimit { limit: query.limit, offset, estimated_total_hits: number_of_hits }
+        HitsInfo::OffsetLimit { limit, offset, estimated_total_hits: number_of_hits }
     };
 
-    let (facet_distribution, facet_stats) = match query.facets {
+    let (facet_distribution, facet_stats) = match facets {
         Some(ref fields) => {
             let mut facet_distribution = index.facets_distribution(&rtxn);
 
@@ -896,7 +880,7 @@ pub fn perform_search(
     let result = SearchResult {
         hits: documents,
         hits_info,
-        query: query.q.unwrap_or_default(),
+        query: q.unwrap_or_default(),
         processing_time_ms: before_search.elapsed().as_millis(),
         facet_distribution,
         facet_stats,
@@ -905,6 +889,130 @@ pub fn perform_search(
         semantic_hit_count,
     };
     Ok(result)
+}
+
+struct AttributesFormat {
+    attributes_to_retrieve: Option<BTreeSet<String>>,
+    attributes_to_highlight: Option<HashSet<String>>,
+    attributes_to_crop: Option<Vec<String>>,
+    crop_length: usize,
+    crop_marker: String,
+    highlight_pre_tag: String,
+    highlight_post_tag: String,
+    show_matches_position: bool,
+    sort: Option<Vec<String>>,
+    show_ranking_score: bool,
+    show_ranking_score_details: bool,
+}
+
+fn make_hits(
+    index: &Index,
+    rtxn: &RoTxn<'_>,
+    format: AttributesFormat,
+    matching_words: milli::MatchingWords,
+    documents_ids: Vec<u32>,
+    document_scores: Vec<Vec<ScoreDetails>>,
+) -> Result<Vec<SearchHit>, MeilisearchHttpError> {
+    let fields_ids_map = index.fields_ids_map(rtxn).unwrap();
+    let displayed_ids = index
+        .displayed_fields_ids(rtxn)?
+        .map(|fields| fields.into_iter().collect::<BTreeSet<_>>())
+        .unwrap_or_else(|| fields_ids_map.iter().map(|(id, _)| id).collect());
+    let fids = |attrs: &BTreeSet<String>| {
+        let mut ids = BTreeSet::new();
+        for attr in attrs {
+            if attr == "*" {
+                ids.clone_from(&displayed_ids);
+                break;
+            }
+
+            if let Some(id) = fields_ids_map.id(attr) {
+                ids.insert(id);
+            }
+        }
+        ids
+    };
+    let to_retrieve_ids: BTreeSet<_> = format
+        .attributes_to_retrieve
+        .as_ref()
+        .map(fids)
+        .unwrap_or_else(|| displayed_ids.clone())
+        .intersection(&displayed_ids)
+        .cloned()
+        .collect();
+    let attr_to_highlight = format.attributes_to_highlight.unwrap_or_default();
+    let attr_to_crop = format.attributes_to_crop.unwrap_or_default();
+    let formatted_options = compute_formatted_options(
+        &attr_to_highlight,
+        &attr_to_crop,
+        format.crop_length,
+        &to_retrieve_ids,
+        &fields_ids_map,
+        &displayed_ids,
+    );
+    let mut tokenizer_builder = TokenizerBuilder::default();
+    tokenizer_builder.create_char_map(true);
+    let script_lang_map = index.script_language(rtxn)?;
+    if !script_lang_map.is_empty() {
+        tokenizer_builder.allow_list(&script_lang_map);
+    }
+    let separators = index.allowed_separators(rtxn)?;
+    let separators: Option<Vec<_>> =
+        separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
+    if let Some(ref separators) = separators {
+        tokenizer_builder.separators(separators);
+    }
+    let dictionary = index.dictionary(rtxn)?;
+    let dictionary: Option<Vec<_>> =
+        dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
+    if let Some(ref dictionary) = dictionary {
+        tokenizer_builder.words_dict(dictionary);
+    }
+    let mut formatter_builder = MatcherBuilder::new(matching_words, tokenizer_builder.build());
+    formatter_builder.crop_marker(format.crop_marker);
+    formatter_builder.highlight_prefix(format.highlight_pre_tag);
+    formatter_builder.highlight_suffix(format.highlight_post_tag);
+    let mut documents = Vec::new();
+    let documents_iter = index.documents(rtxn, documents_ids)?;
+    for ((_id, obkv), score) in documents_iter.into_iter().zip(document_scores.into_iter()) {
+        // First generate a document with all the displayed fields
+        let displayed_document = make_document(&displayed_ids, &fields_ids_map, obkv)?;
+
+        // select the attributes to retrieve
+        let attributes_to_retrieve = to_retrieve_ids
+            .iter()
+            .map(|&fid| fields_ids_map.name(fid).expect("Missing field name"));
+        let mut document =
+            permissive_json_pointer::select_values(&displayed_document, attributes_to_retrieve);
+
+        let (matches_position, formatted) = format_fields(
+            &displayed_document,
+            &fields_ids_map,
+            &formatter_builder,
+            &formatted_options,
+            format.show_matches_position,
+            &displayed_ids,
+        )?;
+
+        if let Some(sort) = format.sort.as_ref() {
+            insert_geo_distance(sort, &mut document);
+        }
+
+        let ranking_score =
+            format.show_ranking_score.then(|| ScoreDetails::global_score(score.iter()));
+        let ranking_score_details =
+            format.show_ranking_score_details.then(|| ScoreDetails::to_json_map(score.iter()));
+
+        let hit = SearchHit {
+            document,
+            formatted,
+            matches_position,
+            ranking_score_details,
+            ranking_score,
+        };
+        documents.push(hit);
+    }
+    Ok(documents)
 }
 
 pub fn perform_facet_search(
@@ -939,6 +1047,95 @@ pub fn perform_facet_search(
         facet_query,
         processing_time_ms: before_search.elapsed().as_millis(),
     })
+}
+
+pub fn perform_similar(
+    index: &Index,
+    query: SimilarQuery,
+    embedder_name: String,
+    embedder: Arc<Embedder>,
+) -> Result<SimilarResult, ResponseError> {
+    let before_search = Instant::now();
+    let rtxn = index.read_txn()?;
+
+    let SimilarQuery {
+        id,
+        offset,
+        limit,
+        filter: _,
+        embedder: _,
+        attributes_to_retrieve,
+        show_ranking_score,
+        show_ranking_score_details,
+    } = query;
+
+    // using let-else rather than `?` so that the borrow checker identifies we're always returning here,
+    // preventing a use-after-move
+    let Some(internal_id) = index.external_documents_ids().get(&rtxn, &id)? else {
+        return Err(ResponseError::from_msg(
+            MeilisearchHttpError::DocumentNotFound(id.into_inner()).to_string(),
+            Code::NotFoundSimilarId,
+        ));
+    };
+
+    let mut similar =
+        milli::Similar::new(internal_id, offset, limit, index, &rtxn, embedder_name, embedder);
+
+    if let Some(ref filter) = query.filter {
+        if let Some(facets) = parse_filter(filter)
+            // inject InvalidSimilarFilter code
+            .map_err(|e| ResponseError::from_msg(e.to_string(), Code::InvalidSimilarFilter))?
+        {
+            similar.filter(facets);
+        }
+    }
+
+    let milli::SearchResult {
+        documents_ids,
+        matching_words: _,
+        candidates,
+        document_scores,
+        degraded: _,
+        used_negative_operator: _,
+    } = similar.execute().map_err(|err| match err {
+        milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
+            ResponseError::from_msg(err.to_string(), Code::InvalidSimilarFilter)
+        }
+        err => err.into(),
+    })?;
+
+    let format = AttributesFormat {
+        attributes_to_retrieve,
+        attributes_to_highlight: None,
+        attributes_to_crop: None,
+        crop_length: DEFAULT_CROP_LENGTH(),
+        crop_marker: DEFAULT_CROP_MARKER(),
+        highlight_pre_tag: DEFAULT_HIGHLIGHT_PRE_TAG(),
+        highlight_post_tag: DEFAULT_HIGHLIGHT_POST_TAG(),
+        show_matches_position: false,
+        sort: None,
+        show_ranking_score,
+        show_ranking_score_details,
+    };
+
+    let hits = make_hits(index, &rtxn, format, Default::default(), documents_ids, document_scores)?;
+
+    let max_total_hits = index
+        .pagination_max_total_hits(&rtxn)
+        .map_err(milli::Error::from)?
+        .map(|x| x as usize)
+        .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
+
+    let number_of_hits = min(candidates.len() as usize, max_total_hits);
+    let hits_info = HitsInfo::OffsetLimit { limit, offset, estimated_total_hits: number_of_hits };
+
+    let result = SimilarResult {
+        hits,
+        hits_info,
+        id: id.into_inner(),
+        processing_time_ms: before_search.elapsed().as_millis(),
+    };
+    Ok(result)
 }
 
 fn insert_geo_distance(sorts: &[String], document: &mut Document) {
