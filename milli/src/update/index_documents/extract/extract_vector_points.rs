@@ -14,6 +14,7 @@ use roaring::RoaringBitmap;
 use serde_json::Value;
 
 use super::helpers::{create_writer, writer_into_reader, GrenadParameters};
+use crate::index::IndexEmbeddingConfig;
 use crate::prompt::Prompt;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::settings::InnerIndexSettingsDiff;
@@ -96,6 +97,7 @@ struct EmbedderVectorExtractor {
 pub fn extract_vector_points<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
+    embedders_configs: &[IndexEmbeddingConfig],
     settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<Vec<ExtractedVectorPoints>> {
     let reindex_vectors = settings_diff.reindex_vectors();

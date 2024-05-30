@@ -286,6 +286,7 @@ where
         settings_diff.new.recompute_searchables(self.wtxn, self.index)?;
 
         let settings_diff = Arc::new(settings_diff);
+        let embedders_configs = Arc::new(self.index.embedding_configs(self.wtxn)?);
 
         let backup_pool;
         let pool = match self.indexer_config.thread_pool {
@@ -399,6 +400,7 @@ where
                         pool_params,
                         lmdb_writer_sx.clone(),
                         primary_key_id,
+                        embedders_configs.clone(),
                         settings_diff_cloned,
                         max_positions_per_attributes,
                     )

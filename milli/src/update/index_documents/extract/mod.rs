@@ -30,6 +30,7 @@ use self::extract_word_pair_proximity_docids::extract_word_pair_proximity_docids
 use self::extract_word_position_docids::extract_word_position_docids;
 use super::helpers::{as_cloneable_grenad, CursorClonableMmap, GrenadParameters};
 use super::{helpers, TypedChunk};
+use crate::index::IndexEmbeddingConfig;
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::{FieldId, Result, ThreadPoolNoAbortBuilder};
 
@@ -43,6 +44,7 @@ pub(crate) fn data_from_obkv_documents(
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     primary_key_id: FieldId,
+    embedders_configs: Arc<Vec<IndexEmbeddingConfig>>,
     settings_diff: Arc<InnerIndexSettingsDiff>,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<()> {
@@ -55,6 +57,7 @@ pub(crate) fn data_from_obkv_documents(
                         original_documents_chunk,
                         indexer,
                         lmdb_writer_sx.clone(),
+                        embedders_configs.clone(),
                         settings_diff.clone(),
                     )
                 })
@@ -210,6 +213,7 @@ fn send_original_documents_data(
     original_documents_chunk: Result<grenad::Reader<BufReader<File>>>,
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
+    embedders_configs: Arc<Vec<IndexEmbeddingConfig>>,
     settings_diff: Arc<InnerIndexSettingsDiff>,
 ) -> Result<()> {
     let original_documents_chunk =
@@ -226,11 +230,17 @@ fn send_original_documents_data(
 
     if index_vectors {
         let settings_diff = settings_diff.clone();
+        let embedders_configs = embedders_configs.clone();
 
         let original_documents_chunk = original_documents_chunk.clone();
         let lmdb_writer_sx = lmdb_writer_sx.clone();
         rayon::spawn(move || {
-            match extract_vector_points(original_documents_chunk.clone(), indexer, &settings_diff) {
+            match extract_vector_points(
+                original_documents_chunk.clone(),
+                indexer,
+                &embedders_configs,
+                &settings_diff,
+            ) {
                 Ok(extracted_vectors) => {
                     for ExtractedVectorPoints {
                         manual_vectors,
