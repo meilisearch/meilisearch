@@ -47,6 +47,31 @@ static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     ])
 });
 
+static SCORE_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+    json!([
+        {
+            "title": "Batman the dark knight returns: Part 1",
+            "id": "A",
+        },
+        {
+            "title": "Batman the dark knight returns: Part 2",
+            "id": "B",
+        },
+        {
+            "title": "Batman Returns",
+            "id": "C",
+        },
+        {
+            "title": "Batman",
+            "id": "D",
+        },
+        {
+            "title": "Badman",
+            "id": "E",
+        }
+    ])
+});
+
 static NESTED_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     json!([
         {
@@ -954,6 +979,213 @@ async fn test_score_details() {
                   }
                 ]
                 "###);
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
+async fn test_score() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = SCORE_DOCUMENTS.clone();
+
+    let res = index.add_documents(json!(documents), None).await;
+    index.wait_task(res.0.uid()).await;
+
+    index
+        .search(
+            json!({
+                "q": "Badman the dark knight returns 1",
+                "showRankingScore": true,
+            }),
+            |response, code| {
+                meili_snap::snapshot!(code, @"200 OK");
+                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "Batman the dark knight returns: Part 1",
+                    "id": "A",
+                    "_rankingScore": 0.9746605609456898
+                  },
+                  {
+                    "title": "Batman the dark knight returns: Part 2",
+                    "id": "B",
+                    "_rankingScore": 0.8055252965383685
+                  },
+                  {
+                    "title": "Badman",
+                    "id": "E",
+                    "_rankingScore": 0.16666666666666666
+                  },
+                  {
+                    "title": "Batman Returns",
+                    "id": "C",
+                    "_rankingScore": 0.07702020202020202
+                  },
+                  {
+                    "title": "Batman",
+                    "id": "D",
+                    "_rankingScore": 0.07702020202020202
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
+async fn test_score_threshold() {
+    let query = "Badman dark returns 1";
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = SCORE_DOCUMENTS.clone();
+
+    let res = index.add_documents(json!(documents), None).await;
+    index.wait_task(res.0.uid()).await;
+
+    index
+        .search(
+            json!({
+                "q": query,
+                "showRankingScore": true,
+                "rankingScoreThreshold": 0.0
+            }),
+            |response, code| {
+                meili_snap::snapshot!(code, @"200 OK");
+                meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @"5");
+                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "Batman the dark knight returns: Part 1",
+                    "id": "A",
+                    "_rankingScore": 0.93430081300813
+                  },
+                  {
+                    "title": "Batman the dark knight returns: Part 2",
+                    "id": "B",
+                    "_rankingScore": 0.6685627880184332
+                  },
+                  {
+                    "title": "Badman",
+                    "id": "E",
+                    "_rankingScore": 0.25
+                  },
+                  {
+                    "title": "Batman Returns",
+                    "id": "C",
+                    "_rankingScore": 0.11553030303030302
+                  },
+                  {
+                    "title": "Batman",
+                    "id": "D",
+                    "_rankingScore": 0.11553030303030302
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+
+    index
+        .search(
+            json!({
+                "q": query,
+                "showRankingScore": true,
+                "rankingScoreThreshold": 0.2
+            }),
+            |response, code| {
+                meili_snap::snapshot!(code, @"200 OK");
+                meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @r###"3"###);
+                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "Batman the dark knight returns: Part 1",
+                    "id": "A",
+                    "_rankingScore": 0.93430081300813
+                  },
+                  {
+                    "title": "Batman the dark knight returns: Part 2",
+                    "id": "B",
+                    "_rankingScore": 0.6685627880184332
+                  },
+                  {
+                    "title": "Badman",
+                    "id": "E",
+                    "_rankingScore": 0.25
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+
+    index
+        .search(
+            json!({
+                "q": query,
+                "showRankingScore": true,
+                "rankingScoreThreshold": 0.5
+            }),
+            |response, code| {
+                meili_snap::snapshot!(code, @"200 OK");
+                meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @r###"2"###);
+                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "Batman the dark knight returns: Part 1",
+                    "id": "A",
+                    "_rankingScore": 0.93430081300813
+                  },
+                  {
+                    "title": "Batman the dark knight returns: Part 2",
+                    "id": "B",
+                    "_rankingScore": 0.6685627880184332
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+
+    index
+        .search(
+            json!({
+                "q": query,
+                "showRankingScore": true,
+                "rankingScoreThreshold": 0.8
+            }),
+            |response, code| {
+                meili_snap::snapshot!(code, @"200 OK");
+                meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @r###"1"###);
+                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "Batman the dark knight returns: Part 1",
+                    "id": "A",
+                    "_rankingScore": 0.93430081300813
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+
+    index
+        .search(
+            json!({
+                "q": query,
+                "showRankingScore": true,
+                "rankingScoreThreshold": 1.0
+            }),
+            |response, code| {
+                meili_snap::snapshot!(code, @"200 OK");
+                meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @r###"0"###);
+                // nobody is perfect
+                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @"[]");
             },
         )
         .await;

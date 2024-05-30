@@ -88,6 +88,68 @@ async fn similar_bad_id() {
 }
 
 #[actix_rt::test]
+async fn similar_bad_ranking_score_threshold() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    server.set_features(json!({"vectorStore": true})).await;
+
+    let (response, code) = index
+        .update_settings(json!({
+        "embedders": {
+            "manual": {
+                "source": "userProvided",
+                "dimensions": 3,
+            }
+        },
+        "filterableAttributes": ["title"]}))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await;
+
+    let (response, code) = index.similar_post(json!({"rankingScoreThreshold": ["doggo"]})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.rankingScoreThreshold`: expected a number, but found an array: `[\"doggo\"]`",
+      "code": "invalid_similar_ranking_score_threshold",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_similar_ranking_score_threshold"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn similar_invalid_ranking_score_threshold() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    server.set_features(json!({"vectorStore": true})).await;
+
+    let (response, code) = index
+        .update_settings(json!({
+        "embedders": {
+            "manual": {
+                "source": "userProvided",
+                "dimensions": 3,
+            }
+        },
+        "filterableAttributes": ["title"]}))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await;
+
+    let (response, code) = index.similar_post(json!({"rankingScoreThreshold": 42})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value at `.rankingScoreThreshold`: the value of `rankingScoreThreshold` is invalid, expected a float between `0.0` and `1.0`.",
+      "code": "invalid_similar_ranking_score_threshold",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_similar_ranking_score_threshold"
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn similar_invalid_id() {
     let server = Server::new().await;
     let index = server.index("test");
