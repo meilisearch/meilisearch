@@ -109,6 +109,24 @@ impl std::convert::TryFrom<f64> for RankingScoreThreshold {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Deserr)]
+#[deserr(try_from(f64) = TryFrom::try_from -> InvalidSimilarRankingScoreThreshold)]
+pub struct RankingScoreThresholdSimilar(f64);
+
+impl std::convert::TryFrom<f64> for RankingScoreThresholdSimilar {
+    type Error = InvalidSimilarRankingScoreThreshold;
+
+    fn try_from(f: f64) -> Result<Self, Self::Error> {
+        // the suggested "fix" is: `!(0.0..=1.0).contains(&f)`` which is allegedly less readable
+        #[allow(clippy::manual_range_contains)]
+        if f > 1.0 || f < 0.0 {
+            Err(InvalidSimilarRankingScoreThreshold)
+        } else {
+            Ok(Self(f))
+        }
+    }
+}
+
 // Since this structure is logged A LOT we're going to reduce the number of things it logs to the bare minimum.
 // - Only what IS used, we know everything else is set to None so there is no need to print it
 // - Re-order the most important field to debug first
@@ -464,6 +482,8 @@ pub struct SimilarQuery {
     pub show_ranking_score: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarShowRankingScoreDetails>, default)]
     pub show_ranking_score_details: bool,
+    #[deserr(default, error = DeserrJsonError<InvalidSimilarRankingScoreThreshold>, default)]
+    pub ranking_score_threshold: Option<RankingScoreThresholdSimilar>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserr)]
@@ -1102,6 +1122,7 @@ pub fn perform_similar(
         attributes_to_retrieve,
         show_ranking_score,
         show_ranking_score_details,
+        ranking_score_threshold,
     } = query;
 
     // using let-else rather than `?` so that the borrow checker identifies we're always returning here,
@@ -1123,6 +1144,10 @@ pub fn perform_similar(
         {
             similar.filter(facets);
         }
+    }
+
+    if let Some(ranking_score_threshold) = ranking_score_threshold {
+        similar.ranking_score_threshold(ranking_score_threshold.0);
     }
 
     let milli::SearchResult {
