@@ -808,13 +808,15 @@ impl<'a, 'i> Transform<'a, 'i> {
         let mut new_inner_settings = old_inner_settings.clone();
         new_inner_settings.fields_ids_map = fields_ids_map;
 
-        let settings_diff = InnerIndexSettingsDiff {
-            old: old_inner_settings,
-            new: new_inner_settings,
+        let embedding_configs_updated = false;
+        let settings_update_only = false;
+        let settings_diff = InnerIndexSettingsDiff::new(
+            old_inner_settings,
+            new_inner_settings,
             primary_key_id,
-            embedding_configs_updated: false,
-            settings_update_only: false,
-        };
+            embedding_configs_updated,
+            settings_update_only,
+        );
 
         Ok(TransformOutput {
             primary_key,

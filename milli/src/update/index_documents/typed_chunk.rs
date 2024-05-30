@@ -489,7 +489,7 @@ pub(crate) fn write_typed_chunk_into_index(
             }
             let merger = builder.build();
 
-            if settings_diff.only_additional_fields().is_some() {
+            if settings_diff.only_additional_fields.is_some() {
                 write_proximity_entries_into_database_additional_searchables(
                     merger,
                     &index.word_pair_proximity_docids,

@@ -1073,13 +1073,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             .index
             .primary_key(self.wtxn)?
             .and_then(|name| new_inner_settings.fields_ids_map.id(name));
-        let inner_settings_diff = InnerIndexSettingsDiff {
-            old: old_inner_settings,
-            new: new_inner_settings,
+        let settings_update_only = true;
+        let inner_settings_diff = InnerIndexSettingsDiff::new(
+            old_inner_settings,
+            new_inner_settings,
             primary_key_id,
             embedding_configs_updated,
-            settings_update_only: true,
-        };
+            settings_update_only,
+        );
 
         if inner_settings_diff.any_reindexing_needed() {
             self.reindex(&progress_callback, &should_abort, inner_settings_diff)?;
@@ -1096,9 +1097,46 @@ pub struct InnerIndexSettingsDiff {
     // TODO: compare directly the embedders.
     pub(crate) embedding_configs_updated: bool,
     pub(crate) settings_update_only: bool,
+    /// The set of only the additional searchable fields.
+    /// If any other searchable field has been modified, is set to None.
+    pub(crate) only_additional_fields: Option<HashSet<String>>,
 }
 
 impl InnerIndexSettingsDiff {
+    pub(crate) fn new(
+        old_settings: InnerIndexSettings,
+        new_settings: InnerIndexSettings,
+        primary_key_id: Option<FieldId>,
+        embedding_configs_updated: bool,
+        settings_update_only: bool,
+    ) -> Self {
+        let only_additional_fields = match (
+            &old_settings.user_defined_searchable_fields,
+            &new_settings.user_defined_searchable_fields,
+        ) {
+            (None, None) | (Some(_), None) | (None, Some(_)) => None, // None means *
+            (Some(old), Some(new)) => {
+                let old: HashSet<_> = old.iter().cloned().collect();
+                let new: HashSet<_> = new.iter().cloned().collect();
+                if old.difference(&new).next().is_none() {
+                    // if no field has been removed return only the additional ones
+                    Some(&new - &old)
+                } else {
+                    None
+                }
+            }
+        };
+
+        InnerIndexSettingsDiff {
+            old: old_settings,
+            new: new_settings,
+            primary_key_id,
+            embedding_configs_updated,
+            settings_update_only,
+            only_additional_fields,
+        }
+    }
+
     pub fn any_reindexing_needed(&self) -> bool {
         self.reindex_searchable() || self.reindex_facets() || self.reindex_vectors()
     }
@@ -1123,7 +1161,7 @@ impl InnerIndexSettingsDiff {
             || self.old.proximity_precision != self.new.proximity_precision
         {
             Some(DelAddOperation::DeletionAndAddition)
-        } else if let Some(only_additional_fields) = self.only_additional_fields() {
+        } else if let Some(only_additional_fields) = &self.only_additional_fields {
             let additional_field = self.new.fields_ids_map.name(id).unwrap();
             if only_additional_fields.contains(additional_field) {
                 Some(DelAddOperation::Addition)
@@ -1135,25 +1173,6 @@ impl InnerIndexSettingsDiff {
             Some(DelAddOperation::DeletionAndAddition)
         } else {
             None
-        }
-    }
-
-    /// Returns only the additional searchable fields.
-    /// If any other searchable field has been modified, returns None.
-    pub fn only_additional_fields(&self) -> Option<HashSet<String>> {
-        match (&self.old.user_defined_searchable_fields, &self.new.user_defined_searchable_fields) {
-            (None, None) | (Some(_), None) | (None, Some(_)) => None, // None means *
-            (Some(old), Some(new)) => {
-                let old: HashSet<_> = old.iter().cloned().collect();
-                let new: HashSet<_> = new.iter().cloned().collect();
-                if old.difference(&new).next().is_none() {
-                    // if no field has been removed
-                    // return only the additional ones
-                    Some(&new - &old)
-                } else {
-                    None
-                }
-            }
         }
     }
 
