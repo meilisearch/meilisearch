@@ -1103,6 +1103,7 @@ pub struct InnerIndexSettingsDiff {
 }
 
 impl InnerIndexSettingsDiff {
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::settings")]
     pub(crate) fn new(
         old_settings: InnerIndexSettings,
         new_settings: InnerIndexSettings,
