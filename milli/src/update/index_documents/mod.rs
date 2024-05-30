@@ -785,6 +785,7 @@ mod tests {
     use super::*;
     use crate::documents::documents_batch_reader_from_objects;
     use crate::index::tests::TempIndex;
+    use crate::index::IndexEmbeddingConfig;
     use crate::search::TermsMatchingStrategy;
     use crate::update::Setting;
     use crate::{db_snap, Filter, Search};
@@ -2620,7 +2621,8 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
         let mut embedding_configs = index.embedding_configs(&rtxn).unwrap();
-        let (embedder_name, embedder, user_defined) = embedding_configs.pop().unwrap();
+        let IndexEmbeddingConfig { name: embedder_name, config: embedder, user_defined } =
+            embedding_configs.pop().unwrap();
         insta::assert_snapshot!(embedder_name, @"manual");
         insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[0, 1, 2]>");
         let embedder =

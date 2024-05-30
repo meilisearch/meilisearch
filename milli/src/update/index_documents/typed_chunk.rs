@@ -20,6 +20,7 @@ use super::MergeFn;
 use crate::external_documents_ids::{DocumentOperation, DocumentOperationKind};
 use crate::facet::FacetType;
 use crate::index::db_name::DOCUMENTS;
+use crate::index::IndexEmbeddingConfig;
 use crate::proximity::MAX_DISTANCE;
 use crate::update::del_add::{deladd_serialize_add_side, DelAdd, KvReaderDelAdd};
 use crate::update::facet::FacetsUpdate;
@@ -156,8 +157,11 @@ pub(crate) fn write_typed_chunk_into_index(
             let mut docids = index.documents_ids(wtxn)?;
             let mut iter = merger.into_stream_merger_iter()?;
 
-            let embedders: BTreeSet<_> =
-                index.embedding_configs(wtxn)?.into_iter().map(|(name, _, _)| name).collect();
+            let embedders: BTreeSet<_> = index
+                .embedding_configs(wtxn)?
+                .into_iter()
+                .map(|IndexEmbeddingConfig { name, .. }| name)
+                .collect();
             let mut vectors_buffer = Vec::new();
             while let Some((key, reader)) = iter.next()? {
                 let mut writer: KvWriter<_, FieldId> = KvWriter::memory();
@@ -653,10 +657,12 @@ pub(crate) fn write_typed_chunk_into_index(
             let Some((expected_dimension, embedder_name)) = params else { unreachable!() };
 
             let mut embedding_configs = index.embedding_configs(&wtxn)?;
-            let (_name, _conf, ud) =
-                embedding_configs.iter_mut().find(|config| config.0 == embedder_name).unwrap();
-            *ud -= remove_from_user_defined;
-            *ud |= user_defined;
+            let index_embedder_config = embedding_configs
+                .iter_mut()
+                .find(|IndexEmbeddingConfig { name, .. }| name == &embedder_name)
+                .unwrap();
+            index_embedder_config.user_defined -= remove_from_user_defined;
+            index_embedder_config.user_defined |= user_defined;
 
             index.put_embedding_configs(wtxn, embedding_configs)?;
 

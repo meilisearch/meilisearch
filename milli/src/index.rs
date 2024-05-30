@@ -9,6 +9,7 @@ use heed::types::*;
 use heed::{CompactionOption, Database, RoTxn, RwTxn, Unspecified};
 use roaring::RoaringBitmap;
 use rstar::RTree;
+use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 use crate::documents::PrimaryKey;
@@ -1579,24 +1580,23 @@ impl Index {
     pub(crate) fn put_embedding_configs(
         &self,
         wtxn: &mut RwTxn<'_>,
-        configs: Vec<(String, EmbeddingConfig, RoaringBitmap)>,
+        configs: Vec<IndexEmbeddingConfig>,
     ) -> heed::Result<()> {
-        self.main
-            .remap_types::<Str, SerdeJson<Vec<(String, EmbeddingConfig, RoaringBitmap)>>>()
-            .put(wtxn, main_key::EMBEDDING_CONFIGS, &configs)
+        self.main.remap_types::<Str, SerdeJson<Vec<IndexEmbeddingConfig>>>().put(
+            wtxn,
+            main_key::EMBEDDING_CONFIGS,
+            &configs,
+        )
     }
 
     pub(crate) fn delete_embedding_configs(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
         self.main.remap_key_type::<Str>().delete(wtxn, main_key::EMBEDDING_CONFIGS)
     }
 
-    pub fn embedding_configs(
-        &self,
-        rtxn: &RoTxn<'_>,
-    ) -> Result<Vec<(String, EmbeddingConfig, RoaringBitmap)>> {
+    pub fn embedding_configs(&self, rtxn: &RoTxn<'_>) -> Result<Vec<IndexEmbeddingConfig>> {
         Ok(self
             .main
-            .remap_types::<Str, SerdeJson<Vec<(String, EmbeddingConfig, RoaringBitmap)>>>()
+            .remap_types::<Str, SerdeJson<Vec<IndexEmbeddingConfig>>>()
             .get(rtxn, main_key::EMBEDDING_CONFIGS)?
             .unwrap_or_default())
     }
@@ -1666,6 +1666,13 @@ impl Index {
         }
         Ok(res)
     }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct IndexEmbeddingConfig {
+    pub name: String,
+    pub config: EmbeddingConfig,
+    pub user_defined: RoaringBitmap,
 }
 
 #[cfg(test)]

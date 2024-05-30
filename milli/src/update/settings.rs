@@ -15,7 +15,9 @@ use super::index_documents::{IndexDocumentsConfig, Transform};
 use super::IndexerConfig;
 use crate::criterion::Criterion;
 use crate::error::UserError;
-use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
+use crate::index::{
+    IndexEmbeddingConfig, DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
+};
 use crate::order_by_map::OrderByMap;
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
@@ -930,8 +932,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 let old_configs: BTreeMap<String, (Setting<EmbeddingSettings>, RoaringBitmap)> =
                     old_configs
                         .into_iter()
-                        .map(|(name, setting, user_defined)| {
-                            (name, (Setting::Set(setting.into()), user_defined))
+                        .map(|IndexEmbeddingConfig { name, config, user_defined }| {
+                            (name, (Setting::Set(config.into()), user_defined))
                         })
                         .collect();
 
@@ -975,23 +977,27 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                         }
                     }
                 }
-                let new_configs: Vec<(String, EmbeddingConfig, RoaringBitmap)> = new_configs
+                let new_configs: Vec<IndexEmbeddingConfig> = new_configs
                     .into_iter()
-                    .filter_map(|(name, (setting, user_defined))| match setting {
-                        Setting::Set(settings) => Some((name, settings.into(), user_defined)),
-                        Setting::Reset => None,
-                        Setting::NotSet => {
-                            Some((name, EmbeddingSettings::default().into(), user_defined))
+                    .filter_map(|(name, (config, user_defined))| match config {
+                        Setting::Set(config) => {
+                            Some(IndexEmbeddingConfig { name, config: config.into(), user_defined })
                         }
+                        Setting::Reset => None,
+                        Setting::NotSet => Some(IndexEmbeddingConfig {
+                            name,
+                            config: EmbeddingSettings::default().into(),
+                            user_defined,
+                        }),
                     })
                     .collect();
 
                 self.index.embedder_category_id.clear(self.wtxn)?;
-                for (index, (embedder_name, _, _)) in new_configs.iter().enumerate() {
+                for (index, index_embedding_config) in new_configs.iter().enumerate() {
                     self.index.embedder_category_id.put_with_flags(
                         self.wtxn,
                         heed::PutFlags::APPEND,
-                        embedder_name,
+                        &index_embedding_config.name,
                         &index
                             .try_into()
                             .map_err(|_| UserError::TooManyEmbedders(new_configs.len()))?,
@@ -1371,21 +1377,25 @@ impl InnerIndexSettings {
     }
 }
 
-fn embedders(
-    embedding_configs: Vec<(String, EmbeddingConfig, RoaringBitmap)>,
-) -> Result<EmbeddingConfigs> {
+fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<EmbeddingConfigs> {
     let res: Result<_> = embedding_configs
         .into_iter()
-        .map(|(name, EmbeddingConfig { embedder_options, prompt }, _)| {
-            let prompt = Arc::new(prompt.try_into().map_err(crate::Error::from)?);
+        .map(
+            |IndexEmbeddingConfig {
+                 name,
+                 config: EmbeddingConfig { embedder_options, prompt },
+                 ..
+             }| {
+                let prompt = Arc::new(prompt.try_into().map_err(crate::Error::from)?);
 
-            let embedder = Arc::new(
-                Embedder::new(embedder_options.clone())
-                    .map_err(crate::vector::Error::from)
-                    .map_err(crate::Error::from)?,
-            );
-            Ok((name, (embedder, prompt)))
-        })
+                let embedder = Arc::new(
+                    Embedder::new(embedder_options.clone())
+                        .map_err(crate::vector::Error::from)
+                        .map_err(crate::Error::from)?,
+                );
+                Ok((name, (embedder, prompt)))
+            },
+        )
         .collect();
     res.map(EmbeddingConfigs::new)
 }
