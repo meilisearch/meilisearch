@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use std::cmp::{Ordering, Reverse};
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 
@@ -321,13 +321,13 @@ impl QueryGraph {
                 })
                 .collect()
         };
-        term_with_frequency.sort_by_key(|(_, frequency)| *frequency);
+        term_with_frequency.sort_by_key(|(_, frequency)| Reverse(*frequency));
         let mut term_weight = BTreeMap::new();
         let mut weight: u16 = 1;
         let mut peekable = term_with_frequency.into_iter().peekable();
         while let Some((idx, frequency)) = peekable.next() {
             term_weight.insert(idx, weight);
-            if peekable.peek().map_or(false, |(_, f)| frequency < *f) {
+            if peekable.peek().map_or(false, |(_, f)| frequency != *f) {
                 weight += 1;
             }
         }
