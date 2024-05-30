@@ -1,8 +1,9 @@
-use std::cmp::Ordering;
+use std::cmp::{Ordering, Reverse};
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 
 use fxhash::{FxHashMap, FxHasher};
+use roaring::RoaringBitmap;
 
 use super::interner::{FixedSizeInterner, Interned};
 use super::query_term::{
@@ -11,6 +12,7 @@ use super::query_term::{
 use super::small_bitmap::SmallBitmap;
 use super::SearchContext;
 use crate::search::new::interner::Interner;
+use crate::search::new::resolve_query_graph::compute_query_term_subset_docids;
 use crate::Result;
 
 /// A node of the [`QueryGraph`].
@@ -290,6 +292,49 @@ impl QueryGraph {
         }
     }
 
+    pub fn removal_order_for_terms_matching_strategy_frequency(
+        &self,
+        ctx: &mut SearchContext,
+    ) -> Result<Vec<SmallBitmap<QueryNode>>> {
+        // lookup frequency for each term
+        let mut term_with_frequency: Vec<(u8, u64)> = {
+            let mut term_docids: BTreeMap<u8, RoaringBitmap> = Default::default();
+            for (_, node) in self.nodes.iter() {
+                match &node.data {
+                    QueryNodeData::Term(t) => {
+                        let docids = compute_query_term_subset_docids(ctx, &t.term_subset)?;
+                        for id in t.term_ids.clone() {
+                            term_docids
+                                .entry(id)
+                                .and_modify(|curr| *curr |= &docids)
+                                .or_insert_with(|| docids.clone());
+                        }
+                    }
+                    QueryNodeData::Deleted | QueryNodeData::Start | QueryNodeData::End => continue,
+                }
+            }
+            term_docids
+                .into_iter()
+                .map(|(idx, docids)| match docids.len() {
+                    0 => (idx, u64::max_value()),
+                    frequency => (idx, frequency),
+                })
+                .collect()
+        };
+        term_with_frequency.sort_by_key(|(_, frequency)| Reverse(*frequency));
+        let mut term_weight = BTreeMap::new();
+        let mut weight: u16 = 1;
+        let mut peekable = term_with_frequency.into_iter().peekable();
+        while let Some((idx, frequency)) = peekable.next() {
+            term_weight.insert(idx, weight);
+            if peekable.peek().map_or(false, |(_, f)| frequency != *f) {
+                weight += 1;
+            }
+        }
+        let cost_of_term_idx = move |term_idx: u8| *term_weight.get(&term_idx).unwrap();
+        Ok(self.removal_order_for_terms_matching_strategy(ctx, cost_of_term_idx))
+    }
+
     pub fn removal_order_for_terms_matching_strategy_last(
         &self,
         ctx: &SearchContext,
@@ -315,10 +360,19 @@ impl QueryGraph {
         if first_term_idx >= last_term_idx {
             return vec![];
         }
+
         let cost_of_term_idx = |term_idx: u8| {
             let rank = 1 + last_term_idx - term_idx;
             rank as u16
         };
+        self.removal_order_for_terms_matching_strategy(ctx, cost_of_term_idx)
+    }
+
+    pub fn removal_order_for_terms_matching_strategy(
+        &self,
+        ctx: &SearchContext,
+        order: impl Fn(u8) -> u16,
+    ) -> Vec<SmallBitmap<QueryNode>> {
         let mut nodes_to_remove = BTreeMap::<u16, SmallBitmap<QueryNode>>::new();
         let mut at_least_one_mandatory_term = false;
         for (node_id, node) in self.nodes.iter() {
@@ -329,7 +383,7 @@ impl QueryGraph {
             }
             let mut cost = 0;
             for id in t.term_ids.clone() {
-                cost = std::cmp::max(cost, cost_of_term_idx(id));
+                cost = std::cmp::max(cost, order(id));
             }
             nodes_to_remove
                 .entry(cost)

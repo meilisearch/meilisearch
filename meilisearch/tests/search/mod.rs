@@ -7,6 +7,7 @@ mod facet_search;
 mod formatted;
 mod geo;
 mod hybrid;
+mod matching_strategy;
 mod multi;
 mod pagination;
 mod restrict_searchable;

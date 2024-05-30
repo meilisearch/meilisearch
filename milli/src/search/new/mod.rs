@@ -197,6 +197,11 @@ fn resolve_maximally_reduced_query_graph(
             .iter()
             .flat_map(|x| x.iter())
             .collect(),
+        TermsMatchingStrategy::Frequency => query_graph
+            .removal_order_for_terms_matching_strategy_frequency(ctx)?
+            .iter()
+            .flat_map(|x| x.iter())
+            .collect(),
         TermsMatchingStrategy::All => vec![],
     };
     graph.remove_nodes_keep_edges(&nodes_to_remove);

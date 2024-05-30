@@ -505,7 +505,7 @@ async fn search_bad_matching_strategy() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Unknown value `doggo` at `.matchingStrategy`: expected one of `last`, `all`",
+      "message": "Unknown value `doggo` at `.matchingStrategy`: expected one of `last`, `all`, `frequency`",
       "code": "invalid_search_matching_strategy",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_matching_strategy"
@@ -527,7 +527,7 @@ async fn search_bad_matching_strategy() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Unknown value `doggo` for parameter `matchingStrategy`: expected one of `last`, `all`",
+      "message": "Unknown value `doggo` for parameter `matchingStrategy`: expected one of `last`, `all`, `frequency`",
       "code": "invalid_search_matching_strategy",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_matching_strategy"
