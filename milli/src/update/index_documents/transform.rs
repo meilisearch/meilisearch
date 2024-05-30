@@ -899,6 +899,11 @@ impl<'a, 'i> Transform<'a, 'i> {
     /// of the index with the attributes reordered accordingly to the `FieldsIdsMap` given as argument.
     ///
     // TODO this can be done in parallel by using the rayon `ThreadPool`.
+    #[tracing::instrument(
+        level = "trace"
+        skip(self, wtxn, settings_diff),
+        target = "indexing::documents"
+    )]
     pub fn prepare_for_documents_reindexing(
         self,
         wtxn: &mut heed::RwTxn<'i>,
