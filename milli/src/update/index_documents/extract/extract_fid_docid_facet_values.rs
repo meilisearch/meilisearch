@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::{self, BufReader};
@@ -9,7 +9,7 @@ use std::result::Result as StdResult;
 use bytemuck::bytes_of;
 use grenad::Sorter;
 use heed::BytesEncode;
-use itertools::EitherOrBoth;
+use itertools::{merge_join_by, EitherOrBoth};
 use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 use serde_json::{from_slice, Value};
@@ -18,7 +18,7 @@ use FilterableValues::{Empty, Null, Values};
 use super::helpers::{create_sorter, keep_first, sorter_into_reader, GrenadParameters};
 use crate::error::InternalError;
 use crate::facet::value_encoding::f64_into_bytes;
-use crate::update::del_add::{DelAdd, KvWriterDelAdd};
+use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::index_documents::{create_writer, writer_into_reader};
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::{CboRoaringBitmapCodec, DocumentId, Error, FieldId, Result, MAX_FACET_VALUE_LENGTH};
@@ -66,6 +66,11 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
         max_memory.map(|m| m / 2),
     );
 
+    let old_faceted_fids: BTreeSet<_> =
+        settings_diff.old.faceted_fields_ids.iter().copied().collect();
+    let new_faceted_fids: BTreeSet<_> =
+        settings_diff.new.faceted_fields_ids.iter().copied().collect();
+
     // The tuples represents the Del and Add side for a bitmap
     let mut facet_exists_docids = BTreeMap::<FieldId, (RoaringBitmap, RoaringBitmap)>::new();
     let mut facet_is_null_docids = BTreeMap::<FieldId, (RoaringBitmap, RoaringBitmap)>::new();
@@ -78,11 +83,45 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     let mut cursor = obkv_documents.into_cursor()?;
     while let Some((docid_bytes, value)) = cursor.move_on_next()? {
         let obkv = obkv::KvReader::new(value);
+        let get_document_json_value = move |field_id, side| {
+            obkv.get(field_id)
+                .map(KvReaderDelAdd::new)
+                .and_then(|kv| kv.get(side))
+                .map(from_slice)
+                .transpose()
+                .map_err(InternalError::SerdeJson)
+        };
+        // iterate over the faceted fields instead of over the whole document.
+        for eob in
+            merge_join_by(old_faceted_fids.iter(), new_faceted_fids.iter(), |old, new| old.cmp(new))
+        {
+            let (field_id, del_value, add_value) = match eob {
+                EitherOrBoth::Left(&field_id) => {
+                    let del_value = get_document_json_value(field_id, DelAdd::Deletion)?;
 
-        for (field_id, field_bytes) in obkv.iter() {
-            let delete_faceted = settings_diff.old.faceted_fields_ids.contains(&field_id);
-            let add_faceted = settings_diff.new.faceted_fields_ids.contains(&field_id);
-            if delete_faceted || add_faceted {
+                    // deletion only
+                    (field_id, del_value, None)
+                }
+                EitherOrBoth::Right(&field_id) => {
+                    let add_value = get_document_json_value(field_id, DelAdd::Addition)?;
+
+                    // addition only
+                    (field_id, None, add_value)
+                }
+                EitherOrBoth::Both(&field_id, _) => {
+                    // during settings update, recompute the changing settings only.
+                    if settings_diff.settings_update_only {
+                        continue;
+                    }
+
+                    let del_value = get_document_json_value(field_id, DelAdd::Deletion)?;
+                    let add_value = get_document_json_value(field_id, DelAdd::Addition)?;
+
+                    (field_id, del_value, add_value)
+                }
+            };
+
+            if del_value.is_some() || add_value.is_some() {
                 numbers_key_buffer.clear();
                 strings_key_buffer.clear();
 
@@ -97,17 +136,6 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
                 // For the other extraction tasks, prefix the key with the field_id and the document_id
                 numbers_key_buffer.extend_from_slice(docid_bytes);
                 strings_key_buffer.extend_from_slice(docid_bytes);
-
-                let del_add_obkv = obkv::KvReader::new(field_bytes);
-                let del_value = match del_add_obkv.get(DelAdd::Deletion).filter(|_| delete_faceted)
-                {
-                    Some(bytes) => Some(from_slice(bytes).map_err(InternalError::SerdeJson)?),
-                    None => None,
-                };
-                let add_value = match del_add_obkv.get(DelAdd::Addition).filter(|_| add_faceted) {
-                    Some(bytes) => Some(from_slice(bytes).map_err(InternalError::SerdeJson)?),
-                    None => None,
-                };
 
                 // We insert the document id on the Del and the Add side if the field exists.
                 let (ref mut del_exists, ref mut add_exists) =
