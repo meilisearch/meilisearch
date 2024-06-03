@@ -5173,8 +5173,8 @@ mod tests {
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "Intel to kefir");
 
         println!("HEEEEERE");
-        // handle.advance_one_successful_batch();
-        handle.advance_one_failed_batch();
+        handle.advance_one_successful_batch();
+        // handle.advance_one_failed_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "Intel to kefir succeeds");
 
         {
@@ -5351,9 +5351,9 @@ mod tests {
         // as user provided since we explicitely marked it as NOT user provided.
         snapshot!(format!("{conf:#?}"), @r###"
         [
-            (
-                "my_doggo_embedder",
-                EmbeddingConfig {
+            IndexEmbeddingConfig {
+                name: "my_doggo_embedder",
+                config: EmbeddingConfig {
                     embedder_options: HuggingFace(
                         EmbedderOptions {
                             model: "sentence-transformers/all-MiniLM-L6-v2",
@@ -5367,8 +5367,8 @@ mod tests {
                         template: "{{doc.doggo}}",
                     },
                 },
-                RoaringBitmap<[1, 2]>,
-            ),
+                user_defined: RoaringBitmap<[1, 2]>,
+            },
         ]
         "###);
         let docid = index.external_documents_ids.get(&rtxn, "0").unwrap().unwrap();

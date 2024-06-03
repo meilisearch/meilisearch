@@ -78,7 +78,7 @@ async fn basic() {
     index.wait_task(value.uid()).await;
 
     index
-        .similar(json!({"id": 143}), |response, code| {
+        .similar(json!({"id": 143, "retrieveVectors": true}), |response, code| {
             snapshot!(code, @"200 OK");
             snapshot!(json_string!(response["hits"]), @r###"
             [
@@ -88,9 +88,9 @@ async fn basic() {
                 "id": "522681",
                 "_vectors": {
                   "manual": [
-                    0.1,
-                    0.6,
-                    0.8
+                    0.10000000149011612,
+                    0.6000000238418579,
+                    0.800000011920929
                   ]
                 }
               },
@@ -100,9 +100,9 @@ async fn basic() {
                 "id": "299537",
                 "_vectors": {
                   "manual": [
-                    0.6,
-                    0.8,
-                    -0.2
+                    0.6000000238418579,
+                    0.800000011920929,
+                    -0.20000000298023224
                   ]
                 }
               },
@@ -112,9 +112,9 @@ async fn basic() {
                 "id": "166428",
                 "_vectors": {
                   "manual": [
-                    0.7,
-                    0.7,
-                    -0.4
+                    0.699999988079071,
+                    0.699999988079071,
+                    -0.4000000059604645
                   ]
                 }
               },
@@ -124,8 +124,8 @@ async fn basic() {
                 "id": "287947",
                 "_vectors": {
                   "manual": [
-                    0.8,
-                    0.4,
+                    0.800000011920929,
+                    0.4000000059604645,
                     -0.5
                   ]
                 }
@@ -136,7 +136,7 @@ async fn basic() {
         .await;
 
     index
-        .similar(json!({"id": "299537"}), |response, code| {
+        .similar(json!({"id": "299537", "retrieveVectors": true}), |response, code| {
             snapshot!(code, @"200 OK");
             snapshot!(json_string!(response["hits"]), @r###"
             [
@@ -146,9 +146,9 @@ async fn basic() {
                 "id": "166428",
                 "_vectors": {
                   "manual": [
-                    0.7,
-                    0.7,
-                    -0.4
+                    0.699999988079071,
+                    0.699999988079071,
+                    -0.4000000059604645
                   ]
                 }
               },
@@ -158,8 +158,8 @@ async fn basic() {
                 "id": "287947",
                 "_vectors": {
                   "manual": [
-                    0.8,
-                    0.4,
+                    0.800000011920929,
+                    0.4000000059604645,
                     -0.5
                   ]
                 }
@@ -170,9 +170,9 @@ async fn basic() {
                 "id": "522681",
                 "_vectors": {
                   "manual": [
-                    0.1,
-                    0.6,
-                    0.8
+                    0.10000000149011612,
+                    0.6000000238418579,
+                    0.800000011920929
                   ]
                 }
               },
@@ -183,8 +183,8 @@ async fn basic() {
                 "_vectors": {
                   "manual": [
                     -0.5,
-                    0.3,
-                    0.85
+                    0.30000001192092896,
+                    0.8500000238418579
                   ]
                 }
               }
@@ -456,71 +456,77 @@ async fn filter() {
     index.wait_task(value.uid()).await;
 
     index
-        .similar(json!({"id": 522681, "filter": "release_year = 2019"}), |response, code| {
-            snapshot!(code, @"200 OK");
-            snapshot!(json_string!(response["hits"]), @r###"
-            [
-              {
-                "title": "Captain Marvel",
-                "release_year": 2019,
-                "id": "299537",
-                "_vectors": {
-                  "manual": [
-                    0.6,
-                    0.8,
-                    -0.2
-                  ]
-                }
-              },
-              {
-                "title": "How to Train Your Dragon: The Hidden World",
-                "release_year": 2019,
-                "id": "166428",
-                "_vectors": {
-                  "manual": [
-                    0.7,
-                    0.7,
-                    -0.4
-                  ]
-                }
-              },
-              {
-                "title": "Shazam!",
-                "release_year": 2019,
-                "id": "287947",
-                "_vectors": {
-                  "manual": [
-                    0.8,
-                    0.4,
-                    -0.5
-                  ]
-                }
-              }
-            ]
-            "###);
-        })
+        .similar(
+            json!({"id": 522681, "filter": "release_year = 2019", "retrieveVectors": true}),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "Captain Marvel",
+                    "release_year": 2019,
+                    "id": "299537",
+                    "_vectors": {
+                      "manual": [
+                        0.6000000238418579,
+                        0.800000011920929,
+                        -0.20000000298023224
+                      ]
+                    }
+                  },
+                  {
+                    "title": "How to Train Your Dragon: The Hidden World",
+                    "release_year": 2019,
+                    "id": "166428",
+                    "_vectors": {
+                      "manual": [
+                        0.699999988079071,
+                        0.699999988079071,
+                        -0.4000000059604645
+                      ]
+                    }
+                  },
+                  {
+                    "title": "Shazam!",
+                    "release_year": 2019,
+                    "id": "287947",
+                    "_vectors": {
+                      "manual": [
+                        0.800000011920929,
+                        0.4000000059604645,
+                        -0.5
+                      ]
+                    }
+                  }
+                ]
+                "###);
+            },
+        )
         .await;
 
     index
-        .similar(json!({"id": 522681, "filter": "release_year < 2000"}), |response, code| {
-            snapshot!(code, @"200 OK");
-            snapshot!(json_string!(response["hits"]), @r###"
-            [
-              {
-                "title": "All Quiet on the Western Front",
-                "release_year": 1930,
-                "id": "143",
-                "_vectors": {
-                  "manual": [
-                    -0.5,
-                    0.3,
-                    0.85
-                  ]
-                }
-              }
-            ]
-            "###);
-        })
+        .similar(
+            json!({"id": 522681, "filter": "release_year < 2000", "retrieveVectors": true}),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "All Quiet on the Western Front",
+                    "release_year": 1930,
+                    "id": "143",
+                    "_vectors": {
+                      "manual": [
+                        -0.5,
+                        0.30000001192092896,
+                        0.8500000238418579
+                      ]
+                    }
+                  }
+                ]
+                "###);
+            },
+        )
         .await;
 }
 
@@ -579,24 +585,27 @@ async fn limit_and_offset() {
         .await;
 
     index
-        .similar(json!({"id": 143, "limit": 1, "offset": 1}), |response, code| {
-            snapshot!(code, @"200 OK");
-            snapshot!(json_string!(response["hits"]), @r###"
-            [
-              {
-                "title": "Captain Marvel",
-                "release_year": 2019,
-                "id": "299537",
-                "_vectors": {
-                  "manual": [
-                    0.6,
-                    0.8,
-                    -0.2
-                  ]
-                }
-              }
-            ]
-            "###);
-        })
+        .similar(
+            json!({"id": 143, "limit": 1, "offset": 1, "retrieveVectors": true}),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "Captain Marvel",
+                    "release_year": 2019,
+                    "id": "299537",
+                    "_vectors": {
+                      "manual": [
+                        0.6000000238418579,
+                        0.800000011920929,
+                        -0.20000000298023224
+                      ]
+                    }
+                  }
+                ]
+                "###);
+            },
+        )
         .await;
 }

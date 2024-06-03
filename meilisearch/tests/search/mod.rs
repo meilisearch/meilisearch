@@ -1337,6 +1337,7 @@ async fn experimental_feature_vector_store() {
         .search_post(json!({
             "vector": [1.0, 2.0, 3.0],
             "showRankingScore": true,
+            "retrieveVectors": true,
         }))
         .await;
 

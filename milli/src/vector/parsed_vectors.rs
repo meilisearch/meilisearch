@@ -4,8 +4,9 @@ use obkv::KvReader;
 use serde_json::{from_slice, Value};
 
 use super::Embedding;
+use crate::index::IndexEmbeddingConfig;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd};
-use crate::{FieldId, InternalError, UserError};
+use crate::{DocumentId, FieldId, InternalError, UserError};
 
 pub const RESERVED_VECTORS_FIELD_NAME: &str = "_vectors";
 
@@ -42,17 +43,19 @@ pub struct ExplicitVectors {
 }
 
 pub struct ParsedVectorsDiff {
-    pub old: Option<BTreeMap<String, Vectors>>,
+    pub old: BTreeMap<String, Option<Vectors>>,
     pub new: Option<BTreeMap<String, Vectors>>,
 }
 
 impl ParsedVectorsDiff {
     pub fn new(
+        docid: DocumentId,
+        embedders_configs: &[IndexEmbeddingConfig],
         documents_diff: KvReader<'_, FieldId>,
         old_vectors_fid: Option<FieldId>,
         new_vectors_fid: Option<FieldId>,
     ) -> Result<Self, Error> {
-        let old = match old_vectors_fid
+        let mut old = match old_vectors_fid
             .and_then(|vectors_fid| documents_diff.get(vectors_fid))
             .map(KvReaderDelAdd::new)
             .map(|obkv| to_vector_map(obkv, DelAdd::Deletion))
@@ -68,7 +71,13 @@ impl ParsedVectorsDiff {
                 return Err(error);
             }
         }
-        .flatten();
+        .flatten().map_or(BTreeMap::default(), |del| del.into_iter().map(|(name, vec)| (name, Some(vec))).collect());
+        for embedding_config in embedders_configs {
+            if embedding_config.user_defined.contains(docid) {
+                old.entry(embedding_config.name.to_string()).or_insert(None);
+            }
+        }
+
         let new = new_vectors_fid
             .and_then(|vectors_fid| documents_diff.get(vectors_fid))
             .map(KvReaderDelAdd::new)
@@ -78,8 +87,9 @@ impl ParsedVectorsDiff {
         Ok(Self { old, new })
     }
 
-    pub fn remove(&mut self, embedder_name: &str) -> (Option<Vectors>, Option<Vectors>) {
-        let old = self.old.as_mut().and_then(|old| old.remove(embedder_name));
+    /// Return (Some(None), _) in case the vector is user defined and contained in the database.
+    pub fn remove(&mut self, embedder_name: &str) -> (Option<Option<Vectors>>, Option<Vectors>) {
+        let old = self.old.remove(embedder_name);
         let new = self.new.as_mut().and_then(|new| new.remove(embedder_name));
         (old, new)
     }
