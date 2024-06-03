@@ -145,7 +145,6 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
                 ctx,
                 from,
                 length,
-                ranking_score_threshold,
                 logger,
                 &mut valid_docids,
                 &mut valid_scores,
@@ -166,6 +165,16 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
             loop {
                 let bucket = std::mem::take(&mut ranking_rule_universes[cur_ranking_rule_index]);
                 ranking_rule_scores.push(ScoreDetails::Skipped);
+
+                // remove candidates from the universe without adding them to result if their score is below the threshold
+                if let Some(ranking_score_threshold) = ranking_score_threshold {
+                    let current_score = ScoreDetails::global_score(ranking_rule_scores.iter());
+                    if current_score < ranking_score_threshold {
+                        all_candidates -= bucket | &ranking_rule_universes[cur_ranking_rule_index];
+                        back!();
+                        continue;
+                    }
+                }
 
                 maybe_add_to_results!(bucket);
 
@@ -225,6 +234,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
             ranking_rule_universes[cur_ranking_rule_index].is_superset(&next_bucket.candidates)
         );
 
+        // remove candidates from the universe without adding them to result if their score is below the threshold
         if let Some(ranking_score_threshold) = ranking_score_threshold {
             let current_score = ScoreDetails::global_score(ranking_rule_scores.iter());
             if current_score < ranking_score_threshold {
@@ -277,7 +287,6 @@ fn maybe_add_to_results<'ctx, Q: RankingRuleQueryTrait>(
     ctx: &mut SearchContext<'ctx>,
     from: usize,
     length: usize,
-    ranking_score_threshold: Option<f64>,
     logger: &mut dyn SearchLogger<Q>,
 
     valid_docids: &mut Vec<u32>,
@@ -295,15 +304,6 @@ fn maybe_add_to_results<'ctx, Q: RankingRuleQueryTrait>(
     ranking_rule_scores: &[ScoreDetails],
     candidates: RoaringBitmap,
 ) -> Result<()> {
-    // remove candidates from the universe without adding them to result if their score is below the threshold
-    if let Some(ranking_score_threshold) = ranking_score_threshold {
-        let score = ScoreDetails::global_score(ranking_rule_scores.iter());
-        if score < ranking_score_threshold {
-            *all_candidates -= candidates | &ranking_rule_universes[cur_ranking_rule_index];
-            return Ok(());
-        }
-    }
-
     // First apply the distinct rule on the candidates, reducing the universes if necessary
     let candidates = if let Some(distinct_fid) = distinct_fid {
         let DistinctOutput { remaining, excluded } =

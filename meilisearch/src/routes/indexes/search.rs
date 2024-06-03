@@ -83,7 +83,7 @@ pub struct SearchQueryGet {
     pub hybrid_embedder: Option<String>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchSemanticRatio>)]
     pub hybrid_semantic_ratio: Option<SemanticRatioGet>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidSearchRankingScoreThreshold>, default)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchRankingScoreThreshold>)]
     pub ranking_score_threshold: Option<RankingScoreThresholdGet>,
 }
 

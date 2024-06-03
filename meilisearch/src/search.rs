@@ -709,7 +709,9 @@ fn prepare_search<'t>(
 ) -> Result<(milli::Search<'t>, bool, usize, usize), MeilisearchHttpError> {
     let mut search = index.search(rtxn);
     search.time_budget(time_budget);
-    search.ranking_score_threshold(query.ranking_score_threshold.map(|rst| rst.0));
+    if let Some(ranking_score_threshold) = query.ranking_score_threshold {
+        search.ranking_score_threshold(ranking_score_threshold.0);
+    }
 
     match search_kind {
         SearchKind::KeywordOnly => {

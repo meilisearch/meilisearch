@@ -148,11 +148,8 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn ranking_score_threshold(
-        &mut self,
-        ranking_score_threshold: Option<f64>,
-    ) -> &mut Search<'a> {
-        self.ranking_score_threshold = ranking_score_threshold;
+    pub fn ranking_score_threshold(&mut self, ranking_score_threshold: f64) -> &mut Search<'a> {
+        self.ranking_score_threshold = Some(ranking_score_threshold);
         self
     }
 
