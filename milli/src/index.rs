@@ -9,6 +9,7 @@ use heed::types::*;
 use heed::{CompactionOption, Database, RoTxn, RwTxn, Unspecified};
 use roaring::RoaringBitmap;
 use rstar::RTree;
+use serde::Serialize;
 use time::OffsetDateTime;
 
 use crate::documents::PrimaryKey;
@@ -322,6 +323,87 @@ impl Index {
     /// and the on-disk size of the index at the time of opening.
     pub fn map_size(&self) -> usize {
         self.env.info().map_size
+    }
+
+    pub fn advanced_stats(&self, rtxn: &heed::RoTxn) -> Result<AdvancedStats> {
+        use db_name::*;
+
+        let mut dbs = BTreeMap::new();
+        dbs.insert(WORD_DOCIDS, advanced_database_stats(rtxn, self.word_docids)?);
+        dbs.insert(
+            WORD_PAIR_PROXIMITY_DOCIDS,
+            advanced_database_stats(rtxn, self.word_pair_proximity_docids)?,
+        );
+        dbs.insert(WORD_PREFIX_DOCIDS, advanced_database_stats(rtxn, self.word_prefix_docids)?);
+        dbs.insert(WORD_FIELD_ID_DOCIDS, advanced_database_stats(rtxn, self.word_fid_docids)?);
+        dbs.insert(WORD_POSITION_DOCIDS, advanced_database_stats(rtxn, self.word_position_docids)?);
+        dbs.insert(DOCUMENTS, advanced_database_stats_no_bitmap(rtxn, self.documents)?);
+
+        fn advanced_database_stats<KC>(
+            rtxn: &heed::RoTxn,
+            db: Database<KC, CboRoaringBitmapCodec>,
+        ) -> Result<AdvancedDatabaseStats> {
+            let db = db.remap_key_type::<Bytes>().lazily_decode_data();
+
+            let mut entries_count = 0;
+            let mut total_bitmap_size = 0;
+            let mut total_bitmap_len = 0;
+            let mut total_key_size = 0;
+
+            for result in db.iter(rtxn)? {
+                let (bytes_key, lazy_value) = result?;
+                entries_count += 1;
+                total_bitmap_size += lazy_value.remap::<Bytes>().decode().unwrap().len();
+                let bitmap = lazy_value.decode().map_err(heed::Error::Decoding)?;
+                total_bitmap_len += bitmap.len();
+                total_key_size += bytes_key.len();
+            }
+
+            Ok(AdvancedDatabaseStats {
+                entries_count,
+                average_bitmap_len: Some(total_bitmap_len as f64 / entries_count as f64),
+                median_bitmap_len: None,
+                average_value_size: Some(total_bitmap_size as f64 / entries_count as f64),
+                median_value_size: None,
+                average_key_size: Some(total_key_size as f64 / entries_count as f64),
+                median_key_size: None,
+            })
+        }
+
+        fn advanced_database_stats_no_bitmap<KC, DC>(
+            rtxn: &heed::RoTxn,
+            db: Database<KC, DC>,
+        ) -> Result<AdvancedDatabaseStats> {
+            let db = db.remap_types::<Bytes, Bytes>();
+
+            let mut entries_count = 0;
+            let mut total_value_size = 0;
+            let mut total_key_size = 0;
+
+            for result in db.iter(rtxn)? {
+                let (bytes_key, bytes_value) = result?;
+                entries_count += 1;
+                total_value_size += bytes_value.len();
+                total_key_size += bytes_key.len();
+            }
+
+            Ok(AdvancedDatabaseStats {
+                entries_count,
+                average_bitmap_len: None,
+                median_bitmap_len: None,
+                average_value_size: Some(total_value_size as f64 / entries_count as f64),
+                median_value_size: None,
+                average_key_size: Some(total_key_size as f64 / entries_count as f64),
+                median_key_size: None,
+            })
+        }
+
+        Ok(AdvancedStats {
+            map_size: self.map_size(),
+            non_free_pages_size: self.on_disk_size()?,
+            on_disk_size: self.on_disk_size()?,
+            databases: dbs,
+        })
     }
 
     pub fn copy_to_file<P: AsRef<Path>>(&self, path: P, option: CompactionOption) -> Result<File> {
@@ -1660,6 +1742,36 @@ impl Index {
         }
         Ok(res)
     }
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct AdvancedStats {
+    /// Size of the data memory map.
+    map_size: usize,
+    /// Returns the size used by all the databases in the environment without the free pages.
+    non_free_pages_size: u64,
+    /// The size of the data file on disk.
+    on_disk_size: u64,
+    /// Databases advanced stats.
+    databases: BTreeMap<&'static str, AdvancedDatabaseStats>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct AdvancedDatabaseStats {
+    /// The number of entries in this database.
+    entries_count: usize,
+    /// The average number of entries in the bitmaps of this database.
+    average_bitmap_len: Option<f64>,
+    /// The median number of entries in the bitmaps of this database.
+    median_bitmap_len: Option<f64>,
+    /// The average size of values of this database.
+    average_value_size: Option<f64>,
+    /// The median size of values of this database.
+    median_value_size: Option<f64>,
+    /// The average size of keys of this database.
+    average_key_size: Option<f64>,
+    /// The mediane size of keys of this database.
+    median_key_size: Option<f64>,
 }
 
 #[cfg(test)]

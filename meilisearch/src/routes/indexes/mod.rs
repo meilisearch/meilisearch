@@ -46,6 +46,10 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                     .route(web::delete().to(SeqHandler(delete_index))),
             )
             .service(web::resource("/stats").route(web::get().to(SeqHandler(get_index_stats))))
+            .service(
+                web::resource("/advanced-stats")
+                    .route(web::get().to(SeqHandler(get_advanced_index_stats))),
+            )
             .service(web::scope("/documents").configure(documents::configure))
             .service(web::scope("/search").configure(search::configure))
             .service(web::scope("/facet-search").configure(facet_search::configure))
@@ -277,4 +281,17 @@ pub async fn get_index_stats(
 
     debug!(returns = ?stats, "Get index stats");
     Ok(HttpResponse::Ok().json(stats))
+}
+
+pub async fn get_advanced_index_stats(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
+) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+    let index = index_scheduler.index(&index_uid)?;
+    let rtxn = index.read_txn()?;
+    let advanced_stats = index.advanced_stats(&rtxn)?;
+
+    debug!(returns = ?advanced_stats, "Get advanced index stats");
+    Ok(HttpResponse::Ok().json(advanced_stats))
 }
