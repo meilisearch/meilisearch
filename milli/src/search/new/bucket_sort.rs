@@ -28,6 +28,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     scoring_strategy: ScoringStrategy,
     logger: &mut dyn SearchLogger<Q>,
     time_budget: TimeBudget,
+    ranking_score_threshold: Option<f64>,
 ) -> Result<BucketSortOutput> {
     logger.initial_query(query);
     logger.ranking_rules(&ranking_rules);
@@ -164,7 +165,19 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
             loop {
                 let bucket = std::mem::take(&mut ranking_rule_universes[cur_ranking_rule_index]);
                 ranking_rule_scores.push(ScoreDetails::Skipped);
+
+                // remove candidates from the universe without adding them to result if their score is below the threshold
+                if let Some(ranking_score_threshold) = ranking_score_threshold {
+                    let current_score = ScoreDetails::global_score(ranking_rule_scores.iter());
+                    if current_score < ranking_score_threshold {
+                        all_candidates -= bucket | &ranking_rule_universes[cur_ranking_rule_index];
+                        back!();
+                        continue;
+                    }
+                }
+
                 maybe_add_to_results!(bucket);
+
                 ranking_rule_scores.pop();
 
                 if cur_ranking_rule_index == 0 {
@@ -220,6 +233,18 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         debug_assert!(
             ranking_rule_universes[cur_ranking_rule_index].is_superset(&next_bucket.candidates)
         );
+
+        // remove candidates from the universe without adding them to result if their score is below the threshold
+        if let Some(ranking_score_threshold) = ranking_score_threshold {
+            let current_score = ScoreDetails::global_score(ranking_rule_scores.iter());
+            if current_score < ranking_score_threshold {
+                all_candidates -=
+                    next_bucket.candidates | &ranking_rule_universes[cur_ranking_rule_index];
+                back!();
+                continue;
+            }
+        }
+
         ranking_rule_universes[cur_ranking_rule_index] -= &next_bucket.candidates;
 
         if cur_ranking_rule_index == ranking_rules_len - 1

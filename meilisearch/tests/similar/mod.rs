@@ -195,6 +195,235 @@ async fn basic() {
 }
 
 #[actix_rt::test]
+async fn ranking_score_threshold() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    let (value, code) = server.set_features(json!({"vectorStore": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r###"
+    {
+      "vectorStore": true,
+      "metrics": false,
+      "logsRoute": false
+    }
+    "###);
+
+    let (response, code) = index
+        .update_settings(json!({
+        "embedders": {
+            "manual": {
+                "source": "userProvided",
+                "dimensions": 3,
+            }
+        },
+        "filterableAttributes": ["title"]}))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await;
+
+    let documents = DOCUMENTS.clone();
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    index.wait_task(value.uid()).await;
+
+    index
+        .similar(
+            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0}),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @"4");
+                snapshot!(json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "Escape Room",
+                    "release_year": 2019,
+                    "id": "522681",
+                    "_vectors": {
+                      "manual": [
+                        0.1,
+                        0.6,
+                        0.8
+                      ]
+                    },
+                    "_rankingScore": 0.890957772731781
+                  },
+                  {
+                    "title": "Captain Marvel",
+                    "release_year": 2019,
+                    "id": "299537",
+                    "_vectors": {
+                      "manual": [
+                        0.6,
+                        0.8,
+                        -0.2
+                      ]
+                    },
+                    "_rankingScore": 0.39060014486312866
+                  },
+                  {
+                    "title": "How to Train Your Dragon: The Hidden World",
+                    "release_year": 2019,
+                    "id": "166428",
+                    "_vectors": {
+                      "manual": [
+                        0.7,
+                        0.7,
+                        -0.4
+                      ]
+                    },
+                    "_rankingScore": 0.2819308042526245
+                  },
+                  {
+                    "title": "Shazam!",
+                    "release_year": 2019,
+                    "id": "287947",
+                    "_vectors": {
+                      "manual": [
+                        0.8,
+                        0.4,
+                        -0.5
+                      ]
+                    },
+                    "_rankingScore": 0.1662663221359253
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+
+    index
+        .similar(
+            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0.2}),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @"3");
+                snapshot!(json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "Escape Room",
+                    "release_year": 2019,
+                    "id": "522681",
+                    "_vectors": {
+                      "manual": [
+                        0.1,
+                        0.6,
+                        0.8
+                      ]
+                    },
+                    "_rankingScore": 0.890957772731781
+                  },
+                  {
+                    "title": "Captain Marvel",
+                    "release_year": 2019,
+                    "id": "299537",
+                    "_vectors": {
+                      "manual": [
+                        0.6,
+                        0.8,
+                        -0.2
+                      ]
+                    },
+                    "_rankingScore": 0.39060014486312866
+                  },
+                  {
+                    "title": "How to Train Your Dragon: The Hidden World",
+                    "release_year": 2019,
+                    "id": "166428",
+                    "_vectors": {
+                      "manual": [
+                        0.7,
+                        0.7,
+                        -0.4
+                      ]
+                    },
+                    "_rankingScore": 0.2819308042526245
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+
+    index
+        .similar(
+            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0.3}),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @"2");
+                snapshot!(json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "Escape Room",
+                    "release_year": 2019,
+                    "id": "522681",
+                    "_vectors": {
+                      "manual": [
+                        0.1,
+                        0.6,
+                        0.8
+                      ]
+                    },
+                    "_rankingScore": 0.890957772731781
+                  },
+                  {
+                    "title": "Captain Marvel",
+                    "release_year": 2019,
+                    "id": "299537",
+                    "_vectors": {
+                      "manual": [
+                        0.6,
+                        0.8,
+                        -0.2
+                      ]
+                    },
+                    "_rankingScore": 0.39060014486312866
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+
+    index
+        .similar(
+            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0.6}),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @"1");
+                snapshot!(json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "Escape Room",
+                    "release_year": 2019,
+                    "id": "522681",
+                    "_vectors": {
+                      "manual": [
+                        0.1,
+                        0.6,
+                        0.8
+                      ]
+                    },
+                    "_rankingScore": 0.890957772731781
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+
+    index
+        .similar(
+            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0.9}),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response["hits"]), @"[]");
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
 async fn filter() {
     let server = Server::new().await;
     let index = server.index("test");

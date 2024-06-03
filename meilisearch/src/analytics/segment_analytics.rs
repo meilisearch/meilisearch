@@ -648,6 +648,7 @@ pub struct SearchAggregator {
     // scoring
     show_ranking_score: bool,
     show_ranking_score_details: bool,
+    ranking_score_threshold: bool,
 }
 
 impl SearchAggregator {
@@ -676,6 +677,7 @@ impl SearchAggregator {
             matching_strategy,
             attributes_to_search_on,
             hybrid,
+            ranking_score_threshold,
         } = query;
 
         let mut ret = Self::default();
@@ -748,6 +750,7 @@ impl SearchAggregator {
 
         ret.show_ranking_score = *show_ranking_score;
         ret.show_ranking_score_details = *show_ranking_score_details;
+        ret.ranking_score_threshold = ranking_score_threshold.is_some();
 
         if let Some(hybrid) = hybrid {
             ret.semantic_ratio = hybrid.semantic_ratio != DEFAULT_SEMANTIC_RATIO();
@@ -821,6 +824,7 @@ impl SearchAggregator {
             hybrid,
             total_degraded,
             total_used_negative_operator,
+            ranking_score_threshold,
         } = other;
 
         if self.timestamp.is_none() {
@@ -904,6 +908,7 @@ impl SearchAggregator {
         // scoring
         self.show_ranking_score |= show_ranking_score;
         self.show_ranking_score_details |= show_ranking_score_details;
+        self.ranking_score_threshold |= ranking_score_threshold;
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
@@ -945,6 +950,7 @@ impl SearchAggregator {
             hybrid,
             total_degraded,
             total_used_negative_operator,
+            ranking_score_threshold,
         } = self;
 
         if total_received == 0 {
@@ -1015,6 +1021,7 @@ impl SearchAggregator {
                 "scoring": {
                     "show_ranking_score": show_ranking_score,
                     "show_ranking_score_details": show_ranking_score_details,
+                    "ranking_score_threshold": ranking_score_threshold,
                 },
             });
 
@@ -1087,6 +1094,7 @@ impl MultiSearchAggregator {
                     matching_strategy: _,
                     attributes_to_search_on: _,
                     hybrid: _,
+                    ranking_score_threshold: _,
                 } = query;
 
                 index_uid.as_str()
@@ -1234,6 +1242,7 @@ impl FacetSearchAggregator {
             matching_strategy,
             attributes_to_search_on,
             hybrid,
+            ranking_score_threshold,
         } = query;
 
         let mut ret = Self::default();
@@ -1248,7 +1257,8 @@ impl FacetSearchAggregator {
             || filter.is_some()
             || *matching_strategy != MatchingStrategy::default()
             || attributes_to_search_on.is_some()
-            || hybrid.is_some();
+            || hybrid.is_some()
+            || ranking_score_threshold.is_some();
 
         ret
     }
@@ -1624,6 +1634,7 @@ pub struct SimilarAggregator {
     // scoring
     show_ranking_score: bool,
     show_ranking_score_details: bool,
+    ranking_score_threshold: bool,
 }
 
 impl SimilarAggregator {
@@ -1638,6 +1649,7 @@ impl SimilarAggregator {
             show_ranking_score,
             show_ranking_score_details,
             filter,
+            ranking_score_threshold,
         } = query;
 
         let mut ret = Self::default();
@@ -1675,6 +1687,7 @@ impl SimilarAggregator {
 
         ret.show_ranking_score = *show_ranking_score;
         ret.show_ranking_score_details = *show_ranking_score_details;
+        ret.ranking_score_threshold = ranking_score_threshold.is_some();
 
         ret.embedder = embedder.is_some();
 
@@ -1708,6 +1721,7 @@ impl SimilarAggregator {
             show_ranking_score,
             show_ranking_score_details,
             embedder,
+            ranking_score_threshold,
         } = other;
 
         if self.timestamp.is_none() {
@@ -1749,6 +1763,7 @@ impl SimilarAggregator {
         // scoring
         self.show_ranking_score |= show_ranking_score;
         self.show_ranking_score_details |= show_ranking_score_details;
+        self.ranking_score_threshold |= ranking_score_threshold;
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
@@ -1769,6 +1784,7 @@ impl SimilarAggregator {
             show_ranking_score,
             show_ranking_score_details,
             embedder,
+            ranking_score_threshold,
         } = self;
 
         if total_received == 0 {
@@ -1808,6 +1824,7 @@ impl SimilarAggregator {
                 "scoring": {
                     "show_ranking_score": show_ranking_score,
                     "show_ranking_score_details": show_ranking_score_details,
+                    "ranking_score_threshold": ranking_score_threshold,
                 },
             });
 

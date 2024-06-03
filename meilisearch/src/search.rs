@@ -87,6 +87,44 @@ pub struct SearchQuery {
     pub matching_strategy: MatchingStrategy,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>, default)]
     pub attributes_to_search_on: Option<Vec<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>, default)]
+    pub ranking_score_threshold: Option<RankingScoreThreshold>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Deserr)]
+#[deserr(try_from(f64) = TryFrom::try_from -> InvalidSearchRankingScoreThreshold)]
+pub struct RankingScoreThreshold(f64);
+
+impl std::convert::TryFrom<f64> for RankingScoreThreshold {
+    type Error = InvalidSearchRankingScoreThreshold;
+
+    fn try_from(f: f64) -> Result<Self, Self::Error> {
+        // the suggested "fix" is: `!(0.0..=1.0).contains(&f)`` which is allegedly less readable
+        #[allow(clippy::manual_range_contains)]
+        if f > 1.0 || f < 0.0 {
+            Err(InvalidSearchRankingScoreThreshold)
+        } else {
+            Ok(RankingScoreThreshold(f))
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Deserr)]
+#[deserr(try_from(f64) = TryFrom::try_from -> InvalidSimilarRankingScoreThreshold)]
+pub struct RankingScoreThresholdSimilar(f64);
+
+impl std::convert::TryFrom<f64> for RankingScoreThresholdSimilar {
+    type Error = InvalidSimilarRankingScoreThreshold;
+
+    fn try_from(f: f64) -> Result<Self, Self::Error> {
+        // the suggested "fix" is: `!(0.0..=1.0).contains(&f)`` which is allegedly less readable
+        #[allow(clippy::manual_range_contains)]
+        if f > 1.0 || f < 0.0 {
+            Err(InvalidSimilarRankingScoreThreshold)
+        } else {
+            Ok(Self(f))
+        }
+    }
 }
 
 // Since this structure is logged A LOT we're going to reduce the number of things it logs to the bare minimum.
@@ -117,6 +155,7 @@ impl fmt::Debug for SearchQuery {
             crop_marker,
             matching_strategy,
             attributes_to_search_on,
+            ranking_score_threshold,
         } = self;
 
         let mut debug = f.debug_struct("SearchQuery");
@@ -188,6 +227,9 @@ impl fmt::Debug for SearchQuery {
         debug.field("highlight_pre_tag", &highlight_pre_tag);
         debug.field("highlight_post_tag", &highlight_post_tag);
         debug.field("crop_marker", &crop_marker);
+        if let Some(ranking_score_threshold) = ranking_score_threshold {
+            debug.field("ranking_score_threshold", &ranking_score_threshold);
+        }
 
         debug.finish()
     }
@@ -356,6 +398,8 @@ pub struct SearchQueryWithIndex {
     pub matching_strategy: MatchingStrategy,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>, default)]
     pub attributes_to_search_on: Option<Vec<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>, default)]
+    pub ranking_score_threshold: Option<RankingScoreThreshold>,
 }
 
 impl SearchQueryWithIndex {
@@ -384,6 +428,7 @@ impl SearchQueryWithIndex {
             matching_strategy,
             attributes_to_search_on,
             hybrid,
+            ranking_score_threshold,
         } = self;
         (
             index_uid,
@@ -410,6 +455,7 @@ impl SearchQueryWithIndex {
                 matching_strategy,
                 attributes_to_search_on,
                 hybrid,
+                ranking_score_threshold,
                 // do not use ..Default::default() here,
                 // rather add any missing field from `SearchQuery` to `SearchQueryWithIndex`
             },
@@ -436,6 +482,8 @@ pub struct SimilarQuery {
     pub show_ranking_score: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarShowRankingScoreDetails>, default)]
     pub show_ranking_score_details: bool,
+    #[deserr(default, error = DeserrJsonError<InvalidSimilarRankingScoreThreshold>, default)]
+    pub ranking_score_threshold: Option<RankingScoreThresholdSimilar>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserr)]
@@ -664,6 +712,9 @@ fn prepare_search<'t>(
 ) -> Result<(milli::Search<'t>, bool, usize, usize), MeilisearchHttpError> {
     let mut search = index.search(rtxn);
     search.time_budget(time_budget);
+    if let Some(ranking_score_threshold) = query.ranking_score_threshold {
+        search.ranking_score_threshold(ranking_score_threshold.0);
+    }
 
     match search_kind {
         SearchKind::KeywordOnly => {
@@ -705,11 +756,16 @@ fn prepare_search<'t>(
         .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
 
     search.exhaustive_number_hits(is_finite_pagination);
-    search.scoring_strategy(if query.show_ranking_score || query.show_ranking_score_details {
-        ScoringStrategy::Detailed
-    } else {
-        ScoringStrategy::Skip
-    });
+    search.scoring_strategy(
+        if query.show_ranking_score
+            || query.show_ranking_score_details
+            || query.ranking_score_threshold.is_some()
+        {
+            ScoringStrategy::Detailed
+        } else {
+            ScoringStrategy::Skip
+        },
+    );
 
     // compute the offset on the limit depending on the pagination mode.
     let (offset, limit) = if is_finite_pagination {
@@ -787,10 +843,6 @@ pub fn perform_search(
 
     let SearchQuery {
         q,
-        vector: _,
-        hybrid: _,
-        // already computed from prepare_search
-        offset: _,
         limit,
         page,
         hits_per_page,
@@ -801,14 +853,19 @@ pub fn perform_search(
         show_matches_position,
         show_ranking_score,
         show_ranking_score_details,
-        filter: _,
         sort,
         facets,
         highlight_pre_tag,
         highlight_post_tag,
         crop_marker,
+        // already used in prepare_search
+        vector: _,
+        hybrid: _,
+        offset: _,
+        ranking_score_threshold: _,
         matching_strategy: _,
         attributes_to_search_on: _,
+        filter: _,
     } = query;
 
     let format = AttributesFormat {
@@ -1070,6 +1127,7 @@ pub fn perform_similar(
         attributes_to_retrieve,
         show_ranking_score,
         show_ranking_score_details,
+        ranking_score_threshold,
     } = query;
 
     // using let-else rather than `?` so that the borrow checker identifies we're always returning here,
@@ -1091,6 +1149,10 @@ pub fn perform_similar(
         {
             similar.filter(facets);
         }
+    }
+
+    if let Some(ranking_score_threshold) = ranking_score_threshold {
+        similar.ranking_score_threshold(ranking_score_threshold.0);
     }
 
     let milli::SearchResult {

@@ -322,6 +322,40 @@ async fn search_bad_facets() {
 }
 
 #[actix_rt::test]
+async fn search_bad_threshold() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.search_post(json!({"rankingScoreThreshold": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.rankingScoreThreshold`: expected a number, but found a string: `\"doggo\"`",
+      "code": "invalid_search_ranking_score_threshold",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_ranking_score_threshold"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn search_invalid_threshold() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.search_post(json!({"rankingScoreThreshold": 42})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value at `.rankingScoreThreshold`: the value of `rankingScoreThreshold` is invalid, expected a float between `0.0` and `1.0`.",
+      "code": "invalid_search_ranking_score_threshold",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_ranking_score_threshold"
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn search_non_filterable_facets() {
     let server = Server::new().await;
     let index = server.index("test");
