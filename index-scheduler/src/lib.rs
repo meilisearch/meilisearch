@@ -5465,7 +5465,6 @@ mod tests {
         // the document with the id 4 should generate an embedding
         let docid = index.external_documents_ids.get(&rtxn, "4").unwrap().unwrap();
         let embeddings = index.embeddings(&rtxn, docid).unwrap();
-        dbg!(&embeddings);
         let embedding = &embeddings["my_doggo_embedder"];
 
         assert!(!embedding.is_empty());

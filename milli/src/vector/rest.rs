@@ -163,7 +163,6 @@ impl Embedder {
         text_chunks: Vec<Vec<String>>,
         threads: &ThreadPoolNoAbort,
     ) -> Result<Vec<Vec<Embeddings<f32>>>, EmbedError> {
-        dbg!(&text_chunks);
         threads
             .install(move || {
                 text_chunks.into_par_iter().map(move |chunk| self.embed(chunk)).collect()
