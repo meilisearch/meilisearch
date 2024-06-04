@@ -1349,11 +1349,14 @@ async fn experimental_feature_vector_store() {
         "title": "Shazam!",
         "id": "287947",
         "_vectors": {
-          "manual": [
-            1.0,
-            2.0,
-            3.0
-          ]
+          "manual": {
+            "userDefined": true,
+            "embedding": [
+              1.0,
+              2.0,
+              3.0
+            ]
+          }
         },
         "_rankingScore": 1.0
       },
@@ -1361,11 +1364,14 @@ async fn experimental_feature_vector_store() {
         "title": "Captain Marvel",
         "id": "299537",
         "_vectors": {
-          "manual": [
-            1.0,
-            2.0,
-            54.0
-          ]
+          "manual": {
+            "userDefined": true,
+            "embedding": [
+              1.0,
+              2.0,
+              54.0
+            ]
+          }
         },
         "_rankingScore": 0.9129111766815186
       },
@@ -1373,11 +1379,14 @@ async fn experimental_feature_vector_store() {
         "title": "Gläss",
         "id": "450465",
         "_vectors": {
-          "manual": [
-            -100.0,
-            340.0,
-            90.0
-          ]
+          "manual": {
+            "userDefined": true,
+            "embedding": [
+              -100.0,
+              340.0,
+              90.0
+            ]
+          }
         },
         "_rankingScore": 0.8106412887573242
       },
@@ -1385,11 +1394,14 @@ async fn experimental_feature_vector_store() {
         "title": "How to Train Your Dragon: The Hidden World",
         "id": "166428",
         "_vectors": {
-          "manual": [
-            -100.0,
-            231.0,
-            32.0
-          ]
+          "manual": {
+            "userDefined": true,
+            "embedding": [
+              -100.0,
+              231.0,
+              32.0
+            ]
+          }
         },
         "_rankingScore": 0.7412010431289673
       },
@@ -1397,11 +1409,14 @@ async fn experimental_feature_vector_store() {
         "title": "Escape Room",
         "id": "522681",
         "_vectors": {
-          "manual": [
-            10.0,
-            -23.0,
-            32.0
-          ]
+          "manual": {
+            "userDefined": true,
+            "embedding": [
+              10.0,
+              -23.0,
+              32.0
+            ]
+          }
         },
         "_rankingScore": 0.6972063183784485
       }

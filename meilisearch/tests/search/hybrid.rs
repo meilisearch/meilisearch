@@ -128,7 +128,7 @@ async fn simple_search() {
         )
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]}},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]}},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]}}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"userDefined":true,"embedding":[1.0,2.0]}}},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"userDefined":true,"embedding":[2.0,3.0]}}},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"userDefined":true,"embedding":[1.0,3.0]}}}]"###);
     snapshot!(response["semanticHitCount"], @"0");
 
     let (response, code) = index
@@ -137,7 +137,7 @@ async fn simple_search() {
         )
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":0.9848484848484848},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":0.9472135901451112}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"userDefined":true,"embedding":[2.0,3.0]}},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"userDefined":true,"embedding":[1.0,2.0]}},"_rankingScore":0.9848484848484848},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"userDefined":true,"embedding":[1.0,3.0]}},"_rankingScore":0.9472135901451112}]"###);
     snapshot!(response["semanticHitCount"], @"2");
 
     let (response, code) = index
@@ -146,7 +146,7 @@ async fn simple_search() {
         )
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":0.974341630935669},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":0.9472135901451112}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"userDefined":true,"embedding":[2.0,3.0]}},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"userDefined":true,"embedding":[1.0,2.0]}},"_rankingScore":0.974341630935669},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"userDefined":true,"embedding":[1.0,3.0]}},"_rankingScore":0.9472135901451112}]"###);
     snapshot!(response["semanticHitCount"], @"3");
 }
 
@@ -207,7 +207,7 @@ async fn distribution_shift() {
     let search = json!({"q": "Captain", "vector": [1.0, 1.0], "showRankingScore": true, "hybrid": {"semanticRatio": 1.0}, "retrieveVectors": true});
     let (response, code) = index.search_post(search.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":0.974341630935669},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":0.9472135901451112}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"userDefined":true,"embedding":[2.0,3.0]}},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"userDefined":true,"embedding":[1.0,2.0]}},"_rankingScore":0.974341630935669},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"userDefined":true,"embedding":[1.0,3.0]}},"_rankingScore":0.9472135901451112}]"###);
 
     let (response, code) = index
         .update_settings(json!({
@@ -228,7 +228,7 @@ async fn distribution_shift() {
 
     let (response, code) = index.search_post(search).await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":0.19161224365234375},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":1.1920928955078125e-7},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":1.1920928955078125e-7}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"userDefined":true,"embedding":[2.0,3.0]}},"_rankingScore":0.19161224365234375},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"userDefined":true,"embedding":[1.0,2.0]}},"_rankingScore":1.1920928955078125e-7},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"userDefined":true,"embedding":[1.0,3.0]}},"_rankingScore":1.1920928955078125e-7}]"###);
 }
 
 #[actix_rt::test]
@@ -249,7 +249,7 @@ async fn highlighter() {
         }))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_formatted":{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3"}},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_formatted":{"title":"Shazam!","desc":"a **BEGIN**Captain**END** **BEGIN**Marvel**END** ersatz","id":"1"}},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_formatted":{"title":"Captain Planet","desc":"He's not part of the **BEGIN**Marvel**END** Cinematic Universe","id":"2"}}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"userDefined":true,"embedding":[2.0,3.0]}},"_formatted":{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3"}},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"userDefined":true,"embedding":[1.0,3.0]}},"_formatted":{"title":"Shazam!","desc":"a **BEGIN**Captain**END** **BEGIN**Marvel**END** ersatz","id":"1"}},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"userDefined":true,"embedding":[1.0,2.0]}},"_formatted":{"title":"Captain Planet","desc":"He's not part of the **BEGIN**Marvel**END** Cinematic Universe","id":"2"}}]"###);
     snapshot!(response["semanticHitCount"], @"0");
 
     let (response, code) = index
@@ -265,7 +265,7 @@ async fn highlighter() {
         }))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_formatted":{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3"},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_formatted":{"title":"Captain Planet","desc":"He's not part of the **BEGIN**Marvel**END** Cinematic Universe","id":"2"},"_rankingScore":0.974341630935669},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_formatted":{"title":"Shazam!","desc":"a **BEGIN**Captain**END** **BEGIN**Marvel**END** ersatz","id":"1"},"_rankingScore":0.9472135901451112}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"userDefined":true,"embedding":[2.0,3.0]}},"_formatted":{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3"},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"userDefined":true,"embedding":[1.0,2.0]}},"_formatted":{"title":"Captain Planet","desc":"He's not part of the **BEGIN**Marvel**END** Cinematic Universe","id":"2"},"_rankingScore":0.974341630935669},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"userDefined":true,"embedding":[1.0,3.0]}},"_formatted":{"title":"Shazam!","desc":"a **BEGIN**Captain**END** **BEGIN**Marvel**END** ersatz","id":"1"},"_rankingScore":0.9472135901451112}]"###);
     snapshot!(response["semanticHitCount"], @"3");
 
     // no highlighting on full semantic
@@ -282,7 +282,7 @@ async fn highlighter() {
         }))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_formatted":{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3"},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_formatted":{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2"},"_rankingScore":0.974341630935669},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_formatted":{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1"},"_rankingScore":0.9472135901451112}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"userDefined":true,"embedding":[2.0,3.0]}},"_formatted":{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3"},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"userDefined":true,"embedding":[1.0,2.0]}},"_formatted":{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2"},"_rankingScore":0.974341630935669},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"userDefined":true,"embedding":[1.0,3.0]}},"_formatted":{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1"},"_rankingScore":0.9472135901451112}]"###);
     snapshot!(response["semanticHitCount"], @"3");
 }
 
@@ -370,7 +370,7 @@ async fn single_document() {
     .await;
 
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"][0], @r###"{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":1.0}"###);
+    snapshot!(response["hits"][0], @r###"{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"userDefined":true,"embedding":[1.0,3.0]}},"_rankingScore":1.0}"###);
     snapshot!(response["semanticHitCount"], @"1");
 }
 
@@ -385,7 +385,7 @@ async fn query_combination() {
         .await;
 
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":1.0},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":1.0},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":1.0}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"userDefined":true,"embedding":[1.0,3.0]}},"_rankingScore":1.0},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"userDefined":true,"embedding":[1.0,2.0]}},"_rankingScore":1.0},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"userDefined":true,"embedding":[2.0,3.0]}},"_rankingScore":1.0}]"###);
     snapshot!(response["semanticHitCount"], @"null");
 
     // same with a different semantic ratio
@@ -394,7 +394,7 @@ async fn query_combination() {
         .await;
 
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":1.0},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":1.0},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":1.0}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"userDefined":true,"embedding":[1.0,3.0]}},"_rankingScore":1.0},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"userDefined":true,"embedding":[1.0,2.0]}},"_rankingScore":1.0},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"userDefined":true,"embedding":[2.0,3.0]}},"_rankingScore":1.0}]"###);
     snapshot!(response["semanticHitCount"], @"null");
 
     // wrong vector dimensions
@@ -418,7 +418,7 @@ async fn query_combination() {
     .await;
 
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":0.7773500680923462},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":0.7236068248748779},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":0.6581138968467712}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"userDefined":true,"embedding":[2.0,3.0]}},"_rankingScore":0.7773500680923462},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"userDefined":true,"embedding":[1.0,2.0]}},"_rankingScore":0.7236068248748779},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"userDefined":true,"embedding":[1.0,3.0]}},"_rankingScore":0.6581138968467712}]"###);
     snapshot!(response["semanticHitCount"], @"3");
 
     // full keyword, without a query
@@ -427,7 +427,7 @@ async fn query_combination() {
     .await;
 
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":1.0},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":1.0},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":1.0}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"userDefined":true,"embedding":[1.0,3.0]}},"_rankingScore":1.0},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"userDefined":true,"embedding":[1.0,2.0]}},"_rankingScore":1.0},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"userDefined":true,"embedding":[2.0,3.0]}},"_rankingScore":1.0}]"###);
     snapshot!(response["semanticHitCount"], @"null");
 
     // query + vector, full keyword => keyword
@@ -436,7 +436,7 @@ async fn query_combination() {
     .await;
 
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":0.9848484848484848},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":0.9848484848484848},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":0.9242424242424242}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"userDefined":true,"embedding":[1.0,2.0]}},"_rankingScore":0.9848484848484848},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"userDefined":true,"embedding":[2.0,3.0]}},"_rankingScore":0.9848484848484848},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"userDefined":true,"embedding":[1.0,3.0]}},"_rankingScore":0.9242424242424242}]"###);
     snapshot!(response["semanticHitCount"], @"null");
 
     // query + vector, no hybrid keyword =>
@@ -479,6 +479,6 @@ async fn query_combination() {
         .await;
 
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":0.9242424242424242}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"userDefined":true,"embedding":[1.0,2.0]}},"_rankingScore":0.9242424242424242}]"###);
     snapshot!(response["semanticHitCount"], @"0");
 }

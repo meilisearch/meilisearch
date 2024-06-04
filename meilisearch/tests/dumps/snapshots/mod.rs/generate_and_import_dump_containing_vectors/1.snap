@@ -1,0 +1,25 @@
+---
+source: meilisearch/tests/dumps/mod.rs
+---
+{
+  "uid": 0,
+  "indexUid": "pets",
+  "status": "succeeded",
+  "type": "settingsUpdate",
+  "canceledBy": null,
+  "details": {
+    "embedders": {
+      "doggo_embedder": {
+        "source": "huggingFace",
+        "model": "sentence-transformers/all-MiniLM-L6-v2",
+        "revision": "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
+        "documentTemplate": "{{doc.doggo}}"
+      }
+    }
+  },
+  "error": null,
+  "duration": "[duration]",
+  "enqueuedAt": "[date]",
+  "startedAt": "[date]",
+  "finishedAt": "[date]"
+}
