@@ -540,7 +540,7 @@ impl IndexScheduler {
         #[cfg(windows)]
         const DEFAULT_BUDGET: usize = 6 * 1024 * 1024 * 1024 * 1024; // 6 TiB, 1 index
         #[cfg(not(windows))]
-        const DEFAULT_BUDGET: usize = 80 * 1024 * 1024 * 1024 * 1024; // 80 TiB, 18 indexes
+        const DEFAULT_BUDGET: usize = 60 * 1024 * 1024 * 1024 * 1024; // 60 TiB, 13 indexes
 
         let budget = if Self::is_good_heed(tasks_path, DEFAULT_BUDGET) {
             DEFAULT_BUDGET
