@@ -4,7 +4,7 @@ use std::ops::Bound::{self, Excluded, Included};
 
 use either::Either;
 pub use filter_parser::{Condition, Error as FPError, FilterCondition, Token};
-use roaring::RoaringBitmap;
+use roaring::{MultiOps, RoaringBitmap};
 use serde_json::Value;
 
 use super::facet_range_search;
@@ -382,14 +382,10 @@ impl<'a> Filter<'a> {
                     }))?
                 }
             }
-            FilterCondition::Or(subfilters) => {
-                let mut bitmap = RoaringBitmap::new();
-                for f in subfilters {
-                    bitmap |=
-                        Self::inner_evaluate(&(f.clone()).into(), rtxn, index, filterable_fields)?;
-                }
-                Ok(bitmap)
-            }
+            FilterCondition::Or(subfilters) => subfilters
+                .iter()
+                .map(|f| Self::inner_evaluate(&(f.clone()).into(), rtxn, index, filterable_fields))
+                .union(),
             FilterCondition::And(subfilters) => {
                 let mut subfilters_iter = subfilters.iter();
                 if let Some(first_subfilter) = subfilters_iter.next() {
