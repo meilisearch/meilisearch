@@ -622,6 +622,7 @@ pub struct SearchAggregator {
     // Whether a non-default embedder was specified
     embedder: bool,
     hybrid: bool,
+    retrieve_vectors: bool,
 
     // every time a search is done, we increment the counter linked to the used settings
     matching_strategy: HashMap<String, usize>,
@@ -662,7 +663,7 @@ impl SearchAggregator {
             page,
             hits_per_page,
             attributes_to_retrieve: _,
-            retrieve_vectors: _,
+            retrieve_vectors,
             attributes_to_crop: _,
             crop_length,
             attributes_to_highlight: _,
@@ -729,6 +730,7 @@ impl SearchAggregator {
         if let Some(ref vector) = vector {
             ret.max_vector_size = vector.len();
         }
+        ret.retrieve_vectors |= retrieve_vectors;
 
         if query.is_finite_pagination() {
             let limit = hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
@@ -804,6 +806,7 @@ impl SearchAggregator {
             attributes_to_search_on_total_number_of_uses,
             max_terms_number,
             max_vector_size,
+            retrieve_vectors,
             matching_strategy,
             max_limit,
             max_offset,
@@ -874,6 +877,7 @@ impl SearchAggregator {
 
         // vector
         self.max_vector_size = self.max_vector_size.max(max_vector_size);
+        self.retrieve_vectors |= retrieve_vectors;
         self.semantic_ratio |= semantic_ratio;
         self.hybrid |= hybrid;
         self.embedder |= embedder;
@@ -930,6 +934,7 @@ impl SearchAggregator {
             attributes_to_search_on_total_number_of_uses,
             max_terms_number,
             max_vector_size,
+            retrieve_vectors,
             matching_strategy,
             max_limit,
             max_offset,
@@ -992,6 +997,7 @@ impl SearchAggregator {
                 },
                 "vector": {
                     "max_vector_size": max_vector_size,
+                    "retrieve_vectors": retrieve_vectors,
                 },
                 "hybrid": {
                     "enabled": hybrid,
@@ -1625,6 +1631,7 @@ pub struct SimilarAggregator {
 
     // Whether a non-default embedder was specified
     embedder: bool,
+    retrieve_vectors: bool,
 
     // pagination
     max_limit: usize,
@@ -1648,7 +1655,7 @@ impl SimilarAggregator {
             offset,
             limit,
             attributes_to_retrieve: _,
-            retrieve_vectors: _,
+            retrieve_vectors,
             show_ranking_score,
             show_ranking_score_details,
             filter,
@@ -1693,6 +1700,7 @@ impl SimilarAggregator {
         ret.ranking_score_threshold = ranking_score_threshold.is_some();
 
         ret.embedder = embedder.is_some();
+        ret.retrieve_vectors = *retrieve_vectors;
 
         ret
     }
@@ -1725,6 +1733,7 @@ impl SimilarAggregator {
             show_ranking_score_details,
             embedder,
             ranking_score_threshold,
+            retrieve_vectors,
         } = other;
 
         if self.timestamp.is_none() {
@@ -1754,6 +1763,7 @@ impl SimilarAggregator {
         }
 
         self.embedder |= embedder;
+        self.retrieve_vectors |= retrieve_vectors;
 
         // pagination
         self.max_limit = self.max_limit.max(max_limit);
@@ -1788,6 +1798,7 @@ impl SimilarAggregator {
             show_ranking_score_details,
             embedder,
             ranking_score_threshold,
+            retrieve_vectors,
         } = self;
 
         if total_received == 0 {
@@ -1813,6 +1824,9 @@ impl SimilarAggregator {
                    "with_geoBoundingBox": filter_with_geo_bounding_box,
                    "avg_criteria_number": format!("{:.2}", filter_sum_of_criteria_terms as f64 / filter_total_number_of_criteria as f64),
                    "most_used_syntax": used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
+                },
+                "vector": {
+                    "retrieve_vectors": retrieve_vectors,
                 },
                 "hybrid": {
                     "embedder": embedder,
