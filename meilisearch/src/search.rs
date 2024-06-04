@@ -1051,6 +1051,7 @@ fn make_hits(
     formatter_builder.highlight_prefix(format.highlight_pre_tag);
     formatter_builder.highlight_suffix(format.highlight_post_tag);
     let mut documents = Vec::new();
+    let embedding_configs = index.embedding_configs(&rtxn)?;
     let documents_iter = index.documents(rtxn, documents_ids)?;
     for ((id, obkv), score) in documents_iter.into_iter().zip(document_scores.into_iter()) {
         // First generate a document with all the displayed fields
@@ -1066,12 +1067,19 @@ fn make_hits(
         if retrieve_vectors {
             let mut vectors = serde_json::Map::new();
             for (name, mut vector) in index.embeddings(&rtxn, id)? {
+                let user_defined = embedding_configs
+                    .iter()
+                    .find(|conf| conf.name == name)
+                    .is_some_and(|conf| conf.user_defined.contains(id));
+                let mut embedding = serde_json::Map::new();
+                embedding.insert("userDefined".to_string(), user_defined.into());
                 if vector.len() == 1 {
                     let vector = vector.pop().unwrap();
-                    vectors.insert(name.into(), vector.into());
+                    embedding.insert("embedding".to_string(), vector.into());
                 } else {
-                    vectors.insert(name.into(), vector.into());
+                    embedding.insert("embedding".to_string(), vector.into());
                 }
+                vectors.insert(name.into(), embedding.into());
             }
             document.insert("_vectors".into(), vectors.into());
         }

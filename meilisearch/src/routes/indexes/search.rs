@@ -52,7 +52,7 @@ pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToRetrieve>)]
     attributes_to_retrieve: Option<CS<String>>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchRetrieveVectors>)]
-    retrieve_vectors: bool,
+    retrieve_vectors: Param<bool>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToCrop>)]
     attributes_to_crop: Option<CS<String>>,
     #[deserr(default = Param(DEFAULT_CROP_LENGTH()), error = DeserrQueryParamError<InvalidSearchCropLength>)]
@@ -155,7 +155,7 @@ impl From<SearchQueryGet> for SearchQuery {
             page: other.page.as_deref().copied(),
             hits_per_page: other.hits_per_page.as_deref().copied(),
             attributes_to_retrieve: other.attributes_to_retrieve.map(|o| o.into_iter().collect()),
-            retrieve_vectors: other.retrieve_vectors,
+            retrieve_vectors: other.retrieve_vectors.0,
             attributes_to_crop: other.attributes_to_crop.map(|o| o.into_iter().collect()),
             crop_length: other.crop_length.0,
             attributes_to_highlight: other.attributes_to_highlight.map(|o| o.into_iter().collect()),

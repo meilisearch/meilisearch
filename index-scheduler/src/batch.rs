@@ -909,6 +909,7 @@ impl IndexScheduler {
 
                     let fields_ids_map = index.fields_ids_map(&rtxn)?;
                     let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
+                    let embedding_configs = index.embedding_configs(&rtxn)?;
 
                     // 3.1. Dump the documents
                     for ret in index.all_documents(&rtxn)? {
@@ -951,16 +952,21 @@ impl IndexScheduler {
                             };
 
                             for (embedder_name, embeddings) in embeddings {
-                                // don't change the entry if it already exists, because it was user-provided
-                                vectors.entry(embedder_name).or_insert_with(|| {
-                                    let embeddings = ExplicitVectors {
-                                        embeddings: VectorOrArrayOfVectors::from_array_of_vectors(
-                                            embeddings,
-                                        ),
-                                        user_provided: false,
-                                    };
-                                    serde_json::to_value(embeddings).unwrap()
-                                });
+                                let user_provided = embedding_configs
+                                    .iter()
+                                    .find(|conf| conf.name == embedder_name)
+                                    .is_some_and(|conf| conf.user_defined.contains(id));
+
+                                let embeddings = ExplicitVectors {
+                                    embeddings: VectorOrArrayOfVectors::from_array_of_vectors(
+                                        embeddings,
+                                    ),
+                                    user_provided,
+                                };
+                                vectors.insert(
+                                    embedder_name,
+                                    serde_json::to_value(embeddings).unwrap(),
+                                );
                             }
                         }
 
