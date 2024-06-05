@@ -1834,7 +1834,7 @@ mod tests {
                 task_db_size: 1000 * 1000, // 1 MB, we don't use MiB on purpose.
                 index_base_map_size: 1000 * 1000, // 1 MB, we don't use MiB on purpose.
                 enable_mdb_writemap: false,
-                index_growth_amount: 1000 * 1000, // 1 MB
+                index_growth_amount: 1000 * 1000 * 1000 * 1000, // 1 TB
                 index_count: 5,
                 indexer_config,
                 autobatching_enabled: true,
