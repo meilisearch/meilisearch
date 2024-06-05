@@ -5271,7 +5271,7 @@ mod tests {
             ]
         );
 
-        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0 as u128).unwrap();
+        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0_u128).unwrap();
         let documents_count =
             read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file)
                 .unwrap();
@@ -5307,16 +5307,18 @@ mod tests {
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string(&documents).unwrap(), name: "documents after initial push");
 
-        let mut setting = meilisearch_types::settings::Settings::<Unchecked>::default();
-        setting.embedders = Setting::Set(maplit::btreemap! {
-            S("my_doggo_embedder") => Setting::Set(EmbeddingSettings {
-                source: Setting::Set(milli::vector::settings::EmbedderSource::HuggingFace),
-                model: Setting::Set(S("sentence-transformers/all-MiniLM-L6-v2")),
-                revision: Setting::Set(S("e4ce9877abf3edfe10b0d82785e83bdcb973e22e")),
-                document_template: Setting::Set(S("{{doc.doggo}}")),
-            .. EmbeddingSettings::default()
-            })
-        });
+        let setting = meilisearch_types::settings::Settings::<Unchecked> {
+            embedders: Setting::Set(maplit::btreemap! {
+                S("my_doggo_embedder") => Setting::Set(EmbeddingSettings {
+                    source: Setting::Set(milli::vector::settings::EmbedderSource::HuggingFace),
+                    model: Setting::Set(S("sentence-transformers/all-MiniLM-L6-v2")),
+                    revision: Setting::Set(S("e4ce9877abf3edfe10b0d82785e83bdcb973e22e")),
+                    document_template: Setting::Set(S("{{doc.doggo}}")),
+                    ..Default::default()
+                })
+            }),
+            ..Default::default()
+        };
         index_scheduler
             .register(
                 KindWithContent::SettingsUpdate {
@@ -5380,7 +5382,7 @@ mod tests {
         let mut embeddings = Vec::new();
 
         'vectors: for i in 0..=u8::MAX {
-            let reader = arroy::Reader::open(&rtxn, 0 | (i as u16), index.vector_arroy)
+            let reader = arroy::Reader::open(&rtxn, i as u16, index.vector_arroy)
                 .map(Some)
                 .or_else(|e| match e {
                     arroy::Error::MissingMetadata => Ok(None),
@@ -5418,7 +5420,7 @@ mod tests {
             ]
         );
 
-        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(1 as u128).unwrap();
+        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(1_u128).unwrap();
         let documents_count =
             read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file)
                 .unwrap();
