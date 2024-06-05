@@ -6,7 +6,7 @@ pub mod service;
 use std::fmt::{self, Display};
 
 #[allow(unused)]
-pub use index::{GetAllDocumentsOptions, GetDocumentOptions};
+pub use index::GetAllDocumentsOptions;
 use meili_snap::json_string;
 use serde::{Deserialize, Serialize};
 #[allow(unused)]

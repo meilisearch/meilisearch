@@ -222,6 +222,7 @@ InvalidApiKeyUid                      , InvalidRequest       , BAD_REQUEST ;
 InvalidContentType                    , InvalidRequest       , UNSUPPORTED_MEDIA_TYPE ;
 InvalidDocumentCsvDelimiter           , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentFields                 , InvalidRequest       , BAD_REQUEST ;
+InvalidDocumentRetrieveVectors        , InvalidRequest       , BAD_REQUEST ;
 MissingDocumentFilter                 , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentFilter                 , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentGeoField               , InvalidRequest       , BAD_REQUEST ;
