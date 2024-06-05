@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::{self, BufReader};
@@ -9,7 +9,7 @@ use std::result::Result as StdResult;
 use bytemuck::bytes_of;
 use grenad::Sorter;
 use heed::BytesEncode;
-use itertools::EitherOrBoth;
+use itertools::{merge_join_by, EitherOrBoth};
 use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 use serde_json::{from_slice, Value};
@@ -18,7 +18,7 @@ use FilterableValues::{Empty, Null, Values};
 use super::helpers::{create_sorter, keep_first, sorter_into_reader, GrenadParameters};
 use crate::error::InternalError;
 use crate::facet::value_encoding::f64_into_bytes;
-use crate::update::del_add::{DelAdd, KvWriterDelAdd};
+use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::index_documents::{create_writer, writer_into_reader};
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::{CboRoaringBitmapCodec, DocumentId, Error, FieldId, Result, MAX_FACET_VALUE_LENGTH};
@@ -75,149 +75,181 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     let mut numbers_key_buffer = Vec::new();
     let mut strings_key_buffer = Vec::new();
 
-    let mut cursor = obkv_documents.into_cursor()?;
-    while let Some((docid_bytes, value)) = cursor.move_on_next()? {
-        let obkv = obkv::KvReader::new(value);
+    let old_faceted_fids: BTreeSet<_> =
+        settings_diff.old.faceted_fields_ids.iter().copied().collect();
+    let new_faceted_fids: BTreeSet<_> =
+        settings_diff.new.faceted_fields_ids.iter().copied().collect();
 
-        for (field_id, field_bytes) in obkv.iter() {
-            let delete_faceted = settings_diff.old.faceted_fields_ids.contains(&field_id);
-            let add_faceted = settings_diff.new.faceted_fields_ids.contains(&field_id);
-            if delete_faceted || add_faceted {
-                numbers_key_buffer.clear();
-                strings_key_buffer.clear();
+    if !settings_diff.settings_update_only || old_faceted_fids != new_faceted_fids {
+        let mut cursor = obkv_documents.into_cursor()?;
+        while let Some((docid_bytes, value)) = cursor.move_on_next()? {
+            let obkv = obkv::KvReader::new(value);
+            let get_document_json_value = move |field_id, side| {
+                obkv.get(field_id)
+                    .map(KvReaderDelAdd::new)
+                    .and_then(|kv| kv.get(side))
+                    .map(from_slice)
+                    .transpose()
+                    .map_err(InternalError::SerdeJson)
+            };
+            // iterate over the faceted fields instead of over the whole document.
+            for eob in
+                merge_join_by(old_faceted_fids.iter(), new_faceted_fids.iter(), |old, new| {
+                    old.cmp(new)
+                })
+            {
+                let (field_id, del_value, add_value) = match eob {
+                    EitherOrBoth::Left(&field_id) => {
+                        let del_value = get_document_json_value(field_id, DelAdd::Deletion)?;
 
-                // Set key to the field_id
-                // Note: this encoding is consistent with FieldIdCodec
-                numbers_key_buffer.extend_from_slice(&field_id.to_be_bytes());
-                strings_key_buffer.extend_from_slice(&field_id.to_be_bytes());
+                        // deletion only
+                        (field_id, del_value, None)
+                    }
+                    EitherOrBoth::Right(&field_id) => {
+                        let add_value = get_document_json_value(field_id, DelAdd::Addition)?;
 
-                let document: [u8; 4] = docid_bytes[..4].try_into().ok().unwrap();
-                let document = DocumentId::from_be_bytes(document);
+                        // addition only
+                        (field_id, None, add_value)
+                    }
+                    EitherOrBoth::Both(&field_id, _) => {
+                        // during settings update, recompute the changing settings only.
+                        if settings_diff.settings_update_only {
+                            continue;
+                        }
 
-                // For the other extraction tasks, prefix the key with the field_id and the document_id
-                numbers_key_buffer.extend_from_slice(docid_bytes);
-                strings_key_buffer.extend_from_slice(docid_bytes);
+                        let del_value = get_document_json_value(field_id, DelAdd::Deletion)?;
+                        let add_value = get_document_json_value(field_id, DelAdd::Addition)?;
 
-                let del_add_obkv = obkv::KvReader::new(field_bytes);
-                let del_value = match del_add_obkv.get(DelAdd::Deletion).filter(|_| delete_faceted)
-                {
-                    Some(bytes) => Some(from_slice(bytes).map_err(InternalError::SerdeJson)?),
-                    None => None,
-                };
-                let add_value = match del_add_obkv.get(DelAdd::Addition).filter(|_| add_faceted) {
-                    Some(bytes) => Some(from_slice(bytes).map_err(InternalError::SerdeJson)?),
-                    None => None,
-                };
-
-                // We insert the document id on the Del and the Add side if the field exists.
-                let (ref mut del_exists, ref mut add_exists) =
-                    facet_exists_docids.entry(field_id).or_default();
-                let (ref mut del_is_null, ref mut add_is_null) =
-                    facet_is_null_docids.entry(field_id).or_default();
-                let (ref mut del_is_empty, ref mut add_is_empty) =
-                    facet_is_empty_docids.entry(field_id).or_default();
-
-                if del_value.is_some() {
-                    del_exists.insert(document);
-                }
-                if add_value.is_some() {
-                    add_exists.insert(document);
-                }
-
-                let del_geo_support = settings_diff
-                    .old
-                    .geo_fields_ids
-                    .map_or(false, |(lat, lng)| field_id == lat || field_id == lng);
-                let add_geo_support = settings_diff
-                    .new
-                    .geo_fields_ids
-                    .map_or(false, |(lat, lng)| field_id == lat || field_id == lng);
-                let del_filterable_values =
-                    del_value.map(|value| extract_facet_values(&value, del_geo_support));
-                let add_filterable_values =
-                    add_value.map(|value| extract_facet_values(&value, add_geo_support));
-
-                // Those closures are just here to simplify things a bit.
-                let mut insert_numbers_diff = |del_numbers, add_numbers| {
-                    insert_numbers_diff(
-                        &mut fid_docid_facet_numbers_sorter,
-                        &mut numbers_key_buffer,
-                        del_numbers,
-                        add_numbers,
-                    )
-                };
-                let mut insert_strings_diff = |del_strings, add_strings| {
-                    insert_strings_diff(
-                        &mut fid_docid_facet_strings_sorter,
-                        &mut strings_key_buffer,
-                        del_strings,
-                        add_strings,
-                    )
+                        (field_id, del_value, add_value)
+                    }
                 };
 
-                match (del_filterable_values, add_filterable_values) {
-                    (None, None) => (),
-                    (Some(del_filterable_values), None) => match del_filterable_values {
-                        Null => {
-                            del_is_null.insert(document);
-                        }
-                        Empty => {
-                            del_is_empty.insert(document);
-                        }
-                        Values { numbers, strings } => {
-                            insert_numbers_diff(numbers, vec![])?;
-                            insert_strings_diff(strings, vec![])?;
-                        }
-                    },
-                    (None, Some(add_filterable_values)) => match add_filterable_values {
-                        Null => {
-                            add_is_null.insert(document);
-                        }
-                        Empty => {
-                            add_is_empty.insert(document);
-                        }
-                        Values { numbers, strings } => {
-                            insert_numbers_diff(vec![], numbers)?;
-                            insert_strings_diff(vec![], strings)?;
-                        }
-                    },
-                    (Some(del_filterable_values), Some(add_filterable_values)) => {
-                        match (del_filterable_values, add_filterable_values) {
-                            (Null, Null) | (Empty, Empty) => (),
-                            (Null, Empty) => {
-                                del_is_null.insert(document);
-                                add_is_empty.insert(document);
-                            }
-                            (Empty, Null) => {
-                                del_is_empty.insert(document);
-                                add_is_null.insert(document);
-                            }
-                            (Null, Values { numbers, strings }) => {
-                                insert_numbers_diff(vec![], numbers)?;
-                                insert_strings_diff(vec![], strings)?;
+                if del_value.is_some() || add_value.is_some() {
+                    numbers_key_buffer.clear();
+                    strings_key_buffer.clear();
+
+                    // Set key to the field_id
+                    // Note: this encoding is consistent with FieldIdCodec
+                    numbers_key_buffer.extend_from_slice(&field_id.to_be_bytes());
+                    strings_key_buffer.extend_from_slice(&field_id.to_be_bytes());
+
+                    let document: [u8; 4] = docid_bytes[..4].try_into().ok().unwrap();
+                    let document = DocumentId::from_be_bytes(document);
+
+                    // For the other extraction tasks, prefix the key with the field_id and the document_id
+                    numbers_key_buffer.extend_from_slice(docid_bytes);
+                    strings_key_buffer.extend_from_slice(docid_bytes);
+
+                    // We insert the document id on the Del and the Add side if the field exists.
+                    let (ref mut del_exists, ref mut add_exists) =
+                        facet_exists_docids.entry(field_id).or_default();
+                    let (ref mut del_is_null, ref mut add_is_null) =
+                        facet_is_null_docids.entry(field_id).or_default();
+                    let (ref mut del_is_empty, ref mut add_is_empty) =
+                        facet_is_empty_docids.entry(field_id).or_default();
+
+                    if del_value.is_some() {
+                        del_exists.insert(document);
+                    }
+                    if add_value.is_some() {
+                        add_exists.insert(document);
+                    }
+
+                    let del_geo_support = settings_diff
+                        .old
+                        .geo_fields_ids
+                        .map_or(false, |(lat, lng)| field_id == lat || field_id == lng);
+                    let add_geo_support = settings_diff
+                        .new
+                        .geo_fields_ids
+                        .map_or(false, |(lat, lng)| field_id == lat || field_id == lng);
+                    let del_filterable_values =
+                        del_value.map(|value| extract_facet_values(&value, del_geo_support));
+                    let add_filterable_values =
+                        add_value.map(|value| extract_facet_values(&value, add_geo_support));
+
+                    // Those closures are just here to simplify things a bit.
+                    let mut insert_numbers_diff = |del_numbers, add_numbers| {
+                        insert_numbers_diff(
+                            &mut fid_docid_facet_numbers_sorter,
+                            &mut numbers_key_buffer,
+                            del_numbers,
+                            add_numbers,
+                        )
+                    };
+                    let mut insert_strings_diff = |del_strings, add_strings| {
+                        insert_strings_diff(
+                            &mut fid_docid_facet_strings_sorter,
+                            &mut strings_key_buffer,
+                            del_strings,
+                            add_strings,
+                        )
+                    };
+
+                    match (del_filterable_values, add_filterable_values) {
+                        (None, None) => (),
+                        (Some(del_filterable_values), None) => match del_filterable_values {
+                            Null => {
                                 del_is_null.insert(document);
                             }
-                            (Empty, Values { numbers, strings }) => {
-                                insert_numbers_diff(vec![], numbers)?;
-                                insert_strings_diff(vec![], strings)?;
+                            Empty => {
                                 del_is_empty.insert(document);
                             }
-                            (Values { numbers, strings }, Null) => {
-                                add_is_null.insert(document);
+                            Values { numbers, strings } => {
                                 insert_numbers_diff(numbers, vec![])?;
                                 insert_strings_diff(strings, vec![])?;
                             }
-                            (Values { numbers, strings }, Empty) => {
-                                add_is_empty.insert(document);
-                                insert_numbers_diff(numbers, vec![])?;
-                                insert_strings_diff(strings, vec![])?;
+                        },
+                        (None, Some(add_filterable_values)) => match add_filterable_values {
+                            Null => {
+                                add_is_null.insert(document);
                             }
-                            (
-                                Values { numbers: del_numbers, strings: del_strings },
-                                Values { numbers: add_numbers, strings: add_strings },
-                            ) => {
-                                insert_numbers_diff(del_numbers, add_numbers)?;
-                                insert_strings_diff(del_strings, add_strings)?;
+                            Empty => {
+                                add_is_empty.insert(document);
+                            }
+                            Values { numbers, strings } => {
+                                insert_numbers_diff(vec![], numbers)?;
+                                insert_strings_diff(vec![], strings)?;
+                            }
+                        },
+                        (Some(del_filterable_values), Some(add_filterable_values)) => {
+                            match (del_filterable_values, add_filterable_values) {
+                                (Null, Null) | (Empty, Empty) => (),
+                                (Null, Empty) => {
+                                    del_is_null.insert(document);
+                                    add_is_empty.insert(document);
+                                }
+                                (Empty, Null) => {
+                                    del_is_empty.insert(document);
+                                    add_is_null.insert(document);
+                                }
+                                (Null, Values { numbers, strings }) => {
+                                    insert_numbers_diff(vec![], numbers)?;
+                                    insert_strings_diff(vec![], strings)?;
+                                    del_is_null.insert(document);
+                                }
+                                (Empty, Values { numbers, strings }) => {
+                                    insert_numbers_diff(vec![], numbers)?;
+                                    insert_strings_diff(vec![], strings)?;
+                                    del_is_empty.insert(document);
+                                }
+                                (Values { numbers, strings }, Null) => {
+                                    add_is_null.insert(document);
+                                    insert_numbers_diff(numbers, vec![])?;
+                                    insert_strings_diff(strings, vec![])?;
+                                }
+                                (Values { numbers, strings }, Empty) => {
+                                    add_is_empty.insert(document);
+                                    insert_numbers_diff(numbers, vec![])?;
+                                    insert_strings_diff(strings, vec![])?;
+                                }
+                                (
+                                    Values { numbers: del_numbers, strings: del_strings },
+                                    Values { numbers: add_numbers, strings: add_strings },
+                                ) => {
+                                    insert_numbers_diff(del_numbers, add_numbers)?;
+                                    insert_strings_diff(del_strings, add_strings)?;
+                                }
                             }
                         }
                     }

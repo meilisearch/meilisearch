@@ -369,6 +369,7 @@ where
 
         // Run extraction pipeline in parallel.
         pool.install(|| {
+            let settings_diff_cloned = settings_diff.clone();
             rayon::spawn(move || {
                 let child_span = tracing::trace_span!(target: "indexing::details", parent: &current_span, "extract_and_send_grenad_chunks");
                 let _enter = child_span.enter();
@@ -398,7 +399,7 @@ where
                         pool_params,
                         lmdb_writer_sx.clone(),
                         primary_key_id,
-                        settings_diff.clone(),
+                        settings_diff_cloned,
                         max_positions_per_attributes,
                     )
                 });
@@ -425,7 +426,7 @@ where
                     Err(status) => {
                         if let Some(typed_chunks) = chunk_accumulator.pop_longest() {
                             let (docids, is_merged_database) =
-                                write_typed_chunk_into_index(typed_chunks, self.index, self.wtxn)?;
+                                write_typed_chunk_into_index(self.wtxn, self.index, &settings_diff, typed_chunks)?;
                             if !docids.is_empty() {
                                 final_documents_ids |= docids;
                                 let documents_seen_count = final_documents_ids.len();

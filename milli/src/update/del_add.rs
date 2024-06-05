@@ -40,11 +40,26 @@ pub fn into_del_add_obkv<K: obkv::Key + PartialOrd>(
     operation: DelAddOperation,
     buffer: &mut Vec<u8>,
 ) -> Result<(), std::io::Error> {
+    into_del_add_obkv_conditional_operation(reader, buffer, |_| operation)
+}
+
+/// Akin to the [into_del_add_obkv] function but lets you
+/// conditionally define the `DelAdd` variant based on the obkv key.
+pub fn into_del_add_obkv_conditional_operation<K, F>(
+    reader: obkv::KvReader<K>,
+    buffer: &mut Vec<u8>,
+    operation: F,
+) -> std::io::Result<()>
+where
+    K: obkv::Key + PartialOrd,
+    F: Fn(K) -> DelAddOperation,
+{
     let mut writer = obkv::KvWriter::new(buffer);
     let mut value_buffer = Vec::new();
     for (key, value) in reader.iter() {
         value_buffer.clear();
         let mut value_writer = KvWriterDelAdd::new(&mut value_buffer);
+        let operation = operation(key);
         if matches!(operation, DelAddOperation::Deletion | DelAddOperation::DeletionAndAddition) {
             value_writer.insert(DelAdd::Deletion, value)?;
         }
