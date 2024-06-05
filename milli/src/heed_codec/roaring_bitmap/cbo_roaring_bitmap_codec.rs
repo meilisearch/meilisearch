@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::io;
+use std::io::{self, Cursor};
 use std::mem::size_of;
 
 use byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
@@ -54,6 +54,24 @@ impl CboRoaringBitmapCodec {
             // Otherwise, it means we used the classic RoaringBitmapCodec and
             // that the header takes threshold integers.
             RoaringBitmap::deserialize_unchecked_from(bytes)
+        }
+    }
+
+    pub fn intersection_with_serialized(
+        mut bytes: &[u8],
+        other: &RoaringBitmap,
+    ) -> io::Result<RoaringBitmap> {
+        // See above `deserialize_from` method for implementation details.
+        if bytes.len() <= THRESHOLD * size_of::<u32>() {
+            let mut bitmap = RoaringBitmap::new();
+            while let Ok(integer) = bytes.read_u32::<NativeEndian>() {
+                if other.contains(integer) {
+                    bitmap.insert(integer);
+                }
+            }
+            Ok(bitmap)
+        } else {
+            other.intersection_with_serialized_unchecked(Cursor::new(bytes))
         }
     }
 
