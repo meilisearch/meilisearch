@@ -1127,7 +1127,7 @@ impl InnerIndexSettingsDiff {
                 let new: HashSet<_> = new.iter().cloned().collect();
                 if old.difference(&new).next().is_none() {
                     // if no field has been removed return only the additional ones
-                    Some(&new - &old)
+                    Some(&new - &old).filter(|x| !x.is_empty())
                 } else {
                     None
                 }
