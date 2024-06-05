@@ -252,7 +252,7 @@ async fn ranking_score_threshold() {
 
     index
         .similar(
-            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0}),
+            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0, "retrieveVectors": true}),
             |response, code| {
                 snapshot!(code, @"200 OK");
                 meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @"4");
@@ -263,11 +263,14 @@ async fn ranking_score_threshold() {
                     "release_year": 2019,
                     "id": "522681",
                     "_vectors": {
-                      "manual": [
-                        0.1,
-                        0.6,
-                        0.8
-                      ]
+                      "manual": {
+                        "userDefined": true,
+                        "embedding": [
+                          0.10000000149011612,
+                          0.6000000238418579,
+                          0.800000011920929
+                        ]
+                      }
                     },
                     "_rankingScore": 0.890957772731781
                   },
@@ -276,11 +279,14 @@ async fn ranking_score_threshold() {
                     "release_year": 2019,
                     "id": "299537",
                     "_vectors": {
-                      "manual": [
-                        0.6,
-                        0.8,
-                        -0.2
-                      ]
+                      "manual": {
+                        "userDefined": true,
+                        "embedding": [
+                          0.6000000238418579,
+                          0.800000011920929,
+                          -0.20000000298023224
+                        ]
+                      }
                     },
                     "_rankingScore": 0.39060014486312866
                   },
@@ -289,11 +295,14 @@ async fn ranking_score_threshold() {
                     "release_year": 2019,
                     "id": "166428",
                     "_vectors": {
-                      "manual": [
-                        0.7,
-                        0.7,
-                        -0.4
-                      ]
+                      "manual": {
+                        "userDefined": true,
+                        "embedding": [
+                          0.699999988079071,
+                          0.699999988079071,
+                          -0.4000000059604645
+                        ]
+                      }
                     },
                     "_rankingScore": 0.2819308042526245
                   },
@@ -302,11 +311,14 @@ async fn ranking_score_threshold() {
                     "release_year": 2019,
                     "id": "287947",
                     "_vectors": {
-                      "manual": [
-                        0.8,
-                        0.4,
-                        -0.5
-                      ]
+                      "manual": {
+                        "userDefined": true,
+                        "embedding": [
+                          0.800000011920929,
+                          0.4000000059604645,
+                          -0.5
+                        ]
+                      }
                     },
                     "_rankingScore": 0.1662663221359253
                   }
@@ -318,7 +330,7 @@ async fn ranking_score_threshold() {
 
     index
         .similar(
-            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0.2}),
+            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0.2, "retrieveVectors": true}),
             |response, code| {
                 snapshot!(code, @"200 OK");
                 meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @"3");
@@ -329,11 +341,14 @@ async fn ranking_score_threshold() {
                     "release_year": 2019,
                     "id": "522681",
                     "_vectors": {
-                      "manual": [
-                        0.1,
-                        0.6,
-                        0.8
-                      ]
+                      "manual": {
+                        "userDefined": true,
+                        "embedding": [
+                          0.10000000149011612,
+                          0.6000000238418579,
+                          0.800000011920929
+                        ]
+                      }
                     },
                     "_rankingScore": 0.890957772731781
                   },
@@ -342,11 +357,14 @@ async fn ranking_score_threshold() {
                     "release_year": 2019,
                     "id": "299537",
                     "_vectors": {
-                      "manual": [
-                        0.6,
-                        0.8,
-                        -0.2
-                      ]
+                      "manual": {
+                        "userDefined": true,
+                        "embedding": [
+                          0.6000000238418579,
+                          0.800000011920929,
+                          -0.20000000298023224
+                        ]
+                      }
                     },
                     "_rankingScore": 0.39060014486312866
                   },
@@ -355,11 +373,14 @@ async fn ranking_score_threshold() {
                     "release_year": 2019,
                     "id": "166428",
                     "_vectors": {
-                      "manual": [
-                        0.7,
-                        0.7,
-                        -0.4
-                      ]
+                      "manual": {
+                        "userDefined": true,
+                        "embedding": [
+                          0.699999988079071,
+                          0.699999988079071,
+                          -0.4000000059604645
+                        ]
+                      }
                     },
                     "_rankingScore": 0.2819308042526245
                   }
@@ -371,7 +392,7 @@ async fn ranking_score_threshold() {
 
     index
         .similar(
-            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0.3}),
+            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0.3, "retrieveVectors": true}),
             |response, code| {
                 snapshot!(code, @"200 OK");
                 meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @"2");
@@ -382,11 +403,14 @@ async fn ranking_score_threshold() {
                     "release_year": 2019,
                     "id": "522681",
                     "_vectors": {
-                      "manual": [
-                        0.1,
-                        0.6,
-                        0.8
-                      ]
+                      "manual": {
+                        "userDefined": true,
+                        "embedding": [
+                          0.10000000149011612,
+                          0.6000000238418579,
+                          0.800000011920929
+                        ]
+                      }
                     },
                     "_rankingScore": 0.890957772731781
                   },
@@ -395,11 +419,14 @@ async fn ranking_score_threshold() {
                     "release_year": 2019,
                     "id": "299537",
                     "_vectors": {
-                      "manual": [
-                        0.6,
-                        0.8,
-                        -0.2
-                      ]
+                      "manual": {
+                        "userDefined": true,
+                        "embedding": [
+                          0.6000000238418579,
+                          0.800000011920929,
+                          -0.20000000298023224
+                        ]
+                      }
                     },
                     "_rankingScore": 0.39060014486312866
                   }
@@ -411,7 +438,7 @@ async fn ranking_score_threshold() {
 
     index
         .similar(
-            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0.6}),
+            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0.6, "retrieveVectors": true}),
             |response, code| {
                 snapshot!(code, @"200 OK");
                 meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @"1");
@@ -422,11 +449,14 @@ async fn ranking_score_threshold() {
                     "release_year": 2019,
                     "id": "522681",
                     "_vectors": {
-                      "manual": [
-                        0.1,
-                        0.6,
-                        0.8
-                      ]
+                      "manual": {
+                        "userDefined": true,
+                        "embedding": [
+                          0.10000000149011612,
+                          0.6000000238418579,
+                          0.800000011920929
+                        ]
+                      }
                     },
                     "_rankingScore": 0.890957772731781
                   }
@@ -438,7 +468,7 @@ async fn ranking_score_threshold() {
 
     index
         .similar(
-            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0.9}),
+            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0.9, "retrieveVectors": true}),
             |response, code| {
                 snapshot!(code, @"200 OK");
                 snapshot!(json_string!(response["hits"]), @"[]");
