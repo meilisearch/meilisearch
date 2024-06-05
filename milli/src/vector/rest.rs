@@ -230,7 +230,6 @@ where
             input_value
         }
         [input] => {
-            dbg!(&options);
             let mut body = options.query.clone();
 
             body.as_object_mut()

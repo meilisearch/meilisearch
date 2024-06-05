@@ -503,8 +503,8 @@ where
                                 embeddings,
                                 manual_vectors,
                                 embedder_name,
-                                user_defined,
-                                remove_from_user_defined,
+                                user_provided,
+                                remove_from_user_provided,
                             } => {
                                 dimension.insert(embedder_name.clone(), expected_dimension);
                                 TypedChunk::VectorPoints {
@@ -513,8 +513,8 @@ where
                                     expected_dimension,
                                     manual_vectors,
                                     embedder_name,
-                                    user_defined,
-                                    remove_from_user_defined,
+                                    user_provided,
+                                    remove_from_user_provided,
                                 }
                             }
                             otherwise => otherwise,

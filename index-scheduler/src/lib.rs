@@ -5012,7 +5012,7 @@ mod tests {
             insta::assert_json_snapshot!(task.details);
         }
 
-        handle.advance_n_successful_batches(1);
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "settings_update_processed_vectors");
 
         {

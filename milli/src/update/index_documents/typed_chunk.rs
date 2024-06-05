@@ -91,8 +91,8 @@ pub(crate) enum TypedChunk {
         expected_dimension: usize,
         manual_vectors: grenad::Reader<BufReader<File>>,
         embedder_name: String,
-        user_defined: RoaringBitmap,
-        remove_from_user_defined: RoaringBitmap,
+        user_provided: RoaringBitmap,
+        remove_from_user_provided: RoaringBitmap,
     },
     ScriptLanguageDocids(HashMap<(Script, Language), (RoaringBitmap, RoaringBitmap)>),
 }
@@ -635,8 +635,8 @@ pub(crate) fn write_typed_chunk_into_index(
                     embeddings,
                     expected_dimension,
                     embedder_name,
-                    user_defined: ud,
-                    remove_from_user_defined: rud,
+                    user_provided: ud,
+                    remove_from_user_provided: rud,
                 } = typed_chunk
                 else {
                     unreachable!();

@@ -248,8 +248,8 @@ fn send_original_documents_data(
                         prompts,
                         embedder_name,
                         embedder,
-                        user_defined,
-                        remove_from_user_defined: auto_generated,
+                        user_provided,
+                        remove_from_user_provided,
                     } in extracted_vectors
                     {
                         let embeddings = match extract_embeddings(
@@ -274,8 +274,8 @@ fn send_original_documents_data(
                                 expected_dimension: embedder.dimensions(),
                                 manual_vectors,
                                 embedder_name,
-                                user_defined,
-                                remove_from_user_defined: auto_generated,
+                                user_provided,
+                                remove_from_user_provided,
                             }));
                         }
                     }
