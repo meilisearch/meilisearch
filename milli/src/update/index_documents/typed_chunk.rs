@@ -656,7 +656,7 @@ pub(crate) fn write_typed_chunk_into_index(
             // typed chunks has always at least 1 chunk.
             let Some((expected_dimension, embedder_name)) = params else { unreachable!() };
 
-            let mut embedding_configs = index.embedding_configs(&wtxn)?;
+            let mut embedding_configs = index.embedding_configs(wtxn)?;
             let index_embedder_config = embedding_configs
                 .iter_mut()
                 .find(|IndexEmbeddingConfig { name, .. }| name == &embedder_name)

@@ -4,7 +4,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME, FieldId, FieldsIdsMap, Weight};
+use crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME;
+use crate::{FieldId, FieldsIdsMap, Weight};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct FieldidsWeightsMap {
