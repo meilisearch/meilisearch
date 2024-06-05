@@ -56,7 +56,7 @@ jsonwebtoken = "9.2.0"
 lazy_static = "1.4.0"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
-mimalloc = { version = "0.1.39", default-features = false }
+mimalloc = { version = "0.1.37", default-features = false }
 mime = "0.3.17"
 num_cpus = "1.16.0"
 obkv = "0.2.1"
