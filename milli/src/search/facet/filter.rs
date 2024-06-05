@@ -343,6 +343,10 @@ impl<'a> Filter<'a> {
         filterable_fields: &HashSet<String>,
         universe: Option<&RoaringBitmap>,
     ) -> Result<RoaringBitmap> {
+        if universe.map_or(false, |u| u.is_empty()) {
+            return Ok(RoaringBitmap::new());
+        }
+
         match &self.condition {
             FilterCondition::Not(f) => {
                 // TODO improve the documents_ids to also support intersections at deserialize time.
