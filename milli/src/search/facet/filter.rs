@@ -349,8 +349,6 @@ impl<'a> Filter<'a> {
 
         match &self.condition {
             FilterCondition::Not(f) => {
-                // TODO improve the documents_ids to also support intersections at deserialize time.
-                let all_ids = index.documents_ids(rtxn)?;
                 let selected = Self::inner_evaluate(
                     &(f.as_ref().clone()).into(),
                     rtxn,
@@ -358,7 +356,13 @@ impl<'a> Filter<'a> {
                     filterable_fields,
                     universe,
                 )?;
-                Ok(all_ids - selected)
+                match universe {
+                    Some(universe) => Ok(universe - selected),
+                    None => {
+                        let all_ids = index.documents_ids(rtxn)?;
+                        Ok(all_ids - selected)
+                    }
+                }
             }
             FilterCondition::In { fid, els } => {
                 if crate::is_faceted(fid.value(), filterable_fields) {
