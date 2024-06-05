@@ -1104,8 +1104,10 @@ pub struct InnerIndexSettingsDiff {
     // Cache the check to see if all the stop_words, allowed_separators, dictionary,
     // exact_attributes, proximity_precision are different.
     pub(crate) cache_reindex_searchable_without_user_defined: bool,
-    // Cache the check to see if all the user_defined_searchables are different.
+    // Cache the check to see if the user_defined_searchables are different.
     pub(crate) cache_user_defined_searchables: bool,
+    // Cache the check to see if the exact_attributes are different.
+    pub(crate) cache_exact_attributes: bool,
 }
 
 impl InnerIndexSettingsDiff {
@@ -1139,9 +1141,10 @@ impl InnerIndexSettingsDiff {
                 != new_settings.stop_words.as_ref().map(|set| set.as_fst().as_bytes())
                 || old_settings.allowed_separators != new_settings.allowed_separators
                 || old_settings.dictionary != new_settings.dictionary
-                || old_settings.exact_attributes != new_settings.exact_attributes
                 || old_settings.proximity_precision != new_settings.proximity_precision
         };
+
+        let cache_exact_attributes = old_settings.exact_attributes != new_settings.exact_attributes;
 
         let cache_user_defined_searchables = old_settings.user_defined_searchable_fields
             != new_settings.user_defined_searchable_fields;
@@ -1155,6 +1158,7 @@ impl InnerIndexSettingsDiff {
             only_additional_fields,
             cache_reindex_searchable_without_user_defined,
             cache_user_defined_searchables,
+            cache_exact_attributes,
         }
     }
 
@@ -1163,11 +1167,21 @@ impl InnerIndexSettingsDiff {
     }
 
     pub fn reindex_searchable(&self) -> bool {
-        self.cache_reindex_searchable_without_user_defined || self.cache_user_defined_searchables
+        self.cache_reindex_searchable_without_user_defined
+            || self.cache_exact_attributes
+            || self.cache_user_defined_searchables
+    }
+
+    pub fn reindex_proximities(&self) -> bool {
+        // if any searchable settings force the reindexing
+        (self.cache_reindex_searchable_without_user_defined || self.cache_user_defined_searchables)
+        // and if any settings needs the proximity database created
+            && (self.old.proximity_precision == ProximityPrecision::ByAttribute
+                || self.old.proximity_precision == ProximityPrecision::ByAttribute)
     }
 
     pub fn reindex_searchable_id(&self, id: FieldId) -> Option<DelAddOperation> {
-        if self.cache_reindex_searchable_without_user_defined {
+        if self.cache_reindex_searchable_without_user_defined || self.cache_exact_attributes {
             Some(DelAddOperation::DeletionAndAddition)
         } else if let Some(only_additional_fields) = &self.only_additional_fields {
             let additional_field = self.new.fields_ids_map.name(id).unwrap();
