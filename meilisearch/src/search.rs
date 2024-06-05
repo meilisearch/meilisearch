@@ -1073,12 +1073,10 @@ fn make_hits(
                     .is_some_and(|conf| conf.user_defined.contains(id));
                 let mut embedding = serde_json::Map::new();
                 embedding.insert("userDefined".to_string(), user_defined.into());
-                if vector.len() == 1 {
-                    let vector = vector.pop().unwrap();
-                    embedding.insert("embedding".to_string(), vector.into());
-                } else {
-                    embedding.insert("embedding".to_string(), vector.into());
-                }
+                match vector.as_mut_slice() {
+                    [one] => embedding.insert("embedding".to_string(), std::mem::take(one).into()),
+                    _ => embedding.insert("embedding".to_string(), vector.into()),
+                };
                 vectors.insert(name, embedding.into());
             }
             document.insert("_vectors".into(), vectors.into());

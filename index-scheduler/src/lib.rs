@@ -5172,9 +5172,7 @@ mod tests {
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "Intel to kefir");
 
-        println!("HEEEEERE");
         handle.advance_one_successful_batch();
-        // handle.advance_one_failed_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "Intel to kefir succeeds");
 
         {

@@ -1993,7 +1993,7 @@ async fn generate_and_import_dump_containing_vectors() {
     let response = index.wait_task(response.uid()).await;
     snapshot!(response["status"], @r###""succeeded""###);
 
-    // ========= We made a dump, now we should clear the DB except and try to import our dump
+    // ========= We made a dump, now we should clear the DB and try to import our dump
     drop(server);
     tokio::fs::remove_dir_all(&opt.db_path).await.unwrap();
     let dump_name = format!("{}.dump", response["details"]["dumpUid"].as_str().unwrap());
