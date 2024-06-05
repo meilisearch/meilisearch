@@ -20,7 +20,10 @@ use super::{IndexDocumentsMethod, IndexerConfig};
 use crate::documents::{DocumentsBatchIndex, EnrichedDocument, EnrichedDocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
 use crate::index::{db_name, main_key};
-use crate::update::del_add::{into_del_add_obkv, DelAdd, DelAddOperation, KvReaderDelAdd};
+use crate::update::del_add::{
+    into_del_add_obkv, into_del_add_obkv_conditional_operation, DelAdd, DelAddOperation,
+    KvReaderDelAdd,
+};
 use crate::update::index_documents::GrenadParameters;
 use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
 use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
@@ -805,13 +808,15 @@ impl<'a, 'i> Transform<'a, 'i> {
         let mut new_inner_settings = old_inner_settings.clone();
         new_inner_settings.fields_ids_map = fields_ids_map;
 
-        let settings_diff = InnerIndexSettingsDiff {
-            old: old_inner_settings,
-            new: new_inner_settings,
+        let embedding_configs_updated = false;
+        let settings_update_only = false;
+        let settings_diff = InnerIndexSettingsDiff::new(
+            old_inner_settings,
+            new_inner_settings,
             primary_key_id,
-            embedding_configs_updated: false,
-            settings_update_only: false,
-        };
+            embedding_configs_updated,
+            settings_update_only,
+        );
 
         Ok(TransformOutput {
             primary_key,
@@ -840,14 +845,6 @@ impl<'a, 'i> Transform<'a, 'i> {
         // Always keep the primary key.
         let is_primary_key = |id: FieldId| -> bool { settings_diff.primary_key_id == Some(id) };
 
-        // If only the `searchableAttributes` has been changed, keep only the searchable fields.
-        let must_reindex_searchables = settings_diff.reindex_searchable();
-        let necessary_searchable_field = |id: FieldId| -> bool {
-            must_reindex_searchables
-                && (settings_diff.old.searchable_fields_ids.contains(&id)
-                    || settings_diff.new.searchable_fields_ids.contains(&id))
-        };
-
         // If only a faceted field has been added, keep only this field.
         let must_reindex_facets = settings_diff.reindex_facets();
         let necessary_faceted_field = |id: FieldId| -> bool {
@@ -862,13 +859,16 @@ impl<'a, 'i> Transform<'a, 'i> {
         // we need the fields for the prompt/templating.
         let reindex_vectors = settings_diff.reindex_vectors();
 
+        // The operations that we must perform on the different fields.
+        let mut operations = HashMap::new();
+
         let mut obkv_writer = KvWriter::<_, FieldId>::memory();
         for (id, val) in old_obkv.iter() {
-            if is_primary_key(id)
-                || necessary_searchable_field(id)
-                || necessary_faceted_field(id)
-                || reindex_vectors
-            {
+            if is_primary_key(id) || necessary_faceted_field(id) || reindex_vectors {
+                operations.insert(id, DelAddOperation::DeletionAndAddition);
+                obkv_writer.insert(id, val)?;
+            } else if let Some(operation) = settings_diff.reindex_searchable_id(id) {
+                operations.insert(id, operation);
                 obkv_writer.insert(id, val)?;
             }
         }
@@ -887,11 +887,9 @@ impl<'a, 'i> Transform<'a, 'i> {
             let flattened = flattened.as_deref().map_or(obkv, KvReader::new);
 
             flattened_obkv_buffer.clear();
-            into_del_add_obkv(
-                flattened,
-                DelAddOperation::DeletionAndAddition,
-                flattened_obkv_buffer,
-            )?;
+            into_del_add_obkv_conditional_operation(flattened, flattened_obkv_buffer, |id| {
+                operations.get(&id).copied().unwrap_or(DelAddOperation::DeletionAndAddition)
+            })?;
         }
 
         Ok(())
@@ -901,6 +899,11 @@ impl<'a, 'i> Transform<'a, 'i> {
     /// of the index with the attributes reordered accordingly to the `FieldsIdsMap` given as argument.
     ///
     // TODO this can be done in parallel by using the rayon `ThreadPool`.
+    #[tracing::instrument(
+        level = "trace"
+        skip(self, wtxn, settings_diff),
+        target = "indexing::documents"
+    )]
     pub fn prepare_for_documents_reindexing(
         self,
         wtxn: &mut heed::RwTxn<'i>,
