@@ -19,9 +19,9 @@ pub fn descending_facet_sort<'t>(
     candidates: RoaringBitmap,
 ) -> Result<impl Iterator<Item = Result<(RoaringBitmap, &'t [u8])>> + 't> {
     let highest_level = get_highest_level(rtxn, db, field_id)?;
-    if let Some(first_bound) = get_first_facet_value::<BytesRefCodec>(rtxn, db, field_id)? {
+    if let Some(first_bound) = get_first_facet_value::<BytesRefCodec, _>(rtxn, db, field_id)? {
         let first_key = FacetGroupKey { field_id, level: highest_level, left_bound: first_bound };
-        let last_bound = get_last_facet_value::<BytesRefCodec>(rtxn, db, field_id)?.unwrap();
+        let last_bound = get_last_facet_value::<BytesRefCodec, _>(rtxn, db, field_id)?.unwrap();
         let last_key = FacetGroupKey { field_id, level: highest_level, left_bound: last_bound };
         let iter = db.rev_range(rtxn, &(first_key..=last_key))?.take(usize::MAX);
         Ok(itertools::Either::Left(DescendingFacetSort {

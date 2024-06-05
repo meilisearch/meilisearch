@@ -4,9 +4,11 @@ use heed::BytesEncode;
 use roaring::RoaringBitmap;
 
 use super::{get_first_facet_value, get_highest_level, get_last_facet_value};
-use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec};
+use crate::heed_codec::facet::{
+    FacetGroupKey, FacetGroupKeyCodec, FacetGroupLazyValueCodec, FacetGroupValueCodec,
+};
 use crate::heed_codec::BytesRefCodec;
-use crate::Result;
+use crate::{CboRoaringBitmapCodec, Result};
 
 /// Find all the document ids for which the given field contains a value contained within
 /// the two bounds.
@@ -16,6 +18,7 @@ pub fn find_docids_of_facet_within_bounds<'t, BoundCodec>(
     field_id: u16,
     left: &'t Bound<<BoundCodec as BytesEncode<'t>>::EItem>,
     right: &'t Bound<<BoundCodec as BytesEncode<'t>>::EItem>,
+    universe: Option<&RoaringBitmap>,
     docids: &mut RoaringBitmap,
 ) -> Result<()>
 where
@@ -46,13 +49,15 @@ where
         }
         Bound::Unbounded => Bound::Unbounded,
     };
-    let db = db.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>();
-    let mut f = FacetRangeSearch { rtxn, db, field_id, left, right, docids };
+    let db = db.remap_types::<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupLazyValueCodec>();
+    let mut f = FacetRangeSearch { rtxn, db, field_id, left, right, universe, docids };
     let highest_level = get_highest_level(rtxn, db, field_id)?;
 
-    if let Some(starting_left_bound) = get_first_facet_value::<BytesRefCodec>(rtxn, db, field_id)? {
+    if let Some(starting_left_bound) =
+        get_first_facet_value::<BytesRefCodec, _>(rtxn, db, field_id)?
+    {
         let rightmost_bound =
-            Bound::Included(get_last_facet_value::<BytesRefCodec>(rtxn, db, field_id)?.unwrap()); // will not fail because get_first_facet_value succeeded
+            Bound::Included(get_last_facet_value::<BytesRefCodec, _>(rtxn, db, field_id)?.unwrap()); // will not fail because get_first_facet_value succeeded
         let group_size = usize::MAX;
         f.run(highest_level, starting_left_bound, rightmost_bound, group_size)?;
         Ok(())
@@ -64,12 +69,16 @@ where
 /// Fetch the document ids that have a facet with a value between the two given bounds
 struct FacetRangeSearch<'t, 'b, 'bitmap> {
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupLazyValueCodec>,
     field_id: u16,
     left: Bound<&'b [u8]>,
     right: Bound<&'b [u8]>,
+    /// The subset of documents ids that are useful for this search.
+    /// Great performance optimizations can be achieved by only fetching values matching this subset.
+    universe: Option<&'bitmap RoaringBitmap>,
     docids: &'bitmap mut RoaringBitmap,
 }
+
 impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
     fn run_level_0(&mut self, starting_left_bound: &'t [u8], group_size: usize) -> Result<()> {
         let left_key =
@@ -104,7 +113,13 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
             }
 
             if RangeBounds::<&[u8]>::contains(&(self.left, self.right), &key.left_bound) {
-                *self.docids |= value.bitmap;
+                *self.docids |= match self.universe {
+                    Some(universe) => CboRoaringBitmapCodec::intersection_with_serialized(
+                        value.bitmap_bytes,
+                        universe,
+                    )?,
+                    None => CboRoaringBitmapCodec::deserialize_from(value.bitmap_bytes)?,
+                };
             }
         }
         Ok(())
@@ -195,7 +210,13 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
                 left_condition && right_condition
             };
             if should_take_whole_group {
-                *self.docids |= &previous_value.bitmap;
+                *self.docids |= match self.universe {
+                    Some(universe) => CboRoaringBitmapCodec::intersection_with_serialized(
+                        previous_value.bitmap_bytes,
+                        universe,
+                    )?,
+                    None => CboRoaringBitmapCodec::deserialize_from(previous_value.bitmap_bytes)?,
+                };
                 previous_key = next_key;
                 previous_value = next_value;
                 continue;
@@ -291,7 +312,13 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
             left_condition && right_condition
         };
         if should_take_whole_group {
-            *self.docids |= &previous_value.bitmap;
+            *self.docids |= match self.universe {
+                Some(universe) => CboRoaringBitmapCodec::intersection_with_serialized(
+                    previous_value.bitmap_bytes,
+                    universe,
+                )?,
+                None => CboRoaringBitmapCodec::deserialize_from(previous_value.bitmap_bytes)?,
+            };
         } else {
             let level = level - 1;
             let starting_left_bound = previous_key.left_bound;
@@ -365,6 +392,7 @@ mod tests {
                     0,
                     &start,
                     &end,
+                    None,
                     &mut docids,
                 )
                 .unwrap();
@@ -384,6 +412,7 @@ mod tests {
                     0,
                     &start,
                     &end,
+                    None,
                     &mut docids,
                 )
                 .unwrap();
@@ -418,6 +447,7 @@ mod tests {
                     0,
                     &start,
                     &end,
+                    None,
                     &mut docids,
                 )
                 .unwrap();
@@ -439,6 +469,7 @@ mod tests {
                     0,
                     &start,
                     &end,
+                    None,
                     &mut docids,
                 )
                 .unwrap();
@@ -474,6 +505,7 @@ mod tests {
                     0,
                     &start,
                     &end,
+                    None,
                     &mut docids,
                 )
                 .unwrap();
@@ -499,6 +531,7 @@ mod tests {
                     0,
                     &start,
                     &end,
+                    None,
                     &mut docids,
                 )
                 .unwrap();
@@ -537,6 +570,7 @@ mod tests {
                     0,
                     &start,
                     &end,
+                    None,
                     &mut docids,
                 )
                 .unwrap();
@@ -556,6 +590,7 @@ mod tests {
                     0,
                     &start,
                     &end,
+                    None,
                     &mut docids,
                 )
                 .unwrap();
@@ -571,6 +606,7 @@ mod tests {
                 0,
                 &Bound::Unbounded,
                 &Bound::Unbounded,
+                None,
                 &mut docids,
             )
             .unwrap();
@@ -586,6 +622,7 @@ mod tests {
                 1,
                 &Bound::Unbounded,
                 &Bound::Unbounded,
+                None,
                 &mut docids,
             )
             .unwrap();
@@ -621,6 +658,7 @@ mod tests {
                     0,
                     &start,
                     &end,
+                    None,
                     &mut docids,
                 )
                 .unwrap();
@@ -634,6 +672,7 @@ mod tests {
                     1,
                     &start,
                     &end,
+                    None,
                     &mut docids,
                 )
                 .unwrap();

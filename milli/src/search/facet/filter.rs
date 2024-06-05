@@ -224,14 +224,14 @@ impl<'a> Filter<'a> {
     pub fn evaluate(&self, rtxn: &heed::RoTxn, index: &Index) -> Result<RoaringBitmap> {
         // to avoid doing this for each recursive call we're going to do it ONCE ahead of time
         let filterable_fields = index.filterable_fields(rtxn)?;
-
-        self.inner_evaluate(rtxn, index, &filterable_fields)
+        self.inner_evaluate(rtxn, index, &filterable_fields, None)
     }
 
     fn evaluate_operator(
         rtxn: &heed::RoTxn,
         index: &Index,
         field_id: FieldId,
+        universe: Option<&RoaringBitmap>,
         operator: &Condition<'a>,
     ) -> Result<RoaringBitmap> {
         let numbers_db = index.facet_id_f64_docids;
@@ -291,14 +291,22 @@ impl<'a> Filter<'a> {
             }
             Condition::NotEqual(val) => {
                 let operator = Condition::Equal(val.clone());
-                let docids = Self::evaluate_operator(rtxn, index, field_id, &operator)?;
+                let docids = Self::evaluate_operator(rtxn, index, field_id, None, &operator)?;
                 let all_ids = index.documents_ids(rtxn)?;
                 return Ok(all_ids - docids);
             }
         };
 
         let mut output = RoaringBitmap::new();
-        Self::explore_facet_number_levels(rtxn, numbers_db, field_id, left, right, &mut output)?;
+        Self::explore_facet_number_levels(
+            rtxn,
+            numbers_db,
+            field_id,
+            left,
+            right,
+            universe,
+            &mut output,
+        )?;
         Ok(output)
     }
 
@@ -310,6 +318,7 @@ impl<'a> Filter<'a> {
         field_id: FieldId,
         left: Bound<f64>,
         right: Bound<f64>,
+        universe: Option<&RoaringBitmap>,
         output: &mut RoaringBitmap,
     ) -> Result<()> {
         match (left, right) {
@@ -321,7 +330,7 @@ impl<'a> Filter<'a> {
             (_, _) => (),
         }
         facet_range_search::find_docids_of_facet_within_bounds::<OrderedF64Codec>(
-            rtxn, db, field_id, &left, &right, output,
+            rtxn, db, field_id, &left, &right, universe, output,
         )?;
 
         Ok(())
@@ -332,15 +341,18 @@ impl<'a> Filter<'a> {
         rtxn: &heed::RoTxn,
         index: &Index,
         filterable_fields: &HashSet<String>,
+        universe: Option<&RoaringBitmap>,
     ) -> Result<RoaringBitmap> {
         match &self.condition {
             FilterCondition::Not(f) => {
+                // TODO improve the documents_ids to also support intersections at deserialize time.
                 let all_ids = index.documents_ids(rtxn)?;
                 let selected = Self::inner_evaluate(
                     &(f.as_ref().clone()).into(),
                     rtxn,
                     index,
                     filterable_fields,
+                    universe,
                 )?;
                 Ok(all_ids - selected)
             }
@@ -353,7 +365,8 @@ impl<'a> Filter<'a> {
 
                         for el in els {
                             let op = Condition::Equal(el.clone());
-                            let el_bitmap = Self::evaluate_operator(rtxn, index, fid, &op)?;
+                            let el_bitmap =
+                                Self::evaluate_operator(rtxn, index, fid, universe, &op)?;
                             bitmap |= el_bitmap;
                         }
                         Ok(bitmap)
@@ -371,7 +384,7 @@ impl<'a> Filter<'a> {
                 if crate::is_faceted(fid.value(), filterable_fields) {
                     let field_ids_map = index.fields_ids_map(rtxn)?;
                     if let Some(fid) = field_ids_map.id(fid.value()) {
-                        Self::evaluate_operator(rtxn, index, fid, op)
+                        Self::evaluate_operator(rtxn, index, fid, universe, op)
                     } else {
                         Ok(RoaringBitmap::new())
                     }
@@ -384,7 +397,8 @@ impl<'a> Filter<'a> {
             }
             FilterCondition::Or(subfilters) => subfilters
                 .iter()
-                .map(|f| Self::inner_evaluate(&(f.clone()).into(), rtxn, index, filterable_fields))
+                .cloned()
+                .map(|f| Self::inner_evaluate(&f.into(), rtxn, index, filterable_fields, universe))
                 .union(),
             FilterCondition::And(subfilters) => {
                 let mut subfilters_iter = subfilters.iter();
@@ -394,16 +408,21 @@ impl<'a> Filter<'a> {
                         rtxn,
                         index,
                         filterable_fields,
+                        universe,
                     )?;
                     for f in subfilters_iter {
                         if bitmap.is_empty() {
                             return Ok(bitmap);
                         }
+                        // TODO We are doing the intersections two times,
+                        //      it could be more efficient
+                        //      Can't I just replace this `&=` by an `=`?
                         bitmap &= Self::inner_evaluate(
                             &(f.clone()).into(),
                             rtxn,
                             index,
                             filterable_fields,
+                            Some(&bitmap),
                         )?;
                     }
                     Ok(bitmap)
@@ -503,6 +522,7 @@ impl<'a> Filter<'a> {
                         rtxn,
                         index,
                         filterable_fields,
+                        universe,
                     )?;
 
                     let geo_lng_token = Token::new(
@@ -535,6 +555,7 @@ impl<'a> Filter<'a> {
                             rtxn,
                             index,
                             filterable_fields,
+                            universe,
                         )?;
 
                         let condition_right = FilterCondition::Condition {
@@ -548,6 +569,7 @@ impl<'a> Filter<'a> {
                             rtxn,
                             index,
                             filterable_fields,
+                            universe,
                         )?;
 
                         left | right
@@ -563,6 +585,7 @@ impl<'a> Filter<'a> {
                             rtxn,
                             index,
                             filterable_fields,
+                            universe,
                         )?
                     };
 
