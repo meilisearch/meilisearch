@@ -367,17 +367,11 @@ impl<'a> Filter<'a> {
             FilterCondition::In { fid, els } => {
                 if crate::is_faceted(fid.value(), filterable_fields) {
                     let field_ids_map = index.fields_ids_map(rtxn)?;
-
                     if let Some(fid) = field_ids_map.id(fid.value()) {
-                        let mut bitmap = RoaringBitmap::new();
-
-                        for el in els {
-                            let op = Condition::Equal(el.clone());
-                            let el_bitmap =
-                                Self::evaluate_operator(rtxn, index, fid, universe, &op)?;
-                            bitmap |= el_bitmap;
-                        }
-                        Ok(bitmap)
+                        els.iter()
+                            .map(|el| Condition::Equal(el.clone()))
+                            .map(|op| Self::evaluate_operator(rtxn, index, fid, universe, &op))
+                            .union()
                     } else {
                         Ok(RoaringBitmap::new())
                     }
