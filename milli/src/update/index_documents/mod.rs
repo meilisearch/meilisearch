@@ -2623,10 +2623,10 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
         let mut embedding_configs = index.embedding_configs(&rtxn).unwrap();
-        let IndexEmbeddingConfig { name: embedder_name, config: embedder, user_defined } =
+        let IndexEmbeddingConfig { name: embedder_name, config: embedder, user_provided } =
             embedding_configs.pop().unwrap();
         insta::assert_snapshot!(embedder_name, @"manual");
-        insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[0, 1, 2]>");
+        insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[0, 1, 2]>");
         let embedder =
             std::sync::Arc::new(crate::vector::Embedder::new(embedder.embedder_options).unwrap());
         let res = index

@@ -625,8 +625,8 @@ pub(crate) fn write_typed_chunk_into_index(
             let mut remove_vectors_builder = MergerBuilder::new(keep_first as MergeFn);
             let mut manual_vectors_builder = MergerBuilder::new(keep_first as MergeFn);
             let mut embeddings_builder = MergerBuilder::new(keep_first as MergeFn);
-            let mut user_defined = RoaringBitmap::new();
-            let mut remove_from_user_defined = RoaringBitmap::new();
+            let mut user_provided = RoaringBitmap::new();
+            let mut remove_from_user_provided = RoaringBitmap::new();
             let mut params = None;
             for typed_chunk in typed_chunks {
                 let TypedChunk::VectorPoints {
@@ -649,8 +649,8 @@ pub(crate) fn write_typed_chunk_into_index(
                 if let Some(embeddings) = embeddings {
                     embeddings_builder.push(embeddings.into_cursor()?);
                 }
-                user_defined |= ud;
-                remove_from_user_defined |= rud;
+                user_provided |= ud;
+                remove_from_user_provided |= rud;
             }
 
             // typed chunks has always at least 1 chunk.
@@ -661,8 +661,8 @@ pub(crate) fn write_typed_chunk_into_index(
                 .iter_mut()
                 .find(|IndexEmbeddingConfig { name, .. }| name == &embedder_name)
                 .unwrap();
-            index_embedder_config.user_defined -= remove_from_user_defined;
-            index_embedder_config.user_defined |= user_defined;
+            index_embedder_config.user_provided -= remove_from_user_provided;
+            index_embedder_config.user_provided |= user_provided;
 
             index.put_embedding_configs(wtxn, embedding_configs)?;
 

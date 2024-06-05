@@ -932,9 +932,11 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 let old_configs: BTreeMap<String, (Setting<EmbeddingSettings>, RoaringBitmap)> =
                     old_configs
                         .into_iter()
-                        .map(|IndexEmbeddingConfig { name, config, user_defined }| {
-                            (name, (Setting::Set(config.into()), user_defined))
-                        })
+                        .map(
+                            |IndexEmbeddingConfig { name, config, user_provided: user_defined }| {
+                                (name, (Setting::Set(config.into()), user_defined))
+                            },
+                        )
                         .collect();
 
                 let mut new_configs = BTreeMap::new();
@@ -944,19 +946,19 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 {
                     match joined {
                         // updated config
-                        EitherOrBoth::Both((name, (mut old, user_defined)), (_, new)) => {
+                        EitherOrBoth::Both((name, (mut old, user_provided)), (_, new)) => {
                             changed |= EmbeddingSettings::apply_and_need_reindex(&mut old, new);
                             if changed {
                                 tracing::debug!(
                                     embedder = name,
-                                    documents = user_defined.len(),
+                                    user_provided = user_provided.len(),
                                     "need reindex"
                                 );
                             } else {
                                 tracing::debug!(embedder = name, "skip reindex");
                             }
                             let new = validate_embedding_settings(old, &name)?;
-                            new_configs.insert(name, (new, user_defined));
+                            new_configs.insert(name, (new, user_provided));
                         }
                         // unchanged config
                         EitherOrBoth::Left((name, setting)) => {
@@ -979,15 +981,17 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 }
                 let new_configs: Vec<IndexEmbeddingConfig> = new_configs
                     .into_iter()
-                    .filter_map(|(name, (config, user_defined))| match config {
-                        Setting::Set(config) => {
-                            Some(IndexEmbeddingConfig { name, config: config.into(), user_defined })
-                        }
+                    .filter_map(|(name, (config, user_provided))| match config {
+                        Setting::Set(config) => Some(IndexEmbeddingConfig {
+                            name,
+                            config: config.into(),
+                            user_provided,
+                        }),
                         Setting::Reset => None,
                         Setting::NotSet => Some(IndexEmbeddingConfig {
                             name,
                             config: EmbeddingSettings::default().into(),
-                            user_defined,
+                            user_provided,
                         }),
                     })
                     .collect();

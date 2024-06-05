@@ -3062,9 +3062,9 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         let configs = index.embedding_configs(&rtxn).unwrap();
-        let IndexEmbeddingConfig { name, config, user_defined } = configs.first().unwrap();
+        let IndexEmbeddingConfig { name, config, user_provided } = configs.first().unwrap();
         insta::assert_snapshot!(name, @"default");
-        insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[]>");
+        insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
         insta::assert_json_snapshot!(config.embedder_options);
     }
 
@@ -5029,17 +5029,17 @@ mod tests {
             let configs = index.embedding_configs(&rtxn).unwrap();
             // for consistency with the below
             #[allow(clippy::get_first)]
-            let IndexEmbeddingConfig { name, config: fakerest_config, user_defined } =
+            let IndexEmbeddingConfig { name, config: fakerest_config, user_provided } =
                 configs.get(0).unwrap();
             insta::assert_snapshot!(name, @"A_fakerest");
-            insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[]>");
+            insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
             insta::assert_json_snapshot!(fakerest_config.embedder_options);
             let fakerest_name = name.clone();
 
-            let IndexEmbeddingConfig { name, config: simple_hf_config, user_defined } =
+            let IndexEmbeddingConfig { name, config: simple_hf_config, user_provided } =
                 configs.get(1).unwrap();
             insta::assert_snapshot!(name, @"B_small_hf");
-            insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[]>");
+            insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
             insta::assert_json_snapshot!(simple_hf_config.embedder_options);
             let simple_hf_name = name.clone();
 
@@ -5111,13 +5111,14 @@ mod tests {
             let configs = index.embedding_configs(&rtxn).unwrap();
             // for consistency with the below
             #[allow(clippy::get_first)]
-            let IndexEmbeddingConfig { name, config: _, user_defined } = configs.get(0).unwrap();
+            let IndexEmbeddingConfig { name, config: _, user_provided: user_defined } =
+                configs.get(0).unwrap();
             insta::assert_snapshot!(name, @"A_fakerest");
             insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[0]>");
 
-            let IndexEmbeddingConfig { name, config: _, user_defined } = configs.get(1).unwrap();
+            let IndexEmbeddingConfig { name, config: _, user_provided } = configs.get(1).unwrap();
             insta::assert_snapshot!(name, @"B_small_hf");
-            insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[]>");
+            insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
 
             let embeddings = index.embeddings(&rtxn, 0).unwrap();
 
@@ -5185,15 +5186,15 @@ mod tests {
                 let configs = index.embedding_configs(&rtxn).unwrap();
                 // for consistency with the below
                 #[allow(clippy::get_first)]
-                let IndexEmbeddingConfig { name, config: _, user_defined } =
+                let IndexEmbeddingConfig { name, config: _, user_provided: user_defined } =
                     configs.get(0).unwrap();
                 insta::assert_snapshot!(name, @"A_fakerest");
                 insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[0]>");
 
-                let IndexEmbeddingConfig { name, config: _, user_defined } =
+                let IndexEmbeddingConfig { name, config: _, user_provided } =
                     configs.get(1).unwrap();
                 insta::assert_snapshot!(name, @"B_small_hf");
-                insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[]>");
+                insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
 
                 let embeddings = index.embeddings(&rtxn, 0).unwrap();
 

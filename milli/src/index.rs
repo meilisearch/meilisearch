@@ -1672,7 +1672,7 @@ impl Index {
 pub struct IndexEmbeddingConfig {
     pub name: String,
     pub config: EmbeddingConfig,
-    pub user_defined: RoaringBitmap,
+    pub user_provided: RoaringBitmap,
 }
 
 #[cfg(test)]

@@ -73,7 +73,7 @@ impl ParsedVectorsDiff {
         }
         .flatten().map_or(BTreeMap::default(), |del| del.into_iter().map(|(name, vec)| (name, Some(vec))).collect());
         for embedding_config in embedders_configs {
-            if embedding_config.user_defined.contains(docid) {
+            if embedding_config.user_provided.contains(docid) {
                 old.entry(embedding_config.name.to_string()).or_insert(None);
             }
         }

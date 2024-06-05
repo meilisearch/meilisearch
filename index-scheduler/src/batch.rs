@@ -955,7 +955,7 @@ impl IndexScheduler {
                                 let user_provided = embedding_configs
                                     .iter()
                                     .find(|conf| conf.name == embedder_name)
-                                    .is_some_and(|conf| conf.user_defined.contains(id));
+                                    .is_some_and(|conf| conf.user_provided.contains(id));
 
                                 let embeddings = ExplicitVectors {
                                     embeddings: VectorOrArrayOfVectors::from_array_of_vectors(
