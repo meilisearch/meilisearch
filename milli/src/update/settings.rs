@@ -1177,7 +1177,7 @@ impl InnerIndexSettingsDiff {
         (self.cache_reindex_searchable_without_user_defined || self.cache_user_defined_searchables)
         // and if any settings needs the proximity database created
             && (self.old.proximity_precision == ProximityPrecision::ByAttribute
-                || self.old.proximity_precision == ProximityPrecision::ByAttribute)
+                || self.new.proximity_precision == ProximityPrecision::ByAttribute)
     }
 
     pub fn reindex_searchable_id(&self, id: FieldId) -> Option<DelAddOperation> {
