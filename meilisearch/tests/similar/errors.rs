@@ -756,3 +756,54 @@ async fn filter_reserved_geo_point_string() {
         })
         .await;
 }
+
+#[actix_rt::test]
+async fn similar_bad_retrieve_vectors() {
+    let server = Server::new().await;
+    server.set_features(json!({"vectorStore": true})).await;
+    let index = server.index("test");
+
+    let (response, code) = index.similar_post(json!({"retrieveVectors": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.retrieveVectors`: expected a boolean, but found a string: `\"doggo\"`",
+      "code": "invalid_similar_retrieve_vectors",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_similar_retrieve_vectors"
+    }
+    "###);
+
+    let (response, code) = index.similar_post(json!({"retrieveVectors": [true]})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.retrieveVectors`: expected a boolean, but found an array: `[true]`",
+      "code": "invalid_similar_retrieve_vectors",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_similar_retrieve_vectors"
+    }
+    "###);
+
+    let (response, code) = index.similar_get("retrieveVectors=").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value in parameter `retrieveVectors`: could not parse `` as a boolean, expected either `true` or `false`",
+      "code": "invalid_similar_retrieve_vectors",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_similar_retrieve_vectors"
+    }
+    "###);
+
+    let (response, code) = index.similar_get("retrieveVectors=doggo").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value in parameter `retrieveVectors`: could not parse `doggo` as a boolean, expected either `true` or `false`",
+      "code": "invalid_similar_retrieve_vectors",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_similar_retrieve_vectors"
+    }
+    "###);
+}

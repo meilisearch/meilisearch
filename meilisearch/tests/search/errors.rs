@@ -168,6 +168,74 @@ async fn search_bad_hits_per_page() {
 }
 
 #[actix_rt::test]
+async fn search_bad_attributes_to_retrieve() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.search_post(json!({"attributesToRetrieve": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.attributesToRetrieve`: expected an array, but found a string: `\"doggo\"`",
+      "code": "invalid_search_attributes_to_retrieve",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_attributes_to_retrieve"
+    }
+    "###);
+    // Can't make the `attributes_to_retrieve` fail with a get search since it'll accept anything as an array of strings.
+}
+
+#[actix_rt::test]
+async fn search_bad_retrieve_vectors() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.search_post(json!({"retrieveVectors": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.retrieveVectors`: expected a boolean, but found a string: `\"doggo\"`",
+      "code": "invalid_search_retrieve_vectors",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_retrieve_vectors"
+    }
+    "###);
+
+    let (response, code) = index.search_post(json!({"retrieveVectors": [true]})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.retrieveVectors`: expected a boolean, but found an array: `[true]`",
+      "code": "invalid_search_retrieve_vectors",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_retrieve_vectors"
+    }
+    "###);
+
+    let (response, code) = index.search_get("retrieveVectors=").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value in parameter `retrieveVectors`: could not parse `` as a boolean, expected either `true` or `false`",
+      "code": "invalid_search_retrieve_vectors",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_retrieve_vectors"
+    }
+    "###);
+
+    let (response, code) = index.search_get("retrieveVectors=doggo").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value in parameter `retrieveVectors`: could not parse `doggo` as a boolean, expected either `true` or `false`",
+      "code": "invalid_search_retrieve_vectors",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_retrieve_vectors"
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn search_bad_attributes_to_crop() {
     let server = Server::new().await;
     let index = server.index("test");
