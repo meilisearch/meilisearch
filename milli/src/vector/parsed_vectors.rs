@@ -160,6 +160,22 @@ impl VectorOrArrayOfVectors {
     pub fn from_array_of_vectors(array_of_vec: Vec<Embedding>) -> Self {
         Self { inner: Some(either::Either::Left(array_of_vec)) }
     }
+
+    pub fn from_vector(vec: Embedding) -> Self {
+        Self { inner: Some(either::Either::Right(vec)) }
+    }
+}
+
+impl From<Embedding> for VectorOrArrayOfVectors {
+    fn from(vec: Embedding) -> Self {
+        Self::from_vector(vec)
+    }
+}
+
+impl From<Vec<Embedding>> for VectorOrArrayOfVectors {
+    fn from(vec: Vec<Embedding>) -> Self {
+        Self::from_array_of_vectors(vec)
+    }
 }
 
 #[cfg(test)]

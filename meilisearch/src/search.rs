@@ -15,6 +15,7 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
+use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{FacetValueHit, OrderBy, SearchForFacetValues, TimeBudget};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -1066,18 +1067,13 @@ fn make_hits(
 
         if retrieve_vectors {
             let mut vectors = serde_json::Map::new();
-            for (name, mut vector) in index.embeddings(rtxn, id)? {
+            for (name, vector) in index.embeddings(rtxn, id)? {
                 let user_provided = embedding_configs
                     .iter()
                     .find(|conf| conf.name == name)
                     .is_some_and(|conf| conf.user_provided.contains(id));
-                let mut embedding = serde_json::Map::new();
-                embedding.insert("userProvided".to_string(), user_provided.into());
-                match vector.as_mut_slice() {
-                    [one] => embedding.insert("embedding".to_string(), std::mem::take(one).into()),
-                    _ => embedding.insert("embedding".to_string(), vector.into()),
-                };
-                vectors.insert(name, embedding.into());
+                let embeddings = ExplicitVectors { embeddings: vector.into(), user_provided };
+                vectors.insert(name, serde_json::to_value(embeddings)?);
             }
             document.insert("_vectors".into(), vectors.into());
         }

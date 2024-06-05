@@ -88,12 +88,14 @@ async fn basic() {
                 "id": "522681",
                 "_vectors": {
                   "manual": {
-                    "userDefined": true,
-                    "embedding": [
-                      0.10000000149011612,
-                      0.6000000238418579,
-                      0.800000011920929
-                    ]
+                    "embeddings": [
+                      [
+                        0.10000000149011612,
+                        0.6000000238418579,
+                        0.800000011920929
+                      ]
+                    ],
+                    "userProvided": true
                   }
                 }
               },
@@ -103,12 +105,14 @@ async fn basic() {
                 "id": "299537",
                 "_vectors": {
                   "manual": {
-                    "userDefined": true,
-                    "embedding": [
-                      0.6000000238418579,
-                      0.800000011920929,
-                      -0.20000000298023224
-                    ]
+                    "embeddings": [
+                      [
+                        0.6000000238418579,
+                        0.800000011920929,
+                        -0.20000000298023224
+                      ]
+                    ],
+                    "userProvided": true
                   }
                 }
               },
@@ -118,12 +122,14 @@ async fn basic() {
                 "id": "166428",
                 "_vectors": {
                   "manual": {
-                    "userDefined": true,
-                    "embedding": [
-                      0.699999988079071,
-                      0.699999988079071,
-                      -0.4000000059604645
-                    ]
+                    "embeddings": [
+                      [
+                        0.699999988079071,
+                        0.699999988079071,
+                        -0.4000000059604645
+                      ]
+                    ],
+                    "userProvided": true
                   }
                 }
               },
@@ -133,12 +139,14 @@ async fn basic() {
                 "id": "287947",
                 "_vectors": {
                   "manual": {
-                    "userDefined": true,
-                    "embedding": [
-                      0.800000011920929,
-                      0.4000000059604645,
-                      -0.5
-                    ]
+                    "embeddings": [
+                      [
+                        0.800000011920929,
+                        0.4000000059604645,
+                        -0.5
+                      ]
+                    ],
+                    "userProvided": true
                   }
                 }
               }
@@ -158,12 +166,14 @@ async fn basic() {
                 "id": "166428",
                 "_vectors": {
                   "manual": {
-                    "userDefined": true,
-                    "embedding": [
-                      0.699999988079071,
-                      0.699999988079071,
-                      -0.4000000059604645
-                    ]
+                    "embeddings": [
+                      [
+                        0.699999988079071,
+                        0.699999988079071,
+                        -0.4000000059604645
+                      ]
+                    ],
+                    "userProvided": true
                   }
                 }
               },
@@ -173,12 +183,14 @@ async fn basic() {
                 "id": "287947",
                 "_vectors": {
                   "manual": {
-                    "userDefined": true,
-                    "embedding": [
-                      0.800000011920929,
-                      0.4000000059604645,
-                      -0.5
-                    ]
+                    "embeddings": [
+                      [
+                        0.800000011920929,
+                        0.4000000059604645,
+                        -0.5
+                      ]
+                    ],
+                    "userProvided": true
                   }
                 }
               },
@@ -188,12 +200,14 @@ async fn basic() {
                 "id": "522681",
                 "_vectors": {
                   "manual": {
-                    "userDefined": true,
-                    "embedding": [
-                      0.10000000149011612,
-                      0.6000000238418579,
-                      0.800000011920929
-                    ]
+                    "embeddings": [
+                      [
+                        0.10000000149011612,
+                        0.6000000238418579,
+                        0.800000011920929
+                      ]
+                    ],
+                    "userProvided": true
                   }
                 }
               },
@@ -203,12 +217,14 @@ async fn basic() {
                 "id": "143",
                 "_vectors": {
                   "manual": {
-                    "userDefined": true,
-                    "embedding": [
-                      -0.5,
-                      0.30000001192092896,
-                      0.8500000238418579
-                    ]
+                    "embeddings": [
+                      [
+                        -0.5,
+                        0.30000001192092896,
+                        0.8500000238418579
+                      ]
+                    ],
+                    "userProvided": true
                   }
                 }
               }
@@ -264,12 +280,14 @@ async fn ranking_score_threshold() {
                     "id": "522681",
                     "_vectors": {
                       "manual": {
-                        "userDefined": true,
-                        "embedding": [
-                          0.10000000149011612,
-                          0.6000000238418579,
-                          0.800000011920929
-                        ]
+                        "embeddings": [
+                          [
+                            0.10000000149011612,
+                            0.6000000238418579,
+                            0.800000011920929
+                          ]
+                        ],
+                        "userProvided": true
                       }
                     },
                     "_rankingScore": 0.890957772731781
@@ -280,12 +298,14 @@ async fn ranking_score_threshold() {
                     "id": "299537",
                     "_vectors": {
                       "manual": {
-                        "userDefined": true,
-                        "embedding": [
-                          0.6000000238418579,
-                          0.800000011920929,
-                          -0.20000000298023224
-                        ]
+                        "embeddings": [
+                          [
+                            0.6000000238418579,
+                            0.800000011920929,
+                            -0.20000000298023224
+                          ]
+                        ],
+                        "userProvided": true
                       }
                     },
                     "_rankingScore": 0.39060014486312866
@@ -296,12 +316,14 @@ async fn ranking_score_threshold() {
                     "id": "166428",
                     "_vectors": {
                       "manual": {
-                        "userDefined": true,
-                        "embedding": [
-                          0.699999988079071,
-                          0.699999988079071,
-                          -0.4000000059604645
-                        ]
+                        "embeddings": [
+                          [
+                            0.699999988079071,
+                            0.699999988079071,
+                            -0.4000000059604645
+                          ]
+                        ],
+                        "userProvided": true
                       }
                     },
                     "_rankingScore": 0.2819308042526245
@@ -312,12 +334,14 @@ async fn ranking_score_threshold() {
                     "id": "287947",
                     "_vectors": {
                       "manual": {
-                        "userDefined": true,
-                        "embedding": [
-                          0.800000011920929,
-                          0.4000000059604645,
-                          -0.5
-                        ]
+                        "embeddings": [
+                          [
+                            0.800000011920929,
+                            0.4000000059604645,
+                            -0.5
+                          ]
+                        ],
+                        "userProvided": true
                       }
                     },
                     "_rankingScore": 0.1662663221359253
@@ -342,12 +366,14 @@ async fn ranking_score_threshold() {
                     "id": "522681",
                     "_vectors": {
                       "manual": {
-                        "userDefined": true,
-                        "embedding": [
-                          0.10000000149011612,
-                          0.6000000238418579,
-                          0.800000011920929
-                        ]
+                        "embeddings": [
+                          [
+                            0.10000000149011612,
+                            0.6000000238418579,
+                            0.800000011920929
+                          ]
+                        ],
+                        "userProvided": true
                       }
                     },
                     "_rankingScore": 0.890957772731781
@@ -358,12 +384,14 @@ async fn ranking_score_threshold() {
                     "id": "299537",
                     "_vectors": {
                       "manual": {
-                        "userDefined": true,
-                        "embedding": [
-                          0.6000000238418579,
-                          0.800000011920929,
-                          -0.20000000298023224
-                        ]
+                        "embeddings": [
+                          [
+                            0.6000000238418579,
+                            0.800000011920929,
+                            -0.20000000298023224
+                          ]
+                        ],
+                        "userProvided": true
                       }
                     },
                     "_rankingScore": 0.39060014486312866
@@ -374,12 +402,14 @@ async fn ranking_score_threshold() {
                     "id": "166428",
                     "_vectors": {
                       "manual": {
-                        "userDefined": true,
-                        "embedding": [
-                          0.699999988079071,
-                          0.699999988079071,
-                          -0.4000000059604645
-                        ]
+                        "embeddings": [
+                          [
+                            0.699999988079071,
+                            0.699999988079071,
+                            -0.4000000059604645
+                          ]
+                        ],
+                        "userProvided": true
                       }
                     },
                     "_rankingScore": 0.2819308042526245
@@ -404,12 +434,14 @@ async fn ranking_score_threshold() {
                     "id": "522681",
                     "_vectors": {
                       "manual": {
-                        "userDefined": true,
-                        "embedding": [
-                          0.10000000149011612,
-                          0.6000000238418579,
-                          0.800000011920929
-                        ]
+                        "embeddings": [
+                          [
+                            0.10000000149011612,
+                            0.6000000238418579,
+                            0.800000011920929
+                          ]
+                        ],
+                        "userProvided": true
                       }
                     },
                     "_rankingScore": 0.890957772731781
@@ -420,12 +452,14 @@ async fn ranking_score_threshold() {
                     "id": "299537",
                     "_vectors": {
                       "manual": {
-                        "userDefined": true,
-                        "embedding": [
-                          0.6000000238418579,
-                          0.800000011920929,
-                          -0.20000000298023224
-                        ]
+                        "embeddings": [
+                          [
+                            0.6000000238418579,
+                            0.800000011920929,
+                            -0.20000000298023224
+                          ]
+                        ],
+                        "userProvided": true
                       }
                     },
                     "_rankingScore": 0.39060014486312866
@@ -450,12 +484,14 @@ async fn ranking_score_threshold() {
                     "id": "522681",
                     "_vectors": {
                       "manual": {
-                        "userDefined": true,
-                        "embedding": [
-                          0.10000000149011612,
-                          0.6000000238418579,
-                          0.800000011920929
-                        ]
+                        "embeddings": [
+                          [
+                            0.10000000149011612,
+                            0.6000000238418579,
+                            0.800000011920929
+                          ]
+                        ],
+                        "userProvided": true
                       }
                     },
                     "_rankingScore": 0.890957772731781
@@ -522,12 +558,14 @@ async fn filter() {
                     "id": "299537",
                     "_vectors": {
                       "manual": {
-                        "userDefined": true,
-                        "embedding": [
-                          0.6000000238418579,
-                          0.800000011920929,
-                          -0.20000000298023224
-                        ]
+                        "embeddings": [
+                          [
+                            0.6000000238418579,
+                            0.800000011920929,
+                            -0.20000000298023224
+                          ]
+                        ],
+                        "userProvided": true
                       }
                     }
                   },
@@ -537,12 +575,14 @@ async fn filter() {
                     "id": "166428",
                     "_vectors": {
                       "manual": {
-                        "userDefined": true,
-                        "embedding": [
-                          0.699999988079071,
-                          0.699999988079071,
-                          -0.4000000059604645
-                        ]
+                        "embeddings": [
+                          [
+                            0.699999988079071,
+                            0.699999988079071,
+                            -0.4000000059604645
+                          ]
+                        ],
+                        "userProvided": true
                       }
                     }
                   },
@@ -552,12 +592,14 @@ async fn filter() {
                     "id": "287947",
                     "_vectors": {
                       "manual": {
-                        "userDefined": true,
-                        "embedding": [
-                          0.800000011920929,
-                          0.4000000059604645,
-                          -0.5
-                        ]
+                        "embeddings": [
+                          [
+                            0.800000011920929,
+                            0.4000000059604645,
+                            -0.5
+                          ]
+                        ],
+                        "userProvided": true
                       }
                     }
                   }
@@ -580,12 +622,14 @@ async fn filter() {
                     "id": "143",
                     "_vectors": {
                       "manual": {
-                        "userDefined": true,
-                        "embedding": [
-                          -0.5,
-                          0.30000001192092896,
-                          0.8500000238418579
-                        ]
+                        "embeddings": [
+                          [
+                            -0.5,
+                            0.30000001192092896,
+                            0.8500000238418579
+                          ]
+                        ],
+                        "userProvided": true
                       }
                     }
                   }
@@ -639,12 +683,14 @@ async fn limit_and_offset() {
                 "id": "522681",
                 "_vectors": {
                   "manual": {
-                    "userDefined": true,
-                    "embedding": [
-                      0.10000000149011612,
-                      0.6000000238418579,
-                      0.800000011920929
-                    ]
+                    "embeddings": [
+                      [
+                        0.10000000149011612,
+                        0.6000000238418579,
+                        0.800000011920929
+                      ]
+                    ],
+                    "userProvided": true
                   }
                 }
               }
@@ -666,12 +712,14 @@ async fn limit_and_offset() {
                     "id": "299537",
                     "_vectors": {
                       "manual": {
-                        "userDefined": true,
-                        "embedding": [
-                          0.6000000238418579,
-                          0.800000011920929,
-                          -0.20000000298023224
-                        ]
+                        "embeddings": [
+                          [
+                            0.6000000238418579,
+                            0.800000011920929,
+                            -0.20000000298023224
+                          ]
+                        ],
+                        "userProvided": true
                       }
                     }
                   }

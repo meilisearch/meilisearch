@@ -1350,12 +1350,14 @@ async fn experimental_feature_vector_store() {
         "id": "287947",
         "_vectors": {
           "manual": {
-            "userDefined": true,
-            "embedding": [
-              1.0,
-              2.0,
-              3.0
-            ]
+            "embeddings": [
+              [
+                1.0,
+                2.0,
+                3.0
+              ]
+            ],
+            "userProvided": true
           }
         },
         "_rankingScore": 1.0
@@ -1365,12 +1367,14 @@ async fn experimental_feature_vector_store() {
         "id": "299537",
         "_vectors": {
           "manual": {
-            "userDefined": true,
-            "embedding": [
-              1.0,
-              2.0,
-              54.0
-            ]
+            "embeddings": [
+              [
+                1.0,
+                2.0,
+                54.0
+              ]
+            ],
+            "userProvided": true
           }
         },
         "_rankingScore": 0.9129111766815186
@@ -1380,12 +1384,14 @@ async fn experimental_feature_vector_store() {
         "id": "450465",
         "_vectors": {
           "manual": {
-            "userDefined": true,
-            "embedding": [
-              -100.0,
-              340.0,
-              90.0
-            ]
+            "embeddings": [
+              [
+                -100.0,
+                340.0,
+                90.0
+              ]
+            ],
+            "userProvided": true
           }
         },
         "_rankingScore": 0.8106412887573242
@@ -1395,12 +1401,14 @@ async fn experimental_feature_vector_store() {
         "id": "166428",
         "_vectors": {
           "manual": {
-            "userDefined": true,
-            "embedding": [
-              -100.0,
-              231.0,
-              32.0
-            ]
+            "embeddings": [
+              [
+                -100.0,
+                231.0,
+                32.0
+              ]
+            ],
+            "userProvided": true
           }
         },
         "_rankingScore": 0.7412010431289673
@@ -1410,12 +1418,14 @@ async fn experimental_feature_vector_store() {
         "id": "522681",
         "_vectors": {
           "manual": {
-            "userDefined": true,
-            "embedding": [
-              10.0,
-              -23.0,
-              32.0
-            ]
+            "embeddings": [
+              [
+                10.0,
+                -23.0,
+                32.0
+              ]
+            ],
+            "userProvided": true
           }
         },
         "_rankingScore": 0.6972063183784485

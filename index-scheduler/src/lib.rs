@@ -5366,7 +5366,7 @@ mod tests {
                         template: "{{doc.doggo}}",
                     },
                 },
-                user_defined: RoaringBitmap<[1, 2]>,
+                user_provided: RoaringBitmap<[1, 2]>,
             },
         ]
         "###);

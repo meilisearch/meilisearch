@@ -1940,8 +1940,9 @@ async fn import_dump_v6_containing_experimental_features() {
 }
 
 // In this test we must generate the dump ourselves to ensure the
-// `user defined` vectors are well set
+// `user provided` vectors are well set
 #[actix_rt::test]
+#[cfg_attr(target_os = "windows", ignore)]
 async fn generate_and_import_dump_containing_vectors() {
     let temp = tempfile::tempdir().unwrap();
     let mut opt = default_settings(temp.path());
@@ -2087,15 +2088,15 @@ async fn generate_and_import_dump_containing_vectors() {
     index
         .search(json!({"retrieveVectors": true}), |response, code| {
             snapshot!(code, @"200 OK");
-            snapshot!(json_string!(response["hits"], { "[]._vectors.doggo_embedder.embedding" => "[vector]" }), @r###"
+            snapshot!(json_string!(response["hits"], { "[]._vectors.doggo_embedder.embeddings" => "[vector]" }), @r###"
             [
               {
                 "id": 0,
                 "doggo": "kefir",
                 "_vectors": {
                   "doggo_embedder": {
-                    "userDefined": true,
-                    "embedding": "[vector]"
+                    "embeddings": "[vector]",
+                    "userProvided": true
                   }
                 }
               },
@@ -2104,8 +2105,8 @@ async fn generate_and_import_dump_containing_vectors() {
                 "doggo": "echo",
                 "_vectors": {
                   "doggo_embedder": {
-                    "userDefined": true,
-                    "embedding": "[vector]"
+                    "embeddings": "[vector]",
+                    "userProvided": true
                   }
                 }
               },
@@ -2114,8 +2115,8 @@ async fn generate_and_import_dump_containing_vectors() {
                 "doggo": "intel",
                 "_vectors": {
                   "doggo_embedder": {
-                    "userDefined": false,
-                    "embedding": "[vector]"
+                    "embeddings": "[vector]",
+                    "userProvided": false
                   }
                 }
               },
@@ -2124,8 +2125,8 @@ async fn generate_and_import_dump_containing_vectors() {
                 "doggo": "bill",
                 "_vectors": {
                   "doggo_embedder": {
-                    "userDefined": false,
-                    "embedding": "[vector]"
+                    "embeddings": "[vector]",
+                    "userProvided": false
                   }
                 }
               },
@@ -2134,8 +2135,8 @@ async fn generate_and_import_dump_containing_vectors() {
                 "doggo": "max",
                 "_vectors": {
                   "doggo_embedder": {
-                    "userDefined": false,
-                    "embedding": "[vector]"
+                    "embeddings": "[vector]",
+                    "userProvided": false
                   }
                 }
               }
