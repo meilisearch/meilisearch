@@ -50,7 +50,7 @@ where
         Bound::Unbounded => Bound::Unbounded,
     };
     let db = db.remap_types::<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupLazyValueCodec>();
-    let mut f = FacetRangeSearch { rtxn, db, field_id, left, right, universe, docids };
+    let mut f = FacetRangeSearch { rtxn, db, field_id, left, right, docids };
     let highest_level = get_highest_level(rtxn, db, field_id)?;
 
     if let Some(starting_left_bound) =
@@ -59,7 +59,7 @@ where
         let rightmost_bound =
             Bound::Included(get_last_facet_value::<BytesRefCodec, _>(rtxn, db, field_id)?.unwrap()); // will not fail because get_first_facet_value succeeded
         let group_size = usize::MAX;
-        f.run(highest_level, starting_left_bound, rightmost_bound, group_size)?;
+        f.run(highest_level, starting_left_bound, rightmost_bound, group_size, universe)?;
         Ok(())
     } else {
         Ok(())
@@ -73,14 +73,18 @@ struct FacetRangeSearch<'t, 'b, 'bitmap> {
     field_id: u16,
     left: Bound<&'b [u8]>,
     right: Bound<&'b [u8]>,
-    /// The subset of documents ids that are useful for this search.
-    /// Great performance optimizations can be achieved by only fetching values matching this subset.
-    universe: Option<&'bitmap RoaringBitmap>,
     docids: &'bitmap mut RoaringBitmap,
 }
 
 impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
-    fn run_level_0(&mut self, starting_left_bound: &'t [u8], group_size: usize) -> Result<()> {
+    fn run_level_0(
+        &mut self,
+        starting_left_bound: &'t [u8],
+        group_size: usize,
+        // The subset of documents ids that are useful for this search.
+        // Great performance optimizations can be achieved by only fetching values matching this subset.
+        universe: Option<&RoaringBitmap>,
+    ) -> Result<()> {
         let left_key =
             FacetGroupKey { field_id: self.field_id, level: 0, left_bound: starting_left_bound };
         let iter = self.db.range(self.rtxn, &(left_key..))?.take(group_size);
@@ -113,7 +117,7 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
             }
 
             if RangeBounds::<&[u8]>::contains(&(self.left, self.right), &key.left_bound) {
-                *self.docids |= match self.universe {
+                *self.docids |= match universe {
                     Some(universe) => CboRoaringBitmapCodec::intersection_with_serialized(
                         value.bitmap_bytes,
                         universe,
@@ -150,9 +154,10 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
         starting_left_bound: &'t [u8],
         rightmost_bound: Bound<&'t [u8]>,
         group_size: usize,
+        universe: Option<&RoaringBitmap>,
     ) -> Result<()> {
         if level == 0 {
-            return self.run_level_0(starting_left_bound, group_size);
+            return self.run_level_0(starting_left_bound, group_size, universe);
         }
 
         let left_key =
@@ -209,12 +214,16 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
                 };
                 left_condition && right_condition
             };
+            let subset = match universe {
+                Some(universe) => Some(CboRoaringBitmapCodec::intersection_with_serialized(
+                    previous_value.bitmap_bytes,
+                    universe,
+                )?),
+                None => None,
+            };
             if should_take_whole_group {
-                *self.docids |= match self.universe {
-                    Some(universe) => CboRoaringBitmapCodec::intersection_with_serialized(
-                        previous_value.bitmap_bytes,
-                        universe,
-                    )?,
+                *self.docids |= match subset {
+                    Some(subset) => subset,
                     None => CboRoaringBitmapCodec::deserialize_from(previous_value.bitmap_bytes)?,
                 };
                 previous_key = next_key;
@@ -229,7 +238,9 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
             let rightmost_bound = Bound::Excluded(next_key.left_bound);
             let group_size = previous_value.size as usize;
 
-            self.run(level, starting_left_bound, rightmost_bound, group_size)?;
+            if subset.as_ref().map_or(true, |u| !u.is_empty()) {
+                self.run(level, starting_left_bound, rightmost_bound, group_size, subset.as_ref())?;
+            }
 
             previous_key = next_key;
             previous_value = next_value;
@@ -311,12 +322,18 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
             };
             left_condition && right_condition
         };
+
+        let subset = match universe {
+            Some(universe) => Some(CboRoaringBitmapCodec::intersection_with_serialized(
+                previous_value.bitmap_bytes,
+                universe,
+            )?),
+            None => None,
+        };
+
         if should_take_whole_group {
-            *self.docids |= match self.universe {
-                Some(universe) => CboRoaringBitmapCodec::intersection_with_serialized(
-                    previous_value.bitmap_bytes,
-                    universe,
-                )?,
+            *self.docids |= match subset {
+                Some(subset) => subset,
                 None => CboRoaringBitmapCodec::deserialize_from(previous_value.bitmap_bytes)?,
             };
         } else {
@@ -324,7 +341,9 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
             let starting_left_bound = previous_key.left_bound;
             let group_size = previous_value.size as usize;
 
-            self.run(level, starting_left_bound, rightmost_bound, group_size)?;
+            if subset.as_ref().map_or(true, |u| !u.is_empty()) {
+                self.run(level, starting_left_bound, rightmost_bound, group_size, subset.as_ref())?;
+            }
         }
 
         Ok(())
