@@ -4395,7 +4395,7 @@ dependencies = [
 [[package]]
 name = "roaring"
 version = "0.10.4"
-source = "git+https://github.com/RoaringBitmap/roaring-rs?branch=intersection-with-serialized#4466ae0104ed44a8cf41d187d9359483fe190701"
+source = "git+https://github.com/RoaringBitmap/roaring-rs?branch=intersection-with-serialized#88b848b84cf7c8cc8d2ea02dfff77b5a54d822ec"
 dependencies = [
  "bytemuck",
  "byteorder",
