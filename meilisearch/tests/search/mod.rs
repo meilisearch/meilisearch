@@ -301,7 +301,7 @@ async fn negative_special_cases_search() {
     index.add_documents(documents, None).await;
     index.wait_task(0).await;
 
-    index.update_settings(json!({"synonyms": { "escape": ["glass"] }})).await;
+    index.update_settings(json!({"synonyms": { "escape": ["gläss"] }})).await;
     index.wait_task(1).await;
 
     // There is a synonym for escape -> glass but we don't want "escape", only the derivates: glass
