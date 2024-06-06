@@ -63,7 +63,8 @@ impl VectorStateDelta {
             VectorStateDelta::NoChange => Default::default(),
             VectorStateDelta::NowRemoved => (true, Default::default(), Default::default()),
             VectorStateDelta::WasGeneratedNowManual(add) => (true, Default::default(), add),
-            VectorStateDelta::ManualDelta(add) => (false, Default::default(), add),
+            // We always delete the previous vectors
+            VectorStateDelta::ManualDelta(add) => (true, Default::default(), add),
             VectorStateDelta::NowGenerated(prompt) => (true, prompt, Default::default()),
         }
     }
