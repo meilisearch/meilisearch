@@ -1542,6 +1542,9 @@ pub struct DocumentsFetchAggregator {
     // if a filter was used
     per_filter: bool,
 
+    #[serde(rename = "vector.retrieve_vectors")]
+    retrieve_vectors: bool,
+
     // pagination
     #[serde(rename = "pagination.max_limit")]
     max_limit: usize,
@@ -1551,18 +1554,21 @@ pub struct DocumentsFetchAggregator {
 
 impl DocumentsFetchAggregator {
     pub fn from_query(query: &DocumentFetchKind, request: &HttpRequest) -> Self {
-        let (limit, offset) = match query {
-            DocumentFetchKind::PerDocumentId => (1, 0),
-            DocumentFetchKind::Normal { limit, offset, .. } => (*limit, *offset),
+        let (limit, offset, retrieve_vectors) = match query {
+            DocumentFetchKind::PerDocumentId { retrieve_vectors } => (1, 0, *retrieve_vectors),
+            DocumentFetchKind::Normal { limit, offset, retrieve_vectors, .. } => {
+                (*limit, *offset, *retrieve_vectors)
+            }
         };
         Self {
             timestamp: Some(OffsetDateTime::now_utc()),
             user_agents: extract_user_agents(request).into_iter().collect(),
             total_received: 1,
-            per_document_id: matches!(query, DocumentFetchKind::PerDocumentId),
+            per_document_id: matches!(query, DocumentFetchKind::PerDocumentId { .. }),
             per_filter: matches!(query, DocumentFetchKind::Normal { with_filter, .. } if *with_filter),
             max_limit: limit,
             max_offset: offset,
+            retrieve_vectors,
         }
     }
 
@@ -1576,6 +1582,7 @@ impl DocumentsFetchAggregator {
             per_filter,
             max_limit,
             max_offset,
+            retrieve_vectors,
         } = other;
 
         if self.timestamp.is_none() {
@@ -1591,6 +1598,8 @@ impl DocumentsFetchAggregator {
 
         self.max_limit = self.max_limit.max(max_limit);
         self.max_offset = self.max_offset.max(max_offset);
+
+        self.retrieve_vectors |= retrieve_vectors;
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {

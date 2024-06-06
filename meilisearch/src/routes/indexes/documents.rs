@@ -110,7 +110,10 @@ pub async fn get_document(
     debug!(parameters = ?params, "Get document");
     let index_uid = IndexUid::try_from(index_uid)?;
 
-    analytics.get_fetch_documents(&DocumentFetchKind::PerDocumentId, &req);
+    analytics.get_fetch_documents(
+        &DocumentFetchKind::PerDocumentId { retrieve_vectors: params.retrieve_vectors.0 },
+        &req,
+    );
 
     let GetDocument { fields, retrieve_vectors } = params.into_inner();
     let attributes_to_retrieve = fields.merge_star_and_none();
@@ -193,6 +196,7 @@ pub async fn documents_by_query_post(
             with_filter: body.filter.is_some(),
             limit: body.limit,
             offset: body.offset,
+            retrieve_vectors: body.retrieve_vectors,
         },
         &req,
     );
@@ -232,6 +236,7 @@ pub async fn get_documents(
             with_filter: query.filter.is_some(),
             limit: query.limit,
             offset: query.offset,
+            retrieve_vectors: query.retrieve_vectors,
         },
         &req,
     );

@@ -74,8 +74,8 @@ pub enum DocumentDeletionKind {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum DocumentFetchKind {
-    PerDocumentId,
-    Normal { with_filter: bool, limit: usize, offset: usize },
+    PerDocumentId { retrieve_vectors: bool },
+    Normal { with_filter: bool, limit: usize, offset: usize, retrieve_vectors: bool },
 }
 
 pub trait Analytics: Sync + Send {
