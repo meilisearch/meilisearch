@@ -429,6 +429,6 @@ impl Index<'_> {
 pub struct GetAllDocumentsOptions {
     pub limit: Option<usize>,
     pub offset: Option<usize>,
-    pub fields: Option<Vec<&'static str>>,
     pub retrieve_vectors: bool,
+    pub fields: Option<Vec<&'static str>>,
 }

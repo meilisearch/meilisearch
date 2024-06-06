@@ -223,9 +223,7 @@ async fn test_get_all_documents_attributes_to_retrieve() {
     assert_eq!(response["limit"], json!(20));
     assert_eq!(response["total"], json!(77));
 
-    let (response, code) = index
-        .get_all_documents(GetAllDocumentsOptions { fields: Some(vec![]), ..Default::default() })
-        .await;
+    let (response, code) = index.get_all_documents_raw("?fields=").await;
     assert_eq!(code, 200);
     assert_eq!(response["results"].as_array().unwrap().len(), 20);
     for results in response["results"].as_array().unwrap() {
