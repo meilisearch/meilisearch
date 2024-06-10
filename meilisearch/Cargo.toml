@@ -98,7 +98,6 @@ tokio-stream = "0.1.14"
 toml = "0.8.8"
 uuid = { version = "1.6.1", features = ["serde", "v4"] }
 walkdir = "2.4.0"
-yaup = "0.2.1"
 serde_urlencoded = "0.7.1"
 termcolor = "1.4.1"
 url = { version = "2.5.0", features = ["serde"] }
@@ -118,7 +117,7 @@ maplit = "1.0.2"
 meili-snap = { path = "../meili-snap" }
 temp-env = "0.3.6"
 urlencoding = "2.1.3"
-yaup = "0.2.1"
+yaup = "0.3.1"
 
 [build-dependencies]
 anyhow = { version = "1.0.79", optional = true }
