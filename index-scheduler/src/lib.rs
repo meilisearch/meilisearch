@@ -1836,6 +1836,7 @@ mod tests {
             assert_eq!(breakpoint, (Init, false));
             let index_scheduler_handle = IndexSchedulerHandle {
                 _tempdir: tempdir,
+                index_scheduler: index_scheduler.private_clone(),
                 test_breakpoint_rcv: receiver,
                 last_breakpoint: breakpoint.0,
             };
@@ -1924,6 +1925,7 @@ mod tests {
 
     pub struct IndexSchedulerHandle {
         _tempdir: TempDir,
+        index_scheduler: IndexScheduler,
         test_breakpoint_rcv: crossbeam::channel::Receiver<(Breakpoint, bool)>,
         last_breakpoint: Breakpoint,
     }
@@ -1941,9 +1943,13 @@ mod tests {
             {
                 Ok(b) => b,
                 Err(RecvTimeoutError::Timeout) => {
-                    panic!("The scheduler seems to be waiting for a new task while your test is waiting for a breakpoint.")
+                    let state = snapshot_index_scheduler(&self.index_scheduler);
+                    panic!("The scheduler seems to be waiting for a new task while your test is waiting for a breakpoint.\n{state}")
                 }
-                Err(RecvTimeoutError::Disconnected) => panic!("The scheduler crashed."),
+                Err(RecvTimeoutError::Disconnected) => {
+                    let state = snapshot_index_scheduler(&self.index_scheduler);
+                    panic!("The scheduler crashed.\n{state}")
+                }
             };
             // if we've already encountered a breakpoint we're supposed to be stuck on the false
             // and we expect the same variant with the true to come now.
@@ -1962,9 +1968,13 @@ mod tests {
             {
                 Ok(b) => b,
                 Err(RecvTimeoutError::Timeout) => {
-                    panic!("The scheduler seems to be waiting for a new task while your test is waiting for a breakpoint.")
+                    let state = snapshot_index_scheduler(&self.index_scheduler);
+                    panic!("The scheduler seems to be waiting for a new task while your test is waiting for a breakpoint.\n{state}")
                 }
-                Err(RecvTimeoutError::Disconnected) => panic!("The scheduler crashed."),
+                Err(RecvTimeoutError::Disconnected) => {
+                    let state = snapshot_index_scheduler(&self.index_scheduler);
+                    panic!("The scheduler crashed.\n{state}")
+                }
             };
             assert!(!b, "Found the breakpoint handle in a bad state. Check your test suite");
 
@@ -1978,9 +1988,10 @@ mod tests {
         fn advance_till(&mut self, breakpoints: impl IntoIterator<Item = Breakpoint>) {
             for breakpoint in breakpoints {
                 let b = self.advance();
+                let state = snapshot_index_scheduler(&self.index_scheduler);
                 assert_eq!(
                     b, breakpoint,
-                    "Was expecting the breakpoint `{:?}` but instead got `{:?}`.",
+                    "Was expecting the breakpoint `{:?}` but instead got `{:?}`.\n{state}",
                     breakpoint, b
                 );
             }
@@ -2013,8 +2024,8 @@ mod tests {
                     InsideProcessBatch => (),
                     // the batch went successfully, we can stop the loop and go on with the next states.
                     ProcessBatchSucceeded => break,
-                    AbortedIndexation => panic!("The batch was aborted."),
-                    ProcessBatchFailed => panic!("The batch failed."),
+                    AbortedIndexation => panic!("The batch was aborted.\n{}", snapshot_index_scheduler(&self.index_scheduler)),
+                    ProcessBatchFailed => panic!("The batch failed.\n{}", snapshot_index_scheduler(&self.index_scheduler)),
                     breakpoint => panic!("Encountered an impossible breakpoint `{:?}`, this is probably an issue with the test suite.", breakpoint),
                 }
             }
@@ -2033,8 +2044,8 @@ mod tests {
                     InsideProcessBatch => (),
                     // the batch went failed, we can stop the loop and go on with the next states.
                     ProcessBatchFailed => break,
-                    ProcessBatchSucceeded => panic!("The batch succeeded. (and it wasn't supposed to sorry)"),
-                    AbortedIndexation => panic!("The batch was aborted."),
+                    ProcessBatchSucceeded => panic!("The batch succeeded. (and it wasn't supposed to sorry)\n{}", snapshot_index_scheduler(&self.index_scheduler)),
+                    AbortedIndexation => panic!("The batch was aborted.\n{}", snapshot_index_scheduler(&self.index_scheduler)),
                     breakpoint => panic!("Encountered an impossible breakpoint `{:?}`, this is probably an issue with the test suite.", breakpoint),
                 }
             }
