@@ -800,6 +800,8 @@ async fn fetch_document_by_filter() {
 async fn retrieve_vectors() {
     let server = Server::new().await;
     let index = server.index("doggo");
+
+    // GET ALL DOCUMENTS BY QUERY
     let (response, _code) = index.get_all_documents_raw("?retrieveVectors=tamo").await;
     snapshot!(json_string!(response), @r###"
     {
@@ -809,6 +811,38 @@ async fn retrieve_vectors() {
       "link": "https://docs.meilisearch.com/errors#invalid_document_retrieve_vectors"
     }
     "###);
+    let (response, _code) = index.get_all_documents_raw("?retrieveVectors=true").await;
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Passing `retrieveVectors` as a parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "###);
+
+    // FETCH ALL DOCUMENTS BY POST
+    let (response, _code) =
+        index.get_document_by_filter(json!({ "retrieveVectors": "tamo" })).await;
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.retrieveVectors`: expected a boolean, but found a string: `\"tamo\"`",
+      "code": "invalid_document_retrieve_vectors",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_retrieve_vectors"
+    }
+    "###);
+    let (response, _code) = index.get_document_by_filter(json!({ "retrieveVectors": true })).await;
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Passing `retrieveVectors` as a parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "###);
+
+    // GET A SINGLE DOCUMENT
     let (response, _code) = index.get_document(0, Some(json!({"retrieveVectors": "tamo"}))).await;
     snapshot!(json_string!(response), @r###"
     {
@@ -816,6 +850,15 @@ async fn retrieve_vectors() {
       "code": "invalid_document_retrieve_vectors",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_retrieve_vectors"
+    }
+    "###);
+    let (response, _code) = index.get_document(0, Some(json!({"retrieveVectors": true}))).await;
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Passing `retrieveVectors` as a parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
     }
     "###);
 }

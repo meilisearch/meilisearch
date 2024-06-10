@@ -110,13 +110,17 @@ pub async fn get_document(
     debug!(parameters = ?params, "Get document");
     let index_uid = IndexUid::try_from(index_uid)?;
 
-    analytics.get_fetch_documents(
-        &DocumentFetchKind::PerDocumentId { retrieve_vectors: params.retrieve_vectors.0 },
-        &req,
-    );
-
     let GetDocument { fields, retrieve_vectors } = params.into_inner();
     let attributes_to_retrieve = fields.merge_star_and_none();
+
+    let features = index_scheduler.features();
+    if retrieve_vectors.0 {
+        features.check_vector("Passing `retrieveVectors` as a parameter")?;
+    }
+    analytics.get_fetch_documents(
+        &DocumentFetchKind::PerDocumentId { retrieve_vectors: retrieve_vectors.0 },
+        &req,
+    );
 
     let index = index_scheduler.index(&index_uid)?;
     let document =
@@ -191,6 +195,11 @@ pub async fn documents_by_query_post(
     let body = body.into_inner();
     debug!(parameters = ?body, "Get documents POST");
 
+    let features = index_scheduler.features();
+    if body.retrieve_vectors {
+        features.check_vector("Passing `retrieveVectors` as a parameter")?;
+    }
+
     analytics.post_fetch_documents(
         &DocumentFetchKind::Normal {
             with_filter: body.filter.is_some(),
@@ -214,6 +223,11 @@ pub async fn get_documents(
     debug!(parameters = ?params, "Get documents GET");
 
     let BrowseQueryGet { limit, offset, fields, retrieve_vectors, filter } = params.into_inner();
+
+    let features = index_scheduler.features();
+    if retrieve_vectors.0 {
+        features.check_vector("Passing `retrieveVectors` as a parameter")?;
+    }
 
     let filter = match filter {
         Some(f) => match serde_json::from_str(&f) {

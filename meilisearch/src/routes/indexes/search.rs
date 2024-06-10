@@ -290,11 +290,13 @@ pub fn search_kind(
     features: RoFeatures,
 ) -> Result<SearchKind, ResponseError> {
     if query.vector.is_some() {
-        features.check_vector("Passing `vector` as a query parameter")?;
+        features.check_vector("Passing `vector` as a parameter")?;
     }
-
     if query.hybrid.is_some() {
-        features.check_vector("Passing `hybrid` as a query parameter")?;
+        features.check_vector("Passing `hybrid` as a parameter")?;
+    }
+    if query.retrieve_vectors {
+        features.check_vector("Passing `retrieveVectors` as a parameter")?;
     }
 
     // regardless of anything, always do a keyword search when we don't have a vector and the query is whitespace or missing

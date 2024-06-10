@@ -1290,21 +1290,38 @@ async fn experimental_feature_vector_store() {
     index.add_documents(json!(documents), None).await;
     index.wait_task(0).await;
 
-    let (response, code) = index
-        .search_post(json!({
+    index
+        .search(json!({
             "vector": [1.0, 2.0, 3.0],
             "showRankingScore": true
-        }))
+        }), |response, code|{
+            meili_snap::snapshot!(code, @"400 Bad Request");
+            meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+            {
+              "message": "Passing `vector` as a parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
+              "code": "feature_not_enabled",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+            }
+            "###);
+        })
         .await;
-    meili_snap::snapshot!(code, @"400 Bad Request");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "message": "Passing `vector` as a query parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
-      "code": "feature_not_enabled",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
-    }
-    "###);
+    index
+        .search(json!({
+            "retrieveVectors": true,
+            "showRankingScore": true
+        }), |response, code|{
+            meili_snap::snapshot!(code, @"400 Bad Request");
+            meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+            {
+              "message": "Passing `retrieveVectors` as a parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
+              "code": "feature_not_enabled",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+            }
+            "###);
+        })
+        .await;
 
     let (response, code) = server.set_features(json!({"vectorStore": true})).await;
     meili_snap::snapshot!(code, @"200 OK");
