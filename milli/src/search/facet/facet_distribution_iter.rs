@@ -38,7 +38,7 @@ where
         field_id,
     )?;
 
-    if let Some(first_bound) = get_first_facet_value::<BytesRefCodec>(rtxn, db, field_id)? {
+    if let Some(first_bound) = get_first_facet_value::<BytesRefCodec, _>(rtxn, db, field_id)? {
         fd.iterate(candidates, highest_level, first_bound, usize::MAX)?;
         Ok(())
     } else {
@@ -81,7 +81,7 @@ where
         field_id,
     )?;
 
-    if let Some(first_bound) = get_first_facet_value::<BytesRefCodec>(rtxn, db, field_id)? {
+    if let Some(first_bound) = get_first_facet_value::<BytesRefCodec, _>(rtxn, db, field_id)? {
         // We first fill the heap with values from the highest level
         let starting_key =
             FacetGroupKey { field_id, level: highest_level, left_bound: first_bound };
