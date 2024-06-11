@@ -225,6 +225,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                     } else if document_is_kept && old.is_none() {
                         VectorStateDelta::NoChange
                     } else {
+                        remove_from_user_provided.insert(docid);
                         VectorStateDelta::NowRemoved
                     }
                 }
