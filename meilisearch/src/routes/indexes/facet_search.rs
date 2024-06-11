@@ -123,6 +123,7 @@ impl From<FacetSearchQuery> for SearchQuery {
             show_ranking_score_details: false,
             filter,
             sort: None,
+            distinct: None,
             facets: None,
             highlight_pre_tag: DEFAULT_HIGHLIGHT_PRE_TAG(),
             highlight_post_tag: DEFAULT_HIGHLIGHT_POST_TAG(),

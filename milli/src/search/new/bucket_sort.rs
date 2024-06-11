@@ -22,6 +22,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     ctx: &mut SearchContext<'ctx>,
     mut ranking_rules: Vec<BoxRankingRule<'ctx, Q>>,
     query: &Q,
+    distinct: Option<&str>,
     universe: &RoaringBitmap,
     from: usize,
     length: usize,
@@ -34,7 +35,12 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     logger.ranking_rules(&ranking_rules);
     logger.initial_universe(universe);
 
-    let distinct_fid = if let Some(field) = ctx.index.distinct_field(ctx.txn)? {
+    let distinct_field = match distinct {
+        Some(distinct) => Some(distinct),
+        None => ctx.index.distinct_field(ctx.txn)?,
+    };
+
+    let distinct_fid = if let Some(field) = distinct_field {
         ctx.index.fields_ids_map(ctx.txn)?.id(field)
     } else {
         None

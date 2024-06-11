@@ -75,6 +75,9 @@ pub struct SearchQuery {
     pub filter: Option<Value>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
     pub sort: Option<Vec<String>>,
+    // TODO Change the error to InvalidSearchDistinct
+    #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
+    pub distinct: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
@@ -149,6 +152,7 @@ impl fmt::Debug for SearchQuery {
             show_ranking_score_details,
             filter,
             sort,
+            distinct,
             facets,
             highlight_pre_tag,
             highlight_post_tag,
@@ -194,6 +198,9 @@ impl fmt::Debug for SearchQuery {
         }
         if let Some(sort) = sort {
             debug.field("sort", &sort);
+        }
+        if let Some(distinct) = distinct {
+            debug.field("distinct", &distinct);
         }
         if let Some(facets) = facets {
             debug.field("facets", &facets);
@@ -386,6 +393,9 @@ pub struct SearchQueryWithIndex {
     pub filter: Option<Value>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
     pub sort: Option<Vec<String>>,
+    // TODO change error to InvalidSearchDistinct
+    #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
+    pub distinct: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
@@ -421,6 +431,7 @@ impl SearchQueryWithIndex {
             show_matches_position,
             filter,
             sort,
+            distinct,
             facets,
             highlight_pre_tag,
             highlight_post_tag,
@@ -448,6 +459,7 @@ impl SearchQueryWithIndex {
                 show_matches_position,
                 filter,
                 sort,
+                distinct,
                 facets,
                 highlight_pre_tag,
                 highlight_post_tag,
@@ -716,6 +728,10 @@ fn prepare_search<'t>(
         search.ranking_score_threshold(ranking_score_threshold.0);
     }
 
+    if let Some(distinct) = &query.distinct {
+        search.distinct(distinct.clone());
+    }
+
     match search_kind {
         SearchKind::KeywordOnly => {
             if let Some(q) = &query.q {
@@ -866,6 +882,7 @@ pub fn perform_search(
         matching_strategy: _,
         attributes_to_search_on: _,
         filter: _,
+        distinct: _,
     } = query;
 
     let format = AttributesFormat {

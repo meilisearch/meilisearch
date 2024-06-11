@@ -567,6 +567,7 @@ pub fn execute_vector_search(
     scoring_strategy: ScoringStrategy,
     universe: RoaringBitmap,
     sort_criteria: &Option<Vec<AscDesc>>,
+    distinct: &Option<String>,
     geo_strategy: geo_sort::Strategy,
     from: usize,
     length: usize,
@@ -597,6 +598,7 @@ pub fn execute_vector_search(
         ctx,
         ranking_rules,
         &PlaceholderQuery,
+        distinct.as_deref(),
         &universe,
         from,
         length,
@@ -626,6 +628,7 @@ pub fn execute_search(
     exhaustive_number_hits: bool,
     mut universe: RoaringBitmap,
     sort_criteria: &Option<Vec<AscDesc>>,
+    distinct: &Option<String>,
     geo_strategy: geo_sort::Strategy,
     from: usize,
     length: usize,
@@ -716,6 +719,7 @@ pub fn execute_search(
             ctx,
             ranking_rules,
             &graph,
+            distinct.as_deref(),
             &universe,
             from,
             length,
@@ -731,6 +735,7 @@ pub fn execute_search(
             ctx,
             ranking_rules,
             &PlaceholderQuery,
+            distinct.as_deref(),
             &universe,
             from,
             length,
@@ -747,7 +752,14 @@ pub fn execute_search(
     // The candidates is the universe unless the exhaustive number of hits
     // is requested and a distinct attribute is set.
     if exhaustive_number_hits {
-        if let Some(f) = ctx.index.distinct_field(ctx.txn)? {
+        // TODO Should the distinct search parameter replace the distinct setting?
+        //      Or should we return an error if the distinct search param is set at the same time as the setting is set?
+        let distinct_field = match distinct.as_deref() {
+            Some(distinct) => Some(distinct),
+            None => ctx.index.distinct_field(ctx.txn)?,
+        };
+
+        if let Some(f) = distinct_field {
             if let Some(distinct_fid) = fields_ids_map.id(f) {
                 all_candidates = apply_distinct_rule(ctx, distinct_fid, &all_candidates)?.remaining;
             }
