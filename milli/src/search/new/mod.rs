@@ -752,8 +752,6 @@ pub fn execute_search(
     // The candidates is the universe unless the exhaustive number of hits
     // is requested and a distinct attribute is set.
     if exhaustive_number_hits {
-        // TODO Should the distinct search parameter replace the distinct setting?
-        //      Or should we return an error if the distinct search param is set at the same time as the setting is set?
         let distinct_field = match distinct.as_deref() {
             Some(distinct) => Some(distinct),
             None => ctx.index.distinct_field(ctx.txn)?,
