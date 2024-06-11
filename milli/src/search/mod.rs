@@ -11,8 +11,8 @@ use self::new::{execute_vector_search, PartialSearchResult};
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::vector::Embedder;
 use crate::{
-    execute_search, filtered_universe, AscDesc, DefaultSearchLogger, DocumentId, Index, Result,
-    SearchContext, TimeBudget,
+    execute_search, filtered_universe, AscDesc, DefaultSearchLogger, DocumentId, Error, Index,
+    Result, SearchContext, TimeBudget, UserError,
 };
 
 // Building these factories is not free.
@@ -177,9 +177,15 @@ impl<'a> Search<'a> {
         }
 
         if let Some(distinct) = &self.distinct {
-            if !ctx.index.filterable_fields(ctx.txn)?.contains(distinct) {
-                // TODO return a real error message
-                panic!("Distinct search field is not a filterable attribute");
+            let filterable_fields = ctx.index.filterable_fields(ctx.txn)?;
+            if !filterable_fields.contains(distinct) {
+                let (valid_fields, hidden_fields) =
+                    ctx.index.remove_hidden_fields(ctx.txn, filterable_fields)?;
+                return Err(Error::UserError(UserError::InvalidDistinctAttribute {
+                    field: distinct.clone(),
+                    valid_fields,
+                    hidden_fields,
+                }));
             }
         }
 

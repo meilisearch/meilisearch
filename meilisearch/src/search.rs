@@ -75,8 +75,7 @@ pub struct SearchQuery {
     pub filter: Option<Value>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
     pub sort: Option<Vec<String>>,
-    // TODO Change the error to InvalidSearchDistinct
-    #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchDistinct>)]
     pub distinct: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
@@ -393,8 +392,7 @@ pub struct SearchQueryWithIndex {
     pub filter: Option<Value>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
     pub sort: Option<Vec<String>>,
-    // TODO change error to InvalidSearchDistinct
-    #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchDistinct>)]
     pub distinct: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,

@@ -61,8 +61,7 @@ pub struct SearchQueryGet {
     filter: Option<String>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchSort>)]
     sort: Option<String>,
-    // TODO change the InvalidSearchSort to InvalidSearchDistinct error
-    #[deserr(default, error = DeserrQueryParamError<InvalidSearchSort>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchDistinct>)]
     distinct: Option<String>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowMatchesPosition>)]
     show_matches_position: Param<bool>,
