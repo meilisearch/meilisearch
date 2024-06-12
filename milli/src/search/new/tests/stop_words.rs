@@ -13,7 +13,7 @@ use std::collections::BTreeSet;
 use std::iter::FromIterator;
 
 use crate::index::tests::TempIndex;
-use crate::{db_snap, Search, SearchResult, TermsMatchingStrategy};
+use crate::{Search, SearchResult, TermsMatchingStrategy};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -66,9 +66,10 @@ fn create_index() -> TempIndex {
 }
 
 #[test]
+#[cfg(not(feature = "swedish-recomposition"))]
 fn test_stop_words_not_indexed() {
     let index = create_index();
-    db_snap!(index, word_docids, @"6288f9d7db3703b02c57025eb4a69264");
+    crate::db_snap!(index, word_docids, @"6288f9d7db3703b02c57025eb4a69264");
 }
 
 #[test]
