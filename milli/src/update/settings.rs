@@ -23,7 +23,10 @@ use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME;
-use crate::vector::settings::{check_set, check_unset, EmbedderSource, EmbeddingSettings};
+use crate::vector::settings::{
+    check_set, check_unset, EmbedderAction, EmbedderSource, EmbeddingSettings, ReindexAction,
+    WriteBackToDocuments,
+};
 use crate::vector::{Embedder, EmbeddingConfig, EmbeddingConfigs};
 use crate::{FieldId, FieldsIdsMap, Index, Result};
 
@@ -924,111 +927,177 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(changed)
     }
 
-    fn update_embedding_configs(&mut self) -> Result<bool> {
-        let update = match std::mem::take(&mut self.embedder_settings) {
-            Setting::Set(configs) => {
-                let mut changed = false;
+    fn update_embedding_configs(&mut self) -> Result<BTreeMap<String, EmbedderAction>> {
+        match std::mem::take(&mut self.embedder_settings) {
+            Setting::Set(configs) => self.update_embedding_configs_set(configs),
+            Setting::Reset => {
+                // all vectors should be written back to documents
                 let old_configs = self.index.embedding_configs(self.wtxn)?;
-                let old_configs: BTreeMap<String, (Setting<EmbeddingSettings>, RoaringBitmap)> =
-                    old_configs
-                        .into_iter()
-                        .map(
-                            |IndexEmbeddingConfig { name, config, user_provided: user_defined }| {
-                                (name, (Setting::Set(config.into()), user_defined))
-                            },
-                        )
-                        .collect();
-
-                let mut new_configs = BTreeMap::new();
-                for joined in old_configs
+                let remove_all: Result<BTreeMap<String, EmbedderAction>> = old_configs
                     .into_iter()
-                    .merge_join_by(configs.into_iter(), |(left, _), (right, _)| left.cmp(right))
-                {
-                    match joined {
-                        // updated config
-                        EitherOrBoth::Both((name, (mut old, user_provided)), (_, new)) => {
-                            changed |= EmbeddingSettings::apply_and_need_reindex(&mut old, new);
-                            if changed {
-                                tracing::debug!(
-                                    embedder = name,
-                                    user_provided = user_provided.len(),
-                                    "need reindex"
-                                );
-                            } else {
-                                tracing::debug!(embedder = name, "skip reindex");
-                            }
-                            let new = validate_embedding_settings(old, &name)?;
-                            new_configs.insert(name, (new, user_provided));
-                        }
-                        // unchanged config
-                        EitherOrBoth::Left((name, setting)) => {
-                            new_configs.insert(name, setting);
-                        }
-                        // new config
-                        EitherOrBoth::Right((name, mut setting)) => {
-                            // apply the default source in case the source was not set so that it gets validated
-                            crate::vector::settings::EmbeddingSettings::apply_default_source(
-                                &mut setting,
-                            );
-                            crate::vector::settings::EmbeddingSettings::apply_default_openai_model(
-                                &mut setting,
-                            );
-                            let setting = validate_embedding_settings(setting, &name)?;
-                            changed = true;
-                            new_configs.insert(name, (setting, RoaringBitmap::new()));
-                        }
-                    }
-                }
-                let new_configs: Vec<IndexEmbeddingConfig> = new_configs
-                    .into_iter()
-                    .filter_map(|(name, (config, user_provided))| match config {
-                        Setting::Set(config) => Some(IndexEmbeddingConfig {
+                    .map(|IndexEmbeddingConfig { name, config: _, user_provided }| -> Result<_> {
+                        let embedder_id =
+                            self.index.embedder_category_id.get(self.wtxn, &name)?.ok_or(
+                                crate::InternalError::DatabaseMissingEntry {
+                                    db_name: crate::index::db_name::VECTOR_EMBEDDER_CATEGORY_ID,
+                                    key: None,
+                                },
+                            )?;
+                        Ok((
                             name,
-                            config: config.into(),
-                            user_provided,
-                        }),
-                        Setting::Reset => None,
-                        Setting::NotSet => Some(IndexEmbeddingConfig {
-                            name,
-                            config: EmbeddingSettings::default().into(),
-                            user_provided,
-                        }),
+                            EmbedderAction::WriteBackToDocuments(WriteBackToDocuments {
+                                embedder_id,
+                                user_provided,
+                            }),
+                        ))
                     })
                     .collect();
 
+                let remove_all = remove_all?;
+
                 self.index.embedder_category_id.clear(self.wtxn)?;
-                for (index, index_embedding_config) in new_configs.iter().enumerate() {
-                    self.index.embedder_category_id.put_with_flags(
-                        self.wtxn,
-                        heed::PutFlags::APPEND,
-                        &index_embedding_config.name,
-                        &index
-                            .try_into()
-                            .map_err(|_| UserError::TooManyEmbedders(new_configs.len()))?,
-                    )?;
-                }
-
-                if new_configs.is_empty() {
-                    self.index.delete_embedding_configs(self.wtxn)?;
-                } else {
-                    self.index.put_embedding_configs(self.wtxn, new_configs)?;
-                }
-                changed
-            }
-            Setting::Reset => {
                 self.index.delete_embedding_configs(self.wtxn)?;
-                true
+                Ok(remove_all)
             }
-            Setting::NotSet => false,
-        };
-
-        // if any changes force a reindexing
-        // clear the vector database.
-        if update {
-            self.index.vector_arroy.clear(self.wtxn)?;
+            Setting::NotSet => Ok(Default::default()),
         }
+    }
 
-        Ok(update)
+    fn update_embedding_configs_set(
+        &mut self,
+        configs: BTreeMap<String, Setting<EmbeddingSettings>>,
+    ) -> Result<BTreeMap<String, EmbedderAction>> {
+        use crate::vector::settings::SettingsDiff;
+
+        let old_configs = self.index.embedding_configs(self.wtxn)?;
+        let old_configs: BTreeMap<String, (EmbeddingSettings, RoaringBitmap)> = old_configs
+            .into_iter()
+            .map(|IndexEmbeddingConfig { name, config, user_provided }| {
+                (name, (config.into(), user_provided))
+            })
+            .collect();
+        let mut updated_configs = BTreeMap::new();
+        let mut embedder_actions = BTreeMap::new();
+        for joined in old_configs
+            .into_iter()
+            .merge_join_by(configs.into_iter(), |(left, _), (right, _)| left.cmp(right))
+        {
+            match joined {
+                // updated config
+                EitherOrBoth::Both((name, (old, user_provided)), (_, new)) => {
+                    let settings_diff = SettingsDiff::from_settings(old, new);
+                    match settings_diff {
+                        SettingsDiff::Remove => {
+                            tracing::debug!(
+                                embedder = name,
+                                user_provided = user_provided.len(),
+                                "removing embedder"
+                            );
+                            let embedder_id =
+                                self.index.embedder_category_id.get(self.wtxn, &name)?.ok_or(
+                                    crate::InternalError::DatabaseMissingEntry {
+                                        db_name: crate::index::db_name::VECTOR_EMBEDDER_CATEGORY_ID,
+                                        key: None,
+                                    },
+                                )?;
+                            // free id immediately
+                            self.index.embedder_category_id.delete(self.wtxn, &name)?;
+                            embedder_actions.insert(
+                                name,
+                                EmbedderAction::WriteBackToDocuments(WriteBackToDocuments {
+                                    embedder_id,
+                                    user_provided,
+                                }),
+                            );
+                        }
+                        SettingsDiff::Reindex { action, updated_settings } => {
+                            tracing::debug!(
+                                embedder = name,
+                                user_provided = user_provided.len(),
+                                ?action,
+                                "reindex embedder"
+                            );
+                            embedder_actions.insert(name.clone(), EmbedderAction::Reindex(action));
+                            let new =
+                                validate_embedding_settings(Setting::Set(updated_settings), &name)?;
+                            updated_configs.insert(name, (new, user_provided));
+                        }
+                        SettingsDiff::UpdateWithoutReindex { updated_settings } => {
+                            tracing::debug!(
+                                embedder = name,
+                                user_provided = user_provided.len(),
+                                "update without reindex embedder"
+                            );
+                            let new =
+                                validate_embedding_settings(Setting::Set(updated_settings), &name)?;
+                            updated_configs.insert(name, (new, user_provided));
+                        }
+                    }
+                }
+                // unchanged config
+                EitherOrBoth::Left((name, (setting, user_provided))) => {
+                    tracing::debug!(embedder = name, "unchanged embedder");
+                    updated_configs.insert(name, (Setting::Set(setting), user_provided));
+                }
+                // new config
+                EitherOrBoth::Right((name, mut setting)) => {
+                    tracing::debug!(embedder = name, "new embedder");
+                    // apply the default source in case the source was not set so that it gets validated
+                    crate::vector::settings::EmbeddingSettings::apply_default_source(&mut setting);
+                    crate::vector::settings::EmbeddingSettings::apply_default_openai_model(
+                        &mut setting,
+                    );
+                    let setting = validate_embedding_settings(setting, &name)?;
+                    embedder_actions
+                        .insert(name.clone(), EmbedderAction::Reindex(ReindexAction::FullReindex));
+                    updated_configs.insert(name, (setting, RoaringBitmap::new()));
+                }
+            }
+        }
+        let mut free_indices: [bool; u8::MAX as usize] = [true; u8::MAX as usize];
+        for res in self.index.embedder_category_id.iter(self.wtxn)? {
+            let (_name, id) = res?;
+            free_indices[id as usize] = false;
+        }
+        let mut free_indices = free_indices.iter_mut().enumerate();
+        let mut find_free_index =
+            move || free_indices.find(|(_, free)| **free).map(|(index, _)| index as u8);
+        for (name, action) in embedder_actions.iter() {
+            match action {
+                EmbedderAction::Reindex(ReindexAction::RegeneratePrompts) => {
+                    /* cannot be a new embedder, so has to have an id already */
+                }
+                EmbedderAction::Reindex(ReindexAction::FullReindex) => {
+                    if self.index.embedder_category_id.get(self.wtxn, name)?.is_none() {
+                        let id = find_free_index()
+                            .ok_or(UserError::TooManyEmbedders(updated_configs.len()))?;
+                        tracing::debug!(embedder = name, id, "assigning free id to new embedder");
+                        self.index.embedder_category_id.put(self.wtxn, name, &id)?;
+                    }
+                }
+                EmbedderAction::WriteBackToDocuments(_) => { /* already removed */ }
+            }
+        }
+        let updated_configs: Vec<IndexEmbeddingConfig> = updated_configs
+            .into_iter()
+            .filter_map(|(name, (config, user_provided))| match config {
+                Setting::Set(config) => {
+                    Some(IndexEmbeddingConfig { name, config: config.into(), user_provided })
+                }
+                Setting::Reset => None,
+                Setting::NotSet => Some(IndexEmbeddingConfig {
+                    name,
+                    config: EmbeddingSettings::default().into(),
+                    user_provided,
+                }),
+            })
+            .collect();
+        if updated_configs.is_empty() {
+            self.index.delete_embedding_configs(self.wtxn)?;
+        } else {
+            self.index.put_embedding_configs(self.wtxn, updated_configs)?;
+        }
+        Ok(embedder_actions)
     }
 
     fn update_search_cutoff(&mut self) -> Result<bool> {
@@ -1082,13 +1151,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.update_searchable()?;
         self.update_exact_attributes()?;
         self.update_proximity_precision()?;
-        // TODO: very rough approximation of the needs for reindexing where any change will result in
-        // a full reindexing.
-        // What can be done instead:
-        // 1. Only change the distance on a distance change
-        // 2. Only change the name -> embedder mapping on a name change
-        // 3. Keep the old vectors but reattempt indexing on a prompt change: only actually changed prompt will need embedding + storage
-        let embedding_configs_updated = self.update_embedding_configs()?;
+
+        let embedding_config_updates = self.update_embedding_configs()?;
 
         let mut new_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn)?;
         new_inner_settings.recompute_facets(self.wtxn, self.index)?;
@@ -1102,7 +1166,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             old_inner_settings,
             new_inner_settings,
             primary_key_id,
-            embedding_configs_updated,
+            embedding_config_updates,
             settings_update_only,
         );
 
@@ -1119,7 +1183,7 @@ pub struct InnerIndexSettingsDiff {
     pub(crate) new: InnerIndexSettings,
     pub(crate) primary_key_id: Option<FieldId>,
     // TODO: compare directly the embedders.
-    pub(crate) embedding_configs_updated: bool,
+    pub(crate) embedding_config_updates: BTreeMap<String, EmbedderAction>,
     pub(crate) settings_update_only: bool,
     /// The set of only the additional searchable fields.
     /// If any other searchable field has been modified, is set to None.
@@ -1140,7 +1204,7 @@ impl InnerIndexSettingsDiff {
         old_settings: InnerIndexSettings,
         new_settings: InnerIndexSettings,
         primary_key_id: Option<FieldId>,
-        embedding_configs_updated: bool,
+        embedding_config_updates: BTreeMap<String, EmbedderAction>,
         settings_update_only: bool,
     ) -> Self {
         let only_additional_fields = match (
@@ -1177,7 +1241,7 @@ impl InnerIndexSettingsDiff {
             old: old_settings,
             new: new_settings,
             primary_key_id,
-            embedding_configs_updated,
+            embedding_config_updates,
             settings_update_only,
             only_additional_fields,
             cache_reindex_searchable_without_user_defined,
@@ -1244,7 +1308,7 @@ impl InnerIndexSettingsDiff {
     }
 
     pub fn reindex_vectors(&self) -> bool {
-        self.embedding_configs_updated
+        !self.embedding_config_updates.is_empty()
     }
 
     pub fn settings_update_only(&self) -> bool {
