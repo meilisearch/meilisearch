@@ -1,3 +1,4 @@
+mod rest;
 mod settings;
 
 use meili_snap::{json_string, snapshot};
