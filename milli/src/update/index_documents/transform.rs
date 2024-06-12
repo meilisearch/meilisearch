@@ -27,6 +27,7 @@ use crate::update::del_add::{
 use crate::update::index_documents::GrenadParameters;
 use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
 use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
+use crate::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use crate::vector::settings::{EmbedderAction, WriteBackToDocuments};
 use crate::{
     is_faceted_by, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldsIdsMap, Index, Result,
@@ -872,28 +873,35 @@ impl<'a, 'i> Transform<'a, 'i> {
                 'inject_vectors: {
                     let Some(vectors_fid) = old_vectors_fid else { break 'inject_vectors };
 
-                    if id != vectors_fid {
+                    if id < vectors_fid {
                         break 'inject_vectors;
                     }
 
-                    let existing_vectors: std::result::Result<
-                        serde_json::Map<String, serde_json::Value>,
-                        serde_json::Error,
-                    > = serde_json::from_slice(val);
+                    let mut existing_vectors = if id == vectors_fid {
+                        let existing_vectors: std::result::Result<
+                            serde_json::Map<String, serde_json::Value>,
+                            serde_json::Error,
+                        > = serde_json::from_slice(val);
 
-                    let mut existing_vectors = match existing_vectors {
-                        Ok(existing_vectors) => existing_vectors,
-                        Err(error) => {
-                            tracing::error!(%error, "Unexpected `_vectors` field that is not a map. Treating as an empty map");
-                            Default::default()
+                        match existing_vectors {
+                            Ok(existing_vectors) => existing_vectors,
+                            Err(error) => {
+                                tracing::error!(%error, "Unexpected `_vectors` field that is not a map. Treating as an empty map");
+                                Default::default()
+                            }
                         }
+                    } else {
+                        Default::default()
                     };
 
                     existing_vectors.append(&mut injected_vectors);
 
-                    operations.insert(id, DelAddOperation::DeletionAndAddition);
-                    obkv_writer.insert(id, serde_json::to_vec(&existing_vectors).unwrap())?;
-                    continue 'write_fid;
+                    operations.insert(vectors_fid, DelAddOperation::DeletionAndAddition);
+                    obkv_writer
+                        .insert(vectors_fid, serde_json::to_vec(&existing_vectors).unwrap())?;
+                    if id == vectors_fid {
+                        continue 'write_fid;
+                    }
                 }
             }
 
@@ -905,6 +913,15 @@ impl<'a, 'i> Transform<'a, 'i> {
                 obkv_writer.insert(id, val)?;
             }
         }
+        if !injected_vectors.is_empty() {
+            'inject_vectors: {
+                let Some(vectors_fid) = old_vectors_fid else { break 'inject_vectors };
+
+                operations.insert(vectors_fid, DelAddOperation::DeletionAndAddition);
+                obkv_writer.insert(vectors_fid, serde_json::to_vec(&injected_vectors).unwrap())?;
+            }
+        }
+
         let data = obkv_writer.into_inner()?;
         let obkv = KvReader::<FieldId>::new(&data);
 
@@ -1048,7 +1065,14 @@ impl<'a, 'i> Transform<'a, 'i> {
                         if vectors.is_empty() {
                             return None;
                         }
-                        Some(Ok((name.to_string(), serde_json::to_value(vectors).unwrap())))
+                        Some(Ok((
+                            name.to_string(),
+                            serde_json::to_value(ExplicitVectors {
+                                embeddings: VectorOrArrayOfVectors::from_array_of_vectors(vectors),
+                                user_provided: true,
+                            })
+                            .unwrap(),
+                        )))
                     })
                     .collect();
 
