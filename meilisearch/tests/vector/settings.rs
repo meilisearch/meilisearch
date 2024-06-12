@@ -43,7 +43,7 @@ async fn update_embedder() {
     {
       "uid": 1,
       "indexUid": "doggo",
-      "status": "failed",
+      "status": "succeeded",
       "type": "settingsUpdate",
       "canceledBy": null,
       "details": {
@@ -54,12 +54,7 @@ async fn update_embedder() {
           }
         }
       },
-      "error": {
-        "message": "`.embedders.manual`: Field `model` unavailable for source `userProvided` (only available for sources: `huggingFace`, `openAi`, `ollama`). Available fields: `source`, `dimensions`, `distribution`",
-        "code": "invalid_settings_embedders",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
-      },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",

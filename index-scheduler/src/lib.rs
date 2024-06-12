@@ -5579,7 +5579,6 @@ mod tests {
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string(&documents).unwrap(), @r###"[{"id":0,"doggo":"kefir"}]"###);
         let conf = index.embedding_configs(&rtxn).unwrap();
-        // TODO: Here the user provided vectors should NOT contains 1
         snapshot!(format!("{conf:#?}"), @r###"
         [
             IndexEmbeddingConfig {
@@ -5595,7 +5594,7 @@ mod tests {
                         template: "{% for field in fields %} {{ field.name }}: {{ field.value }}\n{% endfor %}",
                     },
                 },
-                user_provided: RoaringBitmap<[0, 1]>,
+                user_provided: RoaringBitmap<[0]>,
             },
         ]
         "###);
@@ -5620,7 +5619,6 @@ mod tests {
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string(&documents).unwrap(), @"[]");
         let conf = index.embedding_configs(&rtxn).unwrap();
-        // TODO: Here the user provided vectors should contains nothing
         snapshot!(format!("{conf:#?}"), @r###"
         [
             IndexEmbeddingConfig {
@@ -5636,7 +5634,7 @@ mod tests {
                         template: "{% for field in fields %} {{ field.name }}: {{ field.value }}\n{% endfor %}",
                     },
                 },
-                user_provided: RoaringBitmap<[0, 1]>,
+                user_provided: RoaringBitmap<[]>,
             },
         ]
         "###);
