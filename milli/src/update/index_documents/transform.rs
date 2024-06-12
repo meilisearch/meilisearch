@@ -1068,8 +1068,10 @@ impl<'a, 'i> Transform<'a, 'i> {
                         Some(Ok((
                             name.to_string(),
                             serde_json::to_value(ExplicitVectors {
-                                embeddings: VectorOrArrayOfVectors::from_array_of_vectors(vectors),
-                                user_provided: true,
+                                embeddings: Some(VectorOrArrayOfVectors::from_array_of_vectors(
+                                    vectors,
+                                )),
+                                regenerate: false,
                             })
                             .unwrap(),
                         )))

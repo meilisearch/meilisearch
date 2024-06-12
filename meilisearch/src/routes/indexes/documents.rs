@@ -625,7 +625,10 @@ fn some_documents<'a, 't: 'a>(
                         .iter()
                         .find(|conf| conf.name == name)
                         .is_some_and(|conf| conf.user_provided.contains(key));
-                    let embeddings = ExplicitVectors { embeddings: vector.into(), user_provided };
+                    let embeddings = ExplicitVectors {
+                        embeddings: Some(vector.into()),
+                        regenerate: !user_provided,
+                    };
                     vectors.insert(
                         name,
                         serde_json::to_value(embeddings).map_err(MeilisearchHttpError::from)?,

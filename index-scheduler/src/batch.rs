@@ -958,10 +958,10 @@ impl IndexScheduler {
                                     .is_some_and(|conf| conf.user_provided.contains(id));
 
                                 let embeddings = ExplicitVectors {
-                                    embeddings: VectorOrArrayOfVectors::from_array_of_vectors(
-                                        embeddings,
+                                    embeddings: Some(
+                                        VectorOrArrayOfVectors::from_array_of_vectors(embeddings),
                                     ),
-                                    user_provided,
+                                    regenerate: !user_provided,
                                 };
                                 vectors.insert(
                                     embedder_name,

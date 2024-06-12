@@ -1072,7 +1072,8 @@ fn make_hits(
                     .iter()
                     .find(|conf| conf.name == name)
                     .is_some_and(|conf| conf.user_provided.contains(id));
-                let embeddings = ExplicitVectors { embeddings: vector.into(), user_provided };
+                let embeddings =
+                    ExplicitVectors { embeddings: Some(vector.into()), regenerate: !user_provided };
                 vectors.insert(name, serde_json::to_value(embeddings)?);
             }
             document.insert("_vectors".into(), vectors.into());

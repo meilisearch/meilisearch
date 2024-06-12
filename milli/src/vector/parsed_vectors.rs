@@ -18,18 +18,20 @@ pub enum Vectors {
 }
 
 impl Vectors {
-    pub fn is_user_provided(&self) -> bool {
+    pub fn must_regenerate(&self) -> bool {
         match self {
-            Vectors::ImplicitlyUserProvided(_) => true,
-            Vectors::Explicit(ExplicitVectors { user_provided, .. }) => *user_provided,
+            Vectors::ImplicitlyUserProvided(_) => false,
+            Vectors::Explicit(ExplicitVectors { regenerate, .. }) => *regenerate,
         }
     }
 
-    pub fn into_array_of_vectors(self) -> Vec<Embedding> {
+    pub fn into_array_of_vectors(self) -> Option<Vec<Embedding>> {
         match self {
-            Vectors::ImplicitlyUserProvided(embeddings)
-            | Vectors::Explicit(ExplicitVectors { embeddings, user_provided: _ }) => {
-                embeddings.into_array_of_vectors().unwrap_or_default()
+            Vectors::ImplicitlyUserProvided(embeddings) => {
+                Some(embeddings.into_array_of_vectors().unwrap_or_default())
+            }
+            Vectors::Explicit(ExplicitVectors { embeddings, regenerate: _ }) => {
+                embeddings.map(|embeddings| embeddings.into_array_of_vectors().unwrap_or_default())
             }
         }
     }
@@ -38,22 +40,22 @@ impl Vectors {
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ExplicitVectors {
-    pub embeddings: VectorOrArrayOfVectors,
-    pub user_provided: bool,
+    pub embeddings: Option<VectorOrArrayOfVectors>,
+    pub regenerate: bool,
 }
 
 pub enum VectorState {
     Inline(Vectors),
-    InDb,
+    Manual,
     Generated,
 }
 
 impl VectorState {
-    pub fn is_user_provided(&self) -> bool {
+    pub fn must_regenerate(&self) -> bool {
         match self {
-            VectorState::Inline(vectors) => vectors.is_user_provided(),
-            VectorState::InDb => true,
-            VectorState::Generated => false,
+            VectorState::Inline(vectors) => vectors.must_regenerate(),
+            VectorState::Manual => false,
+            VectorState::Generated => true,
         }
     }
 }
@@ -96,7 +98,7 @@ impl ParsedVectorsDiff {
         .flatten().map_or(BTreeMap::default(), |del| del.into_iter().map(|(name, vec)| (name, VectorState::Inline(vec))).collect());
         for embedding_config in embedders_configs {
             if embedding_config.user_provided.contains(docid) {
-                old.entry(embedding_config.name.to_string()).or_insert(VectorState::InDb);
+                old.entry(embedding_config.name.to_string()).or_insert(VectorState::Manual);
             }
         }
 
@@ -121,7 +123,7 @@ impl ParsedVectorsDiff {
         let old = self.old.remove(embedder_name).unwrap_or(VectorState::Generated);
         let state_from_old = match old {
             // assume a userProvided is still userProvided
-            VectorState::InDb => VectorState::InDb,
+            VectorState::Manual => VectorState::Manual,
             // generated is still generated
             VectorState::Generated => VectorState::Generated,
             // weird case that shouldn't happen were the previous docs version is inline,

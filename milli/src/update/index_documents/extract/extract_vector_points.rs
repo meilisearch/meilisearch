@@ -260,28 +260,33 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                     // 2. an existing embedder changed so that it must regenerate all generated embeddings.
                     // For a new embedder, there can be `_vectors.embedder` embeddings to add to the DB
                     VectorState::Inline(vectors) => {
-                        if vectors.is_user_provided() {
+                        if !vectors.must_regenerate() {
                             add_to_user_provided.insert(docid);
                         }
-                        let add_vectors = vectors.into_array_of_vectors();
 
-                        if add_vectors.len() > usize::from(u8::MAX) {
-                            return Err(crate::Error::UserError(crate::UserError::TooManyVectors(
-                                document_id().to_string(),
-                                add_vectors.len(),
-                            )));
+                        match vectors.into_array_of_vectors() {
+                            Some(add_vectors) => {
+                                if add_vectors.len() > usize::from(u8::MAX) {
+                                    return Err(crate::Error::UserError(
+                                        crate::UserError::TooManyVectors(
+                                            document_id().to_string(),
+                                            add_vectors.len(),
+                                        ),
+                                    ));
+                                }
+                                VectorStateDelta::NowManual(add_vectors)
+                            }
+                            None => VectorStateDelta::NoChange,
                         }
-
-                        VectorStateDelta::NowManual(add_vectors)
                     }
                     // this happens only when an existing embedder changed. We cannot regenerate userProvided vectors
-                    VectorState::InDb => VectorStateDelta::NoChange,
+                    VectorState::Manual => VectorStateDelta::NoChange,
                     // generated vectors must be regenerated
                     VectorState::Generated => regenerate_prompt(obkv, prompt, new_fields_ids_map)?,
                 },
                 // prompt regeneration is only triggered for existing embedders
                 ExtractionAction::SettingsRegeneratePrompts { old_prompt } => {
-                    if !old.is_user_provided() {
+                    if old.must_regenerate() {
                         regenerate_if_prompt_changed(
                             obkv,
                             (old_prompt, prompt),
@@ -362,31 +367,32 @@ fn extract_vector_document_diff(
     (old_fields_ids_map, new_fields_ids_map): (&FieldsIdsMap, &FieldsIdsMap),
     document_id: impl Fn() -> Value,
 ) -> Result<VectorStateDelta> {
-    match (old.is_user_provided(), new.is_user_provided()) {
+    match (old.must_regenerate(), new.must_regenerate()) {
         (true, true) | (false, false) => {}
         (true, false) => {
-            remove_from_user_provided.insert(docid);
+            add_to_user_provided.insert(docid);
         }
         (false, true) => {
-            add_to_user_provided.insert(docid);
+            remove_from_user_provided.insert(docid);
         }
     }
 
     let delta = match (old, new) {
         // regardless of the previous state, if a document now contains inline _vectors, they must
         // be extracted manually
-        (_old, VectorState::Inline(new)) => {
-            let add_vectors = new.into_array_of_vectors();
+        (_old, VectorState::Inline(new)) => match new.into_array_of_vectors() {
+            Some(add_vectors) => {
+                if add_vectors.len() > usize::from(u8::MAX) {
+                    return Err(crate::Error::UserError(crate::UserError::TooManyVectors(
+                        document_id().to_string(),
+                        add_vectors.len(),
+                    )));
+                }
 
-            if add_vectors.len() > usize::from(u8::MAX) {
-                return Err(crate::Error::UserError(crate::UserError::TooManyVectors(
-                    document_id().to_string(),
-                    add_vectors.len(),
-                )));
+                VectorStateDelta::NowManual(add_vectors)
             }
-
-            VectorStateDelta::NowManual(add_vectors)
-        }
+            None => VectorStateDelta::NoChange,
+        },
         // no `_vectors` anywhere, we check for document removal and otherwise we regenerate the prompt if the
         // document changed
         (VectorState::Generated, VectorState::Generated) => {
@@ -437,7 +443,7 @@ fn extract_vector_document_diff(
                 VectorStateDelta::NowRemoved
             }
         }
-        (_old, VectorState::InDb) => {
+        (_old, VectorState::Manual) => {
             // Do we keep this document?
             let document_is_kept = obkv
                 .iter()
