@@ -5639,4 +5639,171 @@ mod tests {
         ]
         "###);
     }
+
+    #[test]
+    fn delete_embedder_with_user_provided_vectors() {
+        // 1. Add two embedders
+        // 2. Push two documents containing a simple vector
+        // 3. The documents must not contain the vectors after the update as they are in the vectors db
+        // 3. Delete the embedders
+        // 4. The documents contain the vectors again
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        let setting = meilisearch_types::settings::Settings::<Unchecked> {
+            embedders: Setting::Set(maplit::btreemap! {
+                S("manual") => Setting::Set(EmbeddingSettings {
+                    source: Setting::Set(milli::vector::settings::EmbedderSource::UserProvided),
+                    dimensions: Setting::Set(3),
+                    ..Default::default()
+                }),
+                S("my_doggo_embedder") => Setting::Set(EmbeddingSettings {
+                    source: Setting::Set(milli::vector::settings::EmbedderSource::HuggingFace),
+                    model: Setting::Set(S("sentence-transformers/all-MiniLM-L6-v2")),
+                    revision: Setting::Set(S("e4ce9877abf3edfe10b0d82785e83bdcb973e22e")),
+                    document_template: Setting::Set(S("{{doc.doggo}}")),
+                    ..Default::default()
+                }),
+            }),
+            ..Default::default()
+        };
+        index_scheduler
+            .register(
+                KindWithContent::SettingsUpdate {
+                    index_uid: S("doggos"),
+                    new_settings: Box::new(setting),
+                    is_deletion: false,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        handle.advance_one_successful_batch();
+
+        let content = serde_json::json!(
+            [
+                {
+                    "id": 0,
+                    "doggo": "kefir",
+                    "_vectors": {
+                        "manual": vec![0, 0, 0],
+                        "my_doggo_embedder": vec![1; 384],
+                    }
+                },
+                {
+                    "id": 1,
+                    "doggo": "intel",
+                    "_vectors": {
+                        "manual": vec![1, 1, 1],
+                    }
+                },
+            ]
+        );
+
+        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0_u128).unwrap();
+        let documents_count =
+            read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file)
+                .unwrap();
+        snapshot!(documents_count, @"2");
+        file.persist().unwrap();
+
+        index_scheduler
+            .register(
+                KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: None,
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: false,
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        handle.advance_one_successful_batch();
+
+        {
+            let index = index_scheduler.index("doggos").unwrap();
+            let rtxn = index.read_txn().unwrap();
+            let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+            let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+            let documents = index
+                .all_documents(&rtxn)
+                .unwrap()
+                .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+                .collect::<Vec<_>>();
+            snapshot!(serde_json::to_string(&documents).unwrap(), @r###"[{"id":0,"doggo":"kefir"},{"id":1,"doggo":"intel"}]"###);
+        }
+
+        {
+            let setting = meilisearch_types::settings::Settings::<Unchecked> {
+                embedders: Setting::Set(maplit::btreemap! {
+                    S("manual") => Setting::Reset,
+                }),
+                ..Default::default()
+            };
+            index_scheduler
+                .register(
+                    KindWithContent::SettingsUpdate {
+                        index_uid: S("doggos"),
+                        new_settings: Box::new(setting),
+                        is_deletion: false,
+                        allow_index_creation: true,
+                    },
+                    None,
+                    false,
+                )
+                .unwrap();
+            handle.advance_one_successful_batch();
+        }
+
+        {
+            let index = index_scheduler.index("doggos").unwrap();
+            let rtxn = index.read_txn().unwrap();
+            let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+            let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+            let documents = index
+                .all_documents(&rtxn)
+                .unwrap()
+                .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+                .collect::<Vec<_>>();
+            snapshot!(serde_json::to_string(&documents).unwrap(), @r###"[{"id":0,"doggo":"kefir","_vectors":{"manual":{"embeddings":[[0.0,0.0,0.0]],"userProvided":true}}},{"id":1,"doggo":"intel","_vectors":{"manual":{"embeddings":[[1.0,1.0,1.0]],"userProvided":true}}}]"###);
+        }
+
+        {
+            let setting = meilisearch_types::settings::Settings::<Unchecked> {
+                embedders: Setting::Reset,
+                ..Default::default()
+            };
+            index_scheduler
+                .register(
+                    KindWithContent::SettingsUpdate {
+                        index_uid: S("doggos"),
+                        new_settings: Box::new(setting),
+                        is_deletion: false,
+                        allow_index_creation: true,
+                    },
+                    None,
+                    false,
+                )
+                .unwrap();
+            handle.advance_one_successful_batch();
+        }
+
+        {
+            let index = index_scheduler.index("doggos").unwrap();
+            let rtxn = index.read_txn().unwrap();
+            let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+            let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+            let documents = index
+                .all_documents(&rtxn)
+                .unwrap()
+                .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+                .collect::<Vec<_>>();
+
+            /// FIXME: redaction
+            snapshot!(json_string!(serde_json::to_string(&documents).unwrap(), { "[]._vectors.doggo_embedder.embeddings" => "[vector]" }),  @r###""[{\"id\":0,\"doggo\":\"kefir\",\"_vectors\":{\"manual\":{\"embeddings\":[[0.0,0.0,0.0]],\"userProvided\":true},\"my_doggo_embedder\":{\"embeddings\":[[1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0]],\"userProvided\":true}}},{\"id\":1,\"doggo\":\"intel\",\"_vectors\":{\"manual\":{\"embeddings\":[[1.0,1.0,1.0]],\"userProvided\":true}}}]""###);
+        }
+    }
 }
