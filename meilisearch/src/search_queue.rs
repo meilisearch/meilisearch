@@ -40,8 +40,9 @@ pub struct Permit {
 
 impl Drop for Permit {
     fn drop(&mut self) {
+        let sender = self.sender.clone();
         // if the channel is closed then the whole instance is down
-        let _ = futures::executor::block_on(self.sender.send(()));
+        std::mem::drop(tokio::spawn(async move { sender.send(()).await }));
     }
 }
 
