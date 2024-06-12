@@ -2741,11 +2741,8 @@ mod tests {
                         dimensions: Setting::Set(3),
                         document_template: Setting::NotSet,
                         url: Setting::NotSet,
-                        query: Setting::NotSet,
-                        input_field: Setting::NotSet,
-                        path_to_embeddings: Setting::NotSet,
-                        embedding_object: Setting::NotSet,
-                        input_type: Setting::NotSet,
+                        request: Setting::NotSet,
+                        response: Setting::NotSet,
                         distribution: Setting::NotSet,
                     }),
                 );

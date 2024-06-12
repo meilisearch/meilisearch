@@ -8,7 +8,9 @@ expression: task.details
       "source": "rest",
       "apiKey": "MyXXXX...",
       "dimensions": 384,
-      "url": "http://localhost:7777"
+      "url": "http://localhost:7777",
+      "request": "{{text}}",
+      "response": "{{embedding}}"
     },
     "B_small_hf": {
       "source": "huggingFace",

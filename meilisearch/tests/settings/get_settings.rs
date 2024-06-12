@@ -116,6 +116,8 @@ async fn secrets_are_hidden_in_settings() {
                     "url": "https://localhost:7777",
                     "apiKey": "My super secret value you will never guess",
                     "dimensions": 4,
+                    "request": "{{text}}",
+                    "response": "{{embedding}}"
                 }
             }
         }))
@@ -189,17 +191,8 @@ async fn secrets_are_hidden_in_settings() {
           "dimensions": 4,
           "documentTemplate": "{% for field in fields %} {{ field.name }}: {{ field.value }}\n{% endfor %}",
           "url": "https://localhost:7777",
-          "query": null,
-          "inputField": [
-            "input"
-          ],
-          "pathToEmbeddings": [
-            "data"
-          ],
-          "embeddingObject": [
-            "embedding"
-          ],
-          "inputType": "text"
+          "request": "{{text}}",
+          "response": "{{embedding}}"
         }
       },
       "searchCutoffMs": null
@@ -215,7 +208,9 @@ async fn secrets_are_hidden_in_settings() {
           "source": "rest",
           "apiKey": "My suXXXXXX...",
           "dimensions": 4,
-          "url": "https://localhost:7777"
+          "url": "https://localhost:7777",
+          "request": "{{text}}",
+          "response": "{{embedding}}"
         }
       }
     }
