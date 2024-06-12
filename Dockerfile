@@ -17,7 +17,7 @@ RUN     set -eux; \
         if [ "$apkArch" = "aarch64" ]; then \
             export JEMALLOC_SYS_WITH_LG_PAGE=16; \
         fi && \
-        cargo build --release -p meilisearch -p meilitool
+        cargo build --release -p meilisearch -p meilitool --features "swedish-recomposition"
 
 # Run
 FROM    alpine:3.16
