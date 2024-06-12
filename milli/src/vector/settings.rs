@@ -1,4 +1,5 @@
 use deserr::Deserr;
+use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 
 use super::rest::InputType;
@@ -69,6 +70,245 @@ pub fn check_unset<T>(
             allowed_fields_for_source: EmbeddingSettings::allowed_fields_for_source(source),
             allowed_sources_for_field: EmbeddingSettings::allowed_sources_for_field(field),
         })
+    }
+}
+
+/// Indicates what action should take place during a reindexing operation for an embedder
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ReindexAction {
+    /// An indexing operation should take place for this embedder, keeping existing vectors
+    /// and checking whether the document template changed or not
+    RegeneratePrompts,
+    /// An indexing operation should take place for all documents for this embedder, removing existing vectors
+    /// (except userProvided ones)
+    FullReindex,
+}
+
+pub enum SettingsDiff {
+    Remove,
+    Reindex { action: ReindexAction, updated_settings: EmbeddingSettings },
+    UpdateWithoutReindex { updated_settings: EmbeddingSettings },
+}
+
+pub enum EmbedderAction {
+    WriteBackToDocuments(WriteBackToDocuments),
+    Reindex(ReindexAction),
+}
+
+pub struct WriteBackToDocuments {
+    pub embedder_id: u8,
+    pub user_provided: RoaringBitmap,
+}
+
+impl SettingsDiff {
+    pub fn should_reindex(&self) -> bool {
+        match self {
+            SettingsDiff::Remove { .. } | SettingsDiff::Reindex { .. } => true,
+            SettingsDiff::UpdateWithoutReindex { .. } => false,
+        }
+    }
+
+    pub fn from_settings(old: EmbeddingSettings, new: Setting<EmbeddingSettings>) -> Self {
+        match new {
+            Setting::Set(new) => {
+                let EmbeddingSettings {
+                    mut source,
+                    mut model,
+                    mut revision,
+                    mut api_key,
+                    mut dimensions,
+                    mut document_template,
+                    mut url,
+                    mut query,
+                    mut input_field,
+                    mut path_to_embeddings,
+                    mut embedding_object,
+                    mut input_type,
+                    mut distribution,
+                } = old;
+
+                let EmbeddingSettings {
+                    source: new_source,
+                    model: new_model,
+                    revision: new_revision,
+                    api_key: new_api_key,
+                    dimensions: new_dimensions,
+                    document_template: new_document_template,
+                    url: new_url,
+                    query: new_query,
+                    input_field: new_input_field,
+                    path_to_embeddings: new_path_to_embeddings,
+                    embedding_object: new_embedding_object,
+                    input_type: new_input_type,
+                    distribution: new_distribution,
+                } = new;
+
+                let mut reindex_action = None;
+
+                // **Warning**: do not use short-circuiting || here, we want all these operations applied
+                if source.apply(new_source) {
+                    ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
+                    // when the source changes, we need to reapply the default settings for the new source
+                    apply_default_for_source(
+                        &source,
+                        &mut model,
+                        &mut revision,
+                        &mut dimensions,
+                        &mut url,
+                        &mut query,
+                        &mut input_field,
+                        &mut path_to_embeddings,
+                        &mut embedding_object,
+                        &mut input_type,
+                        &mut document_template,
+                    )
+                }
+                if model.apply(new_model) {
+                    ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
+                }
+                if revision.apply(new_revision) {
+                    ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
+                }
+                if dimensions.apply(new_dimensions) {
+                    ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
+                }
+                if url.apply(new_url) {
+                    ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
+                }
+                if query.apply(new_query) {
+                    ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
+                }
+                if input_field.apply(new_input_field) {
+                    ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
+                }
+                if path_to_embeddings.apply(new_path_to_embeddings) {
+                    ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
+                }
+                if embedding_object.apply(new_embedding_object) {
+                    ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
+                }
+                if input_type.apply(new_input_type) {
+                    ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
+                }
+                if document_template.apply(new_document_template) {
+                    ReindexAction::push_action(
+                        &mut reindex_action,
+                        ReindexAction::RegeneratePrompts,
+                    );
+                }
+
+                distribution.apply(new_distribution);
+                api_key.apply(new_api_key);
+
+                let updated_settings = EmbeddingSettings {
+                    source,
+                    model,
+                    revision,
+                    api_key,
+                    dimensions,
+                    document_template,
+                    url,
+                    query,
+                    input_field,
+                    path_to_embeddings,
+                    embedding_object,
+                    input_type,
+                    distribution,
+                };
+
+                match reindex_action {
+                    Some(action) => Self::Reindex { action, updated_settings },
+                    None => Self::UpdateWithoutReindex { updated_settings },
+                }
+            }
+            Setting::Reset => Self::Remove,
+            Setting::NotSet => Self::UpdateWithoutReindex { updated_settings: old },
+        }
+    }
+}
+
+impl ReindexAction {
+    fn push_action(this: &mut Option<Self>, other: Self) {
+        *this = match (*this, other) {
+            (_, ReindexAction::FullReindex) => Some(ReindexAction::FullReindex),
+            (Some(ReindexAction::FullReindex), _) => Some(ReindexAction::FullReindex),
+            (_, ReindexAction::RegeneratePrompts) => Some(ReindexAction::RegeneratePrompts),
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)] // private function
+fn apply_default_for_source(
+    source: &Setting<EmbedderSource>,
+    model: &mut Setting<String>,
+    revision: &mut Setting<String>,
+    dimensions: &mut Setting<usize>,
+    url: &mut Setting<String>,
+    query: &mut Setting<serde_json::Value>,
+    input_field: &mut Setting<Vec<String>>,
+    path_to_embeddings: &mut Setting<Vec<String>>,
+    embedding_object: &mut Setting<Vec<String>>,
+    input_type: &mut Setting<InputType>,
+    document_template: &mut Setting<String>,
+) {
+    match source {
+        Setting::Set(EmbedderSource::HuggingFace) => {
+            *model = Setting::Reset;
+            *revision = Setting::Reset;
+            *dimensions = Setting::NotSet;
+            *url = Setting::NotSet;
+            *query = Setting::NotSet;
+            *input_field = Setting::NotSet;
+            *path_to_embeddings = Setting::NotSet;
+            *embedding_object = Setting::NotSet;
+            *input_type = Setting::NotSet;
+        }
+        Setting::Set(EmbedderSource::Ollama) => {
+            *model = Setting::Reset;
+            *revision = Setting::NotSet;
+            *dimensions = Setting::Reset;
+            *url = Setting::NotSet;
+            *query = Setting::NotSet;
+            *input_field = Setting::NotSet;
+            *path_to_embeddings = Setting::NotSet;
+            *embedding_object = Setting::NotSet;
+            *input_type = Setting::NotSet;
+        }
+        Setting::Set(EmbedderSource::OpenAi) | Setting::Reset => {
+            *model = Setting::Reset;
+            *revision = Setting::NotSet;
+            *dimensions = Setting::NotSet;
+            *url = Setting::NotSet;
+            *query = Setting::NotSet;
+            *input_field = Setting::NotSet;
+            *path_to_embeddings = Setting::NotSet;
+            *embedding_object = Setting::NotSet;
+            *input_type = Setting::NotSet;
+        }
+        Setting::Set(EmbedderSource::Rest) => {
+            *model = Setting::NotSet;
+            *revision = Setting::NotSet;
+            *dimensions = Setting::Reset;
+            *url = Setting::Reset;
+            *query = Setting::Reset;
+            *input_field = Setting::Reset;
+            *path_to_embeddings = Setting::Reset;
+            *embedding_object = Setting::Reset;
+            *input_type = Setting::Reset;
+        }
+        Setting::Set(EmbedderSource::UserProvided) => {
+            *model = Setting::NotSet;
+            *revision = Setting::NotSet;
+            *dimensions = Setting::Reset;
+            *url = Setting::NotSet;
+            *query = Setting::NotSet;
+            *input_field = Setting::NotSet;
+            *path_to_embeddings = Setting::NotSet;
+            *embedding_object = Setting::NotSet;
+            *input_type = Setting::NotSet;
+            *document_template = Setting::NotSet;
+        }
+        Setting::NotSet => {}
     }
 }
 
@@ -208,66 +448,6 @@ impl EmbeddingSettings {
         }) = setting
         {
             *model = Setting::Set(openai::EmbeddingModel::default().name().to_owned())
-        }
-    }
-
-    pub(crate) fn apply_and_need_reindex(
-        old: &mut Setting<EmbeddingSettings>,
-        new: Setting<EmbeddingSettings>,
-    ) -> bool {
-        match (old, new) {
-            (
-                Setting::Set(EmbeddingSettings {
-                    source: old_source,
-                    model: old_model,
-                    revision: old_revision,
-                    api_key: old_api_key,
-                    dimensions: old_dimensions,
-                    document_template: old_document_template,
-                    url: old_url,
-                    query: old_query,
-                    input_field: old_input_field,
-                    path_to_embeddings: old_path_to_embeddings,
-                    embedding_object: old_embedding_object,
-                    input_type: old_input_type,
-                    distribution: old_distribution,
-                }),
-                Setting::Set(EmbeddingSettings {
-                    source: new_source,
-                    model: new_model,
-                    revision: new_revision,
-                    api_key: new_api_key,
-                    dimensions: new_dimensions,
-                    document_template: new_document_template,
-                    url: new_url,
-                    query: new_query,
-                    input_field: new_input_field,
-                    path_to_embeddings: new_path_to_embeddings,
-                    embedding_object: new_embedding_object,
-                    input_type: new_input_type,
-                    distribution: new_distribution,
-                }),
-            ) => {
-                let mut needs_reindex = false;
-
-                needs_reindex |= old_source.apply(new_source);
-                needs_reindex |= old_model.apply(new_model);
-                needs_reindex |= old_revision.apply(new_revision);
-                needs_reindex |= old_dimensions.apply(new_dimensions);
-                needs_reindex |= old_document_template.apply(new_document_template);
-                needs_reindex |= old_url.apply(new_url);
-                needs_reindex |= old_query.apply(new_query);
-                needs_reindex |= old_input_field.apply(new_input_field);
-                needs_reindex |= old_path_to_embeddings.apply(new_path_to_embeddings);
-                needs_reindex |= old_embedding_object.apply(new_embedding_object);
-                needs_reindex |= old_input_type.apply(new_input_type);
-
-                old_distribution.apply(new_distribution);
-                old_api_key.apply(new_api_key);
-                needs_reindex
-            }
-            (Setting::Reset, Setting::Reset) | (_, Setting::NotSet) => false,
-            _ => true,
         }
     }
 }
