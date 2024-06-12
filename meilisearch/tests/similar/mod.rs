@@ -95,7 +95,7 @@ async fn basic() {
                         0.800000011920929
                       ]
                     ],
-                    "userProvided": true
+                    "regenerate": false
                   }
                 }
               },
@@ -112,7 +112,7 @@ async fn basic() {
                         -0.20000000298023224
                       ]
                     ],
-                    "userProvided": true
+                    "regenerate": false
                   }
                 }
               },
@@ -129,7 +129,7 @@ async fn basic() {
                         -0.4000000059604645
                       ]
                     ],
-                    "userProvided": true
+                    "regenerate": false
                   }
                 }
               },
@@ -146,7 +146,7 @@ async fn basic() {
                         -0.5
                       ]
                     ],
-                    "userProvided": true
+                    "regenerate": false
                   }
                 }
               }
@@ -173,7 +173,7 @@ async fn basic() {
                         -0.4000000059604645
                       ]
                     ],
-                    "userProvided": true
+                    "regenerate": false
                   }
                 }
               },
@@ -190,7 +190,7 @@ async fn basic() {
                         -0.5
                       ]
                     ],
-                    "userProvided": true
+                    "regenerate": false
                   }
                 }
               },
@@ -207,7 +207,7 @@ async fn basic() {
                         0.800000011920929
                       ]
                     ],
-                    "userProvided": true
+                    "regenerate": false
                   }
                 }
               },
@@ -224,7 +224,7 @@ async fn basic() {
                         0.8500000238418579
                       ]
                     ],
-                    "userProvided": true
+                    "regenerate": false
                   }
                 }
               }
@@ -287,7 +287,7 @@ async fn ranking_score_threshold() {
                             0.800000011920929
                           ]
                         ],
-                        "userProvided": true
+                        "regenerate": false
                       }
                     },
                     "_rankingScore": 0.890957772731781
@@ -305,7 +305,7 @@ async fn ranking_score_threshold() {
                             -0.20000000298023224
                           ]
                         ],
-                        "userProvided": true
+                        "regenerate": false
                       }
                     },
                     "_rankingScore": 0.39060014486312866
@@ -323,7 +323,7 @@ async fn ranking_score_threshold() {
                             -0.4000000059604645
                           ]
                         ],
-                        "userProvided": true
+                        "regenerate": false
                       }
                     },
                     "_rankingScore": 0.2819308042526245
@@ -341,7 +341,7 @@ async fn ranking_score_threshold() {
                             -0.5
                           ]
                         ],
-                        "userProvided": true
+                        "regenerate": false
                       }
                     },
                     "_rankingScore": 0.1662663221359253
@@ -373,7 +373,7 @@ async fn ranking_score_threshold() {
                             0.800000011920929
                           ]
                         ],
-                        "userProvided": true
+                        "regenerate": false
                       }
                     },
                     "_rankingScore": 0.890957772731781
@@ -391,7 +391,7 @@ async fn ranking_score_threshold() {
                             -0.20000000298023224
                           ]
                         ],
-                        "userProvided": true
+                        "regenerate": false
                       }
                     },
                     "_rankingScore": 0.39060014486312866
@@ -409,7 +409,7 @@ async fn ranking_score_threshold() {
                             -0.4000000059604645
                           ]
                         ],
-                        "userProvided": true
+                        "regenerate": false
                       }
                     },
                     "_rankingScore": 0.2819308042526245
@@ -441,7 +441,7 @@ async fn ranking_score_threshold() {
                             0.800000011920929
                           ]
                         ],
-                        "userProvided": true
+                        "regenerate": false
                       }
                     },
                     "_rankingScore": 0.890957772731781
@@ -459,7 +459,7 @@ async fn ranking_score_threshold() {
                             -0.20000000298023224
                           ]
                         ],
-                        "userProvided": true
+                        "regenerate": false
                       }
                     },
                     "_rankingScore": 0.39060014486312866
@@ -491,7 +491,7 @@ async fn ranking_score_threshold() {
                             0.800000011920929
                           ]
                         ],
-                        "userProvided": true
+                        "regenerate": false
                       }
                     },
                     "_rankingScore": 0.890957772731781
@@ -565,7 +565,7 @@ async fn filter() {
                             -0.20000000298023224
                           ]
                         ],
-                        "userProvided": true
+                        "regenerate": false
                       }
                     }
                   },
@@ -582,7 +582,7 @@ async fn filter() {
                             -0.4000000059604645
                           ]
                         ],
-                        "userProvided": true
+                        "regenerate": false
                       }
                     }
                   },
@@ -599,7 +599,7 @@ async fn filter() {
                             -0.5
                           ]
                         ],
-                        "userProvided": true
+                        "regenerate": false
                       }
                     }
                   }
@@ -629,7 +629,7 @@ async fn filter() {
                             0.8500000238418579
                           ]
                         ],
-                        "userProvided": true
+                        "regenerate": false
                       }
                     }
                   }
@@ -690,7 +690,7 @@ async fn limit_and_offset() {
                         0.800000011920929
                       ]
                     ],
-                    "userProvided": true
+                    "regenerate": false
                   }
                 }
               }
@@ -719,7 +719,7 @@ async fn limit_and_offset() {
                             -0.20000000298023224
                           ]
                         ],
-                        "userProvided": true
+                        "regenerate": false
                       }
                     }
                   }

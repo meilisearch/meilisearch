@@ -79,23 +79,93 @@ async fn reset_embedder_documents() {
       "results": [
         {
           "id": 0,
-          "name": "kefir"
+          "name": "kefir",
+          "_vectors": {
+            "manual": {
+              "embeddings": [
+                [
+                  0.0,
+                  0.0,
+                  0.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
         },
         {
           "id": 1,
-          "name": "echo"
+          "name": "echo",
+          "_vectors": {
+            "manual": {
+              "embeddings": [
+                [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
         },
         {
           "id": 2,
-          "name": "billou"
+          "name": "billou",
+          "_vectors": {
+            "manual": {
+              "embeddings": [
+                [
+                  2.0,
+                  2.0,
+                  2.0
+                ],
+                [
+                  2.0,
+                  2.0,
+                  3.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
         },
         {
           "id": 3,
-          "name": "intel"
+          "name": "intel",
+          "_vectors": {
+            "manual": {
+              "embeddings": [
+                [
+                  3.0,
+                  3.0,
+                  3.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
         },
         {
           "id": 4,
-          "name": "max"
+          "name": "max",
+          "_vectors": {
+            "manual": {
+              "embeddings": [
+                [
+                  4.0,
+                  4.0,
+                  4.0
+                ],
+                [
+                  4.0,
+                  4.0,
+                  5.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
         }
       ],
       "offset": 0,

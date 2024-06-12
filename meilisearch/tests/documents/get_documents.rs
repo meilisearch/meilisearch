@@ -637,7 +637,7 @@ async fn get_document_with_vectors() {
                   0.0
                 ]
               ],
-              "userProvided": true
+              "regenerate": false
             }
           }
         },
@@ -666,7 +666,7 @@ async fn get_document_with_vectors() {
               0.0
             ]
           ],
-          "userProvided": true
+          "regenerate": false
         }
       }
     }
@@ -694,7 +694,7 @@ async fn get_document_with_vectors() {
                   0.0
                 ]
               ],
-              "userProvided": true
+              "regenerate": false
             }
           }
         },
@@ -722,7 +722,7 @@ async fn get_document_with_vectors() {
               0.0
             ]
           ],
-          "userProvided": true
+          "regenerate": false
         }
       }
     }

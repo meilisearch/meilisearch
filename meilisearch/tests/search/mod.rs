@@ -1374,7 +1374,7 @@ async fn experimental_feature_vector_store() {
                 3.0
               ]
             ],
-            "userProvided": true
+            "regenerate": false
           }
         },
         "_rankingScore": 1.0
@@ -1391,7 +1391,7 @@ async fn experimental_feature_vector_store() {
                 54.0
               ]
             ],
-            "userProvided": true
+            "regenerate": false
           }
         },
         "_rankingScore": 0.9129111766815186
@@ -1408,7 +1408,7 @@ async fn experimental_feature_vector_store() {
                 90.0
               ]
             ],
-            "userProvided": true
+            "regenerate": false
           }
         },
         "_rankingScore": 0.8106412887573242
@@ -1425,7 +1425,7 @@ async fn experimental_feature_vector_store() {
                 32.0
               ]
             ],
-            "userProvided": true
+            "regenerate": false
           }
         },
         "_rankingScore": 0.7412010431289673
@@ -1442,7 +1442,7 @@ async fn experimental_feature_vector_store() {
                 32.0
               ]
             ],
-            "userProvided": true
+            "regenerate": false
           }
         },
         "_rankingScore": 0.6972063183784485

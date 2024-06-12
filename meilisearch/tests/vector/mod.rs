@@ -59,7 +59,7 @@ async fn add_remove_user_provided() {
                   0.0
                 ]
               ],
-              "userProvided": true
+              "regenerate": false
             }
           }
         },
@@ -75,7 +75,7 @@ async fn add_remove_user_provided() {
                   1.0
                 ]
               ],
-              "userProvided": true
+              "regenerate": false
             }
           }
         }
@@ -112,7 +112,7 @@ async fn add_remove_user_provided() {
                   10.0
                 ]
               ],
-              "userProvided": true
+              "regenerate": false
             }
           }
         },
@@ -180,8 +180,8 @@ async fn generate_default_user_provided_documents(server: &Server) -> Index {
       {"id": 0, "name": "kefir", "_vectors": { "manual": [0, 0, 0] }},
       {"id": 1, "name": "echo", "_vectors": { "manual": [1, 1, 1] }},
       {"id": 2, "name": "billou", "_vectors": { "manual": [[2, 2, 2], [2, 2, 3]] }},
-      {"id": 3, "name": "intel", "_vectors": { "manual": { "userProvided": true, "embeddings": [3, 3, 3] }}},
-      {"id": 4, "name": "max", "_vectors": { "manual": { "userProvided": true, "embeddings": [[4, 4, 4], [4, 4, 5]] }}},
+      {"id": 3, "name": "intel", "_vectors": { "manual": { "regenerate": false, "embeddings": [3, 3, 3] }}},
+      {"id": 4, "name": "max", "_vectors": { "manual": { "regenerate": false, "embeddings": [[4, 4, 4], [4, 4, 5]] }}},
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");

@@ -1977,9 +1977,9 @@ async fn generate_and_import_dump_containing_vectors() {
         .add_documents(
             json!([
                 {"id": 0, "doggo": "kefir", "_vectors": { "doggo_embedder": vec![0; 384] }},
-                {"id": 1, "doggo": "echo", "_vectors": { "doggo_embedder": { "userProvided": true, "embeddings": vec![1; 384] }}},
-                {"id": 2, "doggo": "intel", "_vectors": { "doggo_embedder": { "userProvided": false, "embeddings": vec![2; 384] }}},
-                {"id": 3, "doggo": "bill", "_vectors": { "doggo_embedder": { "userProvided": false }}},
+                {"id": 1, "doggo": "echo", "_vectors": { "doggo_embedder": { "regenerate": false, "embeddings": vec![1; 384] }}},
+                {"id": 2, "doggo": "intel", "_vectors": { "doggo_embedder": { "regenerate": true, "embeddings": vec![2; 384] }}},
+                {"id": 3, "doggo": "bill", "_vectors": { "doggo_embedder": { "regenerate": true }}},
                 {"id": 4, "doggo": "max" },
             ]),
             None,
@@ -2096,7 +2096,7 @@ async fn generate_and_import_dump_containing_vectors() {
                 "_vectors": {
                   "doggo_embedder": {
                     "embeddings": "[vector]",
-                    "userProvided": true
+                    "regenerate": false
                   }
                 }
               },
@@ -2106,7 +2106,7 @@ async fn generate_and_import_dump_containing_vectors() {
                 "_vectors": {
                   "doggo_embedder": {
                     "embeddings": "[vector]",
-                    "userProvided": true
+                    "regenerate": false
                   }
                 }
               },
@@ -2116,7 +2116,7 @@ async fn generate_and_import_dump_containing_vectors() {
                 "_vectors": {
                   "doggo_embedder": {
                     "embeddings": "[vector]",
-                    "userProvided": false
+                    "regenerate": true
                   }
                 }
               },
@@ -2126,7 +2126,7 @@ async fn generate_and_import_dump_containing_vectors() {
                 "_vectors": {
                   "doggo_embedder": {
                     "embeddings": "[vector]",
-                    "userProvided": false
+                    "regenerate": true
                   }
                 }
               },
@@ -2136,7 +2136,7 @@ async fn generate_and_import_dump_containing_vectors() {
                 "_vectors": {
                   "doggo_embedder": {
                     "embeddings": "[vector]",
-                    "userProvided": false
+                    "regenerate": true
                   }
                 }
               }
