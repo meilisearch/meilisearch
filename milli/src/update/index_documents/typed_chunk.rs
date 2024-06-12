@@ -91,7 +91,7 @@ pub(crate) enum TypedChunk {
         expected_dimension: usize,
         manual_vectors: grenad::Reader<BufReader<File>>,
         embedder_name: String,
-        user_provided: RoaringBitmap,
+        add_to_user_provided: RoaringBitmap,
         remove_from_user_provided: RoaringBitmap,
     },
     ScriptLanguageDocids(HashMap<(Script, Language), (RoaringBitmap, RoaringBitmap)>),
@@ -625,7 +625,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let mut remove_vectors_builder = MergerBuilder::new(keep_first as MergeFn);
             let mut manual_vectors_builder = MergerBuilder::new(keep_first as MergeFn);
             let mut embeddings_builder = MergerBuilder::new(keep_first as MergeFn);
-            let mut user_provided = RoaringBitmap::new();
+            let mut add_to_user_provided = RoaringBitmap::new();
             let mut remove_from_user_provided = RoaringBitmap::new();
             let mut params = None;
             for typed_chunk in typed_chunks {
@@ -635,7 +635,7 @@ pub(crate) fn write_typed_chunk_into_index(
                     embeddings,
                     expected_dimension,
                     embedder_name,
-                    user_provided: ud,
+                    add_to_user_provided: aud,
                     remove_from_user_provided: rud,
                 } = typed_chunk
                 else {
@@ -649,7 +649,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 if let Some(embeddings) = embeddings {
                     embeddings_builder.push(embeddings.into_cursor()?);
                 }
-                user_provided |= ud;
+                add_to_user_provided |= aud;
                 remove_from_user_provided |= rud;
             }
 
@@ -662,7 +662,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 .find(|IndexEmbeddingConfig { name, .. }| name == &embedder_name)
                 .unwrap();
             index_embedder_config.user_provided -= remove_from_user_provided;
-            index_embedder_config.user_provided |= user_provided;
+            index_embedder_config.user_provided |= add_to_user_provided;
 
             index.put_embedding_configs(wtxn, embedding_configs)?;
 

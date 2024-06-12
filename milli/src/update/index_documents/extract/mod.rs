@@ -248,7 +248,7 @@ fn send_original_documents_data(
                         prompts,
                         embedder_name,
                         embedder,
-                        user_provided,
+                        add_to_user_provided,
                         remove_from_user_provided,
                     } in extracted_vectors
                     {
@@ -274,7 +274,7 @@ fn send_original_documents_data(
                                 expected_dimension: embedder.dimensions(),
                                 manual_vectors,
                                 embedder_name,
-                                user_provided,
+                                add_to_user_provided,
                                 remove_from_user_provided,
                             }));
                         }

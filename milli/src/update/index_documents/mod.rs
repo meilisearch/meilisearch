@@ -503,7 +503,7 @@ where
                                 embeddings,
                                 manual_vectors,
                                 embedder_name,
-                                user_provided,
+                                add_to_user_provided,
                                 remove_from_user_provided,
                             } => {
                                 dimension.insert(embedder_name.clone(), expected_dimension);
@@ -513,7 +513,7 @@ where
                                     expected_dimension,
                                     manual_vectors,
                                     embedder_name,
-                                    user_provided,
+                                    add_to_user_provided,
                                     remove_from_user_provided,
                                 }
                             }
