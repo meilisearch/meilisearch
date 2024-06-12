@@ -42,9 +42,31 @@ pub struct ExplicitVectors {
     pub user_provided: bool,
 }
 
+pub enum VectorState {
+    Inline(Vectors),
+    InDb,
+    Generated,
+}
+
+impl VectorState {
+    pub fn is_user_provided(&self) -> bool {
+        match self {
+            VectorState::Inline(vectors) => vectors.is_user_provided(),
+            VectorState::InDb => true,
+            VectorState::Generated => false,
+        }
+    }
+}
+
+pub enum VectorsState {
+    NoVectorsFid,
+    NoVectorsFieldInDocument,
+    Vectors(BTreeMap<String, Vectors>),
+}
+
 pub struct ParsedVectorsDiff {
-    pub old: BTreeMap<String, Option<Vectors>>,
-    pub new: Option<BTreeMap<String, Vectors>>,
+    old: BTreeMap<String, VectorState>,
+    new: VectorsState,
 }
 
 impl ParsedVectorsDiff {
@@ -71,26 +93,54 @@ impl ParsedVectorsDiff {
                 return Err(error);
             }
         }
-        .flatten().map_or(BTreeMap::default(), |del| del.into_iter().map(|(name, vec)| (name, Some(vec))).collect());
+        .flatten().map_or(BTreeMap::default(), |del| del.into_iter().map(|(name, vec)| (name, VectorState::Inline(vec))).collect());
         for embedding_config in embedders_configs {
             if embedding_config.user_provided.contains(docid) {
-                old.entry(embedding_config.name.to_string()).or_insert(None);
+                old.entry(embedding_config.name.to_string()).or_insert(VectorState::InDb);
             }
         }
 
-        let new = new_vectors_fid
-            .and_then(|vectors_fid| documents_diff.get(vectors_fid))
-            .map(KvReaderDelAdd::new)
-            .map(|obkv| to_vector_map(obkv, DelAdd::Addition))
-            .transpose()?
-            .flatten();
+        let new = 'new: {
+            let Some(new_vectors_fid) = new_vectors_fid else {
+                break 'new VectorsState::NoVectorsFid;
+            };
+            let Some(bytes) = documents_diff.get(new_vectors_fid) else {
+                break 'new VectorsState::NoVectorsFieldInDocument;
+            };
+            let obkv = KvReaderDelAdd::new(bytes);
+            match to_vector_map(obkv, DelAdd::Addition)? {
+                Some(new) => VectorsState::Vectors(new),
+                None => VectorsState::NoVectorsFieldInDocument,
+            }
+        };
+
         Ok(Self { old, new })
     }
 
-    /// Return (Some(None), _) in case the vector is user defined and contained in the database.
-    pub fn remove(&mut self, embedder_name: &str) -> (Option<Option<Vectors>>, Option<Vectors>) {
-        let old = self.old.remove(embedder_name);
-        let new = self.new.as_mut().and_then(|new| new.remove(embedder_name));
+    pub fn remove(&mut self, embedder_name: &str) -> (VectorState, VectorState) {
+        let old = self.old.remove(embedder_name).unwrap_or(VectorState::Generated);
+        let state_from_old = match old {
+            // assume a userProvided is still userProvided
+            VectorState::InDb => VectorState::InDb,
+            // generated is still generated
+            VectorState::Generated => VectorState::Generated,
+            // weird case that shouldn't happen were the previous docs version is inline,
+            // but it was removed in the new version
+            // Since it is not in the new version, we switch to generated
+            VectorState::Inline(_) => VectorState::Generated,
+        };
+        let new = match &mut self.new {
+            VectorsState::Vectors(new) => {
+                new.remove(embedder_name).map(VectorState::Inline).unwrap_or(state_from_old)
+            }
+            _ =>
+            // if no `_vectors` field is present in the new document,
+            // the state depends on the previous version of the document
+            {
+                state_from_old
+            }
+        };
+
         (old, new)
     }
 }
