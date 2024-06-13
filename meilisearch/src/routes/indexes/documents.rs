@@ -40,7 +40,7 @@ use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::{
     get_task_id, is_dry_run, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
 };
-use crate::search::parse_filter;
+use crate::search::{parse_filter, RetrieveVectors};
 use crate::Opt;
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
@@ -110,21 +110,20 @@ pub async fn get_document(
     debug!(parameters = ?params, "Get document");
     let index_uid = IndexUid::try_from(index_uid)?;
 
-    let GetDocument { fields, retrieve_vectors } = params.into_inner();
+    let GetDocument { fields, retrieve_vectors: param_retrieve_vectors } = params.into_inner();
     let attributes_to_retrieve = fields.merge_star_and_none();
 
     let features = index_scheduler.features();
-    if retrieve_vectors.0 {
-        features.check_vector("Passing `retrieveVectors` as a parameter")?;
-    }
+    let retrieve_vectors = RetrieveVectors::new(param_retrieve_vectors.0, features)?;
+
     analytics.get_fetch_documents(
-        &DocumentFetchKind::PerDocumentId { retrieve_vectors: retrieve_vectors.0 },
+        &DocumentFetchKind::PerDocumentId { retrieve_vectors: param_retrieve_vectors.0 },
         &req,
     );
 
     let index = index_scheduler.index(&index_uid)?;
     let document =
-        retrieve_document(&index, &document_id, attributes_to_retrieve, retrieve_vectors.0)?;
+        retrieve_document(&index, &document_id, attributes_to_retrieve, retrieve_vectors)?;
     debug!(returns = ?document, "Get document");
     Ok(HttpResponse::Ok().json(document))
 }
@@ -195,11 +194,6 @@ pub async fn documents_by_query_post(
     let body = body.into_inner();
     debug!(parameters = ?body, "Get documents POST");
 
-    let features = index_scheduler.features();
-    if body.retrieve_vectors {
-        features.check_vector("Passing `retrieveVectors` as a parameter")?;
-    }
-
     analytics.post_fetch_documents(
         &DocumentFetchKind::Normal {
             with_filter: body.filter.is_some(),
@@ -223,11 +217,6 @@ pub async fn get_documents(
     debug!(parameters = ?params, "Get documents GET");
 
     let BrowseQueryGet { limit, offset, fields, retrieve_vectors, filter } = params.into_inner();
-
-    let features = index_scheduler.features();
-    if retrieve_vectors.0 {
-        features.check_vector("Passing `retrieveVectors` as a parameter")?;
-    }
 
     let filter = match filter {
         Some(f) => match serde_json::from_str(&f) {
@@ -265,6 +254,9 @@ fn documents_by_query(
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let BrowseQuery { offset, limit, fields, retrieve_vectors, filter } = query;
+
+    let features = index_scheduler.features();
+    let retrieve_vectors = RetrieveVectors::new(retrieve_vectors, features)?;
 
     let index = index_scheduler.index(&index_uid)?;
     let (total, documents) =
@@ -608,7 +600,7 @@ fn some_documents<'a, 't: 'a>(
     index: &'a Index,
     rtxn: &'t RoTxn,
     doc_ids: impl IntoIterator<Item = DocumentId> + 'a,
-    retrieve_vectors: bool,
+    retrieve_vectors: RetrieveVectors,
 ) -> Result<impl Iterator<Item = Result<Document, ResponseError>> + 'a, ResponseError> {
     let fields_ids_map = index.fields_ids_map(rtxn)?;
     let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
@@ -617,24 +609,32 @@ fn some_documents<'a, 't: 'a>(
     Ok(index.iter_documents(rtxn, doc_ids)?.map(move |ret| {
         ret.map_err(ResponseError::from).and_then(|(key, document)| -> Result<_, ResponseError> {
             let mut document = milli::obkv_to_json(&all_fields, &fields_ids_map, document)?;
-
-            if retrieve_vectors {
-                let mut vectors = serde_json::Map::new();
-                for (name, vector) in index.embeddings(rtxn, key)? {
-                    let user_provided = embedding_configs
-                        .iter()
-                        .find(|conf| conf.name == name)
-                        .is_some_and(|conf| conf.user_provided.contains(key));
-                    let embeddings = ExplicitVectors {
-                        embeddings: Some(vector.into()),
-                        regenerate: !user_provided,
-                    };
-                    vectors.insert(
-                        name,
-                        serde_json::to_value(embeddings).map_err(MeilisearchHttpError::from)?,
-                    );
+            match retrieve_vectors {
+                RetrieveVectors::Ignore => {}
+                RetrieveVectors::Hide => {
+                    document.remove("_vectors");
                 }
-                document.insert("_vectors".into(), vectors.into());
+                RetrieveVectors::Retrieve => {
+                    let mut vectors = match document.remove("_vectors") {
+                        Some(Value::Object(map)) => map,
+                        _ => Default::default(),
+                    };
+                    for (name, vector) in index.embeddings(rtxn, key)? {
+                        let user_provided = embedding_configs
+                            .iter()
+                            .find(|conf| conf.name == name)
+                            .is_some_and(|conf| conf.user_provided.contains(key));
+                        let embeddings = ExplicitVectors {
+                            embeddings: Some(vector.into()),
+                            regenerate: !user_provided,
+                        };
+                        vectors.insert(
+                            name,
+                            serde_json::to_value(embeddings).map_err(MeilisearchHttpError::from)?,
+                        );
+                    }
+                    document.insert("_vectors".into(), vectors.into());
+                }
             }
 
             Ok(document)
@@ -648,7 +648,7 @@ fn retrieve_documents<S: AsRef<str>>(
     limit: usize,
     filter: Option<Value>,
     attributes_to_retrieve: Option<Vec<S>>,
-    retrieve_vectors: bool,
+    retrieve_vectors: RetrieveVectors,
 ) -> Result<(u64, Vec<Document>), ResponseError> {
     let rtxn = index.read_txn()?;
     let filter = &filter;
@@ -688,10 +688,9 @@ fn retrieve_documents<S: AsRef<str>>(
             Ok(match &attributes_to_retrieve {
                 Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
                     &document?,
-                    attributes_to_retrieve
-                        .iter()
-                        .map(|s| s.as_ref())
-                        .chain(retrieve_vectors.then_some("_vectors")),
+                    attributes_to_retrieve.iter().map(|s| s.as_ref()).chain(
+                        (retrieve_vectors == RetrieveVectors::Retrieve).then_some("_vectors"),
+                    ),
                 ),
                 None => document?,
             })
@@ -705,7 +704,7 @@ fn retrieve_document<S: AsRef<str>>(
     index: &Index,
     doc_id: &str,
     attributes_to_retrieve: Option<Vec<S>>,
-    retrieve_vectors: bool,
+    retrieve_vectors: RetrieveVectors,
 ) -> Result<Document, ResponseError> {
     let txn = index.read_txn()?;
 
@@ -724,7 +723,7 @@ fn retrieve_document<S: AsRef<str>>(
             attributes_to_retrieve
                 .iter()
                 .map(|s| s.as_ref())
-                .chain(retrieve_vectors.then_some("_vectors")),
+                .chain((retrieve_vectors == RetrieveVectors::Retrieve).then_some("_vectors")),
         ),
         None => document,
     };

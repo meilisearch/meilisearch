@@ -17,8 +17,8 @@ use crate::analytics::{Analytics, SimilarAggregator};
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::search::{
-    add_search_rules, perform_similar, RankingScoreThresholdSimilar, SearchKind, SimilarQuery,
-    SimilarResult, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
+    add_search_rules, perform_similar, RankingScoreThresholdSimilar, RetrieveVectors, SearchKind,
+    SimilarQuery, SimilarResult, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
 };
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -93,6 +93,8 @@ async fn similar(
 
     features.check_vector("Using the similar API")?;
 
+    let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors, features)?;
+
     // Tenant token search_rules.
     if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
         add_search_rules(&mut query.filter, search_rules);
@@ -103,8 +105,10 @@ async fn similar(
     let (embedder_name, embedder) =
         SearchKind::embedder(&index_scheduler, &index, query.embedder.as_deref(), None)?;
 
-    tokio::task::spawn_blocking(move || perform_similar(&index, query, embedder_name, embedder))
-        .await?
+    tokio::task::spawn_blocking(move || {
+        perform_similar(&index, query, embedder_name, embedder, retrieve_vectors)
+    })
+    .await?
 }
 
 #[derive(Debug, deserr::Deserr)]

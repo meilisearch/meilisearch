@@ -15,7 +15,7 @@ use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::indexes::search::search_kind;
 use crate::search::{
-    add_search_rules, perform_search, SearchQueryWithIndex, SearchResultWithIndex,
+    add_search_rules, perform_search, RetrieveVectors, SearchQueryWithIndex, SearchResultWithIndex,
 };
 use crate::search_queue::SearchQueue;
 
@@ -83,11 +83,14 @@ pub async fn multi_search_with_post(
 
             let search_kind = search_kind(&query, index_scheduler.get_ref(), &index, features)
                 .with_index(query_index)?;
+            let retrieve_vector =
+                RetrieveVectors::new(query.retrieve_vectors, features).with_index(query_index)?;
 
-            let search_result =
-                tokio::task::spawn_blocking(move || perform_search(&index, query, search_kind))
-                    .await
-                    .with_index(query_index)?;
+            let search_result = tokio::task::spawn_blocking(move || {
+                perform_search(&index, query, search_kind, retrieve_vector)
+            })
+            .await
+            .with_index(query_index)?;
 
             search_results.push(SearchResultWithIndex {
                 index_uid: index_uid.into_inner(),
