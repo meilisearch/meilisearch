@@ -101,13 +101,6 @@ pub struct WriteBackToDocuments {
 }
 
 impl SettingsDiff {
-    pub fn should_reindex(&self) -> bool {
-        match self {
-            SettingsDiff::Remove { .. } | SettingsDiff::Reindex { .. } => true,
-            SettingsDiff::UpdateWithoutReindex { .. } => false,
-        }
-    }
-
     pub fn from_settings(old: EmbeddingSettings, new: Setting<EmbeddingSettings>) -> Self {
         match new {
             Setting::Set(new) => {

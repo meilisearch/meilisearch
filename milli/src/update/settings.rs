@@ -1182,7 +1182,6 @@ pub struct InnerIndexSettingsDiff {
     pub(crate) old: InnerIndexSettings,
     pub(crate) new: InnerIndexSettings,
     pub(crate) primary_key_id: Option<FieldId>,
-    // TODO: compare directly the embedders.
     pub(crate) embedding_config_updates: BTreeMap<String, EmbedderAction>,
     pub(crate) settings_update_only: bool,
     /// The set of only the additional searchable fields.

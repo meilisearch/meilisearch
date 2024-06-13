@@ -422,8 +422,11 @@ fn extract_vector_document_diff(
                 VectorStateDelta::NowRemoved
             }
         }
-        // when the vectors are no longer user-provided,
-        // we generate the prompt unconditionally
+        // inline to the left is not supposed to be possible because the embedder is not new, so `_vectors` was removed from
+        // the previous version of the document.
+        // Manual -> Generated is also not possible without an Inline to the right (which is handled above)
+        // Generated -> Generated is handled above, so not possible
+        // As a result, this code is unreachable
         (_not_generated, VectorState::Generated) => {
             // Do we keep this document?
             let document_is_kept = obkv
@@ -443,7 +446,10 @@ fn extract_vector_document_diff(
                 VectorStateDelta::NowRemoved
             }
         }
-        (_old, VectorState::Manual) => {
+        // inline to the left is not possible because the embedder is not new, and so `_vectors` was removed from the previous
+        // version of the document.
+        // however the Rust type system cannot know that.
+        (_manual, VectorState::Manual) => {
             // Do we keep this document?
             let document_is_kept = obkv
                 .iter()

@@ -866,6 +866,7 @@ impl<'a, 'i> Transform<'a, 'i> {
 
         // The operations that we must perform on the different fields.
         let mut operations = HashMap::new();
+        let mut error_seen = false;
 
         let mut obkv_writer = KvWriter::<_, FieldId>::memory();
         'write_fid: for (id, val) in old_obkv.iter() {
@@ -886,7 +887,10 @@ impl<'a, 'i> Transform<'a, 'i> {
                         match existing_vectors {
                             Ok(existing_vectors) => existing_vectors,
                             Err(error) => {
-                                tracing::error!(%error, "Unexpected `_vectors` field that is not a map. Treating as an empty map");
+                                if !error_seen {
+                                    tracing::error!(%error, "Unexpected `_vectors` field that is not a map. Treating as an empty map");
+                                    error_seen = true;
+                                }
                                 Default::default()
                             }
                         }
