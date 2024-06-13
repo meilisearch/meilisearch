@@ -166,7 +166,12 @@ impl From<KindWithContent> for KindDump {
                 documents_count,
                 allow_index_creation,
             },
-            KindWithContent::DocumentEdition { .. } => todo!(),
+            KindWithContent::DocumentEdition { .. } => KindDump::DocumentImport {
+                primary_key: None,
+                method: IndexDocumentsMethod::UpdateDocuments,
+                documents_count: 0,
+                allow_index_creation: false,
+            },
             KindWithContent::DocumentDeletion { documents_ids, .. } => {
                 KindDump::DocumentDeletion { documents_ids }
             }
