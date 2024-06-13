@@ -51,7 +51,6 @@ pub struct Transform<'a, 'i> {
     fields_ids_map: FieldsIdsMap,
 
     indexer_settings: &'a IndexerConfig,
-    pub autogenerate_docids: bool,
     pub index_documents_method: IndexDocumentsMethod,
     available_documents_ids: AvailableDocumentsIds,
 
@@ -105,7 +104,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         index: &'i Index,
         indexer_settings: &'a IndexerConfig,
         index_documents_method: IndexDocumentsMethod,
-        autogenerate_docids: bool,
+        _autogenerate_docids: bool,
     ) -> Result<Self> {
         // We must choose the appropriate merge function for when two or more documents
         // with the same user id must be merged or fully replaced in the same batch.
@@ -139,7 +138,6 @@ impl<'a, 'i> Transform<'a, 'i> {
             index,
             fields_ids_map: index.fields_ids_map(wtxn)?,
             indexer_settings,
-            autogenerate_docids,
             available_documents_ids: AvailableDocumentsIds::from_documents_ids(&documents_ids),
             original_sorter,
             flattened_sorter,

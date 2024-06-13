@@ -152,6 +152,7 @@ impl Settings<Unchecked> {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)] // otherwise rustc complains that the fields go unused
 #[cfg_attr(test, derive(serde::Serialize))]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
