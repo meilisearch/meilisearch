@@ -182,6 +182,7 @@ impl Settings<Unchecked> {
     }
 }
 
+#[allow(dead_code)] // otherwise rustc complains that the fields go unused
 #[derive(Debug, Clone, Deserialize)]
 #[cfg_attr(test, derive(serde::Serialize))]
 #[serde(deny_unknown_fields)]
