@@ -73,7 +73,48 @@ async fn reset_embedder_documents() {
     server.wait_task(response.uid()).await;
 
     // Make sure the documents are still present
-    let (documents, _code) = index.get_all_documents(Default::default()).await;
+    let (documents, _code) = index
+        .get_all_documents(GetAllDocumentsOptions {
+            limit: None,
+            offset: None,
+            retrieve_vectors: false,
+            fields: None,
+        })
+        .await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name": "kefir"
+        },
+        {
+          "id": 1,
+          "name": "echo"
+        },
+        {
+          "id": 2,
+          "name": "billou"
+        },
+        {
+          "id": 3,
+          "name": "intel"
+        },
+        {
+          "id": 4,
+          "name": "max"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 5
+    }
+    "###);
+
+    // Make sure we are still able to retrieve their vectors
+    let (documents, _code) = index
+        .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
+        .await;
     snapshot!(json_string!(documents), @r###"
     {
       "results": [
@@ -166,45 +207,6 @@ async fn reset_embedder_documents() {
               "regenerate": false
             }
           }
-        }
-      ],
-      "offset": 0,
-      "limit": 20,
-      "total": 5
-    }
-    "###);
-
-    // Make sure we are still able to retrieve their vectors
-    let (documents, _code) = index
-        .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
-        .await;
-    snapshot!(json_string!(documents), @r###"
-    {
-      "results": [
-        {
-          "id": 0,
-          "name": "kefir",
-          "_vectors": {}
-        },
-        {
-          "id": 1,
-          "name": "echo",
-          "_vectors": {}
-        },
-        {
-          "id": 2,
-          "name": "billou",
-          "_vectors": {}
-        },
-        {
-          "id": 3,
-          "name": "intel",
-          "_vectors": {}
-        },
-        {
-          "id": 4,
-          "name": "max",
-          "_vectors": {}
         }
       ],
       "offset": 0,

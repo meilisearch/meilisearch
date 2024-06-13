@@ -482,3 +482,85 @@ async fn query_combination() {
     snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}},"_rankingScore":0.9242424242424242}]"###);
     snapshot!(response["semanticHitCount"], @"0");
 }
+
+#[actix_rt::test]
+async fn retrieve_vectors() {
+    let server = Server::new().await;
+    let index = index_with_documents_hf(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
+
+    let (response, code) = index
+        .search_post(
+            json!({"q": "Captain", "hybrid": {"semanticRatio": 0.2}, "retrieveVectors": true}),
+        )
+        .await;
+    snapshot!(code, @"200 OK");
+    insta::assert_json_snapshot!(response["hits"], {"[]._vectors.default.embeddings" => "[vectors]"},  @r###"
+    [
+      {
+        "title": "Captain Planet",
+        "desc": "He's not part of the Marvel Cinematic Universe",
+        "id": "2",
+        "_vectors": {
+          "default": {
+            "embeddings": "[vectors]",
+            "regenerate": true
+          }
+        }
+      },
+      {
+        "title": "Captain Marvel",
+        "desc": "a Shazam ersatz",
+        "id": "3",
+        "_vectors": {
+          "default": {
+            "embeddings": "[vectors]",
+            "regenerate": true
+          }
+        }
+      },
+      {
+        "title": "Shazam!",
+        "desc": "a Captain Marvel ersatz",
+        "id": "1",
+        "_vectors": {
+          "default": {
+            "embeddings": "[vectors]",
+            "regenerate": true
+          }
+        }
+      }
+    ]
+    "###);
+
+    // remove `_vectors` from displayed attributes
+    let (response, code) =
+        index.update_settings(json!({ "displayedAttributes": ["id", "title", "desc"]} )).await;
+    assert_eq!(202, code, "{:?}", response);
+    index.wait_task(response.uid()).await;
+
+    let (response, code) = index
+        .search_post(
+            json!({"q": "Captain", "hybrid": {"semanticRatio": 0.2}, "retrieveVectors": true}),
+        )
+        .await;
+    snapshot!(code, @"200 OK");
+    insta::assert_json_snapshot!(response["hits"], {"[]._vectors.default.embeddings" => "[vectors]"},  @r###"
+    [
+      {
+        "title": "Captain Planet",
+        "desc": "He's not part of the Marvel Cinematic Universe",
+        "id": "2"
+      },
+      {
+        "title": "Captain Marvel",
+        "desc": "a Shazam ersatz",
+        "id": "3"
+      },
+      {
+        "title": "Shazam!",
+        "desc": "a Captain Marvel ersatz",
+        "id": "1"
+      }
+    ]
+    "###);
+}
