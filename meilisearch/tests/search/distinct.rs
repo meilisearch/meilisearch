@@ -280,23 +280,27 @@ async fn distinct_at_search_time() {
 
     let documents = NESTED_DOCUMENTS.clone();
     index.add_documents(documents, Some(DOCUMENT_PRIMARY_KEY)).await;
-    index.update_settings_filterable_attributes(json!(["color"])).await;
-    index.wait_task(1).await;
+    let (task, _) = index.update_settings_filterable_attributes(json!(["color.main"])).await;
+    let task = index.wait_task(task.uid()).await;
+    snapshot!(task, name: "succeed");
 
-    fn get_hits(response: &Value) -> Vec<&str> {
+    fn get_hits(response: &Value) -> Vec<String> {
         let hits_array = response["hits"]
             .as_array()
             .unwrap_or_else(|| panic!("{}", &serde_json::to_string_pretty(&response).unwrap()));
-        hits_array.iter().map(|h| h[DOCUMENT_DISTINCT_KEY].as_str().unwrap()).collect::<Vec<_>>()
+        hits_array
+            .iter()
+            .map(|h| h[DOCUMENT_PRIMARY_KEY].as_number().unwrap().to_string())
+            .collect::<Vec<_>>()
     }
 
     let (response, code) =
-        index.search_post(json!({"page": 0, "hitsPerPage": 2, "distinct": "color.main"})).await;
+        index.search_post(json!({"page": 1, "hitsPerPage": 3, "distinct": "color.main"})).await;
     let hits = get_hits(&response);
     snapshot!(code, @"200 OK");
-    snapshot!(hits.len(), @"0");
-    snapshot!(format!("{:?}", hits), @r#"[]"#);
-    snapshot!(response["page"], @"0");
-    snapshot!(response["totalPages"], @"3");
-    snapshot!(response["totalHits"], @"6");
+    snapshot!(hits.len(), @"3");
+    snapshot!(format!("{:?}", hits), @r###"["1", "2", "3"]"###);
+    snapshot!(response["page"], @"1");
+    snapshot!(response["totalPages"], @"1");
+    snapshot!(response["totalHits"], @"3");
 }

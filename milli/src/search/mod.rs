@@ -178,7 +178,7 @@ impl<'a> Search<'a> {
 
         if let Some(distinct) = &self.distinct {
             let filterable_fields = ctx.index.filterable_fields(ctx.txn)?;
-            if !filterable_fields.contains(distinct) {
+            if !crate::is_faceted(distinct, &filterable_fields) {
                 let (valid_fields, hidden_fields) =
                     ctx.index.remove_hidden_fields(ctx.txn, filterable_fields)?;
                 return Err(Error::UserError(UserError::InvalidDistinctAttribute {
