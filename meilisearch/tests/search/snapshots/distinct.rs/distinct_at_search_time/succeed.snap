@@ -1,0 +1,20 @@
+---
+source: meilisearch/tests/search/distinct.rs
+---
+{
+  "uid": 1,
+  "indexUid": "tamo",
+  "status": "succeeded",
+  "type": "settingsUpdate",
+  "canceledBy": null,
+  "details": {
+    "filterableAttributes": [
+      "color.main"
+    ]
+  },
+  "error": null,
+  "duration": "[duration]",
+  "enqueuedAt": "[date]",
+  "startedAt": "[date]",
+  "finishedAt": "[date]"
+}
