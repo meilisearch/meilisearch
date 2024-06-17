@@ -2455,6 +2455,7 @@ name = "index-scheduler"
 version = "1.9.0"
 dependencies = [
  "anyhow",
+ "arroy",
  "big_s",
  "bincode",
  "crossbeam",
@@ -2465,6 +2466,7 @@ dependencies = [
  "file-store",
  "flate2",
  "insta",
+ "maplit",
  "meili-snap",
  "meilisearch-auth",
  "meilisearch-types",
@@ -5301,9 +5303,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-actix-web"
-version = "0.7.10"
+version = "0.7.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa069bd1503dd526ee793bb3fce408895136c95fc86d2edb2acf1c646d7f0684"
+checksum = "4ee9e39a66d9b615644893ffc1704d2a89b5b315b7fd0228ad3182ca9a306b19"
 dependencies = [
  "actix-web",
  "mutually_exclusive_features",

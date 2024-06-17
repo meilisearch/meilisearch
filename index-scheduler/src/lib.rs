@@ -53,6 +53,7 @@ use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str, I128};
 use meilisearch_types::heed::{self, Database, Env, PutFlags, RoTxn, RwTxn};
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
+use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
 use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
@@ -1459,33 +1460,39 @@ impl IndexScheduler {
     // TODO: consider using a type alias or a struct embedder/template
     pub fn embedders(
         &self,
-        embedding_configs: Vec<(String, milli::vector::EmbeddingConfig)>,
+        embedding_configs: Vec<IndexEmbeddingConfig>,
     ) -> Result<EmbeddingConfigs> {
         let res: Result<_> = embedding_configs
             .into_iter()
-            .map(|(name, milli::vector::EmbeddingConfig { embedder_options, prompt })| {
-                let prompt =
-                    Arc::new(prompt.try_into().map_err(meilisearch_types::milli::Error::from)?);
-                // optimistically return existing embedder
-                {
-                    let embedders = self.embedders.read().unwrap();
-                    if let Some(embedder) = embedders.get(&embedder_options) {
-                        return Ok((name, (embedder.clone(), prompt)));
+            .map(
+                |IndexEmbeddingConfig {
+                     name,
+                     config: milli::vector::EmbeddingConfig { embedder_options, prompt },
+                     ..
+                 }| {
+                    let prompt =
+                        Arc::new(prompt.try_into().map_err(meilisearch_types::milli::Error::from)?);
+                    // optimistically return existing embedder
+                    {
+                        let embedders = self.embedders.read().unwrap();
+                        if let Some(embedder) = embedders.get(&embedder_options) {
+                            return Ok((name, (embedder.clone(), prompt)));
+                        }
                     }
-                }
 
-                // add missing embedder
-                let embedder = Arc::new(
-                    Embedder::new(embedder_options.clone())
-                        .map_err(meilisearch_types::milli::vector::Error::from)
-                        .map_err(meilisearch_types::milli::Error::from)?,
-                );
-                {
-                    let mut embedders = self.embedders.write().unwrap();
-                    embedders.insert(embedder_options, embedder.clone());
-                }
-                Ok((name, (embedder, prompt)))
-            })
+                    // add missing embedder
+                    let embedder = Arc::new(
+                        Embedder::new(embedder_options.clone())
+                            .map_err(meilisearch_types::milli::vector::Error::from)
+                            .map_err(meilisearch_types::milli::Error::from)?,
+                    );
+                    {
+                        let mut embedders = self.embedders.write().unwrap();
+                        embedders.insert(embedder_options, embedder.clone());
+                    }
+                    Ok((name, (embedder, prompt)))
+                },
+            )
             .collect();
         res.map(EmbeddingConfigs::new)
     }
@@ -1748,6 +1755,9 @@ mod tests {
     use meilisearch_types::milli::update::IndexDocumentsMethod::{
         ReplaceDocuments, UpdateDocuments,
     };
+    use meilisearch_types::milli::update::Setting;
+    use meilisearch_types::milli::vector::settings::EmbeddingSettings;
+    use meilisearch_types::settings::Unchecked;
     use meilisearch_types::tasks::IndexSwap;
     use meilisearch_types::VERSION_FILE_NAME;
     use tempfile::{NamedTempFile, TempDir};
@@ -1826,6 +1836,7 @@ mod tests {
             assert_eq!(breakpoint, (Init, false));
             let index_scheduler_handle = IndexSchedulerHandle {
                 _tempdir: tempdir,
+                index_scheduler: index_scheduler.private_clone(),
                 test_breakpoint_rcv: receiver,
                 last_breakpoint: breakpoint.0,
             };
@@ -1914,6 +1925,7 @@ mod tests {
 
     pub struct IndexSchedulerHandle {
         _tempdir: TempDir,
+        index_scheduler: IndexScheduler,
         test_breakpoint_rcv: crossbeam::channel::Receiver<(Breakpoint, bool)>,
         last_breakpoint: Breakpoint,
     }
@@ -1931,9 +1943,13 @@ mod tests {
             {
                 Ok(b) => b,
                 Err(RecvTimeoutError::Timeout) => {
-                    panic!("The scheduler seems to be waiting for a new task while your test is waiting for a breakpoint.")
+                    let state = snapshot_index_scheduler(&self.index_scheduler);
+                    panic!("The scheduler seems to be waiting for a new task while your test is waiting for a breakpoint.\n{state}")
                 }
-                Err(RecvTimeoutError::Disconnected) => panic!("The scheduler crashed."),
+                Err(RecvTimeoutError::Disconnected) => {
+                    let state = snapshot_index_scheduler(&self.index_scheduler);
+                    panic!("The scheduler crashed.\n{state}")
+                }
             };
             // if we've already encountered a breakpoint we're supposed to be stuck on the false
             // and we expect the same variant with the true to come now.
@@ -1952,9 +1968,13 @@ mod tests {
             {
                 Ok(b) => b,
                 Err(RecvTimeoutError::Timeout) => {
-                    panic!("The scheduler seems to be waiting for a new task while your test is waiting for a breakpoint.")
+                    let state = snapshot_index_scheduler(&self.index_scheduler);
+                    panic!("The scheduler seems to be waiting for a new task while your test is waiting for a breakpoint.\n{state}")
                 }
-                Err(RecvTimeoutError::Disconnected) => panic!("The scheduler crashed."),
+                Err(RecvTimeoutError::Disconnected) => {
+                    let state = snapshot_index_scheduler(&self.index_scheduler);
+                    panic!("The scheduler crashed.\n{state}")
+                }
             };
             assert!(!b, "Found the breakpoint handle in a bad state. Check your test suite");
 
@@ -1968,9 +1988,10 @@ mod tests {
         fn advance_till(&mut self, breakpoints: impl IntoIterator<Item = Breakpoint>) {
             for breakpoint in breakpoints {
                 let b = self.advance();
+                let state = snapshot_index_scheduler(&self.index_scheduler);
                 assert_eq!(
                     b, breakpoint,
-                    "Was expecting the breakpoint `{:?}` but instead got `{:?}`.",
+                    "Was expecting the breakpoint `{:?}` but instead got `{:?}`.\n{state}",
                     breakpoint, b
                 );
             }
@@ -1995,6 +2016,7 @@ mod tests {
         // Wait for one successful batch.
         #[track_caller]
         fn advance_one_successful_batch(&mut self) {
+            self.index_scheduler.assert_internally_consistent();
             self.advance_till([Start, BatchCreated]);
             loop {
                 match self.advance() {
@@ -2003,13 +2025,17 @@ mod tests {
                     InsideProcessBatch => (),
                     // the batch went successfully, we can stop the loop and go on with the next states.
                     ProcessBatchSucceeded => break,
-                    AbortedIndexation => panic!("The batch was aborted."),
-                    ProcessBatchFailed => panic!("The batch failed."),
+                    AbortedIndexation => panic!("The batch was aborted.\n{}", snapshot_index_scheduler(&self.index_scheduler)),
+                    ProcessBatchFailed => {
+                        while self.advance() != Start {}
+                        panic!("The batch failed.\n{}", snapshot_index_scheduler(&self.index_scheduler))
+                    },
                     breakpoint => panic!("Encountered an impossible breakpoint `{:?}`, this is probably an issue with the test suite.", breakpoint),
                 }
             }
 
             self.advance_till([AfterProcessing]);
+            self.index_scheduler.assert_internally_consistent();
         }
 
         // Wait for one failed batch.
@@ -2023,8 +2049,8 @@ mod tests {
                     InsideProcessBatch => (),
                     // the batch went failed, we can stop the loop and go on with the next states.
                     ProcessBatchFailed => break,
-                    ProcessBatchSucceeded => panic!("The batch succeeded. (and it wasn't supposed to sorry)"),
-                    AbortedIndexation => panic!("The batch was aborted."),
+                    ProcessBatchSucceeded => panic!("The batch succeeded. (and it wasn't supposed to sorry)\n{}", snapshot_index_scheduler(&self.index_scheduler)),
+                    AbortedIndexation => panic!("The batch was aborted.\n{}", snapshot_index_scheduler(&self.index_scheduler)),
                     breakpoint => panic!("Encountered an impossible breakpoint `{:?}`, this is probably an issue with the test suite.", breakpoint),
                 }
             }
@@ -3052,8 +3078,10 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         let configs = index.embedding_configs(&rtxn).unwrap();
-        let (_, embedding_config) = configs.first().unwrap();
-        insta::assert_json_snapshot!(embedding_config.embedder_options);
+        let IndexEmbeddingConfig { name, config, user_provided } = configs.first().unwrap();
+        insta::assert_snapshot!(name, @"default");
+        insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
+        insta::assert_json_snapshot!(config.embedder_options);
     }
 
     #[test]
@@ -4989,7 +5017,6 @@ mod tests {
                 false,
             )
             .unwrap();
-        index_scheduler.assert_internally_consistent();
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_settings_task_vectors");
 
@@ -5000,7 +5027,7 @@ mod tests {
             insta::assert_json_snapshot!(task.details);
         }
 
-        handle.advance_n_successful_batches(1);
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "settings_update_processed_vectors");
 
         {
@@ -5017,13 +5044,17 @@ mod tests {
             let configs = index.embedding_configs(&rtxn).unwrap();
             // for consistency with the below
             #[allow(clippy::get_first)]
-            let (name, fakerest_config) = configs.get(0).unwrap();
-            insta::assert_json_snapshot!(name, @r###""A_fakerest""###);
+            let IndexEmbeddingConfig { name, config: fakerest_config, user_provided } =
+                configs.get(0).unwrap();
+            insta::assert_snapshot!(name, @"A_fakerest");
+            insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
             insta::assert_json_snapshot!(fakerest_config.embedder_options);
             let fakerest_name = name.clone();
 
-            let (name, simple_hf_config) = configs.get(1).unwrap();
-            insta::assert_json_snapshot!(name, @r###""B_small_hf""###);
+            let IndexEmbeddingConfig { name, config: simple_hf_config, user_provided } =
+                configs.get(1).unwrap();
+            insta::assert_snapshot!(name, @"B_small_hf");
+            insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
             insta::assert_json_snapshot!(simple_hf_config.embedder_options);
             let simple_hf_name = name.clone();
 
@@ -5038,25 +5069,25 @@ mod tests {
         // add one doc, specifying vectors
 
         let doc = serde_json::json!(
-                    {
-                        "id": 0,
-                        "doggo": "Intel",
-                        "breed": "beagle",
-                        "_vectors": {
-                            &fakerest_name: {
-                                // this will never trigger regeneration, which is good because we can't actually generate with
-                                // this embedder
-                                "userProvided": true,
-                                "embeddings": beagle_embed,
-                            },
-                            &simple_hf_name: {
-                                // this will be regenerated on updates
-                                "userProvided": false,
-                                "embeddings": lab_embed,
-                            },
-                            "noise": [0.1, 0.2, 0.3]
-                        }
-                    }
+            {
+                "id": 0,
+                "doggo": "Intel",
+                "breed": "beagle",
+                "_vectors": {
+                    &fakerest_name: {
+                        // this will never trigger regeneration, which is good because we can't actually generate with
+                        // this embedder
+                        "regenerate": false,
+                        "embeddings": beagle_embed,
+                    },
+                    &simple_hf_name: {
+                        // this will be regenerated on updates
+                        "regenerate": true,
+                        "embeddings": lab_embed,
+                    },
+                    "noise": [0.1, 0.2, 0.3]
+                }
+            }
         );
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0u128).unwrap();
@@ -5078,7 +5109,6 @@ mod tests {
                 false,
             )
             .unwrap();
-        index_scheduler.assert_internally_consistent();
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after adding Intel");
 
@@ -5090,6 +5120,19 @@ mod tests {
         {
             let index = index_scheduler.index("doggos").unwrap();
             let rtxn = index.read_txn().unwrap();
+
+            // Ensure the document have been inserted into the relevant bitamp
+            let configs = index.embedding_configs(&rtxn).unwrap();
+            // for consistency with the below
+            #[allow(clippy::get_first)]
+            let IndexEmbeddingConfig { name, config: _, user_provided: user_defined } =
+                configs.get(0).unwrap();
+            insta::assert_snapshot!(name, @"A_fakerest");
+            insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[0]>");
+
+            let IndexEmbeddingConfig { name, config: _, user_provided } = configs.get(1).unwrap();
+            insta::assert_snapshot!(name, @"B_small_hf");
+            insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
 
             let embeddings = index.embeddings(&rtxn, 0).unwrap();
 
@@ -5140,7 +5183,6 @@ mod tests {
                 false,
             )
             .unwrap();
-        index_scheduler.assert_internally_consistent();
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "Intel to kefir");
 
@@ -5153,11 +5195,25 @@ mod tests {
                 let index = index_scheduler.index("doggos").unwrap();
                 let rtxn = index.read_txn().unwrap();
 
+                // Ensure the document have been inserted into the relevant bitamp
+                let configs = index.embedding_configs(&rtxn).unwrap();
+                // for consistency with the below
+                #[allow(clippy::get_first)]
+                let IndexEmbeddingConfig { name, config: _, user_provided: user_defined } =
+                    configs.get(0).unwrap();
+                insta::assert_snapshot!(name, @"A_fakerest");
+                insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[0]>");
+
+                let IndexEmbeddingConfig { name, config: _, user_provided } =
+                    configs.get(1).unwrap();
+                insta::assert_snapshot!(name, @"B_small_hf");
+                insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
+
                 let embeddings = index.embeddings(&rtxn, 0).unwrap();
 
-                // automatically changed to patou
+                // automatically changed to patou because set to regenerate
                 assert_json_snapshot!(embeddings[&simple_hf_name][0] == patou_embed, @"true");
-                // remained beagle because set to userProvided
+                // remained beagle
                 assert_json_snapshot!(embeddings[&fakerest_name][0] == beagle_embed, @"true");
 
                 let doc = index.documents(&rtxn, std::iter::once(0)).unwrap()[0].1;
@@ -5174,6 +5230,580 @@ mod tests {
                 .unwrap();
                 assert_json_snapshot!(doc, {"._vectors.A_fakerest.embeddings" => "[vector]"});
             }
+        }
+    }
+
+    #[test]
+    fn import_vectors_first_and_embedder_later() {
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        let content = serde_json::json!(
+            [
+                {
+                    "id": 0,
+                    "doggo": "kefir",
+                },
+                {
+                    "id": 1,
+                    "doggo": "intel",
+                    "_vectors": {
+                        "my_doggo_embedder": vec![1; 384],
+                        "unknown embedder": vec![1, 2, 3],
+                    }
+                },
+                {
+                    "id": 2,
+                    "doggo": "max",
+                    "_vectors": {
+                        "my_doggo_embedder": {
+                            "regenerate": false,
+                            "embeddings": vec![2; 384],
+                        },
+                        "unknown embedder": vec![4, 5],
+                    },
+                },
+                {
+                    "id": 3,
+                    "doggo": "marcel",
+                    "_vectors": {
+                        "my_doggo_embedder": {
+                            "regenerate": true,
+                            "embeddings": vec![3; 384],
+                        },
+                    },
+                },
+                {
+                    "id": 4,
+                    "doggo": "sora",
+                    "_vectors": {
+                        "my_doggo_embedder": {
+                            "regenerate": true,
+                        },
+                    },
+                },
+            ]
+        );
+
+        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0_u128).unwrap();
+        let documents_count =
+            read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file)
+                .unwrap();
+        snapshot!(documents_count, @"5");
+        file.persist().unwrap();
+
+        index_scheduler
+            .register(
+                KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: None,
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        handle.advance_one_successful_batch();
+
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string(&documents).unwrap(), name: "documents after initial push");
+
+        let setting = meilisearch_types::settings::Settings::<Unchecked> {
+            embedders: Setting::Set(maplit::btreemap! {
+                S("my_doggo_embedder") => Setting::Set(EmbeddingSettings {
+                    source: Setting::Set(milli::vector::settings::EmbedderSource::HuggingFace),
+                    model: Setting::Set(S("sentence-transformers/all-MiniLM-L6-v2")),
+                    revision: Setting::Set(S("e4ce9877abf3edfe10b0d82785e83bdcb973e22e")),
+                    document_template: Setting::Set(S("{{doc.doggo}}")),
+                    ..Default::default()
+                })
+            }),
+            ..Default::default()
+        };
+        index_scheduler
+            .register(
+                KindWithContent::SettingsUpdate {
+                    index_uid: S("doggos"),
+                    new_settings: Box::new(setting),
+                    is_deletion: false,
+                    allow_index_creation: false,
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        index_scheduler.assert_internally_consistent();
+        handle.advance_one_successful_batch();
+        index_scheduler.assert_internally_consistent();
+
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        // the all the vectors linked to the new specified embedder have been removed
+        // Only the unknown embedders stays in the document DB
+        snapshot!(serde_json::to_string(&documents).unwrap(), @r###"[{"id":0,"doggo":"kefir"},{"id":1,"doggo":"intel","_vectors":{"unknown embedder":[1.0,2.0,3.0]}},{"id":2,"doggo":"max","_vectors":{"unknown embedder":[4.0,5.0]}},{"id":3,"doggo":"marcel"},{"id":4,"doggo":"sora"}]"###);
+        let conf = index.embedding_configs(&rtxn).unwrap();
+        // even though we specified the vector for the ID 3, it shouldn't be marked
+        // as user provided since we explicitely marked it as NOT user provided.
+        snapshot!(format!("{conf:#?}"), @r###"
+        [
+            IndexEmbeddingConfig {
+                name: "my_doggo_embedder",
+                config: EmbeddingConfig {
+                    embedder_options: HuggingFace(
+                        EmbedderOptions {
+                            model: "sentence-transformers/all-MiniLM-L6-v2",
+                            revision: Some(
+                                "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
+                            ),
+                            distribution: None,
+                        },
+                    ),
+                    prompt: PromptData {
+                        template: "{{doc.doggo}}",
+                    },
+                },
+                user_provided: RoaringBitmap<[1, 2]>,
+            },
+        ]
+        "###);
+        let docid = index.external_documents_ids.get(&rtxn, "0").unwrap().unwrap();
+        let embeddings = index.embeddings(&rtxn, docid).unwrap();
+        let embedding = &embeddings["my_doggo_embedder"];
+        assert!(!embedding.is_empty(), "{embedding:?}");
+
+        // the document with the id 3 should keep its original embedding
+        let docid = index.external_documents_ids.get(&rtxn, "3").unwrap().unwrap();
+        let mut embeddings = Vec::new();
+
+        'vectors: for i in 0..=u8::MAX {
+            let reader = arroy::Reader::open(&rtxn, i as u16, index.vector_arroy)
+                .map(Some)
+                .or_else(|e| match e {
+                    arroy::Error::MissingMetadata => Ok(None),
+                    e => Err(e),
+                })
+                .transpose();
+
+            let Some(reader) = reader else {
+                break 'vectors;
+            };
+
+            let embedding = reader.unwrap().item_vector(&rtxn, docid).unwrap();
+            if let Some(embedding) = embedding {
+                embeddings.push(embedding)
+            } else {
+                break 'vectors;
+            }
+        }
+
+        snapshot!(embeddings.len(), @"1");
+        assert!(embeddings[0].iter().all(|i| *i == 3.0), "{:?}", embeddings[0]);
+
+        // If we update marcel it should regenerate its embedding automatically
+
+        let content = serde_json::json!(
+            [
+                {
+                    "id": 3,
+                    "doggo": "marvel",
+                },
+                {
+                    "id": 4,
+                    "doggo": "sorry",
+                },
+            ]
+        );
+
+        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(1_u128).unwrap();
+        let documents_count =
+            read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file)
+                .unwrap();
+        snapshot!(documents_count, @"2");
+        file.persist().unwrap();
+
+        index_scheduler
+            .register(
+                KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: None,
+                    method: UpdateDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        handle.advance_one_successful_batch();
+
+        // the document with the id 3 should have its original embedding updated
+        let rtxn = index.read_txn().unwrap();
+        let docid = index.external_documents_ids.get(&rtxn, "3").unwrap().unwrap();
+        let doc = index.documents(&rtxn, Some(docid)).unwrap()[0];
+        let doc = obkv_to_json(&field_ids, &field_ids_map, doc.1).unwrap();
+        snapshot!(json_string!(doc), @r###"
+        {
+          "id": 3,
+          "doggo": "marvel"
+        }
+        "###);
+
+        let embeddings = index.embeddings(&rtxn, docid).unwrap();
+        let embedding = &embeddings["my_doggo_embedder"];
+
+        assert!(!embedding.is_empty());
+        assert!(!embedding[0].iter().all(|i| *i == 3.0), "{:?}", embedding[0]);
+
+        // the document with the id 4 should generate an embedding
+        let docid = index.external_documents_ids.get(&rtxn, "4").unwrap().unwrap();
+        let embeddings = index.embeddings(&rtxn, docid).unwrap();
+        let embedding = &embeddings["my_doggo_embedder"];
+
+        assert!(!embedding.is_empty());
+    }
+
+    #[test]
+    fn delete_document_containing_vector() {
+        // 1. Add an embedder
+        // 2. Push two documents containing a simple vector
+        // 3. Delete the first document
+        // 4. The user defined roaring bitmap shouldn't contains the id of the first document anymore
+        // 5. Clear the index
+        // 6. The user defined roaring bitmap shouldn't contains the id of the second document
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        let setting = meilisearch_types::settings::Settings::<Unchecked> {
+            embedders: Setting::Set(maplit::btreemap! {
+                S("manual") => Setting::Set(EmbeddingSettings {
+                    source: Setting::Set(milli::vector::settings::EmbedderSource::UserProvided),
+                    dimensions: Setting::Set(3),
+                    ..Default::default()
+                })
+            }),
+            ..Default::default()
+        };
+        index_scheduler
+            .register(
+                KindWithContent::SettingsUpdate {
+                    index_uid: S("doggos"),
+                    new_settings: Box::new(setting),
+                    is_deletion: false,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        handle.advance_one_successful_batch();
+
+        let content = serde_json::json!(
+            [
+                {
+                    "id": 0,
+                    "doggo": "kefir",
+                    "_vectors": {
+                        "manual": vec![0, 0, 0],
+                    }
+                },
+                {
+                    "id": 1,
+                    "doggo": "intel",
+                    "_vectors": {
+                        "manual": vec![1, 1, 1],
+                    }
+                },
+            ]
+        );
+
+        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0_u128).unwrap();
+        let documents_count =
+            read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file)
+                .unwrap();
+        snapshot!(documents_count, @"2");
+        file.persist().unwrap();
+
+        index_scheduler
+            .register(
+                KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: None,
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: false,
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        handle.advance_one_successful_batch();
+
+        index_scheduler
+            .register(
+                KindWithContent::DocumentDeletion {
+                    index_uid: S("doggos"),
+                    documents_ids: vec![S("1")],
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        handle.advance_one_successful_batch();
+
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string(&documents).unwrap(), @r###"[{"id":0,"doggo":"kefir"}]"###);
+        let conf = index.embedding_configs(&rtxn).unwrap();
+        snapshot!(format!("{conf:#?}"), @r###"
+        [
+            IndexEmbeddingConfig {
+                name: "manual",
+                config: EmbeddingConfig {
+                    embedder_options: UserProvided(
+                        EmbedderOptions {
+                            dimensions: 3,
+                            distribution: None,
+                        },
+                    ),
+                    prompt: PromptData {
+                        template: "{% for field in fields %} {{ field.name }}: {{ field.value }}\n{% endfor %}",
+                    },
+                },
+                user_provided: RoaringBitmap<[0]>,
+            },
+        ]
+        "###);
+        let docid = index.external_documents_ids.get(&rtxn, "0").unwrap().unwrap();
+        let embeddings = index.embeddings(&rtxn, docid).unwrap();
+        let embedding = &embeddings["manual"];
+        assert!(!embedding.is_empty(), "{embedding:?}");
+
+        index_scheduler
+            .register(KindWithContent::DocumentClear { index_uid: S("doggos") }, None, false)
+            .unwrap();
+        handle.advance_one_successful_batch();
+
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string(&documents).unwrap(), @"[]");
+        let conf = index.embedding_configs(&rtxn).unwrap();
+        snapshot!(format!("{conf:#?}"), @r###"
+        [
+            IndexEmbeddingConfig {
+                name: "manual",
+                config: EmbeddingConfig {
+                    embedder_options: UserProvided(
+                        EmbedderOptions {
+                            dimensions: 3,
+                            distribution: None,
+                        },
+                    ),
+                    prompt: PromptData {
+                        template: "{% for field in fields %} {{ field.name }}: {{ field.value }}\n{% endfor %}",
+                    },
+                },
+                user_provided: RoaringBitmap<[]>,
+            },
+        ]
+        "###);
+    }
+
+    #[test]
+    fn delete_embedder_with_user_provided_vectors() {
+        // 1. Add two embedders
+        // 2. Push two documents containing a simple vector
+        // 3. The documents must not contain the vectors after the update as they are in the vectors db
+        // 3. Delete the embedders
+        // 4. The documents contain the vectors again
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        let setting = meilisearch_types::settings::Settings::<Unchecked> {
+            embedders: Setting::Set(maplit::btreemap! {
+                S("manual") => Setting::Set(EmbeddingSettings {
+                    source: Setting::Set(milli::vector::settings::EmbedderSource::UserProvided),
+                    dimensions: Setting::Set(3),
+                    ..Default::default()
+                }),
+                S("my_doggo_embedder") => Setting::Set(EmbeddingSettings {
+                    source: Setting::Set(milli::vector::settings::EmbedderSource::HuggingFace),
+                    model: Setting::Set(S("sentence-transformers/all-MiniLM-L6-v2")),
+                    revision: Setting::Set(S("e4ce9877abf3edfe10b0d82785e83bdcb973e22e")),
+                    document_template: Setting::Set(S("{{doc.doggo}}")),
+                    ..Default::default()
+                }),
+            }),
+            ..Default::default()
+        };
+        index_scheduler
+            .register(
+                KindWithContent::SettingsUpdate {
+                    index_uid: S("doggos"),
+                    new_settings: Box::new(setting),
+                    is_deletion: false,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        handle.advance_one_successful_batch();
+
+        let content = serde_json::json!(
+            [
+                {
+                    "id": 0,
+                    "doggo": "kefir",
+                    "_vectors": {
+                        "manual": vec![0, 0, 0],
+                        "my_doggo_embedder": vec![1; 384],
+                    }
+                },
+                {
+                    "id": 1,
+                    "doggo": "intel",
+                    "_vectors": {
+                        "manual": vec![1, 1, 1],
+                    }
+                },
+            ]
+        );
+
+        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0_u128).unwrap();
+        let documents_count =
+            read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file)
+                .unwrap();
+        snapshot!(documents_count, @"2");
+        file.persist().unwrap();
+
+        index_scheduler
+            .register(
+                KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: None,
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: false,
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        handle.advance_one_successful_batch();
+
+        {
+            let index = index_scheduler.index("doggos").unwrap();
+            let rtxn = index.read_txn().unwrap();
+            let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+            let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+            let documents = index
+                .all_documents(&rtxn)
+                .unwrap()
+                .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+                .collect::<Vec<_>>();
+            snapshot!(serde_json::to_string(&documents).unwrap(), @r###"[{"id":0,"doggo":"kefir"},{"id":1,"doggo":"intel"}]"###);
+        }
+
+        {
+            let setting = meilisearch_types::settings::Settings::<Unchecked> {
+                embedders: Setting::Set(maplit::btreemap! {
+                    S("manual") => Setting::Reset,
+                }),
+                ..Default::default()
+            };
+            index_scheduler
+                .register(
+                    KindWithContent::SettingsUpdate {
+                        index_uid: S("doggos"),
+                        new_settings: Box::new(setting),
+                        is_deletion: false,
+                        allow_index_creation: true,
+                    },
+                    None,
+                    false,
+                )
+                .unwrap();
+            handle.advance_one_successful_batch();
+        }
+
+        {
+            let index = index_scheduler.index("doggos").unwrap();
+            let rtxn = index.read_txn().unwrap();
+            let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+            let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+            let documents = index
+                .all_documents(&rtxn)
+                .unwrap()
+                .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+                .collect::<Vec<_>>();
+            snapshot!(serde_json::to_string(&documents).unwrap(), @r###"[{"id":0,"doggo":"kefir","_vectors":{"manual":{"embeddings":[[0.0,0.0,0.0]],"regenerate":false}}},{"id":1,"doggo":"intel","_vectors":{"manual":{"embeddings":[[1.0,1.0,1.0]],"regenerate":false}}}]"###);
+        }
+
+        {
+            let setting = meilisearch_types::settings::Settings::<Unchecked> {
+                embedders: Setting::Reset,
+                ..Default::default()
+            };
+            index_scheduler
+                .register(
+                    KindWithContent::SettingsUpdate {
+                        index_uid: S("doggos"),
+                        new_settings: Box::new(setting),
+                        is_deletion: false,
+                        allow_index_creation: true,
+                    },
+                    None,
+                    false,
+                )
+                .unwrap();
+            handle.advance_one_successful_batch();
+        }
+
+        {
+            let index = index_scheduler.index("doggos").unwrap();
+            let rtxn = index.read_txn().unwrap();
+            let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+            let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+            let documents = index
+                .all_documents(&rtxn)
+                .unwrap()
+                .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+                .collect::<Vec<_>>();
+
+            // FIXME: redaction
+            snapshot!(json_string!(serde_json::to_string(&documents).unwrap(), { "[]._vectors.doggo_embedder.embeddings" => "[vector]" }),  @r###""[{\"id\":0,\"doggo\":\"kefir\",\"_vectors\":{\"manual\":{\"embeddings\":[[0.0,0.0,0.0]],\"regenerate\":false},\"my_doggo_embedder\":{\"embeddings\":[[1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0]],\"regenerate\":false}}},{\"id\":1,\"doggo\":\"intel\",\"_vectors\":{\"manual\":{\"embeddings\":[[1.0,1.0,1.0]],\"regenerate\":false}}}]""###);
         }
     }
 }

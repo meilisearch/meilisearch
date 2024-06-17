@@ -8,6 +8,7 @@ use std::str::FromStr;
 
 use deserr::{DeserializeError, Deserr, ErrorKind, MergeWithError, ValuePointerRef};
 use fst::IntoStreamer;
+use milli::index::IndexEmbeddingConfig;
 use milli::proximity::ProximityPrecision;
 use milli::update::Setting;
 use milli::{Criterion, CriterionError, Index, DEFAULT_VALUES_PER_FACET};
@@ -672,7 +673,7 @@ pub fn settings(
     let embedders: BTreeMap<_, _> = index
         .embedding_configs(rtxn)?
         .into_iter()
-        .map(|(name, config)| (name, Setting::Set(config.into())))
+        .map(|IndexEmbeddingConfig { name, config, .. }| (name, Setting::Set(config.into())))
         .collect();
     let embedders = if embedders.is_empty() { Setting::NotSet } else { Setting::Set(embedders) };
 

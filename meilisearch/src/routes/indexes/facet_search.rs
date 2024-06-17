@@ -115,6 +115,7 @@ impl From<FacetSearchQuery> for SearchQuery {
             page: None,
             hits_per_page: None,
             attributes_to_retrieve: None,
+            retrieve_vectors: false,
             attributes_to_crop: None,
             crop_length: DEFAULT_CROP_LENGTH(),
             attributes_to_highlight: None,

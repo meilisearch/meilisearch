@@ -44,7 +44,7 @@ once_cell = "1.19.0"
 ordered-float = "4.2.0"
 rand_pcg = { version = "0.3.1", features = ["serde1"] }
 rayon = "1.8.0"
-roaring = "0.10.2"
+roaring = { version = "0.10.2", features = ["serde"] }
 rstar = { version = "0.11.0", features = ["serde"] }
 serde = { version = "1.0.195", features = ["derive"] }
 serde_json = { version = "1.0.111", features = ["preserve_order"] }
@@ -71,10 +71,10 @@ csv = "1.3.0"
 candle-core = { version = "0.4.1" }
 candle-transformers = { version = "0.4.1" }
 candle-nn = { version = "0.4.1" }
-tokenizers = { git = "https://github.com/huggingface/tokenizers.git", tag = "v0.15.2", version = "0.15.2", default_features = false, features = [
+tokenizers = { git = "https://github.com/huggingface/tokenizers.git", tag = "v0.15.2", version = "0.15.2", default-features = false, features = [
     "onig",
 ] }
-hf-hub = { git = "https://github.com/dureuill/hf-hub.git", branch = "rust_tls", default_features = false, features = [
+hf-hub = { git = "https://github.com/dureuill/hf-hub.git", branch = "rust_tls", default-features = false, features = [
     "online",
 ] }
 tiktoken-rs = "0.5.8"

@@ -622,6 +622,7 @@ pub struct SearchAggregator {
     // Whether a non-default embedder was specified
     embedder: bool,
     hybrid: bool,
+    retrieve_vectors: bool,
 
     // every time a search is done, we increment the counter linked to the used settings
     matching_strategy: HashMap<String, usize>,
@@ -662,6 +663,7 @@ impl SearchAggregator {
             page,
             hits_per_page,
             attributes_to_retrieve: _,
+            retrieve_vectors,
             attributes_to_crop: _,
             crop_length,
             attributes_to_highlight: _,
@@ -728,6 +730,7 @@ impl SearchAggregator {
         if let Some(ref vector) = vector {
             ret.max_vector_size = vector.len();
         }
+        ret.retrieve_vectors |= retrieve_vectors;
 
         if query.is_finite_pagination() {
             let limit = hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
@@ -803,6 +806,7 @@ impl SearchAggregator {
             attributes_to_search_on_total_number_of_uses,
             max_terms_number,
             max_vector_size,
+            retrieve_vectors,
             matching_strategy,
             max_limit,
             max_offset,
@@ -873,6 +877,7 @@ impl SearchAggregator {
 
         // vector
         self.max_vector_size = self.max_vector_size.max(max_vector_size);
+        self.retrieve_vectors |= retrieve_vectors;
         self.semantic_ratio |= semantic_ratio;
         self.hybrid |= hybrid;
         self.embedder |= embedder;
@@ -929,6 +934,7 @@ impl SearchAggregator {
             attributes_to_search_on_total_number_of_uses,
             max_terms_number,
             max_vector_size,
+            retrieve_vectors,
             matching_strategy,
             max_limit,
             max_offset,
@@ -991,6 +997,7 @@ impl SearchAggregator {
                 },
                 "vector": {
                     "max_vector_size": max_vector_size,
+                    "retrieve_vectors": retrieve_vectors,
                 },
                 "hybrid": {
                     "enabled": hybrid,
@@ -1079,6 +1086,7 @@ impl MultiSearchAggregator {
                     page: _,
                     hits_per_page: _,
                     attributes_to_retrieve: _,
+                    retrieve_vectors: _,
                     attributes_to_crop: _,
                     crop_length: _,
                     attributes_to_highlight: _,
@@ -1534,6 +1542,9 @@ pub struct DocumentsFetchAggregator {
     // if a filter was used
     per_filter: bool,
 
+    #[serde(rename = "vector.retrieve_vectors")]
+    retrieve_vectors: bool,
+
     // pagination
     #[serde(rename = "pagination.max_limit")]
     max_limit: usize,
@@ -1543,18 +1554,21 @@ pub struct DocumentsFetchAggregator {
 
 impl DocumentsFetchAggregator {
     pub fn from_query(query: &DocumentFetchKind, request: &HttpRequest) -> Self {
-        let (limit, offset) = match query {
-            DocumentFetchKind::PerDocumentId => (1, 0),
-            DocumentFetchKind::Normal { limit, offset, .. } => (*limit, *offset),
+        let (limit, offset, retrieve_vectors) = match query {
+            DocumentFetchKind::PerDocumentId { retrieve_vectors } => (1, 0, *retrieve_vectors),
+            DocumentFetchKind::Normal { limit, offset, retrieve_vectors, .. } => {
+                (*limit, *offset, *retrieve_vectors)
+            }
         };
         Self {
             timestamp: Some(OffsetDateTime::now_utc()),
             user_agents: extract_user_agents(request).into_iter().collect(),
             total_received: 1,
-            per_document_id: matches!(query, DocumentFetchKind::PerDocumentId),
+            per_document_id: matches!(query, DocumentFetchKind::PerDocumentId { .. }),
             per_filter: matches!(query, DocumentFetchKind::Normal { with_filter, .. } if *with_filter),
             max_limit: limit,
             max_offset: offset,
+            retrieve_vectors,
         }
     }
 
@@ -1568,6 +1582,7 @@ impl DocumentsFetchAggregator {
             per_filter,
             max_limit,
             max_offset,
+            retrieve_vectors,
         } = other;
 
         if self.timestamp.is_none() {
@@ -1583,6 +1598,8 @@ impl DocumentsFetchAggregator {
 
         self.max_limit = self.max_limit.max(max_limit);
         self.max_offset = self.max_offset.max(max_offset);
+
+        self.retrieve_vectors |= retrieve_vectors;
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
@@ -1623,6 +1640,7 @@ pub struct SimilarAggregator {
 
     // Whether a non-default embedder was specified
     embedder: bool,
+    retrieve_vectors: bool,
 
     // pagination
     max_limit: usize,
@@ -1646,6 +1664,7 @@ impl SimilarAggregator {
             offset,
             limit,
             attributes_to_retrieve: _,
+            retrieve_vectors,
             show_ranking_score,
             show_ranking_score_details,
             filter,
@@ -1690,6 +1709,7 @@ impl SimilarAggregator {
         ret.ranking_score_threshold = ranking_score_threshold.is_some();
 
         ret.embedder = embedder.is_some();
+        ret.retrieve_vectors = *retrieve_vectors;
 
         ret
     }
@@ -1722,6 +1742,7 @@ impl SimilarAggregator {
             show_ranking_score_details,
             embedder,
             ranking_score_threshold,
+            retrieve_vectors,
         } = other;
 
         if self.timestamp.is_none() {
@@ -1751,6 +1772,7 @@ impl SimilarAggregator {
         }
 
         self.embedder |= embedder;
+        self.retrieve_vectors |= retrieve_vectors;
 
         // pagination
         self.max_limit = self.max_limit.max(max_limit);
@@ -1785,6 +1807,7 @@ impl SimilarAggregator {
             show_ranking_score_details,
             embedder,
             ranking_score_threshold,
+            retrieve_vectors,
         } = self;
 
         if total_received == 0 {
@@ -1810,6 +1833,9 @@ impl SimilarAggregator {
                    "with_geoBoundingBox": filter_with_geo_bounding_box,
                    "avg_criteria_number": format!("{:.2}", filter_sum_of_criteria_terms as f64 / filter_total_number_of_criteria as f64),
                    "most_used_syntax": used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
+                },
+                "vector": {
+                    "retrieve_vectors": retrieve_vectors,
                 },
                 "hybrid": {
                     "embedder": embedder,

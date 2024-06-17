@@ -20,9 +20,9 @@ use crate::extractors::sequential_extractor::SeqHandler;
 use crate::metrics::MEILISEARCH_DEGRADED_SEARCH_REQUESTS;
 use crate::search::{
     add_search_rules, perform_search, HybridQuery, MatchingStrategy, RankingScoreThreshold,
-    SearchKind, SearchQuery, SemanticRatio, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
-    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
-    DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
+    RetrieveVectors, SearchKind, SearchQuery, SemanticRatio, DEFAULT_CROP_LENGTH,
+    DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
+    DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
 
@@ -51,6 +51,8 @@ pub struct SearchQueryGet {
     hits_per_page: Option<Param<usize>>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToRetrieve>)]
     attributes_to_retrieve: Option<CS<String>>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchRetrieveVectors>)]
+    retrieve_vectors: Param<bool>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToCrop>)]
     attributes_to_crop: Option<CS<String>>,
     #[deserr(default = Param(DEFAULT_CROP_LENGTH()), error = DeserrQueryParamError<InvalidSearchCropLength>)]
@@ -153,6 +155,7 @@ impl From<SearchQueryGet> for SearchQuery {
             page: other.page.as_deref().copied(),
             hits_per_page: other.hits_per_page.as_deref().copied(),
             attributes_to_retrieve: other.attributes_to_retrieve.map(|o| o.into_iter().collect()),
+            retrieve_vectors: other.retrieve_vectors.0,
             attributes_to_crop: other.attributes_to_crop.map(|o| o.into_iter().collect()),
             crop_length: other.crop_length.0,
             attributes_to_highlight: other.attributes_to_highlight.map(|o| o.into_iter().collect()),
@@ -222,10 +225,12 @@ pub async fn search_with_url_query(
     let features = index_scheduler.features();
 
     let search_kind = search_kind(&query, index_scheduler.get_ref(), &index, features)?;
-
+    let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors, features)?;
     let _permit = search_queue.try_get_search_permit().await?;
-    let search_result =
-        tokio::task::spawn_blocking(move || perform_search(&index, query, search_kind)).await?;
+    let search_result = tokio::task::spawn_blocking(move || {
+        perform_search(&index, query, search_kind, retrieve_vector)
+    })
+    .await?;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
@@ -262,10 +267,13 @@ pub async fn search_with_post(
     let features = index_scheduler.features();
 
     let search_kind = search_kind(&query, index_scheduler.get_ref(), &index, features)?;
+    let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors, features)?;
 
     let _permit = search_queue.try_get_search_permit().await?;
-    let search_result =
-        tokio::task::spawn_blocking(move || perform_search(&index, query, search_kind)).await?;
+    let search_result = tokio::task::spawn_blocking(move || {
+        perform_search(&index, query, search_kind, retrieve_vectors)
+    })
+    .await?;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
         if search_result.degraded {
@@ -287,11 +295,10 @@ pub fn search_kind(
     features: RoFeatures,
 ) -> Result<SearchKind, ResponseError> {
     if query.vector.is_some() {
-        features.check_vector("Passing `vector` as a query parameter")?;
+        features.check_vector("Passing `vector` as a parameter")?;
     }
-
     if query.hybrid.is_some() {
-        features.check_vector("Passing `hybrid` as a query parameter")?;
+        features.check_vector("Passing `hybrid` as a parameter")?;
     }
 
     // regardless of anything, always do a keyword search when we don't have a vector and the query is whitespace or missing

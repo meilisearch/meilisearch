@@ -1938,3 +1938,210 @@ async fn import_dump_v6_containing_experimental_features() {
         })
         .await;
 }
+
+// In this test we must generate the dump ourselves to ensure the
+// `user provided` vectors are well set
+#[actix_rt::test]
+#[cfg_attr(target_os = "windows", ignore)]
+async fn generate_and_import_dump_containing_vectors() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut opt = default_settings(temp.path());
+    let server = Server::new_with_options(opt.clone()).await.unwrap();
+    let (code, _) = server.set_features(json!({"vectorStore": true})).await;
+    snapshot!(code, @r###"
+    {
+      "vectorStore": true,
+      "metrics": false,
+      "logsRoute": false
+    }
+    "###);
+    let index = server.index("pets");
+    let (response, code) = index
+        .update_settings(json!(
+        {
+            "embedders": {
+                "doggo_embedder": {
+                    "source": "huggingFace",
+                    "model": "sentence-transformers/all-MiniLM-L6-v2",
+                    "revision": "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
+                    "documentTemplate": "{{doc.doggo}}",
+                }
+            }
+        }
+        ))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let response = index.wait_task(response.uid()).await;
+    snapshot!(response);
+    let (response, code) = index
+        .add_documents(
+            json!([
+                {"id": 0, "doggo": "kefir", "_vectors": { "doggo_embedder": vec![0; 384] }},
+                {"id": 1, "doggo": "echo", "_vectors": { "doggo_embedder": { "regenerate": false, "embeddings": vec![1; 384] }}},
+                {"id": 2, "doggo": "intel", "_vectors": { "doggo_embedder": { "regenerate": true, "embeddings": vec![2; 384] }}},
+                {"id": 3, "doggo": "bill", "_vectors": { "doggo_embedder": { "regenerate": true }}},
+                {"id": 4, "doggo": "max" },
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let response = index.wait_task(response.uid()).await;
+    snapshot!(response);
+
+    let (response, code) = server.create_dump().await;
+    snapshot!(code, @"202 Accepted");
+    let response = index.wait_task(response.uid()).await;
+    snapshot!(response["status"], @r###""succeeded""###);
+
+    // ========= We made a dump, now we should clear the DB and try to import our dump
+    drop(server);
+    tokio::fs::remove_dir_all(&opt.db_path).await.unwrap();
+    let dump_name = format!("{}.dump", response["details"]["dumpUid"].as_str().unwrap());
+    let dump_path = opt.dump_dir.join(dump_name);
+    assert!(dump_path.exists(), "path: `{}`", dump_path.display());
+
+    opt.import_dump = Some(dump_path);
+    // NOTE: We shouldn't have to change the database path but I lost one hour
+    // because of a « bad path » error and that fixed it.
+    opt.db_path = temp.path().join("data.ms");
+
+    let mut server = Server::new_auth_with_options(opt, temp).await;
+    server.use_api_key("MASTER_KEY");
+
+    let (indexes, code) = server.list_indexes(None, None).await;
+    assert_eq!(code, 200, "{indexes}");
+
+    snapshot!(indexes["results"].as_array().unwrap().len(), @"1");
+    snapshot!(indexes["results"][0]["uid"], @r###""pets""###);
+    snapshot!(indexes["results"][0]["primaryKey"], @r###""id""###);
+
+    let (response, code) = server.get_features().await;
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "vectorStore": true,
+      "metrics": false,
+      "logsRoute": false
+    }
+    "###);
+
+    let index = server.index("pets");
+
+    let (response, code) = index.settings().await;
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "displayedAttributes": [
+        "*"
+      ],
+      "searchableAttributes": [
+        "*"
+      ],
+      "filterableAttributes": [],
+      "sortableAttributes": [],
+      "rankingRules": [
+        "words",
+        "typo",
+        "proximity",
+        "attribute",
+        "sort",
+        "exactness"
+      ],
+      "stopWords": [],
+      "nonSeparatorTokens": [],
+      "separatorTokens": [],
+      "dictionary": [],
+      "synonyms": {},
+      "distinctAttribute": null,
+      "proximityPrecision": "byWord",
+      "typoTolerance": {
+        "enabled": true,
+        "minWordSizeForTypos": {
+          "oneTypo": 5,
+          "twoTypos": 9
+        },
+        "disableOnWords": [],
+        "disableOnAttributes": []
+      },
+      "faceting": {
+        "maxValuesPerFacet": 100,
+        "sortFacetValuesBy": {
+          "*": "alpha"
+        }
+      },
+      "pagination": {
+        "maxTotalHits": 1000
+      },
+      "embedders": {
+        "doggo_embedder": {
+          "source": "huggingFace",
+          "model": "sentence-transformers/all-MiniLM-L6-v2",
+          "revision": "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
+          "documentTemplate": "{{doc.doggo}}"
+        }
+      },
+      "searchCutoffMs": null
+    }
+    "###);
+
+    index
+        .search(json!({"retrieveVectors": true}), |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"], { "[]._vectors.doggo_embedder.embeddings" => "[vector]" }), @r###"
+            [
+              {
+                "id": 0,
+                "doggo": "kefir",
+                "_vectors": {
+                  "doggo_embedder": {
+                    "embeddings": "[vector]",
+                    "regenerate": false
+                  }
+                }
+              },
+              {
+                "id": 1,
+                "doggo": "echo",
+                "_vectors": {
+                  "doggo_embedder": {
+                    "embeddings": "[vector]",
+                    "regenerate": false
+                  }
+                }
+              },
+              {
+                "id": 2,
+                "doggo": "intel",
+                "_vectors": {
+                  "doggo_embedder": {
+                    "embeddings": "[vector]",
+                    "regenerate": true
+                  }
+                }
+              },
+              {
+                "id": 3,
+                "doggo": "bill",
+                "_vectors": {
+                  "doggo_embedder": {
+                    "embeddings": "[vector]",
+                    "regenerate": true
+                  }
+                }
+              },
+              {
+                "id": 4,
+                "doggo": "max",
+                "_vectors": {
+                  "doggo_embedder": {
+                    "embeddings": "[vector]",
+                    "regenerate": true
+                  }
+                }
+              }
+            ]
+            "###);
+        })
+        .await;
+}

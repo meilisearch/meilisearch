@@ -1290,21 +1290,38 @@ async fn experimental_feature_vector_store() {
     index.add_documents(json!(documents), None).await;
     index.wait_task(0).await;
 
-    let (response, code) = index
-        .search_post(json!({
+    index
+        .search(json!({
             "vector": [1.0, 2.0, 3.0],
             "showRankingScore": true
-        }))
+        }), |response, code|{
+            meili_snap::snapshot!(code, @"400 Bad Request");
+            meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+            {
+              "message": "Passing `vector` as a parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
+              "code": "feature_not_enabled",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+            }
+            "###);
+        })
         .await;
-    meili_snap::snapshot!(code, @"400 Bad Request");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "message": "Passing `vector` as a query parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
-      "code": "feature_not_enabled",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
-    }
-    "###);
+    index
+        .search(json!({
+            "retrieveVectors": true,
+            "showRankingScore": true
+        }), |response, code|{
+            meili_snap::snapshot!(code, @"400 Bad Request");
+            meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+            {
+              "message": "Passing `retrieveVectors` as a parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
+              "code": "feature_not_enabled",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+            }
+            "###);
+        })
+        .await;
 
     let (response, code) = server.set_features(json!({"vectorStore": true})).await;
     meili_snap::snapshot!(code, @"200 OK");
@@ -1337,6 +1354,7 @@ async fn experimental_feature_vector_store() {
         .search_post(json!({
             "vector": [1.0, 2.0, 3.0],
             "showRankingScore": true,
+            "retrieveVectors": true,
         }))
         .await;
 
@@ -1348,11 +1366,16 @@ async fn experimental_feature_vector_store() {
         "title": "Shazam!",
         "id": "287947",
         "_vectors": {
-          "manual": [
-            1.0,
-            2.0,
-            3.0
-          ]
+          "manual": {
+            "embeddings": [
+              [
+                1.0,
+                2.0,
+                3.0
+              ]
+            ],
+            "regenerate": false
+          }
         },
         "_rankingScore": 1.0
       },
@@ -1360,11 +1383,16 @@ async fn experimental_feature_vector_store() {
         "title": "Captain Marvel",
         "id": "299537",
         "_vectors": {
-          "manual": [
-            1.0,
-            2.0,
-            54.0
-          ]
+          "manual": {
+            "embeddings": [
+              [
+                1.0,
+                2.0,
+                54.0
+              ]
+            ],
+            "regenerate": false
+          }
         },
         "_rankingScore": 0.9129111766815186
       },
@@ -1372,11 +1400,16 @@ async fn experimental_feature_vector_store() {
         "title": "Gläss",
         "id": "450465",
         "_vectors": {
-          "manual": [
-            -100.0,
-            340.0,
-            90.0
-          ]
+          "manual": {
+            "embeddings": [
+              [
+                -100.0,
+                340.0,
+                90.0
+              ]
+            ],
+            "regenerate": false
+          }
         },
         "_rankingScore": 0.8106412887573242
       },
@@ -1384,11 +1417,16 @@ async fn experimental_feature_vector_store() {
         "title": "How to Train Your Dragon: The Hidden World",
         "id": "166428",
         "_vectors": {
-          "manual": [
-            -100.0,
-            231.0,
-            32.0
-          ]
+          "manual": {
+            "embeddings": [
+              [
+                -100.0,
+                231.0,
+                32.0
+              ]
+            ],
+            "regenerate": false
+          }
         },
         "_rankingScore": 0.7412010431289673
       },
@@ -1396,11 +1434,16 @@ async fn experimental_feature_vector_store() {
         "title": "Escape Room",
         "id": "522681",
         "_vectors": {
-          "manual": [
-            10.0,
-            -23.0,
-            32.0
-          ]
+          "manual": {
+            "embeddings": [
+              [
+                10.0,
+                -23.0,
+                32.0
+              ]
+            ],
+            "regenerate": false
+          }
         },
         "_rankingScore": 0.6972063183784485
       }

@@ -15,6 +15,7 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
+use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{FacetValueHit, OrderBy, SearchForFacetValues, TimeBudget};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -59,6 +60,8 @@ pub struct SearchQuery {
     pub hits_per_page: Option<usize>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchRetrieveVectors>)]
+    pub retrieve_vectors: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
     pub attributes_to_crop: Option<Vec<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
@@ -141,6 +144,7 @@ impl fmt::Debug for SearchQuery {
             page,
             hits_per_page,
             attributes_to_retrieve,
+            retrieve_vectors,
             attributes_to_crop,
             crop_length,
             attributes_to_highlight,
@@ -172,6 +176,9 @@ impl fmt::Debug for SearchQuery {
         // Then, everything related to the queries
         if let Some(q) = q {
             debug.field("q", &q);
+        }
+        if *retrieve_vectors {
+            debug.field("retrieve_vectors", &retrieve_vectors);
         }
         if let Some(v) = vector {
             if v.len() < 10 {
@@ -370,6 +377,8 @@ pub struct SearchQueryWithIndex {
     pub hits_per_page: Option<usize>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchRetrieveVectors>)]
+    pub retrieve_vectors: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
     pub attributes_to_crop: Option<Vec<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
@@ -413,6 +422,7 @@ impl SearchQueryWithIndex {
             page,
             hits_per_page,
             attributes_to_retrieve,
+            retrieve_vectors,
             attributes_to_crop,
             crop_length,
             attributes_to_highlight,
@@ -440,6 +450,7 @@ impl SearchQueryWithIndex {
                 page,
                 hits_per_page,
                 attributes_to_retrieve,
+                retrieve_vectors,
                 attributes_to_crop,
                 crop_length,
                 attributes_to_highlight,
@@ -478,6 +489,8 @@ pub struct SimilarQuery {
     pub embedder: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSimilarRetrieveVectors>)]
+    pub retrieve_vectors: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarShowRankingScore>, default)]
     pub show_ranking_score: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarShowRankingScoreDetails>, default)]
@@ -810,6 +823,7 @@ pub fn perform_search(
     index: &Index,
     query: SearchQuery,
     search_kind: SearchKind,
+    retrieve_vectors: RetrieveVectors,
 ) -> Result<SearchResult, MeilisearchHttpError> {
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
@@ -847,6 +861,8 @@ pub fn perform_search(
         page,
         hits_per_page,
         attributes_to_retrieve,
+        // use the enum passed as parameter
+        retrieve_vectors: _,
         attributes_to_crop,
         crop_length,
         attributes_to_highlight,
@@ -870,6 +886,7 @@ pub fn perform_search(
 
     let format = AttributesFormat {
         attributes_to_retrieve,
+        retrieve_vectors,
         attributes_to_highlight,
         attributes_to_crop,
         crop_length,
@@ -953,6 +970,7 @@ pub fn perform_search(
 
 struct AttributesFormat {
     attributes_to_retrieve: Option<BTreeSet<String>>,
+    retrieve_vectors: RetrieveVectors,
     attributes_to_highlight: Option<HashSet<String>>,
     attributes_to_crop: Option<Vec<String>>,
     crop_length: usize,
@@ -965,6 +983,36 @@ struct AttributesFormat {
     show_ranking_score_details: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RetrieveVectors {
+    /// Do not touch the `_vectors` field
+    ///
+    /// this is the behavior when the vectorStore feature is disabled
+    Ignore,
+    /// Remove the `_vectors` field
+    ///
+    /// this is the behavior when the vectorStore feature is enabled, and `retrieveVectors` is `false`
+    Hide,
+    /// Retrieve vectors from the DB and merge them into the `_vectors` field
+    ///
+    /// this is the behavior when the vectorStore feature is enabled, and `retrieveVectors` is `true`
+    Retrieve,
+}
+
+impl RetrieveVectors {
+    pub fn new(
+        retrieve_vector: bool,
+        features: index_scheduler::RoFeatures,
+    ) -> Result<Self, index_scheduler::Error> {
+        match (retrieve_vector, features.check_vector("Passing `retrieveVectors` as a parameter")) {
+            (true, Ok(())) => Ok(Self::Retrieve),
+            (true, Err(error)) => Err(error),
+            (false, Ok(())) => Ok(Self::Hide),
+            (false, Err(_)) => Ok(Self::Ignore),
+        }
+    }
+}
+
 fn make_hits(
     index: &Index,
     rtxn: &RoTxn<'_>,
@@ -974,10 +1022,32 @@ fn make_hits(
     document_scores: Vec<Vec<ScoreDetails>>,
 ) -> Result<Vec<SearchHit>, MeilisearchHttpError> {
     let fields_ids_map = index.fields_ids_map(rtxn).unwrap();
-    let displayed_ids = index
-        .displayed_fields_ids(rtxn)?
-        .map(|fields| fields.into_iter().collect::<BTreeSet<_>>())
-        .unwrap_or_else(|| fields_ids_map.iter().map(|(id, _)| id).collect());
+    let displayed_ids =
+        index.displayed_fields_ids(rtxn)?.map(|fields| fields.into_iter().collect::<BTreeSet<_>>());
+
+    let vectors_fid = fields_ids_map.id(milli::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME);
+
+    let vectors_is_hidden = match (&displayed_ids, vectors_fid) {
+        // displayed_ids is a wildcard, so `_vectors` can be displayed regardless of its fid
+        (None, _) => false,
+        // displayed_ids is a finite list, and `_vectors` cannot be part of it because it is not an existing field
+        (Some(_), None) => true,
+        // displayed_ids is a finit list, so hide if `_vectors` is not part of it
+        (Some(map), Some(vectors_fid)) => map.contains(&vectors_fid),
+    };
+
+    let retrieve_vectors = if let RetrieveVectors::Retrieve = format.retrieve_vectors {
+        if vectors_is_hidden {
+            RetrieveVectors::Hide
+        } else {
+            RetrieveVectors::Retrieve
+        }
+    } else {
+        format.retrieve_vectors
+    };
+
+    let displayed_ids =
+        displayed_ids.unwrap_or_else(|| fields_ids_map.iter().map(|(id, _)| id).collect());
     let fids = |attrs: &BTreeSet<String>| {
         let mut ids = BTreeSet::new();
         for attr in attrs {
@@ -1000,6 +1070,7 @@ fn make_hits(
         .intersection(&displayed_ids)
         .cloned()
         .collect();
+
     let attr_to_highlight = format.attributes_to_highlight.unwrap_or_default();
     let attr_to_crop = format.attributes_to_crop.unwrap_or_default();
     let formatted_options = compute_formatted_options(
@@ -1033,17 +1104,47 @@ fn make_hits(
     formatter_builder.highlight_prefix(format.highlight_pre_tag);
     formatter_builder.highlight_suffix(format.highlight_post_tag);
     let mut documents = Vec::new();
+    let embedding_configs = index.embedding_configs(rtxn)?;
     let documents_iter = index.documents(rtxn, documents_ids)?;
-    for ((_id, obkv), score) in documents_iter.into_iter().zip(document_scores.into_iter()) {
+    for ((id, obkv), score) in documents_iter.into_iter().zip(document_scores.into_iter()) {
         // First generate a document with all the displayed fields
         let displayed_document = make_document(&displayed_ids, &fields_ids_map, obkv)?;
+
+        let add_vectors_fid =
+            vectors_fid.filter(|_fid| retrieve_vectors == RetrieveVectors::Retrieve);
 
         // select the attributes to retrieve
         let attributes_to_retrieve = to_retrieve_ids
             .iter()
+            // skip the vectors_fid if RetrieveVectors::Hide
+            .filter(|fid| match vectors_fid {
+                Some(vectors_fid) => {
+                    !(retrieve_vectors == RetrieveVectors::Hide && **fid == vectors_fid)
+                }
+                None => true,
+            })
+            // need to retrieve the existing `_vectors` field if the `RetrieveVectors::Retrieve`
+            .chain(add_vectors_fid.iter())
             .map(|&fid| fields_ids_map.name(fid).expect("Missing field name"));
         let mut document =
             permissive_json_pointer::select_values(&displayed_document, attributes_to_retrieve);
+
+        if retrieve_vectors == RetrieveVectors::Retrieve {
+            let mut vectors = match document.remove("_vectors") {
+                Some(Value::Object(map)) => map,
+                _ => Default::default(),
+            };
+            for (name, vector) in index.embeddings(rtxn, id)? {
+                let user_provided = embedding_configs
+                    .iter()
+                    .find(|conf| conf.name == name)
+                    .is_some_and(|conf| conf.user_provided.contains(id));
+                let embeddings =
+                    ExplicitVectors { embeddings: Some(vector.into()), regenerate: !user_provided };
+                vectors.insert(name, serde_json::to_value(embeddings)?);
+            }
+            document.insert("_vectors".into(), vectors.into());
+        }
 
         let (matches_position, formatted) = format_fields(
             &displayed_document,
@@ -1114,6 +1215,7 @@ pub fn perform_similar(
     query: SimilarQuery,
     embedder_name: String,
     embedder: Arc<Embedder>,
+    retrieve_vectors: RetrieveVectors,
 ) -> Result<SimilarResult, ResponseError> {
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
@@ -1125,6 +1227,7 @@ pub fn perform_similar(
         filter: _,
         embedder: _,
         attributes_to_retrieve,
+        retrieve_vectors: _,
         show_ranking_score,
         show_ranking_score_details,
         ranking_score_threshold,
@@ -1171,6 +1274,7 @@ pub fn perform_similar(
 
     let format = AttributesFormat {
         attributes_to_retrieve,
+        retrieve_vectors,
         attributes_to_highlight: None,
         attributes_to_crop: None,
         crop_length: DEFAULT_CROP_LENGTH(),
