@@ -988,7 +988,6 @@ impl SearchAggregator {
                     "with_geoPoint": sort_with_geo_point,
                     "avg_criteria_number": format!("{:.2}", sort_sum_of_criteria_terms as f64 / sort_total_number_of_criteria as f64),
                 },
-                // TODO ask help from María
                 "distinct": distinct,
                 "filter": {
                    "with_geoRadius": filter_with_geo_radius,
