@@ -16,14 +16,10 @@ use meilisearch::{
     LogStderrType, Opt, SubscriberForSecondLayer,
 };
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
-use mimalloc::MiMalloc;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::Layer;
-
-#[global_allocator]
-static ALLOC: MiMalloc = MiMalloc;
 
 fn default_log_route_layer() -> LogRouteType {
     None.with_filter(tracing_subscriber::filter::Targets::new().with_target("", LevelFilter::OFF))
@@ -56,8 +52,10 @@ fn setup(opt: &Opt) -> anyhow::Result<(LogRouteHandle, LogStderrHandle)> {
     let (stderr_layer, stderr_layer_handle) =
         tracing_subscriber::reload::Layer::new(default_log_stderr_layer(opt));
     let route_layer: tracing_subscriber::reload::Layer<_, _> = route_layer;
+    let error_layer = tracing_error::ErrorLayer::default();
 
-    let subscriber = tracing_subscriber::registry().with(route_layer).with(stderr_layer);
+    let subscriber =
+        tracing_subscriber::registry().with(route_layer).with(stderr_layer).with(error_layer);
 
     // set the subscriber as the default for the application
     tracing::subscriber::set_global_default(subscriber).unwrap();

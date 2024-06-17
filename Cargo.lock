@@ -2507,6 +2507,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "inspecting-allocator"
+version = "1.8.0"
+dependencies = [
+ "tracing",
+ "tracing-error",
+]
+
+[[package]]
 name = "insta"
 version = "1.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3316,6 +3324,7 @@ dependencies = [
  "http 0.2.11",
  "index-scheduler",
  "indexmap",
+ "inspecting-allocator",
  "insta",
  "is-terminal",
  "itertools 0.11.0",
@@ -3365,6 +3374,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-actix-web",
+ "tracing-error",
  "tracing-subscriber",
  "tracing-trace",
  "url",

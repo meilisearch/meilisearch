@@ -8,6 +8,7 @@ use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::Deserr;
 use futures::StreamExt;
 use index_scheduler::{IndexScheduler, TaskId};
+use inspecting_allocator::InspectingAllocator;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
@@ -20,6 +21,7 @@ use meilisearch_types::milli::DocumentId;
 use meilisearch_types::star_or::OptionStarOrList;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::{milli, Document, Index};
+use mimalloc::MiMalloc;
 use mime::Mime;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
@@ -45,6 +47,9 @@ use crate::Opt;
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
 });
+
+#[global_allocator]
+static ALLOC: InspectingAllocator<MiMalloc> = InspectingAllocator::wrap(MiMalloc);
 
 /// Extracts the mime type from the content type and return
 /// a meilisearch error if anything bad happen.
@@ -468,6 +473,13 @@ async fn document_addition(
     };
 
     let scheduler = index_scheduler.clone();
+    for (address, entry) in ALLOC.find_older_generations(5) {
+        println!(
+            "Found allocation older than 5 generations: {address:p} in generation {}. Span trace",
+            entry.generation()
+        );
+        println!("{entry}")
+    }
     let task = match tokio::task::spawn_blocking(move || scheduler.register(task, task_id, dry_run))
         .await?
     {

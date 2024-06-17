@@ -108,6 +108,8 @@ tracing-subscriber = { version = "0.3.18", features = ["json"] }
 tracing-trace = { version = "0.1.0", path = "../tracing-trace" }
 tracing-actix-web = "0.7.9"
 build-info = { version = "1.7.0", path = "../build-info" }
+inspecting-allocator = { version = "1.8.0", path = "../inspecting-allocator" }
+tracing-error = { version = "0.2.0", default-features = false }
 
 [dev-dependencies]
 actix-rt = "2.9.0"
