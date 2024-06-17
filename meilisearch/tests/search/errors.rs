@@ -1072,3 +1072,66 @@ async fn search_on_unknown_field_plus_joker() {
         )
         .await;
 }
+
+#[actix_rt::test]
+async fn distinct_at_search_time() {
+    let server = Server::new().await;
+    let index = server.index("tamo");
+    let (task, _) = index.create(None).await;
+    let task = index.wait_task(task.uid()).await;
+    snapshot!(task, name: "task-succeed");
+
+    let (response, code) =
+        index.search_post(json!({"page": 0, "hitsPerPage": 2, "distinct": "doggo.truc"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. This index does not have configured filterable attributes.",
+      "code": "invalid_search_distinct",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
+    }
+    "###);
+
+    let (task, _) = index.update_settings_filterable_attributes(json!(["color", "machin"])).await;
+    index.wait_task(task.uid()).await;
+
+    let (response, code) =
+        index.search_post(json!({"page": 0, "hitsPerPage": 2, "distinct": "doggo.truc"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. Available filterable attributes are: `color, machin`.",
+      "code": "invalid_search_distinct",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
+    }
+    "###);
+
+    let (task, _) = index.update_settings_displayed_attributes(json!(["color"])).await;
+    index.wait_task(task.uid()).await;
+
+    let (response, code) =
+        index.search_post(json!({"page": 0, "hitsPerPage": 2, "distinct": "doggo.truc"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. Available filterable attributes are: `color, <..hidden-attributes>`.",
+      "code": "invalid_search_distinct",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
+    }
+    "###);
+
+    let (response, code) =
+        index.search_post(json!({"page": 0, "hitsPerPage": 2, "distinct": true})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Invalid value type at `.distinct`: expected a string, but found a boolean: `true`",
+      "code": "invalid_search_distinct",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
+    }
+    "###);
+}
