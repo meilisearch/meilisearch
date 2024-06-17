@@ -473,6 +473,7 @@ async fn document_addition(
     };
 
     let scheduler = index_scheduler.clone();
+    ALLOC.next_generation();
     for (address, entry) in ALLOC.find_older_generations(5) {
         println!(
             "Found allocation older than 5 generations: {address:p} in generation {}. Span trace",
