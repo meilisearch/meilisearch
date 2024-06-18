@@ -25,12 +25,6 @@
 
 <p align="center">⚡ A lightning-fast search engine that fits effortlessly into your apps, websites, and workflow 🔍</p>
 
----
-
-### 🔥 On June 11th, we are hosting a live product demo and Q&A about AI search, query suggestions, and v1.9. [Register now](https://us06web.zoom.us/meeting/register/tZMudO-qpz8qGdDQ_MNn3NmGV0m8WLf1uECM?utm_campaign=ossutm_source=github&utm_medium=meilisearch#/registration)!
-
----
-
 [Meilisearch](https://www.meilisearch.com) helps you shape a delightful search experience in a snap, offering features that work out of the box to speed up your workflow.
 
 <p align="center" name="demo">
