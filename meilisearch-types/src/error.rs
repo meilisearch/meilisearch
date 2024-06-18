@@ -273,13 +273,14 @@ InvalidSimilarShowRankingScore        , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowRankingScoreDetails  , InvalidRequest       , BAD_REQUEST ;
 InvalidSimilarShowRankingScoreDetails , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchSort                     , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchDistinct                 , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDisplayedAttributes    , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDistinctAttribute      , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsProximityPrecision     , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFaceting               , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFilterableAttributes   , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsPagination             , InvalidRequest       , BAD_REQUEST ;
-InvalidSettingsSearchCutoffMs           , InvalidRequest       , BAD_REQUEST ;
+InvalidSettingsSearchCutoffMs         , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsEmbedders              , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsRankingRules           , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsSearchableAttributes   , InvalidRequest       , BAD_REQUEST ;
@@ -384,6 +385,7 @@ impl ErrorCode for milli::Error {
                         Code::IndexPrimaryKeyMultipleCandidatesFound
                     }
                     UserError::PrimaryKeyCannotBeChanged(_) => Code::IndexPrimaryKeyAlreadyExists,
+                    UserError::InvalidDistinctAttribute { .. } => Code::InvalidSearchDistinct,
                     UserError::SortRankingRuleMissing => Code::InvalidSearchSort,
                     UserError::InvalidFacetsDistribution { .. } => Code::InvalidSearchFacets,
                     UserError::InvalidSortableAttribute { .. } => Code::InvalidSearchSort,

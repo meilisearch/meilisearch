@@ -205,8 +205,18 @@ fn create_index() -> TempIndex {
     index
 }
 
-fn verify_distinct(index: &Index, txn: &RoTxn, docids: &[u32]) -> Vec<String> {
-    let vs = collect_field_values(index, txn, index.distinct_field(txn).unwrap().unwrap(), docids);
+fn verify_distinct(
+    index: &Index,
+    txn: &RoTxn,
+    distinct: Option<&str>,
+    docids: &[u32],
+) -> Vec<String> {
+    let vs = collect_field_values(
+        index,
+        txn,
+        distinct.or_else(|| index.distinct_field(txn).unwrap()).unwrap(),
+        docids,
+    );
 
     let mut unique = HashSet::new();
     for v in vs.iter() {
@@ -223,12 +233,49 @@ fn verify_distinct(index: &Index, txn: &RoTxn, docids: &[u32]) -> Vec<String> {
 fn test_distinct_placeholder_no_ranking_rules() {
     let index = create_index();
 
+    // Set the letter as filterable and unset the distinct attribute.
+    index
+        .update_settings(|s| {
+            s.set_filterable_fields(hashset! { S("letter") });
+            s.reset_distinct_field();
+        })
+        .unwrap();
+
+    let txn = index.read_txn().unwrap();
+
+    let mut s = Search::new(&txn, &index);
+    s.distinct(S("letter"));
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 2, 5, 8, 9, 15, 18, 20, 21, 24, 25, 26]");
+    let distinct_values = verify_distinct(&index, &txn, Some("letter"), &documents_ids);
+    insta::assert_debug_snapshot!(distinct_values, @r###"
+    [
+        "\"A\"",
+        "\"B\"",
+        "\"C\"",
+        "\"D\"",
+        "\"E\"",
+        "\"F\"",
+        "\"G\"",
+        "\"H\"",
+        "\"I\"",
+        "__does_not_exist__",
+        "__does_not_exist__",
+        "__does_not_exist__",
+    ]
+    "###);
+}
+
+#[test]
+fn test_distinct_at_search_placeholder_no_ranking_rules() {
+    let index = create_index();
+
     let txn = index.read_txn().unwrap();
 
     let s = Search::new(&txn, &index);
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 2, 5, 8, 9, 15, 18, 20, 21, 24, 25, 26]");
-    let distinct_values = verify_distinct(&index, &txn, &documents_ids);
+    let distinct_values = verify_distinct(&index, &txn, None, &documents_ids);
     insta::assert_debug_snapshot!(distinct_values, @r###"
     [
         "\"A\"",
@@ -263,7 +310,7 @@ fn test_distinct_placeholder_sort() {
 
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[14, 26, 4, 7, 17, 23, 1, 19, 25, 8, 20, 24]");
-    let distinct_values = verify_distinct(&index, &txn, &documents_ids);
+    let distinct_values = verify_distinct(&index, &txn, None, &documents_ids);
     insta::assert_debug_snapshot!(distinct_values, @r###"
     [
         "\"E\"",
@@ -303,7 +350,7 @@ fn test_distinct_placeholder_sort() {
 
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[21, 20, 18, 15, 9, 8, 5, 2, 0, 24, 25, 26]");
-    let distinct_values = verify_distinct(&index, &txn, &documents_ids);
+    let distinct_values = verify_distinct(&index, &txn, None, &documents_ids);
     insta::assert_debug_snapshot!(distinct_values, @r###"
     [
         "\"I\"",
@@ -346,7 +393,7 @@ fn test_distinct_placeholder_sort() {
 
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[23, 20, 19, 17, 14, 8, 7, 4, 1, 26, 25, 24]");
-    let distinct_values = verify_distinct(&index, &txn, &documents_ids);
+    let distinct_values = verify_distinct(&index, &txn, None, &documents_ids);
     insta::assert_debug_snapshot!(distinct_values, @r###"
     [
         "\"I\"",
@@ -399,7 +446,7 @@ fn test_distinct_words() {
 
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 2, 26, 5, 8, 9, 15, 18, 20, 21, 25, 24]");
-    let distinct_values = verify_distinct(&index, &txn, &documents_ids);
+    let distinct_values = verify_distinct(&index, &txn, None, &documents_ids);
     insta::assert_debug_snapshot!(distinct_values, @r###"
     [
         "\"A\"",
@@ -453,7 +500,7 @@ fn test_distinct_sort_words() {
 
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[22, 20, 19, 16, 9, 8, 7, 3, 1, 26, 25, 24]");
-    let distinct_values = verify_distinct(&index, &txn, &documents_ids);
+    let distinct_values = verify_distinct(&index, &txn, None, &documents_ids);
     insta::assert_debug_snapshot!(distinct_values, @r###"
     [
         "\"I\"",
@@ -549,7 +596,7 @@ fn test_distinct_typo() {
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[3, 26, 0, 7, 8, 9, 15, 22, 18, 20, 25, 24]");
 
-    let distinct_values = verify_distinct(&index, &txn, &documents_ids);
+    let distinct_values = verify_distinct(&index, &txn, None, &documents_ids);
     insta::assert_debug_snapshot!(distinct_values, @r###"
     [
         "\"B\"",

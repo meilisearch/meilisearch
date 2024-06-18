@@ -59,6 +59,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 false,
                 universe,
                 &None,
+                &None,
                 GeoSortStrategy::default(),
                 0,
                 20,

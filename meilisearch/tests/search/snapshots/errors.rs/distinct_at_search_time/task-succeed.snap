@@ -1,0 +1,18 @@
+---
+source: meilisearch/tests/search/errors.rs
+---
+{
+  "uid": 0,
+  "indexUid": "tamo",
+  "status": "succeeded",
+  "type": "indexCreation",
+  "canceledBy": null,
+  "details": {
+    "primaryKey": null
+  },
+  "error": null,
+  "duration": "[duration]",
+  "enqueuedAt": "[date]",
+  "startedAt": "[date]",
+  "finishedAt": "[date]"
+}

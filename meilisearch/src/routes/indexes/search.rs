@@ -63,6 +63,8 @@ pub struct SearchQueryGet {
     filter: Option<String>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchSort>)]
     sort: Option<String>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchDistinct>)]
+    distinct: Option<String>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowMatchesPosition>)]
     show_matches_position: Param<bool>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowRankingScore>)]
@@ -161,6 +163,7 @@ impl From<SearchQueryGet> for SearchQuery {
             attributes_to_highlight: other.attributes_to_highlight.map(|o| o.into_iter().collect()),
             filter,
             sort: other.sort.map(|attr| fix_sort_query_parameters(&attr)),
+            distinct: other.distinct,
             show_matches_position: other.show_matches_position.0,
             show_ranking_score: other.show_ranking_score.0,
             show_ranking_score_details: other.show_ranking_score_details.0,

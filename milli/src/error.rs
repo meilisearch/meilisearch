@@ -134,6 +134,17 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
         }
     )]
     InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String>, hidden_fields: bool },
+    #[error("Attribute `{}` is not filterable and thus, cannot be used as distinct attribute. {}",
+        .field,
+        match .valid_fields.is_empty() {
+            true => "This index does not have configured filterable attributes.".to_string(),
+            false => format!("Available filterable attributes are: `{}{}`.",
+                    valid_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
+                    .hidden_fields.then_some(", <..hidden-attributes>").unwrap_or(""),
+                ),
+        }
+    )]
+    InvalidDistinctAttribute { field: String, valid_fields: BTreeSet<String>, hidden_fields: bool },
     #[error("Attribute `{}` is not facet-searchable. {}",
         .field,
         match .valid_fields.is_empty() {

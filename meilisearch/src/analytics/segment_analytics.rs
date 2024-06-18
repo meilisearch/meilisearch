@@ -597,6 +597,9 @@ pub struct SearchAggregator {
     // every time a request has a filter, this field must be incremented by one
     sort_total_number_of_criteria: usize,
 
+    // distinct
+    distinct: bool,
+
     // filter
     filter_with_geo_radius: bool,
     filter_with_geo_bounding_box: bool,
@@ -672,6 +675,7 @@ impl SearchAggregator {
             show_ranking_score_details,
             filter,
             sort,
+            distinct,
             facets: _,
             highlight_pre_tag,
             highlight_post_tag,
@@ -693,6 +697,8 @@ impl SearchAggregator {
             ret.sort_with_geo_point = sort.iter().any(|s| s.contains("_geoPoint("));
             ret.sort_sum_of_criteria_terms = sort.len();
         }
+
+        ret.distinct = distinct.is_some();
 
         if let Some(ref filter) = filter {
             static RE: Lazy<Regex> = Lazy::new(|| Regex::new("AND | OR").unwrap());
@@ -798,6 +804,7 @@ impl SearchAggregator {
             sort_with_geo_point,
             sort_sum_of_criteria_terms,
             sort_total_number_of_criteria,
+            distinct,
             filter_with_geo_radius,
             filter_with_geo_bounding_box,
             filter_sum_of_criteria_terms,
@@ -854,6 +861,9 @@ impl SearchAggregator {
             self.sort_sum_of_criteria_terms.saturating_add(sort_sum_of_criteria_terms);
         self.sort_total_number_of_criteria =
             self.sort_total_number_of_criteria.saturating_add(sort_total_number_of_criteria);
+
+        // distinct
+        self.distinct |= distinct;
 
         // filter
         self.filter_with_geo_radius |= filter_with_geo_radius;
@@ -926,6 +936,7 @@ impl SearchAggregator {
             sort_with_geo_point,
             sort_sum_of_criteria_terms,
             sort_total_number_of_criteria,
+            distinct,
             filter_with_geo_radius,
             filter_with_geo_bounding_box,
             filter_sum_of_criteria_terms,
@@ -983,6 +994,7 @@ impl SearchAggregator {
                     "with_geoPoint": sort_with_geo_point,
                     "avg_criteria_number": format!("{:.2}", sort_sum_of_criteria_terms as f64 / sort_total_number_of_criteria as f64),
                 },
+                "distinct": distinct,
                 "filter": {
                    "with_geoRadius": filter_with_geo_radius,
                    "with_geoBoundingBox": filter_with_geo_bounding_box,
@@ -1095,6 +1107,7 @@ impl MultiSearchAggregator {
                     show_matches_position: _,
                     filter: _,
                     sort: _,
+                    distinct: _,
                     facets: _,
                     highlight_pre_tag: _,
                     highlight_post_tag: _,

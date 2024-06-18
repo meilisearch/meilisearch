@@ -159,6 +159,7 @@ impl<'a> Search<'a> {
             offset: 0,
             limit: self.limit + self.offset,
             sort_criteria: self.sort_criteria.clone(),
+            distinct: self.distinct.clone(),
             searchable_attributes: self.searchable_attributes,
             geo_strategy: self.geo_strategy,
             terms_matching_strategy: self.terms_matching_strategy,
