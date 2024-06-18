@@ -229,12 +229,15 @@ fn send_original_documents_data(
     let documents_chunk_cloned = original_documents_chunk.clone();
     let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
 
-    let request_threads = ThreadPoolNoAbortBuilder::new()
-        .num_threads(crate::vector::REQUEST_PARALLELISM)
-        .thread_name(|index| format!("embedding-request-{index}"))
-        .build()?;
+    let new_embedding_configs = settings_diff.new.embedding_configs.clone();
 
-    if settings_diff.reindex_vectors() || !settings_diff.settings_update_only() {
+    if (settings_diff.reindex_vectors() || !settings_diff.settings_update_only())
+        && new_embedding_configs.get_default().is_some()
+    {
+        let request_threads = ThreadPoolNoAbortBuilder::new()
+            .num_threads(crate::vector::REQUEST_PARALLELISM)
+            .thread_name(|index| format!("embedding-request-{index}"))
+            .build()?;
         let settings_diff = settings_diff.clone();
         rayon::spawn(move || {
             for (name, (embedder, prompt)) in settings_diff.new.embedding_configs.clone() {
