@@ -36,7 +36,10 @@
   </a>
 </p>
 
-🔥 [**Try it!**](https://where2watch.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demo-link) 🔥
+## 🖥 Demos
+- [**Where To Watch:**](https://where2watch.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demo-link) Find the movie you will watch tonight through an up-to-date IMDb dataset, [featuring Hybrid Search](https://meilisearch.notion.site/Where2Watch-Noticeable-Queries-881f6270abef4452a94255462df740d7).
+- [**Millions of Musics:**](https://music.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demo-link) Search throught a 47 millions musics and artists dataset.
+- [**Tenant Tokens:**](https://tenant-token.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demo-link) Experience the search with restricted results that leverage the use of tenant tokens.
 
 ## ✨ Features
 - **Hybrid search:** Combine the best of both [semantic](https://www.meilisearch.com/docs/learn/experimental/vector_search) & full-text search to get the most relevant results
