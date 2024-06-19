@@ -1,0 +1,3 @@
+[toolchain]
+channel = "1.78.0"
+components = ["clippy"]
