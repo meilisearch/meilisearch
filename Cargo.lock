@@ -494,7 +494,7 @@ checksum = "8c3c1a368f70d6cf7302d78f8f7093da241fb8e8807c05cc9e51a125895a6d5b"
 
 [[package]]
 name = "benchmarks"
-version = "1.8.2"
+version = "1.8.3"
 dependencies = [
  "anyhow",
  "bytes",
@@ -639,7 +639,7 @@ dependencies = [
 
 [[package]]
 name = "build-info"
-version = "1.8.2"
+version = "1.8.3"
 dependencies = [
  "anyhow",
  "time",
@@ -1539,7 +1539,7 @@ dependencies = [
 
 [[package]]
 name = "dump"
-version = "1.8.2"
+version = "1.8.3"
 dependencies = [
  "anyhow",
  "big_s",
@@ -1787,7 +1787,7 @@ dependencies = [
 
 [[package]]
 name = "file-store"
-version = "1.8.2"
+version = "1.8.3"
 dependencies = [
  "faux",
  "tempfile",
@@ -1810,7 +1810,7 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "1.8.2"
+version = "1.8.3"
 dependencies = [
  "insta",
  "nom",
@@ -1830,7 +1830,7 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "1.8.2"
+version = "1.8.3"
 dependencies = [
  "criterion",
  "serde_json",
@@ -1948,7 +1948,7 @@ dependencies = [
 
 [[package]]
 name = "fuzzers"
-version = "1.8.2"
+version = "1.8.3"
 dependencies = [
  "arbitrary",
  "clap",
@@ -2442,7 +2442,7 @@ checksum = "206ca75c9c03ba3d4ace2460e57b189f39f43de612c2f85836e65c929701bb2d"
 
 [[package]]
 name = "index-scheduler"
-version = "1.8.2"
+version = "1.8.3"
 dependencies = [
  "anyhow",
  "big_s",
@@ -2638,7 +2638,7 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "1.8.2"
+version = "1.8.3"
 dependencies = [
  "criterion",
  "serde_json",
@@ -3275,7 +3275,7 @@ checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
 
 [[package]]
 name = "meili-snap"
-version = "1.8.2"
+version = "1.8.3"
 dependencies = [
  "insta",
  "md5",
@@ -3284,7 +3284,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch"
-version = "1.8.2"
+version = "1.8.3"
 dependencies = [
  "actix-cors",
  "actix-http",
@@ -3377,7 +3377,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-auth"
-version = "1.8.2"
+version = "1.8.3"
 dependencies = [
  "base64 0.21.7",
  "enum-iterator",
@@ -3396,7 +3396,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-types"
-version = "1.8.2"
+version = "1.8.3"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -3426,7 +3426,7 @@ dependencies = [
 
 [[package]]
 name = "meilitool"
-version = "1.8.2"
+version = "1.8.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -3465,7 +3465,7 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "1.8.2"
+version = "1.8.3"
 dependencies = [
  "arroy",
  "big_s",
@@ -3906,7 +3906,7 @@ checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 
 [[package]]
 name = "permissive-json-pointer"
-version = "1.8.2"
+version = "1.8.3"
 dependencies = [
  "big_s",
  "serde_json",
@@ -6074,7 +6074,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "1.8.2"
+version = "1.8.3"
 dependencies = [
  "anyhow",
  "build-info",
