@@ -34,7 +34,7 @@ impl ThreadPoolNoAbort {
 }
 
 #[derive(Error, Debug)]
-#[error("A panic occured. Read the logs to find more information about it")]
+#[error("A panic occurred. Read the logs to find more information about it")]
 pub struct PanicCatched;
 
 #[derive(Default)]
@@ -61,9 +61,28 @@ impl ThreadPoolNoAbortBuilder {
     pub fn build(mut self) -> Result<ThreadPoolNoAbort, rayon::ThreadPoolBuildError> {
         let pool_catched_panic = Arc::new(AtomicBool::new(false));
         self.0 = self.0.panic_handler({
-            let catched_panic = pool_catched_panic.clone();
-            move |_result| catched_panic.store(true, Ordering::SeqCst)
+            let catched_panic = Arc::downgrade(&pool_catched_panic);
+            move |_result| {
+                if let Some(catched_panic) = catched_panic.upgrade() {
+                    catched_panic.store(true, Ordering::SeqCst)
+                }
+            }
         });
         Ok(ThreadPoolNoAbort { thread_pool: self.0.build()?, pool_catched_panic })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::sync::Arc;
+
+    use crate::ThreadPoolNoAbortBuilder;
+
+    #[test]
+    fn drop_pool() {
+        let pool = ThreadPoolNoAbortBuilder::new().num_threads(10).build().unwrap();
+        let caught_panic = Arc::downgrade(&pool.pool_catched_panic);
+        drop(pool);
+        assert_eq!(caught_panic.strong_count(), 0);
     }
 }
