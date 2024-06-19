@@ -239,8 +239,6 @@ fn send_original_documents_data(
     let documents_chunk_cloned = original_documents_chunk.clone();
     let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
 
-    let request_threads = request_threads();
-
     if settings_diff.reindex_vectors() || !settings_diff.settings_update_only() {
         let settings_diff = settings_diff.clone();
         rayon::spawn(move || {
@@ -258,7 +256,7 @@ fn send_original_documents_data(
                             prompts,
                             indexer,
                             embedder.clone(),
-                            request_threads,
+                            request_threads(),
                         ) {
                             Ok(results) => Some(results),
                             Err(error) => {
