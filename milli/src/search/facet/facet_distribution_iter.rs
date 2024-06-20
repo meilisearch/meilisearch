@@ -1,6 +1,5 @@
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
-use std::io::Cursor;
 use std::ops::ControlFlow;
 
 use heed::Result;
@@ -75,11 +74,8 @@ where
 
     // Represents the list of keys that we must explore.
     let mut heap = BinaryHeap::new();
-    let highest_level = get_highest_level(
-        rtxn,
-        db.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>(),
-        field_id,
-    )?;
+    let db = db.remap_data_type::<FacetGroupLazyValueCodec>();
+    let highest_level = get_highest_level(rtxn, db, field_id)?;
 
     if let Some(first_bound) = get_first_facet_value::<BytesRefCodec, _>(rtxn, db, field_id)? {
         // We first fill the heap with values from the highest level
@@ -92,7 +88,10 @@ where
             if key.field_id != field_id {
                 break;
             }
-            let intersection = value.bitmap & candidates;
+            let intersection = CboRoaringBitmapCodec::intersection_with_serialized(
+                value.bitmap_bytes,
+                candidates,
+            )?;
             let count = intersection.len();
             if count != 0 {
                 heap.push(LevelEntry {
@@ -121,7 +120,10 @@ where
                     if key.field_id != field_id {
                         break;
                     }
-                    let intersection = value.bitmap & candidates;
+                    let intersection = CboRoaringBitmapCodec::intersection_with_serialized(
+                        value.bitmap_bytes,
+                        candidates,
+                    )?;
                     let count = intersection.len();
                     if count != 0 {
                         heap.push(LevelEntry {
