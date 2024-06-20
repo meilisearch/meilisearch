@@ -158,5 +158,5 @@ vietnamese = ["meilisearch-types/vietnamese"]
 swedish-recomposition = ["meilisearch-types/swedish-recomposition"]
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.13/build.zip"
-sha1 = "e20cc9b390003c6c844f4b8bcc5c5013191a77ff"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.14/build.zip"
+sha1 = "592d1b5a3459d621d0aae1dded8fe3154f5c38fe"
