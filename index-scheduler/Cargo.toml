@@ -40,7 +40,7 @@ ureq = "2.9.7"
 uuid = { version = "1.6.1", features = ["serde", "v4"] }
 
 [dev-dependencies]
-arroy = "0.3.1"
+arroy = "0.4.0"
 big_s = "1.0.2"
 crossbeam = "0.8.4"
 insta = { version = "1.34.0", features = ["json", "redactions"] }

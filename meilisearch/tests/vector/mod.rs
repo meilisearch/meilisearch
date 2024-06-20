@@ -225,3 +225,85 @@ async fn clear_documents() {
     }
     "###);
 }
+
+#[actix_rt::test]
+async fn add_remove_one_vector_4588() {
+    // https://github.com/meilisearch/meilisearch/issues/4588
+    let server = Server::new().await;
+    let index = server.index("doggo");
+    let (value, code) = server.set_features(json!({"vectorStore": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r###"
+    {
+      "vectorStore": true,
+      "metrics": false,
+      "logsRoute": false
+    }
+    "###);
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+              "manual": {
+                  "source": "userProvided",
+                  "dimensions": 3,
+              }
+          },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task, name: "settings-processed");
+
+    let documents = json!([
+      {"id": 0, "name": "kefir", "_vectors": { "manual": [0, 0, 0] }},
+    ]);
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task, name: "document-added");
+
+    let documents = json!([
+      {"id": 0, "name": "kefir", "_vectors": { "manual": null }},
+    ]);
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task, name: "document-deleted");
+
+    let (documents, _code) = index.search_post(json!({"vector": [1, 1, 1] })).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "hits": [
+        {
+          "id": 0,
+          "name": "kefir"
+        }
+      ],
+      "query": "",
+      "processingTimeMs": 1,
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 1,
+      "semanticHitCount": 1
+    }
+    "###);
+
+    let (documents, _code) = index
+        .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
+        .await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name": "kefir",
+          "_vectors": {}
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "###);
+}
