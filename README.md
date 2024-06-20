@@ -25,12 +25,6 @@
 
 <p align="center">⚡ A lightning-fast search engine that fits effortlessly into your apps, websites, and workflow 🔍</p>
 
----
-
-### 🔥 On June 11th, we are hosting a live product demo and Q&A about AI search, query suggestions, and v1.9. [Register now](https://us06web.zoom.us/meeting/register/tZMudO-qpz8qGdDQ_MNn3NmGV0m8WLf1uECM?utm_campaign=ossutm_source=github&utm_medium=meilisearch#/registration)!
-
----
-
 [Meilisearch](https://www.meilisearch.com) helps you shape a delightful search experience in a snap, offering features that work out of the box to speed up your workflow.
 
 <p align="center" name="demo">
@@ -42,7 +36,10 @@
   </a>
 </p>
 
-🔥 [**Try it!**](https://where2watch.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demo-link) 🔥
+## 🖥 Demos
+- [**Where To Watch:**](https://where2watch.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demo-link) Find the movie you will watch tonight through an up-to-date IMDb dataset, [featuring Hybrid Search](https://meilisearch.notion.site/Where2Watch-Noticeable-Queries-881f6270abef4452a94255462df740d7).
+- [**Millions of Musics:**](https://music.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demo-link) Search throught a 47 millions musics and artists dataset.
+- [**Tenant Tokens:**](https://tenant-token.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demo-link) Experience the search with restricted results that leverage the use of tenant tokens.
 
 ## ✨ Features
 - **Hybrid search:** Combine the best of both [semantic](https://www.meilisearch.com/docs/learn/experimental/vector_search) & full-text search to get the most relevant results
