@@ -99,10 +99,12 @@ impl From<MeilisearchHttpError> for aweb::Error {
 impl From<aweb::error::PayloadError> for MeilisearchHttpError {
     fn from(error: aweb::error::PayloadError) -> Self {
         match error {
-            aweb::error::PayloadError::Incomplete(_) => {
-                MeilisearchHttpError::Payload(PayloadError::Payload(ActixPayloadError::IncompleteError))
-            }
-            _ => MeilisearchHttpError::Payload(PayloadError::Payload(ActixPayloadError::OtherError(error)))
+            aweb::error::PayloadError::Incomplete(_) => MeilisearchHttpError::Payload(
+                PayloadError::Payload(ActixPayloadError::IncompleteError),
+            ),
+            _ => MeilisearchHttpError::Payload(PayloadError::Payload(
+                ActixPayloadError::OtherError(error),
+            )),
         }
     }
 }
@@ -112,7 +114,7 @@ pub enum ActixPayloadError {
     #[error("The provided payload is incomplete and cannot be decompressed")]
     IncompleteError,
     #[error(transparent)]
-    OtherError(aweb::error::PayloadError)
+    OtherError(aweb::error::PayloadError),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -143,7 +145,7 @@ impl ErrorCode for PayloadError {
                     aweb::error::PayloadError::Http2Payload(_) => Code::Internal,
                     aweb::error::PayloadError::Io(_) => Code::Internal,
                     _ => todo!(),
-                }
+                },
             },
             PayloadError::Json(err) => match err {
                 JsonPayloadError::Overflow { .. } => Code::PayloadTooLarge,
