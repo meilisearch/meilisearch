@@ -143,7 +143,6 @@ fn compute_prefix_edges(
         right_prefix,
         forward_proximity,
     )? {
-        let new_docids = &universe & new_docids;
         if !new_docids.is_empty() {
             used_left_words.insert(left_word);
             used_right_prefix.insert(right_prefix);
@@ -153,13 +152,13 @@ fn compute_prefix_edges(
 
     // No swapping when computing the proximity between a phrase and a word
     if left_phrase.is_none() {
+        // TODO check that the fact that the universe always changes is not an issue, e.g. caching stuff.
         if let Some(new_docids) = ctx.get_db_prefix_word_pair_proximity_docids(
             Some(&universe),
             right_prefix,
             left_word,
             backward_proximity,
         )? {
-            let new_docids = &universe & new_docids;
             if !new_docids.is_empty() {
                 used_left_words.insert(left_word);
                 used_right_prefix.insert(right_prefix);
@@ -185,9 +184,7 @@ fn compute_non_prefix_edges(
     let mut universe = universe.clone();
 
     for phrase in left_phrase.iter().chain(right_phrase.iter()).copied() {
-        // TODO do the intersection in the method, again!
-        let phrase_docids = ctx.get_phrase_docids(Some(&universe), phrase)?;
-        universe &= phrase_docids;
+        universe &= ctx.get_phrase_docids(Some(&universe), phrase)?;
         if universe.is_empty() {
             return Ok(());
         }

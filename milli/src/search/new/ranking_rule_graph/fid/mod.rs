@@ -29,14 +29,12 @@ impl RankingRuleGraphTrait for FidGraph {
         let FidCondition { term, .. } = condition;
 
         let docids = if let Some(fid) = condition.fid {
-            // maybe compute_query_term_subset_docids_within_field_id should accept a universe as argument
-            let docids = compute_query_term_subset_docids_within_field_id(
+            compute_query_term_subset_docids_within_field_id(
                 ctx,
                 Some(universe),
                 &term.term_subset,
                 fid,
-            )?;
-            docids & universe
+            )?
         } else {
             RoaringBitmap::new()
         };

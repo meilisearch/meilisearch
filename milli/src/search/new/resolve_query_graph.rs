@@ -251,6 +251,7 @@ pub fn compute_phrase_docids(
         // We sort the bitmaps so that we perform the small intersections first, which is faster.
         bitmaps.sort_unstable_by_key(|a| a.len());
 
+        // TODO use MultiOps intersection which and remove the above sort
         for bitmap in bitmaps {
             candidates &= bitmap;
 

@@ -28,15 +28,15 @@ impl RankingRuleGraphTrait for PositionGraph {
     ) -> Result<ComputedCondition> {
         let PositionCondition { term, positions } = condition;
         let mut docids = RoaringBitmap::new();
+        // TODO use MultiOps to do the big union
         for position in positions {
             // maybe compute_query_term_subset_docids_within_position should accept a universe as argument
-            docids |= universe
-                & compute_query_term_subset_docids_within_position(
-                    ctx,
-                    Some(universe),
-                    &term.term_subset,
-                    *position,
-                )?;
+            docids |= compute_query_term_subset_docids_within_position(
+                ctx,
+                Some(universe),
+                &term.term_subset,
+                *position,
+            )?;
         }
         Ok(ComputedCondition {
             docids,
