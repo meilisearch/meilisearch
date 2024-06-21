@@ -247,14 +247,14 @@ fn resolve_negative_words(
 #[tracing::instrument(level = "trace", skip_all, target = "search::query")]
 fn resolve_negative_phrases(
     ctx: &mut SearchContext<'_>,
-    universe: Option<&RoaringBitmap>,
+    _universe: Option<&RoaringBitmap>,
     negative_phrases: &[LocatedQueryTerm],
 ) -> Result<RoaringBitmap> {
     let mut negative_bitmap = RoaringBitmap::new();
     for term in negative_phrases {
         let query_term = ctx.term_interner.get(term.value);
         if let Some(phrase) = query_term.original_phrase() {
-            negative_bitmap |= ctx.get_phrase_docids(universe, phrase)?;
+            negative_bitmap |= ctx.get_phrase_docids(None, phrase)?;
         }
     }
     Ok(negative_bitmap)

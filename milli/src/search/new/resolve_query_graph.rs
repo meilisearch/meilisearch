@@ -47,7 +47,7 @@ pub fn compute_query_term_subset_docids(
         }
     }
     for phrase in term.all_phrases(ctx)? {
-        docids |= ctx.get_phrase_docids(universe, phrase)?;
+        docids |= ctx.get_phrase_docids(None, phrase)?;
     }
 
     if let Some(prefix) = term.use_prefix_db(ctx) {
@@ -80,7 +80,7 @@ pub fn compute_query_term_subset_docids_within_field_id(
         // guaranteed that all of its words are within a single fid.
         if let Some(word) = phrase.words(ctx).iter().flatten().next() {
             if let Some(word_fid_docids) = ctx.get_db_word_fid_docids(universe, *word, fid)? {
-                docids |= ctx.get_phrase_docids(Some(&word_fid_docids), phrase)?;
+                docids |= ctx.get_phrase_docids(None, phrase)? & word_fid_docids;
             }
         }
     }
@@ -118,7 +118,7 @@ pub fn compute_query_term_subset_docids_within_position(
             if let Some(word_position_docids) =
                 ctx.get_db_word_position_docids(universe, *word, position)?
             {
-                docids |= ctx.get_phrase_docids(Some(&word_position_docids), phrase)?;
+                docids |= ctx.get_phrase_docids(None, phrase)? & word_position_docids;
             }
         }
     }

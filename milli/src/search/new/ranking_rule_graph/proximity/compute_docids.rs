@@ -74,7 +74,7 @@ pub fn compute_docids(
         if right_derivs.len() > 1 {
             let universe = &universe;
             if let Some(left_phrase) = left_phrase {
-                if universe.is_disjoint(ctx.get_phrase_docids(Some(universe), left_phrase)?) {
+                if universe.is_disjoint(ctx.get_phrase_docids(None, left_phrase)?) {
                     continue;
                 }
             } else if let Some(left_word_docids) = ctx.word_docids(Some(universe), left_word)? {
@@ -126,7 +126,7 @@ fn compute_prefix_edges(
         // TODO we can clearly give the universe to this method
         //      Unfortunately, it is deserializing/computing stuff and
         //      keeping the result as a materialized bitmap.
-        let phrase_docids = ctx.get_phrase_docids(Some(&universe), phrase)?;
+        let phrase_docids = ctx.get_phrase_docids(None, phrase)?;
         if !phrase_docids.is_empty() {
             used_left_phrases.insert(phrase);
         }
@@ -184,7 +184,7 @@ fn compute_non_prefix_edges(
     let mut universe = universe.clone();
 
     for phrase in left_phrase.iter().chain(right_phrase.iter()).copied() {
-        universe &= ctx.get_phrase_docids(Some(&universe), phrase)?;
+        universe &= ctx.get_phrase_docids(None, phrase)?;
         if universe.is_empty() {
             return Ok(());
         }

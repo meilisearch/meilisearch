@@ -29,7 +29,7 @@ fn compute_docids(
 
     let candidates = match exact_term {
         // TODO I move the intersection here
-        ExactTerm::Phrase(phrase) => ctx.get_phrase_docids(Some(universe), phrase)? & universe,
+        ExactTerm::Phrase(phrase) => ctx.get_phrase_docids(None, phrase)? & universe,
         ExactTerm::Word(word) => {
             ctx.word_docids(Some(universe), Word::Original(word))?.unwrap_or_default()
         }
