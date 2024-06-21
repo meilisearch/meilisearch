@@ -59,7 +59,7 @@ impl RankingRuleGraphTrait for ExactnessGraph {
             }
             ExactnessCondition::Any(dest_node) => {
                 let docids =
-                    universe & compute_query_term_subset_docids(ctx, &dest_node.term_subset)?;
+                    compute_query_term_subset_docids(ctx, Some(universe), &dest_node.term_subset)?;
                 (docids, dest_node.clone())
             }
         };

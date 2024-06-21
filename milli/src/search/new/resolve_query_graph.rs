@@ -31,6 +31,7 @@ impl<'ctx> SearchContext<'ctx> {
 }
 pub fn compute_query_term_subset_docids(
     ctx: &mut SearchContext<'_>,
+    universe: Option<&RoaringBitmap>,
     term: &QueryTermSubset,
 ) -> Result<RoaringBitmap> {
     let mut docids = RoaringBitmap::new();
@@ -49,7 +50,10 @@ pub fn compute_query_term_subset_docids(
         }
     }
 
-    Ok(docids)
+    match universe {
+        Some(universe) => Ok(docids & universe),
+        None => Ok(docids),
+    }
 }
 
 pub fn compute_query_term_subset_docids_within_field_id(
@@ -147,10 +151,7 @@ pub fn compute_query_graph_docids(
                 term_subset,
                 positions: _,
                 term_ids: _,
-            }) => {
-                let node_docids = compute_query_term_subset_docids(ctx, term_subset)?;
-                predecessors_docids & node_docids
-            }
+            }) => compute_query_term_subset_docids(ctx, Some(&predecessors_docids), term_subset)?,
             QueryNodeData::Deleted => {
                 panic!()
             }

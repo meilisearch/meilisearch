@@ -22,10 +22,8 @@ pub fn compute_docids(
             (left_term, right_term, *cost)
         }
         ProximityCondition::Term { term } => {
-            let mut docids = compute_query_term_subset_docids(ctx, &term.term_subset)?;
-            docids &= universe;
             return Ok(ComputedCondition {
-                docids,
+                docids: compute_query_term_subset_docids(ctx, Some(universe), &term.term_subset)?,
                 universe_len: universe.len(),
                 start_term_subset: None,
                 end_term_subset: term.clone(),
