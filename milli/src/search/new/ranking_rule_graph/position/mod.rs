@@ -33,6 +33,7 @@ impl RankingRuleGraphTrait for PositionGraph {
             docids |= universe
                 & compute_query_term_subset_docids_within_position(
                     ctx,
+                    Some(universe),
                     &term.term_subset,
                     *position,
                 )?;

@@ -171,9 +171,10 @@ impl State {
                 // Note: Since the position is stored bucketed in word_position_docids, for queries with a lot of
                 // longer phrases we'll be losing on precision here.
                 let bucketed_position = crate::bucketed_position(position + offset);
-                let word_position_docids =
-                    ctx.get_db_word_position_docids(*word, bucketed_position)?.unwrap_or_default()
-                        & universe;
+                let word_position_docids = ctx
+                    .get_db_word_position_docids(Some(universe), *word, bucketed_position)?
+                    .unwrap_or_default()
+                    & universe;
                 candidates &= word_position_docids;
                 if candidates.is_empty() {
                     return Ok(State::Empty(query_graph.clone()));
@@ -199,7 +200,9 @@ impl State {
                     // ignore stop words words in phrases
                     .flatten()
                     .map(|word| -> Result<_> {
-                        Ok(ctx.get_db_word_fid_docids(*word, fid)?.unwrap_or_default())
+                        Ok(ctx
+                            .get_db_word_fid_docids(Some(universe), *word, fid)?
+                            .unwrap_or_default())
                     }),
             )?;
             intersection &= &candidates;

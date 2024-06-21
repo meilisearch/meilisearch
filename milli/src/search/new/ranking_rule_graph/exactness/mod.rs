@@ -26,18 +26,15 @@ fn compute_docids(
     } else {
         return Ok(Default::default());
     };
-    let mut candidates = match exact_term {
-        ExactTerm::Phrase(phrase) => ctx.get_phrase_docids(phrase)?.clone(),
+
+    let candidates = match exact_term {
+        // TODO I move the intersection here
+        ExactTerm::Phrase(phrase) => ctx.get_phrase_docids(Some(universe), phrase)? & universe,
         ExactTerm::Word(word) => {
-            if let Some(word_candidates) = ctx.word_docids(Word::Original(word))? {
-                word_candidates
-            } else {
-                return Ok(Default::default());
-            }
+            ctx.word_docids(Some(universe), Word::Original(word))?.unwrap_or_default()
         }
     };
 
-    candidates &= universe;
     Ok(candidates)
 }
 
