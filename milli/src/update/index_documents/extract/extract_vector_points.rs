@@ -290,7 +290,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                         regenerate_if_prompt_changed(
                             obkv,
                             (old_prompt, prompt),
-                            (&old_fields_ids_map, &new_fields_ids_map),
+                            (old_fields_ids_map, new_fields_ids_map),
                         )?
                     } else {
                         // we can simply ignore user provided vectors as they are not regenerated and are
@@ -306,7 +306,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                     prompt,
                     (add_to_user_provided, remove_from_user_provided),
                     (old, new),
-                    (&old_fields_ids_map, &new_fields_ids_map),
+                    (old_fields_ids_map, new_fields_ids_map),
                     document_id,
                 )?,
             };
