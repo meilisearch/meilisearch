@@ -213,11 +213,11 @@ async fn clear_documents() {
 
     // Make sure the arroy DB has been cleared
     let (documents, _code) = index.search_post(json!({ "vector": [1, 1, 1] })).await;
-    snapshot!(json_string!(documents), @r###"
+    snapshot!(documents, @r###"
     {
       "hits": [],
       "query": "",
-      "processingTimeMs": 0,
+      "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 0,
@@ -272,7 +272,7 @@ async fn add_remove_one_vector_4588() {
     snapshot!(task, name: "document-deleted");
 
     let (documents, _code) = index.search_post(json!({"vector": [1, 1, 1] })).await;
-    snapshot!(json_string!(documents), @r###"
+    snapshot!(documents, @r###"
     {
       "hits": [
         {
@@ -281,7 +281,7 @@ async fn add_remove_one_vector_4588() {
         }
       ],
       "query": "",
-      "processingTimeMs": 1,
+      "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 1,
