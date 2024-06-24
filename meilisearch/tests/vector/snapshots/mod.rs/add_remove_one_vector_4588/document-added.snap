@@ -1,0 +1,19 @@
+---
+source: meilisearch/tests/vector/mod.rs
+---
+{
+  "uid": 1,
+  "indexUid": "doggo",
+  "status": "succeeded",
+  "type": "documentAdditionOrUpdate",
+  "canceledBy": null,
+  "details": {
+    "receivedDocuments": 1,
+    "indexedDocuments": 1
+  },
+  "error": null,
+  "duration": "[duration]",
+  "enqueuedAt": "[date]",
+  "startedAt": "[date]",
+  "finishedAt": "[date]"
+}
