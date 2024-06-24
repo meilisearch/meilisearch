@@ -12,6 +12,8 @@ use futures::Future;
 use meilisearch_auth::{AuthController, AuthFilter};
 use meilisearch_types::error::{Code, ResponseError};
 
+use self::policies::AuthError;
+
 pub struct GuardedData<P, D> {
     data: D,
     filters: AuthFilter,
@@ -35,12 +37,12 @@ impl<P, D> GuardedData<P, D> {
         let missing_master_key = auth.get_master_key().is_none();
 
         match Self::authenticate(auth, token, index).await? {
-            Some(filters) => match data {
+            Ok(filters) => match data {
                 Some(data) => Ok(Self { data, filters, _marker: PhantomData }),
                 None => Err(AuthenticationError::IrretrievableState.into()),
             },
-            None if missing_master_key => Err(AuthenticationError::MissingMasterKey.into()),
-            None => Err(AuthenticationError::InvalidToken.into()),
+            Err(_) if missing_master_key => Err(AuthenticationError::MissingMasterKey.into()),
+            Err(e) => Err(ResponseError::from_msg(e.to_string(), Code::InvalidApiKey)),
         }
     }
 
@@ -51,12 +53,12 @@ impl<P, D> GuardedData<P, D> {
         let missing_master_key = auth.get_master_key().is_none();
 
         match Self::authenticate(auth, String::new(), None).await? {
-            Some(filters) => match data {
+            Ok(filters) => match data {
                 Some(data) => Ok(Self { data, filters, _marker: PhantomData }),
                 None => Err(AuthenticationError::IrretrievableState.into()),
             },
-            None if missing_master_key => Err(AuthenticationError::MissingMasterKey.into()),
-            None => Err(AuthenticationError::MissingAuthorizationHeader.into()),
+            Err(_) if missing_master_key => Err(AuthenticationError::MissingMasterKey.into()),
+            Err(_) => Err(AuthenticationError::MissingAuthorizationHeader.into()),
         }
     }
 
@@ -64,7 +66,7 @@ impl<P, D> GuardedData<P, D> {
         auth: Data<AuthController>,
         token: String,
         index: Option<String>,
-    ) -> Result<Option<AuthFilter>, ResponseError>
+    ) -> Result<Result<AuthFilter, AuthError>, ResponseError>
     where
         P: Policy + 'static,
     {
@@ -127,7 +129,7 @@ pub trait Policy {
         auth: Data<AuthController>,
         token: &str,
         index: Option<&str>,
-    ) -> Option<AuthFilter>;
+    ) -> Result<AuthFilter, policies::AuthError>;
 }
 
 pub mod policies {
@@ -144,9 +146,30 @@ pub mod policies {
 
     enum TenantTokenOutcome {
         NotATenantToken,
-        Invalid,
-        Expired,
         Valid(Uuid, SearchRules),
+    }
+
+    #[derive(thiserror::Error, Debug)]
+    pub enum AuthError {
+        #[error("Tenant token expired. Was valid up to `{exp}` and we're now `{now}`")]
+        ExpiredTenantToken { exp: i64, now: i64 },
+        #[error("The provided API key is invalid.")]
+        InvalidApiKey,
+        #[error("The provided tenant token is invalid.")]
+        InvalidTenantToken,
+        #[error("Could not decode tenant token, {0}")]
+        CouldNotDecodeTenantToken(jsonwebtoken::errors::Error),
+    }
+
+    impl From<jsonwebtoken::errors::Error> for AuthError {
+        fn from(error: jsonwebtoken::errors::Error) -> Self {
+            use jsonwebtoken::errors::ErrorKind;
+
+            match error.kind() {
+                ErrorKind::InvalidToken => AuthError::InvalidTenantToken,
+                _ => AuthError::CouldNotDecodeTenantToken(error),
+            }
+        }
     }
 
     fn tenant_token_validation() -> Validation {
@@ -158,15 +181,15 @@ pub mod policies {
     }
 
     /// Extracts the key id used to sign the payload, without performing any validation.
-    fn extract_key_id(token: &str) -> Option<Uuid> {
+    fn extract_key_id(token: &str) -> Result<Uuid, AuthError> {
         let mut validation = tenant_token_validation();
         validation.insecure_disable_signature_validation();
         let dummy_key = DecodingKey::from_secret(b"secret");
-        let token_data = decode::<Claims>(token, &dummy_key, &validation).ok()?;
+        let token_data = decode::<Claims>(token, &dummy_key, &validation)?;
 
         // get token fields without validating it.
         let Claims { api_key_uid, .. } = token_data.claims;
-        Some(api_key_uid)
+        Ok(api_key_uid)
     }
 
     fn is_keys_action(action: u8) -> bool {
@@ -187,76 +210,78 @@ pub mod policies {
             auth: Data<AuthController>,
             token: &str,
             index: Option<&str>,
-        ) -> Option<AuthFilter> {
+        ) -> Result<AuthFilter, AuthError> {
             // authenticate if token is the master key.
             // Without a master key, all routes are accessible except the key-related routes.
             if auth.get_master_key().map_or_else(|| !is_keys_action(A), |mk| mk == token) {
-                return Some(AuthFilter::default());
+                return Ok(AuthFilter::default());
             }
 
             let (key_uuid, search_rules) =
                 match ActionPolicy::<A>::authenticate_tenant_token(&auth, token) {
-                    TenantTokenOutcome::Valid(key_uuid, search_rules) => {
+                    Ok(TenantTokenOutcome::Valid(key_uuid, search_rules)) => {
                         (key_uuid, Some(search_rules))
                     }
-                    TenantTokenOutcome::Expired => return None,
-                    TenantTokenOutcome::Invalid => return None,
-                    TenantTokenOutcome::NotATenantToken => {
-                        (auth.get_optional_uid_from_encoded_key(token.as_bytes()).ok()??, None)
-                    }
+                    Ok(TenantTokenOutcome::NotATenantToken)
+                    | Err(AuthError::InvalidTenantToken) => (
+                        auth.get_optional_uid_from_encoded_key(token.as_bytes())
+                            .map_err(|_e| AuthError::InvalidApiKey)?
+                            .ok_or(AuthError::InvalidApiKey)?,
+                        None,
+                    ),
+                    Err(e) => return Err(e),
                 };
 
             // check that the indexes are allowed
-            let action = Action::from_repr(A)?;
-            let auth_filter = auth.get_key_filters(key_uuid, search_rules).ok()?;
+            let action = Action::from_repr(A).ok_or(AuthError::InvalidTenantToken)?;
+            let auth_filter = auth
+                .get_key_filters(key_uuid, search_rules)
+                .map_err(|_e| AuthError::InvalidTenantToken)?;
             if auth.is_key_authorized(key_uuid, action, index).unwrap_or(false)
                 && index.map(|index| auth_filter.is_index_authorized(index)).unwrap_or(true)
             {
-                return Some(auth_filter);
+                return Ok(auth_filter);
             }
 
-            None
+            Err(AuthError::InvalidApiKey)
         }
     }
 
     impl<const A: u8> ActionPolicy<A> {
-        fn authenticate_tenant_token(auth: &AuthController, token: &str) -> TenantTokenOutcome {
+        fn authenticate_tenant_token(
+            auth: &AuthController,
+            token: &str,
+        ) -> Result<TenantTokenOutcome, AuthError> {
             // Only search action can be accessed by a tenant token.
             if A != actions::SEARCH {
-                return TenantTokenOutcome::NotATenantToken;
+                return Ok(TenantTokenOutcome::NotATenantToken);
             }
 
-            let uid = if let Some(uid) = extract_key_id(token) {
-                uid
-            } else {
-                return TenantTokenOutcome::NotATenantToken;
-            };
+            let uid = extract_key_id(token)?;
 
             // Check if tenant token is valid.
             let key = if let Some(key) = auth.generate_key(uid) {
                 key
             } else {
-                return TenantTokenOutcome::Invalid;
+                /// Only happens when no master key has been set
+                return Err(AuthError::InvalidTenantToken);
             };
 
-            let data = if let Ok(data) = decode::<Claims>(
+            let data = decode::<Claims>(
                 token,
                 &DecodingKey::from_secret(key.as_bytes()),
                 &tenant_token_validation(),
-            ) {
-                data
-            } else {
-                return TenantTokenOutcome::Invalid;
-            };
+            )?;
 
             // Check if token is expired.
             if let Some(exp) = data.claims.exp {
-                if OffsetDateTime::now_utc().unix_timestamp() > exp {
-                    return TenantTokenOutcome::Expired;
+                let now = OffsetDateTime::now_utc().unix_timestamp();
+                if now > exp {
+                    return Err(AuthError::ExpiredTenantToken { exp, now });
                 }
             }
 
-            TenantTokenOutcome::Valid(uid, data.claims.search_rules)
+            Ok(TenantTokenOutcome::Valid(uid, data.claims.search_rules))
         }
     }
 
