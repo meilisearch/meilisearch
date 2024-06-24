@@ -5396,7 +5396,7 @@ mod tests {
             let reader = arroy::Reader::open(&rtxn, i as u16, index.vector_arroy)
                 .map(Some)
                 .or_else(|e| match e {
-                    arroy::Error::MissingMetadata => Ok(None),
+                    arroy::Error::MissingMetadata(_) => Ok(None),
                     e => Err(e),
                 })
                 .transpose();

@@ -65,7 +65,7 @@ impl Display for Value {
         write!(
             f,
             "{}",
-            json_string!(self, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" })
+            json_string!(self, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]", ".processingTimeMs" => "[duration]" })
         )
     }
 }

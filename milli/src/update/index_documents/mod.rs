@@ -547,10 +547,11 @@ where
             pool.install(|| {
                 for k in crate::vector::arroy_db_range_for_embedder(embedder_index) {
                     let writer = arroy::Writer::new(vector_arroy, k, dimension);
-                    if writer.is_empty(wtxn)? {
+                    if writer.need_build(wtxn)? {
+                        writer.build(wtxn, &mut rng, None)?;
+                    } else if writer.is_empty(wtxn)? {
                         break;
                     }
-                    writer.build(wtxn, &mut rng, None)?;
                 }
                 Result::Ok(())
             })

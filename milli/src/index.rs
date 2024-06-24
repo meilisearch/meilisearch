@@ -1610,7 +1610,7 @@ impl Index {
             arroy::Reader::open(rtxn, k, self.vector_arroy)
                 .map(Some)
                 .or_else(|e| match e {
-                    arroy::Error::MissingMetadata => Ok(None),
+                    arroy::Error::MissingMetadata(_) => Ok(None),
                     e => Err(e.into()),
                 })
                 .transpose()
@@ -1643,7 +1643,7 @@ impl Index {
                 let reader = arroy::Reader::open(rtxn, embedder_id | (i as u16), self.vector_arroy)
                     .map(Some)
                     .or_else(|e| match e {
-                        arroy::Error::MissingMetadata => Ok(None),
+                        arroy::Error::MissingMetadata(_) => Ok(None),
                         e => Err(e),
                     })
                     .transpose();
