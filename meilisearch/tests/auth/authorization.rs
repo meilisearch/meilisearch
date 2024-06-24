@@ -280,7 +280,7 @@ async fn access_authorized_no_index_restriction() {
                 route,
                 action
             );
-            assert_ne!(code, 403);
+            assert_ne!(code, 403, "on route: {:?} - {:?} with action: {:?}", method, route, action);
         }
     }
 }

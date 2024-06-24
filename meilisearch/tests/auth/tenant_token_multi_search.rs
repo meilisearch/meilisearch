@@ -109,9 +109,11 @@ static NESTED_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
 
 fn invalid_response(query_index: Option<usize>) -> Value {
     let message = if let Some(query_index) = query_index {
-        format!("Inside `.queries[{query_index}]`: The provided API key is invalid.")
+        json!(format!("Inside `.queries[{query_index}]`: The provided API key is invalid."))
     } else {
-        "The provided API key is invalid.".to_string()
+        // if it's anything else we simply return null and will tests all the
+        // error messages somewhere else
+        json!(null)
     };
     json!({"message": message,
         "code": "invalid_api_key",
@@ -414,7 +416,10 @@ macro_rules! compute_forbidden_single_search {
             for (tenant_token, failed_query_index) in $tenant_tokens.iter().zip(failed_query_indexes.into_iter()) {
                 let web_token = generate_tenant_token(&uid, &key, tenant_token.clone());
                 server.use_api_key(&web_token);
-                let (response, code) = server.multi_search(json!({"queries" : [{"indexUid": "sales"}]})).await;
+                let (mut response, code) = server.multi_search(json!({"queries" : [{"indexUid": "sales"}]})).await;
+                if failed_query_index.is_none() && !response["message"].is_null() {
+                    response["message"] = serde_json::json!(null);
+                }
                 assert_eq!(
                     response,
                     invalid_response(failed_query_index),
@@ -469,10 +474,13 @@ macro_rules! compute_forbidden_multiple_search {
             for (tenant_token, failed_query_index) in $tenant_tokens.iter().zip(failed_query_indexes.into_iter()) {
                 let web_token = generate_tenant_token(&uid, &key, tenant_token.clone());
                 server.use_api_key(&web_token);
-                let (response, code) = server.multi_search(json!({"queries" : [
+                let (mut response, code) = server.multi_search(json!({"queries" : [
                     {"indexUid": "sales"},
                     {"indexUid": "products"},
                 ]})).await;
+                if failed_query_index.is_none() && !response["message"].is_null() {
+                    response["message"] = serde_json::json!(null);
+                }
                 assert_eq!(
                     response,
                     invalid_response(failed_query_index),
@@ -1073,18 +1081,20 @@ async fn error_access_expired_parent_key() {
     server.use_api_key(&web_token);
 
     // test search request while parent_key is not expired
-    let (response, code) = server
+    let (mut response, code) = server
         .multi_search(json!({"queries" : [{"indexUid": "sales"}, {"indexUid": "products"}]}))
         .await;
+    response["message"] = serde_json::json!(null);
     assert_ne!(response, invalid_response(None));
     assert_ne!(code, 403);
 
     // wait until the key is expired.
     thread::sleep(time::Duration::new(1, 0));
 
-    let (response, code) = server
+    let (mut response, code) = server
         .multi_search(json!({"queries" : [{"indexUid": "sales"}, {"indexUid": "products"}]}))
         .await;
+    response["message"] = serde_json::json!(null);
     assert_eq!(response, invalid_response(None));
     assert_eq!(code, 403);
 }
@@ -1134,8 +1144,9 @@ async fn error_access_modified_token() {
     .join(".");
 
     server.use_api_key(&altered_token);
-    let (response, code) =
+    let (mut response, code) =
         server.multi_search(json!({"queries" : [{"indexUid": "products"}]})).await;
+    response["message"] = serde_json::json!(null);
     assert_eq!(response, invalid_response(None));
     assert_eq!(code, 403);
 }
