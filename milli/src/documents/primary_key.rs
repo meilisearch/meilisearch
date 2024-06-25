@@ -166,7 +166,7 @@ pub fn validate_document_id_value(document_id: Value) -> StdResult<String, UserE
             Some(s) => Ok(s.to_string()),
             None => Err(UserError::InvalidDocumentId { document_id: Value::String(string) }),
         },
-        Value::Number(number) if number.is_i64() => Ok(number.to_string()),
+        Value::Number(number) if !number.is_f64() => Ok(number.to_string()),
         content => Err(UserError::InvalidDocumentId { document_id: content }),
     }
 }

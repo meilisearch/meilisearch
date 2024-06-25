@@ -1041,6 +1041,77 @@ async fn document_addition_with_primary_key() {
 }
 
 #[actix_rt::test]
+async fn document_addition_with_huge_int_primary_key() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = json!([
+        {
+            "primary": 14630868576586246730u64,
+            "content": "foo",
+        }
+    ]);
+    let (response, code) = index.add_documents(documents, Some("primary")).await;
+    snapshot!(code, @"202 Accepted");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "taskUid": 0,
+      "indexUid": "test",
+      "status": "enqueued",
+      "type": "documentAdditionOrUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
+
+    index.wait_task(0).await;
+
+    let (response, code) = index.get_task(0).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 0,
+      "indexUid": "test",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let (response, code) = index.get().await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".createdAt" => "[date]", ".updatedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": "test",
+      "createdAt": "[date]",
+      "updatedAt": "[date]",
+      "primaryKey": "primary"
+    }
+    "###);
+
+    let (response, code) = index.get_document(14630868576586246730u64, None).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "primary": 14630868576586246730,
+      "content": "foo"
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn replace_document() {
     let server = Server::new().await;
     let index = server.index("test");
