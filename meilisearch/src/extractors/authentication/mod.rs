@@ -136,6 +136,7 @@ pub mod policies {
     use actix_web::web::Data;
     use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
     use meilisearch_auth::{AuthController, AuthFilter, SearchRules};
+    use meilisearch_types::error::{Code, ErrorCode};
     // reexport actions in policies in order to be used in routes configuration.
     pub use meilisearch_types::keys::{actions, Action};
     use serde::{Deserialize, Serialize};
@@ -151,14 +152,26 @@ pub mod policies {
 
     #[derive(thiserror::Error, Debug)]
     pub enum AuthError {
-        #[error("Tenant token expired. Was valid up to `{exp}` and we're now `{now}`")]
+        #[error("Tenant token expired. Was valid up to `{exp}` and we're now `{now}`.")]
         ExpiredTenantToken { exp: i64, now: i64 },
         #[error("The provided API key is invalid.")]
         InvalidApiKey,
+        #[error("The provided tenant token cannot acces the index `{index}`, allowed indexes are {allowed:?}.")]
+        TenantTokenAccessingnUnauthorizedIndex { index: String, allowed: Vec<String> },
+        #[error(
+            "The API key used to generate this tenant token cannot acces the index `{index}`."
+        )]
+        TenantTokenApiKeyAccessingnUnauthorizedIndex { index: String },
+        #[error(
+            "The API key cannot acces the index `{index}`, authorized indexes are {allowed:?}."
+        )]
+        ApiKeyAccessingnUnauthorizedIndex { index: String, allowed: Vec<String> },
         #[error("The provided tenant token is invalid.")]
         InvalidTenantToken,
-        #[error("Could not decode tenant token, {0}")]
+        #[error("Could not decode tenant token, {0}.")]
         CouldNotDecodeTenantToken(jsonwebtoken::errors::Error),
+        #[error("Invalid action `{0}`.")]
+        InternalInvalidAction(u8),
     }
 
     impl From<jsonwebtoken::errors::Error> for AuthError {
@@ -168,6 +181,15 @@ pub mod policies {
             match error.kind() {
                 ErrorKind::InvalidToken => AuthError::InvalidTenantToken,
                 _ => AuthError::CouldNotDecodeTenantToken(error),
+            }
+        }
+    }
+
+    impl ErrorCode for AuthError {
+        fn error_code(&self) -> Code {
+            match self {
+                AuthError::InternalInvalidAction(_) => Code::Internal,
+                _ => Code::InvalidApiKey,
             }
         }
     }
@@ -233,13 +255,37 @@ pub mod policies {
                 };
 
             // check that the indexes are allowed
-            let action = Action::from_repr(A).ok_or(AuthError::InvalidTenantToken)?;
+            let action = Action::from_repr(A).ok_or(AuthError::InternalInvalidAction(A))?;
             let auth_filter = auth
                 .get_key_filters(key_uuid, search_rules)
-                .map_err(|_e| AuthError::InvalidTenantToken)?;
-            if auth.is_key_authorized(key_uuid, action, index).unwrap_or(false)
-                && index.map(|index| auth_filter.is_index_authorized(index)).unwrap_or(true)
-            {
+                .map_err(|_e| AuthError::InvalidApiKey)?;
+
+            // First check if the index is authorized in the tenant token, this is a public
+            // information, we can return a nice error message.
+            if let Some(index) = index {
+                if !auth_filter.tenant_token_is_index_authorized(index) {
+                    return Err(AuthError::TenantTokenAccessingnUnauthorizedIndex {
+                        index: index.to_string(),
+                        allowed: auth_filter.tenant_token_list_index_authorized(),
+                    });
+                }
+                if !auth_filter.api_key_is_index_authorized(index) {
+                    if auth_filter.is_tenant_token() {
+                        // If the error comes from a tenant token we cannot share the list
+                        // of authorized indexes in the API key. This is not public information.
+                        return Err(AuthError::TenantTokenApiKeyAccessingnUnauthorizedIndex {
+                            index: index.to_string(),
+                        });
+                    } else {
+                        // Otherwise we can share the
+                        return Err(AuthError::ApiKeyAccessingnUnauthorizedIndex {
+                            index: index.to_string(),
+                            allowed: auth_filter.api_key_list_index_authorized(),
+                        });
+                    }
+                }
+            }
+            if auth.is_key_authorized(key_uuid, action, index).unwrap_or(false) {
                 return Ok(auth_filter);
             }
 
@@ -263,7 +309,6 @@ pub mod policies {
             let key = if let Some(key) = auth.generate_key(uid) {
                 key
             } else {
-                /// Only happens when no master key has been set
                 return Err(AuthError::InvalidTenantToken);
             };
 

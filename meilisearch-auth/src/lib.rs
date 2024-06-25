@@ -188,6 +188,12 @@ impl AuthFilter {
         self.allow_index_creation && self.is_index_authorized(index)
     }
 
+    #[inline]
+    /// Return true if a tenant token was used to generate the search rules.
+    pub fn is_tenant_token(&self) -> bool {
+        self.search_rules.is_some()
+    }
+
     pub fn with_allowed_indexes(allowed_indexes: HashSet<IndexUidPattern>) -> Self {
         Self {
             search_rules: None,
@@ -205,6 +211,7 @@ impl AuthFilter {
                 .unwrap_or(true)
     }
 
+    /// Check if the index is authorized by the API key and the tenant token.
     pub fn is_index_authorized(&self, index: &str) -> bool {
         self.key_authorized_indexes.is_index_authorized(index)
             && self
@@ -212,6 +219,44 @@ impl AuthFilter {
                 .as_ref()
                 .map(|search_rules| search_rules.is_index_authorized(index))
                 .unwrap_or(true)
+    }
+
+    /// Only check if the index is authorized by the API key
+    pub fn api_key_is_index_authorized(&self, index: &str) -> bool {
+        self.key_authorized_indexes.is_index_authorized(index)
+    }
+
+    /// Only check if the index is authorized by the tenant token
+    pub fn tenant_token_is_index_authorized(&self, index: &str) -> bool {
+        self.search_rules
+            .as_ref()
+            .map(|search_rules| search_rules.is_index_authorized(index))
+            .unwrap_or(true)
+    }
+
+    /// Return the list of authorized indexes by the tenant token if any
+    pub fn tenant_token_list_index_authorized(&self) -> Vec<String> {
+        match self.search_rules {
+            Some(ref search_rules) => {
+                let mut indexes: Vec<_> = match search_rules {
+                    SearchRules::Set(set) => set.iter().map(|s| s.to_string()).collect(),
+                    SearchRules::Map(map) => map.keys().map(|s| s.to_string()).collect(),
+                };
+                indexes.sort_unstable();
+                indexes
+            }
+            None => Vec::new(),
+        }
+    }
+
+    /// Return the list of authorized indexes by the api key if any
+    pub fn api_key_list_index_authorized(&self) -> Vec<String> {
+        let mut indexes: Vec<_> = match self.key_authorized_indexes {
+            SearchRules::Set(ref set) => set.iter().map(|s| s.to_string()).collect(),
+            SearchRules::Map(ref map) => map.keys().map(|s| s.to_string()).collect(),
+        };
+        indexes.sort_unstable();
+        indexes
     }
 
     pub fn get_index_search_rules(&self, index: &str) -> Option<IndexSearchRules> {
