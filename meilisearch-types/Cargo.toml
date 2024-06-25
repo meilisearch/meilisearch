@@ -49,6 +49,8 @@ chinese-pinyin = ["milli/chinese-pinyin"]
 hebrew = ["milli/hebrew"]
 # japanese specialized tokenization
 japanese = ["milli/japanese"]
+# korean specialized tokenization
+korean = ["milli/korean"]
 # thai specialized tokenization
 thai = ["milli/thai"]
 # allow greek specialized tokenization
