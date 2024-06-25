@@ -15,8 +15,6 @@ jobs:
           - uses: actions-rs/toolchain@v1
             with:
               profile: minimal
-              toolchain: stable
-              override: true
 
           # Run benchmarks
           - name: Run benchmarks - Dataset ${BENCH_NAME} - Branch main - Commit ${{ github.sha }}

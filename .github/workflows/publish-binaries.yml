@@ -46,9 +46,6 @@ jobs:
         apt-get update && apt-get install -y curl
         apt-get install build-essential -y
     - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        override: true
     - name: Build
       run: cargo build --release --locked
     # No need to upload binaries for dry run (cron)
@@ -79,9 +76,6 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        override: true
     - name: Build
       run: cargo build --release --locked
     # No need to upload binaries for dry run (cron)
@@ -109,10 +103,8 @@ jobs:
       - name: Installing Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
           profile: minimal
           target: ${{ matrix.target }}
-          override: true
       - name: Cargo build
         uses: actions-rs/cargo@v1
         with:
@@ -156,10 +148,8 @@ jobs:
       - name: Installing Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
           profile: minimal
           target: ${{ matrix.target }}
-          override: true
       - name: Configure target aarch64 GNU
         ## Environment variable is not passed using env:
         ## LD gold won't work with MUSL
