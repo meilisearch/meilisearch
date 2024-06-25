@@ -22,7 +22,7 @@ pub enum SearchEvents {
     RankingRuleStartIteration { ranking_rule_idx: usize, universe_len: u64 },
     RankingRuleNextBucket { ranking_rule_idx: usize, universe_len: u64, bucket_len: u64 },
     RankingRuleSkipBucket { ranking_rule_idx: usize, bucket_len: u64 },
-    RankingRuleEndIteration { ranking_rule_idx: usize, universe_len: u64 },
+    RankingRuleEndIteration { ranking_rule_idx: usize },
     ExtendResults { new: Vec<u32> },
     ProximityGraph { graph: RankingRuleGraph<ProximityGraph> },
     ProximityPaths { paths: Vec<Vec<Interned<ProximityCondition>>> },
@@ -123,12 +123,9 @@ impl SearchLogger<QueryGraph> for VisualSearchLogger {
         &mut self,
         ranking_rule_idx: usize,
         _ranking_rule: &dyn RankingRule<QueryGraph>,
-        universe: &RoaringBitmap,
+        _universe: &RoaringBitmap,
     ) {
-        self.events.push(SearchEvents::RankingRuleEndIteration {
-            ranking_rule_idx,
-            universe_len: universe.len(),
-        });
+        self.events.push(SearchEvents::RankingRuleEndIteration { ranking_rule_idx });
         self.location.pop();
     }
     fn add_to_results(&mut self, docids: &[u32]) {
@@ -326,7 +323,7 @@ impl<'ctx> DetailedLoggerFinish<'ctx> {
                 assert!(ranking_rule_idx == self.rr_action_counter.len() - 1);
                 self.write_skip_bucket(bucket_len)?;
             }
-            SearchEvents::RankingRuleEndIteration { ranking_rule_idx, universe_len: _ } => {
+            SearchEvents::RankingRuleEndIteration { ranking_rule_idx } => {
                 assert!(ranking_rule_idx == self.rr_action_counter.len() - 1);
                 self.write_end_iteration()?;
             }

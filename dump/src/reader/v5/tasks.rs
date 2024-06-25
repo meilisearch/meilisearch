@@ -200,6 +200,7 @@ impl std::ops::Deref for IndexUid {
     }
 }
 
+#[allow(dead_code)] // otherwise rustc complains that the fields go unused
 #[derive(Debug)]
 #[cfg_attr(test, derive(serde::Serialize))]
 #[cfg_attr(test, serde(rename_all = "camelCase"))]
