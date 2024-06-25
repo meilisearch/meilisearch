@@ -111,7 +111,7 @@ impl From<aweb::error::PayloadError> for MeilisearchHttpError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ActixPayloadError {
-    #[error("The provided payload is incomplete and cannot be decompressed")]
+    #[error("The provided payload is incomplete and cannot be parsed")]
     IncompleteError,
     #[error(transparent)]
     OtherError(aweb::error::PayloadError),

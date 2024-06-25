@@ -183,6 +183,58 @@ async fn add_single_document_gzip_encoded() {
     }
     "###);
 }
+#[actix_rt::test]
+async fn add_single_document_gzip_encoded_with_incomplete_error() {
+    let document = json!("kefir");
+
+    // this is a what is expected and should work
+    let server = Server::new().await;
+    let app = server.init_web_app().await;
+    // post
+    let document = serde_json::to_string(&document).unwrap();
+    let req = test::TestRequest::post()
+        .uri("/indexes/dog/documents")
+        .set_payload(document.to_string())
+        .insert_header(("content-type", "application/json"))
+        .insert_header(("content-encoding", "gzip"))
+        .to_request();
+    let res = test::call_service(&app, req).await;
+    let status_code = res.status();
+    let body = test::read_body(res).await;
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    snapshot!(status_code, @"400 Bad Request");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "The provided payload is incomplete and cannot be parsed",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
+
+    // put
+    let req = test::TestRequest::put()
+        .uri("/indexes/dog/documents")
+        .set_payload(document.to_string())
+        .insert_header(("content-type", "application/json"))
+        .insert_header(("content-encoding", "gzip"))
+        .to_request();
+    let res = test::call_service(&app, req).await;
+    let status_code = res.status();
+    let body = test::read_body(res).await;
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    snapshot!(status_code, @"400 Bad Request");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "The provided payload is incomplete and cannot be parsed",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
+}
 
 /// Here we try document request with every encoding
 #[actix_rt::test]
