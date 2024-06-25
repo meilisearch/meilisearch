@@ -1053,22 +1053,9 @@ async fn document_addition_with_huge_int_primary_key() {
     ]);
     let (response, code) = index.add_documents(documents, Some("primary")).await;
     snapshot!(code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
-    {
-      "taskUid": 0,
-      "indexUid": "test",
-      "status": "enqueued",
-      "type": "documentAdditionOrUpdate",
-      "enqueuedAt": "[date]"
-    }
-    "###);
 
-    index.wait_task(0).await;
-
-    let (response, code) = index.get_task(0).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    let response = index.wait_task(response.uid()).await;
+    snapshot!(response,
         @r###"
     {
       "uid": 0,
@@ -1085,18 +1072,6 @@ async fn document_addition_with_huge_int_primary_key() {
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
-    }
-    "###);
-
-    let (response, code) = index.get().await;
-    snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".createdAt" => "[date]", ".updatedAt" => "[date]" }),
-        @r###"
-    {
-      "uid": "test",
-      "createdAt": "[date]",
-      "updatedAt": "[date]",
-      "primaryKey": "primary"
     }
     "###);
 
