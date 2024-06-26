@@ -25,10 +25,7 @@ jobs:
       run: |
         apt-get update && apt-get install -y curl
         apt-get install build-essential -y
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        override: true
+    - uses: helix-editor/rust-toolchain@v1
     - name: Install cargo-deb
       run: cargo install cargo-deb
     - uses: actions/checkout@v3

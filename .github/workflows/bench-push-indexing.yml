@@ -12,11 +12,9 @@ jobs:
         timeout-minutes: 180 # 3h
         steps:
           - uses: actions/checkout@v3
-          - uses: actions-rs/toolchain@v1
+          - uses: helix-editor/rust-toolchain@v1
             with:
               profile: minimal
-              toolchain: stable
-              override: true
 
           # Run benchmarks
           - name: Run benchmarks - Dataset ${BENCH_NAME} - Branch main - Commit ${{ github.sha }}
