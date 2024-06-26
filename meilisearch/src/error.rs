@@ -98,14 +98,29 @@ impl From<MeilisearchHttpError> for aweb::Error {
 
 impl From<aweb::error::PayloadError> for MeilisearchHttpError {
     fn from(error: aweb::error::PayloadError) -> Self {
-        MeilisearchHttpError::Payload(PayloadError::Payload(error))
+        match error {
+            aweb::error::PayloadError::Incomplete(_) => MeilisearchHttpError::Payload(
+                PayloadError::Payload(ActixPayloadError::IncompleteError),
+            ),
+            _ => MeilisearchHttpError::Payload(PayloadError::Payload(
+                ActixPayloadError::OtherError(error),
+            )),
+        }
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ActixPayloadError {
+    #[error("The provided payload is incomplete and cannot be parsed")]
+    IncompleteError,
+    #[error(transparent)]
+    OtherError(aweb::error::PayloadError),
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum PayloadError {
     #[error(transparent)]
-    Payload(aweb::error::PayloadError),
+    Payload(ActixPayloadError),
     #[error(transparent)]
     Json(JsonPayloadError),
     #[error(transparent)]
@@ -122,13 +137,15 @@ impl ErrorCode for PayloadError {
     fn error_code(&self) -> Code {
         match self {
             PayloadError::Payload(e) => match e {
-                aweb::error::PayloadError::Incomplete(_) => Code::Internal,
-                aweb::error::PayloadError::EncodingCorrupted => Code::Internal,
-                aweb::error::PayloadError::Overflow => Code::PayloadTooLarge,
-                aweb::error::PayloadError::UnknownLength => Code::Internal,
-                aweb::error::PayloadError::Http2Payload(_) => Code::Internal,
-                aweb::error::PayloadError::Io(_) => Code::Internal,
-                _ => todo!(),
+                ActixPayloadError::IncompleteError => Code::BadRequest,
+                ActixPayloadError::OtherError(error) => match error {
+                    aweb::error::PayloadError::EncodingCorrupted => Code::Internal,
+                    aweb::error::PayloadError::Overflow => Code::PayloadTooLarge,
+                    aweb::error::PayloadError::UnknownLength => Code::Internal,
+                    aweb::error::PayloadError::Http2Payload(_) => Code::Internal,
+                    aweb::error::PayloadError::Io(_) => Code::Internal,
+                    _ => todo!(),
+                },
             },
             PayloadError::Json(err) => match err {
                 JsonPayloadError::Overflow { .. } => Code::PayloadTooLarge,
