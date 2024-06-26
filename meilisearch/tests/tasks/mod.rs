@@ -766,7 +766,31 @@ async fn test_summarized_index_deletion() {
     "###);
 
     // is the details correctly set when documents are actually deleted.
-    index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), Some("id")).await;
+    // /!\ We need to wait for the document addition to be processed otherwise, if the test runs too slow,
+    // both tasks may get autobatched and the deleted documents count will be wrong.
+    let (ret, _code) =
+        index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), Some("id")).await;
+    let task = index.wait_task(ret.uid()).await;
+    snapshot!(task,
+        @r###"
+    {
+      "uid": 1,
+      "indexUid": "test",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
     let (ret, _code) = index.delete().await;
     let task = index.wait_task(ret.uid()).await;
     snapshot!(task,
