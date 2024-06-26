@@ -277,7 +277,8 @@ pub mod policies {
                             index: index.to_string(),
                         });
                     } else {
-                        // Otherwise we can share the
+                        // Otherwise we can share the list
+                        // of authorized indexes in the API key.
                         return Err(AuthError::ApiKeyAccessingnUnauthorizedIndex {
                             index: index.to_string(),
                             allowed: auth_filter.api_key_list_index_authorized(),
