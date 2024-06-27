@@ -191,6 +191,285 @@ async fn generate_default_user_provided_documents(server: &Server) -> Index {
 }
 
 #[actix_rt::test]
+async fn user_provided_embeddings_error() {
+    let server = Server::new().await;
+    let index = generate_default_user_provided_documents(&server).await;
+
+    // First case, we forget to specify the `regenerate`
+    let documents =
+        json!({"id": 0, "name": "kefir", "_vectors": { "manual": { "embeddings": [0, 0, 0] }}});
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": 2,
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Bad embedder configuration in the document with id: `\"0\"`. Missing field `regenerate` inside `.manual`",
+        "code": "invalid_vectors_type",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // Second case, we don't specify anything
+    let documents = json!({"id": 0, "name": "kefir", "_vectors": { "manual": {}}});
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": 3,
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Bad embedder configuration in the document with id: `\"0\"`. Missing field `regenerate` inside `.manual`",
+        "code": "invalid_vectors_type",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // Third case, we specify something wrong in place of regenerate
+    let documents =
+        json!({"id": 0, "name": "kefir", "_vectors": { "manual": { "regenerate": "yes please" }}});
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": 4,
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Bad embedder configuration in the document with id: `\"0\"`. Invalid value type at `.manual.regenerate`: expected a boolean, but found a string: `\"yes please\"`",
+        "code": "invalid_vectors_type",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let documents =
+        json!({"id": 0, "name": "kefir", "_vectors": { "manual": { "embeddings": true }}});
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": 5,
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Bad embedder configuration in the document with id: `\"0\"`. Invalid value type at `.manual.embeddings`: expected null or an array, but found a boolean: `true`",
+        "code": "invalid_vectors_type",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let documents =
+        json!({"id": 0, "name": "kefir", "_vectors": { "manual": { "embeddings": [true] }}});
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": 6,
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Bad embedder configuration in the document with id: `\"0\"`. Invalid value type at `.manual.embeddings[0]`: expected a number or an array, but found a boolean: `true`",
+        "code": "invalid_vectors_type",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let documents =
+        json!({"id": 0, "name": "kefir", "_vectors": { "manual": { "embeddings": [[true]] }}});
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": 7,
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Bad embedder configuration in the document with id: `\"0\"`. Invalid value type at `.manual.embeddings[0][0]`: expected a number, but found a boolean: `true`",
+        "code": "invalid_vectors_type",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let documents = json!({"id": 0, "name": "kefir", "_vectors": { "manual": { "embeddings": [23, 0.1, -12], "regenerate": true }}});
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task["status"], @r###""succeeded""###);
+
+    let documents =
+        json!({"id": 0, "name": "kefir", "_vectors": { "manual": { "regenerate": false }}});
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task["status"], @r###""succeeded""###);
+
+    let documents = json!({"id": 0, "name": "kefir", "_vectors": { "manual": { "regenerate": false, "embeddings": [0.1, [0.2, 0.3]] }}});
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": 10,
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Bad embedder configuration in the document with id: `\"0\"`. Invalid value type at `.manual.embeddings[1]`: expected a number, but found an array: `[0.2,0.3]`",
+        "code": "invalid_vectors_type",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let documents = json!({"id": 0, "name": "kefir", "_vectors": { "manual": { "regenerate": false, "embeddings": [[0.1, 0.2], 0.3] }}});
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": 11,
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Bad embedder configuration in the document with id: `\"0\"`. Invalid value type at `.manual.embeddings[1]`: expected an array, but found a number: `0.3`",
+        "code": "invalid_vectors_type",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let documents = json!({"id": 0, "name": "kefir", "_vectors": { "manual": { "regenerate": false, "embeddings": [[0.1, true], 0.3] }}});
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": 12,
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Bad embedder configuration in the document with id: `\"0\"`. Invalid value type at `.manual.embeddings[0][1]`: expected a number, but found a boolean: `true`",
+        "code": "invalid_vectors_type",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn clear_documents() {
     let server = Server::new().await;
     let index = generate_default_user_provided_documents(&server).await;
