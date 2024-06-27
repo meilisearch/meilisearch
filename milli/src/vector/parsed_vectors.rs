@@ -258,7 +258,6 @@ impl<E: DeserializeError> Deserr<E> for VectorOrArrayOfVectors {
             deserr::Value::Null => Ok(VectorOrArrayOfVectors { inner: None }),
             deserr::Value::Sequence(seq) => {
                 let mut iter = seq.into_iter();
-                let location = location.push_index(0);
                 match iter.next().map(|v| v.into_value()) {
                     None => {
                         // With the strange way serde serialize the `Either`, we must send the left part
@@ -266,10 +265,16 @@ impl<E: DeserializeError> Deserr<E> for VectorOrArrayOfVectors {
                         Ok(VectorOrArrayOfVectors { inner: Some(either::Either::Left(Vec::new())) })
                     }
                     Some(val @ deserr::Value::Sequence(_)) => {
-                        let first = Embedding::deserialize_from_value(val, location)?;
+                        let first = Embedding::deserialize_from_value(val, location.push_index(0))?;
                         let mut collect = vec![first];
                         let mut tail = iter
-                            .map(|v| Embedding::deserialize_from_value(v.into_value(), location))
+                            .enumerate()
+                            .map(|(i, v)| {
+                                Embedding::deserialize_from_value(
+                                    v.into_value(),
+                                    location.push_index(i + 1),
+                                )
+                            })
                             .collect::<Result<Vec<_>, _>>()?;
                         collect.append(&mut tail);
 
@@ -280,9 +285,15 @@ impl<E: DeserializeError> Deserr<E> for VectorOrArrayOfVectors {
                         | val @ deserr::Value::NegativeInteger(_)
                         | val @ deserr::Value::Float(_),
                     ) => {
-                        let first = <f32>::deserialize_from_value(val, location)?;
+                        let first = <f32>::deserialize_from_value(val, location.push_index(0))?;
                         let mut embedding = iter
-                            .map(|v| <f32>::deserialize_from_value(v.into_value(), location))
+                            .enumerate()
+                            .map(|(i, v)| {
+                                <f32>::deserialize_from_value(
+                                    v.into_value(),
+                                    location.push_index(i + 1),
+                                )
+                            })
                             .collect::<Result<Vec<_>, _>>()?;
                         embedding.insert(0, first);
                         Ok(VectorOrArrayOfVectors { inner: Some(either::Either::Right(embedding)) })
@@ -293,7 +304,7 @@ impl<E: DeserializeError> Deserr<E> for VectorOrArrayOfVectors {
                             actual: value,
                             accepted: &[deserr::ValueKind::Sequence, deserr::ValueKind::Float],
                         },
-                        location,
+                        location.push_index(0),
                     ))),
                 }
             }
