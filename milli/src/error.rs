@@ -119,6 +119,8 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     InvalidVectorDimensions { expected: usize, found: usize },
     #[error("The `_vectors` field in the document with id: `{document_id}` is not an object. Was expecting an object with a key for each embedder with manually provided vectors, but instead got `{value}`")]
     InvalidVectorsMapType { document_id: String, value: Value },
+    #[error("Bad embedder configuration in the document with id: `{document_id}`. {error}")]
+    InvalidVectorsEmbedderConf { document_id: String, error: deserr::errors::JsonError },
     #[error("{0}")]
     InvalidFilter(String),
     #[error("Invalid type for filter subexpression: expected: {}, found: {1}.", .0.join(", "))]

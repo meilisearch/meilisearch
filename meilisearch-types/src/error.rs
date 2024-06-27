@@ -398,7 +398,8 @@ impl ErrorCode for milli::Error {
                     UserError::CriterionError(_) => Code::InvalidSettingsRankingRules,
                     UserError::InvalidGeoField { .. } => Code::InvalidDocumentGeoField,
                     UserError::InvalidVectorDimensions { .. } => Code::InvalidVectorDimensions,
-                    UserError::InvalidVectorsMapType { .. } => Code::InvalidVectorsType,
+                    UserError::InvalidVectorsMapType { .. }
+                    | UserError::InvalidVectorsEmbedderConf { .. } => Code::InvalidVectorsType,
                     UserError::TooManyVectors(_, _) => Code::TooManyVectors,
                     UserError::SortError(_) => Code::InvalidSearchSort,
                     UserError::InvalidMinTypoWordLenSetting(_, _) => {
