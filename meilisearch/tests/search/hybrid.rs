@@ -151,6 +151,35 @@ async fn simple_search() {
 }
 
 #[actix_rt::test]
+async fn limit_offset() {
+    let server = Server::new().await;
+    let index = index_with_documents_user_provided(&server, &SIMPLE_SEARCH_DOCUMENTS_VEC).await;
+
+    let (response, code) = index
+        .search_post(
+            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.2}, "retrieveVectors": true, "offset": 1, "limit": 1}),
+        )
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"embeddings":[[2.0,3.0]],"regenerate":false}}}]"###);
+    snapshot!(response["semanticHitCount"], @"0");
+    assert_eq!(response["hits"].as_array().unwrap().len(), 1);
+
+    let server = Server::new().await;
+    let index = index_with_documents_user_provided(&server, &SIMPLE_SEARCH_DOCUMENTS_VEC).await;
+
+    let (response, code) = index
+        .search_post(
+            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.9}, "retrieveVectors": true, "offset": 1, "limit": 1}),
+        )
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}}}]"###);
+    snapshot!(response["semanticHitCount"], @"1");
+    assert_eq!(response["hits"].as_array().unwrap().len(), 1);
+}
+
+#[actix_rt::test]
 async fn simple_search_hf() {
     let server = Server::new().await;
     let index = index_with_documents_hf(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
