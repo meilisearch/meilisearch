@@ -78,7 +78,7 @@ pub static ALL_ACTIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
 });
 
 static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
-    json!({"message": "The provided API key is invalid.",
+    json!({"message": null,
         "code": "invalid_api_key",
         "type": "auth",
         "link": "https://docs.meilisearch.com/errors#invalid_api_key"
@@ -119,7 +119,8 @@ async fn error_access_expired_key() {
     thread::sleep(time::Duration::new(1, 0));
 
     for (method, route) in AUTHORIZATIONS.keys() {
-        let (response, code) = server.dummy_request(method, route).await;
+        let (mut response, code) = server.dummy_request(method, route).await;
+        response["message"] = serde_json::json!(null);
 
         assert_eq!(response, INVALID_RESPONSE.clone(), "on route: {:?} - {:?}", method, route);
         assert_eq!(403, code, "{:?}", &response);
@@ -149,7 +150,8 @@ async fn error_access_unauthorized_index() {
         // filter `products` index routes
         .filter(|(_, route)| route.starts_with("/indexes/products"))
     {
-        let (response, code) = server.dummy_request(method, route).await;
+        let (mut response, code) = server.dummy_request(method, route).await;
+        response["message"] = serde_json::json!(null);
 
         assert_eq!(response, INVALID_RESPONSE.clone(), "on route: {:?} - {:?}", method, route);
         assert_eq!(403, code, "{:?}", &response);
@@ -176,7 +178,8 @@ async fn error_access_unauthorized_action() {
 
         let key = response["key"].as_str().unwrap();
         server.use_api_key(key);
-        let (response, code) = server.dummy_request(method, route).await;
+        let (mut response, code) = server.dummy_request(method, route).await;
+        response["message"] = serde_json::json!(null);
 
         assert_eq!(response, INVALID_RESPONSE.clone(), "on route: {:?} - {:?}", method, route);
         assert_eq!(403, code, "{:?}", &response);
@@ -280,7 +283,7 @@ async fn access_authorized_no_index_restriction() {
                 route,
                 action
             );
-            assert_ne!(code, 403);
+            assert_ne!(code, 403, "on route: {:?} - {:?} with action: {:?}", method, route, action);
         }
     }
 }

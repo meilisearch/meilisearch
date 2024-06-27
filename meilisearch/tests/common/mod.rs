@@ -42,6 +42,12 @@ impl std::ops::Deref for Value {
     }
 }
 
+impl std::ops::DerefMut for Value {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 impl PartialEq<serde_json::Value> for Value {
     fn eq(&self, other: &serde_json::Value) -> bool {
         &self.0 == other
