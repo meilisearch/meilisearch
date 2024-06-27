@@ -178,16 +178,16 @@ impl<'a> Search<'a> {
 
         // completely skip semantic search if the results of the keyword search are good enough
         if self.results_good_enough(&keyword_results, semantic_ratio) {
-            return Ok((keyword_results, Some(0)));
+            return Ok(return_keyword_results(self.limit, self.offset, keyword_results));
         }
 
         // no vector search against placeholder search
         let Some(query) = search.query.take() else {
-            return Ok((keyword_results, Some(0)));
+            return Ok(return_keyword_results(self.limit, self.offset, keyword_results));
         };
         // no embedder, no semantic search
         let Some(SemanticSearch { vector, embedder_name, embedder }) = semantic else {
-            return Ok((keyword_results, Some(0)));
+            return Ok(return_keyword_results(self.limit, self.offset, keyword_results));
         };
 
         let vector_query = match vector {
@@ -238,4 +238,45 @@ impl<'a> Search<'a> {
         }
         true
     }
+}
+
+fn return_keyword_results(
+    limit: usize,
+    offset: usize,
+    SearchResult {
+        matching_words,
+        candidates,
+        mut documents_ids,
+        mut document_scores,
+        degraded,
+        used_negative_operator,
+    }: SearchResult,
+) -> (SearchResult, Option<u32>) {
+    let (documents_ids, document_scores) = if offset >= documents_ids.len() ||
+    // technically redudant because documents_ids.len() == document_scores.len(),
+    // defensive programming
+    offset >= document_scores.len()
+    {
+        (vec![], vec![])
+    } else {
+        // PANICS: offset < len
+        documents_ids.rotate_left(offset);
+        documents_ids.truncate(limit);
+
+        // PANICS: offset < len
+        document_scores.rotate_left(offset);
+        document_scores.truncate(limit);
+        (documents_ids, document_scores)
+    };
+    (
+        SearchResult {
+            matching_words,
+            candidates,
+            documents_ids,
+            document_scores,
+            degraded,
+            used_negative_operator,
+        },
+        Some(0),
+    )
 }
