@@ -417,7 +417,7 @@ fn split_best_frequency(
         let left = ctx.word_interner.insert(left.to_owned());
         let right = ctx.word_interner.insert(right.to_owned());
 
-        if let Some(frequency) = ctx.get_db_word_pair_proximity_docids_len(left, right, 1)? {
+        if let Some(frequency) = ctx.get_db_word_pair_proximity_docids_len(None, left, right, 1)? {
             if best.map_or(true, |(old, _, _)| frequency > old) {
                 best = Some((frequency, left, right));
             }

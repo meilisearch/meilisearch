@@ -22,10 +22,8 @@ pub fn compute_docids(
             (left_term, right_term, *cost)
         }
         ProximityCondition::Term { term } => {
-            let mut docids = compute_query_term_subset_docids(ctx, &term.term_subset)?;
-            docids &= universe;
             return Ok(ComputedCondition {
-                docids,
+                docids: compute_query_term_subset_docids(ctx, Some(universe), &term.term_subset)?,
                 universe_len: universe.len(),
                 start_term_subset: None,
                 end_term_subset: term.clone(),
@@ -76,10 +74,10 @@ pub fn compute_docids(
         if right_derivs.len() > 1 {
             let universe = &universe;
             if let Some(left_phrase) = left_phrase {
-                if universe.is_disjoint(ctx.get_phrase_docids(left_phrase)?) {
+                if universe.is_disjoint(ctx.get_phrase_docids(None, left_phrase)?) {
                     continue;
                 }
-            } else if let Some(left_word_docids) = ctx.word_docids(left_word)? {
+            } else if let Some(left_word_docids) = ctx.word_docids(Some(universe), left_word)? {
                 if universe.is_disjoint(&left_word_docids) {
                     continue;
                 }
@@ -125,7 +123,10 @@ fn compute_prefix_edges(
 
     let mut universe = universe.clone();
     if let Some(phrase) = left_phrase {
-        let phrase_docids = ctx.get_phrase_docids(phrase)?;
+        // TODO we can clearly give the universe to this method
+        //      Unfortunately, it is deserializing/computing stuff and
+        //      keeping the result as a materialized bitmap.
+        let phrase_docids = ctx.get_phrase_docids(None, phrase)?;
         if !phrase_docids.is_empty() {
             used_left_phrases.insert(phrase);
         }
@@ -135,10 +136,13 @@ fn compute_prefix_edges(
         }
     }
 
-    if let Some(new_docids) =
-        ctx.get_db_word_prefix_pair_proximity_docids(left_word, right_prefix, forward_proximity)?
-    {
-        let new_docids = &universe & new_docids;
+    // TODO check that the fact that the universe always changes is not an issue, e.g. caching stuff.
+    if let Some(new_docids) = ctx.get_db_word_prefix_pair_proximity_docids(
+        Some(&universe),
+        left_word,
+        right_prefix,
+        forward_proximity,
+    )? {
         if !new_docids.is_empty() {
             used_left_words.insert(left_word);
             used_right_prefix.insert(right_prefix);
@@ -148,12 +152,13 @@ fn compute_prefix_edges(
 
     // No swapping when computing the proximity between a phrase and a word
     if left_phrase.is_none() {
+        // TODO check that the fact that the universe always changes is not an issue, e.g. caching stuff.
         if let Some(new_docids) = ctx.get_db_prefix_word_pair_proximity_docids(
+            Some(&universe),
             right_prefix,
             left_word,
             backward_proximity,
         )? {
-            let new_docids = &universe & new_docids;
             if !new_docids.is_empty() {
                 used_left_words.insert(left_word);
                 used_right_prefix.insert(right_prefix);
@@ -179,26 +184,27 @@ fn compute_non_prefix_edges(
     let mut universe = universe.clone();
 
     for phrase in left_phrase.iter().chain(right_phrase.iter()).copied() {
-        let phrase_docids = ctx.get_phrase_docids(phrase)?;
-        universe &= phrase_docids;
+        universe &= ctx.get_phrase_docids(None, phrase)?;
         if universe.is_empty() {
             return Ok(());
         }
     }
 
+    // TODO check that it is not an issue to alterate the universe
     if let Some(new_docids) =
-        ctx.get_db_word_pair_proximity_docids(word1, word2, forward_proximity)?
+        ctx.get_db_word_pair_proximity_docids(Some(&universe), word1, word2, forward_proximity)?
     {
-        let new_docids = &universe & new_docids;
         if !new_docids.is_empty() {
             *docids |= new_docids;
         }
     }
     if backward_proximity >= 1 && left_phrase.is_none() && right_phrase.is_none() {
-        if let Some(new_docids) =
-            ctx.get_db_word_pair_proximity_docids(word2, word1, backward_proximity)?
-        {
-            let new_docids = &universe & new_docids;
+        if let Some(new_docids) = ctx.get_db_word_pair_proximity_docids(
+            Some(&universe),
+            word2,
+            word1,
+            backward_proximity,
+        )? {
             if !new_docids.is_empty() {
                 *docids |= new_docids;
             }

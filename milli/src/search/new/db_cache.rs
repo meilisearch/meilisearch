@@ -46,34 +46,68 @@ pub struct DatabaseCache<'ctx> {
     pub word_prefix_fids: FxHashMap<Interned<String>, Vec<u16>>,
 }
 impl<'ctx> DatabaseCache<'ctx> {
-    fn get_value<'v, K1, KC, DC>(
+    fn get_value<'v, K1, KC>(
         txn: &'ctx RoTxn,
         cache_key: K1,
         db_key: &'v KC::EItem,
         cache: &mut FxHashMap<K1, Option<Cow<'ctx, [u8]>>>,
+        universe: Option<&RoaringBitmap>,
         db: Database<KC, Bytes>,
-    ) -> Result<Option<DC::DItem>>
+    ) -> Result<Option<RoaringBitmap>>
     where
         K1: Copy + Eq + Hash,
         KC: BytesEncode<'v>,
-        DC: BytesDecodeOwned,
     {
         if let Entry::Vacant(entry) = cache.entry(cache_key) {
             let bitmap_ptr = db.get(txn, db_key)?.map(Cow::Borrowed);
             entry.insert(bitmap_ptr);
         }
 
-        match cache.get(&cache_key).unwrap() {
-            Some(Cow::Borrowed(bytes)) => DC::bytes_decode_owned(bytes)
+        let bitmap_bytes = match cache.get(&cache_key).unwrap() {
+            Some(Cow::Borrowed(bytes)) => bytes,
+            Some(Cow::Owned(bytes)) => bytes.as_slice(),
+            None => return Ok(None),
+        };
+
+        match (bitmap_bytes, universe) {
+            (bytes, Some(universe)) => {
+                CboRoaringBitmapCodec::intersection_with_serialized(bytes, universe)
+                    .map(Some)
+                    .map_err(Into::into)
+            }
+            (bytes, None) => CboRoaringBitmapCodec::bytes_decode_owned(bytes)
                 .map(Some)
                 .map_err(heed::Error::Decoding)
                 .map_err(Into::into),
-            Some(Cow::Owned(bytes)) => DC::bytes_decode_owned(bytes)
-                .map(Some)
-                .map_err(heed::Error::Decoding)
-                .map_err(Into::into),
-            None => Ok(None),
         }
+    }
+
+    fn get_value_length<'v, K1, KC>(
+        txn: &'ctx RoTxn,
+        cache_key: K1,
+        db_key: &'v KC::EItem,
+        cache: &mut FxHashMap<K1, Option<Cow<'ctx, [u8]>>>,
+        db: Database<KC, Bytes>,
+    ) -> Result<Option<u64>>
+    where
+        K1: Copy + Eq + Hash,
+        KC: BytesEncode<'v>,
+    {
+        if let Entry::Vacant(entry) = cache.entry(cache_key) {
+            let bitmap_ptr = db.get(txn, db_key)?.map(Cow::Borrowed);
+            entry.insert(bitmap_ptr);
+        }
+
+        let bitmap_bytes = match cache.get(&cache_key).unwrap() {
+            Some(Cow::Borrowed(bytes)) => bytes,
+            Some(Cow::Owned(bytes)) => bytes.as_slice(),
+            None => return Ok(None),
+        };
+
+        CboRoaringBitmapLenCodec::bytes_decode_owned(bitmap_bytes)
+            .map(Some)
+            .map_err(heed::Error::Decoding)
+            .map_err(Into::into)
     }
 
     fn get_value_from_keys<'v, K1, KC, DC>(
@@ -137,11 +171,15 @@ impl<'ctx> SearchContext<'ctx> {
         }
     }
 
-    pub fn word_docids(&mut self, word: Word) -> Result<Option<RoaringBitmap>> {
+    pub fn word_docids(
+        &mut self,
+        universe: Option<&RoaringBitmap>,
+        word: Word,
+    ) -> Result<Option<RoaringBitmap>> {
         match word {
             Word::Original(word) => {
-                let exact = self.get_db_exact_word_docids(word)?;
-                let tolerant = self.get_db_word_docids(word)?;
+                let exact = self.get_db_exact_word_docids(universe, word)?;
+                let tolerant = self.get_db_word_docids(universe, word)?;
                 Ok(match (exact, tolerant) {
                     (None, None) => None,
                     (None, Some(tolerant)) => Some(tolerant),
@@ -153,12 +191,16 @@ impl<'ctx> SearchContext<'ctx> {
                     }
                 })
             }
-            Word::Derived(word) => self.get_db_word_docids(word),
+            Word::Derived(word) => self.get_db_word_docids(universe, word),
         }
     }
 
     /// Retrieve or insert the given value in the `word_docids` database.
-    fn get_db_word_docids(&mut self, word: Interned<String>) -> Result<Option<RoaringBitmap>> {
+    fn get_db_word_docids(
+        &mut self,
+        universe: Option<&RoaringBitmap>,
+        word: Interned<String>,
+    ) -> Result<Option<RoaringBitmap>> {
         match &self.restricted_fids {
             Some(restricted_fids) => {
                 let interned = self.word_interner.get(word).as_str();
@@ -174,11 +216,12 @@ impl<'ctx> SearchContext<'ctx> {
                     merge_cbo_roaring_bitmaps,
                 )
             }
-            None => DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
+            None => DatabaseCache::get_value::<_, _>(
                 self.txn,
                 word,
                 self.word_interner.get(word).as_str(),
                 &mut self.db_cache.word_docids,
+                universe,
                 self.index.word_docids.remap_data_type::<Bytes>(),
             ),
         }
@@ -186,6 +229,7 @@ impl<'ctx> SearchContext<'ctx> {
 
     fn get_db_exact_word_docids(
         &mut self,
+        universe: Option<&RoaringBitmap>,
         word: Interned<String>,
     ) -> Result<Option<RoaringBitmap>> {
         match &self.restricted_fids {
@@ -203,21 +247,26 @@ impl<'ctx> SearchContext<'ctx> {
                     merge_cbo_roaring_bitmaps,
                 )
             }
-            None => DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
+            None => DatabaseCache::get_value::<_, _>(
                 self.txn,
                 word,
                 self.word_interner.get(word).as_str(),
                 &mut self.db_cache.exact_word_docids,
+                universe,
                 self.index.exact_word_docids.remap_data_type::<Bytes>(),
             ),
         }
     }
 
-    pub fn word_prefix_docids(&mut self, prefix: Word) -> Result<Option<RoaringBitmap>> {
+    pub fn word_prefix_docids(
+        &mut self,
+        universe: Option<&RoaringBitmap>,
+        prefix: Word,
+    ) -> Result<Option<RoaringBitmap>> {
         match prefix {
             Word::Original(prefix) => {
-                let exact = self.get_db_exact_word_prefix_docids(prefix)?;
-                let tolerant = self.get_db_word_prefix_docids(prefix)?;
+                let exact = self.get_db_exact_word_prefix_docids(universe, prefix)?;
+                let tolerant = self.get_db_word_prefix_docids(universe, prefix)?;
                 Ok(match (exact, tolerant) {
                     (None, None) => None,
                     (None, Some(tolerant)) => Some(tolerant),
@@ -229,13 +278,14 @@ impl<'ctx> SearchContext<'ctx> {
                     }
                 })
             }
-            Word::Derived(prefix) => self.get_db_word_prefix_docids(prefix),
+            Word::Derived(prefix) => self.get_db_word_prefix_docids(universe, prefix),
         }
     }
 
     /// Retrieve or insert the given value in the `word_prefix_docids` database.
     fn get_db_word_prefix_docids(
         &mut self,
+        universe: Option<&RoaringBitmap>,
         prefix: Interned<String>,
     ) -> Result<Option<RoaringBitmap>> {
         match &self.restricted_fids {
@@ -253,11 +303,12 @@ impl<'ctx> SearchContext<'ctx> {
                     merge_cbo_roaring_bitmaps,
                 )
             }
-            None => DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
+            None => DatabaseCache::get_value::<_, _>(
                 self.txn,
                 prefix,
                 self.word_interner.get(prefix).as_str(),
                 &mut self.db_cache.word_prefix_docids,
+                universe,
                 self.index.word_prefix_docids.remap_data_type::<Bytes>(),
             ),
         }
@@ -265,6 +316,7 @@ impl<'ctx> SearchContext<'ctx> {
 
     fn get_db_exact_word_prefix_docids(
         &mut self,
+        universe: Option<&RoaringBitmap>,
         prefix: Interned<String>,
     ) -> Result<Option<RoaringBitmap>> {
         match &self.restricted_fids {
@@ -282,11 +334,12 @@ impl<'ctx> SearchContext<'ctx> {
                     merge_cbo_roaring_bitmaps,
                 )
             }
-            None => DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
+            None => DatabaseCache::get_value::<_, _>(
                 self.txn,
                 prefix,
                 self.word_interner.get(prefix).as_str(),
                 &mut self.db_cache.exact_word_prefix_docids,
+                universe,
                 self.index.exact_word_prefix_docids.remap_data_type::<Bytes>(),
             ),
         }
@@ -294,6 +347,7 @@ impl<'ctx> SearchContext<'ctx> {
 
     pub fn get_db_word_pair_proximity_docids(
         &mut self,
+        universe: Option<&RoaringBitmap>,
         word1: Interned<String>,
         word2: Interned<String>,
         proximity: u8,
@@ -320,8 +374,8 @@ impl<'ctx> SearchContext<'ctx> {
                     for fid in fids {
                         // for each field, intersect left word bitmap and right word bitmap,
                         // then merge the result in a global bitmap before storing it in the cache.
-                        let word1_docids = self.get_db_word_fid_docids(word1, fid)?;
-                        let word2_docids = self.get_db_word_fid_docids(word2, fid)?;
+                        let word1_docids = self.get_db_word_fid_docids(universe, word1, fid)?;
+                        let word2_docids = self.get_db_word_fid_docids(universe, word2, fid)?;
                         if let (Some(word1_docids), Some(word2_docids)) =
                             (word1_docids, word2_docids)
                         {
@@ -341,7 +395,33 @@ impl<'ctx> SearchContext<'ctx> {
 
                 Ok(docids)
             }
-            ProximityPrecision::ByWord => DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
+            ProximityPrecision::ByWord => DatabaseCache::get_value::<_, _>(
+                self.txn,
+                (proximity, word1, word2),
+                &(
+                    proximity,
+                    self.word_interner.get(word1).as_str(),
+                    self.word_interner.get(word2).as_str(),
+                ),
+                &mut self.db_cache.word_pair_proximity_docids,
+                universe,
+                self.index.word_pair_proximity_docids.remap_data_type::<Bytes>(),
+            ),
+        }
+    }
+
+    pub fn get_db_word_pair_proximity_docids_len(
+        &mut self,
+        universe: Option<&RoaringBitmap>,
+        word1: Interned<String>,
+        word2: Interned<String>,
+        proximity: u8,
+    ) -> Result<Option<u64>> {
+        match self.index.proximity_precision(self.txn)?.unwrap_or_default() {
+            ProximityPrecision::ByAttribute => Ok(self
+                .get_db_word_pair_proximity_docids(universe, word1, word2, proximity)?
+                .map(|d| d.len())),
+            ProximityPrecision::ByWord => DatabaseCache::get_value_length::<_, _>(
                 self.txn,
                 (proximity, word1, word2),
                 &(
@@ -355,34 +435,9 @@ impl<'ctx> SearchContext<'ctx> {
         }
     }
 
-    pub fn get_db_word_pair_proximity_docids_len(
-        &mut self,
-        word1: Interned<String>,
-        word2: Interned<String>,
-        proximity: u8,
-    ) -> Result<Option<u64>> {
-        match self.index.proximity_precision(self.txn)?.unwrap_or_default() {
-            ProximityPrecision::ByAttribute => Ok(self
-                .get_db_word_pair_proximity_docids(word1, word2, proximity)?
-                .map(|d| d.len())),
-            ProximityPrecision::ByWord => {
-                DatabaseCache::get_value::<_, _, CboRoaringBitmapLenCodec>(
-                    self.txn,
-                    (proximity, word1, word2),
-                    &(
-                        proximity,
-                        self.word_interner.get(word1).as_str(),
-                        self.word_interner.get(word2).as_str(),
-                    ),
-                    &mut self.db_cache.word_pair_proximity_docids,
-                    self.index.word_pair_proximity_docids.remap_data_type::<Bytes>(),
-                )
-            }
-        }
-    }
-
     pub fn get_db_word_prefix_pair_proximity_docids(
         &mut self,
+        universe: Option<&RoaringBitmap>,
         word1: Interned<String>,
         prefix2: Interned<String>,
         mut proximity: u8,
@@ -409,8 +464,9 @@ impl<'ctx> SearchContext<'ctx> {
                     // for each field, intersect left word bitmap and right word bitmap,
                     // then merge the result in a global bitmap before storing it in the cache.
                     for fid in fids {
-                        let word1_docids = self.get_db_word_fid_docids(word1, fid)?;
-                        let prefix2_docids = self.get_db_word_prefix_fid_docids(prefix2, fid)?;
+                        let word1_docids = self.get_db_word_fid_docids(universe, word1, fid)?;
+                        let prefix2_docids =
+                            self.get_db_word_prefix_fid_docids(universe, prefix2, fid)?;
                         if let (Some(word1_docids), Some(prefix2_docids)) =
                             (word1_docids, prefix2_docids)
                         {
@@ -452,16 +508,18 @@ impl<'ctx> SearchContext<'ctx> {
 
     pub fn get_db_prefix_word_pair_proximity_docids(
         &mut self,
+        universe: Option<&RoaringBitmap>,
         left_prefix: Interned<String>,
         right: Interned<String>,
         proximity: u8,
     ) -> Result<Option<RoaringBitmap>> {
         // only accept exact matches on reverted positions
-        self.get_db_word_pair_proximity_docids(left_prefix, right, proximity)
+        self.get_db_word_pair_proximity_docids(universe, left_prefix, right, proximity)
     }
 
     pub fn get_db_word_fid_docids(
         &mut self,
+        universe: Option<&RoaringBitmap>,
         word: Interned<String>,
         fid: u16,
     ) -> Result<Option<RoaringBitmap>> {
@@ -470,17 +528,19 @@ impl<'ctx> SearchContext<'ctx> {
             return Ok(None);
         }
 
-        DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
+        DatabaseCache::get_value::<_, _>(
             self.txn,
             (word, fid),
             &(self.word_interner.get(word).as_str(), fid),
             &mut self.db_cache.word_fid_docids,
+            universe,
             self.index.word_fid_docids.remap_data_type::<Bytes>(),
         )
     }
 
     pub fn get_db_word_prefix_fid_docids(
         &mut self,
+        universe: Option<&RoaringBitmap>,
         word_prefix: Interned<String>,
         fid: u16,
     ) -> Result<Option<RoaringBitmap>> {
@@ -489,11 +549,12 @@ impl<'ctx> SearchContext<'ctx> {
             return Ok(None);
         }
 
-        DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
+        DatabaseCache::get_value::<_, _>(
             self.txn,
             (word_prefix, fid),
             &(self.word_interner.get(word_prefix).as_str(), fid),
             &mut self.db_cache.word_prefix_fid_docids,
+            universe,
             self.index.word_prefix_fid_docids.remap_data_type::<Bytes>(),
         )
     }
@@ -554,28 +615,32 @@ impl<'ctx> SearchContext<'ctx> {
 
     pub fn get_db_word_position_docids(
         &mut self,
+        universe: Option<&RoaringBitmap>,
         word: Interned<String>,
         position: u16,
     ) -> Result<Option<RoaringBitmap>> {
-        DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
+        DatabaseCache::get_value::<_, _>(
             self.txn,
             (word, position),
             &(self.word_interner.get(word).as_str(), position),
             &mut self.db_cache.word_position_docids,
+            universe,
             self.index.word_position_docids.remap_data_type::<Bytes>(),
         )
     }
 
     pub fn get_db_word_prefix_position_docids(
         &mut self,
+        universe: Option<&RoaringBitmap>,
         word_prefix: Interned<String>,
         position: u16,
     ) -> Result<Option<RoaringBitmap>> {
-        DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
+        DatabaseCache::get_value::<_, _>(
             self.txn,
             (word_prefix, position),
             &(self.word_interner.get(word_prefix).as_str(), position),
             &mut self.db_cache.word_prefix_position_docids,
+            universe,
             self.index.word_prefix_position_docids.remap_data_type::<Bytes>(),
         )
     }

@@ -25,8 +25,7 @@ impl RankingRuleGraphTrait for WordsGraph {
     ) -> Result<ComputedCondition> {
         let WordsCondition { term, .. } = condition;
         // maybe compute_query_term_subset_docids should accept a universe as argument
-        let mut docids = compute_query_term_subset_docids(ctx, &term.term_subset)?;
-        docids &= universe;
+        let docids = compute_query_term_subset_docids(ctx, Some(universe), &term.term_subset)?;
 
         Ok(ComputedCondition {
             docids,

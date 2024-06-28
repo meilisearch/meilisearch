@@ -302,7 +302,7 @@ impl QueryGraph {
             for (_, node) in self.nodes.iter() {
                 match &node.data {
                     QueryNodeData::Term(t) => {
-                        let docids = compute_query_term_subset_docids(ctx, &t.term_subset)?;
+                        let docids = compute_query_term_subset_docids(ctx, None, &t.term_subset)?;
                         for id in t.term_ids.clone() {
                             term_docids
                                 .entry(id)
