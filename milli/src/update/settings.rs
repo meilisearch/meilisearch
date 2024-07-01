@@ -1162,6 +1162,18 @@ impl InnerIndexSettingsDiff {
         }
     }
 
+    pub fn searchable_fields_to_index(&self) -> BTreeSet<FieldId> {
+        if self.settings_update_only {
+            self.new
+                .fields_ids_map
+                .ids()
+                .filter(|id| self.reindex_searchable_id(*id).is_some())
+                .collect()
+        } else {
+            self.new.searchable_fields_ids.iter().copied().collect()
+        }
+    }
+
     pub fn any_reindexing_needed(&self) -> bool {
         self.reindex_searchable() || self.reindex_facets() || self.reindex_vectors()
     }

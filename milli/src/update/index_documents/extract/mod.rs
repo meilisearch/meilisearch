@@ -8,6 +8,7 @@ mod extract_vector_points;
 mod extract_word_docids;
 mod extract_word_pair_proximity_docids;
 mod extract_word_position_docids;
+// mod searchable;
 
 use std::fs::File;
 use std::io::BufReader;
