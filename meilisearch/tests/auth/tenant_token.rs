@@ -53,7 +53,8 @@ static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
 });
 
 static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
-    json!({"message": "The provided API key is invalid.",
+    json!({
+        "message": null,
         "code": "invalid_api_key",
         "type": "auth",
         "link": "https://docs.meilisearch.com/errors#invalid_api_key"
@@ -191,7 +192,9 @@ macro_rules! compute_forbidden_search {
                 server.use_api_key(&web_token);
                 let index = server.index("sales");
                 index
-                    .search(json!({}), |response, code| {
+                    .search(json!({}), |mut response, code| {
+                        // We don't assert anything on the message since it may change between cases
+                        response["message"] = serde_json::json!(null);
                         assert_eq!(
                             response,
                             INVALID_RESPONSE.clone(),
@@ -495,7 +498,8 @@ async fn error_access_forbidden_routes() {
 
     for ((method, route), actions) in AUTHORIZATIONS.iter() {
         if !actions.contains("search") {
-            let (response, code) = server.dummy_request(method, route).await;
+            let (mut response, code) = server.dummy_request(method, route).await;
+            response["message"] = serde_json::json!(null);
             assert_eq!(response, INVALID_RESPONSE.clone());
             assert_eq!(code, 403);
         }
@@ -529,14 +533,16 @@ async fn error_access_expired_parent_key() {
     server.use_api_key(&web_token);
 
     // test search request while parent_key is not expired
-    let (response, code) = server.dummy_request("POST", "/indexes/products/search").await;
+    let (mut response, code) = server.dummy_request("POST", "/indexes/products/search").await;
+    response["message"] = serde_json::json!(null);
     assert_ne!(response, INVALID_RESPONSE.clone());
     assert_ne!(code, 403);
 
     // wait until the key is expired.
     thread::sleep(time::Duration::new(1, 0));
 
-    let (response, code) = server.dummy_request("POST", "/indexes/products/search").await;
+    let (mut response, code) = server.dummy_request("POST", "/indexes/products/search").await;
+    response["message"] = serde_json::json!(null);
     assert_eq!(response, INVALID_RESPONSE.clone());
     assert_eq!(code, 403);
 }
@@ -585,7 +591,8 @@ async fn error_access_modified_token() {
     .join(".");
 
     server.use_api_key(&altered_token);
-    let (response, code) = server.dummy_request("POST", "/indexes/products/search").await;
+    let (mut response, code) = server.dummy_request("POST", "/indexes/products/search").await;
+    response["message"] = serde_json::json!(null);
     assert_eq!(response, INVALID_RESPONSE.clone());
     assert_eq!(code, 403);
 }

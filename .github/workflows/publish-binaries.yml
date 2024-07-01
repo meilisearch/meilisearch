@@ -45,10 +45,7 @@ jobs:
       run: |
         apt-get update && apt-get install -y curl
         apt-get install build-essential -y
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        override: true
+    - uses: helix-editor/rust-toolchain@v1
     - name: Build
       run: cargo build --release --locked
     # No need to upload binaries for dry run (cron)
@@ -78,10 +75,7 @@ jobs:
             asset_name: meilisearch-windows-amd64.exe
     steps:
     - uses: actions/checkout@v3
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        override: true
+    - uses: helix-editor/rust-toolchain@v1
     - name: Build
       run: cargo build --release --locked
     # No need to upload binaries for dry run (cron)
@@ -107,12 +101,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Installing Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: helix-editor/rust-toolchain@v1
         with:
-          toolchain: stable
           profile: minimal
           target: ${{ matrix.target }}
-          override: true
       - name: Cargo build
         uses: actions-rs/cargo@v1
         with:
@@ -154,12 +146,10 @@ jobs:
           add-apt-repository "deb [arch=$(dpkg --print-architecture)] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
           apt-get update -y && apt-get install -y docker-ce
       - name: Installing Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: helix-editor/rust-toolchain@v1
         with:
-          toolchain: stable
           profile: minimal
           target: ${{ matrix.target }}
-          override: true
       - name: Configure target aarch64 GNU
         ## Environment variable is not passed using env:
         ## LD gold won't work with MUSL

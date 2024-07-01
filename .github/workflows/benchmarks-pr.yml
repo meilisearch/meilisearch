@@ -13,11 +13,9 @@ jobs:
     runs-on: benchmarks
     timeout-minutes: 4320 # 72h
     steps:
-      - uses: actions-rs/toolchain@v1
+      - uses: helix-editor/rust-toolchain@v1
         with:
           profile: minimal
-          toolchain: stable
-          override: true
 
       - name: Check for Command
         id: command

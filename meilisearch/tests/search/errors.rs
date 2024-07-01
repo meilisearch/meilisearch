@@ -71,7 +71,7 @@ async fn search_bad_offset() {
     }
     "###);
 
-    let (response, code) = index.search_get("offset=doggo").await;
+    let (response, code) = index.search_get("?offset=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -99,7 +99,7 @@ async fn search_bad_limit() {
     }
     "###);
 
-    let (response, code) = index.search_get("limit=doggo").await;
+    let (response, code) = index.search_get("?limit=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -127,7 +127,7 @@ async fn search_bad_page() {
     }
     "###);
 
-    let (response, code) = index.search_get("page=doggo").await;
+    let (response, code) = index.search_get("?page=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -155,7 +155,7 @@ async fn search_bad_hits_per_page() {
     }
     "###);
 
-    let (response, code) = index.search_get("hitsPerPage=doggo").await;
+    let (response, code) = index.search_get("?hitsPerPage=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -269,7 +269,7 @@ async fn search_bad_crop_length() {
     }
     "###);
 
-    let (response, code) = index.search_get("cropLength=doggo").await;
+    let (response, code) = index.search_get("?cropLength=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -359,7 +359,7 @@ async fn search_bad_show_matches_position() {
     }
     "###);
 
-    let (response, code) = index.search_get("showMatchesPosition=doggo").await;
+    let (response, code) = index.search_get("?showMatchesPosition=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -442,7 +442,7 @@ async fn search_non_filterable_facets() {
     }
     "###);
 
-    let (response, code) = index.search_get("facets=doggo").await;
+    let (response, code) = index.search_get("?facets=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -472,7 +472,7 @@ async fn search_non_filterable_facets_multiple_filterable() {
     }
     "###);
 
-    let (response, code) = index.search_get("facets=doggo").await;
+    let (response, code) = index.search_get("?facets=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -502,7 +502,7 @@ async fn search_non_filterable_facets_no_filterable() {
     }
     "###);
 
-    let (response, code) = index.search_get("facets=doggo").await;
+    let (response, code) = index.search_get("?facets=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -532,7 +532,7 @@ async fn search_non_filterable_facets_multiple_facets() {
     }
     "###);
 
-    let (response, code) = index.search_get("facets=doggo,neko").await;
+    let (response, code) = index.search_get("?facets=doggo,neko").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -625,7 +625,7 @@ async fn search_bad_matching_strategy() {
     }
     "###);
 
-    let (response, code) = index.search_get("matchingStrategy=doggo").await;
+    let (response, code) = index.search_get("?matchingStrategy=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {

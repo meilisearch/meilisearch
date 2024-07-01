@@ -1331,10 +1331,20 @@ fn insert_geo_distance(sorts: &[String], document: &mut Document) {
         // TODO: TAMO: milli encountered an internal error, what do we want to do?
         let base = [capture_group[1].parse().unwrap(), capture_group[2].parse().unwrap()];
         let geo_point = &document.get("_geo").unwrap_or(&json!(null));
-        if let Some((lat, lng)) = geo_point["lat"].as_f64().zip(geo_point["lng"].as_f64()) {
+        if let Some((lat, lng)) =
+            extract_geo_value(&geo_point["lat"]).zip(extract_geo_value(&geo_point["lng"]))
+        {
             let distance = milli::distance_between_two_points(&base, &[lat, lng]);
             document.insert("_geoDistance".to_string(), json!(distance.round() as usize));
         }
+    }
+}
+
+fn extract_geo_value(value: &Value) -> Option<f64> {
+    match value {
+        Value::Number(n) => n.as_f64(),
+        Value::String(s) => s.parse().ok(),
+        _ => None,
     }
 }
 
@@ -1710,5 +1720,55 @@ mod test {
         let mut document = value;
         insert_geo_distance(sorters, &mut document);
         assert_eq!(document.get("_geoDistance"), None);
+    }
+
+    #[test]
+    fn test_insert_geo_distance_with_coords_as_string() {
+        let value: Document = serde_json::from_str(
+            r#"{
+              "_geo": {
+                "lat": "50",
+                "lng": 3
+              }
+            }"#,
+        )
+        .unwrap();
+
+        let sorters = &["_geoPoint(50,3):desc".to_string()];
+        let mut document = value.clone();
+        insert_geo_distance(sorters, &mut document);
+        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
+
+        let value: Document = serde_json::from_str(
+            r#"{
+              "_geo": {
+                "lat": "50",
+                "lng": "3"
+              },
+              "id": "1"
+            }"#,
+        )
+        .unwrap();
+
+        let sorters = &["_geoPoint(50,3):desc".to_string()];
+        let mut document = value.clone();
+        insert_geo_distance(sorters, &mut document);
+        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
+
+        let value: Document = serde_json::from_str(
+            r#"{
+              "_geo": {
+                "lat": 50,
+                "lng": "3"
+              },
+              "id": "1"
+            }"#,
+        )
+        .unwrap();
+
+        let sorters = &["_geoPoint(50,3):desc".to_string()];
+        let mut document = value.clone();
+        insert_geo_distance(sorters, &mut document);
+        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
     }
 }

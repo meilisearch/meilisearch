@@ -365,7 +365,7 @@ impl Index<'_> {
     }
 
     pub async fn search_get(&self, query: &str) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/search?{}", urlencode(self.uid.as_ref()), query);
+        let url = format!("/indexes/{}/search{}", urlencode(self.uid.as_ref()), query);
         self.service.get(url).await
     }
 
@@ -402,7 +402,7 @@ impl Index<'_> {
     }
 
     pub async fn similar_get(&self, query: &str) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/similar?{}", urlencode(self.uid.as_ref()), query);
+        let url = format!("/indexes/{}/similar{}", urlencode(self.uid.as_ref()), query);
         self.service.get(url).await
     }
 

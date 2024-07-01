@@ -2,6 +2,7 @@ mod errors;
 mod webhook;
 
 use meili_snap::insta::assert_json_snapshot;
+use meili_snap::snapshot;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
@@ -738,11 +739,9 @@ async fn test_summarized_index_creation() {
 async fn test_summarized_index_deletion() {
     let server = Server::new().await;
     let index = server.index("test");
-    index.delete().await;
-    index.wait_task(0).await;
-    let (task, _) = index.get_task(0).await;
-    assert_json_snapshot!(task,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+    let (ret, _code) = index.delete().await;
+    let task = index.wait_task(ret.uid()).await;
+    snapshot!(task,
         @r###"
     {
       "uid": 0,
@@ -767,12 +766,34 @@ async fn test_summarized_index_deletion() {
     "###);
 
     // is the details correctly set when documents are actually deleted.
-    index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), Some("id")).await;
-    index.delete().await;
-    index.wait_task(2).await;
-    let (task, _) = index.get_task(2).await;
-    assert_json_snapshot!(task,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+    // /!\ We need to wait for the document addition to be processed otherwise, if the test runs too slow,
+    // both tasks may get autobatched and the deleted documents count will be wrong.
+    let (ret, _code) =
+        index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), Some("id")).await;
+    let task = index.wait_task(ret.uid()).await;
+    snapshot!(task,
+        @r###"
+    {
+      "uid": 1,
+      "indexUid": "test",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let (ret, _code) = index.delete().await;
+    let task = index.wait_task(ret.uid()).await;
+    snapshot!(task,
         @r###"
     {
       "uid": 2,
@@ -792,22 +813,25 @@ async fn test_summarized_index_deletion() {
     "###);
 
     // What happens when you delete an index that doesn't exists.
-    index.delete().await;
-    index.wait_task(2).await;
-    let (task, _) = index.get_task(2).await;
-    assert_json_snapshot!(task,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+    let (ret, _code) = index.delete().await;
+    let task = index.wait_task(ret.uid()).await;
+    snapshot!(task,
         @r###"
     {
-      "uid": 2,
+      "uid": 3,
       "indexUid": "test",
-      "status": "succeeded",
+      "status": "failed",
       "type": "indexDeletion",
       "canceledBy": null,
       "details": {
-        "deletedDocuments": 1
+        "deletedDocuments": 0
       },
-      "error": null,
+      "error": {
+        "message": "Index `test` not found.",
+        "code": "index_not_found",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
+      },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",

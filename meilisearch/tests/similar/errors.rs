@@ -241,7 +241,7 @@ async fn similar_bad_offset() {
     }
     "###);
 
-    let (response, code) = index.similar_get("id=287947&offset=doggo").await;
+    let (response, code) = index.similar_get("?id=287947&offset=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -283,7 +283,7 @@ async fn similar_bad_limit() {
     }
     "###);
 
-    let (response, code) = index.similar_get("id=287946&limit=doggo").await;
+    let (response, code) = index.similar_get("?id=287946&limit=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {

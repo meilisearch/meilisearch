@@ -6080,12 +6080,13 @@ dependencies = [
 
 [[package]]
 name = "yaup"
-version = "0.2.1"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a59e7d27bed43f7c37c25df5192ea9d435a8092a902e02203359ac9ce3e429d9"
+checksum = "b0144f1a16a199846cb21024da74edd930b43443463292f536b7110b4855b5c6"
 dependencies = [
+ "form_urlencoded",
  "serde",
- "url",
+ "thiserror",
 ]
 
 [[package]]

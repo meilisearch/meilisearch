@@ -1,7 +1,10 @@
+use actix_web::test;
+use http::StatusCode;
+use jsonwebtoken::{EncodingKey, Header};
 use meili_snap::*;
 use uuid::Uuid;
 
-use crate::common::Server;
+use crate::common::{Server, Value};
 use crate::json;
 
 #[actix_rt::test]
@@ -433,6 +436,265 @@ async fn patch_api_keys_unknown_field() {
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
+}
+
+async fn send_request_with_custom_auth(
+    app: impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse<impl actix_web::body::MessageBody>,
+        Error = actix_web::Error,
+    >,
+    url: &str,
+    auth: &str,
+) -> (Value, StatusCode) {
+    let req = test::TestRequest::get().uri(url).insert_header(("Authorization", auth)).to_request();
+    let res = test::call_service(&app, req).await;
+    let status_code = res.status();
+    let body = test::read_body(res).await;
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+
+    (response, status_code)
+}
+
+#[actix_rt::test]
+async fn invalid_auth_format() {
+    let server = Server::new_auth().await;
+    let app = server.init_web_app().await;
+
+    let req = test::TestRequest::get().uri("/indexes/dog/documents").to_request();
+    let res = test::call_service(&app, req).await;
+    let status_code = res.status();
+    let body = test::read_body(res).await;
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    snapshot!(status_code, @"401 Unauthorized");
+    snapshot!(response, @r###"
+    {
+      "message": "The Authorization header is missing. It must use the bearer authorization method.",
+      "code": "missing_authorization_header",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+    }
+    "###);
+
+    let req = test::TestRequest::get().uri("/indexes/dog/documents").to_request();
+    let res = test::call_service(&app, req).await;
+    let status_code = res.status();
+    let body = test::read_body(res).await;
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    snapshot!(status_code, @"401 Unauthorized");
+    snapshot!(response, @r###"
+    {
+      "message": "The Authorization header is missing. It must use the bearer authorization method.",
+      "code": "missing_authorization_header",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+    }
+    "###);
+
+    let (response, status_code) =
+        send_request_with_custom_auth(&app, "/indexes/dog/documents", "Bearer").await;
+    snapshot!(status_code, @"403 Forbidden");
+    snapshot!(response, @r###"
+    {
+      "message": "The provided API key is invalid.",
+      "code": "invalid_api_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn invalid_api_key() {
+    let server = Server::new_auth().await;
+    let app = server.init_web_app().await;
+
+    let (response, status_code) =
+        send_request_with_custom_auth(&app, "/indexes/dog/search", "Bearer kefir").await;
+    snapshot!(status_code, @"403 Forbidden");
+    snapshot!(response, @r###"
+    {
+      "message": "The provided API key is invalid.",
+      "code": "invalid_api_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+    }
+    "###);
+
+    let uuid = Uuid::nil();
+    let key = json!({ "actions": ["search"], "indexes": ["dog"], "expiresAt": null, "uid": uuid.to_string() });
+    let req = test::TestRequest::post()
+        .uri("/keys")
+        .insert_header(("Authorization", "Bearer MASTER_KEY"))
+        .set_json(&key)
+        .to_request();
+    let res = test::call_service(&app, req).await;
+    let body = test::read_body(res).await;
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    snapshot!(json_string!(response, { ".createdAt" => "[date]",  ".updatedAt" => "[date]" }), @r###"
+    {
+      "name": null,
+      "description": null,
+      "key": "aeb94973e0b6e912d94165430bbe87dee91a7c4f891ce19050c3910ec96977e9",
+      "uid": "00000000-0000-0000-0000-000000000000",
+      "actions": [
+        "search"
+      ],
+      "indexes": [
+        "dog"
+      ],
+      "expiresAt": null,
+      "createdAt": "[date]",
+      "updatedAt": "[date]"
+    }
+    "###);
+    let key = response["key"].as_str().unwrap();
+
+    let (response, status_code) =
+        send_request_with_custom_auth(&app, "/indexes/doggo/search", &format!("Bearer {key}"))
+            .await;
+    snapshot!(status_code, @"403 Forbidden");
+    snapshot!(response, @r###"
+    {
+      "message": "The API key cannot acces the index `doggo`, authorized indexes are [\"dog\"].",
+      "code": "invalid_api_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn invalid_tenant_token() {
+    let server = Server::new_auth().await;
+    let app = server.init_web_app().await;
+
+    // The tenant token won't be recognized at all if we're not on a search route
+    let claims = json!({ "tamo": "kefir" });
+    let jwt = jsonwebtoken::encode(&Header::default(), &claims, &EncodingKey::from_secret(b"tamo"))
+        .unwrap();
+    let (response, status_code) =
+        send_request_with_custom_auth(&app, "/indexes/dog/documents", &format!("Bearer {jwt}"))
+            .await;
+    snapshot!(status_code, @"403 Forbidden");
+    snapshot!(response, @r###"
+    {
+      "message": "The provided API key is invalid.",
+      "code": "invalid_api_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+    }
+    "###);
+
+    let claims = json!({ "tamo": "kefir" });
+    let jwt = jsonwebtoken::encode(&Header::default(), &claims, &EncodingKey::from_secret(b"tamo"))
+        .unwrap();
+    let (response, status_code) =
+        send_request_with_custom_auth(&app, "/indexes/dog/search", &format!("Bearer {jwt}")).await;
+    snapshot!(status_code, @"403 Forbidden");
+    snapshot!(response, @r###"
+    {
+      "message": "Could not decode tenant token, JSON error: missing field `searchRules` at line 1 column 16.",
+      "code": "invalid_api_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+    }
+    "###);
+
+    // The error messages are not ideal but that's expected since we cannot _yet_ use deserr
+    let claims = json!({ "searchRules": "kefir" });
+    let jwt = jsonwebtoken::encode(&Header::default(), &claims, &EncodingKey::from_secret(b"tamo"))
+        .unwrap();
+    let (response, status_code) =
+        send_request_with_custom_auth(&app, "/indexes/dog/search", &format!("Bearer {jwt}")).await;
+    snapshot!(status_code, @"403 Forbidden");
+    snapshot!(response, @r###"
+    {
+      "message": "Could not decode tenant token, JSON error: data did not match any variant of untagged enum SearchRules at line 1 column 23.",
+      "code": "invalid_api_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+    }
+    "###);
+
+    let uuid = Uuid::nil();
+    let claims = json!({ "searchRules": ["kefir"], "apiKeyUid": uuid.to_string() });
+    let jwt = jsonwebtoken::encode(&Header::default(), &claims, &EncodingKey::from_secret(b"tamo"))
+        .unwrap();
+    let (response, status_code) =
+        send_request_with_custom_auth(&app, "/indexes/dog/search", &format!("Bearer {jwt}")).await;
+    snapshot!(status_code, @"403 Forbidden");
+    snapshot!(response, @r###"
+    {
+      "message": "Could not decode tenant token, InvalidSignature.",
+      "code": "invalid_api_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+    }
+    "###);
+
+    // ~~ For the next tests we first need a valid API key
+    let key = json!({ "actions": ["search"], "indexes": ["dog"], "expiresAt": null, "uid": uuid.to_string() });
+    let req = test::TestRequest::post()
+        .uri("/keys")
+        .insert_header(("Authorization", "Bearer MASTER_KEY"))
+        .set_json(&key)
+        .to_request();
+    let res = test::call_service(&app, req).await;
+    let body = test::read_body(res).await;
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    snapshot!(json_string!(response, { ".createdAt" => "[date]",  ".updatedAt" => "[date]" }), @r###"
+    {
+      "name": null,
+      "description": null,
+      "key": "aeb94973e0b6e912d94165430bbe87dee91a7c4f891ce19050c3910ec96977e9",
+      "uid": "00000000-0000-0000-0000-000000000000",
+      "actions": [
+        "search"
+      ],
+      "indexes": [
+        "dog"
+      ],
+      "expiresAt": null,
+      "createdAt": "[date]",
+      "updatedAt": "[date]"
+    }
+    "###);
+    let key = response["key"].as_str().unwrap();
+
+    let claims = json!({ "searchRules": ["doggo", "catto"], "apiKeyUid": uuid.to_string() });
+    let jwt = jsonwebtoken::encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(key.as_bytes()),
+    )
+    .unwrap();
+    // Try to access an index that is not authorized by the tenant token
+    let (response, status_code) =
+        send_request_with_custom_auth(&app, "/indexes/dog/search", &format!("Bearer {jwt}")).await;
+    snapshot!(status_code, @"403 Forbidden");
+    snapshot!(response, @r###"
+    {
+      "message": "The provided tenant token cannot acces the index `dog`, allowed indexes are [\"catto\", \"doggo\"].",
+      "code": "invalid_api_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+    }
+    "###);
+
+    // Try to access an index that *is* authorized by the tenant token but not by the api key used to generate the tt
+    let (response, status_code) =
+        send_request_with_custom_auth(&app, "/indexes/doggo/search", &format!("Bearer {jwt}"))
+            .await;
+    snapshot!(status_code, @"403 Forbidden");
+    snapshot!(response, @r###"
+    {
+      "message": "The API key used to generate this tenant token cannot acces the index `doggo`.",
+      "code": "invalid_api_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
     }
     "###);
 }
