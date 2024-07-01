@@ -54,6 +54,8 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a, 'b> {
 
             let external_docid = change.external_docid().to_owned();
 
+            todo!("manage documents compression");
+
             // document but we need to create a function that collects and compresses documents.
             match change {
                 DocumentChange::Deletion(deletion) => {

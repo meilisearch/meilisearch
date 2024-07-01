@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
 use bumparaw_collections::RawMap;
@@ -47,22 +48,14 @@ pub trait Document<'doc> {
     fn geo_field(&self) -> Result<Option<&'doc RawValue>>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DocumentFromDb<'t, Mapper: FieldIdMapper>
 where
     Mapper: FieldIdMapper,
 {
     fields_ids_map: &'t Mapper,
-    content: &'t KvReaderFieldId,
+    content: Cow<'t, KvReaderFieldId>,
 }
-
-impl<'t, Mapper: FieldIdMapper> Clone for DocumentFromDb<'t, Mapper> {
-    #[inline]
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-impl<'t, Mapper: FieldIdMapper> Copy for DocumentFromDb<'t, Mapper> {}
 
 impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
     fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'t str, &'t RawValue)>> {
