@@ -24,6 +24,7 @@ impl heed::BytesEncode<'_> for ObkvCompressedCodec {
 pub struct CompressedKvReaderU16<'a>(&'a [u8]);
 
 impl<'a> CompressedKvReaderU16<'a> {
+    /// Decompresses the KvReader into the buffer using the provided dictionnary.
     pub fn decompress_with<'b>(
         &self,
         buffer: &'b mut Vec<u8>,
@@ -37,6 +38,11 @@ impl<'a> CompressedKvReaderU16<'a> {
             dictionnary,
         )?;
         Ok(KvReaderU16::new(&buffer[..size]))
+    }
+
+    /// Returns the KvReader like it is not compressed. Happends when there is no dictionnary yet.
+    pub fn as_non_compressed(&self) -> KvReaderU16<'a> {
+        KvReaderU16::new(self.0)
     }
 }
 

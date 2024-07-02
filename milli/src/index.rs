@@ -20,7 +20,8 @@ use crate::heed_codec::facet::{
     FieldIdCodec, OrderedF64Codec,
 };
 use crate::heed_codec::{
-    BEU16StrCodec, FstSetCodec, ScriptLanguageCodec, StrBEU16Codec, StrRefCodec,
+    BEU16StrCodec, CompressedKvReaderU16, FstSetCodec, ObkvCompressedCodec, ScriptLanguageCodec,
+    StrBEU16Codec, StrRefCodec,
 };
 use crate::order_by_map::OrderByMap;
 use crate::proximity::ProximityPrecision;
@@ -29,8 +30,8 @@ use crate::vector::{Embedding, EmbeddingConfig};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
-    FieldidsWeightsMap, GeoPoint, ObkvCodec, Result, RoaringBitmapCodec, RoaringBitmapLenCodec,
-    Search, U8StrStrCodec, Weight, BEU16, BEU32, BEU64,
+    FieldidsWeightsMap, GeoPoint, Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search,
+    U8StrStrCodec, Weight, BEU16, BEU32, BEU64,
 };
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
@@ -73,6 +74,7 @@ pub mod main_key {
     pub const PROXIMITY_PRECISION: &str = "proximity-precision";
     pub const EMBEDDING_CONFIGS: &str = "embedding_configs";
     pub const SEARCH_CUTOFF: &str = "search_cutoff";
+    pub const DOCUMENT_COMPRESSION_DICTIONARY: &str = "document-compression-dictionary";
 }
 
 pub mod db_name {
@@ -172,7 +174,7 @@ pub struct Index {
     pub vector_arroy: arroy::Database<arroy::distances::Angular>,
 
     /// Maps the document id to the document as an obkv store.
-    pub(crate) documents: Database<BEU32, ObkvCodec>,
+    pub(crate) documents: Database<BEU32, ObkvCompressedCodec>,
 }
 
 impl Index {
@@ -337,6 +339,29 @@ impl Index {
     /// when all references are dropped, the last one will eventually close the environment.
     pub fn prepare_for_closing(self) -> heed::EnvClosingEvent {
         self.env.prepare_for_closing()
+    }
+
+    /* document compression dictionary */
+
+    /// Writes the dictionnary that will further be used to compress the documents.
+    pub fn put_document_compression_dictionary(
+        &self,
+        wtxn: &mut RwTxn,
+        dictionary: &[u8],
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, Bytes>().put(
+            wtxn,
+            main_key::DOCUMENT_COMPRESSION_DICTIONARY,
+            dictionary,
+        )
+    }
+
+    /// Returns the optional dictionnary to be used when reading the OBKV documents.
+    pub fn document_compression_dictionary<'t>(
+        &self,
+        rtxn: &'t RoTxn,
+    ) -> heed::Result<Option<&'t [u8]>> {
+        self.main.remap_types::<Str, Bytes>().get(rtxn, main_key::DOCUMENT_COMPRESSION_DICTIONARY)
     }
 
     /* documents ids */
@@ -1248,36 +1273,36 @@ impl Index {
 
     /* documents */
 
-    /// Returns an iterator over the requested documents. The next item will be an error if a document is missing.
-    pub fn iter_documents<'a, 't: 'a>(
+    /// Returns an iterator over the requested compressed documents. The next item will be an error if a document is missing.
+    pub fn iter_compressed_documents<'a, 't: 'a>(
         &'a self,
         rtxn: &'t RoTxn,
         ids: impl IntoIterator<Item = DocumentId> + 'a,
-    ) -> Result<impl Iterator<Item = Result<(DocumentId, obkv::KvReaderU16<'t>)>> + 'a> {
+    ) -> Result<impl Iterator<Item = Result<(DocumentId, CompressedKvReaderU16<'t>)>> + 'a> {
         Ok(ids.into_iter().map(move |id| {
-            let kv = self
+            let compressed = self
                 .documents
                 .get(rtxn, &id)?
                 .ok_or(UserError::UnknownInternalDocumentId { document_id: id })?;
-            Ok((id, kv))
+            Ok((id, compressed))
         }))
     }
 
     /// Returns a [`Vec`] of the requested documents. Returns an error if a document is missing.
-    pub fn documents<'t>(
+    pub fn compressed_documents<'t>(
         &self,
         rtxn: &'t RoTxn,
         ids: impl IntoIterator<Item = DocumentId>,
-    ) -> Result<Vec<(DocumentId, obkv::KvReaderU16<'t>)>> {
-        self.iter_documents(rtxn, ids)?.collect()
+    ) -> Result<Vec<(DocumentId, CompressedKvReaderU16<'t>)>> {
+        self.iter_compressed_documents(rtxn, ids)?.collect()
     }
 
     /// Returns an iterator over all the documents in the index.
-    pub fn all_documents<'a, 't: 'a>(
+    pub fn all_compressed_documents<'a, 't: 'a>(
         &'a self,
         rtxn: &'t RoTxn,
-    ) -> Result<impl Iterator<Item = Result<(DocumentId, obkv::KvReaderU16<'t>)>> + 'a> {
-        self.iter_documents(rtxn, self.documents_ids(rtxn)?)
+    ) -> Result<impl Iterator<Item = Result<(DocumentId, CompressedKvReaderU16<'t>)>> + 'a> {
+        self.iter_compressed_documents(rtxn, self.documents_ids(rtxn)?)
     }
 
     pub fn external_id_of<'a, 't: 'a>(
@@ -1298,8 +1323,15 @@ impl Index {
                 process: "external_id_of",
             })
         })?;
-        Ok(self.iter_documents(rtxn, ids)?.map(move |entry| -> Result<_> {
-            let (_docid, obkv) = entry?;
+        let dictionary = self.document_compression_dictionary(rtxn)?;
+        let mut buffer = Vec::new();
+        Ok(self.iter_compressed_documents(rtxn, ids)?.map(move |entry| -> Result<_> {
+            let (_docid, compressed_obkv) = entry?;
+            let obkv = match dictionary {
+                // TODO manage this unwrap correctly
+                Some(dict) => compressed_obkv.decompress_with(&mut buffer, dict).unwrap(),
+                None => compressed_obkv.as_non_compressed(),
+            };
             match primary_key.document_id(&obkv, &fields)? {
                 Ok(document_id) => Ok(document_id),
                 Err(_) => Err(InternalError::DocumentsError(
@@ -2410,7 +2442,13 @@ pub(crate) mod tests {
         "###);
 
         let rtxn = index.read_txn().unwrap();
-        let (_docid, obkv) = index.documents(&rtxn, [0]).unwrap()[0];
+        let dictionary = index.document_compression_dictionary(&rtxn).unwrap();
+        let (_docid, compressed_obkv) = index.compressed_documents(&rtxn, [0]).unwrap()[0];
+        let mut buffer = Vec::new();
+        let obkv = match dictionary {
+            Some(dict) => compressed_obkv.decompress_with(&mut buffer, dict).unwrap(),
+            None => compressed_obkv.as_non_compressed(),
+        };
         let json = obkv_to_json(&[0, 1, 2], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
         insta::assert_debug_snapshot!(json, @r###"
         {
@@ -2419,7 +2457,11 @@ pub(crate) mod tests {
         "###);
 
         // Furthermore, when we retrieve document 34, it is not the result of merging 35 with 34
-        let (_docid, obkv) = index.documents(&rtxn, [2]).unwrap()[0];
+        let (_docid, compressed_obkv) = index.compressed_documents(&rtxn, [2]).unwrap()[0];
+        let obkv = match dictionary {
+            Some(dict) => compressed_obkv.decompress_with(&mut buffer, dict).unwrap(),
+            None => compressed_obkv.as_non_compressed(),
+        };
         let json = obkv_to_json(&[0, 1, 2], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
         insta::assert_debug_snapshot!(json, @r###"
         {
@@ -2626,7 +2668,7 @@ pub(crate) mod tests {
         } = search.execute().unwrap();
         let primary_key_id = index.fields_ids_map(&rtxn).unwrap().id("primary_key").unwrap();
         documents_ids.sort_unstable();
-        let docs = index.documents(&rtxn, documents_ids).unwrap();
+        let docs = index.compressed_documents(&rtxn, documents_ids).unwrap();
         let mut all_ids = HashSet::new();
         for (_docid, obkv) in docs {
             let id = obkv.get(primary_key_id).unwrap();
