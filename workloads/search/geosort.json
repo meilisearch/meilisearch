@@ -1,0 +1,340 @@
+{
+    "name": "search-geosort.jsonl_1M",
+    "run_count": 3,
+    "target": "search::=trace",
+    "extra_cli_args": [],
+    "assets": {
+        "smol-all-countries-100k.jsonl": {
+            "local_location": null,
+            "format": "NdJson",
+            "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/smol-all-countries/smol-all-countries-100k.jsonl",
+            "sha256": "d00924689abc02d09ec4667cc5a18364ff7bc236bad51367f34b9184b945ece3"
+        },
+        "smol-all-countries-200k.jsonl": {
+            "local_location": null,
+            "format": "NdJson",
+            "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/smol-all-countries/smol-all-countries-200k.jsonl",
+            "sha256": "2a215b43b35d596d9da4f1071deab9002a93602e6dbf1308fba53eb89d9c5a9e"
+        },
+        "smol-all-countries-300k.jsonl": {
+            "local_location": null,
+            "format": "NdJson",
+            "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/smol-all-countries/smol-all-countries-300k.jsonl",
+            "sha256": "91d94d78eeb10d631557a5ccf775e74a41d14ccaff4d7121dd90c7aa35534f2b"
+        },
+        "smol-all-countries-400k.jsonl": {
+            "local_location": null,
+            "format": "NdJson",
+            "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/smol-all-countries/smol-all-countries-400k.jsonl",
+            "sha256": "ee883a353b571f35f4abb79b95cfa628f3f1c582919dd658a388b220f97fe035"
+        },
+        "smol-all-countries-500k.jsonl": {
+            "local_location": null,
+            "format": "NdJson",
+            "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/smol-all-countries/smol-all-countries-500k.jsonl",
+            "sha256": "5be254ce4c50db12b7f1795859b8bbdcbc2ec22bccb3a1898899bd4c4765a1bf"
+        },
+        "smol-all-countries-600k.jsonl": {
+            "local_location": null,
+            "format": "NdJson",
+            "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/smol-all-countries/smol-all-countries-600k.jsonl",
+            "sha256": "3aa91afe3361f5185c142125dfcdc8ddcb7d39fdeeeb4f5e67439511905e9826"
+        },
+        "smol-all-countries-700k.jsonl": {
+            "local_location": null,
+            "format": "NdJson",
+            "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/smol-all-countries/smol-all-countries-700k.jsonl",
+            "sha256": "5a864a1e9d89736147a8da594e2cbce5264979326d38655d0945d8447f3867b3"
+        },
+        "smol-all-countries-800k.jsonl": {
+            "local_location": null,
+            "format": "NdJson",
+            "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/smol-all-countries/smol-all-countries-800k.jsonl",
+            "sha256": "d85eb9c85a612fd7b77623e162ecd0f8265ba3be97054e26b9cff7c48735809b"
+        },
+        "smol-all-countries-900k.jsonl": {
+            "local_location": null,
+            "format": "NdJson",
+            "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/smol-all-countries/smol-all-countries-900k.jsonl",
+            "sha256": "4fd6662e8b9bfcd9fad7d5dcd691a47ec985d810d1e340465c056ee84e9c40f3"
+        },
+        "smol-all-countries-1M.jsonl": {
+            "local_location": null,
+            "format": "NdJson",
+            "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/smol-all-countries/smol-all-countries-1M.jsonl",
+            "sha256": "585a713b489b154b94e7c07707bd369f888c7fe24eb90bf604578d7adf51a9e6"
+        }
+    },
+    "precommands": [
+        {
+            "route": "indexes/movies/settings",
+            "method": "PATCH",
+            "body": {
+                "inline": {
+                    "displayedAttributes": [
+                        "geonameid",
+                        "name",
+                        "asciiname",
+                        "alternatenames",
+                        "_geo",
+                        "population"
+                    ],
+                    "searchableAttributes": [
+                        "name",
+                        "alternatenames",
+                        "elevation"
+                    ],
+                    "filterableAttributes": [
+                        "_geo",
+                        "population",
+                        "elevation"
+                    ],
+                    "sortableAttributes": [
+                        "_geo",
+                        "population",
+                        "elevation"
+                    ],
+                    "searchCutoffMs": 15000
+                }
+            },
+            "synchronous": "DontWait"
+        },
+        {
+            "route": "indexes/movies/documents",
+            "method": "POST",
+            "body": {
+                "asset": "smol-all-countries-100k.jsonl"
+            },
+            "synchronous": "WaitForTask"
+        },
+        {
+            "route": "indexes/movies/documents",
+            "method": "POST",
+            "body": {
+                "asset": "smol-all-countries-200k.jsonl"
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/documents",
+            "method": "POST",
+            "body": {
+                "asset": "smol-all-countries-300k.jsonl"
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/documents",
+            "method": "POST",
+            "body": {
+                "asset": "smol-all-countries-400k.jsonl"
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/documents",
+            "method": "POST",
+            "body": {
+                "asset": "smol-all-countries-500k.jsonl"
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/documents",
+            "method": "POST",
+            "body": {
+                "asset": "smol-all-countries-600k.jsonl"
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/documents",
+            "method": "POST",
+            "body": {
+                "asset": "smol-all-countries-700k.jsonl"
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/documents",
+            "method": "POST",
+            "body": {
+                "asset": "smol-all-countries-800k.jsonl"
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/documents",
+            "method": "POST",
+            "body": {
+                "asset": "smol-all-countries-900k.jsonl"
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/documents",
+            "method": "POST",
+            "body": {
+                "asset": "smol-all-countries-1M.jsonl"
+            },
+            "synchronous": "WaitForTask"
+        }
+    ],
+    "commands": [
+        {
+            "route": "indexes/movies/search",
+            "method": "POST",
+            "body": {
+                "inline": {
+                    "q": "",
+                    "limit": 100
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/search",
+            "method": "POST",
+            "body": {
+                "inline": {
+                    "limit": 100,
+                    "sort": [
+                        "_geoPoint(50.62999333378238, 3.086269263384099):asc"
+                    ]
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/search",
+            "method": "POST",
+            "body": {
+                "inline": {
+                    "limit": 100,
+                    "sort": [
+                        "_geoPoint(50.62999333378238, 3.086269263384099):desc"
+                    ]
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/search",
+            "method": "POST",
+            "body": {
+                "inline": {
+                    "limit": 100,
+                    "sort": [
+                        "_geoPoint(35.749512532692144, 139.61664952543356):asc"
+                    ]
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/search",
+            "method": "POST",
+            "body": {
+                "inline": {
+                    "limit": 100,
+                    "sort": [
+                        "_geoPoint(35.749512532692144, 139.61664952543356):desc"
+                    ]
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/search",
+            "method": "POST",
+            "body": {
+                "inline": {
+                    "limit": 100,
+                    "sort": [
+                        "_geoPoint(-48.87561645055408, -123.39275749319793):asc"
+                    ]
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/search",
+            "method": "POST",
+            "body": {
+                "inline": {
+                    "limit": 100,
+                    "sort": [
+                        "_geoPoint(-48.87561645055408, -123.39275749319793):desc"
+                    ]
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/search",
+            "method": "POST",
+            "body": {
+                "inline": {
+                    "limit": 100,
+                    "filter": "_geoRadius(50.62999333378238, 3.086269263384099, 100000)"
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/search",
+            "method": "POST",
+            "body": {
+                "inline": {
+                    "limit": 100,
+                    "filter": "_geoRadius(50.62999333378238, 3.086269263384099, 1000)"
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/search",
+            "method": "POST",
+            "body": {
+                "inline": {
+                    "limit": 100,
+                    "filter": "_geoRadius(35.749512532692144, 139.61664952543356, 100000)"
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/search",
+            "method": "POST",
+            "body": {
+                "inline": {
+                    "limit": 100,
+                    "filter": "_geoRadius(35.749512532692144, 139.61664952543356, 1000)"
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/search",
+            "method": "POST",
+            "body": {
+                "inline": {
+                    "limit": 100,
+                    "filter": "_geoRadius(-48.87561645055408, -123.39275749319793, 100000)"
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/search",
+            "method": "POST",
+            "body": {
+                "inline": {
+                    "limit": 100,
+                    "filter": "_geoRadius(-48.87561645055408, -123.39275749319793, 1000)"
+                }
+            },
+            "synchronous": "WaitForResponse"
+        }
+    ]
+}

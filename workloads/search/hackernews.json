@@ -1,0 +1,255 @@
+{
+  "name": "search-hackernews.ndjson_1M",
+  "run_count": 3,
+  "target": "search::=trace",
+  "extra_cli_args": [],
+  "assets": {
+    "hackernews-100_000.ndjson": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/hackernews-100_000.ndjson",
+      "sha256": "60ecd23485d560edbd90d9ca31f0e6dba1455422f2a44e402600fbb5f7f1b213"
+    },
+    "hackernews-200_000.ndjson": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/hackernews-200_000.ndjson",
+      "sha256": "785b0271fdb47cba574fab617d5d332276b835c05dd86e4a95251cf7892a1685"
+    },
+    "hackernews-300_000.ndjson": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/hackernews-300_000.ndjson",
+      "sha256": "de73c7154652eddfaf69cdc3b2f824d5c452f095f40a20a1c97bb1b5c4d80ab2"
+    },
+    "hackernews-400_000.ndjson": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/hackernews-400_000.ndjson",
+      "sha256": "c1b00a24689110f366447e434c201c086d6f456d54ed1c4995894102794d8fe7"
+    },
+    "hackernews-500_000.ndjson": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/hackernews-500_000.ndjson",
+      "sha256": "ae98f9dbef8193d750e3e2dbb6a91648941a1edca5f6e82c143e7996f4840083"
+    },
+    "hackernews-600_000.ndjson": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/hackernews-600_000.ndjson",
+      "sha256": "b495fdc72c4a944801f786400f22076ab99186bee9699f67cbab2f21f5b74dbe"
+    },
+    "hackernews-700_000.ndjson": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/hackernews-700_000.ndjson",
+      "sha256": "4b2c63974f3dabaa4954e3d4598b48324d03c522321ac05b0d583f36cb78a28b"
+    },
+    "hackernews-800_000.ndjson": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/hackernews-800_000.ndjson",
+      "sha256": "cb7b6afe0e6caa1be111be256821bc63b0771b2a0e1fad95af7aaeeffd7ba546"
+    },
+    "hackernews-900_000.ndjson": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/hackernews-900_000.ndjson",
+      "sha256": "e1154ddcd398f1c867758a93db5bcb21a07b9e55530c188a2917fdef332d3ba9"
+    },
+    "hackernews-1_000_000.ndjson": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/hackernews-1_000_000.ndjson",
+      "sha256": "27e25efd0b68b159b8b21350d9af76938710cb29ce0393fa71b41c4f3c630ffe"
+    }
+  },
+  "precommands": [
+    {
+      "route": "indexes/movies/settings",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "displayedAttributes": [
+            "title",
+            "by",
+            "score",
+            "time"
+          ],
+          "searchableAttributes": [
+            "title"
+          ],
+          "filterableAttributes": [
+            "by"
+          ],
+          "sortableAttributes": [
+            "score",
+            "time"
+          ],
+          "rankingRules": [
+            "sort",
+            "words",
+            "typo",
+            "proximity",
+            "attribute",
+            "exactness"
+          ],
+          "searchCutoffMs": 15000
+        }
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-100_000.ndjson"
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-200_000.ndjson"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-300_000.ndjson"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-400_000.ndjson"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-500_000.ndjson"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-600_000.ndjson"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-700_000.ndjson"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-800_000.ndjson"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-900_000.ndjson"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-1_000_000.ndjson"
+      },
+      "synchronous": "WaitForTask"
+    }
+  ],
+  "commands": [
+    {
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "q": "rust meilisearch",
+          "limit": 100,
+          "filter": "by = tpayet",
+          "sort": [
+            "score:desc",
+            "time:asc"
+          ]
+        }
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "q": "rust meilisearch",
+          "limit": 100,
+          "filter": "NOT by = tpayet",
+          "sort": [
+            "score:desc",
+            "time:asc"
+          ]
+        }
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "q": "meilisearch",
+          "limit": 100,
+          "sort": [
+            "score:desc",
+            "time:desc"
+          ]
+        }
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "q": "rust",
+          "limit": 100,
+          "filter": "by = dang",
+          "sort": [
+            "score:desc",
+            "time:asc"
+          ]
+        }
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "q": "combinator YC",
+          "limit": 100,
+          "filter": "by = dang",
+          "sort": [
+            "score:desc",
+            "time:asc"
+          ]
+        }
+      },
+      "synchronous": "WaitForResponse"
+    }
+  ]
+}
