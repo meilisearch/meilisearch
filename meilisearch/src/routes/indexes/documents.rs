@@ -20,6 +20,7 @@ use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::DocumentId;
 use meilisearch_types::star_or::OptionStarOrList;
 use meilisearch_types::tasks::KindWithContent;
+use meilisearch_types::zstd::dict::DecoderDictionary;
 use meilisearch_types::{milli, Document, Index};
 use mime::Mime;
 use once_cell::sync::Lazy;
@@ -603,7 +604,7 @@ fn some_documents<'a, 't: 'a>(
     retrieve_vectors: RetrieveVectors,
 ) -> Result<impl Iterator<Item = Result<Document, ResponseError>> + 'a, ResponseError> {
     let fields_ids_map = index.fields_ids_map(rtxn)?;
-    let dictionary = index.document_compression_dictionary(rtxn)?;
+    let dictionary = index.document_compression_dictionary(rtxn)?.map(DecoderDictionary::copy);
     let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
     let embedding_configs = index.embedding_configs(rtxn)?;
     let mut buffer = Vec::new();
@@ -611,7 +612,7 @@ fn some_documents<'a, 't: 'a>(
     Ok(index.iter_compressed_documents(rtxn, doc_ids)?.map(move |ret| {
         ret.map_err(ResponseError::from).and_then(
             |(key, compressed_document)| -> Result<_, ResponseError> {
-                let document = match dictionary {
+                let document = match dictionary.as_ref() {
                     // TODO manage this unwrap correctly
                     Some(dict) => compressed_document.decompress_with(&mut buffer, dict).unwrap(),
                     None => compressed_document.as_non_compressed(),

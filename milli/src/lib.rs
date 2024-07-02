@@ -45,7 +45,7 @@ pub use search::new::{
 };
 use serde_json::Value;
 pub use thread_pool_no_abort::{PanicCatched, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
-pub use {charabia as tokenizer, heed};
+pub use {charabia as tokenizer, heed, zstd};
 
 pub use self::asc_desc::{AscDesc, AscDescError, Member, SortError};
 pub use self::criterion::{default_criteria, Criterion, CriterionError};

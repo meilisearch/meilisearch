@@ -1,7 +1,14 @@
 use std::borrow::Cow;
+use std::io;
+use std::io::ErrorKind;
 
 use heed::BoxedError;
 use obkv::KvReaderU16;
+use zstd::bulk::{Compressor, Decompressor};
+use zstd::dict::{DecoderDictionary, EncoderDictionary};
+
+// TODO move that elsewhere
+pub const COMPRESSION_LEVEL: i32 = 12;
 
 pub struct CompressedObkvCodec;
 
@@ -28,13 +35,23 @@ impl<'a> CompressedKvReaderU16<'a> {
     pub fn decompress_with<'b>(
         &self,
         buffer: &'b mut Vec<u8>,
-        dictionary: &[u8],
-    ) -> Result<KvReaderU16<'b>, lz4_flex::block::DecompressError> {
-        let (size, input) = lz4_flex::block::uncompressed_size(self.0)?;
-        buffer.resize(size, 0);
-        // TODO loop to increase the buffer size of need be
-        let size =
-            lz4_flex::block::decompress_into_with_dict(input, &mut buffer[..size], dictionary)?;
+        dictionary: &DecoderDictionary,
+    ) -> io::Result<KvReaderU16<'b>> {
+        const TWO_GIGABYTES: usize = 2 * 1024 * 1024 * 1024;
+
+        let mut decompressor = Decompressor::with_prepared_dictionary(dictionary)?;
+        let mut max_size = self.0.len() * 4;
+        let size = loop {
+            buffer.resize(max_size, 0);
+            match decompressor.decompress_to_buffer(self.0, &mut buffer[..max_size]) {
+                Ok(size) => break size,
+                // TODO don't do that !!! But what should I do?
+                Err(e) if e.kind() == ErrorKind::Other && max_size <= TWO_GIGABYTES => {
+                    max_size *= 2
+                }
+                Err(e) => return Err(e),
+            }
+        };
         Ok(KvReaderU16::new(&buffer[..size]))
     }
 
@@ -48,8 +65,9 @@ pub struct CompressedKvWriterU16(Vec<u8>);
 
 impl CompressedKvWriterU16 {
     // TODO ask for a KvReaderU16 here
-    pub fn new_with_dictionary(writer: &[u8], dictionary: &[u8]) -> Self {
-        CompressedKvWriterU16(lz4_flex::block::compress_prepend_size_with_dict(writer, dictionary))
+    pub fn new_with_dictionary(input: &[u8], dictionary: &EncoderDictionary) -> io::Result<Self> {
+        let mut compressor = Compressor::with_prepared_dictionary(dictionary)?;
+        compressor.compress(input).map(CompressedKvWriterU16)
     }
 
     pub fn as_bytes(&self) -> &[u8] {

@@ -19,6 +19,7 @@ use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{FacetValueHit, OrderBy, SearchForFacetValues, TimeBudget};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
+use meilisearch_types::zstd::dict::DecoderDictionary;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
 use milli::{
@@ -1123,13 +1124,14 @@ fn make_hits(
     formatter_builder.crop_marker(format.crop_marker);
     formatter_builder.highlight_prefix(format.highlight_pre_tag);
     formatter_builder.highlight_suffix(format.highlight_post_tag);
-    let compression_dictionary = index.document_compression_dictionary(rtxn)?;
+    let compression_dictionary =
+        index.document_compression_dictionary(rtxn)?.map(DecoderDictionary::copy);
     let mut buffer = Vec::new();
     let mut documents = Vec::new();
     let embedding_configs = index.embedding_configs(rtxn)?;
     let documents_iter = index.compressed_documents(rtxn, documents_ids)?;
     for ((id, compressed), score) in documents_iter.into_iter().zip(document_scores.into_iter()) {
-        let obkv = match compression_dictionary {
+        let obkv = match compression_dictionary.as_ref() {
             // TODO manage this unwrap correctly
             Some(dict) => compressed.decompress_with(&mut buffer, dict).unwrap(),
             None => compressed.as_non_compressed(),
