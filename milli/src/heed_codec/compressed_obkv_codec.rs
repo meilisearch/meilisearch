@@ -28,13 +28,13 @@ impl<'a> CompressedKvReaderU16<'a> {
     pub fn decompress_with<'b>(
         &self,
         buffer: &'b mut Vec<u8>,
-        dictionnary: &[u8],
+        dictionary: &[u8],
     ) -> Result<KvReaderU16<'b>, lz4_flex::block::DecompressError> {
         let (size, input) = lz4_flex::block::uncompressed_size(self.0)?;
         buffer.resize(size, 0);
         // TODO loop to increase the buffer size of need be
         let size =
-            lz4_flex::block::decompress_into_with_dict(input, &mut buffer[..size], dictionnary)?;
+            lz4_flex::block::decompress_into_with_dict(input, &mut buffer[..size], dictionary)?;
         Ok(KvReaderU16::new(&buffer[..size]))
     }
 

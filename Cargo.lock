@@ -3516,6 +3516,7 @@ dependencies = [
  "ureq",
  "url",
  "uuid",
+ "zstd",
 ]
 
 [[package]]
@@ -3720,9 +3721,9 @@ dependencies = [
 
 [[package]]
 name = "obkv"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c459142426056c639ff88d053ebaaaeca0ee1411c94362892398ef4ccd81080"
+checksum = "a2e27bcfe835a379d32352112f6b8dbae2d99d16a5fff42abe6e5ba5386c1e5a"
 
 [[package]]
 name = "once_cell"
