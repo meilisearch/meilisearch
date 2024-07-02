@@ -212,7 +212,7 @@ async fn search_bad_retrieve_vectors() {
     }
     "###);
 
-    let (response, code) = index.search_get("retrieveVectors=").await;
+    let (response, code) = index.search_get("?retrieveVectors=").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -223,7 +223,7 @@ async fn search_bad_retrieve_vectors() {
     }
     "###);
 
-    let (response, code) = index.search_get("retrieveVectors=doggo").await;
+    let (response, code) = index.search_get("?retrieveVectors=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {

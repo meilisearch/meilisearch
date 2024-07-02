@@ -185,7 +185,7 @@ impl Index<'_> {
     pub async fn get_document(&self, id: u64, options: Option<Value>) -> (Value, StatusCode) {
         let mut url = format!("/indexes/{}/documents/{}", urlencode(self.uid.as_ref()), id);
         if let Some(options) = options {
-            write!(url, "?{}", yaup::to_string(&options).unwrap()).unwrap();
+            write!(url, "{}", yaup::to_string(&options).unwrap()).unwrap();
         }
         self.service.get(url).await
     }
@@ -202,7 +202,7 @@ impl Index<'_> {
 
     pub async fn get_all_documents(&self, options: GetAllDocumentsOptions) -> (Value, StatusCode) {
         let url = format!(
-            "/indexes/{}/documents?{}",
+            "/indexes/{}/documents{}",
             urlencode(self.uid.as_ref()),
             yaup::to_string(&options).unwrap()
         );
@@ -427,8 +427,11 @@ impl Index<'_> {
 #[derive(Debug, Default, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetAllDocumentsOptions {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub offset: Option<usize>,
-    pub retrieve_vectors: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub fields: Option<Vec<&'static str>>,
+    pub retrieve_vectors: bool,
 }
