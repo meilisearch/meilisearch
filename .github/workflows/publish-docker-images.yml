@@ -80,6 +80,7 @@ jobs:
             type=ref,event=tag
             type=raw,value=nightly,enable=${{ github.event_name != 'push' }}
             type=semver,pattern=v{{major}}.{{minor}},enable=${{ steps.check-tag-format.outputs.stable == 'true' }}
+            type=semver,pattern=v{{major}},enable=${{ steps.check-tag-format.outputs.stable == 'true' }}
             type=raw,value=latest,enable=${{ steps.check-tag-format.outputs.stable == 'true' && steps.check-tag-format.outputs.latest == 'true' }}
 
       - name: Build and push
