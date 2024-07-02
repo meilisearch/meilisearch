@@ -39,6 +39,7 @@ indexmap = { version = "2.2.6", features = ["serde"] }
 json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
 lz4_flex = "0.11.3"
+zstd = { version = "0.11.2", features = ["zdict_builder"] }
 memmap2 = "0.9.4"
 obkv = "0.2.2"
 once_cell = "1.19.0"

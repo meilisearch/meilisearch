@@ -5,7 +5,7 @@ mod transform;
 mod typed_chunk;
 
 use std::collections::{HashMap, HashSet};
-use std::io::{Read, Seek};
+use std::io::{BufWriter, Read, Seek, Write};
 use std::iter;
 use std::num::NonZeroU32;
 use std::result::Result as StdResult;
@@ -41,7 +41,7 @@ use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
 use crate::vector::EmbeddingConfigs;
-use crate::{CboRoaringBitmapCodec, Index, Result};
+use crate::{CboRoaringBitmapCodec, Index, Result, BEU32};
 
 static MERGED_DATABASE_COUNT: usize = 7;
 static PREFIX_DATABASE_COUNT: usize = 4;
@@ -568,7 +568,7 @@ where
 
         // TODO increase this number to 10k and put it in a const somewhere
         //      I don't like that this dangerous condition is here...
-        if number_of_documents > 1_000
+        if number_of_documents > 10_000
             && self.index.document_compression_dictionary(self.wtxn)?.is_none()
         {
             self.manage_compression_dictionary()?;
@@ -767,17 +767,29 @@ where
         name = "compress_documents_database"
     )]
     pub fn manage_compression_dictionary(&mut self) -> Result<()> {
-        // TODO This is a dumb dictionary, just so you get the idea.
-        //      We need to compute a better one by using zstd or something else.
-        let dictionary = b"movietraileradventurehorror";
-        self.index.put_document_compression_dictionary(self.wtxn, dictionary)?;
+        let mut sample_file = tempfile::tempfile().map(BufWriter::new)?;
+        let mut sample_sizes = Vec::new();
+        // TODO make this 1_000 be 10k and const
+        let documents = self.index.documents.remap_types::<BEU32, Bytes>();
+        for result in documents.iter(self.wtxn)?.take(10_000) {
+            let (_id, bytes) = result?;
+            sample_file.write_all(bytes)?;
+            sample_sizes.push(bytes.len());
+        }
+
+        // TODO manage this unwrap correctly
+        let sample_file = sample_file.into_inner().unwrap();
+        let sample_data = unsafe { memmap2::Mmap::map(&sample_file)? };
+        // TODO make this 64_000 const
+        let dictionary = zstd::dict::from_continuous(&sample_data, &sample_sizes, 64_000)?;
+        self.index.put_document_compression_dictionary(self.wtxn, &dictionary)?;
 
         // TODO do not remap types here but rather expose the &[u8] for the KvReaderU16
         let mut iter = self.index.documents.remap_data_type::<Bytes>().iter_mut(self.wtxn)?;
         while let Some(result) = iter.next() {
             let (docid, document) = result?;
             // TODO manage this unwrap correctly
-            let compressed = CompressedKvWriterU16::new_with_dictionary(document, dictionary);
+            let compressed = CompressedKvWriterU16::new_with_dictionary(document, &dictionary);
             // safety the compressed document is entirely owned
             unsafe {
                 iter.put_current_with_options::<CompressedObkvCodec>(
