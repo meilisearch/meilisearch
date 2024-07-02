@@ -11,6 +11,7 @@ use obkv::{KvReader, KvReaderU16, KvWriter};
 use roaring::RoaringBitmap;
 use serde_json::Value;
 use smartstring::SmartString;
+use zstd::dict::DecoderDictionary;
 
 use super::helpers::{
     create_sorter, create_writer, keep_first, obkvs_keep_last_addition_merge_deletions,
@@ -168,7 +169,8 @@ impl<'a, 'i> Transform<'a, 'i> {
         let external_documents_ids = self.index.external_documents_ids();
         let mapping = create_fields_mapping(&mut self.fields_ids_map, &fields_index)?;
 
-        let dictionary = self.index.document_compression_dictionary(wtxn)?;
+        let dictionary =
+            self.index.document_compression_dictionary(wtxn)?.map(DecoderDictionary::copy);
         let primary_key = cursor.primary_key().to_string();
         let primary_key_id =
             self.fields_ids_map.insert(&primary_key).ok_or(UserError::AttributeLimitReached)?;
@@ -253,11 +255,11 @@ impl<'a, 'i> Transform<'a, 'i> {
                     InternalError::DatabaseMissingEntry { db_name: db_name::DOCUMENTS, key: None },
                 )?;
 
-                let base_obkv = match dictionary {
+                let base_obkv = match dictionary.as_ref() {
                     // TODO manage this unwrap correctly
-                    Some(dict) => base_compressed_obkv
-                        .decompress_with(&mut decompression_buffer, dict)
-                        .unwrap(),
+                    Some(dict) => {
+                        base_compressed_obkv.decompress_with(&mut decompression_buffer, dict)?
+                    }
                     None => base_compressed_obkv.as_non_compressed(),
                 };
 
@@ -1038,7 +1040,8 @@ impl<'a, 'i> Transform<'a, 'i> {
 
         if original_sorter.is_some() || flattened_sorter.is_some() {
             let modified_faceted_fields = settings_diff.modified_faceted_fields();
-            let dictionary = self.index.document_compression_dictionary(wtxn)?;
+            let dictionary =
+                self.index.document_compression_dictionary(wtxn)?.map(DecoderDictionary::copy);
 
             let mut original_obkv_buffer = Vec::new();
             let mut flattened_obkv_buffer = Vec::new();
@@ -1050,7 +1053,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                     InternalError::DatabaseMissingEntry { db_name: db_name::DOCUMENTS, key: None },
                 )?;
 
-                let old_obkv = match dictionary {
+                let old_obkv = match dictionary.as_ref() {
                     // TODO manage this unwrap correctly
                     Some(dict) => old_compressed_obkv.decompress_with(&mut buffer, dict).unwrap(),
                     None => old_compressed_obkv.as_non_compressed(),

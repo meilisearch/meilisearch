@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use slice_group_by::GroupBy;
 use tracing::debug;
 use typed_chunk::{write_typed_chunk_into_index, ChunkAccumulator, TypedChunk};
+use zstd::dict::EncoderDictionary;
 
 use self::enrich::enrich_documents_batch;
 pub use self::enrich::{extract_finite_float_from_value, DocumentId};
@@ -34,7 +35,7 @@ use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
 use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
-use crate::heed_codec::{CompressedKvWriterU16, CompressedObkvCodec};
+use crate::heed_codec::{CompressedKvWriterU16, CompressedObkvCodec, COMPRESSION_LEVEL};
 use crate::thread_pool_no_abort::ThreadPoolNoAbortBuilder;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
@@ -783,13 +784,15 @@ where
         // TODO make this 64_000 const
         let dictionary = zstd::dict::from_continuous(&sample_data, &sample_sizes, 64_000)?;
         self.index.put_document_compression_dictionary(self.wtxn, &dictionary)?;
+        // TODO use declare the level 3 as a const
+        let dictionary = EncoderDictionary::copy(&dictionary, COMPRESSION_LEVEL);
 
         // TODO do not remap types here but rather expose the &[u8] for the KvReaderU16
-        let mut iter = self.index.documents.remap_data_type::<Bytes>().iter_mut(self.wtxn)?;
+        let mut iter = self.index.documents.iter_mut(self.wtxn)?;
         while let Some(result) = iter.next() {
             let (docid, document) = result?;
-            // TODO manage this unwrap correctly
-            let compressed = CompressedKvWriterU16::new_with_dictionary(document, &dictionary);
+            let document = document.as_non_compressed().as_bytes();
+            let compressed = CompressedKvWriterU16::new_with_dictionary(document, &dictionary)?;
             // safety the compressed document is entirely owned
             unsafe {
                 iter.put_current_with_options::<CompressedObkvCodec>(

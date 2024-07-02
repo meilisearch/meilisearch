@@ -11,6 +11,7 @@ use roaring::RoaringBitmap;
 use rstar::RTree;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+use zstd::dict::DecoderDictionary;
 
 use crate::documents::PrimaryKey;
 use crate::error::{InternalError, UserError};
@@ -1328,13 +1329,12 @@ impl Index {
                 process: "external_id_of",
             })
         })?;
-        let dictionary = self.document_compression_dictionary(rtxn)?;
+        let dictionary = self.document_compression_dictionary(rtxn)?.map(DecoderDictionary::copy);
         let mut buffer = Vec::new();
         Ok(self.iter_compressed_documents(rtxn, ids)?.map(move |entry| -> Result<_> {
             let (_docid, compressed_obkv) = entry?;
-            let obkv = match dictionary {
-                // TODO manage this unwrap correctly
-                Some(dict) => compressed_obkv.decompress_with(&mut buffer, dict).unwrap(),
+            let obkv = match dictionary.as_ref() {
+                Some(dict) => compressed_obkv.decompress_with(&mut buffer, dict)?,
                 None => compressed_obkv.as_non_compressed(),
             };
             match primary_key.document_id(&obkv, &fields)? {
