@@ -2468,7 +2468,7 @@ mod tests {
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
-            .all_documents(&rtxn)
+            .all_compressed_documents(&rtxn)
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
@@ -2528,7 +2528,7 @@ mod tests {
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
-            .all_documents(&rtxn)
+            .all_compressed_documents(&rtxn)
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
@@ -2907,7 +2907,7 @@ mod tests {
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
-            .all_documents(&rtxn)
+            .all_compressed_documents(&rtxn)
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
@@ -2958,7 +2958,7 @@ mod tests {
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
-            .all_documents(&rtxn)
+            .all_compressed_documents(&rtxn)
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
@@ -3014,7 +3014,7 @@ mod tests {
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
-            .all_documents(&rtxn)
+            .all_compressed_documents(&rtxn)
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
@@ -3132,7 +3132,7 @@ mod tests {
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
-            .all_documents(&rtxn)
+            .all_compressed_documents(&rtxn)
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
@@ -3187,7 +3187,7 @@ mod tests {
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
-            .all_documents(&rtxn)
+            .all_compressed_documents(&rtxn)
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
@@ -3901,7 +3901,7 @@ mod tests {
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
-            .all_documents(&rtxn)
+            .all_compressed_documents(&rtxn)
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
@@ -3972,7 +3972,7 @@ mod tests {
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
-            .all_documents(&rtxn)
+            .all_compressed_documents(&rtxn)
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
@@ -4040,7 +4040,7 @@ mod tests {
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
-            .all_documents(&rtxn)
+            .all_compressed_documents(&rtxn)
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
@@ -4101,7 +4101,7 @@ mod tests {
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
-            .all_documents(&rtxn)
+            .all_compressed_documents(&rtxn)
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
@@ -4166,7 +4166,7 @@ mod tests {
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
-            .all_documents(&rtxn)
+            .all_compressed_documents(&rtxn)
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
@@ -4227,7 +4227,7 @@ mod tests {
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
-            .all_documents(&rtxn)
+            .all_compressed_documents(&rtxn)
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
@@ -4310,7 +4310,7 @@ mod tests {
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
-            .all_documents(&rtxn)
+            .all_compressed_documents(&rtxn)
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
@@ -4396,7 +4396,7 @@ mod tests {
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
-            .all_documents(&rtxn)
+            .all_compressed_documents(&rtxn)
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
@@ -4475,7 +4475,7 @@ mod tests {
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
-            .all_documents(&rtxn)
+            .all_compressed_documents(&rtxn)
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
@@ -5139,7 +5139,7 @@ mod tests {
             assert_json_snapshot!(embeddings[&simple_hf_name][0] == lab_embed, @"true");
             assert_json_snapshot!(embeddings[&fakerest_name][0] == beagle_embed, @"true");
 
-            let doc = index.documents(&rtxn, std::iter::once(0)).unwrap()[0].1;
+            let doc = index.compressed_documents(&rtxn, std::iter::once(0)).unwrap()[0].1;
             let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
             let doc = obkv_to_json(
                 &[
@@ -5216,7 +5216,7 @@ mod tests {
                 // remained beagle
                 assert_json_snapshot!(embeddings[&fakerest_name][0] == beagle_embed, @"true");
 
-                let doc = index.documents(&rtxn, std::iter::once(0)).unwrap()[0].1;
+                let doc = index.compressed_documents(&rtxn, std::iter::once(0)).unwrap()[0].1;
                 let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let doc = obkv_to_json(
                     &[

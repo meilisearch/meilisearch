@@ -1773,7 +1773,7 @@ mod tests {
         // When we search for something that is in the searchable fields
         // we must find the appropriate document.
         let result = index.search(&rtxn).query(r#""kevin""#).execute().unwrap();
-        let documents = index.documents(&rtxn, result.documents_ids).unwrap();
+        let documents = index.compressed_documents(&rtxn, result.documents_ids).unwrap();
         let fid_map = index.fields_ids_map(&rtxn).unwrap();
         assert_eq!(documents.len(), 1);
         assert_eq!(documents[0].1.get(fid_map.id("name").unwrap()), Some(&br#""kevin""#[..]));
@@ -1809,7 +1809,7 @@ mod tests {
         snapshot!(format!("{searchable_fields:?}"), @r###"["id", "name", "age"]"###);
         let result = index.search(&rtxn).query("23").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 1);
-        let documents = index.documents(&rtxn, result.documents_ids).unwrap();
+        let documents = index.compressed_documents(&rtxn, result.documents_ids).unwrap();
         assert_eq!(documents[0].1.get(fid_map.id("name").unwrap()), Some(&br#""kevin""#[..]));
     }
 
@@ -1950,7 +1950,7 @@ mod tests {
         // Only count the field_id 0 and level 0 facet values.
         // TODO we must support typed CSVs for numbers to be understood.
         let fidmap = index.fields_ids_map(&rtxn).unwrap();
-        for document in index.all_documents(&rtxn).unwrap() {
+        for document in index.all_compressed_documents(&rtxn).unwrap() {
             let document = document.unwrap();
             let json = crate::obkv_to_json(&fidmap.ids().collect::<Vec<_>>(), &fidmap, document.1)
                 .unwrap();
@@ -2075,7 +2075,7 @@ mod tests {
         // Run an empty query just to ensure that the search results are ordered.
         let rtxn = index.read_txn().unwrap();
         let SearchResult { documents_ids, .. } = index.search(&rtxn).execute().unwrap();
-        let documents = index.documents(&rtxn, documents_ids).unwrap();
+        let documents = index.compressed_documents(&rtxn, documents_ids).unwrap();
 
         // Fetch the documents "age" field in the ordre in which the documents appear.
         let age_field_id = index.fields_ids_map(&rtxn).unwrap().id("age").unwrap();
@@ -2508,7 +2508,7 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let SearchResult { documents_ids, .. } = index.search(&rtxn).query("S").execute().unwrap();
         let first_id = documents_ids[0];
-        let documents = index.documents(&rtxn, documents_ids).unwrap();
+        let documents = index.compressed_documents(&rtxn, documents_ids).unwrap();
         let (_, content) = documents.iter().find(|(id, _)| *id == first_id).unwrap();
 
         let fid = index.fields_ids_map(&rtxn).unwrap().id("title").unwrap();
@@ -2677,7 +2677,7 @@ mod tests {
         wtxn.commit().unwrap();
 
         let rtxn = index.write_txn().unwrap();
-        let docs: StdResult<Vec<_>, _> = index.all_documents(&rtxn).unwrap().collect();
+        let docs: StdResult<Vec<_>, _> = index.all_compressed_documents(&rtxn).unwrap().collect();
         let docs = docs.unwrap();
         assert_eq!(docs.len(), 5);
     }
