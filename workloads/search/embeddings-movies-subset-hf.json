@@ -1,0 +1,171 @@
+{
+  "name": "search-movies-subset-hf-embeddings",
+  "run_count": 2,
+  "target": "search::=trace",
+  "extra_cli_args": [
+    "--max-indexing-threads=4"
+  ],
+  "assets": {
+    "movies-100.json": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/movies-100.json",
+      "sha256": "d215e395e4240f12f03b8f1f68901eac82d9e7ded5b462cbf4a6b8efde76c6c6"
+    }
+  },
+  "precommands": [
+    {
+      "route": "experimental-features",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "vectorStore": true
+        }
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "indexes/movies/settings",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "searchableAttributes": [
+            "title",
+            "overview"
+          ],
+          "filterableAttributes": [
+            "genres",
+            "release_date"
+          ],
+          "sortableAttributes": [
+            "release_date"
+          ],
+          "searchCutoffMs": 15000
+        }
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "route": "indexes/movies/settings",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "embedders": {
+            "default": {
+              "source": "huggingFace",
+              "documentTemplate": "A movie titled '{{doc.title}}' whose description starts with {{doc.overview|truncatewords: 20}}"
+            }
+          }
+        }
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "movies-100.json"
+      },
+      "synchronous": "WaitForTask"
+    }
+  ],
+  "commands": [
+    {
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "q": "puppy cute comforting movie",
+          "limit": 100,
+          "hybrid": {
+            "semanticRatio": 0.1
+          }
+        }
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "q": "puppy cute comforting movie",
+          "limit": 100,
+          "hybrid": {
+            "semanticRatio": 0.5
+          }
+        }
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "q": "puppy cute comforting movie",
+          "limit": 100,
+          "hybrid": {
+            "semanticRatio": 0.9
+          }
+        }
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "q": "puppy cute comforting movie",
+          "limit": 100,
+          "hybrid": {
+            "semanticRatio": 1.0
+          }
+        }
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "q": "shrek",
+          "limit": 100,
+          "hybrid": {
+            "semanticRatio": 1.0
+          }
+        }
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "q": "shrek",
+          "limit": 100,
+          "hybrid": {
+            "semanticRatio": 0.5
+          }
+        }
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "q": "shrek",
+          "limit": 100,
+          "hybrid": {
+            "semanticRatio": 0.1
+          }
+        }
+      },
+      "synchronous": "WaitForResponse"
+    }
+  ]
+}
