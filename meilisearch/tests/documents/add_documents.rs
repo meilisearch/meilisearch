@@ -374,7 +374,7 @@ async fn add_csv_document_with_types() {
     "###);
 
     let (documents, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
-    // snapshot!(code, @"200 OK");
+    snapshot!(code, @"200 OK");
     snapshot!(json_string!(documents), @r###"
     {
       "results": [
