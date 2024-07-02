@@ -20,7 +20,7 @@ use crate::heed_codec::facet::{
     FieldIdCodec, OrderedF64Codec,
 };
 use crate::heed_codec::{
-    BEU16StrCodec, CompressedKvReaderU16, FstSetCodec, ObkvCompressedCodec, ScriptLanguageCodec,
+    BEU16StrCodec, CompressedKvReaderU16, CompressedObkvCodec, FstSetCodec, ScriptLanguageCodec,
     StrBEU16Codec, StrRefCodec,
 };
 use crate::order_by_map::OrderByMap;
@@ -174,7 +174,7 @@ pub struct Index {
     pub vector_arroy: arroy::Database<arroy::distances::Angular>,
 
     /// Maps the document id to the document as an obkv store.
-    pub(crate) documents: Database<BEU32, ObkvCompressedCodec>,
+    pub(crate) documents: Database<BEU32, CompressedObkvCodec>,
 }
 
 impl Index {
@@ -354,6 +354,11 @@ impl Index {
             main_key::DOCUMENT_COMPRESSION_DICTIONARY,
             dictionary,
         )
+    }
+
+    /// Deletes the document compression dictionary.
+    pub fn delete_document_compression_dictionary(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::DOCUMENT_COMPRESSION_DICTIONARY)
     }
 
     /// Returns the optional dictionnary to be used when reading the OBKV documents.
