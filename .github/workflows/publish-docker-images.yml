@@ -84,7 +84,7 @@ jobs:
             type=raw,value=latest,enable=${{ steps.check-tag-format.outputs.stable == 'true' && steps.check-tag-format.outputs.latest == 'true' }}
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           push: true
           platforms: linux/amd64,linux/arm64
