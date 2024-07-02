@@ -8,18 +8,19 @@ use std::sync::Arc;
 
 use bytemuck::cast_slice;
 use grenad::Writer;
-use itertools::EitherOrBoth;
 use ordered_float::OrderedFloat;
+use roaring::RoaringBitmap;
 use serde_json::Value;
 
 use super::helpers::{create_writer, writer_into_reader, GrenadParameters};
+use crate::index::IndexEmbeddingConfig;
 use crate::prompt::Prompt;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
-use crate::update::index_documents::helpers::try_split_at;
 use crate::update::settings::InnerIndexSettingsDiff;
-use crate::vector::parsed_vectors::{ParsedVectorsDiff, RESERVED_VECTORS_FIELD_NAME};
+use crate::vector::parsed_vectors::{ParsedVectorsDiff, VectorState, RESERVED_VECTORS_FIELD_NAME};
+use crate::vector::settings::{EmbedderAction, ReindexAction};
 use crate::vector::Embedder;
-use crate::{DocumentId, Result, ThreadPoolNoAbort};
+use crate::{try_split_array_at, DocumentId, FieldId, FieldsIdsMap, Result, ThreadPoolNoAbort};
 
 /// The length of the elements that are always in the buffer when inserting new values.
 const TRUNCATE_SIZE: usize = size_of::<DocumentId>();
@@ -35,6 +36,8 @@ pub struct ExtractedVectorPoints {
     // embedder
     pub embedder_name: String,
     pub embedder: Arc<Embedder>,
+    pub add_to_user_provided: RoaringBitmap,
+    pub remove_from_user_provided: RoaringBitmap,
 }
 
 enum VectorStateDelta {
@@ -42,12 +45,7 @@ enum VectorStateDelta {
     // Remove all vectors, generated or manual, from this document
     NowRemoved,
 
-    // Add the manually specified vectors, passed in the other grenad
-    // Remove any previously generated vectors
-    // Note: changing the value of the manually specified vector **should not record** this delta
-    WasGeneratedNowManual(Vec<Vec<f32>>),
-
-    ManualDelta(Vec<Vec<f32>>, Vec<Vec<f32>>),
+    NowManual(Vec<Vec<f32>>),
 
     // Add the vector computed from the specified prompt
     // Remove any previous vector
@@ -56,14 +54,12 @@ enum VectorStateDelta {
 }
 
 impl VectorStateDelta {
-    fn into_values(self) -> (bool, String, (Vec<Vec<f32>>, Vec<Vec<f32>>)) {
+    fn into_values(self) -> (bool, String, Vec<Vec<f32>>) {
         match self {
             VectorStateDelta::NoChange => Default::default(),
             VectorStateDelta::NowRemoved => (true, Default::default(), Default::default()),
-            VectorStateDelta::WasGeneratedNowManual(add) => {
-                (true, Default::default(), (Default::default(), add))
-            }
-            VectorStateDelta::ManualDelta(del, add) => (false, Default::default(), (del, add)),
+            // We always delete the previous vectors
+            VectorStateDelta::NowManual(add) => (true, Default::default(), add),
             VectorStateDelta::NowGenerated(prompt) => (true, prompt, Default::default()),
         }
     }
@@ -74,12 +70,27 @@ struct EmbedderVectorExtractor {
     embedder: Arc<Embedder>,
     prompt: Arc<Prompt>,
 
-    // (docid, _index) -> KvWriterDelAdd -> Vector
-    manual_vectors_writer: Writer<BufWriter<File>>,
     // (docid) -> (prompt)
     prompts_writer: Writer<BufWriter<File>>,
     // (docid) -> ()
     remove_vectors_writer: Writer<BufWriter<File>>,
+    // (docid, _index) -> KvWriterDelAdd -> Vector
+    manual_vectors_writer: Writer<BufWriter<File>>,
+    // The docids of the documents that contains a user defined embedding
+    add_to_user_provided: RoaringBitmap,
+
+    action: ExtractionAction,
+}
+
+struct DocumentOperation {
+    // The docids of the documents that contains an auto-generated embedding
+    remove_from_user_provided: RoaringBitmap,
+}
+
+enum ExtractionAction {
+    SettingsFullReindex,
+    SettingsRegeneratePrompts { old_prompt: Arc<Prompt> },
+    DocumentOperation(DocumentOperation),
 }
 
 /// Extracts the embedding vector contained in each document under the `_vectors` field.
@@ -89,6 +100,7 @@ struct EmbedderVectorExtractor {
 pub fn extract_vector_points<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
+    embedders_configs: &[IndexEmbeddingConfig],
     settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<Vec<ExtractedVectorPoints>> {
     let reindex_vectors = settings_diff.reindex_vectors();
@@ -97,153 +109,207 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
     let new_fields_ids_map = &settings_diff.new.fields_ids_map;
     // the vector field id may have changed
     let old_vectors_fid = old_fields_ids_map.id(RESERVED_VECTORS_FIELD_NAME);
-    // filter the old vector fid if the settings has been changed forcing reindexing.
-    let old_vectors_fid = old_vectors_fid.filter(|_| !reindex_vectors);
 
     let new_vectors_fid = new_fields_ids_map.id(RESERVED_VECTORS_FIELD_NAME);
 
     let mut extractors = Vec::new();
-    for (embedder_name, (embedder, prompt)) in
-        settings_diff.new.embedding_configs.clone().into_iter()
-    {
-        // (docid, _index) -> KvWriterDelAdd -> Vector
-        let manual_vectors_writer = create_writer(
-            indexer.chunk_compression_type,
-            indexer.chunk_compression_level,
-            tempfile::tempfile()?,
-        );
 
-        // (docid) -> (prompt)
-        let prompts_writer = create_writer(
-            indexer.chunk_compression_type,
-            indexer.chunk_compression_level,
-            tempfile::tempfile()?,
-        );
+    let mut configs = settings_diff.new.embedding_configs.clone().into_inner();
+    let old_configs = &settings_diff.old.embedding_configs;
 
-        // (docid) -> ()
-        let remove_vectors_writer = create_writer(
-            indexer.chunk_compression_type,
-            indexer.chunk_compression_level,
-            tempfile::tempfile()?,
-        );
+    if reindex_vectors {
+        for (name, action) in settings_diff.embedding_config_updates.iter() {
+            match action {
+                EmbedderAction::WriteBackToDocuments(_) => continue, // already deleted
+                EmbedderAction::Reindex(action) => {
+                    let Some((embedder_name, (embedder, prompt))) = configs.remove_entry(name)
+                    else {
+                        tracing::error!(embedder = name, "Requested embedder config not found");
+                        continue;
+                    };
 
-        extractors.push(EmbedderVectorExtractor {
-            embedder_name,
-            embedder,
-            prompt,
-            manual_vectors_writer,
-            prompts_writer,
-            remove_vectors_writer,
-        });
+                    // (docid, _index) -> KvWriterDelAdd -> Vector
+                    let manual_vectors_writer = create_writer(
+                        indexer.chunk_compression_type,
+                        indexer.chunk_compression_level,
+                        tempfile::tempfile()?,
+                    );
+
+                    // (docid) -> (prompt)
+                    let prompts_writer = create_writer(
+                        indexer.chunk_compression_type,
+                        indexer.chunk_compression_level,
+                        tempfile::tempfile()?,
+                    );
+
+                    // (docid) -> ()
+                    let remove_vectors_writer = create_writer(
+                        indexer.chunk_compression_type,
+                        indexer.chunk_compression_level,
+                        tempfile::tempfile()?,
+                    );
+
+                    let action = match action {
+                        ReindexAction::FullReindex => ExtractionAction::SettingsFullReindex,
+                        ReindexAction::RegeneratePrompts => {
+                            let Some((_, old_prompt)) = old_configs.get(name) else {
+                                tracing::error!(embedder = name, "Old embedder config not found");
+                                continue;
+                            };
+
+                            ExtractionAction::SettingsRegeneratePrompts { old_prompt }
+                        }
+                    };
+
+                    extractors.push(EmbedderVectorExtractor {
+                        embedder_name,
+                        embedder,
+                        prompt,
+                        prompts_writer,
+                        remove_vectors_writer,
+                        manual_vectors_writer,
+                        add_to_user_provided: RoaringBitmap::new(),
+                        action,
+                    });
+                }
+            }
+        }
+    } else {
+        // document operation
+
+        for (embedder_name, (embedder, prompt)) in configs.into_iter() {
+            // (docid, _index) -> KvWriterDelAdd -> Vector
+            let manual_vectors_writer = create_writer(
+                indexer.chunk_compression_type,
+                indexer.chunk_compression_level,
+                tempfile::tempfile()?,
+            );
+
+            // (docid) -> (prompt)
+            let prompts_writer = create_writer(
+                indexer.chunk_compression_type,
+                indexer.chunk_compression_level,
+                tempfile::tempfile()?,
+            );
+
+            // (docid) -> ()
+            let remove_vectors_writer = create_writer(
+                indexer.chunk_compression_type,
+                indexer.chunk_compression_level,
+                tempfile::tempfile()?,
+            );
+
+            extractors.push(EmbedderVectorExtractor {
+                embedder_name,
+                embedder,
+                prompt,
+                prompts_writer,
+                remove_vectors_writer,
+                manual_vectors_writer,
+                add_to_user_provided: RoaringBitmap::new(),
+                action: ExtractionAction::DocumentOperation(DocumentOperation {
+                    remove_from_user_provided: RoaringBitmap::new(),
+                }),
+            });
+        }
     }
 
     let mut key_buffer = Vec::new();
     let mut cursor = obkv_documents.into_cursor()?;
     while let Some((key, value)) = cursor.move_on_next()? {
         // this must always be serialized as (docid, external_docid);
+        const SIZE_OF_DOCUMENTID: usize = std::mem::size_of::<DocumentId>();
         let (docid_bytes, external_id_bytes) =
-            try_split_at(key, std::mem::size_of::<DocumentId>()).unwrap();
+            try_split_array_at::<u8, SIZE_OF_DOCUMENTID>(key).unwrap();
         debug_assert!(from_utf8(external_id_bytes).is_ok());
+        let docid = DocumentId::from_be_bytes(docid_bytes);
 
         let obkv = obkv::KvReader::new(value);
         key_buffer.clear();
-        key_buffer.extend_from_slice(docid_bytes);
+        key_buffer.extend_from_slice(docid_bytes.as_slice());
 
         // since we only need the primary key when we throw an error we create this getter to
         // lazily get it when needed
         let document_id = || -> Value { from_utf8(external_id_bytes).unwrap().into() };
 
-        let mut parsed_vectors = ParsedVectorsDiff::new(obkv, old_vectors_fid, new_vectors_fid)
-            .map_err(|error| error.to_crate_error(document_id().to_string()))?;
+        let mut parsed_vectors = ParsedVectorsDiff::new(
+            docid,
+            embedders_configs,
+            obkv,
+            old_vectors_fid,
+            new_vectors_fid,
+        )
+        .map_err(|error| error.to_crate_error(document_id().to_string()))?;
 
         for EmbedderVectorExtractor {
             embedder_name,
             embedder: _,
             prompt,
-            manual_vectors_writer,
             prompts_writer,
             remove_vectors_writer,
+            manual_vectors_writer,
+            add_to_user_provided,
+            action,
         } in extractors.iter_mut()
         {
-            let delta = match parsed_vectors.remove(embedder_name) {
-                (Some(old), Some(new)) => {
-                    // no autogeneration
-                    let del_vectors = old.into_array_of_vectors();
-                    let add_vectors = new.into_array_of_vectors();
-
-                    if add_vectors.len() > usize::from(u8::MAX) {
-                        return Err(crate::Error::UserError(crate::UserError::TooManyVectors(
-                            document_id().to_string(),
-                            add_vectors.len(),
-                        )));
-                    }
-
-                    VectorStateDelta::ManualDelta(del_vectors, add_vectors)
-                }
-                (Some(_old), None) => {
-                    // Do we keep this document?
-                    let document_is_kept = obkv
-                        .iter()
-                        .map(|(_, deladd)| KvReaderDelAdd::new(deladd))
-                        .any(|deladd| deladd.get(DelAdd::Addition).is_some());
-                    if document_is_kept {
-                        // becomes autogenerated
-                        VectorStateDelta::NowGenerated(prompt.render(
-                            obkv,
-                            DelAdd::Addition,
-                            new_fields_ids_map,
-                        )?)
-                    } else {
-                        VectorStateDelta::NowRemoved
-                    }
-                }
-                (None, Some(new)) => {
-                    // was possibly autogenerated, remove all vectors for that document
-                    let add_vectors = new.into_array_of_vectors();
-                    if add_vectors.len() > usize::from(u8::MAX) {
-                        return Err(crate::Error::UserError(crate::UserError::TooManyVectors(
-                            document_id().to_string(),
-                            add_vectors.len(),
-                        )));
-                    }
-
-                    VectorStateDelta::WasGeneratedNowManual(add_vectors)
-                }
-                (None, None) => {
-                    // Do we keep this document?
-                    let document_is_kept = obkv
-                        .iter()
-                        .map(|(_, deladd)| KvReaderDelAdd::new(deladd))
-                        .any(|deladd| deladd.get(DelAdd::Addition).is_some());
-
-                    if document_is_kept {
-                        // Don't give up if the old prompt was failing
-                        let old_prompt = Some(&prompt)
-                            // TODO: this filter works because we erase the vec database when a embedding setting changes.
-                            // When vector pipeline will be optimized, this should be removed.
-                            .filter(|_| !settings_diff.reindex_vectors())
-                            .map(|p| {
-                                p.render(obkv, DelAdd::Deletion, old_fields_ids_map)
-                                    .unwrap_or_default()
-                            });
-                        let new_prompt =
-                            prompt.render(obkv, DelAdd::Addition, new_fields_ids_map)?;
-                        if old_prompt.as_ref() != Some(&new_prompt) {
-                            let old_prompt = old_prompt.unwrap_or_default();
-                            tracing::trace!(
-                                "🚀 Changing prompt from\n{old_prompt}\n===to===\n{new_prompt}"
-                            );
-                            VectorStateDelta::NowGenerated(new_prompt)
-                        } else {
-                            tracing::trace!("⏭️ Prompt unmodified, skipping");
-                            VectorStateDelta::NoChange
+            let (old, new) = parsed_vectors.remove(embedder_name);
+            let delta = match action {
+                ExtractionAction::SettingsFullReindex => match old {
+                    // A full reindex can be triggered either by:
+                    // 1. a new embedder
+                    // 2. an existing embedder changed so that it must regenerate all generated embeddings.
+                    // For a new embedder, there can be `_vectors.embedder` embeddings to add to the DB
+                    VectorState::Inline(vectors) => {
+                        if !vectors.must_regenerate() {
+                            add_to_user_provided.insert(docid);
                         }
+
+                        match vectors.into_array_of_vectors() {
+                            Some(add_vectors) => {
+                                if add_vectors.len() > usize::from(u8::MAX) {
+                                    return Err(crate::Error::UserError(
+                                        crate::UserError::TooManyVectors(
+                                            document_id().to_string(),
+                                            add_vectors.len(),
+                                        ),
+                                    ));
+                                }
+                                VectorStateDelta::NowManual(add_vectors)
+                            }
+                            None => VectorStateDelta::NoChange,
+                        }
+                    }
+                    // this happens only when an existing embedder changed. We cannot regenerate userProvided vectors
+                    VectorState::Manual => VectorStateDelta::NoChange,
+                    // generated vectors must be regenerated
+                    VectorState::Generated => regenerate_prompt(obkv, prompt, new_fields_ids_map)?,
+                },
+                // prompt regeneration is only triggered for existing embedders
+                ExtractionAction::SettingsRegeneratePrompts { old_prompt } => {
+                    if old.must_regenerate() {
+                        regenerate_if_prompt_changed(
+                            obkv,
+                            (old_prompt, prompt),
+                            (old_fields_ids_map, new_fields_ids_map),
+                        )?
                     } else {
-                        VectorStateDelta::NowRemoved
+                        // we can simply ignore user provided vectors as they are not regenerated and are
+                        // already in the DB since this is an existing embedder
+                        VectorStateDelta::NoChange
                     }
                 }
+                ExtractionAction::DocumentOperation(DocumentOperation {
+                    remove_from_user_provided,
+                }) => extract_vector_document_diff(
+                    docid,
+                    obkv,
+                    prompt,
+                    (add_to_user_provided, remove_from_user_provided),
+                    (old, new),
+                    (old_fields_ids_map, new_fields_ids_map),
+                    document_id,
+                )?,
             };
-
             // and we finally push the unique vectors into the writer
             push_vectors_diff(
                 remove_vectors_writer,
@@ -251,7 +317,6 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                 manual_vectors_writer,
                 &mut key_buffer,
                 delta,
-                reindex_vectors,
             )?;
         }
     }
@@ -262,43 +327,185 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
         embedder_name,
         embedder,
         prompt: _,
-        manual_vectors_writer,
         prompts_writer,
         remove_vectors_writer,
+        action,
+        manual_vectors_writer,
+        add_to_user_provided,
     } in extractors
     {
-        results.push(ExtractedVectorPoints {
-            // docid, _index -> KvWriterDelAdd -> Vector
-            manual_vectors: writer_into_reader(manual_vectors_writer)?,
-            // docid -> ()
-            remove_vectors: writer_into_reader(remove_vectors_writer)?,
-            // docid -> prompt
-            prompts: writer_into_reader(prompts_writer)?,
+        let remove_from_user_provided =
+            if let ExtractionAction::DocumentOperation(DocumentOperation {
+                remove_from_user_provided,
+            }) = action
+            {
+                remove_from_user_provided
+            } else {
+                Default::default()
+            };
 
+        results.push(ExtractedVectorPoints {
+            manual_vectors: writer_into_reader(manual_vectors_writer)?,
+            remove_vectors: writer_into_reader(remove_vectors_writer)?,
+            prompts: writer_into_reader(prompts_writer)?,
             embedder,
             embedder_name,
+            add_to_user_provided,
+            remove_from_user_provided,
         })
     }
 
     Ok(results)
 }
 
-/// Computes the diff between both Del and Add numbers and
-/// only inserts the parts that differ in the sorter.
+fn extract_vector_document_diff(
+    docid: DocumentId,
+    obkv: obkv::KvReader<'_, FieldId>,
+    prompt: &Prompt,
+    (add_to_user_provided, remove_from_user_provided): (&mut RoaringBitmap, &mut RoaringBitmap),
+    (old, new): (VectorState, VectorState),
+    (old_fields_ids_map, new_fields_ids_map): (&FieldsIdsMap, &FieldsIdsMap),
+    document_id: impl Fn() -> Value,
+) -> Result<VectorStateDelta> {
+    match (old.must_regenerate(), new.must_regenerate()) {
+        (true, true) | (false, false) => {}
+        (true, false) => {
+            add_to_user_provided.insert(docid);
+        }
+        (false, true) => {
+            remove_from_user_provided.insert(docid);
+        }
+    }
+
+    let delta = match (old, new) {
+        // regardless of the previous state, if a document now contains inline _vectors, they must
+        // be extracted manually
+        (_old, VectorState::Inline(new)) => match new.into_array_of_vectors() {
+            Some(add_vectors) => {
+                if add_vectors.len() > usize::from(u8::MAX) {
+                    return Err(crate::Error::UserError(crate::UserError::TooManyVectors(
+                        document_id().to_string(),
+                        add_vectors.len(),
+                    )));
+                }
+
+                VectorStateDelta::NowManual(add_vectors)
+            }
+            None => VectorStateDelta::NoChange,
+        },
+        // no `_vectors` anywhere, we check for document removal and otherwise we regenerate the prompt if the
+        // document changed
+        (VectorState::Generated, VectorState::Generated) => {
+            // Do we keep this document?
+            let document_is_kept = obkv
+                .iter()
+                .map(|(_, deladd)| KvReaderDelAdd::new(deladd))
+                .any(|deladd| deladd.get(DelAdd::Addition).is_some());
+
+            if document_is_kept {
+                // Don't give up if the old prompt was failing
+                let old_prompt = Some(&prompt).map(|p| {
+                    p.render(obkv, DelAdd::Deletion, old_fields_ids_map).unwrap_or_default()
+                });
+                let new_prompt = prompt.render(obkv, DelAdd::Addition, new_fields_ids_map)?;
+                if old_prompt.as_ref() != Some(&new_prompt) {
+                    let old_prompt = old_prompt.unwrap_or_default();
+                    tracing::trace!(
+                        "🚀 Changing prompt from\n{old_prompt}\n===to===\n{new_prompt}"
+                    );
+                    VectorStateDelta::NowGenerated(new_prompt)
+                } else {
+                    tracing::trace!("⏭️ Prompt unmodified, skipping");
+                    VectorStateDelta::NoChange
+                }
+            } else {
+                VectorStateDelta::NowRemoved
+            }
+        }
+        // inline to the left is not supposed to be possible because the embedder is not new, so `_vectors` was removed from
+        // the previous version of the document.
+        // Manual -> Generated is also not possible without an Inline to the right (which is handled above)
+        // Generated -> Generated is handled above, so not possible
+        // As a result, this code is unreachable
+        (_not_generated, VectorState::Generated) => {
+            // Do we keep this document?
+            let document_is_kept = obkv
+                .iter()
+                .map(|(_, deladd)| KvReaderDelAdd::new(deladd))
+                .any(|deladd| deladd.get(DelAdd::Addition).is_some());
+            if document_is_kept {
+                // becomes autogenerated
+                VectorStateDelta::NowGenerated(prompt.render(
+                    obkv,
+                    DelAdd::Addition,
+                    new_fields_ids_map,
+                )?)
+            } else {
+                // make sure the document is always removed from user provided on removal
+                remove_from_user_provided.insert(docid);
+                VectorStateDelta::NowRemoved
+            }
+        }
+        // inline to the left is not possible because the embedder is not new, and so `_vectors` was removed from the previous
+        // version of the document.
+        // however the Rust type system cannot know that.
+        (_manual, VectorState::Manual) => {
+            // Do we keep this document?
+            let document_is_kept = obkv
+                .iter()
+                .map(|(_, deladd)| KvReaderDelAdd::new(deladd))
+                .any(|deladd| deladd.get(DelAdd::Addition).is_some());
+            if document_is_kept {
+                // if the new version of documents has the vectors in the DB,
+                // then they are user-provided and nothing possibly changed
+                VectorStateDelta::NoChange
+            } else {
+                // make sure the document is always removed from user provided on removal
+                remove_from_user_provided.insert(docid);
+                VectorStateDelta::NowRemoved
+            }
+        }
+    };
+
+    Ok(delta)
+}
+
+fn regenerate_if_prompt_changed(
+    obkv: obkv::KvReader<'_, FieldId>,
+    (old_prompt, new_prompt): (&Prompt, &Prompt),
+    (old_fields_ids_map, new_fields_ids_map): (&FieldsIdsMap, &FieldsIdsMap),
+) -> Result<VectorStateDelta> {
+    let old_prompt =
+        old_prompt.render(obkv, DelAdd::Deletion, old_fields_ids_map).unwrap_or(Default::default());
+    let new_prompt = new_prompt.render(obkv, DelAdd::Addition, new_fields_ids_map)?;
+
+    if new_prompt == old_prompt {
+        return Ok(VectorStateDelta::NoChange);
+    }
+    Ok(VectorStateDelta::NowGenerated(new_prompt))
+}
+
+fn regenerate_prompt(
+    obkv: obkv::KvReader<'_, FieldId>,
+    prompt: &Prompt,
+    new_fields_ids_map: &FieldsIdsMap,
+) -> Result<VectorStateDelta> {
+    let prompt = prompt.render(obkv, DelAdd::Addition, new_fields_ids_map)?;
+
+    Ok(VectorStateDelta::NowGenerated(prompt))
+}
+
+/// We cannot compute the diff between both Del and Add vectors.
+/// We'll push every vector and compute the difference later in TypedChunk.
 fn push_vectors_diff(
     remove_vectors_writer: &mut Writer<BufWriter<File>>,
     prompts_writer: &mut Writer<BufWriter<File>>,
     manual_vectors_writer: &mut Writer<BufWriter<File>>,
     key_buffer: &mut Vec<u8>,
     delta: VectorStateDelta,
-    reindex_vectors: bool,
 ) -> Result<()> {
-    let (must_remove, prompt, (mut del_vectors, mut add_vectors)) = delta.into_values();
-    if must_remove
-    // TODO: the below condition works because we erase the vec database when a embedding setting changes.
-    // When vector pipeline will be optimized, this should be removed.
-    && !reindex_vectors
-    {
+    let (must_remove, prompt, mut add_vectors) = delta.into_values();
+    if must_remove {
         key_buffer.truncate(TRUNCATE_SIZE);
         remove_vectors_writer.insert(&key_buffer, [])?;
     }
@@ -308,44 +515,22 @@ fn push_vectors_diff(
     }
 
     // We sort and dedup the vectors
-    del_vectors.sort_unstable_by(|a, b| compare_vectors(a, b));
     add_vectors.sort_unstable_by(|a, b| compare_vectors(a, b));
-    del_vectors.dedup_by(|a, b| compare_vectors(a, b).is_eq());
     add_vectors.dedup_by(|a, b| compare_vectors(a, b).is_eq());
 
-    let merged_vectors_iter =
-        itertools::merge_join_by(del_vectors, add_vectors, |del, add| compare_vectors(del, add));
-
     // insert vectors into the writer
-    for (i, eob) in merged_vectors_iter.into_iter().enumerate().take(u16::MAX as usize) {
+    for (i, vector) in add_vectors.into_iter().enumerate().take(u16::MAX as usize) {
         // Generate the key by extending the unique index to it.
         key_buffer.truncate(TRUNCATE_SIZE);
         let index = u16::try_from(i).unwrap();
         key_buffer.extend_from_slice(&index.to_be_bytes());
 
-        match eob {
-            EitherOrBoth::Both(_, _) => (), // no need to touch anything
-            EitherOrBoth::Left(vector) => {
-                // TODO: the below condition works because we erase the vec database when a embedding setting changes.
-                // When vector pipeline will be optimized, this should be removed.
-                if !reindex_vectors {
-                    // We insert only the Del part of the Obkv to inform
-                    // that we only want to remove all those vectors.
-                    let mut obkv = KvWriterDelAdd::memory();
-                    obkv.insert(DelAdd::Deletion, cast_slice(&vector))?;
-                    let bytes = obkv.into_inner()?;
-                    manual_vectors_writer.insert(&key_buffer, bytes)?;
-                }
-            }
-            EitherOrBoth::Right(vector) => {
-                // We insert only the Add part of the Obkv to inform
-                // that we only want to remove all those vectors.
-                let mut obkv = KvWriterDelAdd::memory();
-                obkv.insert(DelAdd::Addition, cast_slice(&vector))?;
-                let bytes = obkv.into_inner()?;
-                manual_vectors_writer.insert(&key_buffer, bytes)?;
-            }
-        }
+        // We insert only the Add part of the Obkv to inform
+        // that we only want to remove all those vectors.
+        let mut obkv = KvWriterDelAdd::memory();
+        obkv.insert(DelAdd::Addition, cast_slice(&vector))?;
+        let bytes = obkv.into_inner()?;
+        manual_vectors_writer.insert(&key_buffer, bytes)?;
     }
 
     Ok(())

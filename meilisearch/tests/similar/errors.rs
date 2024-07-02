@@ -88,6 +88,68 @@ async fn similar_bad_id() {
 }
 
 #[actix_rt::test]
+async fn similar_bad_ranking_score_threshold() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    server.set_features(json!({"vectorStore": true})).await;
+
+    let (response, code) = index
+        .update_settings(json!({
+        "embedders": {
+            "manual": {
+                "source": "userProvided",
+                "dimensions": 3,
+            }
+        },
+        "filterableAttributes": ["title"]}))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await;
+
+    let (response, code) = index.similar_post(json!({"rankingScoreThreshold": ["doggo"]})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.rankingScoreThreshold`: expected a number, but found an array: `[\"doggo\"]`",
+      "code": "invalid_similar_ranking_score_threshold",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_similar_ranking_score_threshold"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn similar_invalid_ranking_score_threshold() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    server.set_features(json!({"vectorStore": true})).await;
+
+    let (response, code) = index
+        .update_settings(json!({
+        "embedders": {
+            "manual": {
+                "source": "userProvided",
+                "dimensions": 3,
+            }
+        },
+        "filterableAttributes": ["title"]}))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await;
+
+    let (response, code) = index.similar_post(json!({"rankingScoreThreshold": 42})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value at `.rankingScoreThreshold`: the value of `rankingScoreThreshold` is invalid, expected a float between `0.0` and `1.0`.",
+      "code": "invalid_similar_ranking_score_threshold",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_similar_ranking_score_threshold"
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn similar_invalid_id() {
     let server = Server::new().await;
     let index = server.index("test");
@@ -693,4 +755,55 @@ async fn filter_reserved_geo_point_string() {
             assert_eq!(code, 400);
         })
         .await;
+}
+
+#[actix_rt::test]
+async fn similar_bad_retrieve_vectors() {
+    let server = Server::new().await;
+    server.set_features(json!({"vectorStore": true})).await;
+    let index = server.index("test");
+
+    let (response, code) = index.similar_post(json!({"retrieveVectors": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.retrieveVectors`: expected a boolean, but found a string: `\"doggo\"`",
+      "code": "invalid_similar_retrieve_vectors",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_similar_retrieve_vectors"
+    }
+    "###);
+
+    let (response, code) = index.similar_post(json!({"retrieveVectors": [true]})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.retrieveVectors`: expected a boolean, but found an array: `[true]`",
+      "code": "invalid_similar_retrieve_vectors",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_similar_retrieve_vectors"
+    }
+    "###);
+
+    let (response, code) = index.similar_get("?retrieveVectors=").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value in parameter `retrieveVectors`: could not parse `` as a boolean, expected either `true` or `false`",
+      "code": "invalid_similar_retrieve_vectors",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_similar_retrieve_vectors"
+    }
+    "###);
+
+    let (response, code) = index.similar_get("?retrieveVectors=doggo").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value in parameter `retrieveVectors`: could not parse `doggo` as a boolean, expected either `true` or `false`",
+      "code": "invalid_similar_retrieve_vectors",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_similar_retrieve_vectors"
+    }
+    "###);
 }

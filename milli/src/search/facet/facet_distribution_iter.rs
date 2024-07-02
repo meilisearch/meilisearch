@@ -6,9 +6,11 @@ use heed::Result;
 use roaring::RoaringBitmap;
 
 use super::{get_first_facet_value, get_highest_level};
-use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec};
+use crate::heed_codec::facet::{
+    FacetGroupKey, FacetGroupKeyCodec, FacetGroupLazyValueCodec, FacetGroupValueCodec,
+};
 use crate::heed_codec::BytesRefCodec;
-use crate::DocumentId;
+use crate::{CboRoaringBitmapCodec, DocumentId};
 
 /// Call the given closure on the facet distribution of the candidate documents.
 ///
@@ -31,14 +33,11 @@ pub fn lexicographically_iterate_over_facet_distribution<'t, CB>(
 where
     CB: FnMut(&'t [u8], u64, DocumentId) -> Result<ControlFlow<()>>,
 {
+    let db = db.remap_data_type::<FacetGroupLazyValueCodec>();
     let mut fd = LexicographicFacetDistribution { rtxn, db, field_id, callback };
-    let highest_level = get_highest_level(
-        rtxn,
-        db.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>(),
-        field_id,
-    )?;
+    let highest_level = get_highest_level(rtxn, db, field_id)?;
 
-    if let Some(first_bound) = get_first_facet_value::<BytesRefCodec>(rtxn, db, field_id)? {
+    if let Some(first_bound) = get_first_facet_value::<BytesRefCodec, _>(rtxn, db, field_id)? {
         fd.iterate(candidates, highest_level, first_bound, usize::MAX)?;
         Ok(())
     } else {
@@ -75,13 +74,10 @@ where
 
     // Represents the list of keys that we must explore.
     let mut heap = BinaryHeap::new();
-    let highest_level = get_highest_level(
-        rtxn,
-        db.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>(),
-        field_id,
-    )?;
+    let db = db.remap_data_type::<FacetGroupLazyValueCodec>();
+    let highest_level = get_highest_level(rtxn, db, field_id)?;
 
-    if let Some(first_bound) = get_first_facet_value::<BytesRefCodec>(rtxn, db, field_id)? {
+    if let Some(first_bound) = get_first_facet_value::<BytesRefCodec, _>(rtxn, db, field_id)? {
         // We first fill the heap with values from the highest level
         let starting_key =
             FacetGroupKey { field_id, level: highest_level, left_bound: first_bound };
@@ -92,7 +88,10 @@ where
             if key.field_id != field_id {
                 break;
             }
-            let intersection = value.bitmap & candidates;
+            let intersection = CboRoaringBitmapCodec::intersection_with_serialized(
+                value.bitmap_bytes,
+                candidates,
+            )?;
             let count = intersection.len();
             if count != 0 {
                 heap.push(LevelEntry {
@@ -121,7 +120,10 @@ where
                     if key.field_id != field_id {
                         break;
                     }
-                    let intersection = value.bitmap & candidates;
+                    let intersection = CboRoaringBitmapCodec::intersection_with_serialized(
+                        value.bitmap_bytes,
+                        candidates,
+                    )?;
                     let count = intersection.len();
                     if count != 0 {
                         heap.push(LevelEntry {
@@ -146,7 +148,7 @@ where
     CB: FnMut(&'t [u8], u64, DocumentId) -> Result<ControlFlow<()>>,
 {
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupLazyValueCodec>,
     field_id: u16,
     callback: CB,
 }
@@ -171,7 +173,10 @@ where
             if key.field_id != self.field_id {
                 return Ok(ControlFlow::Break(()));
             }
-            let docids_in_common = value.bitmap & candidates;
+            let docids_in_common = CboRoaringBitmapCodec::intersection_with_serialized(
+                value.bitmap_bytes,
+                candidates,
+            )?;
             if !docids_in_common.is_empty() {
                 let any_docid_in_common = docids_in_common.min().unwrap();
                 match (self.callback)(key.left_bound, docids_in_common.len(), any_docid_in_common)?
@@ -205,7 +210,10 @@ where
             if key.field_id != self.field_id {
                 return Ok(ControlFlow::Break(()));
             }
-            let docids_in_common = value.bitmap & candidates;
+            let docids_in_common = CboRoaringBitmapCodec::intersection_with_serialized(
+                value.bitmap_bytes,
+                candidates,
+            )?;
             if !docids_in_common.is_empty() {
                 let cf = self.iterate(
                     &docids_in_common,

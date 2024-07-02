@@ -124,30 +124,59 @@ async fn simple_search() {
 
     let (response, code) = index
         .search_post(
-            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.2}}),
+            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.2}, "retrieveVectors": true}),
         )
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]}},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]}},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]}}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}}},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"embeddings":[[2.0,3.0]],"regenerate":false}}},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"embeddings":[[1.0,3.0]],"regenerate":false}}}]"###);
     snapshot!(response["semanticHitCount"], @"0");
 
     let (response, code) = index
         .search_post(
-            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.5}, "showRankingScore": true}),
+            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.5}, "showRankingScore": true, "retrieveVectors": true}),
         )
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":0.9848484848484848},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":0.9472135901451112}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"embeddings":[[2.0,3.0]],"regenerate":false}},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}},"_rankingScore":0.9848484848484848},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"embeddings":[[1.0,3.0]],"regenerate":false}},"_rankingScore":0.9472135901451112}]"###);
     snapshot!(response["semanticHitCount"], @"2");
 
     let (response, code) = index
         .search_post(
-            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.8}, "showRankingScore": true}),
+            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.8}, "showRankingScore": true, "retrieveVectors": true}),
         )
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":0.974341630935669},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":0.9472135901451112}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"embeddings":[[2.0,3.0]],"regenerate":false}},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}},"_rankingScore":0.974341630935669},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"embeddings":[[1.0,3.0]],"regenerate":false}},"_rankingScore":0.9472135901451112}]"###);
     snapshot!(response["semanticHitCount"], @"3");
+}
+
+#[actix_rt::test]
+async fn limit_offset() {
+    let server = Server::new().await;
+    let index = index_with_documents_user_provided(&server, &SIMPLE_SEARCH_DOCUMENTS_VEC).await;
+
+    let (response, code) = index
+        .search_post(
+            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.2}, "retrieveVectors": true, "offset": 1, "limit": 1}),
+        )
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"embeddings":[[2.0,3.0]],"regenerate":false}}}]"###);
+    snapshot!(response["semanticHitCount"], @"0");
+    assert_eq!(response["hits"].as_array().unwrap().len(), 1);
+
+    let server = Server::new().await;
+    let index = index_with_documents_user_provided(&server, &SIMPLE_SEARCH_DOCUMENTS_VEC).await;
+
+    let (response, code) = index
+        .search_post(
+            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.9}, "retrieveVectors": true, "offset": 1, "limit": 1}),
+        )
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}}}]"###);
+    snapshot!(response["semanticHitCount"], @"1");
+    assert_eq!(response["hits"].as_array().unwrap().len(), 1);
 }
 
 #[actix_rt::test]
@@ -204,10 +233,10 @@ async fn distribution_shift() {
     let server = Server::new().await;
     let index = index_with_documents_user_provided(&server, &SIMPLE_SEARCH_DOCUMENTS_VEC).await;
 
-    let search = json!({"q": "Captain", "vector": [1.0, 1.0], "showRankingScore": true, "hybrid": {"semanticRatio": 1.0}});
+    let search = json!({"q": "Captain", "vector": [1.0, 1.0], "showRankingScore": true, "hybrid": {"semanticRatio": 1.0}, "retrieveVectors": true});
     let (response, code) = index.search_post(search.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":0.974341630935669},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":0.9472135901451112}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"embeddings":[[2.0,3.0]],"regenerate":false}},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}},"_rankingScore":0.974341630935669},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"embeddings":[[1.0,3.0]],"regenerate":false}},"_rankingScore":0.9472135901451112}]"###);
 
     let (response, code) = index
         .update_settings(json!({
@@ -228,7 +257,7 @@ async fn distribution_shift() {
 
     let (response, code) = index.search_post(search).await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":0.19161224365234375},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":1.1920928955078125e-7},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":1.1920928955078125e-7}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"embeddings":[[2.0,3.0]],"regenerate":false}},"_rankingScore":0.19161224365234375},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}},"_rankingScore":1.1920928955078125e-7},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"embeddings":[[1.0,3.0]],"regenerate":false}},"_rankingScore":1.1920928955078125e-7}]"###);
 }
 
 #[actix_rt::test]
@@ -239,20 +268,23 @@ async fn highlighter() {
     let (response, code) = index
         .search_post(json!({"q": "Captain Marvel", "vector": [1.0, 1.0],
             "hybrid": {"semanticRatio": 0.2},
-            "attributesToHighlight": [
-                     "desc"
+           "retrieveVectors": true,
+           "attributesToHighlight": [
+                     "desc",
+                     "_vectors",
                    ],
-                   "highlightPreTag": "**BEGIN**",
-                   "highlightPostTag": "**END**"
+           "highlightPreTag": "**BEGIN**",
+           "highlightPostTag": "**END**",
         }))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_formatted":{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":["2.0","3.0"]}}},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_formatted":{"title":"Shazam!","desc":"a **BEGIN**Captain**END** **BEGIN**Marvel**END** ersatz","id":"1","_vectors":{"default":["1.0","3.0"]}}},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_formatted":{"title":"Captain Planet","desc":"He's not part of the **BEGIN**Marvel**END** Cinematic Universe","id":"2","_vectors":{"default":["1.0","2.0"]}}}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"embeddings":[[2.0,3.0]],"regenerate":false}},"_formatted":{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3"}},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"embeddings":[[1.0,3.0]],"regenerate":false}},"_formatted":{"title":"Shazam!","desc":"a **BEGIN**Captain**END** **BEGIN**Marvel**END** ersatz","id":"1"}},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}},"_formatted":{"title":"Captain Planet","desc":"He's not part of the **BEGIN**Marvel**END** Cinematic Universe","id":"2"}}]"###);
     snapshot!(response["semanticHitCount"], @"0");
 
     let (response, code) = index
         .search_post(json!({"q": "Captain Marvel", "vector": [1.0, 1.0],
             "hybrid": {"semanticRatio": 0.8},
+            "retrieveVectors": true,
             "showRankingScore": true,
             "attributesToHighlight": [
                      "desc"
@@ -262,13 +294,14 @@ async fn highlighter() {
         }))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_formatted":{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":["2.0","3.0"]}},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_formatted":{"title":"Captain Planet","desc":"He's not part of the **BEGIN**Marvel**END** Cinematic Universe","id":"2","_vectors":{"default":["1.0","2.0"]}},"_rankingScore":0.974341630935669},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_formatted":{"title":"Shazam!","desc":"a **BEGIN**Captain**END** **BEGIN**Marvel**END** ersatz","id":"1","_vectors":{"default":["1.0","3.0"]}},"_rankingScore":0.9472135901451112}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"embeddings":[[2.0,3.0]],"regenerate":false}},"_formatted":{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3"},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}},"_formatted":{"title":"Captain Planet","desc":"He's not part of the **BEGIN**Marvel**END** Cinematic Universe","id":"2"},"_rankingScore":0.974341630935669},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"embeddings":[[1.0,3.0]],"regenerate":false}},"_formatted":{"title":"Shazam!","desc":"a **BEGIN**Captain**END** **BEGIN**Marvel**END** ersatz","id":"1"},"_rankingScore":0.9472135901451112}]"###);
     snapshot!(response["semanticHitCount"], @"3");
 
     // no highlighting on full semantic
     let (response, code) = index
         .search_post(json!({"q": "Captain Marvel", "vector": [1.0, 1.0],
             "hybrid": {"semanticRatio": 1.0},
+            "retrieveVectors": true,
             "showRankingScore": true,
             "attributesToHighlight": [
                      "desc"
@@ -278,7 +311,7 @@ async fn highlighter() {
         }))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_formatted":{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":["2.0","3.0"]}},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_formatted":{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":["1.0","2.0"]}},"_rankingScore":0.974341630935669},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_formatted":{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":["1.0","3.0"]}},"_rankingScore":0.9472135901451112}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"embeddings":[[2.0,3.0]],"regenerate":false}},"_formatted":{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3"},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}},"_formatted":{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2"},"_rankingScore":0.974341630935669},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"embeddings":[[1.0,3.0]],"regenerate":false}},"_formatted":{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1"},"_rankingScore":0.9472135901451112}]"###);
     snapshot!(response["semanticHitCount"], @"3");
 }
 
@@ -361,12 +394,12 @@ async fn single_document() {
 
     let (response, code) = index
     .search_post(
-        json!({"vector": [1.0, 3.0], "hybrid": {"semanticRatio": 1.0}, "showRankingScore": true}),
+        json!({"vector": [1.0, 3.0], "hybrid": {"semanticRatio": 1.0}, "showRankingScore": true, "retrieveVectors": true}),
     )
     .await;
 
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"][0], @r###"{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":1.0}"###);
+    snapshot!(response["hits"][0], @r###"{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"embeddings":[[1.0,3.0]],"regenerate":false}},"_rankingScore":1.0}"###);
     snapshot!(response["semanticHitCount"], @"1");
 }
 
@@ -377,25 +410,25 @@ async fn query_combination() {
 
     // search without query and vector, but with hybrid => still placeholder
     let (response, code) = index
-        .search_post(json!({"hybrid": {"semanticRatio": 1.0}, "showRankingScore": true}))
+        .search_post(json!({"hybrid": {"semanticRatio": 1.0}, "showRankingScore": true, "retrieveVectors": true}))
         .await;
 
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":1.0},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":1.0},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":1.0}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"embeddings":[[1.0,3.0]],"regenerate":false}},"_rankingScore":1.0},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}},"_rankingScore":1.0},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"embeddings":[[2.0,3.0]],"regenerate":false}},"_rankingScore":1.0}]"###);
     snapshot!(response["semanticHitCount"], @"null");
 
     // same with a different semantic ratio
     let (response, code) = index
-        .search_post(json!({"hybrid": {"semanticRatio": 0.76}, "showRankingScore": true}))
+        .search_post(json!({"hybrid": {"semanticRatio": 0.76}, "showRankingScore": true, "retrieveVectors": true}))
         .await;
 
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":1.0},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":1.0},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":1.0}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"embeddings":[[1.0,3.0]],"regenerate":false}},"_rankingScore":1.0},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}},"_rankingScore":1.0},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"embeddings":[[2.0,3.0]],"regenerate":false}},"_rankingScore":1.0}]"###);
     snapshot!(response["semanticHitCount"], @"null");
 
     // wrong vector dimensions
     let (response, code) = index
-    .search_post(json!({"vector": [1.0, 0.0, 1.0], "hybrid": {"semanticRatio": 1.0}, "showRankingScore": true}))
+    .search_post(json!({"vector": [1.0, 0.0, 1.0], "hybrid": {"semanticRatio": 1.0}, "showRankingScore": true, "retrieveVectors": true}))
     .await;
 
     snapshot!(code, @"400 Bad Request");
@@ -410,34 +443,34 @@ async fn query_combination() {
 
     // full vector
     let (response, code) = index
-    .search_post(json!({"vector": [1.0, 0.0], "hybrid": {"semanticRatio": 1.0}, "showRankingScore": true}))
+    .search_post(json!({"vector": [1.0, 0.0], "hybrid": {"semanticRatio": 1.0}, "showRankingScore": true, "retrieveVectors": true}))
     .await;
 
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":0.7773500680923462},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":0.7236068248748779},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":0.6581138968467712}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"embeddings":[[2.0,3.0]],"regenerate":false}},"_rankingScore":0.7773500680923462},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}},"_rankingScore":0.7236068248748779},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"embeddings":[[1.0,3.0]],"regenerate":false}},"_rankingScore":0.6581138968467712}]"###);
     snapshot!(response["semanticHitCount"], @"3");
 
     // full keyword, without a query
     let (response, code) = index
-    .search_post(json!({"vector": [1.0, 0.0], "hybrid": {"semanticRatio": 0.0}, "showRankingScore": true}))
+    .search_post(json!({"vector": [1.0, 0.0], "hybrid": {"semanticRatio": 0.0}, "showRankingScore": true, "retrieveVectors": true}))
     .await;
 
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":1.0},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":1.0},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":1.0}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"embeddings":[[1.0,3.0]],"regenerate":false}},"_rankingScore":1.0},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}},"_rankingScore":1.0},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"embeddings":[[2.0,3.0]],"regenerate":false}},"_rankingScore":1.0}]"###);
     snapshot!(response["semanticHitCount"], @"null");
 
     // query + vector, full keyword => keyword
     let (response, code) = index
-    .search_post(json!({"q": "Captain", "vector": [1.0, 0.0], "hybrid": {"semanticRatio": 0.0}, "showRankingScore": true}))
+    .search_post(json!({"q": "Captain", "vector": [1.0, 0.0], "hybrid": {"semanticRatio": 0.0}, "showRankingScore": true, "retrieveVectors": true}))
     .await;
 
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":0.9848484848484848},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":[2.0,3.0]},"_rankingScore":0.9848484848484848},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":[1.0,3.0]},"_rankingScore":0.9242424242424242}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}},"_rankingScore":0.9848484848484848},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"embeddings":[[2.0,3.0]],"regenerate":false}},"_rankingScore":0.9848484848484848},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"embeddings":[[1.0,3.0]],"regenerate":false}},"_rankingScore":0.9242424242424242}]"###);
     snapshot!(response["semanticHitCount"], @"null");
 
     // query + vector, no hybrid keyword =>
     let (response, code) = index
-        .search_post(json!({"q": "Captain", "vector": [1.0, 0.0], "showRankingScore": true}))
+        .search_post(json!({"q": "Captain", "vector": [1.0, 0.0], "showRankingScore": true, "retrieveVectors": true}))
         .await;
 
     snapshot!(code, @"400 Bad Request");
@@ -453,7 +486,7 @@ async fn query_combination() {
     // full vector, without a vector => error
     let (response, code) = index
         .search_post(
-            json!({"q": "Captain", "hybrid": {"semanticRatio": 1.0}, "showRankingScore": true}),
+            json!({"q": "Captain", "hybrid": {"semanticRatio": 1.0}, "showRankingScore": true, "retrieveVectors": true}),
         )
         .await;
 
@@ -470,11 +503,93 @@ async fn query_combination() {
     // hybrid without a vector => full keyword
     let (response, code) = index
         .search_post(
-            json!({"q": "Planet", "hybrid": {"semanticRatio": 0.99}, "showRankingScore": true}),
+            json!({"q": "Planet", "hybrid": {"semanticRatio": 0.99}, "showRankingScore": true, "retrieveVectors": true}),
         )
         .await;
 
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":[1.0,2.0]},"_rankingScore":0.9242424242424242}]"###);
+    snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}},"_rankingScore":0.9242424242424242}]"###);
     snapshot!(response["semanticHitCount"], @"0");
+}
+
+#[actix_rt::test]
+async fn retrieve_vectors() {
+    let server = Server::new().await;
+    let index = index_with_documents_hf(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
+
+    let (response, code) = index
+        .search_post(
+            json!({"q": "Captain", "hybrid": {"semanticRatio": 0.2}, "retrieveVectors": true}),
+        )
+        .await;
+    snapshot!(code, @"200 OK");
+    insta::assert_json_snapshot!(response["hits"], {"[]._vectors.default.embeddings" => "[vectors]"},  @r###"
+    [
+      {
+        "title": "Captain Planet",
+        "desc": "He's not part of the Marvel Cinematic Universe",
+        "id": "2",
+        "_vectors": {
+          "default": {
+            "embeddings": "[vectors]",
+            "regenerate": true
+          }
+        }
+      },
+      {
+        "title": "Captain Marvel",
+        "desc": "a Shazam ersatz",
+        "id": "3",
+        "_vectors": {
+          "default": {
+            "embeddings": "[vectors]",
+            "regenerate": true
+          }
+        }
+      },
+      {
+        "title": "Shazam!",
+        "desc": "a Captain Marvel ersatz",
+        "id": "1",
+        "_vectors": {
+          "default": {
+            "embeddings": "[vectors]",
+            "regenerate": true
+          }
+        }
+      }
+    ]
+    "###);
+
+    // remove `_vectors` from displayed attributes
+    let (response, code) =
+        index.update_settings(json!({ "displayedAttributes": ["id", "title", "desc"]} )).await;
+    assert_eq!(202, code, "{:?}", response);
+    index.wait_task(response.uid()).await;
+
+    let (response, code) = index
+        .search_post(
+            json!({"q": "Captain", "hybrid": {"semanticRatio": 0.2}, "retrieveVectors": true}),
+        )
+        .await;
+    snapshot!(code, @"200 OK");
+    insta::assert_json_snapshot!(response["hits"], {"[]._vectors.default.embeddings" => "[vectors]"},  @r###"
+    [
+      {
+        "title": "Captain Planet",
+        "desc": "He's not part of the Marvel Cinematic Universe",
+        "id": "2"
+      },
+      {
+        "title": "Captain Marvel",
+        "desc": "a Shazam ersatz",
+        "id": "3"
+      },
+      {
+        "title": "Shazam!",
+        "desc": "a Captain Marvel ersatz",
+        "id": "1"
+      }
+    ]
+    "###);
 }

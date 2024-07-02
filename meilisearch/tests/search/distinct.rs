@@ -107,6 +107,39 @@ static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     ])
 });
 
+static NESTED_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+    json!([
+      {
+        "id": 1,
+        "description": "Leather Jacket",
+        "brand": "Lee Jeans",
+        "product_id": "123456",
+        "color": { "main": "Brown", "pattern": "stripped" },
+      },
+      {
+        "id": 2,
+        "description": "Leather Jacket",
+        "brand": "Lee Jeans",
+        "product_id": "123456",
+        "color": { "main": "Black", "pattern": "stripped" },
+      },
+      {
+        "id": 3,
+        "description": "Leather Jacket",
+        "brand": "Lee Jeans",
+        "product_id": "123456",
+        "color": { "main": "Blue", "pattern": "used" },
+      },
+      {
+        "id": 4,
+        "description": "T-Shirt",
+        "brand": "Nike",
+        "product_id": "789012",
+        "color": { "main": "Blue", "pattern": "stripped" },
+      }
+    ])
+});
+
 static DOCUMENT_PRIMARY_KEY: &str = "id";
 static DOCUMENT_DISTINCT_KEY: &str = "product_id";
 
@@ -238,4 +271,36 @@ async fn distinct_search_with_pagination_no_ranking() {
     snapshot!(response["page"], @"2");
     snapshot!(response["totalPages"], @"2");
     snapshot!(response["totalHits"], @"6");
+}
+
+#[actix_rt::test]
+async fn distinct_at_search_time() {
+    let server = Server::new().await;
+    let index = server.index("tamo");
+
+    let documents = NESTED_DOCUMENTS.clone();
+    index.add_documents(documents, Some(DOCUMENT_PRIMARY_KEY)).await;
+    let (task, _) = index.update_settings_filterable_attributes(json!(["color.main"])).await;
+    let task = index.wait_task(task.uid()).await;
+    snapshot!(task, name: "succeed");
+
+    fn get_hits(response: &Value) -> Vec<String> {
+        let hits_array = response["hits"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{}", &serde_json::to_string_pretty(&response).unwrap()));
+        hits_array
+            .iter()
+            .map(|h| h[DOCUMENT_PRIMARY_KEY].as_number().unwrap().to_string())
+            .collect::<Vec<_>>()
+    }
+
+    let (response, code) =
+        index.search_post(json!({"page": 1, "hitsPerPage": 3, "distinct": "color.main"})).await;
+    let hits = get_hits(&response);
+    snapshot!(code, @"200 OK");
+    snapshot!(hits.len(), @"3");
+    snapshot!(format!("{:?}", hits), @r###"["1", "2", "3"]"###);
+    snapshot!(response["page"], @"1");
+    snapshot!(response["totalPages"], @"1");
+    snapshot!(response["totalHits"], @"3");
 }

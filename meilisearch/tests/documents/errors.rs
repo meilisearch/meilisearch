@@ -719,7 +719,7 @@ async fn fetch_document_by_filter() {
 
     let (response, code) = index.get_document_by_filter(json!(null)).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(response, @r###"
     {
       "message": "Invalid value type: expected an object, but found null",
       "code": "bad_request",
@@ -730,7 +730,7 @@ async fn fetch_document_by_filter() {
 
     let (response, code) = index.get_document_by_filter(json!({ "offset": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(response, @r###"
     {
       "message": "Invalid value type at `.offset`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_document_offset",
@@ -741,7 +741,7 @@ async fn fetch_document_by_filter() {
 
     let (response, code) = index.get_document_by_filter(json!({ "limit": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(response, @r###"
     {
       "message": "Invalid value type at `.limit`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_document_limit",
@@ -752,7 +752,7 @@ async fn fetch_document_by_filter() {
 
     let (response, code) = index.get_document_by_filter(json!({ "fields": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(response, @r###"
     {
       "message": "Invalid value type at `.fields`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_document_fields",
@@ -763,7 +763,7 @@ async fn fetch_document_by_filter() {
 
     let (response, code) = index.get_document_by_filter(json!({ "filter": true })).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(response, @r###"
     {
       "message": "Invalid syntax for the filter parameter: `expected String, Array, found: true`.",
       "code": "invalid_document_filter",
@@ -774,7 +774,7 @@ async fn fetch_document_by_filter() {
 
     let (response, code) = index.get_document_by_filter(json!({ "filter": "cool doggo" })).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(response, @r###"
     {
       "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `cool doggo`.\n1:11 cool doggo",
       "code": "invalid_document_filter",
@@ -786,12 +786,79 @@ async fn fetch_document_by_filter() {
     let (response, code) =
         index.get_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(response, @r###"
     {
       "message": "Attribute `doggo` is not filterable. Available filterable attributes are: `color`.\n1:6 doggo = bernese",
       "code": "invalid_document_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn retrieve_vectors() {
+    let server = Server::new().await;
+    let index = server.index("doggo");
+
+    // GET ALL DOCUMENTS BY QUERY
+    let (response, _code) = index.get_all_documents_raw("?retrieveVectors=tamo").await;
+    snapshot!(response, @r###"
+    {
+      "message": "Invalid value in parameter `retrieveVectors`: could not parse `tamo` as a boolean, expected either `true` or `false`",
+      "code": "invalid_document_retrieve_vectors",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_retrieve_vectors"
+    }
+    "###);
+    let (response, _code) = index.get_all_documents_raw("?retrieveVectors=true").await;
+    snapshot!(response, @r###"
+    {
+      "message": "Passing `retrieveVectors` as a parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "###);
+
+    // FETCH ALL DOCUMENTS BY POST
+    let (response, _code) =
+        index.get_document_by_filter(json!({ "retrieveVectors": "tamo" })).await;
+    snapshot!(response, @r###"
+    {
+      "message": "Invalid value type at `.retrieveVectors`: expected a boolean, but found a string: `\"tamo\"`",
+      "code": "invalid_document_retrieve_vectors",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_retrieve_vectors"
+    }
+    "###);
+    let (response, _code) = index.get_document_by_filter(json!({ "retrieveVectors": true })).await;
+    snapshot!(response, @r###"
+    {
+      "message": "Passing `retrieveVectors` as a parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "###);
+
+    // GET A SINGLE DOCUMENT
+    let (response, _code) = index.get_document(0, Some(json!({"retrieveVectors": "tamo"}))).await;
+    snapshot!(response, @r###"
+    {
+      "message": "Invalid value in parameter `retrieveVectors`: could not parse `tamo` as a boolean, expected either `true` or `false`",
+      "code": "invalid_document_retrieve_vectors",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_retrieve_vectors"
+    }
+    "###);
+    let (response, _code) = index.get_document(0, Some(json!({"retrieveVectors": true}))).await;
+    snapshot!(response, @r###"
+    {
+      "message": "Passing `retrieveVectors` as a parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
     }
     "###);
 }

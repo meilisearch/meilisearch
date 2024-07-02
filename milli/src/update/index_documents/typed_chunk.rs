@@ -20,6 +20,7 @@ use super::MergeFn;
 use crate::external_documents_ids::{DocumentOperation, DocumentOperationKind};
 use crate::facet::FacetType;
 use crate::index::db_name::DOCUMENTS;
+use crate::index::IndexEmbeddingConfig;
 use crate::proximity::MAX_DISTANCE;
 use crate::update::del_add::{deladd_serialize_add_side, DelAdd, KvReaderDelAdd};
 use crate::update::facet::FacetsUpdate;
@@ -90,6 +91,8 @@ pub(crate) enum TypedChunk {
         expected_dimension: usize,
         manual_vectors: grenad::Reader<BufReader<File>>,
         embedder_name: String,
+        add_to_user_provided: RoaringBitmap,
+        remove_from_user_provided: RoaringBitmap,
     },
     ScriptLanguageDocids(HashMap<(Script, Language), (RoaringBitmap, RoaringBitmap)>),
 }
@@ -154,8 +157,11 @@ pub(crate) fn write_typed_chunk_into_index(
             let mut docids = index.documents_ids(wtxn)?;
             let mut iter = merger.into_stream_merger_iter()?;
 
-            let embedders: BTreeSet<_> =
-                index.embedding_configs(wtxn)?.into_iter().map(|(k, _v)| k).collect();
+            let embedders: BTreeSet<_> = index
+                .embedding_configs(wtxn)?
+                .into_iter()
+                .map(|IndexEmbeddingConfig { name, .. }| name)
+                .collect();
             let mut vectors_buffer = Vec::new();
             while let Some((key, reader)) = iter.next()? {
                 let mut writer: KvWriter<_, FieldId> = KvWriter::memory();
@@ -181,7 +187,7 @@ pub(crate) fn write_typed_chunk_into_index(
                                     // if the `_vectors` field cannot be parsed as map of vectors, just write it as-is
                                     break 'vectors Some(addition);
                                 };
-                                vectors.retain_user_provided_vectors(&embedders);
+                                vectors.retain_not_embedded_vectors(&embedders);
                                 let crate::vector::parsed_vectors::ParsedVectors(vectors) = vectors;
                                 if vectors.is_empty() {
                                     // skip writing empty `_vectors` map
@@ -619,6 +625,8 @@ pub(crate) fn write_typed_chunk_into_index(
             let mut remove_vectors_builder = MergerBuilder::new(keep_first as MergeFn);
             let mut manual_vectors_builder = MergerBuilder::new(keep_first as MergeFn);
             let mut embeddings_builder = MergerBuilder::new(keep_first as MergeFn);
+            let mut add_to_user_provided = RoaringBitmap::new();
+            let mut remove_from_user_provided = RoaringBitmap::new();
             let mut params = None;
             for typed_chunk in typed_chunks {
                 let TypedChunk::VectorPoints {
@@ -627,6 +635,8 @@ pub(crate) fn write_typed_chunk_into_index(
                     embeddings,
                     expected_dimension,
                     embedder_name,
+                    add_to_user_provided: aud,
+                    remove_from_user_provided: rud,
                 } = typed_chunk
                 else {
                     unreachable!();
@@ -639,10 +649,22 @@ pub(crate) fn write_typed_chunk_into_index(
                 if let Some(embeddings) = embeddings {
                     embeddings_builder.push(embeddings.into_cursor()?);
                 }
+                add_to_user_provided |= aud;
+                remove_from_user_provided |= rud;
             }
 
             // typed chunks has always at least 1 chunk.
             let Some((expected_dimension, embedder_name)) = params else { unreachable!() };
+
+            let mut embedding_configs = index.embedding_configs(wtxn)?;
+            let index_embedder_config = embedding_configs
+                .iter_mut()
+                .find(|IndexEmbeddingConfig { name, .. }| name == &embedder_name)
+                .unwrap();
+            index_embedder_config.user_provided -= remove_from_user_provided;
+            index_embedder_config.user_provided |= add_to_user_provided;
+
+            index.put_embedding_configs(wtxn, embedding_configs)?;
 
             let embedder_index = index.embedder_category_id.get(wtxn, &embedder_name)?.ok_or(
                 InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },

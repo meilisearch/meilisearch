@@ -14,8 +14,8 @@ use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::routes::indexes::search::search_kind;
 use crate::search::{
-    add_search_rules, perform_facet_search, HybridQuery, MatchingStrategy, SearchQuery,
-    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    add_search_rules, perform_facet_search, HybridQuery, MatchingStrategy, RankingScoreThreshold,
+    SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
     DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
 };
 use crate::search_queue::SearchQueue;
@@ -46,6 +46,8 @@ pub struct FacetSearchQuery {
     pub matching_strategy: MatchingStrategy,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>, default)]
     pub attributes_to_search_on: Option<Vec<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>, default)]
+    pub ranking_score_threshold: Option<RankingScoreThreshold>,
 }
 
 pub async fn search(
@@ -103,6 +105,7 @@ impl From<FacetSearchQuery> for SearchQuery {
             matching_strategy,
             attributes_to_search_on,
             hybrid,
+            ranking_score_threshold,
         } = value;
 
         SearchQuery {
@@ -112,6 +115,7 @@ impl From<FacetSearchQuery> for SearchQuery {
             page: None,
             hits_per_page: None,
             attributes_to_retrieve: None,
+            retrieve_vectors: false,
             attributes_to_crop: None,
             crop_length: DEFAULT_CROP_LENGTH(),
             attributes_to_highlight: None,
@@ -120,6 +124,7 @@ impl From<FacetSearchQuery> for SearchQuery {
             show_ranking_score_details: false,
             filter,
             sort: None,
+            distinct: None,
             facets: None,
             highlight_pre_tag: DEFAULT_HIGHLIGHT_PRE_TAG(),
             highlight_post_tag: DEFAULT_HIGHLIGHT_POST_TAG(),
@@ -128,6 +133,7 @@ impl From<FacetSearchQuery> for SearchQuery {
             vector,
             attributes_to_search_on,
             hybrid,
+            ranking_score_threshold,
         }
     }
 }

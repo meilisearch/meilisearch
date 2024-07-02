@@ -168,6 +168,74 @@ async fn search_bad_hits_per_page() {
 }
 
 #[actix_rt::test]
+async fn search_bad_attributes_to_retrieve() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.search_post(json!({"attributesToRetrieve": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.attributesToRetrieve`: expected an array, but found a string: `\"doggo\"`",
+      "code": "invalid_search_attributes_to_retrieve",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_attributes_to_retrieve"
+    }
+    "###);
+    // Can't make the `attributes_to_retrieve` fail with a get search since it'll accept anything as an array of strings.
+}
+
+#[actix_rt::test]
+async fn search_bad_retrieve_vectors() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.search_post(json!({"retrieveVectors": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.retrieveVectors`: expected a boolean, but found a string: `\"doggo\"`",
+      "code": "invalid_search_retrieve_vectors",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_retrieve_vectors"
+    }
+    "###);
+
+    let (response, code) = index.search_post(json!({"retrieveVectors": [true]})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.retrieveVectors`: expected a boolean, but found an array: `[true]`",
+      "code": "invalid_search_retrieve_vectors",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_retrieve_vectors"
+    }
+    "###);
+
+    let (response, code) = index.search_get("?retrieveVectors=").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value in parameter `retrieveVectors`: could not parse `` as a boolean, expected either `true` or `false`",
+      "code": "invalid_search_retrieve_vectors",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_retrieve_vectors"
+    }
+    "###);
+
+    let (response, code) = index.search_get("?retrieveVectors=doggo").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value in parameter `retrieveVectors`: could not parse `doggo` as a boolean, expected either `true` or `false`",
+      "code": "invalid_search_retrieve_vectors",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_retrieve_vectors"
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn search_bad_attributes_to_crop() {
     let server = Server::new().await;
     let index = server.index("test");
@@ -319,6 +387,40 @@ async fn search_bad_facets() {
     }
     "###);
     // Can't make the `attributes_to_highlight` fail with a get search since it'll accept anything as an array of strings.
+}
+
+#[actix_rt::test]
+async fn search_bad_threshold() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.search_post(json!({"rankingScoreThreshold": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.rankingScoreThreshold`: expected a number, but found a string: `\"doggo\"`",
+      "code": "invalid_search_ranking_score_threshold",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_ranking_score_threshold"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn search_invalid_threshold() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.search_post(json!({"rankingScoreThreshold": 42})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value at `.rankingScoreThreshold`: the value of `rankingScoreThreshold` is invalid, expected a float between `0.0` and `1.0`.",
+      "code": "invalid_search_ranking_score_threshold",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_ranking_score_threshold"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -1037,4 +1139,67 @@ async fn search_on_unknown_field_plus_joker() {
             },
         )
         .await;
+}
+
+#[actix_rt::test]
+async fn distinct_at_search_time() {
+    let server = Server::new().await;
+    let index = server.index("tamo");
+    let (task, _) = index.create(None).await;
+    let task = index.wait_task(task.uid()).await;
+    snapshot!(task, name: "task-succeed");
+
+    let (response, code) =
+        index.search_post(json!({"page": 0, "hitsPerPage": 2, "distinct": "doggo.truc"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. This index does not have configured filterable attributes.",
+      "code": "invalid_search_distinct",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
+    }
+    "###);
+
+    let (task, _) = index.update_settings_filterable_attributes(json!(["color", "machin"])).await;
+    index.wait_task(task.uid()).await;
+
+    let (response, code) =
+        index.search_post(json!({"page": 0, "hitsPerPage": 2, "distinct": "doggo.truc"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. Available filterable attributes are: `color, machin`.",
+      "code": "invalid_search_distinct",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
+    }
+    "###);
+
+    let (task, _) = index.update_settings_displayed_attributes(json!(["color"])).await;
+    index.wait_task(task.uid()).await;
+
+    let (response, code) =
+        index.search_post(json!({"page": 0, "hitsPerPage": 2, "distinct": "doggo.truc"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. Available filterable attributes are: `color, <..hidden-attributes>`.",
+      "code": "invalid_search_distinct",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
+    }
+    "###);
+
+    let (response, code) =
+        index.search_post(json!({"page": 0, "hitsPerPage": 2, "distinct": true})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Invalid value type at `.distinct`: expected a string, but found a boolean: `true`",
+      "code": "invalid_search_distinct",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
+    }
+    "###);
 }

@@ -152,6 +152,10 @@ impl EmbeddingConfigs {
         &self.0
     }
 
+    pub fn into_inner(self) -> HashMap<String, (Arc<Embedder>, Arc<Prompt>)> {
+        self.0
+    }
+
     /// Get the name of the default embedder configuration.
     ///
     /// The default embedder is determined as follows:

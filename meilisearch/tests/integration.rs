@@ -13,6 +13,7 @@ mod snapshot;
 mod stats;
 mod swap_indexes;
 mod tasks;
+mod vector;
 
 // Tests are isolated by features in different modules to allow better readability, test
 // targetability, and improved incremental compilation times.

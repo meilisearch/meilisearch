@@ -1,0 +1,19 @@
+---
+source: meilisearch/tests/dumps/mod.rs
+---
+{
+  "uid": 1,
+  "indexUid": "pets",
+  "status": "succeeded",
+  "type": "documentAdditionOrUpdate",
+  "canceledBy": null,
+  "details": {
+    "receivedDocuments": 5,
+    "indexedDocuments": 5
+  },
+  "error": null,
+  "duration": "[duration]",
+  "enqueuedAt": "[date]",
+  "startedAt": "[date]",
+  "finishedAt": "[date]"
+}

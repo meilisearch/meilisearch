@@ -14,20 +14,20 @@ default-run = "meilisearch"
 
 [dependencies]
 actix-cors = "0.7.0"
-actix-http = { version = "3.6.0", default-features = false, features = [
+actix-http = { version = "3.7.0", default-features = false, features = [
     "compress-brotli",
     "compress-gzip",
     "rustls-0_21",
 ] }
 actix-utils = "3.0.1"
-actix-web = { version = "4.5.1", default-features = false, features = [
+actix-web = { version = "4.6.0", default-features = false, features = [
     "macros",
     "compress-brotli",
     "compress-gzip",
     "cookies",
     "rustls-0_21",
 ] }
-actix-web-static-files = { git = "https://github.com/kilork/actix-web-static-files.git", rev = "2d3b6160", optional = true }
+actix-web-static-files = { version = "4.0.1", optional = true }
 anyhow = { version = "1.0.79", features = ["backtrace"] }
 async-stream = "0.3.5"
 async-trait = "0.1.77"
@@ -104,13 +104,13 @@ url = { version = "2.5.0", features = ["serde"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["json"] }
 tracing-trace = { version = "0.1.0", path = "../tracing-trace" }
-tracing-actix-web = "0.7.9"
+tracing-actix-web = "0.7.10"
 build-info = { version = "1.7.0", path = "../build-info" }
 
 [dev-dependencies]
 actix-rt = "2.9.0"
 assert-json-diff = "2.0.2"
-brotli = "3.4.0"
+brotli = "6.0.0"
 insta = "1.34.0"
 manifest-dir-macros = "0.1.18"
 maplit = "1.0.2"
@@ -158,5 +158,5 @@ vietnamese = ["meilisearch-types/vietnamese"]
 swedish-recomposition = ["meilisearch-types/swedish-recomposition"]
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.13/build.zip"
-sha1 = "e20cc9b390003c6c844f4b8bcc5c5013191a77ff"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.14/build.zip"
+sha1 = "592d1b5a3459d621d0aae1dded8fe3154f5c38fe"

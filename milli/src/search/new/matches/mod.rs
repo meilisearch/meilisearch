@@ -516,6 +516,7 @@ mod tests {
                 false,
                 universe,
                 &None,
+                &None,
                 crate::search::new::GeoSortStrategy::default(),
                 0,
                 100,
@@ -523,6 +524,7 @@ mod tests {
                 &mut crate::DefaultSearchLogger,
                 &mut crate::DefaultSearchLogger,
                 TimeBudget::max(),
+                None,
             )
             .unwrap();
 

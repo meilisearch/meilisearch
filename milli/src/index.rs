@@ -9,6 +9,7 @@ use heed::types::*;
 use heed::{CompactionOption, Database, RoTxn, RwTxn, Unspecified};
 use roaring::RoaringBitmap;
 use rstar::RTree;
+use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 use crate::documents::PrimaryKey;
@@ -23,6 +24,7 @@ use crate::heed_codec::{
 };
 use crate::order_by_map::OrderByMap;
 use crate::proximity::ProximityPrecision;
+use crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME;
 use crate::vector::{Embedding, EmbeddingConfig};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
@@ -644,6 +646,7 @@ impl Index {
         &self,
         wtxn: &mut RwTxn,
         user_fields: &[&str],
+        non_searchable_fields_ids: &[FieldId],
         fields_ids_map: &FieldsIdsMap,
     ) -> Result<()> {
         // We can write the user defined searchable fields as-is.
@@ -662,6 +665,7 @@ impl Index {
             for (weight, user_field) in user_fields.iter().enumerate() {
                 if crate::is_faceted_by(field_from_map, user_field)
                     && !real_fields.contains(&field_from_map)
+                    && !non_searchable_fields_ids.contains(&id)
                 {
                     real_fields.push(field_from_map);
 
@@ -708,6 +712,7 @@ impl Index {
                 Ok(self
                     .fields_ids_map(rtxn)?
                     .names()
+                    .filter(|name| !crate::is_faceted_by(name, RESERVED_VECTORS_FIELD_NAME))
                     .map(|field| Cow::Owned(field.to_string()))
                     .collect())
             })
@@ -1568,12 +1573,16 @@ impl Index {
         Ok(script_language)
     }
 
+    /// Put the embedding configs:
+    /// 1. The name of the embedder
+    /// 2. The configuration option for this embedder
+    /// 3. The list of documents with a user provided embedding
     pub(crate) fn put_embedding_configs(
         &self,
         wtxn: &mut RwTxn<'_>,
-        configs: Vec<(String, EmbeddingConfig)>,
+        configs: Vec<IndexEmbeddingConfig>,
     ) -> heed::Result<()> {
-        self.main.remap_types::<Str, SerdeJson<Vec<(String, EmbeddingConfig)>>>().put(
+        self.main.remap_types::<Str, SerdeJson<Vec<IndexEmbeddingConfig>>>().put(
             wtxn,
             main_key::EMBEDDING_CONFIGS,
             &configs,
@@ -1584,13 +1593,10 @@ impl Index {
         self.main.remap_key_type::<Str>().delete(wtxn, main_key::EMBEDDING_CONFIGS)
     }
 
-    pub fn embedding_configs(
-        &self,
-        rtxn: &RoTxn<'_>,
-    ) -> Result<Vec<(String, crate::vector::EmbeddingConfig)>> {
+    pub fn embedding_configs(&self, rtxn: &RoTxn<'_>) -> Result<Vec<IndexEmbeddingConfig>> {
         Ok(self
             .main
-            .remap_types::<Str, SerdeJson<Vec<(String, EmbeddingConfig)>>>()
+            .remap_types::<Str, SerdeJson<Vec<IndexEmbeddingConfig>>>()
             .get(rtxn, main_key::EMBEDDING_CONFIGS)?
             .unwrap_or_default())
     }
@@ -1604,7 +1610,7 @@ impl Index {
             arroy::Reader::open(rtxn, k, self.vector_arroy)
                 .map(Some)
                 .or_else(|e| match e {
-                    arroy::Error::MissingMetadata => Ok(None),
+                    arroy::Error::MissingMetadata(_) => Ok(None),
                     e => Err(e.into()),
                 })
                 .transpose()
@@ -1637,7 +1643,7 @@ impl Index {
                 let reader = arroy::Reader::open(rtxn, embedder_id | (i as u16), self.vector_arroy)
                     .map(Some)
                     .or_else(|e| match e {
-                        arroy::Error::MissingMetadata => Ok(None),
+                        arroy::Error::MissingMetadata(_) => Ok(None),
                         e => Err(e),
                     })
                     .transpose();
@@ -1662,6 +1668,13 @@ impl Index {
     }
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct IndexEmbeddingConfig {
+    pub name: String,
+    pub config: EmbeddingConfig,
+    pub user_provided: RoaringBitmap,
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use std::collections::HashSet;
@@ -1669,15 +1682,17 @@ pub(crate) mod tests {
 
     use big_s::S;
     use heed::{EnvOpenOptions, RwTxn};
-    use maplit::hashset;
+    use maplit::{btreemap, hashset};
     use tempfile::TempDir;
 
     use crate::documents::DocumentsBatchReader;
     use crate::error::{Error, InternalError};
     use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
     use crate::update::{
-        self, IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings,
+        self, IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Setting,
+        Settings,
     };
+    use crate::vector::settings::{EmbedderSource, EmbeddingSettings};
     use crate::{db_snap, obkv_to_json, Filter, Index, Search, SearchResult};
 
     pub(crate) struct TempIndex {
@@ -2782,5 +2797,96 @@ pub(crate) mod tests {
             0,
         ]
         "###);
+    }
+
+    #[test]
+    fn vectors_are_never_indexed_as_searchable_or_filterable() {
+        let index = TempIndex::new();
+
+        index
+            .add_documents(documents!([
+                { "id": 0, "_vectors": { "doggo": [2345] } },
+                { "id": 1, "_vectors": { "doggo": [6789] } },
+            ]))
+            .unwrap();
+
+        db_snap!(index, fields_ids_map, @r###"
+        0   id               |
+        1   _vectors         |
+        2   _vectors.doggo   |
+        "###);
+        db_snap!(index, searchable_fields, @r###"["id"]"###);
+        db_snap!(index, fieldids_weights_map, @r###"
+        fid weight
+        0   0   |
+        "###);
+
+        let rtxn = index.read_txn().unwrap();
+        let mut search = index.search(&rtxn);
+        let results = search.query("2345").execute().unwrap();
+        assert!(results.candidates.is_empty());
+        drop(rtxn);
+
+        index
+            .update_settings(|settings| {
+                settings.set_searchable_fields(vec![S("_vectors"), S("_vectors.doggo")]);
+                settings.set_filterable_fields(hashset![S("_vectors"), S("_vectors.doggo")]);
+            })
+            .unwrap();
+
+        db_snap!(index, fields_ids_map, @r###"
+        0   id               |
+        1   _vectors         |
+        2   _vectors.doggo   |
+        "###);
+        db_snap!(index, searchable_fields, @"[]");
+        db_snap!(index, fieldids_weights_map, @r###"
+        fid weight
+        "###);
+
+        let rtxn = index.read_txn().unwrap();
+        let mut search = index.search(&rtxn);
+        let results = search.query("2345").execute().unwrap();
+        assert!(results.candidates.is_empty());
+
+        let mut search = index.search(&rtxn);
+        let results = search
+            .filter(Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        assert!(results.candidates.is_empty());
+
+        index
+            .update_settings(|settings| {
+                settings.set_embedder_settings(btreemap! {
+                    S("doggo") => Setting::Set(EmbeddingSettings {
+                        dimensions: Setting::Set(1),
+                        source: Setting::Set(EmbedderSource::UserProvided),
+                        ..EmbeddingSettings::default()}),
+                });
+            })
+            .unwrap();
+
+        db_snap!(index, fields_ids_map, @r###"
+        0   id               |
+        1   _vectors         |
+        2   _vectors.doggo   |
+        "###);
+        db_snap!(index, searchable_fields, @"[]");
+        db_snap!(index, fieldids_weights_map, @r###"
+        fid weight
+        "###);
+
+        let rtxn = index.read_txn().unwrap();
+        let mut search = index.search(&rtxn);
+        let results = search.query("2345").execute().unwrap();
+        assert!(results.candidates.is_empty());
+
+        let mut search = index.search(&rtxn);
+        let results = search
+            .filter(Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        assert!(results.candidates.is_empty());
     }
 }

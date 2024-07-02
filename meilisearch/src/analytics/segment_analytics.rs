@@ -597,6 +597,9 @@ pub struct SearchAggregator {
     // every time a request has a filter, this field must be incremented by one
     sort_total_number_of_criteria: usize,
 
+    // distinct
+    distinct: bool,
+
     // filter
     filter_with_geo_radius: bool,
     filter_with_geo_bounding_box: bool,
@@ -622,6 +625,7 @@ pub struct SearchAggregator {
     // Whether a non-default embedder was specified
     embedder: bool,
     hybrid: bool,
+    retrieve_vectors: bool,
 
     // every time a search is done, we increment the counter linked to the used settings
     matching_strategy: HashMap<String, usize>,
@@ -648,6 +652,7 @@ pub struct SearchAggregator {
     // scoring
     show_ranking_score: bool,
     show_ranking_score_details: bool,
+    ranking_score_threshold: bool,
 }
 
 impl SearchAggregator {
@@ -661,6 +666,7 @@ impl SearchAggregator {
             page,
             hits_per_page,
             attributes_to_retrieve: _,
+            retrieve_vectors,
             attributes_to_crop: _,
             crop_length,
             attributes_to_highlight: _,
@@ -669,6 +675,7 @@ impl SearchAggregator {
             show_ranking_score_details,
             filter,
             sort,
+            distinct,
             facets: _,
             highlight_pre_tag,
             highlight_post_tag,
@@ -676,6 +683,7 @@ impl SearchAggregator {
             matching_strategy,
             attributes_to_search_on,
             hybrid,
+            ranking_score_threshold,
         } = query;
 
         let mut ret = Self::default();
@@ -689,6 +697,8 @@ impl SearchAggregator {
             ret.sort_with_geo_point = sort.iter().any(|s| s.contains("_geoPoint("));
             ret.sort_sum_of_criteria_terms = sort.len();
         }
+
+        ret.distinct = distinct.is_some();
 
         if let Some(ref filter) = filter {
             static RE: Lazy<Regex> = Lazy::new(|| Regex::new("AND | OR").unwrap());
@@ -726,6 +736,7 @@ impl SearchAggregator {
         if let Some(ref vector) = vector {
             ret.max_vector_size = vector.len();
         }
+        ret.retrieve_vectors |= retrieve_vectors;
 
         if query.is_finite_pagination() {
             let limit = hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
@@ -748,6 +759,7 @@ impl SearchAggregator {
 
         ret.show_ranking_score = *show_ranking_score;
         ret.show_ranking_score_details = *show_ranking_score_details;
+        ret.ranking_score_threshold = ranking_score_threshold.is_some();
 
         if let Some(hybrid) = hybrid {
             ret.semantic_ratio = hybrid.semantic_ratio != DEFAULT_SEMANTIC_RATIO();
@@ -792,6 +804,7 @@ impl SearchAggregator {
             sort_with_geo_point,
             sort_sum_of_criteria_terms,
             sort_total_number_of_criteria,
+            distinct,
             filter_with_geo_radius,
             filter_with_geo_bounding_box,
             filter_sum_of_criteria_terms,
@@ -800,6 +813,7 @@ impl SearchAggregator {
             attributes_to_search_on_total_number_of_uses,
             max_terms_number,
             max_vector_size,
+            retrieve_vectors,
             matching_strategy,
             max_limit,
             max_offset,
@@ -821,6 +835,7 @@ impl SearchAggregator {
             hybrid,
             total_degraded,
             total_used_negative_operator,
+            ranking_score_threshold,
         } = other;
 
         if self.timestamp.is_none() {
@@ -847,6 +862,9 @@ impl SearchAggregator {
         self.sort_total_number_of_criteria =
             self.sort_total_number_of_criteria.saturating_add(sort_total_number_of_criteria);
 
+        // distinct
+        self.distinct |= distinct;
+
         // filter
         self.filter_with_geo_radius |= filter_with_geo_radius;
         self.filter_with_geo_bounding_box |= filter_with_geo_bounding_box;
@@ -869,6 +887,7 @@ impl SearchAggregator {
 
         // vector
         self.max_vector_size = self.max_vector_size.max(max_vector_size);
+        self.retrieve_vectors |= retrieve_vectors;
         self.semantic_ratio |= semantic_ratio;
         self.hybrid |= hybrid;
         self.embedder |= embedder;
@@ -904,6 +923,7 @@ impl SearchAggregator {
         // scoring
         self.show_ranking_score |= show_ranking_score;
         self.show_ranking_score_details |= show_ranking_score_details;
+        self.ranking_score_threshold |= ranking_score_threshold;
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
@@ -916,6 +936,7 @@ impl SearchAggregator {
             sort_with_geo_point,
             sort_sum_of_criteria_terms,
             sort_total_number_of_criteria,
+            distinct,
             filter_with_geo_radius,
             filter_with_geo_bounding_box,
             filter_sum_of_criteria_terms,
@@ -924,6 +945,7 @@ impl SearchAggregator {
             attributes_to_search_on_total_number_of_uses,
             max_terms_number,
             max_vector_size,
+            retrieve_vectors,
             matching_strategy,
             max_limit,
             max_offset,
@@ -945,6 +967,7 @@ impl SearchAggregator {
             hybrid,
             total_degraded,
             total_used_negative_operator,
+            ranking_score_threshold,
         } = self;
 
         if total_received == 0 {
@@ -971,6 +994,7 @@ impl SearchAggregator {
                     "with_geoPoint": sort_with_geo_point,
                     "avg_criteria_number": format!("{:.2}", sort_sum_of_criteria_terms as f64 / sort_total_number_of_criteria as f64),
                 },
+                "distinct": distinct,
                 "filter": {
                    "with_geoRadius": filter_with_geo_radius,
                    "with_geoBoundingBox": filter_with_geo_bounding_box,
@@ -985,6 +1009,7 @@ impl SearchAggregator {
                 },
                 "vector": {
                     "max_vector_size": max_vector_size,
+                    "retrieve_vectors": retrieve_vectors,
                 },
                 "hybrid": {
                     "enabled": hybrid,
@@ -1015,6 +1040,7 @@ impl SearchAggregator {
                 "scoring": {
                     "show_ranking_score": show_ranking_score,
                     "show_ranking_score_details": show_ranking_score_details,
+                    "ranking_score_threshold": ranking_score_threshold,
                 },
             });
 
@@ -1072,6 +1098,7 @@ impl MultiSearchAggregator {
                     page: _,
                     hits_per_page: _,
                     attributes_to_retrieve: _,
+                    retrieve_vectors: _,
                     attributes_to_crop: _,
                     crop_length: _,
                     attributes_to_highlight: _,
@@ -1080,6 +1107,7 @@ impl MultiSearchAggregator {
                     show_matches_position: _,
                     filter: _,
                     sort: _,
+                    distinct: _,
                     facets: _,
                     highlight_pre_tag: _,
                     highlight_post_tag: _,
@@ -1087,6 +1115,7 @@ impl MultiSearchAggregator {
                     matching_strategy: _,
                     attributes_to_search_on: _,
                     hybrid: _,
+                    ranking_score_threshold: _,
                 } = query;
 
                 index_uid.as_str()
@@ -1234,6 +1263,7 @@ impl FacetSearchAggregator {
             matching_strategy,
             attributes_to_search_on,
             hybrid,
+            ranking_score_threshold,
         } = query;
 
         let mut ret = Self::default();
@@ -1248,7 +1278,8 @@ impl FacetSearchAggregator {
             || filter.is_some()
             || *matching_strategy != MatchingStrategy::default()
             || attributes_to_search_on.is_some()
-            || hybrid.is_some();
+            || hybrid.is_some()
+            || ranking_score_threshold.is_some();
 
         ret
     }
@@ -1524,6 +1555,9 @@ pub struct DocumentsFetchAggregator {
     // if a filter was used
     per_filter: bool,
 
+    #[serde(rename = "vector.retrieve_vectors")]
+    retrieve_vectors: bool,
+
     // pagination
     #[serde(rename = "pagination.max_limit")]
     max_limit: usize,
@@ -1533,18 +1567,21 @@ pub struct DocumentsFetchAggregator {
 
 impl DocumentsFetchAggregator {
     pub fn from_query(query: &DocumentFetchKind, request: &HttpRequest) -> Self {
-        let (limit, offset) = match query {
-            DocumentFetchKind::PerDocumentId => (1, 0),
-            DocumentFetchKind::Normal { limit, offset, .. } => (*limit, *offset),
+        let (limit, offset, retrieve_vectors) = match query {
+            DocumentFetchKind::PerDocumentId { retrieve_vectors } => (1, 0, *retrieve_vectors),
+            DocumentFetchKind::Normal { limit, offset, retrieve_vectors, .. } => {
+                (*limit, *offset, *retrieve_vectors)
+            }
         };
         Self {
             timestamp: Some(OffsetDateTime::now_utc()),
             user_agents: extract_user_agents(request).into_iter().collect(),
             total_received: 1,
-            per_document_id: matches!(query, DocumentFetchKind::PerDocumentId),
+            per_document_id: matches!(query, DocumentFetchKind::PerDocumentId { .. }),
             per_filter: matches!(query, DocumentFetchKind::Normal { with_filter, .. } if *with_filter),
             max_limit: limit,
             max_offset: offset,
+            retrieve_vectors,
         }
     }
 
@@ -1558,6 +1595,7 @@ impl DocumentsFetchAggregator {
             per_filter,
             max_limit,
             max_offset,
+            retrieve_vectors,
         } = other;
 
         if self.timestamp.is_none() {
@@ -1573,6 +1611,8 @@ impl DocumentsFetchAggregator {
 
         self.max_limit = self.max_limit.max(max_limit);
         self.max_offset = self.max_offset.max(max_offset);
+
+        self.retrieve_vectors |= retrieve_vectors;
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
@@ -1613,6 +1653,7 @@ pub struct SimilarAggregator {
 
     // Whether a non-default embedder was specified
     embedder: bool,
+    retrieve_vectors: bool,
 
     // pagination
     max_limit: usize,
@@ -1624,6 +1665,7 @@ pub struct SimilarAggregator {
     // scoring
     show_ranking_score: bool,
     show_ranking_score_details: bool,
+    ranking_score_threshold: bool,
 }
 
 impl SimilarAggregator {
@@ -1635,9 +1677,11 @@ impl SimilarAggregator {
             offset,
             limit,
             attributes_to_retrieve: _,
+            retrieve_vectors,
             show_ranking_score,
             show_ranking_score_details,
             filter,
+            ranking_score_threshold,
         } = query;
 
         let mut ret = Self::default();
@@ -1675,8 +1719,10 @@ impl SimilarAggregator {
 
         ret.show_ranking_score = *show_ranking_score;
         ret.show_ranking_score_details = *show_ranking_score_details;
+        ret.ranking_score_threshold = ranking_score_threshold.is_some();
 
         ret.embedder = embedder.is_some();
+        ret.retrieve_vectors = *retrieve_vectors;
 
         ret
     }
@@ -1708,6 +1754,8 @@ impl SimilarAggregator {
             show_ranking_score,
             show_ranking_score_details,
             embedder,
+            ranking_score_threshold,
+            retrieve_vectors,
         } = other;
 
         if self.timestamp.is_none() {
@@ -1737,6 +1785,7 @@ impl SimilarAggregator {
         }
 
         self.embedder |= embedder;
+        self.retrieve_vectors |= retrieve_vectors;
 
         // pagination
         self.max_limit = self.max_limit.max(max_limit);
@@ -1749,6 +1798,7 @@ impl SimilarAggregator {
         // scoring
         self.show_ranking_score |= show_ranking_score;
         self.show_ranking_score_details |= show_ranking_score_details;
+        self.ranking_score_threshold |= ranking_score_threshold;
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
@@ -1769,6 +1819,8 @@ impl SimilarAggregator {
             show_ranking_score,
             show_ranking_score_details,
             embedder,
+            ranking_score_threshold,
+            retrieve_vectors,
         } = self;
 
         if total_received == 0 {
@@ -1795,6 +1847,9 @@ impl SimilarAggregator {
                    "avg_criteria_number": format!("{:.2}", filter_sum_of_criteria_terms as f64 / filter_total_number_of_criteria as f64),
                    "most_used_syntax": used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
                 },
+                "vector": {
+                    "retrieve_vectors": retrieve_vectors,
+                },
                 "hybrid": {
                     "embedder": embedder,
                 },
@@ -1808,6 +1863,7 @@ impl SimilarAggregator {
                 "scoring": {
                     "show_ranking_score": show_ranking_score,
                     "show_ranking_score_details": show_ranking_score_details,
+                    "ranking_score_threshold": ranking_score_threshold,
                 },
             });
 

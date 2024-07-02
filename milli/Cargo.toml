@@ -17,7 +17,7 @@ bincode = "1.3.3"
 bstr = "1.9.0"
 bytemuck = { version = "1.14.0", features = ["extern_crate_alloc"] }
 byteorder = "1.5.0"
-charabia = { version = "0.8.10", default-features = false }
+charabia = { version = "0.8.11", default-features = false }
 concat-arrays = "0.1.2"
 crossbeam-channel = "0.5.11"
 deserr = "0.6.1"
@@ -44,7 +44,7 @@ once_cell = "1.19.0"
 ordered-float = "4.2.0"
 rand_pcg = { version = "0.3.1", features = ["serde1"] }
 rayon = "1.8.0"
-roaring = "0.10.2"
+roaring = { version = "0.10.2", features = ["serde"] }
 rstar = { version = "0.11.0", features = ["serde"] }
 serde = { version = "1.0.195", features = ["derive"] }
 serde_json = { version = "1.0.111", features = ["preserve_order"] }
@@ -79,7 +79,7 @@ hf-hub = { git = "https://github.com/dureuill/hf-hub.git", branch = "rust_tls", 
 ] }
 tiktoken-rs = "0.5.8"
 liquid = "0.26.4"
-arroy = "0.3.1"
+arroy = "0.4.0"
 rand = "0.8.5"
 tracing = "0.1.40"
 ureq = { version = "2.9.7", features = ["json"] }

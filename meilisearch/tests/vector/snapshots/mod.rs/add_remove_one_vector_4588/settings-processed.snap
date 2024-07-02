@@ -1,0 +1,23 @@
+---
+source: meilisearch/tests/vector/mod.rs
+---
+{
+  "uid": 0,
+  "indexUid": "doggo",
+  "status": "succeeded",
+  "type": "settingsUpdate",
+  "canceledBy": null,
+  "details": {
+    "embedders": {
+      "manual": {
+        "source": "userProvided",
+        "dimensions": 3
+      }
+    }
+  },
+  "error": null,
+  "duration": "[duration]",
+  "enqueuedAt": "[date]",
+  "startedAt": "[date]",
+  "finishedAt": "[date]"
+}

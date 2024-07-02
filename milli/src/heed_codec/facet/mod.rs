@@ -47,6 +47,12 @@ pub struct FacetGroupValue {
     pub bitmap: RoaringBitmap,
 }
 
+#[derive(Debug)]
+pub struct FacetGroupLazyValue<'b> {
+    pub size: u8,
+    pub bitmap_bytes: &'b [u8],
+}
+
 pub struct FacetGroupKeyCodec<T> {
     _phantom: PhantomData<T>,
 }
@@ -69,6 +75,7 @@ where
         Ok(Cow::Owned(v))
     }
 }
+
 impl<'a, T> heed::BytesDecode<'a> for FacetGroupKeyCodec<T>
 where
     T: BytesDecode<'a>,
@@ -84,6 +91,7 @@ where
 }
 
 pub struct FacetGroupValueCodec;
+
 impl<'a> heed::BytesEncode<'a> for FacetGroupValueCodec {
     type EItem = FacetGroupValue;
 
@@ -93,11 +101,23 @@ impl<'a> heed::BytesEncode<'a> for FacetGroupValueCodec {
         Ok(Cow::Owned(v))
     }
 }
+
 impl<'a> heed::BytesDecode<'a> for FacetGroupValueCodec {
     type DItem = FacetGroupValue;
+
     fn bytes_decode(bytes: &'a [u8]) -> Result<Self::DItem, BoxedError> {
         let size = bytes[0];
         let bitmap = CboRoaringBitmapCodec::deserialize_from(&bytes[1..])?;
         Ok(FacetGroupValue { size, bitmap })
+    }
+}
+
+pub struct FacetGroupLazyValueCodec;
+
+impl<'a> heed::BytesDecode<'a> for FacetGroupLazyValueCodec {
+    type DItem = FacetGroupLazyValue<'a>;
+
+    fn bytes_decode(bytes: &'a [u8]) -> Result<Self::DItem, BoxedError> {
+        Ok(FacetGroupLazyValue { size: bytes[0], bitmap_bytes: &bytes[1..] })
     }
 }

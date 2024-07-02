@@ -222,6 +222,7 @@ InvalidApiKeyUid                      , InvalidRequest       , BAD_REQUEST ;
 InvalidContentType                    , InvalidRequest       , UNSUPPORTED_MEDIA_TYPE ;
 InvalidDocumentCsvDelimiter           , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentFields                 , InvalidRequest       , BAD_REQUEST ;
+InvalidDocumentRetrieveVectors        , InvalidRequest       , BAD_REQUEST ;
 MissingDocumentFilter                 , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentFilter                 , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentGeoField               , InvalidRequest       , BAD_REQUEST ;
@@ -240,7 +241,11 @@ InvalidSearchAttributesToSearchOn     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToCrop         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToHighlight    , InvalidRequest       , BAD_REQUEST ;
 InvalidSimilarAttributesToRetrieve    , InvalidRequest       , BAD_REQUEST ;
+InvalidSimilarRetrieveVectors         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToRetrieve     , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchRankingScoreThreshold    , InvalidRequest       , BAD_REQUEST ;
+InvalidSimilarRankingScoreThreshold   , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchRetrieveVectors          , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchCropLength               , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchCropMarker               , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchFacets                   , InvalidRequest       , BAD_REQUEST ;
@@ -268,13 +273,14 @@ InvalidSimilarShowRankingScore        , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowRankingScoreDetails  , InvalidRequest       , BAD_REQUEST ;
 InvalidSimilarShowRankingScoreDetails , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchSort                     , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchDistinct                 , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDisplayedAttributes    , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDistinctAttribute      , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsProximityPrecision     , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFaceting               , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFilterableAttributes   , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsPagination             , InvalidRequest       , BAD_REQUEST ;
-InvalidSettingsSearchCutoffMs           , InvalidRequest       , BAD_REQUEST ;
+InvalidSettingsSearchCutoffMs         , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsEmbedders              , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsRankingRules           , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsSearchableAttributes   , InvalidRequest       , BAD_REQUEST ;
@@ -379,6 +385,7 @@ impl ErrorCode for milli::Error {
                         Code::IndexPrimaryKeyMultipleCandidatesFound
                     }
                     UserError::PrimaryKeyCannotBeChanged(_) => Code::IndexPrimaryKeyAlreadyExists,
+                    UserError::InvalidDistinctAttribute { .. } => Code::InvalidSearchDistinct,
                     UserError::SortRankingRuleMissing => Code::InvalidSearchSort,
                     UserError::InvalidFacetsDistribution { .. } => Code::InvalidSearchFacets,
                     UserError::InvalidSortableAttribute { .. } => Code::InvalidSearchSort,
@@ -391,7 +398,8 @@ impl ErrorCode for milli::Error {
                     UserError::CriterionError(_) => Code::InvalidSettingsRankingRules,
                     UserError::InvalidGeoField { .. } => Code::InvalidDocumentGeoField,
                     UserError::InvalidVectorDimensions { .. } => Code::InvalidVectorDimensions,
-                    UserError::InvalidVectorsMapType { .. } => Code::InvalidVectorsType,
+                    UserError::InvalidVectorsMapType { .. }
+                    | UserError::InvalidVectorsEmbedderConf { .. } => Code::InvalidVectorsType,
                     UserError::TooManyVectors(_, _) => Code::TooManyVectors,
                     UserError::SortError(_) => Code::InvalidSearchSort,
                     UserError::InvalidMinTypoWordLenSetting(_, _) => {
@@ -502,6 +510,21 @@ impl fmt::Display for deserr_codes::InvalidSimilarId {
             A document identifier can be of type integer or string, \
             only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."
         )
+    }
+}
+
+impl fmt::Display for deserr_codes::InvalidSearchRankingScoreThreshold {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "the value of `rankingScoreThreshold` is invalid, expected a float between `0.0` and `1.0`."
+        )
+    }
+}
+
+impl fmt::Display for deserr_codes::InvalidSimilarRankingScoreThreshold {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        deserr_codes::InvalidSearchRankingScoreThreshold.fmt(f)
     }
 }
 

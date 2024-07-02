@@ -7,7 +7,7 @@ use roaring::RoaringBitmap;
 pub use self::facet_distribution::{FacetDistribution, OrderBy, DEFAULT_VALUES_PER_FACET};
 pub use self::filter::{BadGeoError, Filter};
 pub use self::search::{FacetValueHit, SearchForFacetValues};
-use crate::heed_codec::facet::{FacetGroupKeyCodec, FacetGroupValueCodec, OrderedF64Codec};
+use crate::heed_codec::facet::{FacetGroupKeyCodec, OrderedF64Codec};
 use crate::heed_codec::BytesRefCodec;
 use crate::{Index, Result};
 
@@ -54,9 +54,9 @@ pub fn facet_max_value<'t>(
 }
 
 /// Get the first facet value in the facet database
-pub(crate) fn get_first_facet_value<'t, BoundCodec>(
+pub(crate) fn get_first_facet_value<'t, BoundCodec, DC>(
     txn: &'t RoTxn,
-    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, DC>,
     field_id: u16,
 ) -> heed::Result<Option<BoundCodec::DItem>>
 where
@@ -78,9 +78,9 @@ where
 }
 
 /// Get the last facet value in the facet database
-pub(crate) fn get_last_facet_value<'t, BoundCodec>(
+pub(crate) fn get_last_facet_value<'t, BoundCodec, DC>(
     txn: &'t RoTxn,
-    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, DC>,
     field_id: u16,
 ) -> heed::Result<Option<BoundCodec::DItem>>
 where
@@ -102,9 +102,9 @@ where
 }
 
 /// Get the height of the highest level in the facet database
-pub(crate) fn get_highest_level<'t>(
+pub(crate) fn get_highest_level<'t, DC>(
     txn: &'t RoTxn<'t>,
-    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, DC>,
     field_id: u16,
 ) -> heed::Result<u8> {
     let field_id_prefix = &field_id.to_be_bytes();

@@ -119,6 +119,8 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     InvalidVectorDimensions { expected: usize, found: usize },
     #[error("The `_vectors` field in the document with id: `{document_id}` is not an object. Was expecting an object with a key for each embedder with manually provided vectors, but instead got `{value}`")]
     InvalidVectorsMapType { document_id: String, value: Value },
+    #[error("Bad embedder configuration in the document with id: `{document_id}`. {error}")]
+    InvalidVectorsEmbedderConf { document_id: String, error: deserr::errors::JsonError },
     #[error("{0}")]
     InvalidFilter(String),
     #[error("Invalid type for filter subexpression: expected: {}, found: {1}.", .0.join(", "))]
@@ -134,6 +136,17 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
         }
     )]
     InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String>, hidden_fields: bool },
+    #[error("Attribute `{}` is not filterable and thus, cannot be used as distinct attribute. {}",
+        .field,
+        match .valid_fields.is_empty() {
+            true => "This index does not have configured filterable attributes.".to_string(),
+            false => format!("Available filterable attributes are: `{}{}`.",
+                    valid_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
+                    .hidden_fields.then_some(", <..hidden-attributes>").unwrap_or(""),
+                ),
+        }
+    )]
+    InvalidDistinctAttribute { field: String, valid_fields: BTreeSet<String>, hidden_fields: bool },
     #[error("Attribute `{}` is not facet-searchable. {}",
         .field,
         match .valid_fields.is_empty() {
@@ -270,8 +283,9 @@ impl From<arroy::Error> for Error {
             arroy::Error::DatabaseFull
             | arroy::Error::InvalidItemAppend
             | arroy::Error::UnmatchingDistance { .. }
-            | arroy::Error::MissingNode
-            | arroy::Error::MissingMetadata => {
+            | arroy::Error::NeedBuild(_)
+            | arroy::Error::MissingKey { .. }
+            | arroy::Error::MissingMetadata(_) => {
                 Error::InternalError(InternalError::ArroyError(value))
             }
         }

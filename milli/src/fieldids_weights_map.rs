@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME;
 use crate::{FieldId, FieldsIdsMap, Weight};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -23,7 +24,13 @@ impl FieldidsWeightsMap {
     /// Should only be called in the case there are NO searchable attributes.
     /// All the fields will be inserted in the order of the fields ids map with a weight of 0.
     pub fn from_field_id_map_without_searchable(fid_map: &FieldsIdsMap) -> Self {
-        FieldidsWeightsMap { map: fid_map.ids().map(|fid| (fid, 0)).collect() }
+        FieldidsWeightsMap {
+            map: fid_map
+                .iter()
+                .filter(|(_fid, name)| !crate::is_faceted_by(name, RESERVED_VECTORS_FIELD_NAME))
+                .map(|(fid, _name)| (fid, 0))
+                .collect(),
+        }
     }
 
     /// Removes a field id from the map, returning the associated weight previously in the map.

@@ -41,6 +41,16 @@ impl FieldsIdsMap {
         }
     }
 
+    /// Get the ids of a field and all its nested fields based on its name.
+    pub fn nested_ids(&self, name: &str) -> Vec<FieldId> {
+        self.names_ids
+            .range(name.to_string()..)
+            .take_while(|(key, _)| key.starts_with(name))
+            .filter(|(key, _)| crate::is_faceted_by(key, name))
+            .map(|(_name, id)| *id)
+            .collect()
+    }
+
     /// Get the id of a field based on its name.
     pub fn id(&self, name: &str) -> Option<FieldId> {
         self.names_ids.get(name).copied()
@@ -125,5 +135,33 @@ mod tests {
         assert_eq!(iter.next(), Some((2, "description")));
         assert_eq!(iter.next(), Some((3, "title")));
         assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn nested_fields() {
+        let mut map = FieldsIdsMap::new();
+
+        assert_eq!(map.insert("id"), Some(0));
+        assert_eq!(map.insert("doggo"), Some(1));
+        assert_eq!(map.insert("doggo.name"), Some(2));
+        assert_eq!(map.insert("doggolution"), Some(3));
+        assert_eq!(map.insert("doggo.breed.name"), Some(4));
+        assert_eq!(map.insert("description"), Some(5));
+
+        insta::assert_debug_snapshot!(map.nested_ids("doggo"), @r###"
+        [
+            1,
+            4,
+            2,
+        ]
+        "###);
+
+        insta::assert_debug_snapshot!(map.nested_ids("doggo.breed"), @r###"
+        [
+            4,
+        ]
+        "###);
+
+        insta::assert_debug_snapshot!(map.nested_ids("_vector"), @"[]");
     }
 }

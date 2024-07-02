@@ -6,7 +6,7 @@ pub mod service;
 use std::fmt::{self, Display};
 
 #[allow(unused)]
-pub use index::{GetAllDocumentsOptions, GetDocumentOptions};
+pub use index::GetAllDocumentsOptions;
 use meili_snap::json_string;
 use serde::{Deserialize, Serialize};
 #[allow(unused)]
@@ -71,7 +71,7 @@ impl Display for Value {
         write!(
             f,
             "{}",
-            json_string!(self, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" })
+            json_string!(self, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]", ".processingTimeMs" => "[duration]" })
         )
     }
 }

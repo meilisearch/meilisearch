@@ -48,6 +48,31 @@ static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     ])
 });
 
+static SCORE_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+    json!([
+        {
+            "title": "Batman the dark knight returns: Part 1",
+            "id": "A",
+        },
+        {
+            "title": "Batman the dark knight returns: Part 2",
+            "id": "B",
+        },
+        {
+            "title": "Batman Returns",
+            "id": "C",
+        },
+        {
+            "title": "Batman",
+            "id": "D",
+        },
+        {
+            "title": "Badman",
+            "id": "E",
+        }
+    ])
+});
+
 static NESTED_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     json!([
         {
@@ -276,7 +301,7 @@ async fn negative_special_cases_search() {
     index.add_documents(documents, None).await;
     index.wait_task(0).await;
 
-    index.update_settings(json!({"synonyms": { "escape": ["glass"] }})).await;
+    index.update_settings(json!({"synonyms": { "escape": ["gläss"] }})).await;
     index.wait_task(1).await;
 
     // There is a synonym for escape -> glass but we don't want "escape", only the derivates: glass
@@ -961,6 +986,213 @@ async fn test_score_details() {
 }
 
 #[actix_rt::test]
+async fn test_score() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = SCORE_DOCUMENTS.clone();
+
+    let res = index.add_documents(json!(documents), None).await;
+    index.wait_task(res.0.uid()).await;
+
+    index
+        .search(
+            json!({
+                "q": "Badman the dark knight returns 1",
+                "showRankingScore": true,
+            }),
+            |response, code| {
+                meili_snap::snapshot!(code, @"200 OK");
+                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "Batman the dark knight returns: Part 1",
+                    "id": "A",
+                    "_rankingScore": 0.9746605609456898
+                  },
+                  {
+                    "title": "Batman the dark knight returns: Part 2",
+                    "id": "B",
+                    "_rankingScore": 0.8055252965383685
+                  },
+                  {
+                    "title": "Badman",
+                    "id": "E",
+                    "_rankingScore": 0.16666666666666666
+                  },
+                  {
+                    "title": "Batman Returns",
+                    "id": "C",
+                    "_rankingScore": 0.07702020202020202
+                  },
+                  {
+                    "title": "Batman",
+                    "id": "D",
+                    "_rankingScore": 0.07702020202020202
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
+async fn test_score_threshold() {
+    let query = "Badman dark returns 1";
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = SCORE_DOCUMENTS.clone();
+
+    let res = index.add_documents(json!(documents), None).await;
+    index.wait_task(res.0.uid()).await;
+
+    index
+        .search(
+            json!({
+                "q": query,
+                "showRankingScore": true,
+                "rankingScoreThreshold": 0.0
+            }),
+            |response, code| {
+                meili_snap::snapshot!(code, @"200 OK");
+                meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @"5");
+                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "Batman the dark knight returns: Part 1",
+                    "id": "A",
+                    "_rankingScore": 0.93430081300813
+                  },
+                  {
+                    "title": "Batman the dark knight returns: Part 2",
+                    "id": "B",
+                    "_rankingScore": 0.6685627880184332
+                  },
+                  {
+                    "title": "Badman",
+                    "id": "E",
+                    "_rankingScore": 0.25
+                  },
+                  {
+                    "title": "Batman Returns",
+                    "id": "C",
+                    "_rankingScore": 0.11553030303030302
+                  },
+                  {
+                    "title": "Batman",
+                    "id": "D",
+                    "_rankingScore": 0.11553030303030302
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+
+    index
+        .search(
+            json!({
+                "q": query,
+                "showRankingScore": true,
+                "rankingScoreThreshold": 0.2
+            }),
+            |response, code| {
+                meili_snap::snapshot!(code, @"200 OK");
+                meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @r###"3"###);
+                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "Batman the dark knight returns: Part 1",
+                    "id": "A",
+                    "_rankingScore": 0.93430081300813
+                  },
+                  {
+                    "title": "Batman the dark knight returns: Part 2",
+                    "id": "B",
+                    "_rankingScore": 0.6685627880184332
+                  },
+                  {
+                    "title": "Badman",
+                    "id": "E",
+                    "_rankingScore": 0.25
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+
+    index
+        .search(
+            json!({
+                "q": query,
+                "showRankingScore": true,
+                "rankingScoreThreshold": 0.5
+            }),
+            |response, code| {
+                meili_snap::snapshot!(code, @"200 OK");
+                meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @r###"2"###);
+                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "Batman the dark knight returns: Part 1",
+                    "id": "A",
+                    "_rankingScore": 0.93430081300813
+                  },
+                  {
+                    "title": "Batman the dark knight returns: Part 2",
+                    "id": "B",
+                    "_rankingScore": 0.6685627880184332
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+
+    index
+        .search(
+            json!({
+                "q": query,
+                "showRankingScore": true,
+                "rankingScoreThreshold": 0.8
+            }),
+            |response, code| {
+                meili_snap::snapshot!(code, @"200 OK");
+                meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @r###"1"###);
+                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "Batman the dark knight returns: Part 1",
+                    "id": "A",
+                    "_rankingScore": 0.93430081300813
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+
+    index
+        .search(
+            json!({
+                "q": query,
+                "showRankingScore": true,
+                "rankingScoreThreshold": 1.0
+            }),
+            |response, code| {
+                meili_snap::snapshot!(code, @"200 OK");
+                meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @r###"0"###);
+                // nobody is perfect
+                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @"[]");
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
 async fn test_degraded_score_details() {
     let server = Server::new().await;
     let index = server.index("test");
@@ -1058,21 +1290,38 @@ async fn experimental_feature_vector_store() {
     index.add_documents(json!(documents), None).await;
     index.wait_task(0).await;
 
-    let (response, code) = index
-        .search_post(json!({
+    index
+        .search(json!({
             "vector": [1.0, 2.0, 3.0],
             "showRankingScore": true
-        }))
+        }), |response, code|{
+            meili_snap::snapshot!(code, @"400 Bad Request");
+            meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+            {
+              "message": "Passing `vector` as a parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
+              "code": "feature_not_enabled",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+            }
+            "###);
+        })
         .await;
-    meili_snap::snapshot!(code, @"400 Bad Request");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "message": "Passing `vector` as a query parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
-      "code": "feature_not_enabled",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
-    }
-    "###);
+    index
+        .search(json!({
+            "retrieveVectors": true,
+            "showRankingScore": true
+        }), |response, code|{
+            meili_snap::snapshot!(code, @"400 Bad Request");
+            meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+            {
+              "message": "Passing `retrieveVectors` as a parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
+              "code": "feature_not_enabled",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+            }
+            "###);
+        })
+        .await;
 
     let (response, code) = server.set_features(json!({"vectorStore": true})).await;
     meili_snap::snapshot!(code, @"200 OK");
@@ -1105,6 +1354,7 @@ async fn experimental_feature_vector_store() {
         .search_post(json!({
             "vector": [1.0, 2.0, 3.0],
             "showRankingScore": true,
+            "retrieveVectors": true,
         }))
         .await;
 
@@ -1116,11 +1366,16 @@ async fn experimental_feature_vector_store() {
         "title": "Shazam!",
         "id": "287947",
         "_vectors": {
-          "manual": [
-            1.0,
-            2.0,
-            3.0
-          ]
+          "manual": {
+            "embeddings": [
+              [
+                1.0,
+                2.0,
+                3.0
+              ]
+            ],
+            "regenerate": false
+          }
         },
         "_rankingScore": 1.0
       },
@@ -1128,11 +1383,16 @@ async fn experimental_feature_vector_store() {
         "title": "Captain Marvel",
         "id": "299537",
         "_vectors": {
-          "manual": [
-            1.0,
-            2.0,
-            54.0
-          ]
+          "manual": {
+            "embeddings": [
+              [
+                1.0,
+                2.0,
+                54.0
+              ]
+            ],
+            "regenerate": false
+          }
         },
         "_rankingScore": 0.9129111766815186
       },
@@ -1140,11 +1400,16 @@ async fn experimental_feature_vector_store() {
         "title": "Gläss",
         "id": "450465",
         "_vectors": {
-          "manual": [
-            -100.0,
-            340.0,
-            90.0
-          ]
+          "manual": {
+            "embeddings": [
+              [
+                -100.0,
+                340.0,
+                90.0
+              ]
+            ],
+            "regenerate": false
+          }
         },
         "_rankingScore": 0.8106412887573242
       },
@@ -1152,11 +1417,16 @@ async fn experimental_feature_vector_store() {
         "title": "How to Train Your Dragon: The Hidden World",
         "id": "166428",
         "_vectors": {
-          "manual": [
-            -100.0,
-            231.0,
-            32.0
-          ]
+          "manual": {
+            "embeddings": [
+              [
+                -100.0,
+                231.0,
+                32.0
+              ]
+            ],
+            "regenerate": false
+          }
         },
         "_rankingScore": 0.7412010431289673
       },
@@ -1164,11 +1434,16 @@ async fn experimental_feature_vector_store() {
         "title": "Escape Room",
         "id": "522681",
         "_vectors": {
-          "manual": [
-            10.0,
-            -23.0,
-            32.0
-          ]
+          "manual": {
+            "embeddings": [
+              [
+                10.0,
+                -23.0,
+                32.0
+              ]
+            ],
+            "regenerate": false
+          }
         },
         "_rankingScore": 0.6972063183784485
       }

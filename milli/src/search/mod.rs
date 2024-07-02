@@ -11,8 +11,8 @@ use self::new::{execute_vector_search, PartialSearchResult};
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::vector::Embedder;
 use crate::{
-    execute_search, filtered_universe, AscDesc, DefaultSearchLogger, DocumentId, Index, Result,
-    SearchContext, TimeBudget,
+    execute_search, filtered_universe, AscDesc, DefaultSearchLogger, DocumentId, Error, Index,
+    Result, SearchContext, TimeBudget, UserError,
 };
 
 // Building these factories is not free.
@@ -40,6 +40,7 @@ pub struct Search<'a> {
     offset: usize,
     limit: usize,
     sort_criteria: Option<Vec<AscDesc>>,
+    distinct: Option<String>,
     searchable_attributes: Option<&'a [String]>,
     geo_strategy: new::GeoSortStrategy,
     terms_matching_strategy: TermsMatchingStrategy,
@@ -50,6 +51,7 @@ pub struct Search<'a> {
     index: &'a Index,
     semantic: Option<SemanticSearch>,
     time_budget: TimeBudget,
+    ranking_score_threshold: Option<f64>,
 }
 
 impl<'a> Search<'a> {
@@ -60,6 +62,7 @@ impl<'a> Search<'a> {
             offset: 0,
             limit: 20,
             sort_criteria: None,
+            distinct: None,
             searchable_attributes: None,
             geo_strategy: new::GeoSortStrategy::default(),
             terms_matching_strategy: TermsMatchingStrategy::default(),
@@ -70,6 +73,7 @@ impl<'a> Search<'a> {
             index,
             semantic: None,
             time_budget: TimeBudget::max(),
+            ranking_score_threshold: None,
         }
     }
 
@@ -100,6 +104,11 @@ impl<'a> Search<'a> {
 
     pub fn sort_criteria(&mut self, criteria: Vec<AscDesc>) -> &mut Search<'a> {
         self.sort_criteria = Some(criteria);
+        self
+    }
+
+    pub fn distinct(&mut self, distinct: String) -> &mut Search<'a> {
+        self.distinct = Some(distinct);
         self
     }
 
@@ -146,6 +155,11 @@ impl<'a> Search<'a> {
         self
     }
 
+    pub fn ranking_score_threshold(&mut self, ranking_score_threshold: f64) -> &mut Search<'a> {
+        self.ranking_score_threshold = Some(ranking_score_threshold);
+        self
+    }
+
     pub fn execute_for_candidates(&self, has_vector_search: bool) -> Result<RoaringBitmap> {
         if has_vector_search {
             let ctx = SearchContext::new(self.index, self.rtxn)?;
@@ -160,6 +174,19 @@ impl<'a> Search<'a> {
 
         if let Some(searchable_attributes) = self.searchable_attributes {
             ctx.attributes_to_search_on(searchable_attributes)?;
+        }
+
+        if let Some(distinct) = &self.distinct {
+            let filterable_fields = ctx.index.filterable_fields(ctx.txn)?;
+            if !crate::is_faceted(distinct, &filterable_fields) {
+                let (valid_fields, hidden_fields) =
+                    ctx.index.remove_hidden_fields(ctx.txn, filterable_fields)?;
+                return Err(Error::UserError(UserError::InvalidDistinctAttribute {
+                    field: distinct.clone(),
+                    valid_fields,
+                    hidden_fields,
+                }));
+            }
         }
 
         let universe = filtered_universe(ctx.index, ctx.txn, &self.filter)?;
@@ -178,12 +205,14 @@ impl<'a> Search<'a> {
                     self.scoring_strategy,
                     universe,
                     &self.sort_criteria,
+                    &self.distinct,
                     self.geo_strategy,
                     self.offset,
                     self.limit,
                     embedder_name,
                     embedder,
                     self.time_budget.clone(),
+                    self.ranking_score_threshold,
                 )?
             }
             _ => execute_search(
@@ -194,6 +223,7 @@ impl<'a> Search<'a> {
                 self.exhaustive_number_hits,
                 universe,
                 &self.sort_criteria,
+                &self.distinct,
                 self.geo_strategy,
                 self.offset,
                 self.limit,
@@ -201,6 +231,7 @@ impl<'a> Search<'a> {
                 &mut DefaultSearchLogger,
                 &mut DefaultSearchLogger,
                 self.time_budget.clone(),
+                self.ranking_score_threshold,
             )?,
         };
 
@@ -229,6 +260,7 @@ impl fmt::Debug for Search<'_> {
             offset,
             limit,
             sort_criteria,
+            distinct,
             searchable_attributes,
             geo_strategy: _,
             terms_matching_strategy,
@@ -239,6 +271,7 @@ impl fmt::Debug for Search<'_> {
             index: _,
             semantic,
             time_budget,
+            ranking_score_threshold,
         } = self;
         f.debug_struct("Search")
             .field("query", query)
@@ -247,6 +280,7 @@ impl fmt::Debug for Search<'_> {
             .field("offset", offset)
             .field("limit", limit)
             .field("sort_criteria", sort_criteria)
+            .field("distinct", distinct)
             .field("searchable_attributes", searchable_attributes)
             .field("terms_matching_strategy", terms_matching_strategy)
             .field("scoring_strategy", scoring_strategy)
@@ -257,6 +291,7 @@ impl fmt::Debug for Search<'_> {
                 &semantic.as_ref().map(|semantic| &semantic.embedder_name),
             )
             .field("time_budget", time_budget)
+            .field("ranking_score_threshold", ranking_score_threshold)
             .finish()
     }
 }

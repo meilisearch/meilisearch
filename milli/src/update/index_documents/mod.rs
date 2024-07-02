@@ -286,6 +286,7 @@ where
         settings_diff.new.recompute_searchables(self.wtxn, self.index)?;
 
         let settings_diff = Arc::new(settings_diff);
+        let embedders_configs = Arc::new(self.index.embedding_configs(self.wtxn)?);
 
         let backup_pool;
         let pool = match self.indexer_config.thread_pool {
@@ -399,6 +400,7 @@ where
                         pool_params,
                         lmdb_writer_sx.clone(),
                         primary_key_id,
+                        embedders_configs.clone(),
                         settings_diff_cloned,
                         max_positions_per_attributes,
                     )
@@ -501,6 +503,8 @@ where
                                 embeddings,
                                 manual_vectors,
                                 embedder_name,
+                                add_to_user_provided,
+                                remove_from_user_provided,
                             } => {
                                 dimension.insert(embedder_name.clone(), expected_dimension);
                                 TypedChunk::VectorPoints {
@@ -509,6 +513,8 @@ where
                                     expected_dimension,
                                     manual_vectors,
                                     embedder_name,
+                                    add_to_user_provided,
+                                    remove_from_user_provided,
                                 }
                             }
                             otherwise => otherwise,
@@ -541,10 +547,11 @@ where
             pool.install(|| {
                 for k in crate::vector::arroy_db_range_for_embedder(embedder_index) {
                     let writer = arroy::Writer::new(vector_arroy, k, dimension);
-                    if writer.is_empty(wtxn)? {
+                    if writer.need_build(wtxn)? {
+                        writer.build(wtxn, &mut rng, None)?;
+                    } else if writer.is_empty(wtxn)? {
                         break;
                     }
-                    writer.build(wtxn, &mut rng, None)?;
                 }
                 Result::Ok(())
             })
@@ -781,6 +788,7 @@ mod tests {
     use super::*;
     use crate::documents::documents_batch_reader_from_objects;
     use crate::index::tests::TempIndex;
+    use crate::index::IndexEmbeddingConfig;
     use crate::search::TermsMatchingStrategy;
     use crate::update::Setting;
     use crate::{db_snap, Filter, Search};
@@ -2616,10 +2624,12 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
         let mut embedding_configs = index.embedding_configs(&rtxn).unwrap();
-        let (embedder_name, embedder) = embedding_configs.pop().unwrap();
+        let IndexEmbeddingConfig { name: embedder_name, config: embedder, user_provided } =
+            embedding_configs.pop().unwrap();
+        insta::assert_snapshot!(embedder_name, @"manual");
+        insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[0, 1, 2]>");
         let embedder =
             std::sync::Arc::new(crate::vector::Embedder::new(embedder.embedder_options).unwrap());
-        assert_eq!("manual", embedder_name);
         let res = index
             .search(&rtxn)
             .semantic(embedder_name, embedder, Some([0.0, 1.0, 2.0].to_vec()))

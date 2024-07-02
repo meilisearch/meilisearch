@@ -4,7 +4,7 @@ use meili_snap::*;
 use urlencoding::encode as urlencode;
 
 use crate::common::encoder::Encoder;
-use crate::common::{GetAllDocumentsOptions, GetDocumentOptions, Server, Value};
+use crate::common::{GetAllDocumentsOptions, Server, Value};
 use crate::json;
 
 // TODO: partial test since we are testing error, amd error is not yet fully implemented in
@@ -59,8 +59,7 @@ async fn get_document() {
         })
     );
 
-    let (response, code) =
-        index.get_document(0, Some(GetDocumentOptions { fields: Some(vec!["id"]) })).await;
+    let (response, code) = index.get_document(0, Some(json!({ "fields": ["id"] }))).await;
     assert_eq!(code, 200);
     assert_eq!(
         response,
@@ -69,9 +68,8 @@ async fn get_document() {
         })
     );
 
-    let (response, code) = index
-        .get_document(0, Some(GetDocumentOptions { fields: Some(vec!["nested.content"]) }))
-        .await;
+    let (response, code) =
+        index.get_document(0, Some(json!({ "fields": ["nested.content"] }))).await;
     assert_eq!(code, 200);
     assert_eq!(
         response,
@@ -211,7 +209,7 @@ async fn test_get_all_documents_attributes_to_retrieve() {
 
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions {
-            attributes_to_retrieve: Some(vec!["name"]),
+            fields: Some(vec!["name"]),
             ..Default::default()
         })
         .await;
@@ -225,9 +223,19 @@ async fn test_get_all_documents_attributes_to_retrieve() {
     assert_eq!(response["limit"], json!(20));
     assert_eq!(response["total"], json!(77));
 
+    let (response, code) = index.get_all_documents_raw("?fields=").await;
+    assert_eq!(code, 200);
+    assert_eq!(response["results"].as_array().unwrap().len(), 20);
+    for results in response["results"].as_array().unwrap() {
+        assert_eq!(results.as_object().unwrap().keys().count(), 0);
+    }
+    assert_eq!(response["offset"], json!(0));
+    assert_eq!(response["limit"], json!(20));
+    assert_eq!(response["total"], json!(77));
+
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions {
-            attributes_to_retrieve: Some(vec![]),
+            fields: Some(vec!["wrong"]),
             ..Default::default()
         })
         .await;
@@ -242,22 +250,7 @@ async fn test_get_all_documents_attributes_to_retrieve() {
 
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions {
-            attributes_to_retrieve: Some(vec!["wrong"]),
-            ..Default::default()
-        })
-        .await;
-    assert_eq!(code, 200);
-    assert_eq!(response["results"].as_array().unwrap().len(), 20);
-    for results in response["results"].as_array().unwrap() {
-        assert_eq!(results.as_object().unwrap().keys().count(), 0);
-    }
-    assert_eq!(response["offset"], json!(0));
-    assert_eq!(response["limit"], json!(20));
-    assert_eq!(response["total"], json!(77));
-
-    let (response, code) = index
-        .get_all_documents(GetAllDocumentsOptions {
-            attributes_to_retrieve: Some(vec!["name", "tags"]),
+            fields: Some(vec!["name", "tags"]),
             ..Default::default()
         })
         .await;
@@ -270,10 +263,7 @@ async fn test_get_all_documents_attributes_to_retrieve() {
     }
 
     let (response, code) = index
-        .get_all_documents(GetAllDocumentsOptions {
-            attributes_to_retrieve: Some(vec!["*"]),
-            ..Default::default()
-        })
+        .get_all_documents(GetAllDocumentsOptions { fields: Some(vec!["*"]), ..Default::default() })
         .await;
     assert_eq!(code, 200);
     assert_eq!(response["results"].as_array().unwrap().len(), 20);
@@ -283,7 +273,7 @@ async fn test_get_all_documents_attributes_to_retrieve() {
 
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions {
-            attributes_to_retrieve: Some(vec!["*", "wrong"]),
+            fields: Some(vec!["*", "wrong"]),
             ..Default::default()
         })
         .await;
@@ -316,12 +306,10 @@ async fn get_document_s_nested_attributes_to_retrieve() {
     assert_eq!(code, 202);
     index.wait_task(1).await;
 
-    let (response, code) =
-        index.get_document(0, Some(GetDocumentOptions { fields: Some(vec!["content"]) })).await;
+    let (response, code) = index.get_document(0, Some(json!({ "fields": ["content"] }))).await;
     assert_eq!(code, 200);
     assert_eq!(response, json!({}));
-    let (response, code) =
-        index.get_document(1, Some(GetDocumentOptions { fields: Some(vec!["content"]) })).await;
+    let (response, code) = index.get_document(1, Some(json!({ "fields": ["content"] }))).await;
     assert_eq!(code, 200);
     assert_eq!(
         response,
@@ -333,9 +321,7 @@ async fn get_document_s_nested_attributes_to_retrieve() {
         })
     );
 
-    let (response, code) = index
-        .get_document(0, Some(GetDocumentOptions { fields: Some(vec!["content.truc"]) }))
-        .await;
+    let (response, code) = index.get_document(0, Some(json!({ "fields": ["content.truc"] }))).await;
     assert_eq!(code, 200);
     assert_eq!(
         response,
@@ -343,9 +329,7 @@ async fn get_document_s_nested_attributes_to_retrieve() {
             "content.truc": "foobar",
         })
     );
-    let (response, code) = index
-        .get_document(1, Some(GetDocumentOptions { fields: Some(vec!["content.truc"]) }))
-        .await;
+    let (response, code) = index.get_document(1, Some(json!({ "fields": ["content.truc"] }))).await;
     assert_eq!(code, 200);
     assert_eq!(
         response,
@@ -537,6 +521,210 @@ async fn get_document_by_filter() {
       "offset": 0,
       "limit": 20,
       "total": 1
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn get_document_with_vectors() {
+    let server = Server::new().await;
+    let index = server.index("doggo");
+    let (value, code) = server.set_features(json!({"vectorStore": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r###"
+    {
+      "vectorStore": true,
+      "metrics": false,
+      "logsRoute": false
+    }
+    "###);
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+              "manual": {
+                  "source": "userProvided",
+                  "dimensions": 3,
+              }
+          },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await;
+
+    let documents = json!([
+      {"id": 0, "name": "kefir", "_vectors": { "manual": [0, 0, 0] }},
+      {"id": 1, "name": "echo", "_vectors": { "manual": null }},
+    ]);
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    index.wait_task(value.uid()).await;
+
+    // by default you shouldn't see the `_vectors` object
+    let (documents, _code) = index.get_all_documents(Default::default()).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name": "kefir"
+        },
+        {
+          "id": 1,
+          "name": "echo"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "###);
+    let (documents, _code) = index.get_document(0, None).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "id": 0,
+      "name": "kefir"
+    }
+    "###);
+
+    // if we try to retrieve the vectors with the `fields` parameter they
+    // still shouldn't be displayed
+    let (documents, _code) = index
+        .get_all_documents(GetAllDocumentsOptions {
+            fields: Some(vec!["name", "_vectors"]),
+            ..Default::default()
+        })
+        .await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "name": "kefir"
+        },
+        {
+          "name": "echo"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "###);
+    let (documents, _code) =
+        index.get_document(0, Some(json!({"fields": ["name", "_vectors"]}))).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "name": "kefir"
+    }
+    "###);
+
+    // If we specify the retrieve vectors boolean and nothing else we should get the vectors
+    let (documents, _code) = index
+        .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
+        .await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name": "kefir",
+          "_vectors": {
+            "manual": {
+              "embeddings": [
+                [
+                  0.0,
+                  0.0,
+                  0.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
+        },
+        {
+          "id": 1,
+          "name": "echo",
+          "_vectors": {}
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "###);
+    let (documents, _code) = index.get_document(0, Some(json!({"retrieveVectors": true}))).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "id": 0,
+      "name": "kefir",
+      "_vectors": {
+        "manual": {
+          "embeddings": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ]
+          ],
+          "regenerate": false
+        }
+      }
+    }
+    "###);
+
+    // If we specify the retrieve vectors boolean and exclude vectors form the `fields` we should still get the vectors
+    let (documents, _code) = index
+        .get_all_documents(GetAllDocumentsOptions {
+            retrieve_vectors: true,
+            fields: Some(vec!["name"]),
+            ..Default::default()
+        })
+        .await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "name": "kefir",
+          "_vectors": {
+            "manual": {
+              "embeddings": [
+                [
+                  0.0,
+                  0.0,
+                  0.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
+        },
+        {
+          "name": "echo",
+          "_vectors": {}
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "###);
+    let (documents, _code) =
+        index.get_document(0, Some(json!({"retrieveVectors": true, "fields": ["name"]}))).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "name": "kefir",
+      "_vectors": {
+        "manual": {
+          "embeddings": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ]
+          ],
+          "regenerate": false
+        }
+      }
     }
     "###);
 }

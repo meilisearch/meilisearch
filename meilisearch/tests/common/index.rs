@@ -182,14 +182,10 @@ impl Index<'_> {
         self.service.get(url).await
     }
 
-    pub async fn get_document(
-        &self,
-        id: u64,
-        options: Option<GetDocumentOptions>,
-    ) -> (Value, StatusCode) {
+    pub async fn get_document(&self, id: u64, options: Option<Value>) -> (Value, StatusCode) {
         let mut url = format!("/indexes/{}/documents/{}", urlencode(self.uid.as_ref()), id);
-        if let Some(fields) = options.and_then(|o| o.fields) {
-            let _ = write!(url, "?fields={}", fields.join(","));
+        if let Some(options) = options {
+            write!(url, "{}", yaup::to_string(&options).unwrap()).unwrap();
         }
         self.service.get(url).await
     }
@@ -205,18 +201,11 @@ impl Index<'_> {
     }
 
     pub async fn get_all_documents(&self, options: GetAllDocumentsOptions) -> (Value, StatusCode) {
-        let mut url = format!("/indexes/{}/documents?", urlencode(self.uid.as_ref()));
-        if let Some(limit) = options.limit {
-            let _ = write!(url, "limit={}&", limit);
-        }
-
-        if let Some(offset) = options.offset {
-            let _ = write!(url, "offset={}&", offset);
-        }
-
-        if let Some(attributes_to_retrieve) = options.attributes_to_retrieve {
-            let _ = write!(url, "fields={}&", attributes_to_retrieve.join(","));
-        }
+        let url = format!(
+            "/indexes/{}/documents{}",
+            urlencode(self.uid.as_ref()),
+            yaup::to_string(&options).unwrap()
+        );
 
         self.service.get(url).await
     }
@@ -435,13 +424,14 @@ impl Index<'_> {
     }
 }
 
-pub struct GetDocumentOptions {
-    pub fields: Option<Vec<&'static str>>,
-}
-
-#[derive(Debug, Default)]
+#[derive(Debug, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetAllDocumentsOptions {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub offset: Option<usize>,
-    pub attributes_to_retrieve: Option<Vec<&'static str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fields: Option<Vec<&'static str>>,
+    pub retrieve_vectors: bool,
 }
