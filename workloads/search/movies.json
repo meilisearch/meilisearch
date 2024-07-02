@@ -1,0 +1,90 @@
+{
+  "name": "search-movies.json",
+  "run_count": 10,
+  "target": "search::=trace",
+  "extra_cli_args": [],
+  "assets": {
+    "movies.json": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/movies.json",
+      "sha256": "5b6e4cb660bc20327776e8a33ea197b43d9ec84856710ead1cc87ab24df77de1"
+    }
+  },
+  "precommands": [
+    {
+      "route": "indexes/movies/settings",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "searchableAttributes": [
+            "title",
+            "overview"
+          ],
+          "filterableAttributes": [
+            "genres",
+            "release_date"
+          ],
+          "sortableAttributes": [
+            "release_date"
+          ],
+          "searchCutoffMs": 15000
+        }
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "movies.json"
+      },
+      "synchronous": "WaitForTask"
+    }
+  ],
+  "commands": [
+    {
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "q": "",
+          "limit": 100
+        }
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "q": "Batman returns",
+          "limit": 100
+        }
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "limit": 100,
+          "q": "the"
+        }
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "limit": 100,
+          "q": "t"
+        }
+      },
+      "synchronous": "WaitForResponse"
+    }
+  ]
+}

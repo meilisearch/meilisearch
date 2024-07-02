@@ -19,6 +19,7 @@ pub enum TypoGraph {}
 impl RankingRuleGraphTrait for TypoGraph {
     type Condition = TypoCondition;
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::typo")]
     fn resolve_condition(
         ctx: &mut SearchContext,
         condition: &Self::Condition,
@@ -37,6 +38,7 @@ impl RankingRuleGraphTrait for TypoGraph {
         })
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::typo")]
     fn build_edges(
         ctx: &mut SearchContext,
         conditions_interner: &mut DedupInterner<Self::Condition>,
@@ -77,6 +79,7 @@ impl RankingRuleGraphTrait for TypoGraph {
         Ok(edges)
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::typo")]
     fn rank_to_score(rank: Rank) -> ScoreDetails {
         ScoreDetails::Typo(score_details::Typo::from_rank(rank))
     }

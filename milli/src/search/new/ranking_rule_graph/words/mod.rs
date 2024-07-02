@@ -18,6 +18,7 @@ pub enum WordsGraph {}
 impl RankingRuleGraphTrait for WordsGraph {
     type Condition = WordsCondition;
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::words")]
     fn resolve_condition(
         ctx: &mut SearchContext,
         condition: &Self::Condition,
@@ -36,6 +37,7 @@ impl RankingRuleGraphTrait for WordsGraph {
         })
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::words")]
     fn build_edges(
         _ctx: &mut SearchContext,
         conditions_interner: &mut DedupInterner<Self::Condition>,
@@ -45,6 +47,7 @@ impl RankingRuleGraphTrait for WordsGraph {
         Ok(vec![(0, conditions_interner.insert(WordsCondition { term: to_term.clone() }))])
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::words")]
     fn rank_to_score(rank: Rank) -> ScoreDetails {
         ScoreDetails::Words(score_details::Words::from_rank(rank))
     }

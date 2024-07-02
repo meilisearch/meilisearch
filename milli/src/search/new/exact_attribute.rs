@@ -27,6 +27,7 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for ExactAttribute {
         "exact_attribute".to_owned()
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::exact_attribute")]
     fn start_iteration(
         &mut self,
         ctx: &mut SearchContext<'ctx>,
@@ -38,6 +39,7 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for ExactAttribute {
         Ok(())
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::exact_attribute")]
     fn next_bucket(
         &mut self,
         _ctx: &mut SearchContext<'ctx>,
@@ -51,6 +53,7 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for ExactAttribute {
         Ok(output)
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::exact_attribute")]
     fn end_iteration(
         &mut self,
         _ctx: &mut SearchContext<'ctx>,

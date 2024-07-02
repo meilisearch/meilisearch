@@ -21,6 +21,7 @@ pub enum ProximityGraph {}
 impl RankingRuleGraphTrait for ProximityGraph {
     type Condition = ProximityCondition;
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::proximity")]
     fn resolve_condition(
         ctx: &mut SearchContext,
         condition: &Self::Condition,
@@ -29,6 +30,7 @@ impl RankingRuleGraphTrait for ProximityGraph {
         compute_docids::compute_docids(ctx, condition, universe)
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::proximity")]
     fn build_edges(
         ctx: &mut SearchContext,
         conditions_interner: &mut DedupInterner<Self::Condition>,
@@ -38,6 +40,7 @@ impl RankingRuleGraphTrait for ProximityGraph {
         build::build_edges(ctx, conditions_interner, source_term, dest_term)
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::proximity")]
     fn rank_to_score(rank: Rank) -> ScoreDetails {
         ScoreDetails::Proximity(rank)
     }

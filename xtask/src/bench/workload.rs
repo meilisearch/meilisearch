@@ -23,6 +23,8 @@ pub struct Workload {
     pub extra_cli_args: Vec<String>,
     pub assets: BTreeMap<String, Asset>,
     #[serde(default)]
+    pub target: String,
+    #[serde(default)]
     pub precommands: Vec<super::command::Command>,
     pub commands: Vec<super::command::Command>,
 }
@@ -54,7 +56,7 @@ async fn run_commands(
     let trace_filename = format!("{report_folder}/{workload_name}-{run_number}-trace.json");
     let report_filename = format!("{report_folder}/{workload_name}-{run_number}-report.json");
 
-    let report_handle = start_report(logs_client, trace_filename).await?;
+    let report_handle = start_report(logs_client, trace_filename, &workload.target).await?;
 
     for batch in workload
         .commands
@@ -160,7 +162,11 @@ async fn execute_run(
 async fn start_report(
     logs_client: &Client,
     filename: String,
+    target: &str,
 ) -> anyhow::Result<tokio::task::JoinHandle<anyhow::Result<std::fs::File>>> {
+    const DEFAULT_TARGET: &str = "indexing::=trace";
+    let target = if target.is_empty() { DEFAULT_TARGET } else { target };
+
     let report_file = std::fs::File::options()
         .create(true)
         .truncate(true)
@@ -174,7 +180,7 @@ async fn start_report(
         .post("")
         .json(&json!({
             "mode": "profile",
-            "target": "indexing::=trace"
+            "target": target,
         }))
         .send()
         .await

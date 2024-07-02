@@ -88,6 +88,8 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
         let Self { field_name, is_ascending, .. } = self;
         format!("{field_name}:{}", if *is_ascending { "asc" } else { "desc" })
     }
+
+    #[tracing::instrument(level = "trace", skip_all, target = "search::sort")]
     fn start_iteration(
         &mut self,
         ctx: &mut SearchContext<'ctx>,
@@ -186,6 +188,7 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
         Ok(())
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::sort")]
     fn next_bucket(
         &mut self,
         _ctx: &mut SearchContext<'ctx>,
@@ -211,6 +214,7 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
         }
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::sort")]
     fn end_iteration(
         &mut self,
         _ctx: &mut SearchContext<'ctx>,
