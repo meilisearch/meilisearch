@@ -109,6 +109,12 @@ They are JSON files with the following structure (comments are not actually supp
   "run_count": 3,
   // List of arguments to add to the Meilisearch command line.
   "extra_cli_args": ["--max-indexing-threads=1"],
+  // An expression that can be parsed as a comma-separated list of targets and levels
+  // as described in [tracing_subscriber's documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/targets/struct.Targets.html#examples).
+  // The expression is used to filter the spans that are measured for profiling purposes.
+  // Optional, defaults to "indexing::=trace" (for indexing workloads), common other values is
+  // "search::=trace"
+  "target": "indexing::=trace",
   // List of named assets that can be used in the commands.
   "assets": {
     // name of the asset.
