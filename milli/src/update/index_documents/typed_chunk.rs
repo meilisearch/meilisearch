@@ -19,6 +19,7 @@ use super::helpers::{
 use super::MergeFn;
 use crate::external_documents_ids::{DocumentOperation, DocumentOperationKind};
 use crate::facet::FacetType;
+use crate::heed_codec::CompressedKvWriterU16;
 use crate::index::db_name::DOCUMENTS;
 use crate::index::IndexEmbeddingConfig;
 use crate::proximity::MAX_DISTANCE;
@@ -162,6 +163,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 .into_iter()
                 .map(|IndexEmbeddingConfig { name, .. }| name)
                 .collect();
+            let dictionary = index.document_compression_dictionary(wtxn)?.map(Vec::from);
             let mut vectors_buffer = Vec::new();
             while let Some((key, reader)) = iter.next()? {
                 let mut writer: KvWriter<_, FieldId> = KvWriter::memory();
@@ -211,7 +213,17 @@ pub(crate) fn write_typed_chunk_into_index(
                 let db = index.documents.remap_data_type::<Bytes>();
 
                 if !writer.is_empty() {
-                    db.put(wtxn, &docid, &writer.into_inner().unwrap())?;
+                    let uncompressed_document_bytes = writer.into_inner().unwrap();
+                    match dictionary.as_ref() {
+                        Some(dictionary) => {
+                            let compressed = CompressedKvWriterU16::new_with_dictionary(
+                                &uncompressed_document_bytes,
+                                dictionary,
+                            );
+                            db.put(wtxn, &docid, compressed.as_bytes())?
+                        }
+                        None => db.put(wtxn, &docid, &uncompressed_document_bytes)?,
+                    }
                     operations.push(DocumentOperation {
                         external_id: external_id.to_string(),
                         internal_id: docid,

@@ -13,8 +13,8 @@ use std::sync::Arc;
 
 use crossbeam_channel::{Receiver, Sender};
 use grenad::{Merger, MergerBuilder};
-use heed::types::Str;
-use heed::Database;
+use heed::types::{Bytes, Str};
+use heed::{Database, PutFlags};
 use rand::SeedableRng;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
@@ -34,6 +34,7 @@ use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
 use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
+use crate::heed_codec::{CompressedKvWriterU16, CompressedObkvCodec};
 use crate::thread_pool_no_abort::ThreadPoolNoAbortBuilder;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
@@ -266,7 +267,7 @@ where
         target = "indexing::details",
         name = "index_documents_raw"
     )]
-    pub fn execute_raw(self, output: TransformOutput) -> Result<u64>
+    pub fn execute_raw(mut self, output: TransformOutput) -> Result<u64>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
         FA: Fn() -> bool + Sync,
@@ -565,6 +566,14 @@ where
             word_fid_docids.map(MergerBuilder::build),
         )?;
 
+        // TODO increase this number to 10k and put it in a const somewhere
+        //      I don't like that this dangerous condition is here...
+        if number_of_documents > 1_000
+            && self.index.document_compression_dictionary(self.wtxn)?.is_none()
+        {
+            self.manage_compression_dictionary()?;
+        }
+
         Ok(number_of_documents)
     }
 
@@ -575,7 +584,7 @@ where
         name = "index_documents_prefix_databases"
     )]
     pub fn execute_prefix_databases(
-        self,
+        &mut self,
         word_docids: Option<Merger<CursorClonableMmap, MergeFn>>,
         exact_word_docids: Option<Merger<CursorClonableMmap, MergeFn>>,
         word_position_docids: Option<Merger<CursorClonableMmap, MergeFn>>,
@@ -744,6 +753,40 @@ where
             databases_seen,
             total_databases: TOTAL_POSTING_DATABASE_COUNT,
         });
+
+        Ok(())
+    }
+
+    /// Computes a new dictionay and compress the documents with it in the database.
+    ///
+    /// Documents still need to be directly compressed when being written in the database and a dictionary exists.
+    #[tracing::instrument(
+        level = "trace",
+        skip_all,
+        target = "indexing::compression",
+        name = "compress_documents_database"
+    )]
+    pub fn manage_compression_dictionary(&mut self) -> Result<()> {
+        // TODO This is a dumb dictionary, just so you get the idea.
+        //      We need to compute a better one by using zstd or something else.
+        let dictionary = b"movietraileradventurehorror";
+        self.index.put_document_compression_dictionary(self.wtxn, dictionary)?;
+
+        // TODO do not remap types here but rather expose the &[u8] for the KvReaderU16
+        let mut iter = self.index.documents.remap_data_type::<Bytes>().iter_mut(self.wtxn)?;
+        while let Some(result) = iter.next() {
+            let (docid, document) = result?;
+            // TODO manage this unwrap correctly
+            let compressed = CompressedKvWriterU16::new_with_dictionary(document, dictionary);
+            // safety the compressed document is entirely owned
+            unsafe {
+                iter.put_current_with_options::<CompressedObkvCodec>(
+                    PutFlags::empty(),
+                    &docid,
+                    &compressed,
+                )?;
+            }
+        }
 
         Ok(())
     }
