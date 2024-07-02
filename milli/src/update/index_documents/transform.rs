@@ -1035,14 +1035,23 @@ impl<'a, 'i> Transform<'a, 'i> {
 
         if original_sorter.is_some() || flattened_sorter.is_some() {
             let modified_faceted_fields = settings_diff.modified_faceted_fields();
+            let dictionary = self.index.document_compression_dictionary(wtxn)?;
+
             let mut original_obkv_buffer = Vec::new();
             let mut flattened_obkv_buffer = Vec::new();
             let mut document_sorter_key_buffer = Vec::new();
+            let mut buffer = Vec::new();
             for result in self.index.external_documents_ids().iter(wtxn)? {
                 let (external_id, docid) = result?;
-                let old_obkv = self.index.documents.get(wtxn, &docid)?.ok_or(
+                let old_compressed_obkv = self.index.documents.get(wtxn, &docid)?.ok_or(
                     InternalError::DatabaseMissingEntry { db_name: db_name::DOCUMENTS, key: None },
                 )?;
+
+                let old_obkv = match dictionary {
+                    // TODO manage this unwrap correctly
+                    Some(dict) => old_compressed_obkv.decompress_with(&mut buffer, dict).unwrap(),
+                    None => old_compressed_obkv.as_non_compressed(),
+                };
 
                 let injected_vectors: std::result::Result<
                     serde_json::Map<String, serde_json::Value>,

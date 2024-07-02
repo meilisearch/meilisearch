@@ -1123,10 +1123,17 @@ fn make_hits(
     formatter_builder.crop_marker(format.crop_marker);
     formatter_builder.highlight_prefix(format.highlight_pre_tag);
     formatter_builder.highlight_suffix(format.highlight_post_tag);
+    let compression_dictionary = index.document_compression_dictionary(rtxn)?;
+    let mut buffer = Vec::new();
     let mut documents = Vec::new();
     let embedding_configs = index.embedding_configs(rtxn)?;
-    let documents_iter = index.documents(rtxn, documents_ids)?;
-    for ((id, obkv), score) in documents_iter.into_iter().zip(document_scores.into_iter()) {
+    let documents_iter = index.compressed_documents(rtxn, documents_ids)?;
+    for ((id, compressed), score) in documents_iter.into_iter().zip(document_scores.into_iter()) {
+        let obkv = match compression_dictionary {
+            // TODO manage this unwrap correctly
+            Some(dict) => compressed.decompress_with(&mut buffer, dict).unwrap(),
+            None => compressed.as_non_compressed(),
+        };
         // First generate a document with all the displayed fields
         let displayed_document = make_document(&displayed_ids, &fields_ids_map, obkv)?;
 

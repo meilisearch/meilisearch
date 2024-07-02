@@ -317,7 +317,8 @@ fn criteria_ascdesc() {
     wtxn.commit().unwrap();
 
     let rtxn = index.read_txn().unwrap();
-    let documents = index.all_documents(&rtxn).unwrap().map(|doc| doc.unwrap()).collect::<Vec<_>>();
+    let documents =
+        index.all_compressed_documents(&rtxn).unwrap().map(|doc| doc.unwrap()).collect::<Vec<_>>();
 
     for criterion in [Asc(S("name")), Desc(S("name")), Asc(S("age")), Desc(S("age"))] {
         eprintln!("Testing with criterion: {:?}", &criterion);

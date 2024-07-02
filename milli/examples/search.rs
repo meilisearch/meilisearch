@@ -76,7 +76,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("new: {}us, docids: {:?}", elapsed.as_micros(), docs.documents_ids);
             if print_documents {
                 let documents = index
-                    .documents(&txn, docs.documents_ids.iter().copied())
+                    .compressed_documents(&txn, docs.documents_ids.iter().copied())
                     .unwrap()
                     .into_iter()
                     .map(|(id, obkv)| {
@@ -96,7 +96,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
 
                 let documents = index
-                    .documents(&txn, docs.documents_ids.iter().copied())
+                    .compressed_documents(&txn, docs.documents_ids.iter().copied())
                     .unwrap()
                     .into_iter()
                     .map(|(id, obkv)| {

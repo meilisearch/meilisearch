@@ -834,7 +834,7 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let count = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(count, 3);
-        let count = index.all_documents(&rtxn).unwrap().count();
+        let count = index.all_compressed_documents(&rtxn).unwrap().count();
         assert_eq!(count, 3);
 
         drop(rtxn);
@@ -861,7 +861,7 @@ mod tests {
         assert_eq!(count, 1);
 
         // Check that we get only one document from the database.
-        let docs = index.documents(&rtxn, Some(0)).unwrap();
+        let docs = index.compressed_documents(&rtxn, Some(0)).unwrap();
         assert_eq!(docs.len(), 1);
         let (id, doc) = docs[0];
         assert_eq!(id, 0);
@@ -882,7 +882,7 @@ mod tests {
         assert_eq!(count, 1);
 
         // Check that we get only one document from the database.
-        let docs = index.documents(&rtxn, Some(0)).unwrap();
+        let docs = index.compressed_documents(&rtxn, Some(0)).unwrap();
         assert_eq!(docs.len(), 1);
         let (id, doc) = docs[0];
         assert_eq!(id, 0);
@@ -932,7 +932,7 @@ mod tests {
         let count = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(count, 3);
 
-        let docs = index.documents(&rtxn, vec![0, 1, 2]).unwrap();
+        let docs = index.compressed_documents(&rtxn, vec![0, 1, 2]).unwrap();
         let (_id, obkv) = docs.iter().find(|(_id, kv)| kv.get(0) == Some(br#""kevin""#)).unwrap();
         let kevin_uuid: String = serde_json::from_slice(obkv.get(1).unwrap()).unwrap();
         drop(rtxn);
@@ -946,7 +946,7 @@ mod tests {
         assert_eq!(count, 3);
 
         // the document 0 has been deleted and reinserted with the id 3
-        let docs = index.documents(&rtxn, vec![1, 2, 0]).unwrap();
+        let docs = index.compressed_documents(&rtxn, vec![1, 2, 0]).unwrap();
         let kevin_position =
             docs.iter().position(|(_, d)| d.get(0).unwrap() == br#""updated kevin""#).unwrap();
         assert_eq!(kevin_position, 2);
@@ -1088,7 +1088,7 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let count = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(count, 6);
-        let count = index.all_documents(&rtxn).unwrap().count();
+        let count = index.all_compressed_documents(&rtxn).unwrap().count();
         assert_eq!(count, 6);
 
         db_snap!(index, word_docids, "updated");
@@ -1506,7 +1506,7 @@ mod tests {
         index.add_documents(documents!({ "a" : { "b" : { "c" :  1 }}})).unwrap();
 
         let rtxn = index.read_txn().unwrap();
-        let all_documents_count = index.all_documents(&rtxn).unwrap().count();
+        let all_documents_count = index.all_compressed_documents(&rtxn).unwrap().count();
         assert_eq!(all_documents_count, 1);
         let external_documents_ids = index.external_documents_ids();
         assert!(external_documents_ids.get(&rtxn, "1").unwrap().is_some());
@@ -2796,7 +2796,7 @@ mod tests {
         // Ensuring all the returned IDs actually exists
         let rtxn = index.read_txn().unwrap();
         let res = index.search(&rtxn).execute().unwrap();
-        index.documents(&rtxn, res.documents_ids).unwrap();
+        index.compressed_documents(&rtxn, res.documents_ids).unwrap();
     }
 
     fn delete_documents<'t>(
@@ -3163,7 +3163,7 @@ mod tests {
         let deleted_internal_ids = delete_documents(&mut wtxn, &index, &deleted_external_ids);
 
         // list all documents
-        let results = index.all_documents(&wtxn).unwrap();
+        let results = index.all_compressed_documents(&wtxn).unwrap();
         for result in results {
             let (id, _) = result.unwrap();
             assert!(

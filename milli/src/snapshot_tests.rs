@@ -407,9 +407,16 @@ pub fn snap_documents(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
     let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let display = fields_ids_map.ids().collect::<Vec<_>>();
+    let dictionary = index.document_compression_dictionary(&rtxn).unwrap();
+    let mut buffer = Vec::new();
 
-    for document in index.all_documents(&rtxn).unwrap() {
-        let doc = obkv_to_json(&display, &fields_ids_map, document.unwrap().1).unwrap();
+    for result in index.all_compressed_documents(&rtxn).unwrap() {
+        let (_id, compressed_document) = result.unwrap();
+        let document = match dictionary {
+            Some(dict) => compressed_document.decompress_with(&mut buffer, dict).unwrap(),
+            None => compressed_document.as_non_compressed(),
+        };
+        let doc = obkv_to_json(&display, &fields_ids_map, document).unwrap();
         snap.push_str(&serde_json::to_string(&doc).unwrap());
         snap.push('\n');
     }

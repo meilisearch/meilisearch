@@ -280,7 +280,7 @@ fn export_a_dump(
         let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
 
         // 4.1. Dump the documents
-        for ret in index.all_documents(&rtxn)? {
+        for ret in index.all_compressed_documents(&rtxn)? {
             let (_id, doc) = ret?;
             let document = obkv_to_json(&all_fields, &fields_ids_map, doc)?;
             index_dumper.push_document(&document)?;

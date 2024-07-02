@@ -908,16 +908,23 @@ impl IndexScheduler {
                     let mut index_dumper = dump.create_index(uid, &metadata)?;
 
                     let fields_ids_map = index.fields_ids_map(&rtxn)?;
+                    let dictionary = index.document_compression_dictionary(&rtxn)?;
                     let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
                     let embedding_configs = index.embedding_configs(&rtxn)?;
+                    let mut buffer = Vec::new();
 
                     // 3.1. Dump the documents
-                    for ret in index.all_documents(&rtxn)? {
+                    for ret in index.all_compressed_documents(&rtxn)? {
                         if self.must_stop_processing.get() {
                             return Err(Error::AbortedTask);
                         }
 
-                        let (id, doc) = ret?;
+                        let (id, compressed) = ret?;
+                        let doc = match dictionary {
+                            // TODO manage this unwrap correctly
+                            Some(dict) => compressed.decompress_with(&mut buffer, dict).unwrap(),
+                            None => compressed.as_non_compressed(),
+                        };
 
                         let mut document = milli::obkv_to_json(&all_fields, &fields_ids_map, doc)?;
 
