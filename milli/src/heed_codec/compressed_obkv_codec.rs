@@ -30,15 +30,11 @@ impl<'a> CompressedKvReaderU16<'a> {
         buffer: &'b mut Vec<u8>,
         dictionnary: &[u8],
     ) -> Result<KvReaderU16<'b>, lz4_flex::block::DecompressError> {
-        // TODO WHAT THE HECK!!! WHY DO I NEED TO INCREASE THE SIZE PROVIDED
-        let max_size = lz4_flex::block::get_maximum_output_size(self.0.len()) * 2;
-        buffer.resize(max_size, 0);
+        let (size, input) = lz4_flex::block::uncompressed_size(self.0)?;
+        buffer.resize(size, 0);
         // TODO loop to increase the buffer size of need be
-        let size = lz4_flex::block::decompress_into_with_dict(
-            self.0,
-            &mut buffer[..max_size],
-            dictionnary,
-        )?;
+        let size =
+            lz4_flex::block::decompress_into_with_dict(input, &mut buffer[..size], dictionnary)?;
         Ok(KvReaderU16::new(&buffer[..size]))
     }
 
@@ -53,7 +49,7 @@ pub struct CompressedKvWriterU16(Vec<u8>);
 impl CompressedKvWriterU16 {
     // TODO ask for a KvReaderU16 here
     pub fn new_with_dictionary(writer: &[u8], dictionary: &[u8]) -> Self {
-        CompressedKvWriterU16(lz4_flex::block::compress_with_dict(writer, dictionary))
+        CompressedKvWriterU16(lz4_flex::block::compress_prepend_size_with_dict(writer, dictionary))
     }
 
     pub fn as_bytes(&self) -> &[u8] {
