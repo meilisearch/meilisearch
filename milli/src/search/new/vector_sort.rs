@@ -73,6 +73,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
         "vector_sort".to_owned()
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::vector_sort")]
     fn start_iteration(
         &mut self,
         ctx: &mut SearchContext<'ctx>,
@@ -89,6 +90,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
     }
 
     #[allow(clippy::only_used_in_recursion)]
+    #[tracing::instrument(level = "trace", skip_all, target = "search::vector_sort")]
     fn next_bucket(
         &mut self,
         ctx: &mut SearchContext<'ctx>,
@@ -139,6 +141,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
         self.next_bucket(ctx, _logger, universe)
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::vector_sort")]
     fn end_iteration(&mut self, _ctx: &mut SearchContext<'ctx>, _logger: &mut dyn SearchLogger<Q>) {
         self.query = None;
     }

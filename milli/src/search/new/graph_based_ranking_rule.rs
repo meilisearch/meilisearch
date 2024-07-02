@@ -127,6 +127,8 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
     fn id(&self) -> String {
         self.id.clone()
     }
+
+    #[tracing::instrument(level = "trace", skip_all, target = "search::graph_based")]
     fn start_iteration(
         &mut self,
         ctx: &mut SearchContext<'ctx>,
@@ -209,6 +211,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         Ok(())
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::graph_based")]
     fn next_bucket(
         &mut self,
         ctx: &mut SearchContext<'ctx>,
@@ -358,6 +361,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         Ok(Some(RankingRuleOutput { query: next_query_graph, candidates: bucket, score }))
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::graph_based")]
     fn end_iteration(
         &mut self,
         _ctx: &mut SearchContext<'ctx>,

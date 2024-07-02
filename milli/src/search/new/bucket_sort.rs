@@ -213,9 +213,6 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
             continue;
         }
 
-        let span = tracing::trace_span!(target: "search::bucket_sort", "next_bucket", id = ranking_rules[cur_ranking_rule_index].id());
-        let entered = span.enter();
-
         let Some(next_bucket) = ranking_rules[cur_ranking_rule_index].next_bucket(
             ctx,
             logger,
@@ -225,7 +222,6 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
             back!();
             continue;
         };
-        drop(entered);
 
         ranking_rule_scores.push(next_bucket.score);
 

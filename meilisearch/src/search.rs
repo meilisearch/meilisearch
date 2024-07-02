@@ -752,10 +752,15 @@ fn prepare_search<'t>(
         SearchKind::SemanticOnly { embedder_name, embedder } => {
             let vector = match query.vector.clone() {
                 Some(vector) => vector,
-                None => embedder
-                    .embed_one(query.q.clone().unwrap())
-                    .map_err(milli::vector::Error::from)
-                    .map_err(milli::Error::from)?,
+                None => {
+                    let span = tracing::trace_span!(target: "search::vector", "embed_one");
+                    let _entered = span.enter();
+
+                    embedder
+                        .embed_one(query.q.clone().unwrap())
+                        .map_err(milli::vector::Error::from)
+                        .map_err(milli::Error::from)?
+                }
             };
 
             search.semantic(embedder_name.clone(), embedder.clone(), Some(vector));

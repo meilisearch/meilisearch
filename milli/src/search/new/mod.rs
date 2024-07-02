@@ -212,7 +212,7 @@ fn resolve_maximally_reduced_query_graph(
     Ok(docids)
 }
 
-#[tracing::instrument(level = "trace", skip_all, target = "search")]
+#[tracing::instrument(level = "trace", skip_all, target = "search::universe")]
 fn resolve_universe(
     ctx: &mut SearchContext,
     initial_universe: &RoaringBitmap,
@@ -229,7 +229,7 @@ fn resolve_universe(
     )
 }
 
-#[tracing::instrument(level = "trace", skip_all, target = "search")]
+#[tracing::instrument(level = "trace", skip_all, target = "search::query")]
 fn resolve_negative_words(
     ctx: &mut SearchContext,
     negative_words: &[Word],
@@ -243,7 +243,7 @@ fn resolve_negative_words(
     Ok(negative_bitmap)
 }
 
-#[tracing::instrument(level = "trace", skip_all, target = "search")]
+#[tracing::instrument(level = "trace", skip_all, target = "search::query")]
 fn resolve_negative_phrases(
     ctx: &mut SearchContext,
     negative_phrases: &[LocatedQueryTerm],
@@ -548,7 +548,7 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
     Ok(())
 }
 
-#[tracing::instrument(level = "trace", skip_all, target = "search")]
+#[tracing::instrument(level = "trace", skip_all, target = "search::universe")]
 pub fn filtered_universe(
     index: &Index,
     txn: &RoTxn<'_>,
@@ -620,7 +620,7 @@ pub fn execute_vector_search(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[tracing::instrument(level = "trace", skip_all, target = "search")]
+#[tracing::instrument(level = "trace", skip_all, target = "search::main")]
 pub fn execute_search(
     ctx: &mut SearchContext,
     query: Option<&str>,
