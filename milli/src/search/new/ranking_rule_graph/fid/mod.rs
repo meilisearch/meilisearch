@@ -20,6 +20,7 @@ pub enum FidGraph {}
 impl RankingRuleGraphTrait for FidGraph {
     type Condition = FidCondition;
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::fid")]
     fn resolve_condition(
         ctx: &mut SearchContext,
         condition: &Self::Condition,
@@ -44,6 +45,7 @@ impl RankingRuleGraphTrait for FidGraph {
         })
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::fid")]
     fn build_edges(
         ctx: &mut SearchContext,
         conditions_interner: &mut DedupInterner<Self::Condition>,
@@ -101,6 +103,7 @@ impl RankingRuleGraphTrait for FidGraph {
         Ok(edges)
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::fid")]
     fn rank_to_score(rank: Rank) -> ScoreDetails {
         ScoreDetails::Fid(rank)
     }

@@ -44,6 +44,7 @@ fn compute_docids(
 impl RankingRuleGraphTrait for ExactnessGraph {
     type Condition = ExactnessCondition;
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::exactness")]
     fn resolve_condition(
         ctx: &mut SearchContext,
         condition: &Self::Condition,
@@ -71,6 +72,7 @@ impl RankingRuleGraphTrait for ExactnessGraph {
         })
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::exactness")]
     fn build_edges(
         _ctx: &mut SearchContext,
         conditions_interner: &mut DedupInterner<Self::Condition>,
@@ -86,6 +88,7 @@ impl RankingRuleGraphTrait for ExactnessGraph {
         Ok(vec![(0, exact_condition), (dest_node.term_ids.len() as u32, skip_condition)])
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::exactness")]
     fn rank_to_score(rank: Rank) -> ScoreDetails {
         ScoreDetails::ExactWords(score_details::ExactWords::from_rank(rank))
     }

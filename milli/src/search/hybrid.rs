@@ -17,6 +17,7 @@ struct ScoreWithRatioResult {
 
 type ScoreWithRatio = (Vec<ScoreDetails>, f32);
 
+#[tracing::instrument(level = "trace", skip_all, target = "search::hybrid")]
 fn compare_scores(
     &(ref left_scores, left_ratio): &ScoreWithRatio,
     &(ref right_scores, right_ratio): &ScoreWithRatio,
@@ -84,6 +85,7 @@ impl ScoreWithRatioResult {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip_all, target = "search::hybrid")]
     fn merge(
         vector_results: Self,
         keyword_results: Self,
@@ -150,6 +152,7 @@ impl ScoreWithRatioResult {
 }
 
 impl<'a> Search<'a> {
+    #[tracing::instrument(level = "trace", skip_all, target = "search::hybrid")]
     pub fn execute_hybrid(&self, semantic_ratio: f32) -> Result<(SearchResult, Option<u32>)> {
         // TODO: find classier way to achieve that than to reset vector and query params
         // create separate keyword and semantic searches
@@ -194,6 +197,9 @@ impl<'a> Search<'a> {
             Some(vector_query) => vector_query,
             None => {
                 // attempt to embed the vector
+                let span = tracing::trace_span!(target: "search::hybrid", "embed_one");
+                let _entered = span.enter();
+
                 match embedder.embed_one(query) {
                     Ok(embedding) => embedding,
                     Err(error) => {
