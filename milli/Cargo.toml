@@ -38,7 +38,7 @@ heed = { version = "0.20.3", default-features = false, features = [
 indexmap = { version = "2.2.6", features = ["serde"] }
 json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
-zstd = { version = "0.11.2", features = ["zdict_builder"] }
+zstd = { version = "0.13.1", features = ["zdict_builder", "experimental"] }
 memmap2 = "0.9.4"
 obkv = "0.2.2"
 once_cell = "1.19.0"

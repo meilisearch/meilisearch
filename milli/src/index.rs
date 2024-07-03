@@ -374,7 +374,7 @@ impl Index {
         &self,
         rtxn: &'t RoTxn,
     ) -> heed::Result<Option<DecoderDictionary<'t>>> {
-        self.document_compression_raw_dictionary(rtxn).map(|opt| opt.map(DecoderDictionary::copy))
+        self.document_compression_raw_dictionary(rtxn).map(|opt| opt.map(DecoderDictionary::new))
     }
 
     pub fn document_compression_dictionary(
