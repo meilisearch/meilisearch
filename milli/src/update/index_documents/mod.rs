@@ -566,13 +566,9 @@ where
             word_fid_docids.map(MergerBuilder::build),
         )?;
 
-        // TODO increase this number to 10k and put it in a const somewhere
-        //      I don't like that this dangerous condition is here...
-        if number_of_documents > 10_000
-            && self.index.document_compression_dictionary(self.wtxn)?.is_none()
-        {
-            self.manage_compression_dictionary()?;
-        }
+        // This call contains an internal condition to ensure we do not always
+        // generate compression dictionaries and always compress documents.
+        self.manage_compression_dictionary()?;
 
         Ok(number_of_documents)
     }
@@ -767,32 +763,42 @@ where
         name = "compress_documents_database"
     )]
     pub fn manage_compression_dictionary(&mut self) -> Result<()> {
+        /// The size of the dictionary generated from a sample of the documents already
+        /// in the database. It will be used when compressing and decompressing documents.
+        const COMPRESSION_DICTIONARY_SIZE: usize = 64_000;
+        /// The minimum number of documents to trigger the generation of the compression dictionary.
+        const COMPRESSION_ON_NUMBER_OF_DOCUMENTS: usize = 10_000;
+
+        if self.index.number_of_documents(self.wtxn)? < COMPRESSION_ON_NUMBER_OF_DOCUMENTS as u64
+            || self.index.document_compression_dictionary(self.wtxn)?.is_some()
+        {
+            return Ok(());
+        }
+
         let mut sample_file = tempfile::tempfile().map(BufWriter::new)?;
         let mut sample_sizes = Vec::new();
         // TODO make this 1_000 be 10k and const
         let documents = self.index.documents.remap_types::<BEU32, Bytes>();
-        for result in documents.iter(self.wtxn)?.take(10_000) {
+        for result in documents.iter(self.wtxn)?.take(COMPRESSION_ON_NUMBER_OF_DOCUMENTS) {
             let (_id, bytes) = result?;
             sample_file.write_all(bytes)?;
             sample_sizes.push(bytes.len());
         }
 
-        // TODO manage this unwrap correctly
-        let sample_file = sample_file.into_inner().unwrap();
+        let sample_file = sample_file.into_inner().map_err(|ie| ie.into_error())?;
         let sample_data = unsafe { memmap2::Mmap::map(&sample_file)? };
-        // TODO make this 64_000 const
-        let dictionary = zstd::dict::from_continuous(&sample_data, &sample_sizes, 64_000)?;
+        let dictionary =
+            zstd::dict::from_continuous(&sample_data, &sample_sizes, COMPRESSION_DICTIONARY_SIZE)?;
         self.index.put_document_compression_dictionary(self.wtxn, &dictionary)?;
-        // safety: We just set the dictionary above, it must be there when we get it back.
+        // safety: We just set the dictionary above. It must be there when we get it back.
         let dictionary = self.index.document_compression_dictionary(self.wtxn)?.unwrap();
 
-        // TODO do not remap types here but rather expose the &[u8] for the KvReaderU16
         let mut iter = self.index.documents.iter_mut(self.wtxn)?;
         while let Some(result) = iter.next() {
             let (docid, document) = result?;
             let document = document.as_non_compressed().as_bytes();
             let compressed = CompressedKvWriterU16::new_with_dictionary(document, &dictionary)?;
-            // safety the compressed document is entirely owned
+            // safety: the compressed document is entirely owned
             unsafe {
                 iter.put_current_with_options::<CompressedObkvCodec>(
                     PutFlags::empty(),
