@@ -37,7 +37,6 @@ use meilisearch_types::milli::vector::parsed_vectors::{
 use meilisearch_types::milli::{self, Filter};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
-use meilisearch_types::zstd::dict::DecoderDictionary;
 use meilisearch_types::{compression, Index, VERSION_FILE_NAME};
 use roaring::RoaringBitmap;
 use time::macros::format_description;
@@ -909,8 +908,7 @@ impl IndexScheduler {
                     let mut index_dumper = dump.create_index(uid, &metadata)?;
 
                     let fields_ids_map = index.fields_ids_map(&rtxn)?;
-                    let dictionary =
-                        index.document_compression_dictionary(&rtxn)?.map(DecoderDictionary::copy);
+                    let dictionary = index.document_decompression_dictionary(&rtxn)?;
                     let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
                     let embedding_configs = index.embedding_configs(&rtxn)?;
                     let mut buffer = Vec::new();

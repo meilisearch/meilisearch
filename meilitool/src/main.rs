@@ -260,6 +260,7 @@ fn export_a_dump(
 
     // 4. Dump the indexes
     let mut count = 0;
+    let mut buffer = Vec::new();
     for result in index_mapping.iter(&rtxn)? {
         let (uid, uuid) = result?;
         let index_path = db_path.join("indexes").join(uuid.to_string());
@@ -268,6 +269,7 @@ fn export_a_dump(
         })?;
 
         let rtxn = index.read_txn()?;
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let metadata = IndexMetadata {
             uid: uid.to_owned(),
             primary_key: index.primary_key(&rtxn)?.map(String::from),
@@ -281,7 +283,10 @@ fn export_a_dump(
 
         // 4.1. Dump the documents
         for ret in index.all_compressed_documents(&rtxn)? {
-            let (_id, doc) = ret?;
+            let (_id, compressed_doc) = ret?;
+            let doc = compressed_doc
+                .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                .unwrap();
             let document = obkv_to_json(&all_fields, &fields_ids_map, doc)?;
             index_dumper.push_document(&document)?;
         }

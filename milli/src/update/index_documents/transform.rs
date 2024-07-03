@@ -11,7 +11,6 @@ use obkv::{KvReader, KvReaderU16, KvWriter};
 use roaring::RoaringBitmap;
 use serde_json::Value;
 use smartstring::SmartString;
-use zstd::dict::DecoderDictionary;
 
 use super::helpers::{
     create_sorter, create_writer, keep_first, obkvs_keep_last_addition_merge_deletions,
@@ -169,8 +168,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         let external_documents_ids = self.index.external_documents_ids();
         let mapping = create_fields_mapping(&mut self.fields_ids_map, &fields_index)?;
 
-        let dictionary =
-            self.index.document_compression_dictionary(wtxn)?.map(DecoderDictionary::copy);
+        let dictionary = self.index.document_decompression_dictionary(wtxn)?;
         let primary_key = cursor.primary_key().to_string();
         let primary_key_id =
             self.fields_ids_map.insert(&primary_key).ok_or(UserError::AttributeLimitReached)?;
@@ -350,9 +348,12 @@ impl<'a, 'i> Transform<'a, 'i> {
             documents_seen: documents_count,
         });
 
+        drop(dictionary);
+
         self.index.put_fields_ids_map(wtxn, &self.fields_ids_map)?;
         self.index.put_primary_key(wtxn, &primary_key)?;
         self.documents_count += documents_count;
+
         // Now that we have a valid sorter that contains the user id and the obkv we
         // give it to the last transforming function which returns the TransformOutput.
         Ok(documents_count)
@@ -1037,8 +1038,7 @@ impl<'a, 'i> Transform<'a, 'i> {
 
         if original_sorter.is_some() || flattened_sorter.is_some() {
             let modified_faceted_fields = settings_diff.modified_faceted_fields();
-            let dictionary =
-                self.index.document_compression_dictionary(wtxn)?.map(DecoderDictionary::copy);
+            let dictionary = self.index.document_decompression_dictionary(wtxn)?;
 
             let mut original_obkv_buffer = Vec::new();
             let mut flattened_obkv_buffer = Vec::new();

@@ -30,6 +30,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let index = Index::new(options, dataset)?;
     let txn = index.read_txn()?;
+    let dictionary = index.document_decompression_dictionary(&txn).unwrap();
     let mut query = String::new();
     while stdin().read_line(&mut query)? > 0 {
         for _ in 0..2 {
@@ -49,6 +50,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let start = Instant::now();
 
             let mut ctx = SearchContext::new(&index, &txn)?;
+            let mut buffer = Vec::new();
             let universe = filtered_universe(ctx.index, ctx.txn, &None)?;
 
             let docs = execute_search(
@@ -75,11 +77,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             let elapsed = start.elapsed();
             println!("new: {}us, docids: {:?}", elapsed.as_micros(), docs.documents_ids);
             if print_documents {
-                let documents = index
+                let compressed_documents = index
                     .compressed_documents(&txn, docs.documents_ids.iter().copied())
                     .unwrap()
                     .into_iter()
-                    .map(|(id, obkv)| {
+                    .map(|(id, compressed_obkv)| {
+                        let obkv = compressed_obkv
+                            .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                            .unwrap();
                         let mut object = serde_json::Map::default();
                         for (fid, fid_name) in index.fields_ids_map(&txn).unwrap().iter() {
                             let value = obkv.get(fid).unwrap();
@@ -90,17 +95,20 @@ fn main() -> Result<(), Box<dyn Error>> {
                     })
                     .collect::<Vec<_>>();
 
-                for (id, document) in documents {
+                for (id, document) in compressed_documents {
                     println!("{id}:");
                     println!("{document}");
                 }
 
-                let documents = index
+                let compressed_documents = index
                     .compressed_documents(&txn, docs.documents_ids.iter().copied())
                     .unwrap()
                     .into_iter()
-                    .map(|(id, obkv)| {
+                    .map(|(id, compressed_obkv)| {
                         let mut object = serde_json::Map::default();
+                        let obkv = compressed_obkv
+                            .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                            .unwrap();
                         for (fid, fid_name) in index.fields_ids_map(&txn).unwrap().iter() {
                             let value = obkv.get(fid).unwrap();
                             let value: serde_json::Value = serde_json::from_slice(value).unwrap();
@@ -110,7 +118,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     })
                     .collect::<Vec<_>>();
                 println!("{}us: {:?}", elapsed.as_micros(), docs.documents_ids);
-                for (id, document) in documents {
+                for (id, document) in compressed_documents {
                     println!("{id}:");
                     println!("{document}");
                 }

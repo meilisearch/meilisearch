@@ -20,7 +20,6 @@ use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::DocumentId;
 use meilisearch_types::star_or::OptionStarOrList;
 use meilisearch_types::tasks::KindWithContent;
-use meilisearch_types::zstd::dict::DecoderDictionary;
 use meilisearch_types::{milli, Document, Index};
 use mime::Mime;
 use once_cell::sync::Lazy;
@@ -604,7 +603,7 @@ fn some_documents<'a, 't: 'a>(
     retrieve_vectors: RetrieveVectors,
 ) -> Result<impl Iterator<Item = Result<Document, ResponseError>> + 'a, ResponseError> {
     let fields_ids_map = index.fields_ids_map(rtxn)?;
-    let dictionary = index.document_compression_dictionary(rtxn)?.map(DecoderDictionary::copy);
+    let dictionary = index.document_decompression_dictionary(rtxn)?;
     let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
     let embedding_configs = index.embedding_configs(rtxn)?;
     let mut buffer = Vec::new();

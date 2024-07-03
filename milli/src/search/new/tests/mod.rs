@@ -25,10 +25,11 @@ fn collect_field_values(
     let mut values = vec![];
     let fid = index.fields_ids_map(txn).unwrap().id(fid).unwrap();
     let mut buffer = Vec::new();
-    let dictionary = index.document_compression_dictionary(txn).unwrap();
+    let dictionary = index.document_decompression_dictionary(txn).unwrap();
     for (_id, compressed_doc) in index.compressed_documents(txn, docids.iter().copied()).unwrap() {
-        let doc =
-            compressed_doc.decompress_with_optional_dictionary(&mut buffer, dictionary).unwrap();
+        let doc = compressed_doc
+            .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+            .unwrap();
         if let Some(v) = doc.get(fid) {
             let v: serde_json::Value = serde_json::from_slice(v).unwrap();
             let v = v.to_string();

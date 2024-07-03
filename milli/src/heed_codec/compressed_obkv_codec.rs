@@ -7,9 +7,6 @@ use obkv::KvReaderU16;
 use zstd::bulk::{Compressor, Decompressor};
 use zstd::dict::{DecoderDictionary, EncoderDictionary};
 
-// TODO move that elsewhere
-pub const COMPRESSION_LEVEL: i32 = 12;
-
 pub struct CompressedObkvCodec;
 
 impl<'a> heed::BytesDecode<'a> for CompressedObkvCodec {
@@ -63,10 +60,13 @@ impl<'a> CompressedKvReaderU16<'a> {
 
     /// Decompresses this KvReader if necessary.
     pub fn decompress_with_optional_dictionary<'b>(
-        &'b self,
+        &self,
         buffer: &'b mut Vec<u8>,
         dictionary: Option<&DecoderDictionary>,
-    ) -> io::Result<KvReaderU16<'b>> {
+    ) -> io::Result<KvReaderU16<'b>>
+    where
+        'a: 'b,
+    {
         match dictionary {
             Some(dict) => self.decompress_with(buffer, dict),
             None => Ok(self.as_non_compressed()),

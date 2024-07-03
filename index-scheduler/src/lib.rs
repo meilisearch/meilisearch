@@ -2465,12 +2465,20 @@ mod tests {
 
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
             .all_compressed_documents(&rtxn)
             .unwrap()
-            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .map(|ret| {
+                let (_id, compressed_doc) = ret.unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+            })
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
@@ -2525,12 +2533,20 @@ mod tests {
 
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
             .all_compressed_documents(&rtxn)
             .unwrap()
-            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .map(|ret| {
+                let (_id, compressed_doc) = ret.unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+            })
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
@@ -2904,12 +2920,20 @@ mod tests {
         // has everything being pushed successfully in milli?
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
             .all_compressed_documents(&rtxn)
             .unwrap()
-            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .map(|ret| {
+                let (_id, compressed_doc) = ret.unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+            })
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
@@ -2955,12 +2979,20 @@ mod tests {
         // has everything being pushed successfully in milli?
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
             .all_compressed_documents(&rtxn)
             .unwrap()
-            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .map(|ret| {
+                let (_id, compressed_doc) = ret.unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+            })
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
@@ -3011,12 +3043,20 @@ mod tests {
         // has everything being pushed successfully in milli?
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
             .all_compressed_documents(&rtxn)
             .unwrap()
-            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .map(|ret| {
+                let (_id, compressed_doc) = ret.unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+            })
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
@@ -3129,12 +3169,20 @@ mod tests {
         // has everything being pushed successfully in milli?
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
             .all_compressed_documents(&rtxn)
             .unwrap()
-            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .map(|ret| {
+                let (_id, compressed_doc) = ret.unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+            })
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
@@ -3184,12 +3232,20 @@ mod tests {
         // has everything being pushed successfully in milli?
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
             .all_compressed_documents(&rtxn)
             .unwrap()
-            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .map(|ret| {
+                let (_id, compressed_doc) = ret.unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+            })
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
@@ -3898,12 +3954,20 @@ mod tests {
         // Has everything being pushed successfully in milli?
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
             .all_compressed_documents(&rtxn)
             .unwrap()
-            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .map(|ret| {
+                let (_id, compressed_doc) = ret.unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+            })
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
@@ -3969,12 +4033,20 @@ mod tests {
         // Has everything being pushed successfully in milli?
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
             .all_compressed_documents(&rtxn)
             .unwrap()
-            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .map(|ret| {
+                let (_id, compressed_doc) = ret.unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+            })
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
@@ -4037,12 +4109,20 @@ mod tests {
         // Has everything being pushed successfully in milli?
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
             .all_compressed_documents(&rtxn)
             .unwrap()
-            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .map(|ret| {
+                let (_id, compressed_doc) = ret.unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+            })
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
@@ -4098,12 +4178,20 @@ mod tests {
         // Has everything being pushed successfully in milli?
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
             .all_compressed_documents(&rtxn)
             .unwrap()
-            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .map(|ret| {
+                let (_id, compressed_doc) = ret.unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+            })
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
@@ -4159,6 +4247,8 @@ mod tests {
         // Is the primary key still what we expect?
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
         snapshot!(primary_key, @"id");
 
@@ -4168,7 +4258,13 @@ mod tests {
         let documents = index
             .all_compressed_documents(&rtxn)
             .unwrap()
-            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .map(|ret| {
+                let (_id, compressed_doc) = ret.unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+            })
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
@@ -4220,6 +4316,8 @@ mod tests {
         // Is the primary key still what we expect?
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
         snapshot!(primary_key, @"id");
 
@@ -4229,7 +4327,13 @@ mod tests {
         let documents = index
             .all_compressed_documents(&rtxn)
             .unwrap()
-            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .map(|ret| {
+                let (_id, compressed_doc) = ret.unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+            })
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
@@ -4303,6 +4407,8 @@ mod tests {
         // Is the primary key still what we expect?
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
         snapshot!(primary_key, @"id");
 
@@ -4312,7 +4418,13 @@ mod tests {
         let documents = index
             .all_compressed_documents(&rtxn)
             .unwrap()
-            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .map(|ret| {
+                let (_id, compressed_doc) = ret.unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+            })
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
@@ -4389,6 +4501,8 @@ mod tests {
         // Is the primary key still what we expect?
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
         snapshot!(primary_key, @"paw");
 
@@ -4398,7 +4512,13 @@ mod tests {
         let documents = index
             .all_compressed_documents(&rtxn)
             .unwrap()
-            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .map(|ret| {
+                let (_id, compressed_doc) = ret.unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+            })
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
@@ -4468,6 +4588,8 @@ mod tests {
         // Is the primary key still what we expect?
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
         snapshot!(primary_key, @"doggoid");
 
@@ -4477,7 +4599,13 @@ mod tests {
         let documents = index
             .all_compressed_documents(&rtxn)
             .unwrap()
-            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .map(|ret| {
+                let (_id, compressed_doc) = ret.unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+            })
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
@@ -5120,6 +5248,8 @@ mod tests {
         {
             let index = index_scheduler.index("doggos").unwrap();
             let rtxn = index.read_txn().unwrap();
+            let mut buffer = Vec::new();
+            let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
 
             // Ensure the document have been inserted into the relevant bitamp
             let configs = index.embedding_configs(&rtxn).unwrap();
@@ -5139,8 +5269,12 @@ mod tests {
             assert_json_snapshot!(embeddings[&simple_hf_name][0] == lab_embed, @"true");
             assert_json_snapshot!(embeddings[&fakerest_name][0] == beagle_embed, @"true");
 
-            let doc = index.compressed_documents(&rtxn, std::iter::once(0)).unwrap()[0].1;
+            let (_id, compressed_doc) =
+                index.compressed_documents(&rtxn, std::iter::once(0)).unwrap().remove(0);
             let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+            let doc = compressed_doc
+                .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                .unwrap();
             let doc = obkv_to_json(
                 &[
                     fields_ids_map.id("doggo").unwrap(),
@@ -5194,6 +5328,8 @@ mod tests {
             {
                 let index = index_scheduler.index("doggos").unwrap();
                 let rtxn = index.read_txn().unwrap();
+                let mut buffer = Vec::new();
+                let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
 
                 // Ensure the document have been inserted into the relevant bitamp
                 let configs = index.embedding_configs(&rtxn).unwrap();
@@ -5216,8 +5352,12 @@ mod tests {
                 // remained beagle
                 assert_json_snapshot!(embeddings[&fakerest_name][0] == beagle_embed, @"true");
 
-                let doc = index.compressed_documents(&rtxn, std::iter::once(0)).unwrap()[0].1;
+                let (_id, compressed_doc) =
+                    index.compressed_documents(&rtxn, std::iter::once(0)).unwrap().remove(0);
                 let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
                 let doc = obkv_to_json(
                     &[
                         fields_ids_map.id("doggo").unwrap(),
@@ -5309,12 +5449,20 @@ mod tests {
 
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
-            .all_documents(&rtxn)
+            .all_compressed_documents(&rtxn)
             .unwrap()
-            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .map(|ret| {
+                let (_id, compressed_doc) = ret.unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+            })
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string(&documents).unwrap(), name: "documents after initial push");
 
@@ -5348,12 +5496,20 @@ mod tests {
 
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
-            .all_documents(&rtxn)
+            .all_compressed_documents(&rtxn)
             .unwrap()
-            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .map(|ret| {
+                let (_id, compressed_doc) = ret.unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+            })
             .collect::<Vec<_>>();
         // the all the vectors linked to the new specified embedder have been removed
         // Only the unknown embedders stays in the document DB
@@ -5456,9 +5612,15 @@ mod tests {
 
         // the document with the id 3 should have its original embedding updated
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let docid = index.external_documents_ids.get(&rtxn, "3").unwrap().unwrap();
-        let doc = index.documents(&rtxn, Some(docid)).unwrap()[0];
-        let doc = obkv_to_json(&field_ids, &field_ids_map, doc.1).unwrap();
+        let (_id, compressed_doc) =
+            index.compressed_documents(&rtxn, Some(docid)).unwrap().remove(0);
+        let doc = compressed_doc
+            .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+            .unwrap();
+        let doc = obkv_to_json(&field_ids, &field_ids_map, doc).unwrap();
         snapshot!(json_string!(doc), @r###"
         {
           "id": 3,
@@ -5570,12 +5732,20 @@ mod tests {
 
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
-            .all_documents(&rtxn)
+            .all_compressed_documents(&rtxn)
             .unwrap()
-            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .map(|ret| {
+                let (_id, compressed_doc) = ret.unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+            })
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string(&documents).unwrap(), @r###"[{"id":0,"doggo":"kefir"}]"###);
         let conf = index.embedding_configs(&rtxn).unwrap();
@@ -5610,12 +5780,20 @@ mod tests {
 
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
+        let mut buffer = Vec::new();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
         let documents = index
-            .all_documents(&rtxn)
+            .all_compressed_documents(&rtxn)
             .unwrap()
-            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .map(|ret| {
+                let (_id, compressed_doc) = ret.unwrap();
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+            })
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string(&documents).unwrap(), @"[]");
         let conf = index.embedding_configs(&rtxn).unwrap();
@@ -5726,12 +5904,20 @@ mod tests {
         {
             let index = index_scheduler.index("doggos").unwrap();
             let rtxn = index.read_txn().unwrap();
+            let mut buffer = Vec::new();
+            let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
             let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
             let field_ids = field_ids_map.ids().collect::<Vec<_>>();
             let documents = index
-                .all_documents(&rtxn)
+                .all_compressed_documents(&rtxn)
                 .unwrap()
-                .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+                .map(|ret| {
+                    let (_id, compressed_doc) = ret.unwrap();
+                    let doc = compressed_doc
+                        .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                        .unwrap();
+                    obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+                })
                 .collect::<Vec<_>>();
             snapshot!(serde_json::to_string(&documents).unwrap(), @r###"[{"id":0,"doggo":"kefir"},{"id":1,"doggo":"intel"}]"###);
         }
@@ -5761,12 +5947,20 @@ mod tests {
         {
             let index = index_scheduler.index("doggos").unwrap();
             let rtxn = index.read_txn().unwrap();
+            let mut buffer = Vec::new();
+            let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
             let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
             let field_ids = field_ids_map.ids().collect::<Vec<_>>();
             let documents = index
-                .all_documents(&rtxn)
+                .all_compressed_documents(&rtxn)
                 .unwrap()
-                .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+                .map(|ret| {
+                    let (_id, compressed_doc) = ret.unwrap();
+                    let doc = compressed_doc
+                        .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                        .unwrap();
+                    obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+                })
                 .collect::<Vec<_>>();
             snapshot!(serde_json::to_string(&documents).unwrap(), @r###"[{"id":0,"doggo":"kefir","_vectors":{"manual":{"embeddings":[[0.0,0.0,0.0]],"regenerate":false}}},{"id":1,"doggo":"intel","_vectors":{"manual":{"embeddings":[[1.0,1.0,1.0]],"regenerate":false}}}]"###);
         }
@@ -5794,12 +5988,20 @@ mod tests {
         {
             let index = index_scheduler.index("doggos").unwrap();
             let rtxn = index.read_txn().unwrap();
+            let mut buffer = Vec::new();
+            let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
             let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
             let field_ids = field_ids_map.ids().collect::<Vec<_>>();
             let documents = index
-                .all_documents(&rtxn)
+                .all_compressed_documents(&rtxn)
                 .unwrap()
-                .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+                .map(|ret| {
+                    let (_id, compressed_doc) = ret.unwrap();
+                    let doc = compressed_doc
+                        .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                        .unwrap();
+                    obkv_to_json(&field_ids, &field_ids_map, doc).unwrap()
+                })
                 .collect::<Vec<_>>();
 
             // FIXME: redaction

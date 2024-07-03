@@ -10,7 +10,6 @@ use heed::types::Bytes;
 use heed::{BytesDecode, RwTxn};
 use obkv::{KvReader, KvWriter};
 use roaring::RoaringBitmap;
-use zstd::dict::EncoderDictionary;
 
 use super::helpers::{
     self, keep_first, merge_deladd_btreeset_string, merge_deladd_cbo_roaring_bitmaps,
@@ -20,7 +19,7 @@ use super::helpers::{
 use super::MergeFn;
 use crate::external_documents_ids::{DocumentOperation, DocumentOperationKind};
 use crate::facet::FacetType;
-use crate::heed_codec::{CompressedKvWriterU16, COMPRESSION_LEVEL};
+use crate::heed_codec::CompressedKvWriterU16;
 use crate::index::db_name::DOCUMENTS;
 use crate::index::IndexEmbeddingConfig;
 use crate::proximity::MAX_DISTANCE;
@@ -164,10 +163,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 .into_iter()
                 .map(|IndexEmbeddingConfig { name, .. }| name)
                 .collect();
-            // TODO declare the compression ratio as a const
-            let dictionary = index
-                .document_compression_dictionary(wtxn)?
-                .map(|dict| EncoderDictionary::copy(dict, COMPRESSION_LEVEL));
+            let dictionary = index.document_compression_dictionary(wtxn)?;
             let mut vectors_buffer = Vec::new();
             while let Some((key, reader)) = iter.next()? {
                 let mut writer: KvWriter<_, FieldId> = KvWriter::memory();

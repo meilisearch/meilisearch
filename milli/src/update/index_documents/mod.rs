@@ -21,7 +21,6 @@ use serde::{Deserialize, Serialize};
 use slice_group_by::GroupBy;
 use tracing::debug;
 use typed_chunk::{write_typed_chunk_into_index, ChunkAccumulator, TypedChunk};
-use zstd::dict::EncoderDictionary;
 
 use self::enrich::enrich_documents_batch;
 pub use self::enrich::{extract_finite_float_from_value, DocumentId};
@@ -35,7 +34,7 @@ use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
 use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
-use crate::heed_codec::{CompressedKvWriterU16, CompressedObkvCodec, COMPRESSION_LEVEL};
+use crate::heed_codec::{CompressedKvWriterU16, CompressedObkvCodec};
 use crate::thread_pool_no_abort::ThreadPoolNoAbortBuilder;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
@@ -784,8 +783,8 @@ where
         // TODO make this 64_000 const
         let dictionary = zstd::dict::from_continuous(&sample_data, &sample_sizes, 64_000)?;
         self.index.put_document_compression_dictionary(self.wtxn, &dictionary)?;
-        // TODO use declare the level 3 as a const
-        let dictionary = EncoderDictionary::copy(&dictionary, COMPRESSION_LEVEL);
+        // safety: We just set the dictionary above, it must be there when we get it back.
+        let dictionary = self.index.document_compression_dictionary(self.wtxn)?.unwrap();
 
         // TODO do not remap types here but rather expose the &[u8] for the KvReaderU16
         let mut iter = self.index.documents.iter_mut(self.wtxn)?;
@@ -901,6 +900,7 @@ mod tests {
     #[test]
     fn simple_document_merge() {
         let mut index = TempIndex::new();
+        let mut buffer = Vec::new();
         index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         // First we send 3 documents with duplicate ids and
@@ -919,16 +919,21 @@ mod tests {
         assert_eq!(count, 1);
 
         // Check that we get only one document from the database.
-        let docs = index.compressed_documents(&rtxn, Some(0)).unwrap();
-        assert_eq!(docs.len(), 1);
-        let (id, doc) = docs[0];
+        let mut compressed_docs = index.compressed_documents(&rtxn, Some(0)).unwrap();
+        assert_eq!(compressed_docs.len(), 1);
+        let (id, compressed_doc) = compressed_docs.remove(0);
         assert_eq!(id, 0);
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
+        let doc = compressed_doc
+            .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+            .unwrap();
 
         // Check that this document is equal to the last one sent.
         let mut doc_iter = doc.iter();
         assert_eq!(doc_iter.next(), Some((0, &b"1"[..])));
         assert_eq!(doc_iter.next(), Some((1, &br#""benoit""#[..])));
         assert_eq!(doc_iter.next(), None);
+        drop(dictionary);
         drop(rtxn);
 
         // Second we send 1 document with id 1, to force it to be merged with the previous one.
@@ -940,10 +945,14 @@ mod tests {
         assert_eq!(count, 1);
 
         // Check that we get only one document from the database.
-        let docs = index.compressed_documents(&rtxn, Some(0)).unwrap();
-        assert_eq!(docs.len(), 1);
-        let (id, doc) = docs[0];
+        let mut compressed_docs = index.compressed_documents(&rtxn, Some(0)).unwrap();
+        assert_eq!(compressed_docs.len(), 1);
+        let (id, compressed_doc) = compressed_docs.remove(0);
         assert_eq!(id, 0);
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
+        let doc = compressed_doc
+            .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+            .unwrap();
 
         // Check that this document is equal to the last one sent.
         let mut doc_iter = doc.iter();
@@ -951,6 +960,7 @@ mod tests {
         assert_eq!(doc_iter.next(), Some((1, &br#""benoit""#[..])));
         assert_eq!(doc_iter.next(), Some((2, &b"25"[..])));
         assert_eq!(doc_iter.next(), None);
+        drop(dictionary);
         drop(rtxn);
     }
 
@@ -975,6 +985,7 @@ mod tests {
     #[test]
     fn simple_auto_generated_documents_ids() {
         let mut index = TempIndex::new();
+        let mut buffer = Vec::new();
         index.index_documents_config.autogenerate_docids = true;
         // First we send 3 documents with ids from 1 to 3.
         index
@@ -987,12 +998,26 @@ mod tests {
 
         // Check that there is 3 documents now.
         let rtxn = index.read_txn().unwrap();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let count = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(count, 3);
 
-        let docs = index.compressed_documents(&rtxn, vec![0, 1, 2]).unwrap();
-        let (_id, obkv) = docs.iter().find(|(_id, kv)| kv.get(0) == Some(br#""kevin""#)).unwrap();
+        let compressed_docs = index.compressed_documents(&rtxn, vec![0, 1, 2]).unwrap();
+        let (_id, compressed_obkv) = compressed_docs
+            .iter()
+            .find(|(_id, compressed_doc)| {
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+                doc.get(0) == Some(br#""kevin""#)
+            })
+            .unwrap();
+
+        let obkv = compressed_obkv
+            .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+            .unwrap();
         let kevin_uuid: String = serde_json::from_slice(obkv.get(1).unwrap()).unwrap();
+        drop(dictionary);
         drop(rtxn);
 
         // Second we send 1 document with the generated uuid, to erase the previous ones.
@@ -1000,21 +1025,34 @@ mod tests {
 
         // Check that there is **always** 3 documents.
         let rtxn = index.read_txn().unwrap();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
         let count = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(count, 3);
 
         // the document 0 has been deleted and reinserted with the id 3
-        let docs = index.compressed_documents(&rtxn, vec![1, 2, 0]).unwrap();
-        let kevin_position =
-            docs.iter().position(|(_, d)| d.get(0).unwrap() == br#""updated kevin""#).unwrap();
+        let mut compressed_docs = index.compressed_documents(&rtxn, vec![1, 2, 0]).unwrap();
+        let kevin_position = compressed_docs
+            .iter()
+            .position(|(_, compressed_doc)| {
+                let doc = compressed_doc
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                    .unwrap();
+
+                doc.get(0).unwrap() == br#""updated kevin""#
+            })
+            .unwrap();
         assert_eq!(kevin_position, 2);
-        let (_, doc) = docs[kevin_position];
+        let (_, compressed_doc) = compressed_docs.remove(kevin_position);
+        let doc = compressed_doc
+            .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+            .unwrap();
 
         // Check that this document is equal to the last
         // one sent and that an UUID has been generated.
         assert_eq!(doc.get(0), Some(&br#""updated kevin""#[..]));
         // This is an UUID, it must be 36 bytes long plus the 2 surrounding string quotes (").
         assert_eq!(doc.get(1).unwrap().len(), 36 + 2);
+        drop(dictionary);
         drop(rtxn);
     }
 

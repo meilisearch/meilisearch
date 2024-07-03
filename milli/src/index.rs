@@ -11,7 +11,7 @@ use roaring::RoaringBitmap;
 use rstar::RTree;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-use zstd::dict::DecoderDictionary;
+use zstd::dict::{DecoderDictionary, EncoderDictionary};
 
 use crate::documents::PrimaryKey;
 use crate::error::{InternalError, UserError};
@@ -362,12 +362,28 @@ impl Index {
         self.main.remap_key_type::<Str>().delete(wtxn, main_key::DOCUMENT_COMPRESSION_DICTIONARY)
     }
 
-    /// Returns the optional dictionnary to be used when reading the OBKV documents.
-    pub fn document_compression_dictionary<'t>(
+    /// Returns the optional raw bytes dictionary to be used when reading or writing the OBKV documents.
+    pub fn document_compression_raw_dictionary<'t>(
         &self,
         rtxn: &'t RoTxn,
     ) -> heed::Result<Option<&'t [u8]>> {
         self.main.remap_types::<Str, Bytes>().get(rtxn, main_key::DOCUMENT_COMPRESSION_DICTIONARY)
+    }
+
+    pub fn document_decompression_dictionary<'t>(
+        &self,
+        rtxn: &'t RoTxn,
+    ) -> heed::Result<Option<DecoderDictionary<'t>>> {
+        self.document_compression_raw_dictionary(rtxn).map(|opt| opt.map(DecoderDictionary::copy))
+    }
+
+    pub fn document_compression_dictionary(
+        &self,
+        rtxn: &RoTxn,
+    ) -> heed::Result<Option<EncoderDictionary<'static>>> {
+        const COMPRESSION_LEVEL: i32 = 19;
+        self.document_compression_raw_dictionary(rtxn)
+            .map(|opt| opt.map(|bytes| EncoderDictionary::copy(bytes, COMPRESSION_LEVEL)))
     }
 
     /* documents ids */
@@ -1342,7 +1358,8 @@ impl Index {
                 process: "external_id_of",
             })
         })?;
-        let dictionary = self.document_compression_dictionary(rtxn)?.map(DecoderDictionary::copy);
+        let dictionary =
+            self.document_compression_raw_dictionary(rtxn)?.map(DecoderDictionary::copy);
         let mut buffer = Vec::new();
         Ok(self.iter_compressed_documents(rtxn, ids)?.map(move |entry| -> Result<_> {
             let (_docid, compressed_obkv) = entry?;
@@ -2476,11 +2493,12 @@ pub(crate) mod tests {
         "###);
 
         let rtxn = index.read_txn().unwrap();
-        let dictionary = index.document_compression_dictionary(&rtxn).unwrap();
-        let (_docid, compressed_obkv) = index.compressed_documents(&rtxn, [0]).unwrap()[0];
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
+        let (_docid, compressed_obkv) = index.compressed_documents(&rtxn, [0]).unwrap().remove(0);
         let mut buffer = Vec::new();
-        let obkv =
-            compressed_obkv.decompress_with_optional_dictionary(&mut buffer, dictionary).unwrap();
+        let obkv = compressed_obkv
+            .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+            .unwrap();
         let json = obkv_to_json(&[0, 1, 2], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
         insta::assert_debug_snapshot!(json, @r###"
         {
@@ -2489,9 +2507,10 @@ pub(crate) mod tests {
         "###);
 
         // Furthermore, when we retrieve document 34, it is not the result of merging 35 with 34
-        let (_docid, compressed_obkv) = index.compressed_documents(&rtxn, [2]).unwrap()[0];
-        let obkv =
-            compressed_obkv.decompress_with_optional_dictionary(&mut buffer, dictionary).unwrap();
+        let (_docid, compressed_obkv) = index.compressed_documents(&rtxn, [2]).unwrap().remove(0);
+        let obkv = compressed_obkv
+            .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+            .unwrap();
         let json = obkv_to_json(&[0, 1, 2], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
         insta::assert_debug_snapshot!(json, @r###"
         {
@@ -2500,6 +2519,7 @@ pub(crate) mod tests {
         }
         "###);
 
+        drop(dictionary);
         drop(rtxn);
 
         // Add new documents again
@@ -2698,11 +2718,16 @@ pub(crate) mod tests {
         } = search.execute().unwrap();
         let primary_key_id = index.fields_ids_map(&rtxn).unwrap().id("primary_key").unwrap();
         documents_ids.sort_unstable();
-        let docs = index.compressed_documents(&rtxn, documents_ids).unwrap();
+        let compressed_docs = index.compressed_documents(&rtxn, documents_ids).unwrap();
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
+        let mut buffer = Vec::new();
         let mut all_ids = HashSet::new();
-        for (_docid, obkv) in docs {
-            let id = obkv.get(primary_key_id).unwrap();
-            assert!(all_ids.insert(id));
+        for (_docid, compressed) in compressed_docs {
+            let doc = compressed
+                .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+                .unwrap();
+            let id = doc.get(primary_key_id).unwrap();
+            assert!(all_ids.insert(id.to_vec()));
         }
     }
 
