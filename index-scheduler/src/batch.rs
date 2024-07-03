@@ -922,11 +922,10 @@ impl IndexScheduler {
                         }
 
                         let (id, compressed) = ret?;
-                        let doc = match dictionary.as_ref() {
-                            // TODO manage this unwrap correctly
-                            Some(dict) => compressed.decompress_with(&mut buffer, dict)?,
-                            None => compressed.as_non_compressed(),
-                        };
+                        let doc = compressed.decompress_with_optional_dictionary(
+                            &mut buffer,
+                            dictionary.as_ref(),
+                        )?;
 
                         let mut document = milli::obkv_to_json(&all_fields, &fields_ids_map, doc)?;
 

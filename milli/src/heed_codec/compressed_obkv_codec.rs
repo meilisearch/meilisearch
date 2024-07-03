@@ -55,9 +55,22 @@ impl<'a> CompressedKvReaderU16<'a> {
         Ok(KvReaderU16::new(&buffer[..size]))
     }
 
-    /// Returns the KvReader like it is not compressed. Happends when there is no dictionnary yet.
+    /// Returns the KvReader like it is not compressed.
+    /// Happends when there is no dictionary yet.
     pub fn as_non_compressed(&self) -> KvReaderU16<'a> {
         KvReaderU16::new(self.0)
+    }
+
+    /// Decompresses this KvReader if necessary.
+    pub fn decompress_with_optional_dictionary<'b>(
+        &'b self,
+        buffer: &'b mut Vec<u8>,
+        dictionary: Option<&DecoderDictionary>,
+    ) -> io::Result<KvReaderU16<'b>> {
+        match dictionary {
+            Some(dict) => self.decompress_with(buffer, dict),
+            None => Ok(self.as_non_compressed()),
+        }
     }
 }
 

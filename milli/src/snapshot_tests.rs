@@ -412,10 +412,9 @@ pub fn snap_documents(index: &Index) -> String {
 
     for result in index.all_compressed_documents(&rtxn).unwrap() {
         let (_id, compressed_document) = result.unwrap();
-        let document = match dictionary {
-            Some(dict) => compressed_document.decompress_with(&mut buffer, dict).unwrap(),
-            None => compressed_document.as_non_compressed(),
-        };
+        let document = compressed_document
+            .decompress_with_optional_dictionary(&mut buffer, dictionary)
+            .unwrap();
         let doc = obkv_to_json(&display, &fields_ids_map, document).unwrap();
         snap.push_str(&serde_json::to_string(&doc).unwrap());
         snap.push('\n');

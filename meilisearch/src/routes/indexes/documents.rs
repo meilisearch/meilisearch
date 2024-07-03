@@ -612,11 +612,8 @@ fn some_documents<'a, 't: 'a>(
     Ok(index.iter_compressed_documents(rtxn, doc_ids)?.map(move |ret| {
         ret.map_err(ResponseError::from).and_then(
             |(key, compressed_document)| -> Result<_, ResponseError> {
-                let document = match dictionary.as_ref() {
-                    // TODO manage this unwrap correctly
-                    Some(dict) => compressed_document.decompress_with(&mut buffer, dict).unwrap(),
-                    None => compressed_document.as_non_compressed(),
-                };
+                let document = compressed_document
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())?;
                 let mut document = milli::obkv_to_json(&all_fields, &fields_ids_map, document)?;
                 match retrieve_vectors {
                     RetrieveVectors::Ignore => {}

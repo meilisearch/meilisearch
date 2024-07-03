@@ -1346,10 +1346,8 @@ impl Index {
         let mut buffer = Vec::new();
         Ok(self.iter_compressed_documents(rtxn, ids)?.map(move |entry| -> Result<_> {
             let (_docid, compressed_obkv) = entry?;
-            let obkv = match dictionary.as_ref() {
-                Some(dict) => compressed_obkv.decompress_with(&mut buffer, dict)?,
-                None => compressed_obkv.as_non_compressed(),
-            };
+            let obkv = compressed_obkv
+                .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())?;
             match primary_key.document_id(&obkv, &fields)? {
                 Ok(document_id) => Ok(document_id),
                 Err(_) => Err(InternalError::DocumentsError(
@@ -2481,10 +2479,8 @@ pub(crate) mod tests {
         let dictionary = index.document_compression_dictionary(&rtxn).unwrap();
         let (_docid, compressed_obkv) = index.compressed_documents(&rtxn, [0]).unwrap()[0];
         let mut buffer = Vec::new();
-        let obkv = match dictionary {
-            Some(dict) => compressed_obkv.decompress_with(&mut buffer, dict).unwrap(),
-            None => compressed_obkv.as_non_compressed(),
-        };
+        let obkv =
+            compressed_obkv.decompress_with_optional_dictionary(&mut buffer, dictionary).unwrap();
         let json = obkv_to_json(&[0, 1, 2], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
         insta::assert_debug_snapshot!(json, @r###"
         {
@@ -2494,10 +2490,8 @@ pub(crate) mod tests {
 
         // Furthermore, when we retrieve document 34, it is not the result of merging 35 with 34
         let (_docid, compressed_obkv) = index.compressed_documents(&rtxn, [2]).unwrap()[0];
-        let obkv = match dictionary {
-            Some(dict) => compressed_obkv.decompress_with(&mut buffer, dict).unwrap(),
-            None => compressed_obkv.as_non_compressed(),
-        };
+        let obkv =
+            compressed_obkv.decompress_with_optional_dictionary(&mut buffer, dictionary).unwrap();
         let json = obkv_to_json(&[0, 1, 2], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
         insta::assert_debug_snapshot!(json, @r###"
         {

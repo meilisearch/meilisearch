@@ -255,13 +255,10 @@ impl<'a, 'i> Transform<'a, 'i> {
                     InternalError::DatabaseMissingEntry { db_name: db_name::DOCUMENTS, key: None },
                 )?;
 
-                let base_obkv = match dictionary.as_ref() {
-                    // TODO manage this unwrap correctly
-                    Some(dict) => {
-                        base_compressed_obkv.decompress_with(&mut decompression_buffer, dict)?
-                    }
-                    None => base_compressed_obkv.as_non_compressed(),
-                };
+                let base_obkv = base_compressed_obkv.decompress_with_optional_dictionary(
+                    &mut decompression_buffer,
+                    dictionary.as_ref(),
+                )?;
 
                 // we check if the two documents are exactly equal. If it's the case we can skip this document entirely
                 if base_obkv.as_bytes() == obkv_buffer {
@@ -1053,11 +1050,8 @@ impl<'a, 'i> Transform<'a, 'i> {
                     InternalError::DatabaseMissingEntry { db_name: db_name::DOCUMENTS, key: None },
                 )?;
 
-                let old_obkv = match dictionary.as_ref() {
-                    // TODO manage this unwrap correctly
-                    Some(dict) => old_compressed_obkv.decompress_with(&mut buffer, dict).unwrap(),
-                    None => old_compressed_obkv.as_non_compressed(),
-                };
+                let old_obkv = old_compressed_obkv
+                    .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())?;
 
                 let injected_vectors: std::result::Result<
                     serde_json::Map<String, serde_json::Value>,
