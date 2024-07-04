@@ -631,7 +631,7 @@ pub async fn edit_documents_by_function(
             .await??
             .into();
 
-    debug!(returns = ?task, "Delete documents by filter");
+    debug!(returns = ?task, "Edit documents by function");
     Ok(HttpResponse::Accepted().json(task))
 }
 
