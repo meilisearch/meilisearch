@@ -183,7 +183,7 @@ where
         context: Option<Object>,
         code: &str,
     ) -> Result<(Self, StdResult<(u64, u64), UserError>)> {
-        // Early return when there is no document to add
+        // Early return when there is no document to edit
         if documents.is_empty() {
             return Ok((self, Ok((0, 0))));
         }
@@ -202,14 +202,16 @@ where
         // It is an arbitrary value. We need to let users define this in the settings.
         engine.set_max_operations(1_000_000);
 
-        let ast = engine.compile(code).unwrap();
+        let ast = engine.compile(code).map_err(UserError::DocumentEditionCompilationError)?;
         let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
         let primary_key = self.index.primary_key(self.wtxn)?.unwrap();
         let mut documents_batch_builder = tempfile::tempfile().map(DocumentsBatchBuilder::new)?;
         let mut documents_to_remove = RoaringBitmap::new();
 
         let context: Dynamic = match context {
-            Some(context) => serde_json::from_value(context.into()).unwrap(),
+            Some(context) => {
+                serde_json::from_value(context.into()).map_err(InternalError::SerdeJson)?
+            }
             None => Dynamic::from(()),
         };
 
@@ -227,6 +229,8 @@ where
         )?;
 
         let processing = documents.into_iter().par_bridge().map(|docid| {
+            // safety: Both documents *must* exists in the database as
+            //         their IDs comes from the list of documents ids.
             let rhai_document = immutable_obkvs.rhai_map(docid)?.unwrap();
             let json_document = immutable_obkvs.json_map(docid)?.unwrap();
             let document_id = &json_document[primary_key];
@@ -234,32 +238,38 @@ where
             let mut scope = Scope::new();
             scope.push_constant_dynamic("context", context.clone());
             scope.push("doc", rhai_document);
-            let _ = engine.eval_ast_with_scope::<Dynamic>(&mut scope, &ast).unwrap();
+            // That's were the magic happens. We run the user script
+            // which edits "doc" scope variable reprensenting the document
+            // and ignore the output and even the type of it, i.e., Dynamic.
+            let _ = engine
+                .eval_ast_with_scope::<Dynamic>(&mut scope, &ast)
+                .map_err(UserError::DocumentEditionRuntimeError)?;
 
             match scope.remove::<Dynamic>("doc") {
-                // If the "doc" variable has been removed from the scope
-                // or set to (), we effectively delete the document.
-                Some(doc) if doc.is_unit() => {
-                    return Ok(DocumentEdition::Deleted(docid));
-                }
-                None => unreachable!(),
+                // If the "doc" variable has set to (), we effectively delete the document.
+                Some(doc) if doc.is_unit() => Ok(DocumentEdition::Deleted(docid)),
+                None => unreachable!("missing doc variable from the Rhai scope"),
                 Some(document) => match document.try_cast() {
                     Some(document) => {
                         let new_document = rhaimap_to_object(document);
+                        // Note: This condition is not perfect. Sometimes it detect changes
+                        //       like with floating points numbers and consider updating
+                        //       the document even if nothing actually changed.
                         if json_document != new_document {
-                            assert_eq!(
-                                Some(document_id),
-                                new_document.get(primary_key),
-                                "you cannot change the document id when editing documents"
-                            );
-                            return Ok(DocumentEdition::Edited(new_document));
+                            if Some(document_id) != new_document.get(primary_key) {
+                                Err(Error::UserError(
+                                    UserError::DocumentEditionCannotModifyPrimaryKey,
+                                ))
+                            } else {
+                                Ok(DocumentEdition::Edited(new_document))
+                            }
+                        } else {
+                            Ok(DocumentEdition::Nothing)
                         }
                     }
-                    None => panic!("Why is \"doc\" no longer a Map?"),
+                    None => Err(Error::UserError(UserError::DocumentEditionDocumentMustBeObject)),
                 },
             }
-
-            Ok(DocumentEdition::Nothing) as Result<_>
         });
 
         rayon_par_bridge::par_bridge(100, processing, |iterator| {

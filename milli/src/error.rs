@@ -5,6 +5,7 @@ use std::{io, str};
 
 use heed::{Error as HeedError, MdbError};
 use rayon::ThreadPoolBuildError;
+use rhai::EvalAltResult;
 use serde_json::Value;
 use thiserror::Error;
 
@@ -259,6 +260,14 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     InvalidSettingsDimensions { embedder_name: String },
     #[error("`.embedders.{embedder_name}.url`: could not parse `{url}`: {inner_error}")]
     InvalidUrl { embedder_name: String, inner_error: url::ParseError, url: String },
+    #[error("Document editions cannot modify a document's primary key")]
+    DocumentEditionCannotModifyPrimaryKey,
+    #[error("Document editions must keep documents as objects")]
+    DocumentEditionDocumentMustBeObject,
+    #[error("Document edition runtime error encountered while running the function: {0}")]
+    DocumentEditionRuntimeError(Box<EvalAltResult>),
+    #[error("Document edition runtime error encountered while compiling the function: {0}")]
+    DocumentEditionCompilationError(rhai::ParseError),
 }
 
 impl From<crate::vector::Error> for Error {

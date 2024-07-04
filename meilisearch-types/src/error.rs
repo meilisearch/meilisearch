@@ -336,7 +336,8 @@ UnsupportedMediaType                  , InvalidRequest       , UNSUPPORTED_MEDIA
 
 // Experimental features
 VectorEmbeddingError                  , InvalidRequest       , BAD_REQUEST ;
-NotFoundSimilarId                     , InvalidRequest       , BAD_REQUEST
+NotFoundSimilarId                     , InvalidRequest       , BAD_REQUEST ;
+EditDocumentsByFunctionError          , InvalidRequest       , BAD_REQUEST
 }
 
 impl ErrorCode for JoinError {
@@ -407,6 +408,12 @@ impl ErrorCode for milli::Error {
                     }
                     UserError::InvalidEmbedder(_) => Code::InvalidEmbedder,
                     UserError::VectorEmbeddingError(_) => Code::VectorEmbeddingError,
+                    UserError::DocumentEditionCannotModifyPrimaryKey
+                    | UserError::DocumentEditionDocumentMustBeObject
+                    | UserError::DocumentEditionRuntimeError(_)
+                    | UserError::DocumentEditionCompilationError(_) => {
+                        Code::EditDocumentsByFunctionError
+                    }
                 }
             }
         }
