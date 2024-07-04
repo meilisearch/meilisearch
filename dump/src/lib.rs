@@ -104,6 +104,11 @@ pub enum KindDump {
     DocumentDeletionByFilter {
         filter: serde_json::Value,
     },
+    DocumentEdition {
+        filter: Option<serde_json::Value>,
+        context: Option<serde_json::Map<String, serde_json::Value>>,
+        function: String,
+    },
     Settings {
         settings: Box<meilisearch_types::settings::Settings<Unchecked>>,
         is_deletion: bool,
@@ -166,17 +171,14 @@ impl From<KindWithContent> for KindDump {
                 documents_count,
                 allow_index_creation,
             },
-            KindWithContent::DocumentEdition { .. } => KindDump::DocumentImport {
-                primary_key: None,
-                method: IndexDocumentsMethod::UpdateDocuments,
-                documents_count: 0,
-                allow_index_creation: false,
-            },
             KindWithContent::DocumentDeletion { documents_ids, .. } => {
                 KindDump::DocumentDeletion { documents_ids }
             }
             KindWithContent::DocumentDeletionByFilter { filter_expr, .. } => {
                 KindDump::DocumentDeletionByFilter { filter: filter_expr }
+            }
+            KindWithContent::DocumentEdition { filter_expr, context, function, .. } => {
+                KindDump::DocumentEdition { filter: filter_expr, context, function }
             }
             KindWithContent::DocumentClear { .. } => KindDump::DocumentClear,
             KindWithContent::SettingsUpdate {

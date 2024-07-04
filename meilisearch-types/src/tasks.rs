@@ -97,12 +97,6 @@ pub enum KindWithContent {
         documents_count: u64,
         allow_index_creation: bool,
     },
-    DocumentEdition {
-        index_uid: String,
-        filter_expr: Option<serde_json::Value>,
-        context: Option<milli::Object>,
-        function: String,
-    },
     DocumentDeletion {
         index_uid: String,
         documents_ids: Vec<String>,
@@ -110,6 +104,12 @@ pub enum KindWithContent {
     DocumentDeletionByFilter {
         index_uid: String,
         filter_expr: serde_json::Value,
+    },
+    DocumentEdition {
+        index_uid: String,
+        filter_expr: Option<serde_json::Value>,
+        context: Option<milli::Object>,
+        function: String,
     },
     DocumentClear {
         index_uid: String,
@@ -534,13 +534,6 @@ pub enum Details {
         received_documents: u64,
         indexed_documents: Option<u64>,
     },
-    DocumentEdition {
-        deleted_documents: Option<u64>,
-        edited_documents: Option<u64>,
-        original_filter: Option<String>,
-        context: Option<Object>,
-        function: String,
-    },
     SettingsUpdate {
         settings: Box<Settings<Unchecked>>,
     },
@@ -554,6 +547,13 @@ pub enum Details {
     DocumentDeletionByFilter {
         original_filter: String,
         deleted_documents: Option<u64>,
+    },
+    DocumentEdition {
+        deleted_documents: Option<u64>,
+        edited_documents: Option<u64>,
+        original_filter: Option<String>,
+        context: Option<Object>,
+        function: String,
     },
     ClearAll {
         deleted_documents: Option<u64>,
