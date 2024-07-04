@@ -13,7 +13,7 @@ use crate::search::new::{SearchContext, Word};
 use crate::Result;
 
 pub fn compute_docids(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     condition: &ProximityCondition,
     universe: &RoaringBitmap,
 ) -> Result<ComputedCondition> {
@@ -110,7 +110,7 @@ pub fn compute_docids(
 }
 
 fn compute_prefix_edges(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     left_word: Interned<String>,
     right_prefix: Interned<String>,
     left_phrase: Option<Interned<Phrase>>,
@@ -166,7 +166,7 @@ fn compute_prefix_edges(
 }
 
 fn compute_non_prefix_edges(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     word1: Interned<String>,
     word2: Interned<String>,
     left_phrase: Option<Interned<Phrase>>,
@@ -209,7 +209,7 @@ fn compute_non_prefix_edges(
 }
 
 fn last_words_of_term_derivations(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     t: &QueryTermSubset,
 ) -> Result<BTreeSet<(Option<Interned<Phrase>>, Word)>> {
     let mut result = BTreeSet::new();
@@ -228,7 +228,7 @@ fn last_words_of_term_derivations(
     Ok(result)
 }
 fn first_word_of_term_iter(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     t: &QueryTermSubset,
 ) -> Result<BTreeSet<(Interned<String>, Option<Interned<Phrase>>)>> {
     let mut result = BTreeSet::new();

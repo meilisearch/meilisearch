@@ -758,7 +758,7 @@ where
     name = "index_documents_word_prefix_docids"
 )]
 fn execute_word_prefix_docids(
-    txn: &mut heed::RwTxn,
+    txn: &mut heed::RwTxn<'_>,
     merger: Merger<CursorClonableMmap, MergeFn>,
     word_docids_db: Database<Str, CboRoaringBitmapCodec>,
     word_prefix_docids_db: Database<Str, CboRoaringBitmapCodec>,

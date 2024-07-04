@@ -30,7 +30,7 @@ impl<'ctx> SearchContext<'ctx> {
     }
 }
 pub fn compute_query_term_subset_docids(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     term: &QueryTermSubset,
 ) -> Result<RoaringBitmap> {
     let mut docids = RoaringBitmap::new();
@@ -53,7 +53,7 @@ pub fn compute_query_term_subset_docids(
 }
 
 pub fn compute_query_term_subset_docids_within_field_id(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     term: &QueryTermSubset,
     fid: u16,
 ) -> Result<RoaringBitmap> {
@@ -86,7 +86,7 @@ pub fn compute_query_term_subset_docids_within_field_id(
 }
 
 pub fn compute_query_term_subset_docids_within_position(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     term: &QueryTermSubset,
     position: u16,
 ) -> Result<RoaringBitmap> {
@@ -121,7 +121,7 @@ pub fn compute_query_term_subset_docids_within_position(
 
 /// Returns the subset of the input universe that satisfies the contraints of the input query graph.
 pub fn compute_query_graph_docids(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     q: &QueryGraph,
     universe: &RoaringBitmap,
 ) -> Result<RoaringBitmap> {
@@ -178,7 +178,7 @@ pub fn compute_query_graph_docids(
 }
 
 pub fn compute_phrase_docids(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     phrase: Interned<Phrase>,
 ) -> Result<RoaringBitmap> {
     let Phrase { words } = ctx.phrase_interner.get(phrase).clone();

@@ -76,7 +76,7 @@ impl<R: io::Read + io::Seek> DocumentsBatchCursor<R> {
     /// `next_document` advance the document reader until all the documents have been read.
     pub fn next_document(
         &mut self,
-    ) -> Result<Option<KvReader<FieldId>>, DocumentsBatchCursorError> {
+    ) -> Result<Option<KvReader<'_, FieldId>>, DocumentsBatchCursorError> {
         match self.cursor.move_on_next()? {
             Some((key, value)) if key != DOCUMENTS_BATCH_INDEX_KEY => {
                 Ok(Some(KvReader::new(value)))
@@ -108,7 +108,7 @@ impl From<serde_json::Error> for DocumentsBatchCursorError {
 impl error::Error for DocumentsBatchCursorError {}
 
 impl fmt::Display for DocumentsBatchCursorError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             DocumentsBatchCursorError::Grenad(e) => e.fmt(f),
             DocumentsBatchCursorError::SerdeJson(e) => e.fmt(f),

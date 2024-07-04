@@ -47,7 +47,7 @@ pub struct FacetDistribution<'a> {
 }
 
 impl<'a> FacetDistribution<'a> {
-    pub fn new(rtxn: &'a heed::RoTxn, index: &'a Index) -> FacetDistribution<'a> {
+    pub fn new(rtxn: &'a heed::RoTxn<'a>, index: &'a Index) -> FacetDistribution<'a> {
         FacetDistribution {
             facets: None,
             candidates: None,
@@ -374,7 +374,7 @@ impl<'a> FacetDistribution<'a> {
 }
 
 impl fmt::Debug for FacetDistribution<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let FacetDistribution {
             facets,
             candidates,

@@ -21,7 +21,7 @@ pub enum Vectors {
 impl<E: DeserializeError> Deserr<E> for Vectors {
     fn deserialize_from_value<V: deserr::IntoValue>(
         value: deserr::Value<V>,
-        location: deserr::ValuePointerRef,
+        location: deserr::ValuePointerRef<'_>,
     ) -> Result<Self, E> {
         match value {
             deserr::Value::Sequence(_) | deserr::Value::Null => {
@@ -186,7 +186,7 @@ pub struct ParsedVectors(pub BTreeMap<String, Vectors>);
 impl<E: DeserializeError> Deserr<E> for ParsedVectors {
     fn deserialize_from_value<V: deserr::IntoValue>(
         value: deserr::Value<V>,
-        location: deserr::ValuePointerRef,
+        location: deserr::ValuePointerRef<'_>,
     ) -> Result<Self, E> {
         let value = <BTreeMap<String, Vectors>>::deserialize_from_value(value, location)?;
         Ok(ParsedVectors(value))
@@ -230,7 +230,7 @@ impl Error {
 }
 
 fn to_vector_map(
-    obkv: KvReaderDelAdd,
+    obkv: KvReaderDelAdd<'_>,
     side: DelAdd,
 ) -> Result<Option<BTreeMap<String, Vectors>>, Error> {
     Ok(if let Some(value) = obkv.get(side) {
@@ -252,7 +252,7 @@ pub struct VectorOrArrayOfVectors {
 impl<E: DeserializeError> Deserr<E> for VectorOrArrayOfVectors {
     fn deserialize_from_value<V: deserr::IntoValue>(
         value: deserr::Value<V>,
-        location: deserr::ValuePointerRef,
+        location: deserr::ValuePointerRef<'_>,
     ) -> Result<Self, E> {
         match value {
             deserr::Value::Null => Ok(VectorOrArrayOfVectors { inner: None }),

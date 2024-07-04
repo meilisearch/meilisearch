@@ -30,7 +30,7 @@ impl<'a> heed::BytesDecode<'a> for StrBEU32Codec {
 impl<'a> heed::BytesEncode<'a> for StrBEU32Codec {
     type EItem = (&'a str, u32);
 
-    fn bytes_encode((word, pos): &Self::EItem) -> Result<Cow<[u8]>, BoxedError> {
+    fn bytes_encode((word, pos): &Self::EItem) -> Result<Cow<'a, [u8]>, BoxedError> {
         let pos = pos.to_be_bytes();
 
         let mut bytes = Vec::with_capacity(word.len() + pos.len());
@@ -66,7 +66,7 @@ impl<'a> heed::BytesDecode<'a> for StrBEU16Codec {
 impl<'a> heed::BytesEncode<'a> for StrBEU16Codec {
     type EItem = (&'a str, u16);
 
-    fn bytes_encode((word, pos): &Self::EItem) -> Result<Cow<[u8]>, BoxedError> {
+    fn bytes_encode((word, pos): &Self::EItem) -> Result<Cow<'a, [u8]>, BoxedError> {
         let pos = pos.to_be_bytes();
 
         let mut bytes = Vec::with_capacity(word.len() + 1 + pos.len());

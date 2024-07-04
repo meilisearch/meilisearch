@@ -375,7 +375,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
 /// docids and the previous path docids is empty.
 #[allow(clippy::too_many_arguments)]
 fn visit_path_condition<G: RankingRuleGraphTrait>(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     graph: &mut RankingRuleGraph<G>,
     universe: &RoaringBitmap,
     dead_ends_cache: &mut DeadEndsCache<G::Condition>,

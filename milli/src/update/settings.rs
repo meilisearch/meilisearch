@@ -44,7 +44,7 @@ where
 {
     fn deserialize_from_value<V: deserr::IntoValue>(
         value: deserr::Value<V>,
-        location: deserr::ValuePointerRef,
+        location: deserr::ValuePointerRef<'_>,
     ) -> std::result::Result<Self, E> {
         match value {
             deserr::Value::Null => Ok(Setting::Reset),
@@ -617,7 +617,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     fn update_synonyms(&mut self) -> Result<bool> {
         match self.synonyms {
             Setting::Set(ref user_synonyms) => {
-                fn normalize(tokenizer: &Tokenizer, text: &str) -> Vec<String> {
+                fn normalize(tokenizer: &Tokenizer<'_>, text: &str) -> Vec<String> {
                     tokenizer
                         .tokenize(text)
                         .filter_map(|token| {
@@ -838,7 +838,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     fn update_exact_words(&mut self) -> Result<()> {
         match self.exact_words {
             Setting::Set(ref mut words) => {
-                fn normalize(tokenizer: &Tokenizer, text: &str) -> String {
+                fn normalize(tokenizer: &Tokenizer<'_>, text: &str) -> String {
                     tokenizer.tokenize(text).map(|token| token.lemma().to_string()).collect()
                 }
 
@@ -1344,7 +1344,7 @@ pub(crate) struct InnerIndexSettings {
 }
 
 impl InnerIndexSettings {
-    pub fn from_index(index: &Index, rtxn: &heed::RoTxn) -> Result<Self> {
+    pub fn from_index(index: &Index, rtxn: &heed::RoTxn<'_>) -> Result<Self> {
         let stop_words = index.stop_words(rtxn)?;
         let stop_words = stop_words.map(|sw| sw.map_data(Vec::from).unwrap());
         let allowed_separators = index.allowed_separators(rtxn)?;
@@ -1407,7 +1407,7 @@ impl InnerIndexSettings {
     }
 
     // find and insert the new field ids
-    pub fn recompute_facets(&mut self, wtxn: &mut heed::RwTxn, index: &Index) -> Result<()> {
+    pub fn recompute_facets(&mut self, wtxn: &mut heed::RwTxn<'_>, index: &Index) -> Result<()> {
         let new_facets = self
             .fields_ids_map
             .iter()
@@ -1422,7 +1422,7 @@ impl InnerIndexSettings {
     }
 
     // find and insert the new field ids
-    pub fn recompute_searchables(&mut self, wtxn: &mut heed::RwTxn, index: &Index) -> Result<()> {
+    pub fn recompute_searchables(&mut self, wtxn: &mut heed::RwTxn<'_>, index: &Index) -> Result<()> {
         let searchable_fields = self
             .user_defined_searchable_fields
             .as_ref()

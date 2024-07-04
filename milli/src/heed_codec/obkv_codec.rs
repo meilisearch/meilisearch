@@ -16,7 +16,7 @@ impl<'a> heed::BytesDecode<'a> for ObkvCodec {
 impl heed::BytesEncode<'_> for ObkvCodec {
     type EItem = KvWriterU16<Vec<u8>>;
 
-    fn bytes_encode(item: &Self::EItem) -> Result<Cow<[u8]>, BoxedError> {
+    fn bytes_encode(item: &Self::EItem) -> Result<Cow<'_, [u8]>, BoxedError> {
         item.clone().into_inner().map(Cow::Owned).map_err(Into::into)
     }
 }

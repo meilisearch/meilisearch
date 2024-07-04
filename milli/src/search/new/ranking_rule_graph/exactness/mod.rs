@@ -17,7 +17,7 @@ pub enum ExactnessCondition {
 pub enum ExactnessGraph {}
 
 fn compute_docids(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     dest_node: &LocatedQueryTermSubset,
     universe: &RoaringBitmap,
 ) -> Result<RoaringBitmap> {
@@ -46,7 +46,7 @@ impl RankingRuleGraphTrait for ExactnessGraph {
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::exactness")]
     fn resolve_condition(
-        ctx: &mut SearchContext,
+        ctx: &mut SearchContext<'_>,
         condition: &Self::Condition,
         universe: &RoaringBitmap,
     ) -> Result<ComputedCondition> {
@@ -74,7 +74,7 @@ impl RankingRuleGraphTrait for ExactnessGraph {
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::exactness")]
     fn build_edges(
-        _ctx: &mut SearchContext,
+        _ctx: &mut SearchContext<'_>,
         conditions_interner: &mut DedupInterner<Self::Condition>,
         _source_node: Option<&LocatedQueryTermSubset>,
         dest_node: &LocatedQueryTermSubset,

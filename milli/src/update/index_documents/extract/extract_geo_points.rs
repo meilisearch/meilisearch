@@ -68,7 +68,7 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
 
 /// Extract the finite floats lat and lng from two bytes slices.
 fn extract_lat_lng(
-    document: &obkv::KvReader<FieldId>,
+    document: &obkv::KvReader<'_,FieldId>,
     settings: &InnerIndexSettings,
     deladd: DelAdd,
     document_id: impl Fn() -> Value,
