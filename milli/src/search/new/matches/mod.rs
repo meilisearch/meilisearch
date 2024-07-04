@@ -244,7 +244,12 @@ impl<'t> Matcher<'t, '_> {
     }
 
     /// Returns the bounds in byte index of the crop window.
-    fn crop_bounds(&self, tokens: &[Token<'_>], matches: &[Match], crop_size: usize) -> (usize, usize) {
+    fn crop_bounds(
+        &self,
+        tokens: &[Token<'_>],
+        matches: &[Match],
+        crop_size: usize,
+    ) -> (usize, usize) {
         // if there is no match, we start from the beginning of the string by default.
         let first_match_word_position = matches.first().map(|m| m.word_position).unwrap_or(0);
         let first_match_token_position = matches.first().map(|m| m.token_position).unwrap_or(0);

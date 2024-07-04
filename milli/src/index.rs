@@ -375,7 +375,11 @@ impl Index {
     /* primary key */
 
     /// Writes the documents primary key, this is the field name that is used to store the id.
-    pub(crate) fn put_primary_key(&self, wtxn: &mut RwTxn<'_>, primary_key: &str) -> heed::Result<()> {
+    pub(crate) fn put_primary_key(
+        &self,
+        wtxn: &mut RwTxn<'_>,
+        primary_key: &str,
+    ) -> heed::Result<()> {
         self.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
         self.main.remap_types::<Str, Str>().put(wtxn, main_key::PRIMARY_KEY_KEY, primary_key)
     }
@@ -531,7 +535,10 @@ impl Index {
     }
 
     /// Delete the documents ids that are faceted with a _geo field.
-    pub(crate) fn delete_geo_faceted_documents_ids(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
+    pub(crate) fn delete_geo_faceted_documents_ids(
+        &self,
+        wtxn: &mut RwTxn<'_>,
+    ) -> heed::Result<bool> {
         self.main.remap_key_type::<Str>().delete(wtxn, main_key::GEO_FACETED_DOCUMENTS_IDS_KEY)
     }
 
@@ -763,7 +770,10 @@ impl Index {
     }
 
     /// Identical to `user_defined_searchable_fields`, but returns ids instead.
-    pub fn user_defined_searchable_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<Option<Vec<FieldId>>> {
+    pub fn user_defined_searchable_fields_ids(
+        &self,
+        rtxn: &RoTxn<'_>,
+    ) -> Result<Option<Vec<FieldId>>> {
         match self.user_defined_searchable_fields(rtxn)? {
             Some(fields) => {
                 let fields_ids_map = self.fields_ids_map(rtxn)?;
@@ -1198,7 +1208,10 @@ impl Index {
             .unwrap_or_default())
     }
 
-    pub fn synonyms(&self, rtxn: &RoTxn<'_>) -> heed::Result<HashMap<Vec<String>, Vec<Vec<String>>>> {
+    pub fn synonyms(
+        &self,
+        rtxn: &RoTxn<'_>,
+    ) -> heed::Result<HashMap<Vec<String>, Vec<Vec<String>>>> {
         Ok(self
             .main
             .remap_types::<Str, SerdeBincode<_>>()
@@ -1384,7 +1397,11 @@ impl Index {
             .unwrap_or(DEFAULT_MIN_WORD_LEN_ONE_TYPO))
     }
 
-    pub(crate) fn put_min_word_len_one_typo(&self, txn: &mut RwTxn<'_>, val: u8) -> heed::Result<()> {
+    pub(crate) fn put_min_word_len_one_typo(
+        &self,
+        txn: &mut RwTxn<'_>,
+        val: u8,
+    ) -> heed::Result<()> {
         // It is not possible to put a bool in heed with OwnedType, so we put a u8 instead. We
         // identify 0 as being false, and anything else as true. The absence of a value is true,
         // because by default, we authorize typos.
@@ -1403,7 +1420,11 @@ impl Index {
             .unwrap_or(DEFAULT_MIN_WORD_LEN_TWO_TYPOS))
     }
 
-    pub(crate) fn put_min_word_len_two_typos(&self, txn: &mut RwTxn<'_>, val: u8) -> heed::Result<()> {
+    pub(crate) fn put_min_word_len_two_typos(
+        &self,
+        txn: &mut RwTxn<'_>,
+        val: u8,
+    ) -> heed::Result<()> {
         // It is not possible to put a bool in heed with OwnedType, so we put a u8 instead. We
         // identify 0 as being false, and anything else as true. The absence of a value is true,
         // because by default, we authorize typos.
@@ -1467,7 +1488,11 @@ impl Index {
         self.main.remap_types::<Str, BEU64>().get(txn, main_key::MAX_VALUES_PER_FACET)
     }
 
-    pub(crate) fn put_max_values_per_facet(&self, txn: &mut RwTxn<'_>, val: u64) -> heed::Result<()> {
+    pub(crate) fn put_max_values_per_facet(
+        &self,
+        txn: &mut RwTxn<'_>,
+        val: u64,
+    ) -> heed::Result<()> {
         self.main.remap_types::<Str, BEU64>().put(txn, main_key::MAX_VALUES_PER_FACET, &val)
     }
 
@@ -1508,7 +1533,10 @@ impl Index {
         self.main.remap_types::<Str, BEU64>().put(txn, main_key::PAGINATION_MAX_TOTAL_HITS, &val)
     }
 
-    pub(crate) fn delete_pagination_max_total_hits(&self, txn: &mut RwTxn<'_>) -> heed::Result<bool> {
+    pub(crate) fn delete_pagination_max_total_hits(
+        &self,
+        txn: &mut RwTxn<'_>,
+    ) -> heed::Result<bool> {
         self.main.remap_key_type::<Str>().delete(txn, main_key::PAGINATION_MAX_TOTAL_HITS)
     }
 
@@ -1544,7 +1572,10 @@ impl Index {
         self.script_language_docids.get(rtxn, key)
     }
 
-    pub fn script_language(&self, rtxn: &RoTxn<'_>) -> heed::Result<HashMap<Script, Vec<Language>>> {
+    pub fn script_language(
+        &self,
+        rtxn: &RoTxn<'_>,
+    ) -> heed::Result<HashMap<Script, Vec<Language>>> {
         let mut script_language: HashMap<Script, Vec<Language>> = HashMap::new();
         let mut script_language_doc_count: Vec<(Script, Language, u64)> = Vec::new();
         let mut total = 0;

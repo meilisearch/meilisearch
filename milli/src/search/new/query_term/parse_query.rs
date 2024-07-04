@@ -297,7 +297,12 @@ impl PhraseBuilder {
     }
 
     // precondition: token has kind Word or StopWord
-    fn push_word(&mut self, ctx: &mut SearchContext<'_>, token: &charabia::Token<'_>, position: u16) {
+    fn push_word(
+        &mut self,
+        ctx: &mut SearchContext<'_>,
+        token: &charabia::Token<'_>,
+        position: u16,
+    ) {
         if self.is_empty() {
             self.start = position;
         }

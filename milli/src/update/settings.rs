@@ -1422,7 +1422,11 @@ impl InnerIndexSettings {
     }
 
     // find and insert the new field ids
-    pub fn recompute_searchables(&mut self, wtxn: &mut heed::RwTxn<'_>, index: &Index) -> Result<()> {
+    pub fn recompute_searchables(
+        &mut self,
+        wtxn: &mut heed::RwTxn<'_>,
+        index: &Index,
+    ) -> Result<()> {
         let searchable_fields = self
             .user_defined_searchable_fields
             .as_ref()

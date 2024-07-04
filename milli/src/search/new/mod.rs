@@ -775,7 +775,10 @@ pub fn execute_search(
     })
 }
 
-fn check_sort_criteria(ctx: &SearchContext<'_>, sort_criteria: Option<&Vec<AscDesc>>) -> Result<()> {
+fn check_sort_criteria(
+    ctx: &SearchContext<'_>,
+    sort_criteria: Option<&Vec<AscDesc>>,
+) -> Result<()> {
     let sort_criteria = if let Some(sort_criteria) = sort_criteria {
         sort_criteria
     } else {

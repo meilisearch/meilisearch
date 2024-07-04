@@ -28,7 +28,11 @@ impl ExternalDocumentsIds {
         self.0.is_empty(rtxn).map_err(Into::into)
     }
 
-    pub fn get<A: AsRef<str>>(&self, rtxn: &RoTxn<'_>, external_id: A) -> heed::Result<Option<u32>> {
+    pub fn get<A: AsRef<str>>(
+        &self,
+        rtxn: &RoTxn<'_>,
+        external_id: A,
+    ) -> heed::Result<Option<u32>> {
         self.0.get(rtxn, external_id.as_ref())
     }
 
@@ -51,7 +55,11 @@ impl ExternalDocumentsIds {
     ///
     /// - If attempting to delete a document that doesn't exist
     /// - If attempting to create a document that already exists
-    pub fn apply(&self, wtxn: &mut RwTxn<'_>, operations: Vec<DocumentOperation>) -> heed::Result<()> {
+    pub fn apply(
+        &self,
+        wtxn: &mut RwTxn<'_>,
+        operations: Vec<DocumentOperation>,
+    ) -> heed::Result<()> {
         for DocumentOperation { external_id, internal_id, kind } in operations {
             match kind {
                 DocumentOperationKind::Create => {

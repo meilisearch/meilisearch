@@ -97,7 +97,7 @@ impl SearchLogger<QueryGraph> for VisualSearchLogger {
     fn next_bucket_ranking_rule(
         &mut self,
         ranking_rule_idx: usize,
-        _ranking_rule: &dyn RankingRule<'_,QueryGraph>,
+        _ranking_rule: &dyn RankingRule<'_, QueryGraph>,
         universe: &RoaringBitmap,
         bucket: &RoaringBitmap,
     ) {

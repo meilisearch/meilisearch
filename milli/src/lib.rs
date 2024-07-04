@@ -229,7 +229,10 @@ pub fn obkv_to_json(
 }
 
 /// Transform every field of a raw obkv store into a JSON Object.
-pub fn all_obkv_to_json(obkv: obkv::KvReaderU16<'_>, fields_ids_map: &FieldsIdsMap) -> Result<Object> {
+pub fn all_obkv_to_json(
+    obkv: obkv::KvReaderU16<'_>,
+    fields_ids_map: &FieldsIdsMap,
+) -> Result<Object> {
     let all_keys = obkv.iter().map(|(k, _v)| k).collect::<Vec<_>>();
     obkv_to_json(all_keys.as_slice(), fields_ids_map, obkv)
 }
