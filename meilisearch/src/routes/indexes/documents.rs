@@ -580,9 +580,9 @@ pub async fn delete_documents_by_filter(
 pub struct DocumentEditionByFunction {
     #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
     filter: Option<Value>,
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
+    #[deserr(default, error = DeserrJsonError<InvalidDocumentEditionContext>)]
     context: Option<Value>,
-    #[deserr(error = DeserrJsonError<InvalidDocumentFilter>, missing_field_error = DeserrJsonError::missing_document_filter)]
+    #[deserr(error = DeserrJsonError<InvalidDocumentEditionFunctionFilter>, missing_field_error = DeserrJsonError::missing_document_edition_function)]
     function: String,
 }
 
@@ -617,10 +617,15 @@ pub async fn edit_documents_by_function(
     let task = KindWithContent::DocumentEdition {
         index_uid,
         filter_expr: filter,
-        context: context.map(|v| match v {
-            serde_json::Value::Object(m) => m,
-            _ => panic!("The context must be an Object"),
-        }),
+        context: match context {
+            Some(Value::Object(m)) => Some(m),
+            _ => {
+                return Err(ResponseError::from_msg(
+                    "The context must be an object".to_string(),
+                    Code::InvalidDocumentEditionContext,
+                ))
+            }
+        },
         function,
     };
 

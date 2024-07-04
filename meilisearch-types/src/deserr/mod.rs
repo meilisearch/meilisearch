@@ -151,6 +151,7 @@ make_missing_field_convenience_builder!(MissingApiKeyExpiresAt, missing_api_key_
 make_missing_field_convenience_builder!(MissingApiKeyIndexes, missing_api_key_indexes);
 make_missing_field_convenience_builder!(MissingSwapIndexes, missing_swap_indexes);
 make_missing_field_convenience_builder!(MissingDocumentFilter, missing_document_filter);
+make_missing_field_convenience_builder!(MissingDocumentFilter, missing_document_edition_function);
 make_missing_field_convenience_builder!(
     MissingFacetSearchFacetName,
     missing_facet_search_facet_name
