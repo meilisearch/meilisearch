@@ -132,6 +132,79 @@ static NESTED_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     ])
 });
 
+static FRUITS_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+    json!([
+        {
+            "name": "Exclusive sale: green apple",
+            "id": "green-apple-boosted",
+            "BOOST": true
+        },
+        {
+            "name": "Pear",
+            "id": "pear",
+        },
+        {
+            "name": "Red apple gala",
+            "id": "red-apple-gala",
+        },
+        {
+            "name": "Exclusive sale: Red Tomato",
+            "id": "red-tomatoes-boosted",
+            "BOOST": true
+        },
+        {
+            "name": "Exclusive sale: Red delicious apple",
+            "id": "red-delicious-boosted",
+            "BOOST": true,
+        }
+    ])
+});
+
+static VECTOR_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+    json!([
+      {
+        "id": "A",
+        "description": "the dog barks at the cat",
+        "_vectors": {
+          // dimensions [canine, feline, young]
+          "animal": [0.9, 0.8, 0.05],
+          // dimensions [negative/positive, energy]
+          "sentiment": [-0.1, 0.55]
+        }
+      },
+      {
+        "id": "B",
+        "description": "the kitten scratched the beagle",
+        "_vectors": {
+          // dimensions [canine, feline, young]
+          "animal": [0.8, 0.9, 0.5],
+          // dimensions [negative/positive, energy]
+          "sentiment": [-0.2, 0.65]
+        }
+      },
+      {
+        "id": "C",
+        "description": "the dog had to stay alone today",
+        "_vectors": {
+          // dimensions [canine, feline, young]
+          "animal": [0.85, 0.02, 0.1],
+          // dimensions [negative/positive, energy]
+          "sentiment": [-1.0, 0.1]
+        }
+      },
+      {
+        "id": "D",
+        "description": "the little boy pets the puppy",
+        "_vectors": {
+          // dimensions [canine, feline, young]
+          "animal": [0.8, 0.09, 0.8],
+          // dimensions [negative/positive, energy]
+          "sentiment": [0.8, 0.3]
+        }
+      },
+    ])
+});
+
 #[actix_rt::test]
 async fn simple_placeholder_search() {
     let server = Server::new().await;

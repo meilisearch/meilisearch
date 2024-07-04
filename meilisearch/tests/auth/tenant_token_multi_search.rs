@@ -310,6 +310,23 @@ macro_rules! compute_authorized_single_search {
                     tenant_token,
                     key_content
                 );
+
+                // federated
+                let (response, code) = server.multi_search(json!({"federation": {}, "queries" : [{"indexUid": "sales", "filter": $filter}]})).await;
+                assert_eq!(
+                    200, code,
+                    "{} using tenant_token: {:?} generated with parent_key: {:?}",
+                    response, tenant_token, key_content
+                );
+                assert_eq!(
+                    // same count as the search is federated over a single query
+                    $expected_count,
+                    response["hits"].as_array().unwrap().len(),
+                    "{} using tenant_token: {:?} generated with parent_key: {:?}",
+                    response,
+                    tenant_token,
+                    key_content
+                );
             }
         }
     };
@@ -375,6 +392,25 @@ macro_rules! compute_authorized_multiple_search {
                     tenant_token,
                     key_content
                 );
+
+                let (response, code) = server.multi_search(json!({"federation": {}, "queries" : [
+                    {"indexUid": "sales", "filter": $filter1},
+                    {"indexUid": "products", "filter": $filter2},
+                ]})).await;
+                assert_eq!(
+                    code, 200,
+                    "{} using tenant_token: {:?} generated with parent_key: {:?}",
+                    response, tenant_token, key_content
+                );
+                assert_eq!(
+                    response["hits"].as_array().unwrap().len(),
+                    // sum of counts as the search is federated across to queries in different indexes
+                    $expected_count1 + $expected_count2,
+                    "{} using tenant_token: {:?} generated with parent_key: {:?}",
+                    response,
+                    tenant_token,
+                    key_content
+                );
             }
         }
     };
@@ -433,6 +469,24 @@ macro_rules! compute_forbidden_single_search {
                     "{} using tenant_token: {:?} generated with parent_key: {:?}",
                     response, tenant_token, key_content
                 );
+
+                let (mut response, code) = server.multi_search(json!({"federation": {}, "queries" : [{"indexUid": "sales"}]})).await;
+                if failed_query_index.is_none() && !response["message"].is_null() {
+                    response["message"] = serde_json::json!(null);
+                }
+                assert_eq!(
+                    response,
+                    invalid_response(failed_query_index),
+                    "{} using tenant_token: {:?} generated with parent_key: {:?}",
+                    response,
+                    tenant_token,
+                    key_content
+                );
+                assert_eq!(
+                    code, 403,
+                    "{} using tenant_token: {:?} generated with parent_key: {:?}",
+                    response, tenant_token, key_content
+                );
             }
         }
     };
@@ -475,6 +529,27 @@ macro_rules! compute_forbidden_multiple_search {
                 let web_token = generate_tenant_token(&uid, &key, tenant_token.clone());
                 server.use_api_key(&web_token);
                 let (mut response, code) = server.multi_search(json!({"queries" : [
+                    {"indexUid": "sales"},
+                    {"indexUid": "products"},
+                ]})).await;
+                if failed_query_index.is_none() && !response["message"].is_null() {
+                    response["message"] = serde_json::json!(null);
+                }
+                assert_eq!(
+                    response,
+                    invalid_response(failed_query_index),
+                    "{} using tenant_token: {:?} generated with parent_key: {:?}",
+                    response,
+                    tenant_token,
+                    key_content
+                );
+                assert_eq!(
+                    code, 403,
+                    "{} using tenant_token: {:?} generated with parent_key: {:?}",
+                    response, tenant_token, key_content
+                );
+
+                let (mut response, code) = server.multi_search(json!({"federation": {}, "queries" : [
                     {"indexUid": "sales"},
                     {"indexUid": "products"},
                 ]})).await;
