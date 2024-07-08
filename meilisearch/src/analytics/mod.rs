@@ -102,7 +102,7 @@ pub trait Analytics: Sync + Send {
     /// This method should be called to aggregate post facet values searches
     fn post_facet_search(&self, aggregate: FacetSearchAggregator);
 
-    // this method should be called to aggregate a add documents request
+    // this method should be called to aggregate an add documents request
     fn add_documents(
         &self,
         documents_query: &UpdateDocumentsQuery,

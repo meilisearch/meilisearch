@@ -662,7 +662,11 @@ impl IndexScheduler {
         let rtxn = self.env.read_txn()?;
         self.index_mapper.index(&rtxn, name)
     }
-
+    /// Return the boolean referring if index exists.
+    pub fn index_exists(&self, name: &str) -> Result<bool> {
+        let rtxn = self.env.read_txn()?;
+        self.index_mapper.index_exists(&rtxn, name)
+    }
     /// Return the name of all indexes without opening them.
     pub fn index_names(&self) -> Result<Vec<String>> {
         let rtxn = self.env.read_txn()?;
@@ -3787,15 +3791,15 @@ mod tests {
         ]);
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_processing_the_10_tasks");
 
-        // The index should not exists.
-        snapshot!(format!("{}", index_scheduler.index("doggos").map(|_| ()).unwrap_err()), @"Index `doggos` not found.");
+        // The index should not exist.
+        snapshot!(matches!(index_scheduler.index_exists("doggos"), Ok(true)), @"false");
     }
 
     #[test]
     fn test_document_addition_cant_create_index_without_index_without_autobatching() {
         // We're going to execute multiple document addition that don't have
         // the right to create an index while there is no index currently.
-        // Since the autobatching is disabled, every tasks should be processed
+        // Since the auto-batching is disabled, every task should be processed
         // sequentially and throw an IndexDoesNotExists.
         let (index_scheduler, mut handle) = IndexScheduler::test(false, vec![]);
 
@@ -3837,8 +3841,8 @@ mod tests {
         handle.advance_n_failed_batches(5);
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
-        // The index should not exists.
-        snapshot!(format!("{}", index_scheduler.index("doggos").map(|_| ()).unwrap_err()), @"Index `doggos` not found.");
+        // The index should not exist.
+        snapshot!(matches!(index_scheduler.index_exists("doggos"), Ok(true)), @"false");
     }
 
     #[test]
