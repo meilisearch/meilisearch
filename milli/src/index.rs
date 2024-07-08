@@ -2089,7 +2089,7 @@ pub(crate) mod tests {
             .filter(Filter::from_str("_geoBoundingBox([-80, 0], [80, 0])").unwrap().unwrap())
             .execute()
             .unwrap_err();
-        insta::assert_display_snapshot!(
+        insta::assert_snapshot!(
             error,
             @r###"
         The top latitude `-80` is below the bottom latitude `80`.
@@ -2102,7 +2102,7 @@ pub(crate) mod tests {
             .filter(Filter::from_str("_geoBoundingBox([-10, 0], [10, 0])").unwrap().unwrap())
             .execute()
             .unwrap_err();
-        insta::assert_display_snapshot!(
+        insta::assert_snapshot!(
             error,
             @r###"
         The top latitude `-10` is below the bottom latitude `10`.
@@ -2684,7 +2684,7 @@ pub(crate) mod tests {
                 documents!({ "id" : "doggo", "_geo": { "lat": 1, "lng": 2, "doggo": "are the best" }}),
             )
             .unwrap_err();
-        insta::assert_display_snapshot!(err, @r###"The `_geo` field in the document with the id: `"\"doggo\""` contains the following unexpected fields: `{"doggo":"are the best"}`."###);
+        insta::assert_snapshot!(err, @r###"The `_geo` field in the document with the id: `"\"doggo\""` contains the following unexpected fields: `{"doggo":"are the best"}`."###);
 
         db_snap!(index, geo_faceted_documents_ids); // ensure that no documents were inserted
 
@@ -2694,7 +2694,7 @@ pub(crate) mod tests {
                 documents!({ "id" : "doggo", "_geo": { "lat": 1, "lng": 2, "doggo": "are the best", "and": { "all": ["cats", { "are": "beautiful" } ] } } }),
             )
             .unwrap_err();
-        insta::assert_display_snapshot!(err, @r###"The `_geo` field in the document with the id: `"\"doggo\""` contains the following unexpected fields: `{"and":{"all":["cats",{"are":"beautiful"}]},"doggo":"are the best"}`."###);
+        insta::assert_snapshot!(err, @r###"The `_geo` field in the document with the id: `"\"doggo\""` contains the following unexpected fields: `{"and":{"all":["cats",{"are":"beautiful"}]},"doggo":"are the best"}`."###);
 
         db_snap!(index, geo_faceted_documents_ids); // ensure that no documents were inserted
     }
