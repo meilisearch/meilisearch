@@ -167,7 +167,7 @@ jobs:
       - uses: helix-editor/rust-toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly-2024-06-25
+          toolchain: nightly-2024-07-7
           override: true
           components: rustfmt
       - name: Cache dependencies
