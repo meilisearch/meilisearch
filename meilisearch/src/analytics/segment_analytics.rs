@@ -30,7 +30,7 @@ use crate::analytics::Analytics;
 use crate::option::{
     default_http_addr, IndexerOpts, LogMode, MaxMemory, MaxThreads, ScheduleSnapshot,
 };
-use crate::routes::indexes::documents::UpdateDocumentsQuery;
+use crate::routes::indexes::documents::{DocumentEditionByFunction, UpdateDocumentsQuery};
 use crate::routes::indexes::facet_search::FacetSearchQuery;
 use crate::routes::{create_all_stats, Stats};
 use crate::search::{
@@ -80,6 +80,7 @@ pub enum AnalyticsMsg {
     AggregateAddDocuments(DocumentsAggregator),
     AggregateDeleteDocuments(DocumentsDeletionAggregator),
     AggregateUpdateDocuments(DocumentsAggregator),
+    AggregateEditDocumentsByFunction(EditDocumentsByFunctionAggregator),
     AggregateGetFetchDocuments(DocumentsFetchAggregator),
     AggregatePostFetchDocuments(DocumentsFetchAggregator),
 }
@@ -149,6 +150,7 @@ impl SegmentAnalytics {
             add_documents_aggregator: DocumentsAggregator::default(),
             delete_documents_aggregator: DocumentsDeletionAggregator::default(),
             update_documents_aggregator: DocumentsAggregator::default(),
+            edit_documents_by_function_aggregator: EditDocumentsByFunctionAggregator::default(),
             get_fetch_documents_aggregator: DocumentsFetchAggregator::default(),
             post_fetch_documents_aggregator: DocumentsFetchAggregator::default(),
             get_similar_aggregator: SimilarAggregator::default(),
@@ -227,6 +229,17 @@ impl super::Analytics for SegmentAnalytics {
     ) {
         let aggregate = DocumentsAggregator::from_query(documents_query, index_creation, request);
         let _ = self.sender.try_send(AnalyticsMsg::AggregateUpdateDocuments(aggregate));
+    }
+
+    fn update_documents_by_function(
+        &self,
+        documents_query: &DocumentEditionByFunction,
+        index_creation: bool,
+        request: &HttpRequest,
+    ) {
+        let aggregate =
+            EditDocumentsByFunctionAggregator::from_query(documents_query, index_creation, request);
+        let _ = self.sender.try_send(AnalyticsMsg::AggregateEditDocumentsByFunction(aggregate));
     }
 
     fn get_fetch_documents(&self, documents_query: &DocumentFetchKind, request: &HttpRequest) {
@@ -389,6 +402,7 @@ pub struct Segment {
     add_documents_aggregator: DocumentsAggregator,
     delete_documents_aggregator: DocumentsDeletionAggregator,
     update_documents_aggregator: DocumentsAggregator,
+    edit_documents_by_function_aggregator: EditDocumentsByFunctionAggregator,
     get_fetch_documents_aggregator: DocumentsFetchAggregator,
     post_fetch_documents_aggregator: DocumentsFetchAggregator,
     get_similar_aggregator: SimilarAggregator,
@@ -453,6 +467,7 @@ impl Segment {
                         Some(AnalyticsMsg::AggregateAddDocuments(agreg)) => self.add_documents_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregateDeleteDocuments(agreg)) => self.delete_documents_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregateUpdateDocuments(agreg)) => self.update_documents_aggregator.aggregate(agreg),
+                        Some(AnalyticsMsg::AggregateEditDocumentsByFunction(agreg)) => self.edit_documents_by_function_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregateGetFetchDocuments(agreg)) => self.get_fetch_documents_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregatePostFetchDocuments(agreg)) => self.post_fetch_documents_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregateGetSimilar(agreg)) => self.get_similar_aggregator.aggregate(agreg),
@@ -508,6 +523,7 @@ impl Segment {
             add_documents_aggregator,
             delete_documents_aggregator,
             update_documents_aggregator,
+            edit_documents_by_function_aggregator,
             get_fetch_documents_aggregator,
             post_fetch_documents_aggregator,
             get_similar_aggregator,
@@ -548,6 +564,11 @@ impl Segment {
             take(update_documents_aggregator).into_event(user, "Documents Updated")
         {
             let _ = self.batcher.push(update_documents).await;
+        }
+        if let Some(edit_documents_by_function) = take(edit_documents_by_function_aggregator)
+            .into_event(user, "Documents Edited By Function")
+        {
+            let _ = self.batcher.push(edit_documents_by_function).await;
         }
         if let Some(get_fetch_documents) =
             take(get_fetch_documents_aggregator).into_event(user, "Documents Fetched GET")
@@ -1462,6 +1483,75 @@ impl DocumentsAggregator {
                 ..Default::default()
             })
         }
+    }
+}
+
+#[derive(Default)]
+pub struct EditDocumentsByFunctionAggregator {
+    timestamp: Option<OffsetDateTime>,
+
+    // Set to true if at least one request was filtered
+    filtered: bool,
+    // Set to true if at least one request contained a context
+    with_context: bool,
+
+    // context
+    user_agents: HashSet<String>,
+
+    index_creation: bool,
+}
+
+impl EditDocumentsByFunctionAggregator {
+    pub fn from_query(
+        documents_query: &DocumentEditionByFunction,
+        index_creation: bool,
+        request: &HttpRequest,
+    ) -> Self {
+        let DocumentEditionByFunction { filter, context, function: _ } = documents_query;
+
+        Self {
+            timestamp: Some(OffsetDateTime::now_utc()),
+            user_agents: extract_user_agents(request).into_iter().collect(),
+            filtered: filter.is_some(),
+            with_context: context.is_some(),
+            index_creation,
+        }
+    }
+
+    /// Aggregate one [DocumentsAggregator] into another.
+    pub fn aggregate(&mut self, other: Self) {
+        let Self { timestamp, user_agents, index_creation, filtered, with_context } = other;
+
+        if self.timestamp.is_none() {
+            self.timestamp = timestamp;
+        }
+
+        // we can't create a union because there is no `into_union` method
+        for user_agent in user_agents {
+            self.user_agents.insert(user_agent);
+        }
+        self.index_creation |= index_creation;
+        self.filtered |= filtered;
+        self.with_context |= with_context;
+    }
+
+    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
+        let Self { timestamp, user_agents, index_creation, filtered, with_context } = self;
+
+        let properties = json!({
+            "user-agent": user_agents,
+            "filtered": filtered,
+            "with_context": with_context,
+            "index_creation": index_creation,
+        });
+
+        Some(Track {
+            timestamp,
+            user: user.clone(),
+            event: event_name.to_string(),
+            properties,
+            ..Default::default()
+        })
     }
 }
 

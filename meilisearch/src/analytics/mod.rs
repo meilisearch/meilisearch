@@ -13,7 +13,7 @@ use once_cell::sync::Lazy;
 use platform_dirs::AppDirs;
 use serde_json::Value;
 
-use crate::routes::indexes::documents::UpdateDocumentsQuery;
+use crate::routes::indexes::documents::{DocumentEditionByFunction, UpdateDocumentsQuery};
 
 // if the analytics feature is disabled
 // the `SegmentAnalytics` point to the mock instead of the real analytics
@@ -119,10 +119,18 @@ pub trait Analytics: Sync + Send {
     // this method should be called to aggregate a add documents request
     fn delete_documents(&self, kind: DocumentDeletionKind, request: &HttpRequest);
 
-    // this method should be called to batch a update documents request
+    // this method should be called to batch an update documents request
     fn update_documents(
         &self,
         documents_query: &UpdateDocumentsQuery,
+        index_creation: bool,
+        request: &HttpRequest,
+    );
+
+    // this method should be called to batch an update documents by function request
+    fn update_documents_by_function(
+        &self,
+        documents_query: &DocumentEditionByFunction,
         index_creation: bool,
         request: &HttpRequest,
     );

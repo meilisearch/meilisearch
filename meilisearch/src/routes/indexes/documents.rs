@@ -579,28 +579,33 @@ pub async fn delete_documents_by_filter(
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct DocumentEditionByFunction {
     #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
-    filter: Option<Value>,
+    pub filter: Option<Value>,
     #[deserr(default, error = DeserrJsonError<InvalidDocumentEditionContext>)]
-    context: Option<Value>,
+    pub context: Option<Value>,
     #[deserr(error = DeserrJsonError<InvalidDocumentEditionFunctionFilter>, missing_field_error = DeserrJsonError::missing_document_edition_function)]
-    function: String,
+    pub function: String,
 }
 
 pub async fn edit_documents_by_function(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ALL }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    body: AwebJson<DocumentEditionByFunction, DeserrJsonError>,
+    params: AwebJson<DocumentEditionByFunction, DeserrJsonError>,
     req: HttpRequest,
     opt: web::Data<Opt>,
-    _analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    debug!(parameters = ?body, "Edit documents by function");
+    debug!(parameters = ?params, "Edit documents by function");
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let index_uid = index_uid.into_inner();
-    let DocumentEditionByFunction { filter, context, function } = body.into_inner();
+    let params = params.into_inner();
 
-    // analytics.delete_documents(DocumentDeletionKind::PerFilter, &req);
+    analytics.update_documents_by_function(
+        &params,
+        index_scheduler.index(&index_uid).is_err(),
+        &req,
+    );
 
+    let DocumentEditionByFunction { filter, context, function } = params;
     let engine = milli::rhai::Engine::new();
     if let Err(e) = engine.compile(&function) {
         return Err(ResponseError::from_msg(e.to_string(), Code::BadRequest));

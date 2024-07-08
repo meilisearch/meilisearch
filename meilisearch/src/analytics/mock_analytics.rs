@@ -6,7 +6,7 @@ use meilisearch_types::InstanceUid;
 use serde_json::Value;
 
 use super::{find_user_id, Analytics, DocumentDeletionKind, DocumentFetchKind};
-use crate::routes::indexes::documents::UpdateDocumentsQuery;
+use crate::routes::indexes::documents::{DocumentEditionByFunction, UpdateDocumentsQuery};
 use crate::Opt;
 
 pub struct MockAnalytics {
@@ -93,6 +93,13 @@ impl Analytics for MockAnalytics {
     fn update_documents(
         &self,
         _documents_query: &UpdateDocumentsQuery,
+        _index_creation: bool,
+        _request: &HttpRequest,
+    ) {
+    }
+    fn update_documents_by_function(
+        &self,
+        _documents_query: &DocumentEditionByFunction,
         _index_creation: bool,
         _request: &HttpRequest,
     ) {
