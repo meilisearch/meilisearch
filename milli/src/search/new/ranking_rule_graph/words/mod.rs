@@ -20,7 +20,7 @@ impl RankingRuleGraphTrait for WordsGraph {
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::words")]
     fn resolve_condition(
-        ctx: &mut SearchContext,
+        ctx: &mut SearchContext<'_>,
         condition: &Self::Condition,
         universe: &RoaringBitmap,
     ) -> Result<ComputedCondition> {
@@ -39,7 +39,7 @@ impl RankingRuleGraphTrait for WordsGraph {
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::words")]
     fn build_edges(
-        _ctx: &mut SearchContext,
+        _ctx: &mut SearchContext<'_>,
         conditions_interner: &mut DedupInterner<Self::Condition>,
         _from: Option<&LocatedQueryTermSubset>,
         to_term: &LocatedQueryTermSubset,

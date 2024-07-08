@@ -8,7 +8,7 @@ use crate::search::new::SearchContext;
 use crate::Result;
 
 pub fn build_edges(
-    _ctx: &mut SearchContext,
+    _ctx: &mut SearchContext<'_>,
     conditions_interner: &mut DedupInterner<ProximityCondition>,
     left_term: Option<&LocatedQueryTermSubset>,
     right_term: &LocatedQueryTermSubset,

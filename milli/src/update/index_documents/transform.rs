@@ -102,7 +102,7 @@ fn create_fields_mapping(
 
 impl<'a, 'i> Transform<'a, 'i> {
     pub fn new(
-        wtxn: &mut heed::RwTxn,
+        wtxn: &mut heed::RwTxn<'_>,
         index: &'i Index,
         indexer_settings: &'a IndexerConfig,
         index_documents_method: IndexDocumentsMethod,
@@ -155,7 +155,7 @@ impl<'a, 'i> Transform<'a, 'i> {
     pub fn read_documents<R, FP, FA>(
         &mut self,
         reader: EnrichedDocumentsBatchReader<R>,
-        wtxn: &mut heed::RwTxn,
+        wtxn: &mut heed::RwTxn<'_>,
         progress_callback: FP,
         should_abort: FA,
     ) -> Result<usize>
@@ -177,7 +177,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         let mut document_sorter_key_buffer = Vec::new();
         let mut documents_count = 0;
         let mut docid_buffer: Vec<u8> = Vec::new();
-        let mut field_buffer: Vec<(u16, Cow<[u8]>)> = Vec::new();
+        let mut field_buffer: Vec<(u16, Cow<'_, [u8]>)> = Vec::new();
         while let Some(enriched_document) = cursor.next_enriched_document()? {
             let EnrichedDocument { document, document_id } = enriched_document;
 
@@ -370,7 +370,7 @@ impl<'a, 'i> Transform<'a, 'i> {
     pub fn remove_documents<FA>(
         &mut self,
         mut to_remove: Vec<String>,
-        wtxn: &mut heed::RwTxn,
+        wtxn: &mut heed::RwTxn<'_>,
         should_abort: FA,
     ) -> Result<usize>
     where
@@ -459,7 +459,7 @@ impl<'a, 'i> Transform<'a, 'i> {
     pub fn remove_documents_from_db_no_batch<FA>(
         &mut self,
         to_remove: &RoaringBitmap,
-        wtxn: &mut heed::RwTxn,
+        wtxn: &mut heed::RwTxn<'_>,
         should_abort: FA,
     ) -> Result<usize>
     where
@@ -493,7 +493,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         &mut self,
         internal_docid: u32,
         external_docid: String,
-        txn: &heed::RoTxn,
+        txn: &heed::RoTxn<'_>,
         document_sorter_key_buffer: &mut Vec<u8>,
         document_sorter_value_buffer: &mut Vec<u8>,
     ) -> Result<()> {
@@ -552,7 +552,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         target = "indexing::transform"
     )]
     fn flatten_from_fields_ids_map(
-        obkv: &KvReader<FieldId>,
+        obkv: &KvReader<'_, FieldId>,
         fields_ids_map: &mut FieldsIdsMap,
     ) -> Result<Option<Vec<u8>>> {
         if obkv
@@ -566,7 +566,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         // We first extract all the key+value out of the obkv. If a value is not nested
         // we keep a reference on its value. If the value is nested we'll get its value
         // as an owned `Vec<u8>` after flattening it.
-        let mut key_value: Vec<(FieldId, Cow<[u8]>)> = Vec::new();
+        let mut key_value: Vec<(FieldId, Cow<'_, [u8]>)> = Vec::new();
 
         // the object we're going to use to store the fields that need to be flattened.
         let mut doc = serde_json::Map::new();
@@ -609,7 +609,7 @@ impl<'a, 'i> Transform<'a, 'i> {
 
     /// Generate an obkv from a slice of key / value sorted by key.
     fn create_obkv_from_key_value(
-        key_value: &mut [(FieldId, Cow<[u8]>)],
+        key_value: &mut [(FieldId, Cow<'_, [u8]>)],
         output_buffer: &mut Vec<u8>,
     ) -> Result<()> {
         debug_assert!(
@@ -677,7 +677,7 @@ impl<'a, 'i> Transform<'a, 'i> {
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::transform")]
     pub(crate) fn output_from_sorter<F>(
         self,
-        wtxn: &mut heed::RwTxn,
+        wtxn: &mut heed::RwTxn<'_>,
         progress_callback: F,
     ) -> Result<TransformOutput>
     where
@@ -837,7 +837,7 @@ impl<'a, 'i> Transform<'a, 'i> {
     /// then fill the provided buffers with delta documents using KvWritterDelAdd.
     #[allow(clippy::too_many_arguments)] // need the vectors + fid, feel free to create a struct xo xo
     fn rebind_existing_document(
-        old_obkv: KvReader<FieldId>,
+        old_obkv: KvReader<'_, FieldId>,
         settings_diff: &InnerIndexSettingsDiff,
         modified_faceted_fields: &HashSet<String>,
         mut injected_vectors: serde_json::Map<String, serde_json::Value>,
@@ -990,7 +990,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         };
 
         let readers: Result<
-            BTreeMap<&str, (Vec<arroy::Reader<arroy::distances::Angular>>, &RoaringBitmap)>,
+            BTreeMap<&str, (Vec<arroy::Reader<'_, arroy::distances::Angular>>, &RoaringBitmap)>,
         > = settings_diff
             .embedding_config_updates
             .iter()

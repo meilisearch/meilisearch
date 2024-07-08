@@ -33,7 +33,7 @@ impl<G: RankingRuleGraphTrait> ConditionDocIdsCache<G> {
     /// and inserted in the cache.
     pub fn get_computed_condition<'s>(
         &'s mut self,
-        ctx: &mut SearchContext,
+        ctx: &mut SearchContext<'_>,
         interned_condition: Interned<G::Condition>,
         graph: &mut RankingRuleGraph<G>,
         universe: &RoaringBitmap,

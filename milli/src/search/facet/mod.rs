@@ -33,7 +33,7 @@ fn facet_extreme_value<'t>(
 
 pub fn facet_min_value<'t>(
     index: &'t Index,
-    rtxn: &'t heed::RoTxn,
+    rtxn: &'t heed::RoTxn<'t>,
     field_id: u16,
     candidates: RoaringBitmap,
 ) -> Result<Option<f64>> {
@@ -44,7 +44,7 @@ pub fn facet_min_value<'t>(
 
 pub fn facet_max_value<'t>(
     index: &'t Index,
-    rtxn: &'t heed::RoTxn,
+    rtxn: &'t heed::RoTxn<'t>,
     field_id: u16,
     candidates: RoaringBitmap,
 ) -> Result<Option<f64>> {
@@ -55,7 +55,7 @@ pub fn facet_max_value<'t>(
 
 /// Get the first facet value in the facet database
 pub(crate) fn get_first_facet_value<'t, BoundCodec, DC>(
-    txn: &'t RoTxn,
+    txn: &'t RoTxn<'t>,
     db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, DC>,
     field_id: u16,
 ) -> heed::Result<Option<BoundCodec::DItem>>
@@ -79,7 +79,7 @@ where
 
 /// Get the last facet value in the facet database
 pub(crate) fn get_last_facet_value<'t, BoundCodec, DC>(
-    txn: &'t RoTxn,
+    txn: &'t RoTxn<'t>,
     db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, DC>,
     field_id: u16,
 ) -> heed::Result<Option<BoundCodec::DItem>>

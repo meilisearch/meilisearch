@@ -535,7 +535,7 @@ pub fn convert_snap_to_hash_if_needed<'snap>(
 
 #[macro_export]
 macro_rules! make_db_snap_from_iter {
-    ($index:ident, $name:ident, |$vars:pat| $push:block) => {{
+    ($index:ident, $name:ident, |$vars:pat_param| $push:block) => {{
         let rtxn = $index.read_txn().unwrap();
         let iter = $index.$name.iter(&rtxn).unwrap();
         let mut snap = String::new();

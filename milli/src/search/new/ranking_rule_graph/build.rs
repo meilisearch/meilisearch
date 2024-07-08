@@ -10,7 +10,7 @@ use crate::Result;
 impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
     /// Build the ranking rule graph from the given query graph
     pub fn build(
-        ctx: &mut SearchContext,
+        ctx: &mut SearchContext<'_>,
         query_graph: QueryGraph,
         cost_of_ignoring_node: MappedInterner<QueryNode, Option<(u32, SmallBitmap<QueryNode>)>>,
     ) -> Result<Self> {

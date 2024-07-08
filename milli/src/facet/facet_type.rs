@@ -11,7 +11,7 @@ pub enum FacetType {
 }
 
 impl fmt::Display for FacetType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             FacetType::String => f.write_str("string"),
             FacetType::Number => f.write_str("number"),
@@ -37,7 +37,7 @@ impl FromStr for FacetType {
 pub struct InvalidFacetType;
 
 impl fmt::Display for InvalidFacetType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(r#"Invalid facet type, must be "string" or "number""#)
     }
 }

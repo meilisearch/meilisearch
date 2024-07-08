@@ -55,7 +55,7 @@ pub struct Search<'a> {
 }
 
 impl<'a> Search<'a> {
-    pub fn new(rtxn: &'a heed::RoTxn, index: &'a Index) -> Search<'a> {
+    pub fn new(rtxn: &'a heed::RoTxn<'a>, index: &'a Index) -> Search<'a> {
         Search {
             query: None,
             filter: None,
@@ -253,7 +253,7 @@ impl<'a> Search<'a> {
 }
 
 impl fmt::Debug for Search<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Search {
             query,
             filter,

@@ -88,7 +88,7 @@ impl FacetsUpdateIncremental {
     }
 
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::facets::incremental")]
-    pub fn execute(self, wtxn: &mut RwTxn) -> crate::Result<()> {
+    pub fn execute(self, wtxn: &mut RwTxn<'_>) -> crate::Result<()> {
         let mut current_field_id = None;
         let mut facet_level_may_be_updated = false;
         let mut iter = self.delta_data.into_stream_merger_iter()?;
@@ -172,7 +172,7 @@ impl FacetsUpdateIncrementalInner {
         field_id: u16,
         level: u8,
         facet_value: &[u8],
-        txn: &RoTxn,
+        txn: &RoTxn<'_>,
     ) -> Result<(FacetGroupKey<Vec<u8>>, FacetGroupValue)> {
         assert!(level > 0);
         match self.db.get_lower_than_or_equal_to(
@@ -215,7 +215,7 @@ impl FacetsUpdateIncrementalInner {
     /// See documentation of `insert_in_level`
     fn modify_in_level_0(
         &self,
-        txn: &mut RwTxn,
+        txn: &mut RwTxn<'_>,
         field_id: u16,
         facet_value: &[u8],
         add_docids: Option<&RoaringBitmap>,
@@ -277,7 +277,7 @@ impl FacetsUpdateIncrementalInner {
     /// Returns `ModificationResult::Insert` if the split is successful.
     fn split_group(
         &self,
-        txn: &mut RwTxn,
+        txn: &mut RwTxn<'_>,
         field_id: u16,
         level: u8,
         insertion_key: FacetGroupKey<Vec<u8>>,
@@ -346,7 +346,7 @@ impl FacetsUpdateIncrementalInner {
     /// This process is needed to avoid removing docids from a group node where the docid is present in several sub-nodes.
     fn trim_del_docids<'a>(
         &self,
-        txn: &mut RwTxn,
+        txn: &mut RwTxn<'_>,
         field_id: u16,
         level: u8,
         insertion_key: &FacetGroupKey<Vec<u8>>,
@@ -383,7 +383,7 @@ impl FacetsUpdateIncrementalInner {
     ///
     fn modify_in_level(
         &self,
-        txn: &mut RwTxn,
+        txn: &mut RwTxn<'_>,
         field_id: u16,
         level: u8,
         facet_value: &[u8],
@@ -523,7 +523,7 @@ impl FacetsUpdateIncrementalInner {
     /// Otherwise returns `false` if the tree-nodes have been modified in place.
     pub fn modify(
         &self,
-        txn: &mut RwTxn,
+        txn: &mut RwTxn<'_>,
         field_id: u16,
         facet_value: &[u8],
         add_docids: Option<&RoaringBitmap>,
@@ -558,7 +558,7 @@ impl FacetsUpdateIncrementalInner {
     /// If it has, we must build an addition level above it.
     /// Then check whether the highest level is under `min_level_size`.
     /// If it has, we must remove the complete level.
-    pub(crate) fn add_or_delete_level(&self, txn: &mut RwTxn, field_id: u16) -> Result<()> {
+    pub(crate) fn add_or_delete_level(&self, txn: &mut RwTxn<'_>, field_id: u16) -> Result<()> {
         let highest_level = get_highest_level(txn, self.db, field_id)?;
         let mut highest_level_prefix = vec![];
         highest_level_prefix.extend_from_slice(&field_id.to_be_bytes());
@@ -577,7 +577,7 @@ impl FacetsUpdateIncrementalInner {
     }
 
     /// Delete a level.
-    fn delete_level(&self, txn: &mut RwTxn, highest_level_prefix: &[u8]) -> Result<()> {
+    fn delete_level(&self, txn: &mut RwTxn<'_>, highest_level_prefix: &[u8]) -> Result<()> {
         let mut to_delete = vec![];
         let mut iter =
             self.db.remap_types::<Bytes, Bytes>().prefix_iter(txn, highest_level_prefix)?;
@@ -599,7 +599,7 @@ impl FacetsUpdateIncrementalInner {
     /// Build an additional level for the field id.
     fn add_level(
         &self,
-        txn: &mut RwTxn,
+        txn: &mut RwTxn<'_>,
         field_id: u16,
         highest_level: u8,
         highest_level_prefix: &[u8],

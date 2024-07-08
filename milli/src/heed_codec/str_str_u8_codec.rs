@@ -24,7 +24,7 @@ impl<'a> heed::BytesDecode<'a> for U8StrStrCodec {
 impl<'a> heed::BytesEncode<'a> for U8StrStrCodec {
     type EItem = (u8, &'a str, &'a str);
 
-    fn bytes_encode((n, s1, s2): &Self::EItem) -> Result<Cow<[u8]>, BoxedError> {
+    fn bytes_encode((n, s1, s2): &Self::EItem) -> Result<Cow<'a, [u8]>, BoxedError> {
         let mut bytes = Vec::with_capacity(s1.len() + s2.len() + 1);
         bytes.push(*n);
         bytes.extend_from_slice(s1.as_bytes());
@@ -51,7 +51,7 @@ impl<'a> heed::BytesDecode<'a> for UncheckedU8StrStrCodec {
 impl<'a> heed::BytesEncode<'a> for UncheckedU8StrStrCodec {
     type EItem = (u8, &'a [u8], &'a [u8]);
 
-    fn bytes_encode((n, s1, s2): &Self::EItem) -> Result<Cow<[u8]>, BoxedError> {
+    fn bytes_encode((n, s1, s2): &Self::EItem) -> Result<Cow<'a, [u8]>, BoxedError> {
         let mut bytes = Vec::with_capacity(s1.len() + s2.len() + 1);
         bytes.push(*n);
         bytes.extend_from_slice(s1);

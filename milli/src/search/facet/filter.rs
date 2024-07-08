@@ -221,14 +221,14 @@ impl<'a> Filter<'a> {
 }
 
 impl<'a> Filter<'a> {
-    pub fn evaluate(&self, rtxn: &heed::RoTxn, index: &Index) -> Result<RoaringBitmap> {
+    pub fn evaluate(&self, rtxn: &heed::RoTxn<'_>, index: &Index) -> Result<RoaringBitmap> {
         // to avoid doing this for each recursive call we're going to do it ONCE ahead of time
         let filterable_fields = index.filterable_fields(rtxn)?;
         self.inner_evaluate(rtxn, index, &filterable_fields, None)
     }
 
     fn evaluate_operator(
-        rtxn: &heed::RoTxn,
+        rtxn: &heed::RoTxn<'_>,
         index: &Index,
         field_id: FieldId,
         universe: Option<&RoaringBitmap>,
@@ -313,7 +313,7 @@ impl<'a> Filter<'a> {
     /// Aggregates the documents ids that are part of the specified range automatically
     /// going deeper through the levels.
     fn explore_facet_number_levels(
-        rtxn: &heed::RoTxn,
+        rtxn: &heed::RoTxn<'_>,
         db: heed::Database<FacetGroupKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>,
         field_id: FieldId,
         left: Bound<f64>,
@@ -338,7 +338,7 @@ impl<'a> Filter<'a> {
 
     fn inner_evaluate(
         &self,
-        rtxn: &heed::RoTxn,
+        rtxn: &heed::RoTxn<'_>,
         index: &Index,
         filterable_fields: &HashSet<String>,
         universe: Option<&RoaringBitmap>,

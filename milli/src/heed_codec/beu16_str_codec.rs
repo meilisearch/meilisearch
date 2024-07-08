@@ -20,7 +20,7 @@ impl<'a> heed::BytesDecode<'a> for BEU16StrCodec {
 impl<'a> heed::BytesEncode<'a> for BEU16StrCodec {
     type EItem = (u16, &'a str);
 
-    fn bytes_encode((n, s): &Self::EItem) -> Result<Cow<[u8]>, BoxedError> {
+    fn bytes_encode((n, s): &Self::EItem) -> Result<Cow<'a, [u8]>, BoxedError> {
         let mut bytes = Vec::with_capacity(s.len() + 2);
         bytes.extend_from_slice(&n.to_be_bytes());
         bytes.extend_from_slice(s.as_bytes());

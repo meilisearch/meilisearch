@@ -179,7 +179,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
 
 /// Check if any searchable fields of a document changed.
 fn searchable_fields_changed(
-    obkv: &KvReader<FieldId>,
+    obkv: &KvReader<'_, FieldId>,
     settings_diff: &InnerIndexSettingsDiff,
 ) -> bool {
     let searchable_fields = &settings_diff.new.searchable_fields_ids;
@@ -228,9 +228,9 @@ fn tokenizer_builder<'a>(
 /// Extract words mapped with their positions of a document,
 /// ensuring no Language detection mistakes was made.
 fn lang_safe_tokens_from_document<'a>(
-    obkv: &KvReader<FieldId>,
+    obkv: &KvReader<'_, FieldId>,
     settings: &InnerIndexSettings,
-    tokenizer: &Tokenizer,
+    tokenizer: &Tokenizer<'_>,
     max_positions_per_attributes: u32,
     del_add: DelAdd,
     buffers: &'a mut Buffers,
@@ -295,9 +295,9 @@ fn lang_safe_tokens_from_document<'a>(
 
 /// Extract words mapped with their positions of a document.
 fn tokens_from_document<'a>(
-    obkv: &KvReader<FieldId>,
+    obkv: &KvReader<'a, FieldId>,
     searchable_fields: &[FieldId],
-    tokenizer: &Tokenizer,
+    tokenizer: &Tokenizer<'_>,
     max_positions_per_attributes: u32,
     del_add: DelAdd,
     buffers: &'a mut Buffers,

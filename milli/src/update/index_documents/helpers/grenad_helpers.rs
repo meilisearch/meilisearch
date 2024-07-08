@@ -172,7 +172,7 @@ pub fn grenad_obkv_into_chunks<R: io::Read + io::Seek>(
 pub fn write_sorter_into_database<K, V, FS, FM>(
     sorter: Sorter<MergeFn>,
     database: &heed::Database<K, V>,
-    wtxn: &mut heed::RwTxn,
+    wtxn: &mut heed::RwTxn<'_>,
     index_is_empty: bool,
     serialize_value: FS,
     merge_values: FM,

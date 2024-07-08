@@ -1,6 +1,6 @@
 [package]
 name = "milli"
-edition = "2018"
+edition = "2021"
 publish = false
 
 version.workspace = true

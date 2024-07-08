@@ -20,7 +20,7 @@ pub struct VectorSort<Q: RankingRuleQueryTrait> {
 
 impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
     pub fn new(
-        ctx: &SearchContext,
+        ctx: &SearchContext<'_>,
         target: Vec<f32>,
         vector_candidates: RoaringBitmap,
         limit: usize,

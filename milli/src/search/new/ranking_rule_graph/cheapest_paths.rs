@@ -117,7 +117,7 @@ impl<'a, G: RankingRuleGraphTrait> PathVisitor<'a, G> {
     }
 
     /// See module documentation
-    pub fn visit_paths(mut self, visit: VisitFn<G>) -> Result<()> {
+    pub fn visit_paths(mut self, visit: VisitFn<'_, G>) -> Result<()> {
         let _ =
             self.state.visit_node(self.ctx.graph.query_graph.root_node, visit, &mut self.ctx)?;
         Ok(())
@@ -132,8 +132,8 @@ impl<G: RankingRuleGraphTrait> VisitorState<G> {
     fn visit_node(
         &mut self,
         from_node: Interned<QueryNode>,
-        visit: VisitFn<G>,
-        ctx: &mut VisitorContext<G>,
+        visit: VisitFn<'_, G>,
+        ctx: &mut VisitorContext<'_, G>,
     ) -> Result<ControlFlow<(), bool>> {
         // any valid path will be found from this point
         // if a valid path was found, then we know that the DeadEndsCache may have been updated,
@@ -189,8 +189,8 @@ impl<G: RankingRuleGraphTrait> VisitorState<G> {
         &mut self,
         dest_node: Interned<QueryNode>,
         edge_new_nodes_to_skip: &SmallBitmap<QueryNode>,
-        visit: VisitFn<G>,
-        ctx: &mut VisitorContext<G>,
+        visit: VisitFn<'_, G>,
+        ctx: &mut VisitorContext<'_, G>,
     ) -> Result<ControlFlow<(), bool>> {
         if !ctx
             .all_costs_from_node
@@ -228,8 +228,8 @@ impl<G: RankingRuleGraphTrait> VisitorState<G> {
         condition: Interned<G::Condition>,
         dest_node: Interned<QueryNode>,
         edge_new_nodes_to_skip: &SmallBitmap<QueryNode>,
-        visit: VisitFn<G>,
-        ctx: &mut VisitorContext<G>,
+        visit: VisitFn<'_, G>,
+        ctx: &mut VisitorContext<'_, G>,
     ) -> Result<ControlFlow<(), bool>> {
         assert!(dest_node != ctx.graph.query_graph.end_node);
 

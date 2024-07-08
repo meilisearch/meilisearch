@@ -25,7 +25,7 @@ impl<'a> heed::BytesDecode<'a> for ScriptLanguageCodec {
 impl<'a> heed::BytesEncode<'a> for ScriptLanguageCodec {
     type EItem = (Script, Language);
 
-    fn bytes_encode((script, lan): &Self::EItem) -> Result<Cow<[u8]>, BoxedError> {
+    fn bytes_encode((script, lan): &Self::EItem) -> Result<Cow<'a, [u8]>, BoxedError> {
         let script_name = script.name().as_bytes();
         let lan_name = lan.name().as_bytes();
 

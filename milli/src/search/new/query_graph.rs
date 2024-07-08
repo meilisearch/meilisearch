@@ -93,7 +93,7 @@ impl QueryGraph {
     /// Build the query graph from the parsed user search query, return an updated list of the located query terms
     /// which contains ngrams.
     pub fn from_query(
-        ctx: &mut SearchContext,
+        ctx: &mut SearchContext<'_>,
         // The terms here must be consecutive
         terms: &[LocatedQueryTerm],
     ) -> Result<(QueryGraph, Vec<LocatedQueryTerm>)> {
@@ -294,7 +294,7 @@ impl QueryGraph {
 
     pub fn removal_order_for_terms_matching_strategy_frequency(
         &self,
-        ctx: &mut SearchContext,
+        ctx: &mut SearchContext<'_>,
     ) -> Result<Vec<SmallBitmap<QueryNode>>> {
         // lookup frequency for each term
         let mut term_with_frequency: Vec<(u8, u64)> = {
@@ -337,7 +337,7 @@ impl QueryGraph {
 
     pub fn removal_order_for_terms_matching_strategy_last(
         &self,
-        ctx: &SearchContext,
+        ctx: &SearchContext<'_>,
     ) -> Vec<SmallBitmap<QueryNode>> {
         let (first_term_idx, last_term_idx) = {
             let mut first_term_idx = u8::MAX;
@@ -370,7 +370,7 @@ impl QueryGraph {
 
     pub fn removal_order_for_terms_matching_strategy(
         &self,
-        ctx: &SearchContext,
+        ctx: &SearchContext<'_>,
         order: impl Fn(u8) -> u16,
     ) -> Vec<SmallBitmap<QueryNode>> {
         let mut nodes_to_remove = BTreeMap::<u16, SmallBitmap<QueryNode>>::new();
@@ -398,7 +398,7 @@ impl QueryGraph {
     }
 
     /// Number of words in the phrases in this query graph
-    pub(crate) fn words_in_phrases_count(&self, ctx: &SearchContext) -> usize {
+    pub(crate) fn words_in_phrases_count(&self, ctx: &SearchContext<'_>) -> usize {
         let mut word_count = 0;
         for (_, node) in self.nodes.iter() {
             match &node.data {

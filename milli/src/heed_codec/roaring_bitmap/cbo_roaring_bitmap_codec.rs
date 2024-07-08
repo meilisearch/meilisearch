@@ -167,7 +167,7 @@ impl BytesDecodeOwned for CboRoaringBitmapCodec {
 impl heed::BytesEncode<'_> for CboRoaringBitmapCodec {
     type EItem = RoaringBitmap;
 
-    fn bytes_encode(item: &Self::EItem) -> Result<Cow<[u8]>, BoxedError> {
+    fn bytes_encode(item: &Self::EItem) -> Result<Cow<'_, [u8]>, BoxedError> {
         let mut vec = Vec::with_capacity(Self::serialized_size(item));
         Self::serialize_into(item, &mut vec);
         Ok(Cow::Owned(vec))

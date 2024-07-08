@@ -183,7 +183,7 @@ impl RestrictedFids {
 
 /// Apply the [`TermsMatchingStrategy`] to the query graph and resolve it.
 fn resolve_maximally_reduced_query_graph(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     universe: &RoaringBitmap,
     query_graph: &QueryGraph,
     matching_strategy: TermsMatchingStrategy,
@@ -214,7 +214,7 @@ fn resolve_maximally_reduced_query_graph(
 
 #[tracing::instrument(level = "trace", skip_all, target = "search::universe")]
 fn resolve_universe(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     initial_universe: &RoaringBitmap,
     query_graph: &QueryGraph,
     matching_strategy: TermsMatchingStrategy,
@@ -231,7 +231,7 @@ fn resolve_universe(
 
 #[tracing::instrument(level = "trace", skip_all, target = "search::query")]
 fn resolve_negative_words(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     negative_words: &[Word],
 ) -> Result<RoaringBitmap> {
     let mut negative_bitmap = RoaringBitmap::new();
@@ -245,7 +245,7 @@ fn resolve_negative_words(
 
 #[tracing::instrument(level = "trace", skip_all, target = "search::query")]
 fn resolve_negative_phrases(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     negative_phrases: &[LocatedQueryTerm],
 ) -> Result<RoaringBitmap> {
     let mut negative_bitmap = RoaringBitmap::new();
@@ -267,7 +267,7 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
     let mut sort = false;
     let mut sorted_fields = HashSet::new();
     let mut geo_sorted = false;
-    let mut ranking_rules: Vec<BoxRankingRule<PlaceholderQuery>> = vec![];
+    let mut ranking_rules: Vec<BoxRankingRule<'ctx, PlaceholderQuery>> = vec![];
     let settings_ranking_rules = ctx.index.criteria(ctx.txn)?;
     for rr in settings_ranking_rules {
         match rr {
@@ -326,7 +326,7 @@ fn get_ranking_rules_for_vector<'ctx>(
     let mut geo_sorted = false;
 
     let mut vector = false;
-    let mut ranking_rules: Vec<BoxRankingRule<PlaceholderQuery>> = vec![];
+    let mut ranking_rules: Vec<BoxRankingRule<'ctx, PlaceholderQuery>> = vec![];
 
     let settings_ranking_rules = ctx.index.criteria(ctx.txn)?;
     for rr in settings_ranking_rules {
@@ -406,7 +406,7 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
         words = true;
     }
 
-    let mut ranking_rules: Vec<BoxRankingRule<QueryGraph>> = vec![];
+    let mut ranking_rules: Vec<BoxRankingRule<'ctx, QueryGraph>> = vec![];
     let settings_ranking_rules = ctx.index.criteria(ctx.txn)?;
     for rr in settings_ranking_rules {
         // Add Words before any of: typo, proximity, attribute
@@ -552,7 +552,7 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
 pub fn filtered_universe(
     index: &Index,
     txn: &RoTxn<'_>,
-    filters: &Option<Filter>,
+    filters: &Option<Filter<'_>>,
 ) -> Result<RoaringBitmap> {
     Ok(if let Some(filters) = filters {
         filters.evaluate(txn, index)?
@@ -563,7 +563,7 @@ pub fn filtered_universe(
 
 #[allow(clippy::too_many_arguments)]
 pub fn execute_vector_search(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     vector: &[f32],
     scoring_strategy: ScoringStrategy,
     universe: RoaringBitmap,
@@ -622,7 +622,7 @@ pub fn execute_vector_search(
 #[allow(clippy::too_many_arguments)]
 #[tracing::instrument(level = "trace", skip_all, target = "search::main")]
 pub fn execute_search(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     query: Option<&str>,
     terms_matching_strategy: TermsMatchingStrategy,
     scoring_strategy: ScoringStrategy,
@@ -775,7 +775,10 @@ pub fn execute_search(
     })
 }
 
-fn check_sort_criteria(ctx: &SearchContext, sort_criteria: Option<&Vec<AscDesc>>) -> Result<()> {
+fn check_sort_criteria(
+    ctx: &SearchContext<'_>,
+    sort_criteria: Option<&Vec<AscDesc>>,
+) -> Result<()> {
     let sort_criteria = if let Some(sort_criteria) = sort_criteria {
         sort_criteria
     } else {

@@ -128,7 +128,7 @@ impl QueryTermSubset {
     pub fn make_mandatory(&mut self) {
         self.mandatory = true;
     }
-    pub fn exact_term(&self, ctx: &SearchContext) -> Option<ExactTerm> {
+    pub fn exact_term(&self, ctx: &SearchContext<'_>) -> Option<ExactTerm> {
         let full_query_term = ctx.term_interner.get(self.original);
         if full_query_term.ngram_words.is_some() {
             return None;
@@ -174,7 +174,7 @@ impl QueryTermSubset {
         self.two_typo_subset.intersect(&other.two_typo_subset);
     }
 
-    pub fn use_prefix_db(&self, ctx: &SearchContext) -> Option<Word> {
+    pub fn use_prefix_db(&self, ctx: &SearchContext<'_>) -> Option<Word> {
         let original = ctx.term_interner.get(self.original);
         let use_prefix_db = original.zero_typo.use_prefix_db?;
         let word = match &self.zero_typo_subset {
@@ -198,7 +198,7 @@ impl QueryTermSubset {
     }
     pub fn all_single_words_except_prefix_db(
         &self,
-        ctx: &mut SearchContext,
+        ctx: &mut SearchContext<'_>,
     ) -> Result<BTreeSet<Word>> {
         let mut result = BTreeSet::default();
         if !self.one_typo_subset.is_empty() || !self.two_typo_subset.is_empty() {
@@ -290,7 +290,7 @@ impl QueryTermSubset {
 
         Ok(result)
     }
-    pub fn all_phrases(&self, ctx: &mut SearchContext) -> Result<BTreeSet<Interned<Phrase>>> {
+    pub fn all_phrases(&self, ctx: &mut SearchContext<'_>) -> Result<BTreeSet<Interned<Phrase>>> {
         let mut result = BTreeSet::default();
 
         if !self.one_typo_subset.is_empty() {
@@ -328,7 +328,7 @@ impl QueryTermSubset {
         Ok(result)
     }
 
-    pub fn original_phrase(&self, ctx: &SearchContext) -> Option<Interned<Phrase>> {
+    pub fn original_phrase(&self, ctx: &SearchContext<'_>) -> Option<Interned<Phrase>> {
         let t = ctx.term_interner.get(self.original);
         if let Some(p) = t.zero_typo.phrase {
             if self.zero_typo_subset.contains_phrase(p) {
@@ -337,7 +337,7 @@ impl QueryTermSubset {
         }
         None
     }
-    pub fn max_typo_cost(&self, ctx: &SearchContext) -> u8 {
+    pub fn max_typo_cost(&self, ctx: &SearchContext<'_>) -> u8 {
         let t = ctx.term_interner.get(self.original);
         match t.max_levenshtein_distance {
             0 => {
@@ -368,7 +368,7 @@ impl QueryTermSubset {
             _ => panic!(),
         }
     }
-    pub fn keep_only_exact_term(&mut self, ctx: &SearchContext) {
+    pub fn keep_only_exact_term(&mut self, ctx: &SearchContext<'_>) {
         if let Some(term) = self.exact_term(ctx) {
             match term {
                 ExactTerm::Phrase(p) => {
@@ -399,7 +399,7 @@ impl QueryTermSubset {
     pub fn clear_two_typo_subset(&mut self) {
         self.two_typo_subset = NTypoTermSubset::Nothing;
     }
-    pub fn description(&self, ctx: &SearchContext) -> String {
+    pub fn description(&self, ctx: &SearchContext<'_>) -> String {
         let t = ctx.term_interner.get(self.original);
         ctx.word_interner.get(t.original).to_owned()
     }
@@ -446,7 +446,7 @@ impl QueryTerm {
 
 impl Interned<QueryTerm> {
     /// Return the original word from the given query term
-    fn original_single_word(self, ctx: &SearchContext) -> Option<Interned<String>> {
+    fn original_single_word(self, ctx: &SearchContext<'_>) -> Option<Interned<String>> {
         let self_ = ctx.term_interner.get(self);
         if self_.ngram_words.is_some() {
             None
@@ -477,7 +477,7 @@ impl QueryTerm {
     pub fn is_prefix(&self) -> bool {
         self.is_prefix
     }
-    pub fn original_word(&self, ctx: &SearchContext) -> String {
+    pub fn original_word(&self, ctx: &SearchContext<'_>) -> String {
         ctx.word_interner.get(self.original).clone()
     }
 
