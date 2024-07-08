@@ -10,8 +10,8 @@ jobs:
   flaky:
     runs-on: ubuntu-latest
     container:
-      # Use ubuntu-18.04 to compile with glibc 2.27, which are the production expectations
-      image: ubuntu:18.04
+      # Use ubuntu-20.04 to compile with glibc 2.28
+      image: ubuntu:20.04
     steps:
     - uses: actions/checkout@v3
     - name: Install needed dependencies
