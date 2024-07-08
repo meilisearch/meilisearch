@@ -68,6 +68,19 @@ impl RoFeatures {
             .into())
         }
     }
+
+    pub fn check_edit_documents_by_function(&self, disabled_action: &'static str) -> Result<()> {
+        if self.runtime.edit_documents_by_function {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action,
+                feature: "edit documents by function",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/762",
+            }
+            .into())
+        }
+    }
 }
 
 impl FeatureData {

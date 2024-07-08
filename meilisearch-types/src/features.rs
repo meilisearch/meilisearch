@@ -6,6 +6,7 @@ pub struct RuntimeTogglableFeatures {
     pub vector_store: bool,
     pub metrics: bool,
     pub logs_route: bool,
+    pub edit_documents_by_function: bool,
 }
 
 #[derive(Default, Debug, Clone, Copy)]

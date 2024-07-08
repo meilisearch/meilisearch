@@ -595,6 +595,11 @@ pub async fn edit_documents_by_function(
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?params, "Edit documents by function");
+
+    index_scheduler
+        .features()
+        .check_edit_documents_by_function("Using the documents edit route")?;
+
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let index_uid = index_uid.into_inner();
     let params = params.into_inner();

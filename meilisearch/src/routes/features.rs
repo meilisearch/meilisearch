@@ -47,6 +47,8 @@ pub struct RuntimeTogglableFeatures {
     pub metrics: Option<bool>,
     #[deserr(default)]
     pub logs_route: Option<bool>,
+    #[deserr(default)]
+    pub edit_documents_by_function: Option<bool>,
 }
 
 async fn patch_features(
@@ -66,13 +68,21 @@ async fn patch_features(
         vector_store: new_features.0.vector_store.unwrap_or(old_features.vector_store),
         metrics: new_features.0.metrics.unwrap_or(old_features.metrics),
         logs_route: new_features.0.logs_route.unwrap_or(old_features.logs_route),
+        edit_documents_by_function: new_features
+            .0
+            .edit_documents_by_function
+            .unwrap_or(old_features.edit_documents_by_function),
     };
 
     // explicitly destructure for analytics rather than using the `Serialize` implementation, because
     // the it renames to camelCase, which we don't want for analytics.
     // **Do not** ignore fields with `..` or `_` here, because we want to add them in the future.
-    let meilisearch_types::features::RuntimeTogglableFeatures { vector_store, metrics, logs_route } =
-        new_features;
+    let meilisearch_types::features::RuntimeTogglableFeatures {
+        vector_store,
+        metrics,
+        logs_route,
+        edit_documents_by_function,
+    } = new_features;
 
     analytics.publish(
         "Experimental features Updated".to_string(),
@@ -80,6 +90,7 @@ async fn patch_features(
             "vector_store": vector_store,
             "metrics": metrics,
             "logs_route": logs_route,
+            "edit_documents_by_function": edit_documents_by_function,
         }),
         Some(&req),
     );
