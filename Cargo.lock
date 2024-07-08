@@ -3349,7 +3349,6 @@ dependencies = [
  "futures",
  "futures-util",
  "hex",
- "http 0.2.12",
  "index-scheduler",
  "indexmap",
  "insta",

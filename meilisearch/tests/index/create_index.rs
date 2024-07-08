@@ -1,6 +1,5 @@
-use actix_web::http::header::ContentType;
+use actix_web::http::header::{ContentType, ACCEPT_ENCODING};
 use actix_web::test;
-use http::header::ACCEPT_ENCODING;
 use meili_snap::{json_string, snapshot};
 use meilisearch::Opt;
 

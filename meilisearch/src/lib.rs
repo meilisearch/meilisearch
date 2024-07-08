@@ -23,13 +23,13 @@ use actix_cors::Cors;
 use actix_http::body::MessageBody;
 use actix_web::dev::{ServiceFactory, ServiceResponse};
 use actix_web::error::JsonPayloadError;
+use actix_web::http::header::{CONTENT_TYPE, USER_AGENT};
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest};
 use analytics::Analytics;
 use anyhow::bail;
 use error::PayloadError;
 use extractors::payload::PayloadConfig;
-use http::header::CONTENT_TYPE;
 use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use meilisearch_auth::AuthController;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
@@ -167,7 +167,7 @@ impl tracing_actix_web::RootSpanBuilder for AwebTracingLogger {
         let conn_info = request.connection_info();
         let headers = request.headers();
         let user_agent = headers
-            .get(http::header::USER_AGENT)
+            .get(USER_AGENT)
             .map(|value| String::from_utf8_lossy(value.as_bytes()).into_owned())
             .unwrap_or_default();
         info_span!("HTTP request", method = %request.method(), host = conn_info.host(), route = %request.path(), query_parameters = %request.query_string(), %user_agent, status_code = Empty, error = Empty)

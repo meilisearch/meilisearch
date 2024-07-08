@@ -5,10 +5,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use actix_web::http::header::USER_AGENT;
+use actix_web::http::header::{CONTENT_TYPE, USER_AGENT};
 use actix_web::HttpRequest;
 use byte_unit::Byte;
-use http::header::CONTENT_TYPE;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::{AuthController, AuthFilter};
 use meilisearch_types::InstanceUid;
