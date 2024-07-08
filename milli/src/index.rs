@@ -169,7 +169,7 @@ pub struct Index {
     /// Maps an embedder name to its id in the arroy store.
     pub embedder_category_id: Database<Str, U8>,
     /// Vector store based on arroy™.
-    pub vector_arroy: arroy::Database<arroy::distances::Angular>,
+    pub vector_arroy: arroy::Database<arroy::distances::BinaryQuantizedEuclidean>,
 
     /// Maps the document id to the document as an obkv store.
     pub(crate) documents: Database<BEU32, ObkvCodec>,
@@ -1605,7 +1605,8 @@ impl Index {
         &'a self,
         rtxn: &'a RoTxn<'a>,
         embedder_id: u8,
-    ) -> impl Iterator<Item = Result<arroy::Reader<arroy::distances::Angular>>> + 'a {
+    ) -> impl Iterator<Item = Result<arroy::Reader<arroy::distances::BinaryQuantizedEuclidean>>> + 'a
+    {
         crate::vector::arroy_db_range_for_embedder(embedder_id).map_while(move |k| {
             arroy::Reader::open(rtxn, k, self.vector_arroy)
                 .map(Some)

@@ -990,7 +990,10 @@ impl<'a, 'i> Transform<'a, 'i> {
         };
 
         let readers: Result<
-            BTreeMap<&str, (Vec<arroy::Reader<arroy::distances::Angular>>, &RoaringBitmap)>,
+            BTreeMap<
+                &str,
+                (Vec<arroy::Reader<arroy::distances::BinaryQuantizedEuclidean>>, &RoaringBitmap),
+            >,
         > = settings_diff
             .embedding_config_updates
             .iter()

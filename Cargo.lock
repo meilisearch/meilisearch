@@ -399,6 +399,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "arroy"
+version = "0.4.0"
+source = "git+https://github.com/meilisearch/arroy?branch=binary-quantization#facc8575222d3f5da5b9a94288e44896911e701f"
+dependencies = [
+ "bytemuck",
+ "byteorder",
+ "heed",
+ "log",
+ "memmap2 0.9.4",
+ "ordered-float",
+ "rand",
+ "rayon",
+ "roaring",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "assert-json-diff"
 version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2455,7 +2473,7 @@ name = "index-scheduler"
 version = "1.9.0"
 dependencies = [
  "anyhow",
- "arroy",
+ "arroy 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "big_s",
  "bincode",
  "crossbeam",
@@ -3448,7 +3466,7 @@ dependencies = [
 name = "milli"
 version = "1.9.0"
 dependencies = [
- "arroy",
+ "arroy 0.4.0 (git+https://github.com/meilisearch/arroy?branch=binary-quantization)",
  "big_s",
  "bimap",
  "bincode",
