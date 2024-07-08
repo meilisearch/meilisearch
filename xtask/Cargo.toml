@@ -11,27 +11,27 @@ license.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.79"
+anyhow = "1.0.86"
 build-info = { version = "1.7.0", path = "../build-info" }
 cargo_metadata = "0.18.1"
-clap = { version = "4.4.14", features = ["derive"] }
+clap = { version = "4.5.8", features = ["derive"] }
 futures-core = "0.3.30"
 futures-util = "0.3.30"
-reqwest = { version = "0.11.23", features = [
+reqwest = { version = "0.11.27", features = [
     "stream",
     "json",
     "rustls-tls",
 ], default-features = false }
-serde = { version = "1.0.195", features = ["derive"] }
-serde_json = "1.0.111"
+serde = { version = "1.0.204", features = ["derive"] }
+serde_json = "1.0.120"
 sha2 = "0.10.8"
-sysinfo = "0.30.5"
-time = { version = "0.3.32", features = [
+sysinfo = "0.30.12"
+time = { version = "0.3.36", features = [
     "serde",
     "serde-human-readable",
     "macros",
 ] }
-tokio = { version = "1.35.1", features = [
+tokio = { version = "1.38.0", features = [
     "rt",
     "net",
     "time",
@@ -41,4 +41,4 @@ tokio = { version = "1.35.1", features = [
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 tracing-trace = { version = "0.1.0", path = "../tracing-trace" }
-uuid = { version = "1.7.0", features = ["v7", "serde"] }
+uuid = { version = "1.9.1", features = ["v7", "serde"] }

@@ -11,36 +11,36 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-actix-web = { version = "4.6.0", default-features = false }
-anyhow = "1.0.79"
+actix-web = { version = "4.8.0", default-features = false }
+anyhow = "1.0.86"
 convert_case = "0.6.0"
 csv = "1.3.0"
-deserr = { version = "0.6.1", features = ["actix-web"] }
-either = { version = "1.9.0", features = ["serde"] }
+deserr = { version = "0.6.2", features = ["actix-web"] }
+either = { version = "1.13.0", features = ["serde"] }
 enum-iterator = "1.5.0"
 file-store = { path = "../file-store" }
-flate2 = "1.0.28"
+flate2 = "1.0.30"
 fst = "0.4.7"
 memmap2 = "0.7.1"
 milli = { path = "../milli" }
-roaring = { version = "0.10.2", features = ["serde"] }
-serde = { version = "1.0.195", features = ["derive"] }
+roaring = { version = "0.10.6", features = ["serde"] }
+serde = { version = "1.0.204", features = ["derive"] }
 serde-cs = "0.2.4"
-serde_json = "1.0.111"
-tar = "0.4.40"
-tempfile = "3.9.0"
-thiserror = "1.0.56"
-time = { version = "0.3.31", features = [
+serde_json = "1.0.120"
+tar = "0.4.41"
+tempfile = "3.10.1"
+thiserror = "1.0.61"
+time = { version = "0.3.36", features = [
     "serde-well-known",
     "formatting",
     "parsing",
     "macros",
 ] }
-tokio = "1.35"
-uuid = { version = "1.6.1", features = ["serde", "v4"] }
+tokio = "1.38"
+uuid = { version = "1.9.1", features = ["serde", "v4"] }
 
 [dev-dependencies]
-insta = "1.34.0"
+insta = "1.39.0"
 meili-snap = { path = "../meili-snap" }
 
 [features]

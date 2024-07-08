@@ -11,22 +11,22 @@ readme.workspace = true
 license.workspace = true
 
 [dependencies]
-anyhow = "1.0.79"
-flate2 = "1.0.28"
-http = "0.2.11"
+anyhow = "1.0.86"
+flate2 = "1.0.30"
+http = "0.2.12"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 once_cell = "1.19.0"
-regex = "1.10.2"
-roaring = { version = "0.10.2", features = ["serde"] }
-serde = { version = "1.0.195", features = ["derive"] }
-serde_json = { version = "1.0.111", features = ["preserve_order"] }
-tar = "0.4.40"
-tempfile = "3.9.0"
-thiserror = "1.0.56"
-time = { version = "0.3.31", features = ["serde-well-known", "formatting", "parsing", "macros"] }
+regex = "1.10.5"
+roaring = { version = "0.10.6", features = ["serde"] }
+serde = { version = "1.0.204", features = ["derive"] }
+serde_json = { version = "1.0.120", features = ["preserve_order"] }
+tar = "0.4.41"
+tempfile = "3.10.1"
+thiserror = "1.0.61"
+time = { version = "0.3.36", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 tracing = "0.1.40"
-uuid = { version = "1.6.1", features = ["serde", "v4"] }
+uuid = { version = "1.9.1", features = ["serde", "v4"] }
 
 [dev-dependencies]
 big_s = "1.0.2"
