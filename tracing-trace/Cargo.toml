@@ -13,8 +13,9 @@ serde_json = "1.0.120"
 tracing = "0.1.40"
 tracing-error = "0.2.0"
 tracing-subscriber = "0.3.18"
-byte-unit = { version = "4.0.19", default-features = false, features = [
+byte-unit = { version = "5.1.4", default-features = false, features = [
     "std",
+    "byte",
     "serde",
 ] }
 tokio = { version = "1.38.0", features = ["sync"] }

@@ -1,6 +1,6 @@
 use actix_web as aweb;
 use aweb::error::{JsonPayloadError, QueryPayloadError};
-use byte_unit::Byte;
+use byte_unit::{Byte, UnitType};
 use meilisearch_types::document_formats::{DocumentFormatError, PayloadType};
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::index_uid::{IndexUid, IndexUidFormatError};
@@ -33,7 +33,7 @@ pub enum MeilisearchHttpError {
     TooManySearchRequests(usize),
     #[error("Internal error: Search limiter is down.")]
     SearchLimiterIsDown,
-    #[error("The provided payload reached the size limit. The maximum accepted payload size is {}.",  Byte::from_bytes(*.0 as u64).get_appropriate_unit(true))]
+    #[error("The provided payload reached the size limit. The maximum accepted payload size is {}.",  Byte::from_u64(*.0 as u64).get_appropriate_unit(UnitType::Binary))]
     PayloadTooLarge(usize),
     #[error("Two indexes must be given for each swap. The list `[{}]` contains {} indexes.",
         .0.iter().map(|uid| format!("\"{uid}\"")).collect::<Vec<_>>().join(", "), .0.len()

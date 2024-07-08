@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::io::Read;
 
+use byte_unit::UnitType;
+
 use crate::entry::{
     Entry, Event, MemoryStats, NewCallsite, NewSpan, NewThread, ResourceId, SpanClose, SpanEnter,
     SpanExit, SpanId,
@@ -190,6 +192,6 @@ fn print_duration(duration: std::time::Duration) -> String {
 /// Format only the allocated bytes, deallocated bytes and reallocated bytes in GiB, MiB, KiB, Bytes.
 fn print_memory(MemoryStats { resident }: MemoryStats) -> String {
     use byte_unit::Byte;
-    let rss_bytes = Byte::from_bytes(resident).get_appropriate_unit(true);
+    let rss_bytes = Byte::from_u64(resident).get_appropriate_unit(UnitType::Binary);
     format!("RSS {rss_bytes:.2}")
 }

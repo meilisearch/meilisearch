@@ -32,8 +32,9 @@ anyhow = { version = "1.0.86", features = ["backtrace"] }
 async-stream = "0.3.5"
 async-trait = "0.1.81"
 bstr = "1.9.1"
-byte-unit = { version = "4.0.19", default-features = false, features = [
+byte-unit = { version = "5.1.4", default-features = false, features = [
     "std",
+    "byte",
     "serde",
 ] }
 bytes = "1.6.0"

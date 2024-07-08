@@ -15,6 +15,7 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::num::NonZeroUsize;
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::thread::{self, available_parallelism};
 use std::time::Duration;
@@ -300,15 +301,15 @@ fn open_or_create_database_unchecked(
             dumps_path: opt.dump_dir.clone(),
             webhook_url: opt.task_webhook_url.as_ref().map(|url| url.to_string()),
             webhook_authorization_header: opt.task_webhook_authorization_header.clone(),
-            task_db_size: opt.max_task_db_size.get_bytes() as usize,
-            index_base_map_size: opt.max_index_size.get_bytes() as usize,
+            task_db_size: opt.max_task_db_size.as_u64() as usize,
+            index_base_map_size: opt.max_index_size.as_u64() as usize,
             enable_mdb_writemap: opt.experimental_reduce_indexing_memory_usage,
             indexer_config: (&opt.indexer_options).try_into()?,
             autobatching_enabled: true,
             cleanup_enabled: !opt.experimental_replication_parameters,
             max_number_of_tasks: 1_000_000,
             max_number_of_batched_tasks: opt.experimental_max_number_of_batched_tasks,
-            index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().get_bytes() as usize,
+            index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().as_u64() as usize,
             index_count: DEFAULT_INDEX_COUNT,
             instance_features,
         })?)
@@ -476,7 +477,7 @@ pub fn configure_data(
         opt.experimental_search_queue_size,
         available_parallelism().unwrap_or(NonZeroUsize::new(2).unwrap()),
     );
-    let http_payload_size_limit = opt.http_payload_size_limit.get_bytes() as usize;
+    let http_payload_size_limit = opt.http_payload_size_limit.as_u64() as usize;
     config
         .app_data(index_scheduler)
         .app_data(auth)

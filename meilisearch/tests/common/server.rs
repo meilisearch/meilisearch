@@ -6,7 +6,7 @@ use std::time::Duration;
 use actix_http::body::MessageBody;
 use actix_web::dev::ServiceResponse;
 use actix_web::http::StatusCode;
-use byte_unit::{Byte, ByteUnit};
+use byte_unit::{Byte, Unit};
 use clap::Parser;
 use meilisearch::option::{IndexerOpts, MaxMemory, Opt};
 use meilisearch::{analytics, create_app, setup_meilisearch, SubscriberForSecondLayer};
@@ -231,9 +231,9 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
         env: "development".to_owned(),
         #[cfg(feature = "analytics")]
         no_analytics: true,
-        max_index_size: Byte::from_unit(100.0, ByteUnit::MiB).unwrap(),
-        max_task_db_size: Byte::from_unit(1.0, ByteUnit::GiB).unwrap(),
-        http_payload_size_limit: Byte::from_unit(10.0, ByteUnit::MiB).unwrap(),
+        max_index_size: Byte::from_u64_with_unit(100, Unit::MiB).unwrap(),
+        max_task_db_size: Byte::from_u64_with_unit(1, Unit::GiB).unwrap(),
+        http_payload_size_limit: Byte::from_u64_with_unit(10, Unit::MiB).unwrap(),
         snapshot_dir: ".".into(),
         indexer_options: IndexerOpts {
             // memory has to be unlimited because several meilisearch are running in test context.
