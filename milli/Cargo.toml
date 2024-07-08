@@ -38,14 +38,14 @@ heed = { version = "0.20.3", default-features = false, features = [
 indexmap = { version = "2.2.6", features = ["serde"] }
 json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
-memmap2 = "0.7.1"
+memmap2 = "0.9.4"
 obkv = "0.2.2"
 once_cell = "1.19.0"
 ordered-float = "4.2.1"
 rand_pcg = { version = "0.3.1", features = ["serde1"] }
 rayon = "1.10.0"
 roaring = { version = "0.10.6", features = ["serde"] }
-rstar = { version = "0.11.0", features = ["serde"] }
+rstar = { version = "0.12.0", features = ["serde"] }
 serde = { version = "1.0.204", features = ["derive"] }
 serde_json = { version = "1.0.120", features = ["preserve_order"] }
 slice-group-by = "0.3.1"
@@ -65,12 +65,12 @@ uuid = { version = "1.9.1", features = ["v4"] }
 filter-parser = { path = "../filter-parser" }
 
 # documents words self-join
-itertools = "0.11.0"
+itertools = "0.13.0"
 
 csv = "1.3.0"
-candle-core = { version = "0.4.1" }
-candle-transformers = { version = "0.4.1" }
-candle-nn = { version = "0.4.1" }
+candle-core = { version = "0.6.0" }
+candle-transformers = { version = "0.6.0" }
+candle-nn = { version = "0.6.0" }
 tokenizers = { git = "https://github.com/huggingface/tokenizers.git", tag = "v0.15.2", version = "0.15.2", default-features = false, features = [
     "onig",
 ] }

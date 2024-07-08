@@ -17,7 +17,7 @@ cargo_metadata = "0.18.1"
 clap = { version = "4.5.8", features = ["derive"] }
 futures-core = "0.3.30"
 futures-util = "0.3.30"
-reqwest = { version = "0.11.27", features = [
+reqwest = { version = "0.12.5", features = [
     "stream",
     "json",
     "rustls-tls",

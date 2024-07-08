@@ -11,8 +11,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-base64 = "0.21.7"
-enum-iterator = "1.5.0"
+base64 = "0.22.1"
+enum-iterator = "2.1.0"
 hmac = "0.12.1"
 maplit = "1.0.2"
 meilisearch-types = { path = "../meilisearch-types" }
