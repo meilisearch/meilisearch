@@ -14,13 +14,13 @@ default-run = "meilisearch"
 
 [dependencies]
 actix-cors = "0.7.0"
-actix-http = { version = "3.7.0", default-features = false, features = [
+actix-http = { version = "3.8.0", default-features = false, features = [
     "compress-brotli",
     "compress-gzip",
     "rustls-0_21",
 ] }
 actix-utils = "3.0.1"
-actix-web = { version = "4.6.0", default-features = false, features = [
+actix-web = { version = "4.8.0", default-features = false, features = [
     "macros",
     "compress-brotli",
     "compress-gzip",
