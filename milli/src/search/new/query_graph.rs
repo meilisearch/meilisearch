@@ -316,7 +316,7 @@ impl QueryGraph {
             term_docids
                 .into_iter()
                 .map(|(idx, docids)| match docids.len() {
-                    0 => (idx, u64::max_value()),
+                    0 => (idx, u64::MAX),
                     frequency => (idx, frequency),
                 })
                 .collect()

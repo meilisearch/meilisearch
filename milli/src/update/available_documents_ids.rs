@@ -15,7 +15,7 @@ impl AvailableDocumentsIds {
                 available -= docids;
 
                 let iter = match last_id.checked_add(1) {
-                    Some(id) => id..=u32::max_value(),
+                    Some(id) => id..=u32::MAX,
                     #[allow(clippy::reversed_empty_ranges)]
                     None => 1..=0, // empty range iterator
                 };
@@ -24,7 +24,7 @@ impl AvailableDocumentsIds {
             }
             None => {
                 let empty = RoaringBitmap::new().into_iter();
-                AvailableDocumentsIds { iter: empty.chain(0..=u32::max_value()) }
+                AvailableDocumentsIds { iter: empty.chain(0..=u32::MAX) }
             }
         }
     }
@@ -46,7 +46,7 @@ mod tests {
     fn empty() {
         let base = RoaringBitmap::new();
         let left = AvailableDocumentsIds::from_documents_ids(&base);
-        let right = 0..=u32::max_value();
+        let right = 0..=u32::MAX;
         left.zip(right).take(500).for_each(|(l, r)| assert_eq!(l, r));
     }
 
@@ -59,7 +59,7 @@ mod tests {
         base.insert(405);
 
         let left = AvailableDocumentsIds::from_documents_ids(&base);
-        let right = (0..=u32::max_value()).filter(|&n| n != 0 && n != 10 && n != 100 && n != 405);
+        let right = (0..=u32::MAX).filter(|&n| n != 0 && n != 10 && n != 100 && n != 405);
         left.zip(right).take(500).for_each(|(l, r)| assert_eq!(l, r));
     }
 }
