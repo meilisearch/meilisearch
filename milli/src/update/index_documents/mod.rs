@@ -197,10 +197,18 @@ where
             output
         }
 
+        // Setup the security and limits of the Engine
         let mut engine = Engine::new();
         engine.set_optimization_level(OptimizationLevel::Full);
+        engine.set_max_call_levels(1000);
         // It is an arbitrary value. We need to let users define this in the settings.
         engine.set_max_operations(1_000_000);
+        engine.set_max_variables(1000);
+        engine.set_max_functions(30);
+        engine.set_max_expr_depths(100, 1000);
+        engine.set_max_string_size(1024 * 1024 * 1024); // 1 GiB
+        engine.set_max_array_size(10_000);
+        engine.set_max_map_size(10_000);
 
         let ast = engine.compile(code).map_err(UserError::DocumentEditionCompilationError)?;
         let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
