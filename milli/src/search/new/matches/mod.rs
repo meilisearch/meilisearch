@@ -123,7 +123,7 @@ impl<'t> Matcher<'t, '_> {
         /// some words are counted as matches only if they are close together and in the good order,
         /// compute_partial_match peek into next words to validate if the match is complete.
         fn compute_partial_match<'a>(
-            mut partial: PartialMatch,
+            mut partial: PartialMatch<'a>,
             token_position: usize,
             word_position: usize,
             words_positions: &mut impl Iterator<Item = (usize, usize, &'a Token<'a>)>,
@@ -244,7 +244,12 @@ impl<'t> Matcher<'t, '_> {
     }
 
     /// Returns the bounds in byte index of the crop window.
-    fn crop_bounds(&self, tokens: &[Token], matches: &[Match], crop_size: usize) -> (usize, usize) {
+    fn crop_bounds(
+        &self,
+        tokens: &[Token<'_>],
+        matches: &[Match],
+        crop_size: usize,
+    ) -> (usize, usize) {
         // if there is no match, we start from the beginning of the string by default.
         let first_match_word_position = matches.first().map(|m| m.word_position).unwrap_or(0);
         let first_match_token_position = matches.first().map(|m| m.token_position).unwrap_or(0);
@@ -505,7 +510,7 @@ mod tests {
     use crate::{execute_search, filtered_universe, SearchContext, TimeBudget};
 
     impl<'a> MatcherBuilder<'a> {
-        fn new_test(rtxn: &'a heed::RoTxn, index: &'a TempIndex, query: &str) -> Self {
+        fn new_test(rtxn: &'a heed::RoTxn<'a>, index: &'a TempIndex, query: &str) -> Self {
             let mut ctx = SearchContext::new(index, rtxn).unwrap();
             let universe = filtered_universe(ctx.index, ctx.txn, &None).unwrap();
             let crate::search::PartialSearchResult { located_query_terms, .. } = execute_search(

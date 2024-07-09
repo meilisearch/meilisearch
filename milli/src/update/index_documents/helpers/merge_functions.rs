@@ -45,8 +45,8 @@ pub fn keep_latest_obkv<'a>(_key: &[u8], obkvs: &[Cow<'a, [u8]>]) -> Result<Cow<
 }
 
 pub fn merge_two_del_add_obkvs(
-    base: obkv::KvReaderU16,
-    update: obkv::KvReaderU16,
+    base: obkv::KvReaderU16<'_>,
+    update: obkv::KvReaderU16<'_>,
     merge_additions: bool,
     buffer: &mut Vec<u8>,
 ) {

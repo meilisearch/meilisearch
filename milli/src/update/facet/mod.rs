@@ -141,7 +141,7 @@ impl<'i> FacetsUpdate<'i> {
         }
     }
 
-    pub fn execute(self, wtxn: &mut heed::RwTxn) -> Result<()> {
+    pub fn execute(self, wtxn: &mut heed::RwTxn<'_>) -> Result<()> {
         if self.data_size == 0 {
             return Ok(());
         }
@@ -181,7 +181,7 @@ impl<'i> FacetsUpdate<'i> {
 }
 
 fn index_facet_search(
-    wtxn: &mut heed::RwTxn,
+    wtxn: &mut heed::RwTxn<'_>,
     normalized_delta_data: Merger<BufReader<File>, MergeFn>,
     index: &Index,
 ) -> Result<()> {
@@ -417,7 +417,7 @@ pub(crate) mod test_helpers {
 
         pub fn insert<'a>(
             &self,
-            wtxn: &'a mut RwTxn,
+            wtxn: &'a mut RwTxn<'_>,
             field_id: u16,
             key: &'a <BoundCodec as BytesEncode<'a>>::EItem,
             docids: &RoaringBitmap,
@@ -434,7 +434,7 @@ pub(crate) mod test_helpers {
         }
         pub fn delete_single_docid<'a>(
             &self,
-            wtxn: &'a mut RwTxn,
+            wtxn: &'a mut RwTxn<'_>,
             field_id: u16,
             key: &'a <BoundCodec as BytesEncode<'a>>::EItem,
             docid: u32,
@@ -444,7 +444,7 @@ pub(crate) mod test_helpers {
 
         pub fn delete<'a>(
             &self,
-            wtxn: &'a mut RwTxn,
+            wtxn: &'a mut RwTxn<'_>,
             field_id: u16,
             key: &'a <BoundCodec as BytesEncode<'a>>::EItem,
             docids: &RoaringBitmap,
@@ -462,7 +462,7 @@ pub(crate) mod test_helpers {
 
         pub fn bulk_insert<'a, 'b>(
             &self,
-            wtxn: &'a mut RwTxn,
+            wtxn: &'a mut RwTxn<'_>,
             field_ids: &[u16],
             els: impl IntoIterator<
                 Item = &'a ((u16, <BoundCodec as BytesEncode<'a>>::EItem), RoaringBitmap),
@@ -498,7 +498,7 @@ pub(crate) mod test_helpers {
             update.update(wtxn, field_ids).unwrap();
         }
 
-        pub fn verify_structure_validity(&self, txn: &RoTxn, field_id: u16) {
+        pub fn verify_structure_validity(&self, txn: &RoTxn<'_>, field_id: u16) {
             let mut field_id_prefix = vec![];
             field_id_prefix.extend_from_slice(&field_id.to_be_bytes());
 

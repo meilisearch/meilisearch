@@ -24,7 +24,7 @@ impl<'a> BytesDecode<'a> for OrderedF64Codec {
 impl heed::BytesEncode<'_> for OrderedF64Codec {
     type EItem = f64;
 
-    fn bytes_encode(f: &Self::EItem) -> Result<Cow<[u8]>, BoxedError> {
+    fn bytes_encode(f: &Self::EItem) -> Result<Cow<'_, [u8]>, BoxedError> {
         let mut buffer = [0u8; 16];
 
         // write the globally ordered float

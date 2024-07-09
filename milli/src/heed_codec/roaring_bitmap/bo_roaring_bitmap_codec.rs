@@ -42,7 +42,7 @@ impl BytesDecodeOwned for BoRoaringBitmapCodec {
 impl heed::BytesEncode<'_> for BoRoaringBitmapCodec {
     type EItem = RoaringBitmap;
 
-    fn bytes_encode(item: &Self::EItem) -> Result<Cow<[u8]>, BoxedError> {
+    fn bytes_encode(item: &Self::EItem) -> Result<Cow<'_, [u8]>, BoxedError> {
         let mut out = Vec::new();
         BoRoaringBitmapCodec::serialize_into(item, &mut out);
         Ok(Cow::Owned(out))

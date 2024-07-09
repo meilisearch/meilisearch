@@ -99,14 +99,14 @@ pub trait RankingRuleGraphTrait: Sized + 'static {
     /// Compute the document ids associated with the given edge condition,
     /// restricted to the given universe.
     fn resolve_condition(
-        ctx: &mut SearchContext,
+        ctx: &mut SearchContext<'_>,
         condition: &Self::Condition,
         universe: &RoaringBitmap,
     ) -> Result<ComputedCondition>;
 
     /// Return the costs and conditions of the edges going from the source node to the destination node
     fn build_edges(
-        ctx: &mut SearchContext,
+        ctx: &mut SearchContext<'_>,
         conditions_interner: &mut DedupInterner<Self::Condition>,
         source_node: Option<&LocatedQueryTermSubset>,
         dest_node: &LocatedQueryTermSubset,

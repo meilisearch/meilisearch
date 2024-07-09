@@ -23,7 +23,7 @@ impl RankingRuleGraphTrait for ProximityGraph {
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::proximity")]
     fn resolve_condition(
-        ctx: &mut SearchContext,
+        ctx: &mut SearchContext<'_>,
         condition: &Self::Condition,
         universe: &RoaringBitmap,
     ) -> Result<ComputedCondition> {
@@ -32,7 +32,7 @@ impl RankingRuleGraphTrait for ProximityGraph {
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::proximity")]
     fn build_edges(
-        ctx: &mut SearchContext,
+        ctx: &mut SearchContext<'_>,
         conditions_interner: &mut DedupInterner<Self::Condition>,
         source_term: Option<&LocatedQueryTermSubset>,
         dest_term: &LocatedQueryTermSubset,

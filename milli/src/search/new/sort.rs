@@ -56,7 +56,7 @@ pub struct Sort<'ctx, Query> {
 impl<'ctx, Query> Sort<'ctx, Query> {
     pub fn new(
         index: &Index,
-        rtxn: &'ctx heed::RoTxn,
+        rtxn: &'ctx heed::RoTxn<'ctx>,
         field_name: String,
         is_ascending: bool,
     ) -> Result<Self> {
@@ -74,7 +74,7 @@ impl<'ctx, Query> Sort<'ctx, Query> {
         })
     }
 
-    fn must_redact(index: &Index, rtxn: &'ctx heed::RoTxn, field_name: &str) -> Result<bool> {
+    fn must_redact(index: &Index, rtxn: &'ctx heed::RoTxn<'ctx>, field_name: &str) -> Result<bool> {
         let Some(displayed_fields) = index.displayed_fields(rtxn)? else {
             return Ok(false);
         };
@@ -97,7 +97,7 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
         parent_candidates: &RoaringBitmap,
         parent_query: &Query,
     ) -> Result<()> {
-        let iter: RankingRuleOutputIterWrapper<Query> = match self.field_id {
+        let iter: RankingRuleOutputIterWrapper<'ctx, Query> = match self.field_id {
             Some(field_id) => {
                 let number_db = ctx
                     .index

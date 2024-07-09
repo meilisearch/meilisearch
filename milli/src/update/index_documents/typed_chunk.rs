@@ -128,7 +128,7 @@ impl TypedChunk {
 /// Return new documents seen.
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::write_db")]
 pub(crate) fn write_typed_chunk_into_index(
-    wtxn: &mut RwTxn,
+    wtxn: &mut RwTxn<'_>,
     index: &Index,
     settings_diff: &InnerIndexSettingsDiff,
     typed_chunks: Vec<TypedChunk>,
@@ -165,7 +165,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let mut vectors_buffer = Vec::new();
             while let Some((key, reader)) = iter.next()? {
                 let mut writer: KvWriter<_, FieldId> = KvWriter::memory();
-                let reader: KvReader<FieldId> = KvReader::new(reader);
+                let reader: KvReader<'_, FieldId> = KvReader::new(reader);
 
                 let (document_id_bytes, external_id_bytes) = try_split_array_at(key)
                     .ok_or(SerializationError::Decoding { db_name: Some(DOCUMENTS) })?;
@@ -835,7 +835,7 @@ fn merge_word_docids_reader_into_fst(
 fn write_entries_into_database<R, K, V, FS, FM>(
     merger: Merger<R, MergeFn>,
     database: &heed::Database<K, V>,
-    wtxn: &mut RwTxn,
+    wtxn: &mut RwTxn<'_>,
     serialize_value: FS,
     merge_values: FM,
 ) -> Result<()>
@@ -872,7 +872,7 @@ where
 fn write_proximity_entries_into_database_additional_searchables<R>(
     merger: Merger<R, MergeFn>,
     database: &heed::Database<U8StrStrCodec, CboRoaringBitmapCodec>,
-    wtxn: &mut RwTxn,
+    wtxn: &mut RwTxn<'_>,
 ) -> Result<()>
 where
     R: io::Read + io::Seek,

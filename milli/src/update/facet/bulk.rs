@@ -67,7 +67,7 @@ impl<'i> FacetsUpdateBulk<'i> {
     }
 
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::facets::bulk")]
-    pub fn execute(self, wtxn: &mut heed::RwTxn) -> Result<()> {
+    pub fn execute(self, wtxn: &mut heed::RwTxn<'_>) -> Result<()> {
         let Self { index, field_ids, group_size, min_level_size, facet_type, delta_data } = self;
 
         let db = match facet_type {
@@ -95,7 +95,7 @@ pub(crate) struct FacetsUpdateBulkInner<R: std::io::Read + std::io::Seek> {
     pub min_level_size: u8,
 }
 impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
-    pub fn update(mut self, wtxn: &mut RwTxn, field_ids: &[u16]) -> Result<()> {
+    pub fn update(mut self, wtxn: &mut RwTxn<'_>, field_ids: &[u16]) -> Result<()> {
         self.update_level0(wtxn)?;
         for &field_id in field_ids.iter() {
             self.clear_levels(wtxn, field_id)?;
@@ -114,7 +114,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
         Ok(())
     }
 
-    fn clear_levels(&self, wtxn: &mut heed::RwTxn, field_id: FieldId) -> Result<()> {
+    fn clear_levels(&self, wtxn: &mut heed::RwTxn<'_>, field_id: FieldId) -> Result<()> {
         let left = FacetGroupKey::<&[u8]> { field_id, level: 1, left_bound: &[] };
         let right = FacetGroupKey::<&[u8]> { field_id, level: u8::MAX, left_bound: &[] };
         let range = left..=right;
@@ -122,7 +122,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
         Ok(())
     }
 
-    fn update_level0(&mut self, wtxn: &mut RwTxn) -> Result<()> {
+    fn update_level0(&mut self, wtxn: &mut RwTxn<'_>) -> Result<()> {
         let delta_data = match self.delta_data.take() {
             Some(x) => x,
             None => return Ok(()),
@@ -198,7 +198,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
     fn compute_levels_for_field_id(
         &self,
         field_id: FieldId,
-        txn: &RoTxn,
+        txn: &RoTxn<'_>,
     ) -> Result<Vec<grenad::Reader<BufReader<File>>>> {
         let subwriters = self.compute_higher_levels(txn, field_id, 32, &mut |_, _| Ok(()))?;
 
@@ -207,7 +207,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
     #[allow(clippy::type_complexity)]
     fn read_level_0<'t>(
         &self,
-        rtxn: &'t RoTxn,
+        rtxn: &'t RoTxn<'t>,
         field_id: u16,
         handle_group: &mut dyn FnMut(&[RoaringBitmap], &'t [u8]) -> Result<()>,
     ) -> Result<()> {
@@ -261,7 +261,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
     #[allow(clippy::type_complexity)]
     fn compute_higher_levels<'t>(
         &self,
-        rtxn: &'t RoTxn,
+        rtxn: &'t RoTxn<'t>,
         field_id: u16,
         level: u8,
         handle_group: &mut dyn FnMut(&[RoaringBitmap], &'t [u8]) -> Result<()>,

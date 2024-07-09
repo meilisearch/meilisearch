@@ -21,7 +21,7 @@ impl<'a> heed::BytesDecode<'a> for FieldIdWordCountCodec {
 impl<'a> heed::BytesEncode<'a> for FieldIdWordCountCodec {
     type EItem = (FieldId, u8);
 
-    fn bytes_encode((field_id, word_count): &Self::EItem) -> Result<Cow<[u8]>, BoxedError> {
+    fn bytes_encode((field_id, word_count): &Self::EItem) -> Result<Cow<'a, [u8]>, BoxedError> {
         let mut bytes = Vec::with_capacity(2 + 1);
         bytes.extend_from_slice(&field_id.to_be_bytes());
         bytes.push(*word_count);

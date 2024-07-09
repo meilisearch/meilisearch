@@ -35,7 +35,7 @@ where
 
     fn bytes_encode(
         (field_id, document_id, value): &'a Self::EItem,
-    ) -> Result<Cow<[u8]>, BoxedError> {
+    ) -> Result<Cow<'a, [u8]>, BoxedError> {
         let mut bytes = Vec::with_capacity(32);
         bytes.extend_from_slice(&field_id.to_be_bytes()); // 2 bytes
         bytes.extend_from_slice(&document_id.to_be_bytes()); // 4 bytes

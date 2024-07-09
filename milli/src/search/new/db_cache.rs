@@ -47,7 +47,7 @@ pub struct DatabaseCache<'ctx> {
 }
 impl<'ctx> DatabaseCache<'ctx> {
     fn get_value<'v, K1, KC, DC>(
-        txn: &'ctx RoTxn,
+        txn: &'ctx RoTxn<'_>,
         cache_key: K1,
         db_key: &'v KC::EItem,
         cache: &mut FxHashMap<K1, Option<Cow<'ctx, [u8]>>>,
@@ -77,7 +77,7 @@ impl<'ctx> DatabaseCache<'ctx> {
     }
 
     fn get_value_from_keys<'v, K1, KC, DC>(
-        txn: &'ctx RoTxn,
+        txn: &'ctx RoTxn<'_>,
         cache_key: K1,
         db_keys: &'v [KC::EItem],
         cache: &mut FxHashMap<K1, Option<Cow<'ctx, [u8]>>>,
@@ -99,7 +99,7 @@ impl<'ctx> DatabaseCache<'ctx> {
                         .iter()
                         .filter_map(|key| db.get(txn, key).transpose())
                         .map(|v| v.map(Cow::Borrowed))
-                        .collect::<std::result::Result<Vec<Cow<[u8]>>, _>>()?;
+                        .collect::<std::result::Result<Vec<Cow<'_, [u8]>>, _>>()?;
 
                     if bitmaps.is_empty() {
                         None

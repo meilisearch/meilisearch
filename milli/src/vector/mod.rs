@@ -345,7 +345,7 @@ where
 {
     fn deserialize_from_value<V: deserr::IntoValue>(
         value: deserr::Value<V>,
-        location: deserr::ValuePointerRef,
+        location: deserr::ValuePointerRef<'_>,
     ) -> Result<Self, E> {
         let value = DistributionShiftSerializable::deserialize_from_value(value, location)?;
         if value.mean < 0. || value.mean > 1. {

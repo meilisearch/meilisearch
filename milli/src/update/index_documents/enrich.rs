@@ -24,7 +24,7 @@ use crate::{FieldId, Index, Result};
 /// - if reader.is_empty(), this function may panic in some cases
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents")]
 pub fn enrich_documents_batch<R: Read + Seek>(
-    rtxn: &heed::RoTxn,
+    rtxn: &heed::RoTxn<'_>,
     index: &Index,
     autogenerate_docids: bool,
     reader: DocumentsBatchReader<R>,
@@ -145,9 +145,9 @@ pub fn enrich_documents_batch<R: Read + Seek>(
 #[tracing::instrument(level = "trace", skip(uuid_buffer, documents_batch_index, document)
 target = "indexing::documents")]
 fn fetch_or_generate_document_id(
-    document: &obkv::KvReader<FieldId>,
+    document: &obkv::KvReader<'_, FieldId>,
     documents_batch_index: &DocumentsBatchIndex,
-    primary_key: PrimaryKey,
+    primary_key: PrimaryKey<'_>,
     autogenerate_docids: bool,
     uuid_buffer: &mut [u8; uuid::fmt::Hyphenated::LENGTH],
     count: u32,

@@ -23,7 +23,7 @@ pub struct DistinctOutput {
 /// - `excluded`: the set of document ids that contain a value for the given field that occurs
 /// in the given candidates.
 pub fn apply_distinct_rule(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     field_id: u16,
     candidates: &RoaringBitmap,
 ) -> Result<DistinctOutput> {
@@ -42,7 +42,7 @@ pub fn apply_distinct_rule(
 /// Apply the distinct rule defined by [`apply_distinct_rule`] for a single document id.
 pub fn distinct_single_docid(
     index: &Index,
-    txn: &RoTxn,
+    txn: &RoTxn<'_>,
     field_id: u16,
     docid: u32,
     excluded: &mut RoaringBitmap,
@@ -72,7 +72,7 @@ pub fn distinct_single_docid(
 /// Return all the docids containing the given value in the given field
 fn facet_value_docids(
     database: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
-    txn: &RoTxn,
+    txn: &RoTxn<'_>,
     field_id: u16,
     facet_value: &[u8],
 ) -> heed::Result<Option<RoaringBitmap>> {
@@ -86,7 +86,7 @@ fn facet_number_values<'a>(
     docid: u32,
     field_id: u16,
     index: &Index,
-    txn: &'a RoTxn,
+    txn: &'a RoTxn<'a>,
 ) -> Result<RoPrefix<'a, FieldDocIdFacetCodec<BytesRefCodec>, Unit>> {
     let key = facet_values_prefix_key(field_id, docid);
 
@@ -104,7 +104,7 @@ pub fn facet_string_values<'a>(
     docid: u32,
     field_id: u16,
     index: &Index,
-    txn: &'a RoTxn,
+    txn: &'a RoTxn<'a>,
 ) -> Result<RoPrefix<'a, FieldDocIdFacetCodec<BytesRefCodec>, Str>> {
     let key = facet_values_prefix_key(field_id, docid);
 

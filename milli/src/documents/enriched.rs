@@ -95,7 +95,7 @@ impl<R: io::Read + io::Seek> EnrichedDocumentsBatchCursor<R> {
     /// `next_document` advance the document reader until all the documents have been read.
     pub fn next_enriched_document(
         &mut self,
-    ) -> Result<Option<EnrichedDocument>, DocumentsBatchCursorError> {
+    ) -> Result<Option<EnrichedDocument<'_>>, DocumentsBatchCursorError> {
         let document = self.documents.next_document()?;
         let document_id = match self.external_ids.move_on_next()? {
             Some((_, bytes)) => serde_json::from_slice(bytes).map(Some)?,

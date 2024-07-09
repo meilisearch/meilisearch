@@ -18,7 +18,7 @@ pub mod words_tms;
 
 fn collect_field_values(
     index: &crate::Index,
-    txn: &heed::RoTxn,
+    txn: &heed::RoTxn<'_>,
     fid: &str,
     docids: &[u32],
 ) -> Vec<String> {

@@ -27,7 +27,7 @@ pub enum ZeroOrOneTypo {
 }
 
 impl Interned<QueryTerm> {
-    pub fn compute_fully_if_needed(self, ctx: &mut SearchContext) -> Result<()> {
+    pub fn compute_fully_if_needed(self, ctx: &mut SearchContext<'_>) -> Result<()> {
         let s = ctx.term_interner.get_mut(self);
         if s.max_levenshtein_distance <= 1 && s.one_typo.is_uninit() {
             assert!(s.two_typo.is_uninit());
@@ -48,7 +48,7 @@ impl Interned<QueryTerm> {
 
 fn find_zero_typo_prefix_derivations(
     word_interned: Interned<String>,
-    fst: fst::Set<Cow<[u8]>>,
+    fst: fst::Set<Cow<'_, [u8]>>,
     word_interner: &mut DedupInterner<String>,
     mut visit: impl FnMut(Interned<String>) -> Result<ControlFlow<()>>,
 ) -> Result<()> {
@@ -71,7 +71,7 @@ fn find_zero_typo_prefix_derivations(
 }
 
 fn find_zero_one_typo_derivations(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     word_interned: Interned<String>,
     is_prefix: bool,
     mut visit: impl FnMut(Interned<String>, ZeroOrOneTypo) -> Result<ControlFlow<()>>,
@@ -114,7 +114,7 @@ fn find_zero_one_typo_derivations(
 fn find_zero_one_two_typo_derivations(
     word_interned: Interned<String>,
     is_prefix: bool,
-    fst: fst::Set<Cow<[u8]>>,
+    fst: fst::Set<Cow<'_, [u8]>>,
     word_interner: &mut DedupInterner<String>,
     mut visit: impl FnMut(Interned<String>, NumberOfTypos) -> Result<ControlFlow<()>>,
 ) -> Result<()> {
@@ -172,7 +172,7 @@ fn find_zero_one_two_typo_derivations(
 }
 
 pub fn partially_initialized_term_from_word(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     word: &str,
     max_typo: u8,
     is_prefix: bool,
@@ -265,7 +265,7 @@ pub fn partially_initialized_term_from_word(
     })
 }
 
-fn find_split_words(ctx: &mut SearchContext, word: &str) -> Result<Option<Interned<Phrase>>> {
+fn find_split_words(ctx: &mut SearchContext<'_>, word: &str) -> Result<Option<Interned<Phrase>>> {
     if let Some((l, r)) = split_best_frequency(ctx, word)? {
         Ok(Some(ctx.phrase_interner.insert(Phrase { words: vec![Some(l), Some(r)] })))
     } else {
@@ -274,7 +274,7 @@ fn find_split_words(ctx: &mut SearchContext, word: &str) -> Result<Option<Intern
 }
 
 impl Interned<QueryTerm> {
-    fn initialize_one_typo_subterm(self, ctx: &mut SearchContext) -> Result<()> {
+    fn initialize_one_typo_subterm(self, ctx: &mut SearchContext<'_>) -> Result<()> {
         let self_mut = ctx.term_interner.get_mut(self);
 
         let allows_split_words = self_mut.allows_split_words();
@@ -340,7 +340,7 @@ impl Interned<QueryTerm> {
 
         Ok(())
     }
-    fn initialize_one_and_two_typo_subterm(self, ctx: &mut SearchContext) -> Result<()> {
+    fn initialize_one_and_two_typo_subterm(self, ctx: &mut SearchContext<'_>) -> Result<()> {
         let self_mut = ctx.term_interner.get_mut(self);
         let QueryTerm {
             original,
@@ -406,7 +406,7 @@ impl Interned<QueryTerm> {
 ///
 /// Return `None` if the original word cannot be split.
 fn split_best_frequency(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     original: &str,
 ) -> Result<Option<(Interned<String>, Interned<String>)>> {
     let chars = original.char_indices().skip(1);

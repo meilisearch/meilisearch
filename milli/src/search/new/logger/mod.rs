@@ -20,13 +20,13 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
     fn query_for_initial_universe(&mut self, _query: &Q);
 
     /// Logs the ranking rules used to perform the search query
-    fn ranking_rules(&mut self, _rr: &[BoxRankingRule<Q>]);
+    fn ranking_rules(&mut self, _rr: &[BoxRankingRule<'_, Q>]);
 
     /// Logs the start of a ranking rule's iteration.
     fn start_iteration_ranking_rule(
         &mut self,
         _ranking_rule_idx: usize,
-        _ranking_rule: &dyn RankingRule<Q>,
+        _ranking_rule: &dyn RankingRule<'_, Q>,
         _query: &Q,
         _universe: &RoaringBitmap,
     ) {
@@ -35,7 +35,7 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
     fn next_bucket_ranking_rule(
         &mut self,
         _ranking_rule_idx: usize,
-        _ranking_rule: &dyn RankingRule<Q>,
+        _ranking_rule: &dyn RankingRule<'_, Q>,
         _universe: &RoaringBitmap,
         _candidates: &RoaringBitmap,
     ) {
@@ -44,7 +44,7 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
     fn skip_bucket_ranking_rule(
         &mut self,
         _ranking_rule_idx: usize,
-        _ranking_rule: &dyn RankingRule<Q>,
+        _ranking_rule: &dyn RankingRule<'_, Q>,
         _candidates: &RoaringBitmap,
     ) {
     }
@@ -52,7 +52,7 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
     fn end_iteration_ranking_rule(
         &mut self,
         _ranking_rule_idx: usize,
-        _ranking_rule: &dyn RankingRule<Q>,
+        _ranking_rule: &dyn RankingRule<'_, Q>,
         _universe: &RoaringBitmap,
     ) {
     }
@@ -73,7 +73,7 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
 
     fn query_for_initial_universe(&mut self, _query: &Q) {}
 
-    fn ranking_rules(&mut self, _rr: &[BoxRankingRule<Q>]) {}
+    fn ranking_rules(&mut self, _rr: &[BoxRankingRule<'_, Q>]) {}
 
     fn add_to_results(&mut self, _docids: &[u32]) {}
 

@@ -23,8 +23,8 @@ pub struct ExtractedTokens {
 /// Convert the tokenised search query into a list of located query terms.
 #[tracing::instrument(level = "trace", skip_all, target = "search::query")]
 pub fn located_query_terms_from_tokens(
-    ctx: &mut SearchContext,
-    query: NormalizedTokenIter,
+    ctx: &mut SearchContext<'_>,
+    query: NormalizedTokenIter<'_, '_>,
     words_limit: Option<usize>,
 ) -> Result<ExtractedTokens> {
     let nbr_typos = number_of_typos_allowed(ctx)?;
@@ -214,7 +214,7 @@ pub fn number_of_typos_allowed<'ctx>(
 }
 
 pub fn make_ngram(
-    ctx: &mut SearchContext,
+    ctx: &mut SearchContext<'_>,
     terms: &[LocatedQueryTerm],
     number_of_typos_allowed: &impl Fn(&str) -> u8,
 ) -> Result<Option<LocatedQueryTerm>> {
@@ -297,7 +297,12 @@ impl PhraseBuilder {
     }
 
     // precondition: token has kind Word or StopWord
-    fn push_word(&mut self, ctx: &mut SearchContext, token: &charabia::Token, position: u16) {
+    fn push_word(
+        &mut self,
+        ctx: &mut SearchContext<'_>,
+        token: &charabia::Token<'_>,
+        position: u16,
+    ) {
         if self.is_empty() {
             self.start = position;
         }
@@ -311,7 +316,7 @@ impl PhraseBuilder {
         }
     }
 
-    fn build(self, ctx: &mut SearchContext) -> Option<LocatedQueryTerm> {
+    fn build(self, ctx: &mut SearchContext<'_>) -> Option<LocatedQueryTerm> {
         if self.is_empty() {
             return None;
         }

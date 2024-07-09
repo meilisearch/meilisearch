@@ -207,7 +207,7 @@ fn create_index() -> TempIndex {
 
 fn verify_distinct(
     index: &Index,
-    txn: &RoTxn,
+    txn: &RoTxn<'_>,
     distinct: Option<&str>,
     docids: &[u32],
 ) -> Vec<String> {

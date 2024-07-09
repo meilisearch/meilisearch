@@ -69,14 +69,14 @@ impl SearchLogger<QueryGraph> for VisualSearchLogger {
     fn initial_universe(&mut self, universe: &RoaringBitmap) {
         self.initial_universe = Some(universe.clone());
     }
-    fn ranking_rules(&mut self, rr: &[BoxRankingRule<QueryGraph>]) {
+    fn ranking_rules(&mut self, rr: &[BoxRankingRule<'_, QueryGraph>]) {
         self.ranking_rules_ids = Some(rr.iter().map(|rr| rr.id()).collect());
     }
 
     fn start_iteration_ranking_rule(
         &mut self,
         ranking_rule_idx: usize,
-        ranking_rule: &dyn RankingRule<QueryGraph>,
+        ranking_rule: &dyn RankingRule<'_, QueryGraph>,
         _query: &QueryGraph,
         universe: &RoaringBitmap,
     ) {
@@ -97,7 +97,7 @@ impl SearchLogger<QueryGraph> for VisualSearchLogger {
     fn next_bucket_ranking_rule(
         &mut self,
         ranking_rule_idx: usize,
-        _ranking_rule: &dyn RankingRule<QueryGraph>,
+        _ranking_rule: &dyn RankingRule<'_, QueryGraph>,
         universe: &RoaringBitmap,
         bucket: &RoaringBitmap,
     ) {
@@ -110,7 +110,7 @@ impl SearchLogger<QueryGraph> for VisualSearchLogger {
     fn skip_bucket_ranking_rule(
         &mut self,
         ranking_rule_idx: usize,
-        _ranking_rule: &dyn RankingRule<QueryGraph>,
+        _ranking_rule: &dyn RankingRule<'_, QueryGraph>,
         bucket: &RoaringBitmap,
     ) {
         self.events.push(SearchEvents::RankingRuleSkipBucket {
@@ -122,7 +122,7 @@ impl SearchLogger<QueryGraph> for VisualSearchLogger {
     fn end_iteration_ranking_rule(
         &mut self,
         ranking_rule_idx: usize,
-        _ranking_rule: &dyn RankingRule<QueryGraph>,
+        _ranking_rule: &dyn RankingRule<'_, QueryGraph>,
         _universe: &RoaringBitmap,
     ) {
         self.events.push(SearchEvents::RankingRuleEndIteration { ranking_rule_idx });

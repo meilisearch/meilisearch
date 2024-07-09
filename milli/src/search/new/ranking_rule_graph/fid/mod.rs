@@ -22,7 +22,7 @@ impl RankingRuleGraphTrait for FidGraph {
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::fid")]
     fn resolve_condition(
-        ctx: &mut SearchContext,
+        ctx: &mut SearchContext<'_>,
         condition: &Self::Condition,
         universe: &RoaringBitmap,
     ) -> Result<ComputedCondition> {
@@ -47,7 +47,7 @@ impl RankingRuleGraphTrait for FidGraph {
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::fid")]
     fn build_edges(
-        ctx: &mut SearchContext,
+        ctx: &mut SearchContext<'_>,
         conditions_interner: &mut DedupInterner<Self::Condition>,
         _from: Option<&LocatedQueryTermSubset>,
         to_term: &LocatedQueryTermSubset,

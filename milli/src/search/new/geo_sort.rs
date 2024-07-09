@@ -28,7 +28,7 @@ fn facet_number_values<'a>(
     docid: u32,
     field_id: u16,
     index: &Index,
-    txn: &'a RoTxn,
+    txn: &'a RoTxn<'a>,
 ) -> Result<RoPrefix<'a, FieldDocIdFacetCodec<OrderedF64Codec>, Unit>> {
     let key = facet_values_prefix_key(field_id, docid);
 
@@ -109,7 +109,7 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
     /// Drop the rtree if we don't need it anymore.
     fn fill_buffer(
         &mut self,
-        ctx: &mut SearchContext,
+        ctx: &mut SearchContext<'_>,
         geo_candidates: &RoaringBitmap,
     ) -> Result<()> {
         debug_assert!(self.field_ids.is_some(), "fill_buffer can't be called without the lat&lng");
@@ -182,7 +182,7 @@ fn geo_value(
     field_lat: u16,
     field_lng: u16,
     index: &Index,
-    rtxn: &RoTxn,
+    rtxn: &RoTxn<'_>,
 ) -> Result<[f64; 2]> {
     let extract_geo = |geo_field: u16| -> Result<f64> {
         match facet_number_values(docid, geo_field, index, rtxn)?.next() {

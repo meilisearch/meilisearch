@@ -32,7 +32,7 @@ pub struct MatchingWords {
 }
 
 impl MatchingWords {
-    pub fn new(ctx: SearchContext, located_terms: Vec<LocatedQueryTerm>) -> Self {
+    pub fn new(ctx: SearchContext<'_>, located_terms: Vec<LocatedQueryTerm>) -> Self {
         let mut phrases = Vec::new();
         let mut words = Vec::new();
 
@@ -74,7 +74,7 @@ impl MatchingWords {
     }
 
     /// Try to match the token with one of the located_words.
-    fn match_unique_words<'a>(&'a self, token: &Token) -> Option<MatchType<'a>> {
+    fn match_unique_words<'a>(&'a self, token: &Token<'_>) -> Option<MatchType<'a>> {
         for located_words in &self.words {
             for word in &located_words.value {
                 let word = self.word_interner.get(*word);
@@ -166,7 +166,7 @@ impl<'a> PartialMatch<'a> {
     /// - None if the given token breaks the partial match
     /// - Partial if the given token matches the partial match but doesn't complete it
     /// - Full if the given token completes the partial match
-    pub fn match_token(self, token: &Token) -> Option<MatchType<'a>> {
+    pub fn match_token(self, token: &Token<'_>) -> Option<MatchType<'a>> {
         let Self { mut matching_words, ids, .. } = self;
 
         let is_matching = match matching_words.first()? {
@@ -198,7 +198,7 @@ impl<'a> PartialMatch<'a> {
 }
 
 impl fmt::Debug for MatchingWords {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let MatchingWords { word_interner, phrase_interner, phrases, words } = self;
 
         let phrases: Vec<_> = phrases

@@ -10,11 +10,11 @@ pub struct Phrase {
     pub words: Vec<Option<Interned<String>>>,
 }
 impl Interned<Phrase> {
-    pub fn description(self, ctx: &SearchContext) -> String {
+    pub fn description(self, ctx: &SearchContext<'_>) -> String {
         let p = ctx.phrase_interner.get(self);
         p.words.iter().flatten().map(|w| ctx.word_interner.get(*w)).join(" ")
     }
-    pub fn words(self, ctx: &SearchContext) -> Vec<Option<Interned<String>>> {
+    pub fn words(self, ctx: &SearchContext<'_>) -> Vec<Option<Interned<String>>> {
         let p = ctx.phrase_interner.get(self);
         p.words.clone()
     }
