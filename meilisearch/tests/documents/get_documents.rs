@@ -535,7 +535,8 @@ async fn get_document_with_vectors() {
     {
       "vectorStore": true,
       "metrics": false,
-      "logsRoute": false
+      "logsRoute": false,
+      "editDocumentsByFunction": false
     }
     "###);
 
