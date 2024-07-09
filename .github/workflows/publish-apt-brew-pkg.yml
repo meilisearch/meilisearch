@@ -15,8 +15,6 @@ jobs:
 
   debian:
     name: Publish debian packagge
-    env:
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     runs-on: ubuntu-latest
     needs: check-version
     container:
