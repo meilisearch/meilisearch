@@ -1,5 +1,5 @@
 {
-  "name": "search-sortable-movies.json",
+  "name": "search-filterable-movies.json",
   "run_count": 10,
   "target": "search::=trace",
   "extra_cli_args": [],

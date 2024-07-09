@@ -35,6 +35,8 @@ jobs:
   publish-linux:
     name: Publish binary for Linux
     runs-on: ubuntu-latest
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     needs: check-version
     container:
       # Use ubuntu-18.04 to compile with glibc 2.27
@@ -124,6 +126,8 @@ jobs:
     name: Publish binary for aarch64
     runs-on: ubuntu-latest
     needs: check-version
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     container:
       # Use ubuntu-18.04 to compile with glibc 2.27
       image: ubuntu:18.04
