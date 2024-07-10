@@ -52,6 +52,11 @@ cargo test
 
 This command will be triggered to each PR as a requirement for merging it.
 
+#### Faster build
+
+You can set the `LINDERA_CACHE` environment variable to speed up your successive builds by up to 2 minutes.
+It'll store some built artifacts in the directory of your choice.
+
 #### Snapshot-based tests
 
 We are using [insta](https://insta.rs) to perform snapshot-based testing.
