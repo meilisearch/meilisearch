@@ -56,11 +56,9 @@ This command will be triggered to each PR as a requirement for merging it.
 
 You can set the `LINDERA_CACHE` environment variable to speed up your successive builds by up to 2 minutes.
 It'll store some built artifacts in the directory of your choice.
-⚠ The directory must exist; otherwise, an error will be thrown while building Meilisearch.
 
 We recommend using the standard `$HOME/.cache/lindera` directory:
 ```sh
-mkdir $HOME/.cache/lindera
 export LINDERA_CACHE=$HOME/.cache/lindera
 ```
 
