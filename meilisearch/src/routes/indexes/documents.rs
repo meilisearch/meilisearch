@@ -304,7 +304,7 @@ pub async fn replace_documents(
     debug!(parameters = ?params, "Replace documents");
     let params = params.into_inner();
 
-    analytics.add_documents(&params, index_scheduler.index_exists(&index_uid) == Ok(true), &req);
+    analytics.add_documents(&params, index_scheduler.index_exists(&index_uid) != Ok(true), &req);
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
     let uid = get_task_id(&req, &opt)?;
@@ -341,7 +341,7 @@ pub async fn update_documents(
     let params = params.into_inner();
     debug!(parameters = ?params, "Update documents");
 
-    analytics.update_documents(&params, index_scheduler.index_exists(&index_uid) == Ok(true), &req);
+    analytics.update_documents(&params, index_scheduler.index_exists(&index_uid) != Ok(true), &req);
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
     let uid = get_task_id(&req, &opt)?;
