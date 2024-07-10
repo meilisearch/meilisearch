@@ -136,7 +136,6 @@ fn compute_prefix_edges(
         }
     }
 
-    // TODO check that the fact that the universe always changes is not an issue, e.g. caching stuff.
     if let Some(new_docids) = ctx.get_db_word_prefix_pair_proximity_docids(
         Some(&universe),
         left_word,
@@ -152,7 +151,6 @@ fn compute_prefix_edges(
 
     // No swapping when computing the proximity between a phrase and a word
     if left_phrase.is_none() {
-        // TODO check that the fact that the universe always changes is not an issue, e.g. caching stuff.
         if let Some(new_docids) = ctx.get_db_prefix_word_pair_proximity_docids(
             Some(&universe),
             right_prefix,
@@ -190,7 +188,6 @@ fn compute_non_prefix_edges(
         }
     }
 
-    // TODO check that it is not an issue to alterate the universe
     if let Some(new_docids) =
         ctx.get_db_word_pair_proximity_docids(Some(&universe), word1, word2, forward_proximity)?
     {
