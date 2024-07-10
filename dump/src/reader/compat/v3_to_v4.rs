@@ -358,7 +358,7 @@ pub(crate) mod test {
         let mut dump = v3::V3Reader::open(dir).unwrap().to_v4();
 
         // top level infos
-        insta::assert_display_snapshot!(dump.date().unwrap(), @"2022-10-07 11:39:03.709153554 +00:00:00");
+        insta::assert_snapshot!(dump.date().unwrap(), @"2022-10-07 11:39:03.709153554 +00:00:00");
 
         // tasks
         let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();

@@ -2274,7 +2274,7 @@ async fn error_add_documents_payload_size() {
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "message": "The provided payload reached the size limit. The maximum accepted payload size is 10.00 MiB.",
+      "message": "The provided payload reached the size limit. The maximum accepted payload size is 10 MiB.",
       "code": "payload_too_large",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#payload_too_large"

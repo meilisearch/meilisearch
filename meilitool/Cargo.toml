@@ -9,11 +9,11 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-anyhow = "1.0.79"
-clap = { version = "4.4.17", features = ["derive"] }
+anyhow = "1.0.86"
+clap = { version = "4.5.9", features = ["derive"] }
 dump = { path = "../dump" }
 file-store = { path = "../file-store" }
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
-time = { version = "0.3.31", features = ["formatting"] }
-uuid = { version = "1.6.1", features = ["v4"], default-features = false }
+time = { version = "0.3.36", features = ["formatting"] }
+uuid = { version = "1.10.0", features = ["v4"], default-features = false }

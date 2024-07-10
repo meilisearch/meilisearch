@@ -281,7 +281,7 @@ pub(crate) mod test {
         let dump_path = dump.path();
 
         // ==== checking global file hierarchy (we want to be sure there isn't too many files or too few)
-        insta::assert_display_snapshot!(create_directory_hierarchy(dump_path), @r###"
+        insta::assert_snapshot!(create_directory_hierarchy(dump_path), @r###"
         .
         ├---- indexes/
         │    └---- doggos/

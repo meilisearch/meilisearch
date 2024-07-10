@@ -1,5 +1,5 @@
+use actix_web::http::StatusCode;
 use actix_web::test;
-use http::StatusCode;
 use jsonwebtoken::{EncodingKey, Header};
 use meili_snap::*;
 use uuid::Uuid;

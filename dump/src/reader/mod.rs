@@ -216,7 +216,7 @@ pub(crate) mod test {
         let mut dump = DumpReader::open(dump).unwrap();
 
         // top level infos
-        insta::assert_display_snapshot!(dump.date().unwrap(), @"2024-05-16 15:51:34.151044 +00:00:00");
+        insta::assert_snapshot!(dump.date().unwrap(), @"2024-05-16 15:51:34.151044 +00:00:00");
         insta::assert_debug_snapshot!(dump.instance_uid().unwrap(), @"None");
 
         // tasks
@@ -337,7 +337,7 @@ pub(crate) mod test {
         let mut dump = DumpReader::open(dump).unwrap();
 
         // top level infos
-        insta::assert_display_snapshot!(dump.date().unwrap(), @"2023-07-06 7:10:27.21958 +00:00:00");
+        insta::assert_snapshot!(dump.date().unwrap(), @"2023-07-06 7:10:27.21958 +00:00:00");
         insta::assert_debug_snapshot!(dump.instance_uid().unwrap(), @"None");
 
         // tasks
@@ -383,8 +383,8 @@ pub(crate) mod test {
         let mut dump = DumpReader::open(dump).unwrap();
 
         // top level infos
-        insta::assert_display_snapshot!(dump.date().unwrap(), @"2022-10-04 15:55:10.344982459 +00:00:00");
-        insta::assert_display_snapshot!(dump.instance_uid().unwrap().unwrap(), @"9e15e977-f2ae-4761-943f-1eaf75fd736d");
+        insta::assert_snapshot!(dump.date().unwrap(), @"2022-10-04 15:55:10.344982459 +00:00:00");
+        insta::assert_snapshot!(dump.instance_uid().unwrap().unwrap(), @"9e15e977-f2ae-4761-943f-1eaf75fd736d");
 
         // tasks
         let tasks = dump.tasks().unwrap().collect::<Result<Vec<_>>>().unwrap();
@@ -463,8 +463,8 @@ pub(crate) mod test {
         let mut dump = DumpReader::open(dump).unwrap();
 
         // top level infos
-        insta::assert_display_snapshot!(dump.date().unwrap(), @"2022-10-06 12:53:49.131989609 +00:00:00");
-        insta::assert_display_snapshot!(dump.instance_uid().unwrap().unwrap(), @"9e15e977-f2ae-4761-943f-1eaf75fd736d");
+        insta::assert_snapshot!(dump.date().unwrap(), @"2022-10-06 12:53:49.131989609 +00:00:00");
+        insta::assert_snapshot!(dump.instance_uid().unwrap().unwrap(), @"9e15e977-f2ae-4761-943f-1eaf75fd736d");
 
         // tasks
         let tasks = dump.tasks().unwrap().collect::<Result<Vec<_>>>().unwrap();
@@ -540,7 +540,7 @@ pub(crate) mod test {
         let mut dump = DumpReader::open(dump).unwrap();
 
         // top level infos
-        insta::assert_display_snapshot!(dump.date().unwrap(), @"2022-10-07 11:39:03.709153554 +00:00:00");
+        insta::assert_snapshot!(dump.date().unwrap(), @"2022-10-07 11:39:03.709153554 +00:00:00");
         assert_eq!(dump.instance_uid().unwrap(), None);
 
         // tasks
@@ -633,7 +633,7 @@ pub(crate) mod test {
         let mut dump = DumpReader::open(dump).unwrap();
 
         // top level infos
-        insta::assert_display_snapshot!(dump.date().unwrap(), @"2022-10-09 20:27:59.904096267 +00:00:00");
+        insta::assert_snapshot!(dump.date().unwrap(), @"2022-10-09 20:27:59.904096267 +00:00:00");
         assert_eq!(dump.instance_uid().unwrap(), None);
 
         // tasks
@@ -726,7 +726,7 @@ pub(crate) mod test {
         let mut dump = DumpReader::open(dump).unwrap();
 
         // top level infos
-        insta::assert_display_snapshot!(dump.date().unwrap(), @"2023-01-30 16:26:09.247261 +00:00:00");
+        insta::assert_snapshot!(dump.date().unwrap(), @"2023-01-30 16:26:09.247261 +00:00:00");
         assert_eq!(dump.instance_uid().unwrap(), None);
 
         // tasks

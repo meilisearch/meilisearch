@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
 use fxprof_processed_profile::{
-    CategoryPairHandle, CounterHandle, CpuDelta, Frame, FrameFlags, FrameInfo, MarkerDynamicField,
-    MarkerFieldFormat, MarkerLocation, MarkerSchema, MarkerSchemaField, ProcessHandle, Profile,
-    ProfilerMarker, ReferenceTimestamp, SamplingInterval, StringHandle, Timestamp,
+    CategoryHandle, CategoryPairHandle, CounterHandle, CpuDelta, Frame, FrameFlags, FrameInfo,
+    MarkerDynamicField, MarkerFieldFormat, MarkerLocation, MarkerSchema, MarkerSchemaField,
+    ProcessHandle, Profile, ProfilerMarker, ReferenceTimestamp, SamplingInterval, StringHandle,
+    Timestamp,
 };
 use serde_json::json;
 
@@ -129,6 +130,7 @@ pub fn to_firefox_profile<R: std::io::Read>(
 
                 profile.add_marker_with_stack(
                     *thread_handle,
+                    CategoryHandle::OTHER,
                     &callsite.name,
                     marker,
                     fxprof_processed_profile::MarkerTiming::Interval(
@@ -179,6 +181,7 @@ pub fn to_firefox_profile<R: std::io::Read>(
 
                 profile.add_marker_with_stack(
                     *thread_handle,
+                    CategoryHandle::OTHER,
                     &callsite.name,
                     marker,
                     fxprof_processed_profile::MarkerTiming::Instant(timestamp),

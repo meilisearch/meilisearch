@@ -2229,10 +2229,10 @@ mod tests {
             { "id": 3, "name": "jean", "age": 25 },
         ]);
         let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_display_snapshot!(added.unwrap(), @"3");
+        insta::assert_snapshot!(added.unwrap(), @"3");
 
         let (builder, removed) = builder.remove_documents(vec![S("2")]).unwrap();
-        insta::assert_display_snapshot!(removed.unwrap(), @"1");
+        insta::assert_snapshot!(removed.unwrap(), @"1");
 
         let addition = builder.execute().unwrap();
         insta::assert_debug_snapshot!(addition, @r###"
@@ -2271,17 +2271,17 @@ mod tests {
             { "id": 3, "name": "jean", "age": 25 },
         ]);
         let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_display_snapshot!(added.unwrap(), @"3");
+        insta::assert_snapshot!(added.unwrap(), @"3");
 
         let documents = documents!([
             { "id": 2, "catto": "jorts" },
             { "id": 3, "legs": 4 },
         ]);
         let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_display_snapshot!(added.unwrap(), @"2");
+        insta::assert_snapshot!(added.unwrap(), @"2");
 
         let (builder, removed) = builder.remove_documents(vec![S("1"), S("2")]).unwrap();
-        insta::assert_display_snapshot!(removed.unwrap(), @"2");
+        insta::assert_snapshot!(removed.unwrap(), @"2");
 
         let addition = builder.execute().unwrap();
         insta::assert_debug_snapshot!(addition, @r###"
@@ -2319,7 +2319,7 @@ mod tests {
             { "id": 3, "name": "jean", "age": 25 },
         ]);
         let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_display_snapshot!(added.unwrap(), @"3");
+        insta::assert_snapshot!(added.unwrap(), @"3");
 
         let addition = builder.execute().unwrap();
         insta::assert_debug_snapshot!(addition, @r###"
@@ -2354,10 +2354,10 @@ mod tests {
             { "id": 3, "legs": 4 },
         ]);
         let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_display_snapshot!(added.unwrap(), @"2");
+        insta::assert_snapshot!(added.unwrap(), @"2");
 
         let (builder, removed) = builder.remove_documents(vec![S("1"), S("2")]).unwrap();
-        insta::assert_display_snapshot!(removed.unwrap(), @"2");
+        insta::assert_snapshot!(removed.unwrap(), @"2");
 
         let addition = builder.execute().unwrap();
         insta::assert_debug_snapshot!(addition, @r###"
@@ -2390,14 +2390,14 @@ mod tests {
         .unwrap();
 
         let (builder, removed) = builder.remove_documents(vec![S("1"), S("2")]).unwrap();
-        insta::assert_display_snapshot!(removed.unwrap(), @"0");
+        insta::assert_snapshot!(removed.unwrap(), @"0");
 
         let documents = documents!([
             { "id": 2, "doggo": { "name": "jean", "age": 20 } },
             { "id": 3, "name": "bob", "age": 25 },
         ]);
         let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_display_snapshot!(added.unwrap(), @"2");
+        insta::assert_snapshot!(added.unwrap(), @"2");
 
         let addition = builder.execute().unwrap();
         insta::assert_debug_snapshot!(addition, @r###"
@@ -2432,7 +2432,7 @@ mod tests {
 
         let (builder, removed) =
             builder.remove_documents(vec![S("1"), S("2"), S("1"), S("2")]).unwrap();
-        insta::assert_display_snapshot!(removed.unwrap(), @"0");
+        insta::assert_snapshot!(removed.unwrap(), @"0");
 
         let documents = documents!([
             { "id": 1, "doggo": "kevin" },
@@ -2440,11 +2440,11 @@ mod tests {
             { "id": 3, "name": "bob", "age": 25 },
         ]);
         let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_display_snapshot!(added.unwrap(), @"3");
+        insta::assert_snapshot!(added.unwrap(), @"3");
 
         let (builder, removed) =
             builder.remove_documents(vec![S("1"), S("2"), S("1"), S("2")]).unwrap();
-        insta::assert_display_snapshot!(removed.unwrap(), @"2");
+        insta::assert_snapshot!(removed.unwrap(), @"2");
 
         let addition = builder.execute().unwrap();
         insta::assert_debug_snapshot!(addition, @r###"
@@ -2480,7 +2480,7 @@ mod tests {
             { "id": 1, "doggo": "kevin" },
         ]);
         let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_display_snapshot!(added.unwrap(), @"1");
+        insta::assert_snapshot!(added.unwrap(), @"1");
 
         let addition = builder.execute().unwrap();
         insta::assert_debug_snapshot!(addition, @r###"
@@ -2509,13 +2509,13 @@ mod tests {
         .unwrap();
 
         let (builder, removed) = builder.remove_documents(vec![S("1")]).unwrap();
-        insta::assert_display_snapshot!(removed.unwrap(), @"1");
+        insta::assert_snapshot!(removed.unwrap(), @"1");
 
         let documents = documents!([
             { "id": 1, "catto": "jorts" },
         ]);
         let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_display_snapshot!(added.unwrap(), @"1");
+        insta::assert_snapshot!(added.unwrap(), @"1");
 
         let addition = builder.execute().unwrap();
         insta::assert_debug_snapshot!(addition, @r###"
@@ -2692,7 +2692,7 @@ mod tests {
             { "id": 1, "doggo": "bernese" },
         ]);
         let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_display_snapshot!(added.unwrap(), @"1");
+        insta::assert_snapshot!(added.unwrap(), @"1");
 
         // FINISHING
         let addition = builder.execute().unwrap();
@@ -2731,13 +2731,13 @@ mod tests {
         .unwrap();
 
         let (builder, removed) = builder.remove_documents(vec![S("1")]).unwrap();
-        insta::assert_display_snapshot!(removed.unwrap(), @"1");
+        insta::assert_snapshot!(removed.unwrap(), @"1");
 
         let documents = documents!([
             { "id": 0, "catto": "jorts" },
         ]);
         let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_display_snapshot!(added.unwrap(), @"1");
+        insta::assert_snapshot!(added.unwrap(), @"1");
 
         let addition = builder.execute().unwrap();
         insta::assert_debug_snapshot!(addition, @r###"
@@ -2777,7 +2777,7 @@ mod tests {
             { "id": 1, "catto": "jorts" },
         ]);
         let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_display_snapshot!(added.unwrap(), @"1");
+        insta::assert_snapshot!(added.unwrap(), @"1");
 
         let addition = builder.execute().unwrap();
         insta::assert_debug_snapshot!(addition, @r###"

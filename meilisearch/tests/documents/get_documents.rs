@@ -1,5 +1,5 @@
+use actix_web::http::header::ACCEPT_ENCODING;
 use actix_web::test;
-use http::header::ACCEPT_ENCODING;
 use meili_snap::*;
 use urlencoding::encode as urlencode;
 

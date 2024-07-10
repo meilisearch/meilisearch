@@ -1150,6 +1150,8 @@ fn make_hits(
             permissive_json_pointer::select_values(&displayed_document, attributes_to_retrieve);
 
         if retrieve_vectors == RetrieveVectors::Retrieve {
+            // Clippy is wrong
+            #[allow(clippy::manual_unwrap_or_default)]
             let mut vectors = match document.remove("_vectors") {
                 Some(Value::Object(map)) => map,
                 _ => Default::default(),

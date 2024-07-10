@@ -262,8 +262,8 @@ pub(crate) mod test {
         let mut dump = V4Reader::open(dir).unwrap();
 
         // top level infos
-        insta::assert_display_snapshot!(dump.date().unwrap(), @"2022-10-06 12:53:49.131989609 +00:00:00");
-        insta::assert_display_snapshot!(dump.instance_uid().unwrap().unwrap(), @"9e15e977-f2ae-4761-943f-1eaf75fd736d");
+        insta::assert_snapshot!(dump.date().unwrap(), @"2022-10-06 12:53:49.131989609 +00:00:00");
+        insta::assert_snapshot!(dump.instance_uid().unwrap().unwrap(), @"9e15e977-f2ae-4761-943f-1eaf75fd736d");
 
         // tasks
         let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();

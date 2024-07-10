@@ -25,7 +25,7 @@ impl RoaringBitmapLenCodec {
             }
         };
 
-        if size > u16::max_value() as usize + 1 {
+        if size > u16::MAX as usize + 1 {
             return Err(io::Error::new(io::ErrorKind::Other, "size is greater than supported"));
         }
 

@@ -9,7 +9,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::{env, fmt, fs};
 
-use byte_unit::{Byte, ByteError};
+use byte_unit::{Byte, ParseError, UnitType};
 use clap::Parser;
 use meilisearch_types::features::InstanceTogglableFeatures;
 use meilisearch_types::milli::update::IndexerConfig;
@@ -674,7 +674,7 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
 
         Ok(Self {
             log_every_n: Some(DEFAULT_LOG_EVERY_N),
-            max_memory: other.max_indexing_memory.map(|b| b.get_bytes() as usize),
+            max_memory: other.max_indexing_memory.map(|b| b.as_u64() as usize),
             thread_pool: Some(thread_pool),
             max_positions_per_attributes: None,
             skip_index_budget: other.skip_index_budget,
@@ -688,23 +688,25 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
 pub struct MaxMemory(Option<Byte>);
 
 impl FromStr for MaxMemory {
-    type Err = ByteError;
+    type Err = ParseError;
 
-    fn from_str(s: &str) -> Result<MaxMemory, ByteError> {
+    fn from_str(s: &str) -> Result<MaxMemory, Self::Err> {
         Byte::from_str(s).map(Some).map(MaxMemory)
     }
 }
 
 impl Default for MaxMemory {
     fn default() -> MaxMemory {
-        MaxMemory(total_memory_bytes().map(|bytes| bytes * 2 / 3).map(Byte::from_bytes))
+        MaxMemory(total_memory_bytes().map(|bytes| bytes * 2 / 3).map(Byte::from_u64))
     }
 }
 
 impl fmt::Display for MaxMemory {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.0 {
-            Some(memory) => write!(f, "{}", memory.get_appropriate_unit(true)),
+            Some(memory) => {
+                write!(f, "{}", memory.get_appropriate_unit(UnitType::Binary))
+            }
             None => f.write_str("unknown"),
         }
     }
@@ -844,11 +846,11 @@ fn default_env() -> String {
 }
 
 fn default_max_index_size() -> Byte {
-    Byte::from_bytes(INDEX_SIZE)
+    Byte::from_u64(INDEX_SIZE)
 }
 
 fn default_max_task_db_size() -> Byte {
-    Byte::from_bytes(TASK_DB_SIZE)
+    Byte::from_u64(TASK_DB_SIZE)
 }
 
 fn default_http_payload_size_limit() -> Byte {
