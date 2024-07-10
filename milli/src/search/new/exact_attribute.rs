@@ -193,7 +193,7 @@ impl State {
         let mut candidates_per_attribute = Vec::with_capacity(searchable_fields_ids.len());
         // then check that there exists at least one attribute that has all of the terms
         for fid in searchable_fields_ids {
-            let mut intersection = MultiOps::intersection(
+            let intersection = MultiOps::intersection(
                 words_positions
                     .iter()
                     .flat_map(|(words, ..)| words.iter())
@@ -201,12 +201,10 @@ impl State {
                     .flatten()
                     .map(|word| -> Result<_> {
                         Ok(ctx
-                            .get_db_word_fid_docids(Some(universe), *word, fid)?
+                            .get_db_word_fid_docids(Some(&candidates), *word, fid)?
                             .unwrap_or_default())
                     }),
             )?;
-            // TODO Why not doing this intersection in the MultiOps above?
-            intersection &= &candidates;
             if !intersection.is_empty() {
                 // Although not really worth it in terms of performance,
                 // if would be good to put this in cache for the sake of consistency
