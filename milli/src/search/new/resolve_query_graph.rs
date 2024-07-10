@@ -19,15 +19,11 @@ pub struct PhraseDocIdsCache {
 }
 impl<'ctx> SearchContext<'ctx> {
     /// Get the document ids associated with the given phrase
-    pub fn get_phrase_docids(
-        &mut self,
-        universe: Option<&RoaringBitmap>,
-        phrase: Interned<Phrase>,
-    ) -> Result<&RoaringBitmap> {
+    pub fn get_phrase_docids(&mut self, phrase: Interned<Phrase>) -> Result<&RoaringBitmap> {
         if self.phrase_docids.cache.contains_key(&phrase) {
             return Ok(&self.phrase_docids.cache[&phrase]);
         };
-        let docids = compute_phrase_docids(self, universe, phrase)?;
+        let docids = compute_phrase_docids(self, phrase)?;
         // TODO can we improve that? Because there is an issue, we keep that in cache...
         let _ = self.phrase_docids.cache.insert(phrase, docids);
         let docids = &self.phrase_docids.cache[&phrase];
@@ -47,7 +43,7 @@ pub fn compute_query_term_subset_docids(
         }
     }
     for phrase in term.all_phrases(ctx)? {
-        docids |= ctx.get_phrase_docids(None, phrase)?;
+        docids |= ctx.get_phrase_docids(phrase)?;
     }
 
     if let Some(prefix) = term.use_prefix_db(ctx) {
@@ -80,7 +76,7 @@ pub fn compute_query_term_subset_docids_within_field_id(
         // guaranteed that all of its words are within a single fid.
         if let Some(word) = phrase.words(ctx).iter().flatten().next() {
             if let Some(word_fid_docids) = ctx.get_db_word_fid_docids(universe, *word, fid)? {
-                docids |= ctx.get_phrase_docids(None, phrase)? & word_fid_docids;
+                docids |= ctx.get_phrase_docids(phrase)? & word_fid_docids;
             }
         }
     }
@@ -118,7 +114,7 @@ pub fn compute_query_term_subset_docids_within_position(
             if let Some(word_position_docids) =
                 ctx.get_db_word_position_docids(universe, *word, position)?
             {
-                docids |= ctx.get_phrase_docids(None, phrase)? & word_position_docids;
+                docids |= ctx.get_phrase_docids(phrase)? & word_position_docids;
             }
         }
     }
@@ -190,7 +186,6 @@ pub fn compute_query_graph_docids(
 
 pub fn compute_phrase_docids(
     ctx: &mut SearchContext<'_>,
-    universe: Option<&RoaringBitmap>,
     phrase: Interned<Phrase>,
 ) -> Result<RoaringBitmap> {
     let Phrase { words } = ctx.phrase_interner.get(phrase).clone();
@@ -200,7 +195,7 @@ pub fn compute_phrase_docids(
     }
     let mut candidates = RoaringBitmap::new();
     for word in words.iter().flatten().copied() {
-        if let Some(word_docids) = ctx.word_docids(universe, Word::Original(word))? {
+        if let Some(word_docids) = ctx.word_docids(None, Word::Original(word))? {
             candidates |= word_docids;
         } else {
             return Ok(RoaringBitmap::new());
@@ -224,7 +219,7 @@ pub fn compute_phrase_docids(
                 .filter_map(|(index, word)| word.as_ref().map(|word| (index, word)))
             {
                 if dist == 0 {
-                    match ctx.get_db_word_pair_proximity_docids(universe, s1, s2, 1)? {
+                    match ctx.get_db_word_pair_proximity_docids(None, s1, s2, 1)? {
                         Some(m) => bitmaps.push(m),
                         // If there are no documents for this pair, there will be no
                         // results for the phrase query.
@@ -234,7 +229,7 @@ pub fn compute_phrase_docids(
                     let mut bitmap = RoaringBitmap::new();
                     for dist in 0..=dist {
                         if let Some(m) =
-                            ctx.get_db_word_pair_proximity_docids(universe, s1, s2, dist as u8 + 1)?
+                            ctx.get_db_word_pair_proximity_docids(None, s1, s2, dist as u8 + 1)?
                         {
                             bitmap |= m;
                         }
