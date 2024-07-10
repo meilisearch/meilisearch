@@ -25,7 +25,7 @@ tempfile = "3.10.1"
 thiserror = "1.0.61"
 time = { version = "0.3.36", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 tracing = "0.1.40"
-uuid = { version = "1.9.1", features = ["serde", "v4"] }
+uuid = { version = "1.10.0", features = ["serde", "v4"] }
 
 [dev-dependencies]
 big_s = "1.0.2"

@@ -23,4 +23,4 @@ serde_json = { version = "1.0.120", features = ["preserve_order"] }
 sha2 = "0.10.8"
 thiserror = "1.0.61"
 time = { version = "0.3.36", features = ["serde-well-known", "formatting", "parsing", "macros"] }
-uuid = { version = "1.9.1", features = ["serde", "v4"] }
+uuid = { version = "1.10.0", features = ["serde", "v4"] }

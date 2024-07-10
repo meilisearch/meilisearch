@@ -59,7 +59,7 @@ time = { version = "0.3.36", features = [
     "parsing",
     "macros",
 ] }
-uuid = { version = "1.9.1", features = ["v4"] }
+uuid = { version = "1.10.0", features = ["v4"] }
 
 filter-parser = { path = "../filter-parser" }
 
