@@ -56,6 +56,13 @@ This command will be triggered to each PR as a requirement for merging it.
 
 You can set the `LINDERA_CACHE` environment variable to speed up your successive builds by up to 2 minutes.
 It'll store some built artifacts in the directory of your choice.
+⚠ The directory must exist; otherwise, an error will be thrown while building Meilisearch.
+
+We recommend using the standard `$HOME/.cache/lindera` directory:
+```sh
+mkdir $HOME/.cache/lindera
+export LINDERA_CACHE=$HOME/.cache/lindera
+```
 
 #### Snapshot-based tests
 
@@ -68,7 +75,7 @@ Furthermore, we provide some macros on top of insta, notably a way to use snapsh
 
 To effectively debug snapshot-based hashes, we recommend you export the `MEILI_TEST_FULL_SNAPS` environment variable so that snapshot are fully created locally:
 
-```
+```sh
 export MEILI_TEST_FULL_SNAPS=true # add this to your .bashrc, .zshrc, ...
 ```
 
