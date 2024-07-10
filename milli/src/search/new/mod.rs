@@ -232,11 +232,12 @@ fn resolve_universe(
 #[tracing::instrument(level = "trace", skip_all, target = "search::query")]
 fn resolve_negative_words(
     ctx: &mut SearchContext<'_>,
+    universe: Option<&RoaringBitmap>,
     negative_words: &[Word],
 ) -> Result<RoaringBitmap> {
     let mut negative_bitmap = RoaringBitmap::new();
     for &word in negative_words {
-        if let Some(bitmap) = ctx.word_docids(word)? {
+        if let Some(bitmap) = ctx.word_docids(universe, word)? {
             negative_bitmap |= bitmap;
         }
     }
@@ -686,7 +687,7 @@ pub fn execute_search(
             located_query_terms_from_tokens(ctx, tokens, words_limit)?;
         used_negative_operator = !negative_words.is_empty() || !negative_phrases.is_empty();
 
-        let ignored_documents = resolve_negative_words(ctx, &negative_words)?;
+        let ignored_documents = resolve_negative_words(ctx, Some(&universe), &negative_words)?;
         let ignored_phrases = resolve_negative_phrases(ctx, &negative_phrases)?;
 
         universe -= ignored_documents;

@@ -1,3 +1,4 @@
+use heed::types::Bytes;
 use roaring::{MultiOps, RoaringBitmap};
 
 use super::query_graph::QueryGraph;
@@ -5,7 +6,7 @@ use super::ranking_rules::{RankingRule, RankingRuleOutput};
 use crate::score_details::{self, ScoreDetails};
 use crate::search::new::query_graph::QueryNodeData;
 use crate::search::new::query_term::ExactTerm;
-use crate::{Result, SearchContext, SearchLogger};
+use crate::{CboRoaringBitmapCodec, Result, SearchContext, SearchLogger};
 
 /// A ranking rule that produces 3 disjoint buckets:
 ///
@@ -171,9 +172,9 @@ impl State {
                 // Note: Since the position is stored bucketed in word_position_docids, for queries with a lot of
                 // longer phrases we'll be losing on precision here.
                 let bucketed_position = crate::bucketed_position(position + offset);
-                let word_position_docids =
-                    ctx.get_db_word_position_docids(*word, bucketed_position)?.unwrap_or_default()
-                        & universe;
+                let word_position_docids = ctx
+                    .get_db_word_position_docids(Some(universe), *word, bucketed_position)?
+                    .unwrap_or_default();
                 candidates &= word_position_docids;
                 if candidates.is_empty() {
                     return Ok(State::Empty(query_graph.clone()));
@@ -192,26 +193,34 @@ impl State {
         let mut candidates_per_attribute = Vec::with_capacity(searchable_fields_ids.len());
         // then check that there exists at least one attribute that has all of the terms
         for fid in searchable_fields_ids {
-            let mut intersection = MultiOps::intersection(
+            let intersection = MultiOps::intersection(
                 words_positions
                     .iter()
                     .flat_map(|(words, ..)| words.iter())
                     // ignore stop words words in phrases
                     .flatten()
                     .map(|word| -> Result<_> {
-                        Ok(ctx.get_db_word_fid_docids(*word, fid)?.unwrap_or_default())
+                        Ok(ctx
+                            .get_db_word_fid_docids(Some(&candidates), *word, fid)?
+                            .unwrap_or_default())
                     }),
             )?;
-            intersection &= &candidates;
             if !intersection.is_empty() {
                 // Although not really worth it in terms of performance,
                 // if would be good to put this in cache for the sake of consistency
                 let candidates_with_exact_word_count = if count_all_positions < u8::MAX as usize {
-                    ctx.index
+                    let bitmap_bytes = ctx
+                        .index
                         .field_id_word_count_docids
-                        .get(ctx.txn, &(fid, count_all_positions as u8))?
-                        .unwrap_or_default()
-                        & universe
+                        .remap_data_type::<Bytes>()
+                        .get(ctx.txn, &(fid, count_all_positions as u8))?;
+
+                    match bitmap_bytes {
+                        Some(bytes) => {
+                            CboRoaringBitmapCodec::intersection_with_serialized(bytes, universe)?
+                        }
+                        None => RoaringBitmap::default(),
+                    }
                 } else {
                     RoaringBitmap::default()
                 };
@@ -234,6 +243,8 @@ impl State {
         let (state, output) = match state {
             State::Uninitialized => (state, None),
             State::ExactAttribute(query_graph, candidates_per_attribute) => {
+                // TODO it can be much faster to do the intersections before the unions...
+                //      or maybe the candidates_per_attribute are not containing anything outside universe
                 let mut candidates = MultiOps::union(candidates_per_attribute.iter().map(
                     |FieldCandidates { start_with_exact, exact_word_count }| {
                         start_with_exact & exact_word_count
@@ -252,6 +263,8 @@ impl State {
                 )
             }
             State::AttributeStarts(query_graph, candidates_per_attribute) => {
+                // TODO it can be much faster to do the intersections before the unions...
+                //      or maybe the candidates_per_attribute are not containing anything outside universe
                 let mut candidates = MultiOps::union(candidates_per_attribute.into_iter().map(
                     |FieldCandidates { mut start_with_exact, exact_word_count }| {
                         start_with_exact -= exact_word_count;

@@ -24,6 +24,7 @@ impl<'ctx> SearchContext<'ctx> {
             return Ok(&self.phrase_docids.cache[&phrase]);
         };
         let docids = compute_phrase_docids(self, phrase)?;
+        // TODO can we improve that? Because there is an issue, we keep that in cache...
         let _ = self.phrase_docids.cache.insert(phrase, docids);
         let docids = &self.phrase_docids.cache[&phrase];
         Ok(docids)
@@ -31,11 +32,13 @@ impl<'ctx> SearchContext<'ctx> {
 }
 pub fn compute_query_term_subset_docids(
     ctx: &mut SearchContext<'_>,
+    universe: Option<&RoaringBitmap>,
     term: &QueryTermSubset,
 ) -> Result<RoaringBitmap> {
     let mut docids = RoaringBitmap::new();
+    // TODO use the MultiOps trait to do large intersections
     for word in term.all_single_words_except_prefix_db(ctx)? {
-        if let Some(word_docids) = ctx.word_docids(word)? {
+        if let Some(word_docids) = ctx.word_docids(universe, word)? {
             docids |= word_docids;
         }
     }
@@ -44,22 +47,26 @@ pub fn compute_query_term_subset_docids(
     }
 
     if let Some(prefix) = term.use_prefix_db(ctx) {
-        if let Some(prefix_docids) = ctx.word_prefix_docids(prefix)? {
+        if let Some(prefix_docids) = ctx.word_prefix_docids(universe, prefix)? {
             docids |= prefix_docids;
         }
     }
 
-    Ok(docids)
+    match universe {
+        Some(universe) => Ok(docids & universe),
+        None => Ok(docids),
+    }
 }
 
 pub fn compute_query_term_subset_docids_within_field_id(
     ctx: &mut SearchContext<'_>,
+    universe: Option<&RoaringBitmap>,
     term: &QueryTermSubset,
     fid: u16,
 ) -> Result<RoaringBitmap> {
     let mut docids = RoaringBitmap::new();
     for word in term.all_single_words_except_prefix_db(ctx)? {
-        if let Some(word_fid_docids) = ctx.get_db_word_fid_docids(word.interned(), fid)? {
+        if let Some(word_fid_docids) = ctx.get_db_word_fid_docids(universe, word.interned(), fid)? {
             docids |= word_fid_docids;
         }
     }
@@ -68,7 +75,7 @@ pub fn compute_query_term_subset_docids_within_field_id(
         // There may be false positives when resolving a phrase, so we're not
         // guaranteed that all of its words are within a single fid.
         if let Some(word) = phrase.words(ctx).iter().flatten().next() {
-            if let Some(word_fid_docids) = ctx.get_db_word_fid_docids(*word, fid)? {
+            if let Some(word_fid_docids) = ctx.get_db_word_fid_docids(universe, *word, fid)? {
                 docids |= ctx.get_phrase_docids(phrase)? & word_fid_docids;
             }
         }
@@ -76,7 +83,7 @@ pub fn compute_query_term_subset_docids_within_field_id(
 
     if let Some(word_prefix) = term.use_prefix_db(ctx) {
         if let Some(word_fid_docids) =
-            ctx.get_db_word_prefix_fid_docids(word_prefix.interned(), fid)?
+            ctx.get_db_word_prefix_fid_docids(universe, word_prefix.interned(), fid)?
         {
             docids |= word_fid_docids;
         }
@@ -87,13 +94,14 @@ pub fn compute_query_term_subset_docids_within_field_id(
 
 pub fn compute_query_term_subset_docids_within_position(
     ctx: &mut SearchContext<'_>,
+    universe: Option<&RoaringBitmap>,
     term: &QueryTermSubset,
     position: u16,
 ) -> Result<RoaringBitmap> {
     let mut docids = RoaringBitmap::new();
     for word in term.all_single_words_except_prefix_db(ctx)? {
         if let Some(word_position_docids) =
-            ctx.get_db_word_position_docids(word.interned(), position)?
+            ctx.get_db_word_position_docids(universe, word.interned(), position)?
         {
             docids |= word_position_docids;
         }
@@ -103,15 +111,17 @@ pub fn compute_query_term_subset_docids_within_position(
         // It's difficult to know the expected position of the words in the phrase,
         // so instead we just check the first one.
         if let Some(word) = phrase.words(ctx).iter().flatten().next() {
-            if let Some(word_position_docids) = ctx.get_db_word_position_docids(*word, position)? {
-                docids |= ctx.get_phrase_docids(phrase)? & word_position_docids
+            if let Some(word_position_docids) =
+                ctx.get_db_word_position_docids(universe, *word, position)?
+            {
+                docids |= ctx.get_phrase_docids(phrase)? & word_position_docids;
             }
         }
     }
 
     if let Some(word_prefix) = term.use_prefix_db(ctx) {
         if let Some(word_position_docids) =
-            ctx.get_db_word_prefix_position_docids(word_prefix.interned(), position)?
+            ctx.get_db_word_prefix_position_docids(universe, word_prefix.interned(), position)?
         {
             docids |= word_position_docids;
         }
@@ -147,10 +157,7 @@ pub fn compute_query_graph_docids(
                 term_subset,
                 positions: _,
                 term_ids: _,
-            }) => {
-                let node_docids = compute_query_term_subset_docids(ctx, term_subset)?;
-                predecessors_docids & node_docids
-            }
+            }) => compute_query_term_subset_docids(ctx, Some(&predecessors_docids), term_subset)?,
             QueryNodeData::Deleted => {
                 panic!()
             }
@@ -188,7 +195,7 @@ pub fn compute_phrase_docids(
     }
     let mut candidates = RoaringBitmap::new();
     for word in words.iter().flatten().copied() {
-        if let Some(word_docids) = ctx.word_docids(Word::Original(word))? {
+        if let Some(word_docids) = ctx.word_docids(None, Word::Original(word))? {
             candidates |= word_docids;
         } else {
             return Ok(RoaringBitmap::new());
@@ -212,7 +219,7 @@ pub fn compute_phrase_docids(
                 .filter_map(|(index, word)| word.as_ref().map(|word| (index, word)))
             {
                 if dist == 0 {
-                    match ctx.get_db_word_pair_proximity_docids(s1, s2, 1)? {
+                    match ctx.get_db_word_pair_proximity_docids(None, s1, s2, 1)? {
                         Some(m) => bitmaps.push(m),
                         // If there are no documents for this pair, there will be no
                         // results for the phrase query.
@@ -222,7 +229,7 @@ pub fn compute_phrase_docids(
                     let mut bitmap = RoaringBitmap::new();
                     for dist in 0..=dist {
                         if let Some(m) =
-                            ctx.get_db_word_pair_proximity_docids(s1, s2, dist as u8 + 1)?
+                            ctx.get_db_word_pair_proximity_docids(None, s1, s2, dist as u8 + 1)?
                         {
                             bitmap |= m;
                         }
@@ -239,6 +246,7 @@ pub fn compute_phrase_docids(
         // We sort the bitmaps so that we perform the small intersections first, which is faster.
         bitmaps.sort_unstable_by_key(|a| a.len());
 
+        // TODO use MultiOps intersection which and remove the above sort
         for bitmap in bitmaps {
             candidates &= bitmap;
 
