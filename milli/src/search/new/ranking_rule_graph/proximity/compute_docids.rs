@@ -78,7 +78,7 @@ pub fn compute_docids(
                     continue;
                 }
             } else if let Some(left_word_docids) = ctx.word_docids(Some(universe), left_word)? {
-                if universe.is_disjoint(&left_word_docids) {
+                if left_word_docids.is_empty() {
                     continue;
                 }
             }
