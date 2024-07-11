@@ -192,6 +192,7 @@ merge_with_error_impl_take_error_message!(ParseOffsetDateTimeError);
 merge_with_error_impl_take_error_message!(ParseTaskKindError);
 merge_with_error_impl_take_error_message!(ParseTaskStatusError);
 merge_with_error_impl_take_error_message!(IndexUidFormatError);
+merge_with_error_impl_take_error_message!(InvalidMultiSearchWeight);
 merge_with_error_impl_take_error_message!(InvalidSearchSemanticRatio);
 merge_with_error_impl_take_error_message!(InvalidSearchRankingScoreThreshold);
 merge_with_error_impl_take_error_message!(InvalidSimilarRankingScoreThreshold);
