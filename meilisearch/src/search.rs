@@ -257,11 +257,13 @@ pub struct HybridQuery {
     pub embedder: Option<String>,
 }
 
+#[derive(Clone)]
 pub enum SearchKind {
     KeywordOnly,
     SemanticOnly { embedder_name: String, embedder: Arc<Embedder> },
     Hybrid { embedder_name: String, embedder: Arc<Embedder>, semantic_ratio: f32 },
 }
+
 impl SearchKind {
     pub(crate) fn semantic(
         index_scheduler: &index_scheduler::IndexScheduler,
