@@ -216,11 +216,11 @@ where
         let mut documents_batch_builder = tempfile::tempfile().map(DocumentsBatchBuilder::new)?;
         let mut documents_to_remove = RoaringBitmap::new();
 
-        let context: Dynamic = match context {
+        let context: Option<Dynamic> = match context {
             Some(context) => {
-                serde_json::from_value(context.into()).map_err(InternalError::SerdeJson)?
+                Some(serde_json::from_value(context.into()).map_err(InternalError::SerdeJson)?)
             }
-            None => Dynamic::from(()),
+            None => None,
         };
 
         enum DocumentEdition {
@@ -244,7 +244,9 @@ where
             let document_id = &json_document[primary_key];
 
             let mut scope = Scope::new();
-            scope.push_constant_dynamic("context", context.clone());
+            if let Some(context) = context.as_ref().cloned() {
+                scope.push_constant_dynamic("context", context.clone());
+            }
             scope.push("doc", rhai_document);
             // That's were the magic happens. We run the user script
             // which edits "doc" scope variable reprensenting the document

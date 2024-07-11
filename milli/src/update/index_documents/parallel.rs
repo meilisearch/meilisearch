@@ -60,7 +60,7 @@ impl<'t> ImmutableObkvs<'t> {
                 let name = self.fields_ids_map.name(id).ok_or(
                     crate::error::FieldIdMapMissingEntry::FieldId {
                         field_id: id,
-                        process: "allobkv_to_rhaimap",
+                        process: "all_obkv_to_rhaimap",
                     },
                 )?;
                 let value = serde_json::from_slice(value)

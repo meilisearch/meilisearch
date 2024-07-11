@@ -224,6 +224,7 @@ InvalidDocumentCsvDelimiter           , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentFields                 , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentRetrieveVectors        , InvalidRequest       , BAD_REQUEST ;
 MissingDocumentFilter                 , InvalidRequest       , BAD_REQUEST ;
+MissingDocumentEditionFunction        , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentFilter                 , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentGeoField               , InvalidRequest       , BAD_REQUEST ;
 InvalidVectorDimensions               , InvalidRequest       , BAD_REQUEST ;

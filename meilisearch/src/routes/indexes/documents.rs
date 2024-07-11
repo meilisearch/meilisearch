@@ -24,7 +24,7 @@ use meilisearch_types::{milli, Document, Index};
 use mime::Mime;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
-use serde_json::{Map, Value};
+use serde_json::Value;
 use tempfile::tempfile;
 use tokio::fs::File;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
@@ -629,7 +629,7 @@ pub async fn edit_documents_by_function(
         filter_expr: filter,
         context: match context {
             Some(Value::Object(m)) => Some(m),
-            None => Some(Map::default()),
+            None => None,
             _ => {
                 return Err(ResponseError::from_msg(
                     "The context must be an object".to_string(),
