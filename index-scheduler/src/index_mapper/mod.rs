@@ -4,7 +4,7 @@ use std::time::Duration;
 use std::{fs, thread};
 
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn};
+use meilisearch_types::heed::{Database, Env, RoIter, RoTxn, RwTxn};
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::{FieldDistribution, Index};
 use serde::{Deserialize, Serialize};
@@ -111,6 +111,8 @@ pub struct IndexStats {
     pub created_at: OffsetDateTime,
     /// Date of the last update of the index.
     pub updated_at: OffsetDateTime,
+    /// Primary key of the index.
+    pub primary_key: Option<String>,
 }
 
 impl IndexStats {
@@ -127,6 +129,7 @@ impl IndexStats {
             field_distribution: index.field_distribution(rtxn)?,
             created_at: index.created_at(rtxn)?,
             updated_at: index.updated_at(rtxn)?,
+            primary_key: index.primary_key(rtxn)?.map(String::from),
         })
     }
 }
@@ -414,6 +417,11 @@ impl IndexMapper {
                     .and_then(|(name, _)| self.index(rtxn, name).and_then(|index| f(name, &index)))
             })
             .collect()
+    }
+
+    /// Return an iterator over the database entries which only lives as much as the transaction lives.
+    pub fn iter<'txn>(&self, rtxn: &'txn RoTxn) -> Result<RoIter<'txn, Str, UuidCodec>> {
+        self.index_mapping.iter(rtxn).map_err(Error::from)
     }
 
     /// Return the name of all indexes without opening them.

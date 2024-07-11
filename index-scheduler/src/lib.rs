@@ -51,7 +51,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str, I128};
-use meilisearch_types::heed::{self, Database, Env, PutFlags, RoTxn, RwTxn};
+use meilisearch_types::heed::{self, Database, Env, PutFlags, RoIter, RoTxn, RwTxn};
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexerConfig;
@@ -70,6 +70,7 @@ use uuid::Uuid;
 
 use crate::index_mapper::IndexMapper;
 use crate::utils::{check_index_swap_validity, clamp_to_page_size};
+use crate::uuid_codec::UuidCodec;
 
 pub(crate) type BEI128 = I128<BE>;
 
@@ -415,6 +416,23 @@ impl IndexScheduler {
     }
 }
 
+/// An owned type for database entries iterator and its transaction.
+/// To get the inner iterator you should call .iter() on it.
+pub struct IndexIterator<'txn> {
+    rtxn: RoTxn<'txn>,
+    index_mapper: &'txn IndexMapper,
+}
+
+impl<'txn> IndexIterator<'txn> {
+    pub fn new(rtxn: RoTxn<'txn>, index_mapper: &'txn IndexMapper) -> IndexIterator<'txn> {
+        Self { rtxn, index_mapper }
+    }
+
+    pub fn iter(&'txn self) -> Result<RoIter<'txn, Str, UuidCodec>> {
+        self.index_mapper.iter(&self.rtxn)
+    }
+}
+
 impl IndexScheduler {
     /// Create an index scheduler and start its run loop.
     pub fn new(
@@ -689,6 +707,13 @@ impl IndexScheduler {
     {
         let rtxn = self.env.read_txn()?;
         self.index_mapper.try_for_each_index(&rtxn, f)
+    }
+
+    /// Return an owned type for the database entries iterator.
+    /// You should call .iter() on it to get an iterator over the database entries.
+    pub fn iter(&self) -> Result<IndexIterator> {
+        let rtxn = self.env.read_txn()?;
+        Ok(IndexIterator::new(rtxn, &self.index_mapper))
     }
 
     /// Return the task ids matched by the given query from the index scheduler's point of view.

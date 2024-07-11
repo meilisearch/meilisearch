@@ -99,16 +99,33 @@ pub async fn list_indexes(
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?paginate, "List indexes");
     let filters = index_scheduler.filters();
-    let indexes: Vec<Option<IndexView>> =
-        index_scheduler.try_for_each_index(|uid, index| -> Result<Option<IndexView>, _> {
-            if !filters.is_index_authorized(uid) {
-                return Ok(None);
-            }
-            Ok(Some(IndexView::new(uid.to_string(), index)?))
-        })?;
-    // Won't cause to open all indexes because IndexView doesn't keep the `Index` opened.
-    let indexes: Vec<IndexView> = indexes.into_iter().flatten().collect();
-    let ret = paginate.as_pagination().auto_paginate_sized(indexes.into_iter());
+    let index_iterator = index_scheduler.iter()?;
+    let database_iterator = index_iterator.iter()?;
+    let indexes = database_iterator
+        .filter(|res| {
+            res.as_ref().map(|(name, _)| filters.is_index_authorized(name)).unwrap_or(false)
+        })
+        .flat_map(|res| {
+            res.ok().and_then(|(name, _)| {
+                index_scheduler.index_stats(name).ok().map(|index| IndexView {
+                    uid: name.to_string(),
+                    created_at: index.inner_stats.created_at,
+                    updated_at: index.inner_stats.updated_at,
+                    primary_key: index.inner_stats.primary_key,
+                })
+            })
+        });
+    // The previous indexes iterator doesn't have size_hint() filled.
+    // In order to find how many elements there is we must create a new iterator that will only
+    // filter the total authorized indexes that are valid, consume it and return the number of elements.
+    let index_iterator = index_scheduler.iter()?;
+    let database_iterator = index_iterator.iter()?;
+    let count = database_iterator
+        .filter(|res| {
+            res.as_ref().ok().map(|(name, _)| filters.is_index_authorized(name)).unwrap_or(false)
+        })
+        .count();
+    let ret = paginate.as_pagination().auto_paginate_unsized(count, indexes);
 
     debug!(returns = ?ret, "List indexes");
     Ok(HttpResponse::Ok().json(ret))
