@@ -34,6 +34,8 @@ use crate::error::MeilisearchHttpError;
 mod federated;
 pub use federated::{perform_federated_search, FederatedSearch, Federation, FederationOptions};
 
+mod ranking_rules;
+
 type MatchesPosition = BTreeMap<String, Vec<MatchBounds>>;
 
 pub const DEFAULT_SEARCH_OFFSET: fn() -> usize = || 0;
