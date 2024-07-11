@@ -866,15 +866,7 @@ pub fn perform_search(
             used_negative_operator,
         },
         semantic_hit_count,
-    ) = match &search_kind {
-        SearchKind::KeywordOnly => (search.execute()?, None),
-        SearchKind::SemanticOnly { .. } => {
-            let results = search.execute()?;
-            let semantic_hit_count = results.document_scores.len() as u32;
-            (results, Some(semantic_hit_count))
-        }
-        SearchKind::Hybrid { semantic_ratio, .. } => search.execute_hybrid(*semantic_ratio)?,
-    };
+    ) = search_from_kind(search_kind, search)?;
 
     let SearchQuery {
         q,
@@ -988,6 +980,22 @@ pub fn perform_search(
         semantic_hit_count,
     };
     Ok(result)
+}
+
+pub fn search_from_kind(
+    search_kind: SearchKind,
+    search: milli::Search<'_>,
+) -> Result<(milli::SearchResult, Option<u32>), MeilisearchHttpError> {
+    let (milli_result, semantic_hit_count) = match &search_kind {
+        SearchKind::KeywordOnly => (search.execute()?, None),
+        SearchKind::SemanticOnly { .. } => {
+            let results = search.execute()?;
+            let semantic_hit_count = results.document_scores.len() as u32;
+            (results, Some(semantic_hit_count))
+        }
+        SearchKind::Hybrid { semantic_ratio, .. } => search.execute_hybrid(*semantic_ratio)?,
+    };
+    Ok((milli_result, semantic_hit_count))
 }
 
 struct AttributesFormat {
