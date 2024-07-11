@@ -31,6 +31,9 @@ use serde_json::{json, Value};
 
 use crate::error::MeilisearchHttpError;
 
+mod federated;
+pub use federated::{perform_federated_search, FederatedSearch, Federation, FederationOptions};
+
 type MatchesPosition = BTreeMap<String, Vec<MatchBounds>>;
 
 pub const DEFAULT_SEARCH_OFFSET: fn() -> usize = || 0;
@@ -360,7 +363,7 @@ impl SearchQuery {
     }
 }
 
-/// A `SearchQuery` + an index UID.
+/// A `SearchQuery` + an index UID and optional FederationOptions.
 // This struct contains the fields of `SearchQuery` inline.
 // This is because neither deserr nor serde support `flatten` when using `deny_unknown_fields.
 // The `From<SearchQueryWithIndex>` implementation ensures both structs remain up to date.
@@ -375,10 +378,10 @@ pub struct SearchQueryWithIndex {
     pub vector: Option<Vec<f32>>,
     #[deserr(default, error = DeserrJsonError<InvalidHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
-    #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
-    pub offset: usize,
-    #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
-    pub limit: usize,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchOffset>)]
+    pub offset: Option<usize>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchLimit>)]
+    pub limit: Option<usize>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
     pub page: Option<usize>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
@@ -419,12 +422,33 @@ pub struct SearchQueryWithIndex {
     pub attributes_to_search_on: Option<Vec<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>, default)]
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
+
+    #[deserr(default)]
+    pub federation_options: Option<FederationOptions>,
 }
 
 impl SearchQueryWithIndex {
-    pub fn into_index_query(self) -> (IndexUid, SearchQuery) {
+    pub fn has_federation_options(&self) -> bool {
+        self.federation_options.is_some()
+    }
+    pub fn has_pagination(&self) -> Option<&'static str> {
+        if self.offset.is_some() {
+            Some("offset")
+        } else if self.limit.is_some() {
+            Some("limit")
+        } else if self.page.is_some() {
+            Some("page")
+        } else if self.hits_per_page.is_some() {
+            Some("hitsPerPage")
+        } else {
+            None
+        }
+    }
+
+    pub fn into_index_query_federation(self) -> (IndexUid, SearchQuery, Option<FederationOptions>) {
         let SearchQueryWithIndex {
             index_uid,
+            federation_options,
             q,
             vector,
             offset,
@@ -456,8 +480,8 @@ impl SearchQueryWithIndex {
             SearchQuery {
                 q,
                 vector,
-                offset,
-                limit,
+                offset: offset.unwrap_or(DEFAULT_SEARCH_OFFSET()),
+                limit: limit.unwrap_or(DEFAULT_SEARCH_LIMIT()),
                 page,
                 hits_per_page,
                 attributes_to_retrieve,
@@ -482,6 +506,7 @@ impl SearchQueryWithIndex {
                 // do not use ..Default::default() here,
                 // rather add any missing field from `SearchQuery` to `SearchQueryWithIndex`
             },
+            federation_options,
         )
     }
 }
