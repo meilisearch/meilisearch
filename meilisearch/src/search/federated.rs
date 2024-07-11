@@ -19,15 +19,13 @@ use meilisearch_types::milli::{self, DocumentId, TimeBudget};
 use roaring::RoaringBitmap;
 use serde::Serialize;
 
-use self::ranking_rules::RankingRules;
+use super::ranking_rules::{self, RankingRules};
 use super::{
     prepare_search, AttributesFormat, HitMaker, HitsInfo, RetrieveVectors, SearchHit, SearchKind,
     SearchQuery, SearchQueryWithIndex,
 };
 use crate::error::MeilisearchHttpError;
 use crate::routes::indexes::search::search_kind;
-
-mod ranking_rules;
 
 pub const DEFAULT_FEDERATED_WEIGHT: fn() -> f64 = || 1.0;
 
