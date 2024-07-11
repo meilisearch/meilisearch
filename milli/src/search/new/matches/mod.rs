@@ -46,7 +46,7 @@ impl<'m> MatcherBuilder<'m> {
         self
     }
 
-    pub fn build<'t>(&'m self, text: &'t str) -> Matcher<'t, 'm> {
+    pub fn build<'t>(&self, text: &'t str) -> Matcher<'t, 'm, '_> {
         let crop_marker = match &self.crop_marker {
             Some(marker) => marker.as_str(),
             None => DEFAULT_CROP_MARKER,
@@ -105,19 +105,19 @@ pub struct MatchBounds {
     pub length: usize,
 }
 
-/// Structure used to analize a string, compute words that match,
+/// Structure used to analyze a string, compute words that match,
 /// and format the source string, returning a highlighted and cropped sub-string.
-pub struct Matcher<'t, 'm> {
+pub struct Matcher<'t, 'tokenizer, 'b> {
     text: &'t str,
-    matching_words: &'m MatchingWords,
-    tokenizer: &'m Tokenizer<'m>,
-    crop_marker: &'m str,
-    highlight_prefix: &'m str,
-    highlight_suffix: &'m str,
+    matching_words: &'b MatchingWords,
+    tokenizer: &'b Tokenizer<'tokenizer>,
+    crop_marker: &'b str,
+    highlight_prefix: &'b str,
+    highlight_suffix: &'b str,
     matches: Option<(Vec<Token<'t>>, Vec<Match>)>,
 }
 
-impl<'t> Matcher<'t, '_> {
+impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_> {
     /// Iterates over tokens and save any of them that matches the query.
     fn compute_matches(&mut self) -> &mut Self {
         /// some words are counted as matches only if they are close together and in the good order,
