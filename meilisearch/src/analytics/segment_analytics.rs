@@ -34,8 +34,8 @@ use crate::routes::indexes::documents::{DocumentEditionByFunction, UpdateDocumen
 use crate::routes::indexes::facet_search::FacetSearchQuery;
 use crate::routes::{create_all_stats, Stats};
 use crate::search::{
-    FacetSearchResult, MatchingStrategy, SearchQuery, SearchQueryWithIndex, SearchResult,
-    SimilarQuery, SimilarResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    FacetSearchResult, FederatedSearch, MatchingStrategy, SearchQuery, SearchQueryWithIndex,
+    SearchResult, SimilarQuery, SimilarResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
     DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
     DEFAULT_SEMANTIC_RATIO,
 };
@@ -1095,22 +1095,33 @@ pub struct MultiSearchAggregator {
     show_ranking_score: bool,
     show_ranking_score_details: bool,
 
+    // federation
+    use_federation: bool,
+
     // context
     user_agents: HashSet<String>,
 }
 
 impl MultiSearchAggregator {
-    pub fn from_queries(query: &[SearchQueryWithIndex], request: &HttpRequest) -> Self {
+    pub fn from_federated_search(
+        federated_search: &FederatedSearch,
+        request: &HttpRequest,
+    ) -> Self {
         let timestamp = Some(OffsetDateTime::now_utc());
 
         let user_agents = extract_user_agents(request).into_iter().collect();
 
-        let distinct_indexes: HashSet<_> = query
+        let use_federation = federated_search.federation.is_some();
+
+        let distinct_indexes: HashSet<_> = federated_search
+            .queries
             .iter()
             .map(|query| {
+                let query = &query;
                 // make sure we get a compilation error if a field gets added to / removed from SearchQueryWithIndex
                 let SearchQueryWithIndex {
                     index_uid,
+                    federation_options: _,
                     q: _,
                     vector: _,
                     offset: _,
@@ -1142,8 +1153,10 @@ impl MultiSearchAggregator {
             })
             .collect();
 
-        let show_ranking_score = query.iter().any(|query| query.show_ranking_score);
-        let show_ranking_score_details = query.iter().any(|query| query.show_ranking_score_details);
+        let show_ranking_score =
+            federated_search.queries.iter().any(|query| query.show_ranking_score);
+        let show_ranking_score_details =
+            federated_search.queries.iter().any(|query| query.show_ranking_score_details);
 
         Self {
             timestamp,
@@ -1151,10 +1164,11 @@ impl MultiSearchAggregator {
             total_succeeded: 0,
             total_distinct_index_count: distinct_indexes.len(),
             total_single_index: if distinct_indexes.len() == 1 { 1 } else { 0 },
-            total_search_count: query.len(),
+            total_search_count: federated_search.queries.len(),
             show_ranking_score,
             show_ranking_score_details,
             user_agents,
+            use_federation,
         }
     }
 
@@ -1180,6 +1194,7 @@ impl MultiSearchAggregator {
         let show_ranking_score_details =
             this.show_ranking_score_details || other.show_ranking_score_details;
         let mut user_agents = this.user_agents;
+        let use_federation = this.use_federation || other.use_federation;
 
         for user_agent in other.user_agents.into_iter() {
             user_agents.insert(user_agent);
@@ -1196,6 +1211,7 @@ impl MultiSearchAggregator {
             user_agents,
             show_ranking_score,
             show_ranking_score_details,
+            use_federation,
             // do not add _ or ..Default::default() here
         };
 
@@ -1214,6 +1230,7 @@ impl MultiSearchAggregator {
             user_agents,
             show_ranking_score,
             show_ranking_score_details,
+            use_federation,
         } = self;
 
         if total_received == 0 {
@@ -1238,6 +1255,9 @@ impl MultiSearchAggregator {
                 "scoring": {
                     "show_ranking_score": show_ranking_score,
                     "show_ranking_score_details": show_ranking_score_details,
+                },
+                "federation": {
+                    "use_federation": use_federation,
                 }
             });
 
