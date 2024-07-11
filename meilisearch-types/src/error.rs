@@ -224,6 +224,7 @@ InvalidDocumentCsvDelimiter           , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentFields                 , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentRetrieveVectors        , InvalidRequest       , BAD_REQUEST ;
 MissingDocumentFilter                 , InvalidRequest       , BAD_REQUEST ;
+MissingDocumentEditionFunction        , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentFilter                 , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentGeoField               , InvalidRequest       , BAD_REQUEST ;
 InvalidVectorDimensions               , InvalidRequest       , BAD_REQUEST ;
@@ -336,7 +337,10 @@ UnsupportedMediaType                  , InvalidRequest       , UNSUPPORTED_MEDIA
 
 // Experimental features
 VectorEmbeddingError                  , InvalidRequest       , BAD_REQUEST ;
-NotFoundSimilarId                     , InvalidRequest       , BAD_REQUEST
+NotFoundSimilarId                     , InvalidRequest       , BAD_REQUEST ;
+InvalidDocumentEditionContext         , InvalidRequest       , BAD_REQUEST ;
+InvalidDocumentEditionFunctionFilter  , InvalidRequest       , BAD_REQUEST ;
+EditDocumentsByFunctionError          , InvalidRequest       , BAD_REQUEST
 }
 
 impl ErrorCode for JoinError {
@@ -407,6 +411,12 @@ impl ErrorCode for milli::Error {
                     }
                     UserError::InvalidEmbedder(_) => Code::InvalidEmbedder,
                     UserError::VectorEmbeddingError(_) => Code::VectorEmbeddingError,
+                    UserError::DocumentEditionCannotModifyPrimaryKey
+                    | UserError::DocumentEditionDocumentMustBeObject
+                    | UserError::DocumentEditionRuntimeError(_)
+                    | UserError::DocumentEditionCompilationError(_) => {
+                        Code::EditDocumentsByFunctionError
+                    }
                 }
             }
         }

@@ -1603,6 +1603,14 @@ impl<'a> Dump<'a> {
                         index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
                     }
                 }
+                KindDump::DocumentEdition { filter, context, function } => {
+                    KindWithContent::DocumentEdition {
+                        index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
+                        filter_expr: filter,
+                        context,
+                        function,
+                    }
+                }
                 KindDump::DocumentClear => KindWithContent::DocumentClear {
                     index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
                 },
@@ -4744,6 +4752,7 @@ mod tests {
           "types": {
             "documentAdditionOrUpdate": 0,
             "documentDeletion": 0,
+            "documentEdition": 0,
             "dumpCreation": 0,
             "indexCreation": 3,
             "indexDeletion": 0,
@@ -4775,6 +4784,7 @@ mod tests {
           "types": {
             "documentAdditionOrUpdate": 0,
             "documentDeletion": 0,
+            "documentEdition": 0,
             "dumpCreation": 0,
             "indexCreation": 3,
             "indexDeletion": 0,
@@ -4813,6 +4823,7 @@ mod tests {
           "types": {
             "documentAdditionOrUpdate": 0,
             "documentDeletion": 0,
+            "documentEdition": 0,
             "dumpCreation": 0,
             "indexCreation": 3,
             "indexDeletion": 0,
@@ -4852,6 +4863,7 @@ mod tests {
           "types": {
             "documentAdditionOrUpdate": 0,
             "documentDeletion": 0,
+            "documentEdition": 0,
             "dumpCreation": 0,
             "indexCreation": 3,
             "indexDeletion": 0,

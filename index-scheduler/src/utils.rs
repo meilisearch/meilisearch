@@ -238,6 +238,7 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
     let mut index_uids = vec![];
     match &mut task.kind {
         K::DocumentAdditionOrUpdate { index_uid, .. } => index_uids.push(index_uid),
+        K::DocumentEdition { index_uid, .. } => index_uids.push(index_uid),
         K::DocumentDeletion { index_uid, .. } => index_uids.push(index_uid),
         K::DocumentDeletionByFilter { index_uid, .. } => index_uids.push(index_uid),
         K::DocumentClear { index_uid } => index_uids.push(index_uid),
@@ -408,7 +409,26 @@ impl IndexScheduler {
                                 match status {
                                     Status::Succeeded => assert!(indexed_documents <= received_documents),
                                     Status::Failed | Status::Canceled => assert_eq!(indexed_documents, 0),
-                                    status => panic!("DocumentAddition can't have an indexed_document set if it's {}", status),
+                                    status => panic!("DocumentAddition can't have an indexed_documents set if it's {}", status),
+                                }
+                            }
+                            None => {
+                                assert!(matches!(status, Status::Enqueued | Status::Processing))
+                            }
+                        }
+                    }
+                    Details::DocumentEdition { edited_documents, .. } => {
+                        assert_eq!(kind.as_kind(), Kind::DocumentEdition);
+                        match edited_documents {
+                            Some(edited_documents) => {
+                                assert!(matches!(
+                                    status,
+                                    Status::Succeeded | Status::Failed | Status::Canceled
+                                ));
+                                match status {
+                                    Status::Succeeded => (),
+                                    Status::Failed | Status::Canceled => assert_eq!(edited_documents, 0),
+                                    status => panic!("DocumentEdition can't have an edited_documents set if it's {}", status),
                                 }
                             }
                             None => {

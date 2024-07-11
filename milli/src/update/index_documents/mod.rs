@@ -1,6 +1,7 @@
 mod enrich;
 mod extract;
 mod helpers;
+mod parallel;
 mod transform;
 mod typed_chunk;
 
@@ -16,6 +17,8 @@ use grenad::{Merger, MergerBuilder};
 use heed::types::Str;
 use heed::Database;
 use rand::SeedableRng;
+use rayon::iter::{ParallelBridge, ParallelIterator};
+use rhai::{Dynamic, Engine, OptimizationLevel, Scope};
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use slice_group_by::GroupBy;
@@ -32,15 +35,16 @@ pub use self::helpers::{
 };
 use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
-use crate::documents::{obkv_to_object, DocumentsBatchReader};
+use crate::documents::{obkv_to_object, DocumentsBatchBuilder, DocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
 use crate::thread_pool_no_abort::ThreadPoolNoAbortBuilder;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
+use crate::update::index_documents::parallel::ImmutableObkvs;
 use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
 use crate::vector::EmbeddingConfigs;
-use crate::{CboRoaringBitmapCodec, Index, Result};
+use crate::{CboRoaringBitmapCodec, Index, Object, Result};
 
 static MERGED_DATABASE_COUNT: usize = 7;
 static PREFIX_DATABASE_COUNT: usize = 4;
@@ -170,6 +174,141 @@ where
         self.added_documents += indexed_documents;
 
         Ok((self, Ok(indexed_documents)))
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents")]
+    pub fn edit_documents(
+        self,
+        documents: &RoaringBitmap,
+        context: Option<Object>,
+        code: &str,
+    ) -> Result<(Self, StdResult<(u64, u64), UserError>)> {
+        // Early return when there is no document to edit
+        if documents.is_empty() {
+            return Ok((self, Ok((0, 0))));
+        }
+
+        fn rhaimap_to_object(map: rhai::Map) -> Object {
+            let mut output = Object::new();
+            for (key, value) in map {
+                let value = serde_json::to_value(&value).unwrap();
+                output.insert(key.into(), value);
+            }
+            output
+        }
+
+        // Setup the security and limits of the Engine
+        let mut engine = Engine::new();
+        engine.set_optimization_level(OptimizationLevel::Full);
+        engine.set_max_call_levels(1000);
+        // It is an arbitrary value. We need to let users define this in the settings.
+        engine.set_max_operations(1_000_000);
+        engine.set_max_variables(1000);
+        engine.set_max_functions(30);
+        engine.set_max_expr_depths(100, 1000);
+        engine.set_max_string_size(1024 * 1024 * 1024); // 1 GiB
+        engine.set_max_array_size(10_000);
+        engine.set_max_map_size(10_000);
+
+        let ast = engine.compile(code).map_err(UserError::DocumentEditionCompilationError)?;
+        let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
+        let primary_key = self.index.primary_key(self.wtxn)?.unwrap();
+        let mut documents_batch_builder = tempfile::tempfile().map(DocumentsBatchBuilder::new)?;
+        let mut documents_to_remove = RoaringBitmap::new();
+
+        let context: Option<Dynamic> = match context {
+            Some(context) => {
+                Some(serde_json::from_value(context.into()).map_err(InternalError::SerdeJson)?)
+            }
+            None => None,
+        };
+
+        enum DocumentEdition {
+            Deleted(crate::DocumentId),
+            Edited(Object),
+            Nothing,
+        }
+
+        let immutable_obkvs = ImmutableObkvs::new(
+            self.wtxn,
+            self.index.documents,
+            fields_ids_map.clone(),
+            documents.clone(),
+        )?;
+
+        let processing = documents.into_iter().par_bridge().map(|docid| {
+            // safety: Both documents *must* exists in the database as
+            //         their IDs comes from the list of documents ids.
+            let rhai_document = immutable_obkvs.rhai_map(docid)?.unwrap();
+            let json_document = immutable_obkvs.json_map(docid)?.unwrap();
+            let document_id = &json_document[primary_key];
+
+            let mut scope = Scope::new();
+            if let Some(context) = context.as_ref().cloned() {
+                scope.push_constant_dynamic("context", context.clone());
+            }
+            scope.push("doc", rhai_document);
+            // That's were the magic happens. We run the user script
+            // which edits "doc" scope variable reprensenting the document
+            // and ignore the output and even the type of it, i.e., Dynamic.
+            let _ = engine
+                .eval_ast_with_scope::<Dynamic>(&mut scope, &ast)
+                .map_err(UserError::DocumentEditionRuntimeError)?;
+
+            match scope.remove::<Dynamic>("doc") {
+                // If the "doc" variable has set to (), we effectively delete the document.
+                Some(doc) if doc.is_unit() => Ok(DocumentEdition::Deleted(docid)),
+                None => unreachable!("missing doc variable from the Rhai scope"),
+                Some(document) => match document.try_cast() {
+                    Some(document) => {
+                        let new_document = rhaimap_to_object(document);
+                        // Note: This condition is not perfect. Sometimes it detect changes
+                        //       like with floating points numbers and consider updating
+                        //       the document even if nothing actually changed.
+                        if json_document != new_document {
+                            if Some(document_id) != new_document.get(primary_key) {
+                                Err(Error::UserError(
+                                    UserError::DocumentEditionCannotModifyPrimaryKey,
+                                ))
+                            } else {
+                                Ok(DocumentEdition::Edited(new_document))
+                            }
+                        } else {
+                            Ok(DocumentEdition::Nothing)
+                        }
+                    }
+                    None => Err(Error::UserError(UserError::DocumentEditionDocumentMustBeObject)),
+                },
+            }
+        });
+
+        rayon_par_bridge::par_bridge(100, processing, |iterator| {
+            for result in iterator {
+                if (self.should_abort)() {
+                    return Err(Error::InternalError(InternalError::AbortedIndexation));
+                }
+
+                match result? {
+                    DocumentEdition::Deleted(docid) => {
+                        documents_to_remove.push(docid);
+                    }
+                    DocumentEdition::Edited(new_document) => {
+                        documents_batch_builder.append_json_object(&new_document)?;
+                    }
+                    DocumentEdition::Nothing => (),
+                }
+            }
+
+            Ok(())
+        })?;
+
+        let file = documents_batch_builder.into_inner()?;
+        let reader = DocumentsBatchReader::from_reader(file)?;
+
+        let (this, removed) = self.remove_documents_from_db_no_batch(&documents_to_remove)?;
+        let (this, result) = this.add_documents(reader)?;
+
+        Ok((this, result.map(|added| (removed, added))))
     }
 
     pub fn with_embedders(mut self, embedders: EmbeddingConfigs) -> Self {

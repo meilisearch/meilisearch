@@ -155,6 +155,10 @@ make_missing_field_convenience_builder!(
     MissingFacetSearchFacetName,
     missing_facet_search_facet_name
 );
+make_missing_field_convenience_builder!(
+    MissingDocumentEditionFunction,
+    missing_document_edition_function
+);
 
 // Integrate a sub-error into a [`DeserrError`] by taking its error message but using
 // the default error code (C) from `Self`

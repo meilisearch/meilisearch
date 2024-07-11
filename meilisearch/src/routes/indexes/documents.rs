@@ -82,6 +82,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         web::resource("/delete-batch").route(web::post().to(SeqHandler(delete_documents_batch))),
     )
     .service(web::resource("/delete").route(web::post().to(SeqHandler(delete_documents_by_filter))))
+    .service(web::resource("/edit").route(web::post().to(SeqHandler(edit_documents_by_function))))
     .service(web::resource("/fetch").route(web::post().to(SeqHandler(documents_by_query_post))))
     .service(
         web::resource("/{document_id}")
@@ -571,6 +572,82 @@ pub async fn delete_documents_by_filter(
             .into();
 
     debug!(returns = ?task, "Delete documents by filter");
+    Ok(HttpResponse::Accepted().json(task))
+}
+
+#[derive(Debug, Deserr)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+pub struct DocumentEditionByFunction {
+    #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
+    pub filter: Option<Value>,
+    #[deserr(default, error = DeserrJsonError<InvalidDocumentEditionContext>)]
+    pub context: Option<Value>,
+    #[deserr(error = DeserrJsonError<InvalidDocumentEditionFunctionFilter>, missing_field_error = DeserrJsonError::missing_document_edition_function)]
+    pub function: String,
+}
+
+pub async fn edit_documents_by_function(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ALL }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
+    params: AwebJson<DocumentEditionByFunction, DeserrJsonError>,
+    req: HttpRequest,
+    opt: web::Data<Opt>,
+    analytics: web::Data<dyn Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    debug!(parameters = ?params, "Edit documents by function");
+
+    index_scheduler
+        .features()
+        .check_edit_documents_by_function("Using the documents edit route")?;
+
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+    let index_uid = index_uid.into_inner();
+    let params = params.into_inner();
+
+    analytics.update_documents_by_function(
+        &params,
+        index_scheduler.index(&index_uid).is_err(),
+        &req,
+    );
+
+    let DocumentEditionByFunction { filter, context, function } = params;
+    let engine = milli::rhai::Engine::new();
+    if let Err(e) = engine.compile(&function) {
+        return Err(ResponseError::from_msg(e.to_string(), Code::BadRequest));
+    }
+
+    if let Some(ref filter) = filter {
+        // we ensure the filter is well formed before enqueuing it
+        || -> Result<_, ResponseError> {
+            Ok(crate::search::parse_filter(filter)?.ok_or(MeilisearchHttpError::EmptyFilter)?)
+        }()
+        // and whatever was the error, the error code should always be an InvalidDocumentFilter
+        .map_err(|err| ResponseError::from_msg(err.message, Code::InvalidDocumentFilter))?;
+    }
+    let task = KindWithContent::DocumentEdition {
+        index_uid,
+        filter_expr: filter,
+        context: match context {
+            Some(Value::Object(m)) => Some(m),
+            None => None,
+            _ => {
+                return Err(ResponseError::from_msg(
+                    "The context must be an object".to_string(),
+                    Code::InvalidDocumentEditionContext,
+                ))
+            }
+        },
+        function,
+    };
+
+    let uid = get_task_id(&req, &opt)?;
+    let dry_run = is_dry_run(&req, &opt)?;
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
+            .await??
+            .into();
+
+    debug!(returns = ?task, "Edit documents by function");
     Ok(HttpResponse::Accepted().json(task))
 }
 

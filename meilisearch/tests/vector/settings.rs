@@ -14,7 +14,8 @@ async fn update_embedder() {
     {
       "vectorStore": true,
       "metrics": false,
-      "logsRoute": false
+      "logsRoute": false,
+      "editDocumentsByFunction": false
     }
     "###);
 
