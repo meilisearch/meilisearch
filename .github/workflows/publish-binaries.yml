@@ -162,6 +162,9 @@ jobs:
           echo '[target.aarch64-unknown-linux-gnu]' >> ~/.cargo/config
           echo 'linker = "aarch64-linux-gnu-gcc"' >> ~/.cargo/config
           echo 'JEMALLOC_SYS_WITH_LG_PAGE=16' >> $GITHUB_ENV
+      - name: Install a default toolchain that will be used to build cargo cross
+        run: |
+          rustup default stable
       - name: Cargo build
         uses: actions-rs/cargo@v1
         with:
