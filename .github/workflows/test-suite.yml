@@ -19,13 +19,11 @@ env:
 
 jobs:
   test-linux:
-    name: Tests on ubuntu-18.04
+    name: Tests on ubuntu-20.04
     runs-on: ubuntu-latest
-    env:
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     container:
-      # Use ubuntu-18.04 to compile with glibc 2.27, which are the production expectations
-      image: ubuntu:18.04
+      # Use ubuntu-20.04 to compile with glibc 2.28
+      image: ubuntu:20.04
     steps:
       - uses: actions/checkout@v3
       - name: Install needed dependencies
@@ -73,11 +71,9 @@ jobs:
   test-all-features:
     name: Tests almost all features
     runs-on: ubuntu-latest
-    env:
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     container:
-      # Use ubuntu-18.04 to compile with glibc 2.27, which are the production expectations
-      image: ubuntu:18.04
+      # Use ubuntu-20.04 to compile with glibc 2.28
+      image: ubuntu:20.04
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v3
@@ -95,11 +91,9 @@ jobs:
 
   test-disabled-tokenization:
     name: Test disabled tokenization
-    env:
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     runs-on: ubuntu-latest
     container:
-      image: ubuntu:18.04
+      image: ubuntu:20.04
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v3
@@ -121,12 +115,10 @@ jobs:
   # We run tests in debug also, to make sure that the debug_assertions are hit
   test-debug:
     name: Run tests in debug
-    env:
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     runs-on: ubuntu-latest
     container:
-      # Use ubuntu-18.04 to compile with glibc 2.27, which are the production expectations
-      image: ubuntu:18.04
+      # Use ubuntu-20.04 to compile with glibc 2.28
+      image: ubuntu:20.04
     steps:
       - uses: actions/checkout@v3
       - name: Install needed dependencies
