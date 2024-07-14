@@ -56,7 +56,9 @@ use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
-use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
+use meilisearch_types::milli::{
+    self, CboRoaringBitmapCodec, Index, InternalError, RoaringBitmapCodec, BEU32,
+};
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use rayon::current_num_threads;
@@ -1238,9 +1240,9 @@ impl IndexScheduler {
 
                 return Ok(TickOutcome::TickAgain(0));
             }
-            Err(Error::Milli(milli::Error::InternalError(
-                milli::InternalError::MdbTxnFullError,
-            ))) => {
+            Err(Error::Milli(milli::Error::InternalError(InternalError::Store(
+                heed::MdbError::TxnFull,
+            )))) => {
                 let task_ids: Vec<u32> = ids.iter().collect();
                 tracing::info!("Batch failed due to the transaction full {:?}", task_ids);
                 let tasks_limit =
