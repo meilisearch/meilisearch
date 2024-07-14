@@ -1243,13 +1243,11 @@ impl IndexScheduler {
             Err(Error::Milli(milli::Error::InternalError(InternalError::Store(
                 heed::MdbError::TxnFull,
             )))) => {
-                let task_ids: Vec<u32> = ids.iter().collect();
-                tracing::info!("Batch failed due to the transaction full {:?}", task_ids);
                 let tasks_limit =
                     if self.autobatching_enabled { self.max_number_of_batched_tasks } else { 1 };
                 if tasks_limit == 1 {
                     let error: ResponseError = ResponseError::from_msg(
-                        "Batch failed due to MDB_TXN_FULL error".parse().unwrap(),
+                        "Batch failed due to MDB_TXN_FULL error".to_string(),
                         Code::Internal,
                     );
                     for id in ids.iter() {
@@ -1263,11 +1261,6 @@ impl IndexScheduler {
                         task.error = Some(error.clone());
                         task.details = task.details.map(|d| d.to_failed());
 
-                        #[cfg(test)]
-                        self.maybe_fail(
-                            tests::FailureLocation::UpdatingTaskAfterProcessBatchFailure,
-                        )?;
-
                         tracing::info!(
                             "Batch failed due to MDB_TXN_FULL error, Batch size is already 1"
                         );
@@ -1278,7 +1271,7 @@ impl IndexScheduler {
                 } else {
                     // We reduce the batch size by half and Tick Again to re-schedule all the failed tasks
                     self.max_number_of_batched_tasks /= 2;
-                    tracing::info!("Batch failed due to MDB_TXN_FULL error retrying with reduced number of batched tasks {}", self.max_number_of_batched_tasks);
+                    tracing::info!("Batch failed due to MDB_TXN_FULL error re-scheduling the tasks with reduced number of batched tasks {}", self.max_number_of_batched_tasks);
                     return Ok(TickOutcome::TickAgain(0));
                 }
             }
