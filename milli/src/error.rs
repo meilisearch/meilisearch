@@ -69,6 +69,8 @@ pub enum InternalError {
     ArroyError(#[from] arroy::Error),
     #[error(transparent)]
     VectorEmbeddingError(#[from] crate::vector::Error),
+    #[error(transparent)]
+    MdbTxnFullError,
 }
 
 #[derive(Error, Debug)]
@@ -444,6 +446,7 @@ impl From<HeedError> for Error {
             HeedError::Io(error) => Error::from(error),
             HeedError::Mdb(MdbError::MapFull) => UserError(MaxDatabaseSizeReached),
             HeedError::Mdb(MdbError::Invalid) => UserError(InvalidStoreFile),
+            HeedError::Mdb(MdbError::TxnFull) => InternalError(MdbTxnFullError),
             HeedError::Mdb(error) => InternalError(Store(error)),
             // TODO use the encoding
             HeedError::Encoding(_) => InternalError(Serialization(Encoding { db_name: None })),

@@ -47,7 +47,7 @@ pub use features::RoFeatures;
 use file_store::FileStore;
 use flate2::bufread::GzEncoder;
 use flate2::Compression;
-use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str, I128};
@@ -605,7 +605,7 @@ impl IndexScheduler {
     /// This function will execute in a different thread and must be called
     /// only once per index scheduler.
     fn run(&self) {
-        let run = self.private_clone();
+        let mut run = self.private_clone();
         std::thread::Builder::new()
             .name(String::from("scheduler"))
             .spawn(move || {
@@ -1122,7 +1122,7 @@ impl IndexScheduler {
     /// 6. Reset the in-memory list of processed tasks.
     ///
     /// Returns the number of processed tasks.
-    fn tick(&self) -> Result<TickOutcome> {
+    fn tick(&mut self) -> Result<TickOutcome> {
         #[cfg(test)]
         {
             *self.run_loop_iteration.write().unwrap() += 1;
@@ -1237,6 +1237,48 @@ impl IndexScheduler {
                 tracing::info!("The max database size was reached. Resizing the index.");
 
                 return Ok(TickOutcome::TickAgain(0));
+            }
+            Err(Error::Milli(milli::Error::InternalError(
+                milli::InternalError::MdbTxnFullError,
+            ))) => {
+                let task_ids: Vec<u32> = ids.iter().collect();
+                tracing::info!("Batch failed due to the transaction full {:?}", task_ids);
+                let tasks_limit =
+                    if self.autobatching_enabled { self.max_number_of_batched_tasks } else { 1 };
+                if tasks_limit == 1 {
+                    let error: ResponseError = ResponseError::from_msg(
+                        "Batch failed due to MDB_TXN_FULL error".parse().unwrap(),
+                        Code::Internal,
+                    );
+                    for id in ids.iter() {
+                        let mut task = self
+                            .get_task(&wtxn, id)
+                            .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?
+                            .ok_or(Error::CorruptedTaskQueue)?;
+                        task.started_at = Some(started_at);
+                        task.finished_at = Some(finished_at);
+                        task.status = Status::Failed;
+                        task.error = Some(error.clone());
+                        task.details = task.details.map(|d| d.to_failed());
+
+                        #[cfg(test)]
+                        self.maybe_fail(
+                            tests::FailureLocation::UpdatingTaskAfterProcessBatchFailure,
+                        )?;
+
+                        tracing::info!(
+                            "Batch failed due to MDB_TXN_FULL error, Batch size is already 1"
+                        );
+
+                        self.update_task(&mut wtxn, &task)
+                            .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?;
+                    }
+                } else {
+                    // We reduce the batch size by half and Tick Again to re-schedule all the failed tasks
+                    self.max_number_of_batched_tasks /= 2;
+                    tracing::info!("Batch failed due to MDB_TXN_FULL error retrying with reduced number of batched tasks {}", self.max_number_of_batched_tasks);
+                    return Ok(TickOutcome::TickAgain(0));
+                }
             }
             // In case of a failure we must get back and patch all the tasks with the error.
             Err(err) => {
