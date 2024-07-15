@@ -235,7 +235,7 @@ jobs:
   meilisearch-ruby-tests:
     needs: define-docker-image
     name: Ruby SDK tests
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     services:
       meilisearch:
         image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
@@ -251,7 +251,7 @@ jobs:
       - name: Set up Ruby 3
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 3
+          ruby-version: 3.3.3
       - name: Install ruby dependencies
         run: bundle install --with test
       - name: Run test suite
