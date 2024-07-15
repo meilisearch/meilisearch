@@ -251,7 +251,7 @@ jobs:
       - name: Set up Ruby 3
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 3.3
+          ruby-version: 3.1
       - name: Install ruby dependencies
         run: bundle install --with test
       - name: Run test suite
