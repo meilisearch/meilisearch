@@ -248,6 +248,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: meilisearch/meilisearch-ruby
+          ref: 'brunoocasali-patch-1'
       - name: Set up Ruby 3.3
         uses: ruby/setup-ruby@v1
         with:
