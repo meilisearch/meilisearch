@@ -419,7 +419,41 @@ fn import_dump(
         let file = tempfile::tempfile()?;
         let mut builder = DocumentsBatchBuilder::new(BufWriter::new(file));
         for document in index_reader.documents()? {
-            builder.append_json_object(&document?)?;
+            let mut document = document?;
+
+            'remove_injected_vectors: {
+                let Some(vectors) = document.get_mut("_vectors") else {
+                    break 'remove_injected_vectors;
+                };
+
+                let Some(vectors) = vectors.as_object_mut() else { break 'remove_injected_vectors };
+
+                vectors.retain(|_embedder, embedding_object| {
+                    // don't touch values that aren't objects
+                    let Some(embedding_object) = embedding_object.as_object() else {
+                        return true;
+                    };
+
+                    let mut has_regenerate_true = false;
+                    for (field, value) in embedding_object {
+                        match (field.as_str(), value) {
+                            // detected regenerate : true
+                            // if we don't have any superfluous field, we'll remove the entire entry
+                            ("regenerate", serde_json::Value::Bool(true)) => {
+                                has_regenerate_true = true;
+                            }
+                            // ignore embeddings
+                            ("embeddings", _) => continue,
+                            // any other field: immediately retain the entry
+                            _ => return true,
+                        }
+                    }
+                    // retain the entry unless it has regenerate: true
+                    !has_regenerate_true
+                })
+            }
+
+            builder.append_json_object(&document)?;
         }
 
         // This flush the content of the batch builder.
