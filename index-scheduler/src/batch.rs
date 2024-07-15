@@ -914,8 +914,34 @@ impl IndexScheduler {
                         if self.must_stop_processing.get() {
                             return Err(Error::AbortedTask);
                         }
-                        let (_id, doc) = ret?;
-                        let document = milli::obkv_to_json(&all_fields, &fields_ids_map, doc)?;
+                        let (id, doc) = ret?;
+                        let mut document = milli::obkv_to_json(&all_fields, &fields_ids_map, doc)?;
+
+                        'inject_vectors: {
+                            let embeddings = index.embeddings(&rtxn, id)?;
+
+                            if embeddings.is_empty() {
+                                break 'inject_vectors;
+                            }
+
+                            let vectors = document
+                                .entry("_vectors".to_owned())
+                                .or_insert(serde_json::Value::Object(Default::default()));
+
+                            let serde_json::Value::Object(vectors) = vectors else {
+                                break 'inject_vectors;
+                            };
+
+                            for (embedder_name, embeddings) in embeddings {
+                                vectors.entry(embedder_name).or_insert_with(|| {
+                                    serde_json::json!({
+                                        "embeddings": embeddings,
+                                        "regenerate": true
+                                    })
+                                });
+                            }
+                        }
+
                         index_dumper.push_document(&document)?;
                     }
 
