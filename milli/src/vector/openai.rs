@@ -10,6 +10,7 @@ use crate::ThreadPoolNoAbort;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct EmbedderOptions {
+    pub url: Option<String>,
     pub api_key: Option<String>,
     pub embedding_model: EmbeddingModel,
     pub dimensions: Option<usize>,
@@ -146,11 +147,13 @@ pub const OPENAI_EMBEDDINGS_URL: &str = "https://api.openai.com/v1/embeddings";
 
 impl EmbedderOptions {
     pub fn with_default_model(api_key: Option<String>) -> Self {
-        Self { api_key, embedding_model: Default::default(), dimensions: None, distribution: None }
-    }
-
-    pub fn with_embedding_model(api_key: Option<String>, embedding_model: EmbeddingModel) -> Self {
-        Self { api_key, embedding_model, dimensions: None, distribution: None }
+        Self {
+            api_key,
+            embedding_model: Default::default(),
+            dimensions: None,
+            distribution: None,
+            url: None,
+        }
     }
 }
 
@@ -175,11 +178,13 @@ impl Embedder {
             &inferred_api_key
         });
 
+        let url = options.url.as_deref().unwrap_or(OPENAI_EMBEDDINGS_URL).to_owned();
+
         let rest_embedder = RestEmbedder::new(RestEmbedderOptions {
             api_key: Some(api_key.clone()),
             distribution: None,
             dimensions: Some(options.dimensions()),
-            url: OPENAI_EMBEDDINGS_URL.to_owned(),
+            url,
             query: options.query(),
             input_field: vec!["input".to_owned()],
             input_type: crate::vector::rest::InputType::TextArray,

@@ -1574,7 +1574,6 @@ pub fn validate_embedding_settings(
         EmbedderSource::OpenAi => {
             check_unset(&revision, EmbeddingSettings::REVISION, inferred_source, name)?;
 
-            check_unset(&url, EmbeddingSettings::URL, inferred_source, name)?;
             check_unset(&query, EmbeddingSettings::QUERY, inferred_source, name)?;
             check_unset(&input_field, EmbeddingSettings::INPUT_FIELD, inferred_source, name)?;
             check_unset(
