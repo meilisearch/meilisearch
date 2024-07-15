@@ -325,7 +325,7 @@ where
         let documents_chunk_size = match self.indexer_config.documents_chunk_size {
             Some(chunk_size) => chunk_size,
             None => {
-                let default_chunk_size = 1024 * 1024 * 4; // 4MiB
+                let default_chunk_size = 1024 * 1024 * 1024 * 2; // 2 GiB
                 let min_chunk_size = 1024 * 512; // 512KiB
 
                 // compute the chunk size from the number of available threads and the inputed data size.

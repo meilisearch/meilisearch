@@ -2191,7 +2191,6 @@ dependencies = [
  "bytemuck",
  "byteorder",
  "rayon",
- "tempfile",
 ]
 
 [[package]]

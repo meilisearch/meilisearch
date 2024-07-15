@@ -27,8 +27,7 @@ fst = "0.4.7"
 fxhash = "0.2.1"
 geoutils = "0.5.1"
 grenad = { version = "0.4.6", default-features = false, features = [
-    "rayon",
-    "tempfile",
+    "rayon"
 ] }
 heed = { version = "0.20.1", default-features = false, features = [
     "serde-json",
