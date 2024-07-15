@@ -27,7 +27,7 @@ use super::{
 use crate::error::MeilisearchHttpError;
 use crate::routes::indexes::search::search_kind;
 
-pub const DEFAULT_FEDERATED_WEIGHT: fn() -> f64 = || 1.0;
+pub const DEFAULT_FEDERATED_WEIGHT: f64 = 1.0;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, deserr::Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
@@ -42,7 +42,7 @@ pub struct Weight(f64);
 
 impl Default for Weight {
     fn default() -> Self {
-        Weight(DEFAULT_FEDERATED_WEIGHT())
+        Weight(DEFAULT_FEDERATED_WEIGHT)
     }
 }
 
@@ -50,8 +50,6 @@ impl std::convert::TryFrom<f64> for Weight {
     type Error = InvalidMultiSearchWeight;
 
     fn try_from(f: f64) -> Result<Self, Self::Error> {
-        // the suggested "fix" is: `!(0.0..=1.0).contains(&f)`` which is allegedly less readable
-        #[allow(clippy::manual_range_contains)]
         if f < 0.0 {
             Err(InvalidMultiSearchWeight)
         } else {

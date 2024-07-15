@@ -125,7 +125,7 @@ impl CompatibilityError {
             | (RankingRuleKind::Relevancy, RankingRuleKind::DescendingGeoSort)
             | (RankingRuleKind::AscendingGeoSort, RankingRuleKind::Relevancy)
             | (RankingRuleKind::DescendingGeoSort, RankingRuleKind::Relevancy) => {
-                "cannot compare a relevancy rule with a sort rule"
+                "cannot compare a relevancy rule with a geosort rule"
             }
 
             (RankingRuleKind::AscendingSort, RankingRuleKind::DescendingSort)
