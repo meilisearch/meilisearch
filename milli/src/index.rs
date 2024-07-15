@@ -1691,9 +1691,7 @@ impl Index {
                 }
             }
 
-            if !embeddings.is_empty() {
-                res.insert(embedder_name.to_owned(), embeddings);
-            }
+            res.insert(embedder_name.to_owned(), embeddings);
         }
         Ok(res)
     }
