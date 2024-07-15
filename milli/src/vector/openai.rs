@@ -210,7 +210,6 @@ impl Embedder {
     }
 
     fn try_embed_tokenized(&self, text: &[String]) -> Result<Vec<Embeddings<f32>>, EmbedError> {
-        pub const OVERLAP_SIZE: usize = 200;
         let mut all_embeddings = Vec::with_capacity(text.len());
         for text in text {
             let max_token_count = self.options.embedding_model.max_token();
@@ -221,21 +220,10 @@ impl Embedder {
                 continue;
             }
 
-            let mut tokens = encoded.as_slice();
+            let tokens = &encoded.as_slice()[0..max_token_count];
             let mut embeddings_for_prompt = Embeddings::new(self.dimensions());
-            while tokens.len() > max_token_count {
-                let window = &tokens[..max_token_count];
-                let embedding = self.rest_embedder.embed_tokens(window)?;
-                embeddings_for_prompt.append(embedding.into_inner()).map_err(|got| {
-                    EmbedError::openai_unexpected_dimension(self.dimensions(), got.len())
-                })?;
 
-                tokens = &tokens[max_token_count - OVERLAP_SIZE..];
-            }
-
-            // end of text
             let embedding = self.rest_embedder.embed_tokens(tokens)?;
-
             embeddings_for_prompt.append(embedding.into_inner()).map_err(|got| {
                 EmbedError::openai_unexpected_dimension(self.dimensions(), got.len())
             })?;
