@@ -415,7 +415,9 @@ impl ErrorCode for milli::Error {
                         Code::InvalidSettingsTypoTolerance
                     }
                     UserError::InvalidEmbedder(_) => Code::InvalidEmbedder,
-                    UserError::VectorEmbeddingError(_) => Code::VectorEmbeddingError,
+                    UserError::VectorEmbeddingError(_) | UserError::DocumentEmbeddingError(_) => {
+                        Code::VectorEmbeddingError
+                    }
                     UserError::DocumentEditionCannotModifyPrimaryKey
                     | UserError::DocumentEditionDocumentMustBeObject
                     | UserError::DocumentEditionRuntimeError(_)

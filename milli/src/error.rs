@@ -268,15 +268,17 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     DocumentEditionRuntimeError(Box<EvalAltResult>),
     #[error("Document edition runtime error encountered while compiling the function: {0}")]
     DocumentEditionCompilationError(rhai::ParseError),
+    #[error("{0}")]
+    DocumentEmbeddingError(String),
 }
 
 impl From<crate::vector::Error> for Error {
     fn from(value: crate::vector::Error) -> Self {
         match value.fault() {
             FaultSource::User => Error::UserError(value.into()),
-            FaultSource::Runtime => Error::InternalError(value.into()),
+            FaultSource::Runtime => Error::UserError(value.into()),
             FaultSource::Bug => Error::InternalError(value.into()),
-            FaultSource::Undecided => Error::InternalError(value.into()),
+            FaultSource::Undecided => Error::UserError(value.into()),
         }
     }
 }

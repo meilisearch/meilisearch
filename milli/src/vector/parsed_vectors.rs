@@ -179,6 +179,15 @@ impl ParsedVectorsDiff {
 
         (old, new)
     }
+
+    pub fn into_new_vectors_keys_iter(self) -> impl Iterator<Item = String> {
+        let maybe_it = match self.new {
+            VectorsState::NoVectorsFid => None,
+            VectorsState::NoVectorsFieldInDocument => None,
+            VectorsState::Vectors(vectors) => Some(vectors.into_keys()),
+        };
+        maybe_it.into_iter().flatten()
+    }
 }
 
 pub struct ParsedVectors(pub BTreeMap<String, Vectors>);
