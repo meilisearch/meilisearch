@@ -482,6 +482,99 @@ async fn user_provided_embeddings_error() {
 }
 
 #[actix_rt::test]
+async fn user_provided_vectors_error() {
+    let server = Server::new().await;
+    let index = generate_default_user_provided_documents(&server).await;
+
+    // First case, we forget to specify `_vectors`
+    let documents = json!({"id": 42, "name": "kefir"});
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": 2,
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "While embedding documents for embedder `manual`: user error: attempt to embed the following text in a configuration where embeddings must be user provided: \" id: 42\\n name: kefir\\n _vectors: \\n _vectors.manual: \\n _vectors.manual.regenerate: \\n _vectors.manual.embeddings: \\n\"\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: opt-out for a document with `_vectors.manual: null`",
+        "code": "vector_embedding_error",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // Second case, we provide `_vectors` with a typo
+    let documents = json!({"id": 42, "name": "kefir", "_vector": { "manaul": [0, 0, 0] }});
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": 3,
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "While embedding documents for embedder `manual`: user error: attempt to embed the following text in a configuration where embeddings must be user provided: \" id: 42\\n name: kefir\\n _vectors: \\n _vectors.manual: \\n _vectors.manual.regenerate: \\n _vectors.manual.embeddings: \\n _vector: manaul000\\n _vector.manaul: \\n\"\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: try replacing `_vector` by `_vectors` in 1 document(s).",
+        "code": "vector_embedding_error",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // Third case, we specify the embedder with a typo
+    let documents = json!({"id": 42, "name": "kefir", "_vectors": { "manaul": [0, 0, 0] }});
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": 4,
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "While embedding documents for embedder `manual`: user error: attempt to embed the following text in a configuration where embeddings must be user provided: \" id: 42\\n name: kefir\\n _vectors: manaul000\\n _vectors.manual: \\n _vectors.manual.regenerate: \\n _vectors.manual.embeddings: \\n _vectors.manaul: \\n\"\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: try replacing `_vectors.manaul` by `_vectors.manual` in 1 document(s).",
+        "code": "vector_embedding_error",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn clear_documents() {
     let server = Server::new().await;
     let index = generate_default_user_provided_documents(&server).await;
