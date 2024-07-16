@@ -228,7 +228,9 @@ impl Embedder {
             EmbedderOptions::UserProvided(options) => {
                 Self::UserProvided(manual::Embedder::new(options))
             }
-            EmbedderOptions::Rest(options) => Self::Rest(rest::Embedder::new(options)?),
+            EmbedderOptions::Rest(options) => {
+                Self::Rest(rest::Embedder::new(options, rest::ConfigurationSource::User)?)
+            }
         })
     }
 
