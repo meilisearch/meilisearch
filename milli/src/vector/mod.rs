@@ -11,6 +11,7 @@ use crate::ThreadPoolNoAbort;
 
 pub mod error;
 pub mod hf;
+pub mod json_template;
 pub mod manual;
 pub mod openai;
 pub mod parsed_vectors;
