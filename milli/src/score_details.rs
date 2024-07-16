@@ -425,9 +425,6 @@ pub struct Sort {
 
 impl PartialOrd for Sort {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if self.field_name != other.field_name {
-            return None;
-        }
         if self.ascending != other.ascending {
             return None;
         }
@@ -466,9 +463,6 @@ pub struct GeoSort {
 
 impl PartialOrd for GeoSort {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if self.target_point != other.target_point {
-            return None;
-        }
         if self.ascending != other.ascending {
             return None;
         }

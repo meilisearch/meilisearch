@@ -42,7 +42,7 @@ pub struct MultiSearchAggregator;
 
 #[allow(dead_code)]
 impl MultiSearchAggregator {
-    pub fn from_queries(_: &dyn Any, _: &dyn Any) -> Self {
+    pub fn from_federated_search(_: &dyn Any, _: &dyn Any) -> Self {
         Self
     }
 
