@@ -120,7 +120,12 @@ async fn add_remove_user_provided() {
         {
           "id": 1,
           "name": "echo",
-          "_vectors": {}
+          "_vectors": {
+            "manual": {
+              "embeddings": [],
+              "regenerate": false
+            }
+          }
         }
       ],
       "offset": 0,
@@ -142,7 +147,12 @@ async fn add_remove_user_provided() {
         {
           "id": 1,
           "name": "echo",
-          "_vectors": {}
+          "_vectors": {
+            "manual": {
+              "embeddings": [],
+              "regenerate": false
+            }
+          }
         }
       ],
       "offset": 0,
@@ -580,7 +590,12 @@ async fn add_remove_one_vector_4588() {
         {
           "id": 0,
           "name": "kefir",
-          "_vectors": {}
+          "_vectors": {
+            "manual": {
+              "embeddings": [],
+              "regenerate": false
+            }
+          }
         }
       ],
       "offset": 0,

@@ -645,7 +645,12 @@ async fn get_document_with_vectors() {
         {
           "id": 1,
           "name": "echo",
-          "_vectors": {}
+          "_vectors": {
+            "manual": {
+              "embeddings": [],
+              "regenerate": false
+            }
+          }
         }
       ],
       "offset": 0,
@@ -701,7 +706,12 @@ async fn get_document_with_vectors() {
         },
         {
           "name": "echo",
-          "_vectors": {}
+          "_vectors": {
+            "manual": {
+              "embeddings": [],
+              "regenerate": false
+            }
+          }
         }
       ],
       "offset": 0,
