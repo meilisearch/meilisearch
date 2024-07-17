@@ -360,16 +360,17 @@ async fn filter_invalid_syntax_object() {
     snapshot!(code, @"202 Accepted");
     index.wait_task(value.uid()).await;
 
-    let expected_response = json!({
-        "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `title & Glass`.\n1:14 title & Glass",
-        "code": "invalid_similar_filter",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
-    });
     index
         .similar(json!({"id": 287947, "filter": "title & Glass"}), |response, code| {
-            assert_eq!(response, expected_response);
-            assert_eq!(code, 400);
+            snapshot!(response, @r###"
+            {
+              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `_geoRadius`, or `_geoBoundingBox` at `title & Glass`.\n1:14 title & Glass",
+              "code": "invalid_similar_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
+            }
+            "###);
+            snapshot!(code, @"400 Bad Request");
         })
         .await;
 }
@@ -398,16 +399,17 @@ async fn filter_invalid_syntax_array() {
     snapshot!(code, @"202 Accepted");
     index.wait_task(value.uid()).await;
 
-    let expected_response = json!({
-        "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `title & Glass`.\n1:14 title & Glass",
-        "code": "invalid_similar_filter",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
-    });
     index
         .similar(json!({"id": 287947, "filter": ["title & Glass"]}), |response, code| {
-            assert_eq!(response, expected_response);
-            assert_eq!(code, 400);
+            snapshot!(response, @r###"
+            {
+              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `_geoRadius`, or `_geoBoundingBox` at `title & Glass`.\n1:14 title & Glass",
+              "code": "invalid_similar_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
+            }
+            "###);
+            snapshot!(code, @"400 Bad Request");
         })
         .await;
 }

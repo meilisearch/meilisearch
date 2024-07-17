@@ -13,9 +13,11 @@ mod pagination;
 mod restrict_searchable;
 mod search_queue;
 
+use meilisearch::Opt;
 use once_cell::sync::Lazy;
+use tempfile::TempDir;
 
-use crate::common::{Server, Value};
+use crate::common::{default_settings, Server, Value};
 use crate::json;
 
 static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
@@ -574,6 +576,32 @@ async fn search_with_filter_array_notation() {
         .await;
     assert_eq!(code, 200, "{}", response);
     assert_eq!(response["hits"].as_array().unwrap().len(), 3);
+}
+
+#[actix_rt::test]
+async fn search_with_contains_filter() {
+    let temp = TempDir::new().unwrap();
+    let server = Server::new_with_options(Opt {
+        experimental_contains_filter: true,
+        ..default_settings(temp.path())
+    })
+    .await
+    .unwrap();
+    let index = server.index("movies");
+
+    index.update_settings(json!({"filterableAttributes": ["title"]})).await;
+
+    let documents = DOCUMENTS.clone();
+    let (request, _code) = index.add_documents(documents, None).await;
+    index.wait_task(request.uid()).await.succeeded();
+
+    let (response, code) = index
+        .search_post(json!({
+            "filter": "title CONTAINS cap"
+        }))
+        .await;
+    assert_eq!(code, 200, "{}", response);
+    assert_eq!(response["hits"].as_array().unwrap().len(), 2);
 }
 
 #[actix_rt::test]

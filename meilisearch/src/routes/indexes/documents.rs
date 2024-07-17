@@ -7,7 +7,7 @@ use bstr::ByteSlice as _;
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::Deserr;
 use futures::StreamExt;
-use index_scheduler::{IndexScheduler, TaskId};
+use index_scheduler::{IndexScheduler, RoFeatures, TaskId};
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
@@ -260,8 +260,15 @@ fn documents_by_query(
     let retrieve_vectors = RetrieveVectors::new(retrieve_vectors, features)?;
 
     let index = index_scheduler.index(&index_uid)?;
-    let (total, documents) =
-        retrieve_documents(&index, offset, limit, filter, fields, retrieve_vectors)?;
+    let (total, documents) = retrieve_documents(
+        &index,
+        offset,
+        limit,
+        filter,
+        fields,
+        retrieve_vectors,
+        index_scheduler.features(),
+    )?;
 
     let ret = PaginationView::new(offset, limit, total as usize, documents);
 
@@ -565,11 +572,9 @@ pub async fn delete_documents_by_filter(
     analytics.delete_documents(DocumentDeletionKind::PerFilter, &req);
 
     // we ensure the filter is well formed before enqueuing it
-    || -> Result<_, ResponseError> {
-        Ok(crate::search::parse_filter(&filter)?.ok_or(MeilisearchHttpError::EmptyFilter)?)
-    }()
-    // and whatever was the error, the error code should always be an InvalidDocumentFilter
-    .map_err(|err| ResponseError::from_msg(err.message, Code::InvalidDocumentFilter))?;
+    crate::search::parse_filter(&filter, Code::InvalidDocumentFilter, index_scheduler.features())?
+        .ok_or(MeilisearchHttpError::EmptyFilter)?;
+
     let task = KindWithContent::DocumentDeletionByFilter { index_uid, filter_expr: filter };
 
     let uid = get_task_id(&req, &opt)?;
@@ -626,11 +631,12 @@ pub async fn edit_documents_by_function(
 
     if let Some(ref filter) = filter {
         // we ensure the filter is well formed before enqueuing it
-        || -> Result<_, ResponseError> {
-            Ok(crate::search::parse_filter(filter)?.ok_or(MeilisearchHttpError::EmptyFilter)?)
-        }()
-        // and whatever was the error, the error code should always be an InvalidDocumentFilter
-        .map_err(|err| ResponseError::from_msg(err.message, Code::InvalidDocumentFilter))?;
+        crate::search::parse_filter(
+            filter,
+            Code::InvalidDocumentFilter,
+            index_scheduler.features(),
+        )?
+        .ok_or(MeilisearchHttpError::EmptyFilter)?;
     }
     let task = KindWithContent::DocumentEdition {
         index_uid,
@@ -736,12 +742,12 @@ fn retrieve_documents<S: AsRef<str>>(
     filter: Option<Value>,
     attributes_to_retrieve: Option<Vec<S>>,
     retrieve_vectors: RetrieveVectors,
+    features: RoFeatures,
 ) -> Result<(u64, Vec<Document>), ResponseError> {
     let rtxn = index.read_txn()?;
     let filter = &filter;
     let filter = if let Some(filter) = filter {
-        parse_filter(filter)
-            .map_err(|err| ResponseError::from_msg(err.to_string(), Code::InvalidDocumentFilter))?
+        parse_filter(filter, Code::InvalidDocumentFilter, features)?
     } else {
         None
     };

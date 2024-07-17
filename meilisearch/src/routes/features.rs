@@ -49,6 +49,8 @@ pub struct RuntimeTogglableFeatures {
     pub logs_route: Option<bool>,
     #[deserr(default)]
     pub edit_documents_by_function: Option<bool>,
+    #[deserr(default)]
+    pub contains_filter: Option<bool>,
 }
 
 async fn patch_features(
@@ -72,6 +74,7 @@ async fn patch_features(
             .0
             .edit_documents_by_function
             .unwrap_or(old_features.edit_documents_by_function),
+        contains_filter: new_features.0.contains_filter.unwrap_or(old_features.contains_filter),
     };
 
     // explicitly destructure for analytics rather than using the `Serialize` implementation, because
@@ -82,6 +85,7 @@ async fn patch_features(
         metrics,
         logs_route,
         edit_documents_by_function,
+        contains_filter,
     } = new_features;
 
     analytics.publish(
@@ -91,6 +95,7 @@ async fn patch_features(
             "metrics": metrics,
             "logs_route": logs_route,
             "edit_documents_by_function": edit_documents_by_function,
+            "contains_filter": contains_filter,
         }),
         Some(&req),
     );

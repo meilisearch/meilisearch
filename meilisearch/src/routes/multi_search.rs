@@ -112,6 +112,7 @@ pub async fn multi_search_with_post(
                         ));
                     }
 
+                    let features = index_scheduler.features();
                     let index = index_scheduler
                         .index(&index_uid)
                         .map_err(|err| {
@@ -130,7 +131,7 @@ pub async fn multi_search_with_post(
                         .with_index(query_index)?;
 
                     let search_result = tokio::task::spawn_blocking(move || {
-                        perform_search(&index, query, search_kind, retrieve_vector)
+                        perform_search(&index, query, search_kind, retrieve_vector, features)
                     })
                     .await
                     .with_index(query_index)?;

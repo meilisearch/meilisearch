@@ -1860,7 +1860,8 @@ async fn import_dump_v6_containing_experimental_features() {
       "vectorStore": false,
       "metrics": false,
       "logsRoute": false,
-      "editDocumentsByFunction": false
+      "editDocumentsByFunction": false,
+      "containsFilter": false
     }
     "###);
 
@@ -1954,7 +1955,8 @@ async fn generate_and_import_dump_containing_vectors() {
       "vectorStore": true,
       "metrics": false,
       "logsRoute": false,
-      "editDocumentsByFunction": false
+      "editDocumentsByFunction": false,
+      "containsFilter": false
     }
     "###);
     let index = server.index("pets");
@@ -2025,7 +2027,8 @@ async fn generate_and_import_dump_containing_vectors() {
       "vectorStore": true,
       "metrics": false,
       "logsRoute": false,
-      "editDocumentsByFunction": false
+      "editDocumentsByFunction": false,
+      "containsFilter": false
     }
     "###);
 

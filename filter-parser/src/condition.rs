@@ -26,6 +26,7 @@ pub enum Condition<'a> {
     LowerThan(Token<'a>),
     LowerThanOrEqual(Token<'a>),
     Between { from: Token<'a>, to: Token<'a> },
+    Contains(Token<'a>),
 }
 
 /// condition      = value ("==" | ">" ...) value
@@ -90,6 +91,23 @@ pub fn parse_not_exists(input: Span) -> IResult<FilterCondition> {
 
     let (input, _) = tuple((tag("NOT"), multispace1, tag("EXISTS")))(input)?;
     Ok((input, FilterCondition::Not(Box::new(FilterCondition::Condition { fid: key, op: Exists }))))
+}
+
+/// contains        = value "CONTAINS" value
+pub fn parse_contains(input: Span) -> IResult<FilterCondition> {
+    let (input, (fid, _, value)) = tuple((parse_value, tag("CONTAINS"), cut(parse_value)))(input)?;
+    Ok((input, FilterCondition::Condition { fid, op: Contains(value) }))
+}
+
+/// contains        = value "NOT" WS+ "CONTAINS" value
+pub fn parse_not_contains(input: Span) -> IResult<FilterCondition> {
+    let keyword = tuple((tag("NOT"), multispace1, tag("CONTAINS")));
+    let (input, (fid, _, value)) = tuple((parse_value, keyword, cut(parse_value)))(input)?;
+
+    Ok((
+        input,
+        FilterCondition::Not(Box::new(FilterCondition::Condition { fid, op: Contains(value) })),
+    ))
 }
 
 /// to             = value value "TO" WS+ value

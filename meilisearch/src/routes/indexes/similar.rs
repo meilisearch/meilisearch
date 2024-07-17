@@ -106,7 +106,14 @@ async fn similar(
         SearchKind::embedder(&index_scheduler, &index, query.embedder.as_deref(), None)?;
 
     tokio::task::spawn_blocking(move || {
-        perform_similar(&index, query, embedder_name, embedder, retrieve_vectors)
+        perform_similar(
+            &index,
+            query,
+            embedder_name,
+            embedder,
+            retrieve_vectors,
+            index_scheduler.features(),
+        )
     })
     .await?
 }

@@ -4,6 +4,8 @@ use std::ops::Bound::{self, Excluded, Included};
 
 use either::Either;
 pub use filter_parser::{Condition, Error as FPError, FilterCondition, Token};
+use heed::types::LazyDecode;
+use memchr::memmem::Finder;
 use roaring::{MultiOps, RoaringBitmap};
 use serde_json::Value;
 
@@ -12,7 +14,11 @@ use crate::error::{Error, UserError};
 use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec, OrderedF64Codec,
 };
-use crate::{distance_between_two_points, lat_lng_to_xyz, FieldId, Index, Result};
+use crate::index::db_name::FACET_ID_STRING_DOCIDS;
+use crate::{
+    distance_between_two_points, lat_lng_to_xyz, FieldId, Index, InternalError, Result,
+    SerializationError,
+};
 
 /// The maximum number of filters the filter AST can process.
 const MAX_FILTER_DEPTH: usize = 2000;
@@ -218,6 +224,10 @@ impl<'a> Filter<'a> {
 
         Ok(Some(Self { condition }))
     }
+
+    pub fn use_contains_operator(&self) -> Option<&Token> {
+        self.condition.use_contains_operator()
+    }
 }
 
 impl<'a> Filter<'a> {
@@ -294,6 +304,41 @@ impl<'a> Filter<'a> {
                 let docids = Self::evaluate_operator(rtxn, index, field_id, None, &operator)?;
                 let all_ids = index.documents_ids(rtxn)?;
                 return Ok(all_ids - docids);
+            }
+            Condition::Contains(val) => {
+                let value = crate::normalize_facet(val.value());
+                let finder = Finder::new(&value);
+                let base = FacetGroupKey { field_id, level: 0, left_bound: "" };
+                let docids = strings_db
+                    .prefix_iter(rtxn, &base)?
+                    .remap_data_type::<LazyDecode<FacetGroupValueCodec>>()
+                    .filter_map(|result| -> Option<Result<RoaringBitmap>> {
+                        match result {
+                            Ok((FacetGroupKey { left_bound, .. }, lazy_group_value)) => {
+                                if finder.find(left_bound.as_bytes()).is_some() {
+                                    Some(lazy_group_value.decode().map(|gv| gv.bitmap).map_err(
+                                        |_| {
+                                            InternalError::from(SerializationError::Decoding {
+                                                db_name: Some(FACET_ID_STRING_DOCIDS),
+                                            })
+                                            .into()
+                                        },
+                                    ))
+                                } else {
+                                    None
+                                }
+                            }
+                            Err(_e) => {
+                                Some(Err(InternalError::from(SerializationError::Decoding {
+                                    db_name: Some(FACET_ID_STRING_DOCIDS),
+                                })
+                                .into()))
+                            }
+                        }
+                    })
+                    .union()?;
+
+                return Ok(docids);
             }
         };
 

@@ -56,7 +56,8 @@ async fn basic() {
       "vectorStore": true,
       "metrics": false,
       "logsRoute": false,
-      "editDocumentsByFunction": false
+      "editDocumentsByFunction": false,
+      "containsFilter": false
     }
     "###);
 
@@ -246,7 +247,8 @@ async fn ranking_score_threshold() {
       "vectorStore": true,
       "metrics": false,
       "logsRoute": false,
-      "editDocumentsByFunction": false
+      "editDocumentsByFunction": false,
+      "containsFilter": false
     }
     "###);
 
@@ -526,7 +528,8 @@ async fn filter() {
       "vectorStore": true,
       "metrics": false,
       "logsRoute": false,
-      "editDocumentsByFunction": false
+      "editDocumentsByFunction": false,
+      "containsFilter": false
     }
     "###);
 
@@ -654,7 +657,8 @@ async fn limit_and_offset() {
       "vectorStore": true,
       "metrics": false,
       "logsRoute": false,
-      "editDocumentsByFunction": false
+      "editDocumentsByFunction": false,
+      "containsFilter": false
     }
     "###);
 
