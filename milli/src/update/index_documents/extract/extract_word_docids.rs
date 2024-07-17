@@ -10,6 +10,7 @@ use super::helpers::{
     create_sorter, create_writer, merge_deladd_cbo_roaring_bitmaps, try_split_array_at,
     writer_into_reader, GrenadParameters,
 };
+use super::REDIS_CLIENT;
 use crate::error::SerializationError;
 use crate::heed_codec::StrBEU16Codec;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
@@ -37,6 +38,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     grenad::Reader<BufReader<File>>,
 )> {
     let max_memory = indexer.max_memory_by_thread();
+    let mut conn = REDIS_CLIENT.get_connection().unwrap();
 
     let mut word_fid_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,
@@ -80,6 +82,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
             &del_words,
             &add_words,
             &mut word_fid_docids_sorter,
+            &mut conn,
         )?;
 
         del_words.clear();
@@ -164,6 +167,7 @@ fn words_into_sorter(
     del_words: &BTreeSet<Vec<u8>>,
     add_words: &BTreeSet<Vec<u8>>,
     word_fid_docids_sorter: &mut grenad::Sorter<MergeFn>,
+    conn: &mut redis::Connection,
 ) -> Result<()> {
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};
@@ -192,18 +196,21 @@ fn words_into_sorter(
         key_buffer.extend_from_slice(word_bytes);
         key_buffer.push(0);
         key_buffer.extend_from_slice(&fid.to_be_bytes());
+        redis::cmd("INCR").arg(key_buffer.as_slice()).query::<usize>(conn).unwrap();
         word_fid_docids_sorter.insert(&key_buffer, value_writer.into_inner().unwrap())?;
     }
 
     Ok(())
 }
 
+// TODO do we still use this?
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 fn docids_into_writers<W>(
     word: &str,
     deletions: &RoaringBitmap,
     additions: &RoaringBitmap,
     writer: &mut grenad::Writer<W>,
+    conn: &mut redis::Connection,
 ) -> Result<()>
 where
     W: std::io::Write,
@@ -235,6 +242,7 @@ where
     }
 
     // insert everything in the same writer.
+    redis::cmd("INCR").arg(word.as_bytes()).query::<usize>(conn).unwrap();
     writer.insert(word.as_bytes(), obkv.into_inner().unwrap())?;
 
     Ok(())

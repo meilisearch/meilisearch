@@ -35,6 +35,9 @@ use crate::update::settings::InnerIndexSettingsDiff;
 use crate::vector::error::PossibleEmbeddingMistakes;
 use crate::{FieldId, Result, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 
+pub static REDIS_CLIENT: once_cell::sync::Lazy<redis::Client> =
+    once_cell::sync::Lazy::new(|| redis::Client::open("redis://127.0.0.1/").unwrap());
+
 /// Extract data for each databases from obkv documents in parallel.
 /// Send data in grenad file over provided Sender.
 #[allow(clippy::too_many_arguments)]

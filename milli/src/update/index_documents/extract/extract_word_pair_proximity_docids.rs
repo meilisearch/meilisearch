@@ -26,6 +26,8 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<grenad::Reader<BufReader<File>>> {
+    let mut conn = super::REDIS_CLIENT.get_connection().unwrap();
+
     // early return if the data shouldn't be deleted nor created.
     if settings_diff.settings_update_only && !settings_diff.reindex_proximities() {
         let writer = create_writer(
@@ -78,6 +80,7 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
                 &del_word_pair_proximity,
                 &add_word_pair_proximity,
                 &mut word_pair_proximity_docids_sorters,
+                &mut conn,
             )?;
             del_word_pair_proximity.clear();
             add_word_pair_proximity.clear();
@@ -168,6 +171,7 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
             &del_word_pair_proximity,
             &add_word_pair_proximity,
             &mut word_pair_proximity_docids_sorters,
+            &mut conn,
         )?;
     }
     {
@@ -198,6 +202,7 @@ fn document_word_positions_into_sorter(
     del_word_pair_proximity: &BTreeMap<(String, String), u8>,
     add_word_pair_proximity: &BTreeMap<(String, String), u8>,
     word_pair_proximity_docids_sorters: &mut [grenad::Sorter<MergeFn>],
+    conn: &mut redis::Connection,
 ) -> Result<()> {
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};
@@ -233,6 +238,7 @@ fn document_word_positions_into_sorter(
         key_buffer.push(0);
         key_buffer.extend_from_slice(w2.as_bytes());
 
+        redis::cmd("INCR").arg(key_buffer.as_slice()).query::<usize>(conn).unwrap();
         word_pair_proximity_docids_sorters[*prox as usize - 1]
             .insert(&key_buffer, value_writer.into_inner().unwrap())?;
     }

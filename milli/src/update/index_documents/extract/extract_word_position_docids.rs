@@ -25,6 +25,7 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     _settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<grenad::Reader<BufReader<File>>> {
+    let mut conn = super::REDIS_CLIENT.get_connection().unwrap();
     let max_memory = indexer.max_memory_by_thread();
 
     let mut word_position_docids_sorter = create_sorter(
@@ -53,6 +54,7 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
                 &del_word_positions,
                 &add_word_positions,
                 &mut word_position_docids_sorter,
+                &mut conn,
             )?;
             del_word_positions.clear();
             add_word_positions.clear();
@@ -85,6 +87,7 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
             &del_word_positions,
             &add_word_positions,
             &mut word_position_docids_sorter,
+            &mut conn,
         )?;
     }
 
@@ -101,6 +104,7 @@ fn words_position_into_sorter(
     del_word_positions: &BTreeSet<(u16, Vec<u8>)>,
     add_word_positions: &BTreeSet<(u16, Vec<u8>)>,
     word_position_docids_sorter: &mut grenad::Sorter<MergeFn>,
+    conn: &mut redis::Connection,
 ) -> Result<()> {
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};
@@ -131,6 +135,7 @@ fn words_position_into_sorter(
         key_buffer.extend_from_slice(word_bytes);
         key_buffer.push(0);
         key_buffer.extend_from_slice(&position.to_be_bytes());
+        redis::cmd("INCR").arg(key_buffer.as_slice()).query::<usize>(conn).unwrap();
         word_position_docids_sorter.insert(&key_buffer, value_writer.into_inner().unwrap())?;
     }
 

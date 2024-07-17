@@ -26,6 +26,7 @@ pub fn extract_fid_word_count_docids<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     _settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<grenad::Reader<BufReader<File>>> {
+    let mut conn = super::REDIS_CLIENT.get_connection().unwrap();
     let max_memory = indexer.max_memory_by_thread();
 
     let mut fid_word_count_docids_sorter = create_sorter(
@@ -70,6 +71,7 @@ pub fn extract_fid_word_count_docids<R: io::Read + io::Seek>(
                 key_buffer.clear();
                 key_buffer.extend_from_slice(fid_bytes);
                 key_buffer.push(word_count as u8);
+                redis::cmd("INCR").arg(key_buffer.as_slice()).query::<usize>(&mut conn).unwrap();
                 fid_word_count_docids_sorter
                     .insert(&key_buffer, value_writer.into_inner().unwrap())?;
             }
@@ -81,6 +83,7 @@ pub fn extract_fid_word_count_docids<R: io::Read + io::Seek>(
                 key_buffer.clear();
                 key_buffer.extend_from_slice(fid_bytes);
                 key_buffer.push(word_count as u8);
+                redis::cmd("INCR").arg(key_buffer.as_slice()).query::<usize>(&mut conn).unwrap();
                 fid_word_count_docids_sorter
                     .insert(&key_buffer, value_writer.into_inner().unwrap())?;
             }

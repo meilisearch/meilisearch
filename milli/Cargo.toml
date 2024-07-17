@@ -67,6 +67,8 @@ filter-parser = { path = "../filter-parser" }
 # documents words self-join
 itertools = "0.13.0"
 
+redis = "0.25.4"
+
 csv = "1.3.0"
 candle-core = { version = "0.6.0" }
 candle-transformers = { version = "0.6.0" }
