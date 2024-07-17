@@ -1,11 +1,13 @@
 use std::collections::{HashMap, HashSet};
+use std::num::NonZeroUsize;
 
 use grenad::CompressionType;
-use heed::types::{Bytes, Str};
+use heed::types::Str;
 use heed::Database;
 
+use super::index_documents::cache::SorterCacheDelAddCboRoaringBitmap;
 use super::index_documents::REDIS_CLIENT;
-use crate::update::del_add::{deladd_serialize_add_side, DelAdd, KvWriterDelAdd};
+use crate::update::del_add::deladd_serialize_add_side;
 use crate::update::index_documents::{
     create_sorter, merge_deladd_cbo_roaring_bitmaps,
     merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, valid_lmdb_key,
@@ -53,17 +55,20 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
         common_prefix_fst_words: &[&[String]],
         del_prefix_fst_words: &HashSet<Vec<u8>>,
     ) -> Result<()> {
-        let mut conn = REDIS_CLIENT.get_connection().unwrap();
-
         // It is forbidden to keep a mutable reference into the database
         // and write into it at the same time, therefore we write into another file.
-        let mut prefix_docids_sorter = create_sorter(
+        let prefix_docids_sorter = create_sorter(
             grenad::SortAlgorithm::Unstable,
             merge_deladd_cbo_roaring_bitmaps,
             self.chunk_compression_type,
             self.chunk_compression_level,
             self.max_nb_chunks,
             self.max_memory,
+        );
+        let mut cached_prefix_docids_sorter = SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
+            NonZeroUsize::new(200).unwrap(),
+            prefix_docids_sorter,
+            REDIS_CLIENT.get_connection().unwrap(),
         );
 
         if !common_prefix_fst_words.is_empty() {
@@ -76,8 +81,7 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
                     _otherwise => {
                         write_prefixes_in_sorter(
                             &mut prefixes_cache,
-                            &mut prefix_docids_sorter,
-                            &mut conn,
+                            &mut cached_prefix_docids_sorter,
                         )?;
                         common_prefix_fst_words
                             .iter()
@@ -100,22 +104,17 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
                 }
             }
 
-            write_prefixes_in_sorter(&mut prefixes_cache, &mut prefix_docids_sorter, &mut conn)?;
+            write_prefixes_in_sorter(&mut prefixes_cache, &mut cached_prefix_docids_sorter)?;
         }
 
         // We fetch the docids associated to the newly added word prefix fst only.
-        let db = self.word_docids.remap_data_type::<Bytes>();
-        let mut buffer = Vec::new();
+        let db = self.word_docids.lazily_decode_data();
         for prefix in new_prefix_fst_words {
             let prefix = std::str::from_utf8(prefix.as_bytes())?;
             for result in db.prefix_iter(self.wtxn, prefix)? {
-                let (_word, data) = result?;
-                buffer.clear();
-                let mut writer = KvWriterDelAdd::new(&mut buffer);
-                writer.insert(DelAdd::Addition, data)?;
-
-                redis::cmd("INCR").arg(prefix.as_bytes()).query::<usize>(&mut conn).unwrap();
-                prefix_docids_sorter.insert(prefix, writer.into_inner()?)?;
+                let (_word, lazy_data) = result?;
+                cached_prefix_docids_sorter
+                    .insert_add(prefix.as_bytes(), lazy_data.decode().unwrap())?;
             }
         }
 
@@ -133,7 +132,7 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
 
         // We finally write the word prefix docids into the LMDB database.
         write_sorter_into_database(
-            prefix_docids_sorter,
+            cached_prefix_docids_sorter.into_sorter()?,
             &self.word_prefix_docids,
             self.wtxn,
             database_is_empty,
@@ -147,14 +146,12 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
 
 fn write_prefixes_in_sorter(
     prefixes: &mut HashMap<Vec<u8>, Vec<Vec<u8>>>,
-    sorter: &mut grenad::Sorter<MergeFn>,
-    conn: &mut redis::Connection,
+    sorter: &mut SorterCacheDelAddCboRoaringBitmap<20, MergeFn>,
 ) -> Result<()> {
     for (key, data_slices) in prefixes.drain() {
         for data in data_slices {
             if valid_lmdb_key(&key) {
-                redis::cmd("INCR").arg(key.as_slice()).query::<usize>(conn).unwrap();
-                sorter.insert(&key, data)?;
+                sorter.direct_insert(&key, &data)?;
             }
         }
     }

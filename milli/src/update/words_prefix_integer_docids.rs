@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::num::NonZeroUsize;
 use std::str;
 
 use grenad::CompressionType;
@@ -9,7 +10,8 @@ use tracing::debug;
 use crate::error::SerializationError;
 use crate::heed_codec::StrBEU16Codec;
 use crate::index::main_key::WORDS_PREFIXES_FST_KEY;
-use crate::update::del_add::{deladd_serialize_add_side, DelAdd, KvWriterDelAdd};
+use crate::update::del_add::deladd_serialize_add_side;
+use crate::update::index_documents::cache::SorterCacheDelAddCboRoaringBitmap;
 use crate::update::index_documents::{
     create_sorter, merge_deladd_cbo_roaring_bitmaps,
     merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, valid_lmdb_key,
@@ -59,9 +61,7 @@ impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
     ) -> Result<()> {
         debug!("Computing and writing the word levels integers docids into LMDB on disk...");
 
-        let mut conn = REDIS_CLIENT.get_connection().unwrap();
-
-        let mut prefix_integer_docids_sorter = create_sorter(
+        let prefix_integer_docids_sorter = create_sorter(
             grenad::SortAlgorithm::Unstable,
             merge_deladd_cbo_roaring_bitmaps,
             self.chunk_compression_type,
@@ -69,6 +69,12 @@ impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
             self.max_nb_chunks,
             self.max_memory,
         );
+        let mut cached_prefix_integer_docids_sorter =
+            SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
+                NonZeroUsize::new(200).unwrap(),
+                prefix_integer_docids_sorter,
+                REDIS_CLIENT.get_connection().unwrap(),
+            );
 
         if !common_prefix_fst_words.is_empty() {
             // We fetch all the new common prefixes between the previous and new prefix fst.
@@ -86,8 +92,7 @@ impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
                     _otherwise => {
                         write_prefixes_in_sorter(
                             &mut prefixes_cache,
-                            &mut prefix_integer_docids_sorter,
-                            &mut conn,
+                            &mut cached_prefix_integer_docids_sorter,
                         )?;
                         common_prefix_fst_words
                             .iter()
@@ -115,14 +120,12 @@ impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
 
             write_prefixes_in_sorter(
                 &mut prefixes_cache,
-                &mut prefix_integer_docids_sorter,
-                &mut conn,
+                &mut cached_prefix_integer_docids_sorter,
             )?;
         }
 
         // We fetch the docids associated to the newly added word prefix fst only.
-        let db = self.word_database.remap_data_type::<Bytes>();
-        let mut buffer = Vec::new();
+        let db = self.word_database.lazily_decode_data();
         for prefix_bytes in new_prefix_fst_words {
             let prefix = str::from_utf8(prefix_bytes.as_bytes()).map_err(|_| {
                 SerializationError::Decoding { db_name: Some(WORDS_PREFIXES_FST_KEY) }
@@ -134,16 +137,12 @@ impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
                 .prefix_iter(self.wtxn, prefix_bytes.as_bytes())?
                 .remap_key_type::<StrBEU16Codec>();
             for result in iter {
-                let ((word, pos), data) = result?;
+                let ((word, pos), lazy_data) = result?;
                 if word.starts_with(prefix) {
                     let key = (prefix, pos);
                     let bytes = StrBEU16Codec::bytes_encode(&key).unwrap();
-
-                    buffer.clear();
-                    let mut writer = KvWriterDelAdd::new(&mut buffer);
-                    writer.insert(DelAdd::Addition, data)?;
-                    redis::cmd("INCR").arg(bytes.as_ref()).query::<usize>(&mut conn).unwrap();
-                    prefix_integer_docids_sorter.insert(bytes, writer.into_inner()?)?;
+                    cached_prefix_integer_docids_sorter
+                        .insert_add(&bytes, lazy_data.decode().unwrap())?;
                 }
             }
         }
@@ -167,7 +166,7 @@ impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
 
         // We finally write all the word prefix integer docids into the LMDB database.
         write_sorter_into_database(
-            prefix_integer_docids_sorter,
+            cached_prefix_integer_docids_sorter.into_sorter()?,
             &self.prefix_database,
             self.wtxn,
             database_is_empty,
@@ -181,15 +180,13 @@ impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
 
 fn write_prefixes_in_sorter(
     prefixes: &mut HashMap<Vec<u8>, Vec<Vec<u8>>>,
-    sorter: &mut grenad::Sorter<MergeFn>,
-    conn: &mut redis::Connection,
+    sorter: &mut SorterCacheDelAddCboRoaringBitmap<20, MergeFn>,
 ) -> Result<()> {
     // TODO: Merge before insertion.
     for (key, data_slices) in prefixes.drain() {
         for data in data_slices {
             if valid_lmdb_key(&key) {
-                redis::cmd("INCR").arg(key.as_slice()).query::<usize>(conn).unwrap();
-                sorter.insert(&key, data)?;
+                sorter.direct_insert(&key, &data)?;
             }
         }
     }

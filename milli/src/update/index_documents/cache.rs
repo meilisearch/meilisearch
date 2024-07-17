@@ -140,6 +140,10 @@ where
         self.sorter.insert(key, value_writer.into_inner().unwrap())
     }
 
+    pub fn direct_insert(&mut self, key: &[u8], val: &[u8]) -> Result<(), grenad::Error<U>> {
+        self.sorter.insert(key, val)
+    }
+
     pub fn into_sorter(mut self) -> Result<grenad::Sorter<MF>, grenad::Error<U>> {
         let default_lru = LruCache::new(NonZeroUsize::MIN);
         for (key, deladd) in mem::replace(&mut self.cache, default_lru) {
@@ -155,10 +159,6 @@ pub struct DelAddRoaringBitmap {
 }
 
 impl DelAddRoaringBitmap {
-    fn new_del_add(bitmap: RoaringBitmap) -> Self {
-        DelAddRoaringBitmap { del: Some(bitmap.clone()), add: Some(bitmap) }
-    }
-
     fn new_del_add_u32(n: u32) -> Self {
         DelAddRoaringBitmap {
             del: Some(RoaringBitmap::from([n])),
