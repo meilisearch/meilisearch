@@ -166,7 +166,7 @@ impl<'a> FilterCondition<'a> {
                 | Condition::LowerThan(_)
                 | Condition::LowerThanOrEqual(_)
                 | Condition::Between { .. } => None,
-                Condition::Contains(tok) => Some(tok),
+                Condition::Contains { keyword, word: _ } => Some(keyword),
             },
             FilterCondition::Not(this) => this.use_contains_operator(),
             FilterCondition::Or(seq) | FilterCondition::And(seq) => {
@@ -566,7 +566,7 @@ impl<'a> std::fmt::Display for Condition<'a> {
             Condition::LowerThan(token) => write!(f, "< {token}"),
             Condition::LowerThanOrEqual(token) => write!(f, "<= {token}"),
             Condition::Between { from, to } => write!(f, "{from} TO {to}"),
-            Condition::Contains(token) => write!(f, "CONTAINS {token}"),
+            Condition::Contains { word, keyword: _ } => write!(f, "CONTAINS {word}"),
         }
     }
 }

@@ -305,8 +305,8 @@ impl<'a> Filter<'a> {
                 let all_ids = index.documents_ids(rtxn)?;
                 return Ok(all_ids - docids);
             }
-            Condition::Contains(val) => {
-                let value = crate::normalize_facet(val.value());
+            Condition::Contains { keyword: _, word } => {
+                let value = crate::normalize_facet(word.value());
                 let finder = Finder::new(&value);
                 let base = FacetGroupKey { field_id, level: 0, left_bound: "" };
                 let docids = strings_db
