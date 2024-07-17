@@ -1281,6 +1281,7 @@ impl IndexScheduler {
                 operations,
                 mut tasks,
             } => {
+                let started_processing_at = std::time::Instant::now();
                 let mut primary_key_has_been_set = false;
                 let must_stop_processing = self.must_stop_processing.clone();
                 let indexer_config = self.index_mapper.indexer_config();
@@ -1395,7 +1396,7 @@ impl IndexScheduler {
 
                 if !tasks.iter().all(|res| res.error.is_some()) {
                     let addition = builder.execute()?;
-                    tracing::info!(indexing_result = ?addition, "document indexing done");
+                    tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
                 } else if primary_key_has_been_set {
                     // Everything failed but we've set a primary key.
                     // We need to remove it.
