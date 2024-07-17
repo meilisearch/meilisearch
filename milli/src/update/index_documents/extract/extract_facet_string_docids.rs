@@ -28,6 +28,7 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     _settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<(grenad::Reader<BufReader<File>>, grenad::Reader<BufReader<File>>)> {
+    let mut conn = super::REDIS_CLIENT.get_connection().unwrap();
     let max_memory = indexer.max_memory_by_thread();
     let options = NormalizerOption { lossy: true, ..Default::default() };
 
@@ -94,6 +95,7 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
 
             let key = (field_id, hyper_normalized_value.as_ref());
             let key_bytes = BEU16StrCodec::bytes_encode(&key).map_err(heed::Error::Encoding)?;
+            redis::cmd("INCR").arg(key_bytes.as_ref()).query::<usize>(&mut conn).unwrap();
             normalized_facet_string_docids_sorter.insert(key_bytes, &buffer)?;
         }
 
@@ -106,6 +108,7 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
             obkv.insert(deladd_key, document_id.to_ne_bytes())?;
         }
         obkv.finish()?;
+        redis::cmd("INCR").arg(key_bytes.as_ref()).query::<usize>(&mut conn).unwrap();
         facet_string_docids_sorter.insert(&key_bytes, &buffer)?;
     }
 

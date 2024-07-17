@@ -132,6 +132,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
             buffer.clear();
             let mut obkv = KvWriterDelAdd::new(&mut buffer);
             obkv.insert(DelAdd::Deletion, value)?;
+            redis::cmd("INCR").arg(w.as_bytes()).query::<usize>(&mut conn).unwrap();
             if delete_from_exact {
                 exact_word_docids_sorter.insert(w, obkv.into_inner().unwrap())?;
             } else {
@@ -144,6 +145,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
             buffer.clear();
             let mut obkv = KvWriterDelAdd::new(&mut buffer);
             obkv.insert(DelAdd::Addition, value)?;
+            redis::cmd("INCR").arg(w.as_bytes()).query::<usize>(&mut conn).unwrap();
             if add_in_exact {
                 exact_word_docids_sorter.insert(w, obkv.into_inner().unwrap())?;
             } else {

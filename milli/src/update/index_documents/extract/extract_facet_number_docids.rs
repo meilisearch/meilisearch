@@ -23,6 +23,7 @@ pub fn extract_facet_number_docids<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     _settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<grenad::Reader<BufReader<File>>> {
+    let mut conn = super::REDIS_CLIENT.get_connection().unwrap();
     let max_memory = indexer.max_memory_by_thread();
 
     let mut facet_number_docids_sorter = create_sorter(
@@ -50,6 +51,7 @@ pub fn extract_facet_number_docids<R: io::Read + io::Seek>(
         }
         obkv.finish()?;
 
+        redis::cmd("INCR").arg(key_bytes.as_ref()).query::<usize>(&mut conn).unwrap();
         facet_number_docids_sorter.insert(key_bytes, &buffer)?;
     }
 

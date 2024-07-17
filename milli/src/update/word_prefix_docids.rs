@@ -4,6 +4,7 @@ use grenad::CompressionType;
 use heed::types::{Bytes, Str};
 use heed::Database;
 
+use super::index_documents::REDIS_CLIENT;
 use crate::update::del_add::{deladd_serialize_add_side, DelAdd, KvWriterDelAdd};
 use crate::update::index_documents::{
     create_sorter, merge_deladd_cbo_roaring_bitmaps,
@@ -52,6 +53,8 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
         common_prefix_fst_words: &[&[String]],
         del_prefix_fst_words: &HashSet<Vec<u8>>,
     ) -> Result<()> {
+        let mut conn = REDIS_CLIENT.get_connection().unwrap();
+
         // It is forbidden to keep a mutable reference into the database
         // and write into it at the same time, therefore we write into another file.
         let mut prefix_docids_sorter = create_sorter(
@@ -71,7 +74,11 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
                 current_prefixes = match current_prefixes.take() {
                     Some(prefixes) if word.starts_with(prefixes[0].as_bytes()) => Some(prefixes),
                     _otherwise => {
-                        write_prefixes_in_sorter(&mut prefixes_cache, &mut prefix_docids_sorter)?;
+                        write_prefixes_in_sorter(
+                            &mut prefixes_cache,
+                            &mut prefix_docids_sorter,
+                            &mut conn,
+                        )?;
                         common_prefix_fst_words
                             .iter()
                             .find(|prefixes| word.starts_with(prefixes[0].as_bytes()))
@@ -93,7 +100,7 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
                 }
             }
 
-            write_prefixes_in_sorter(&mut prefixes_cache, &mut prefix_docids_sorter)?;
+            write_prefixes_in_sorter(&mut prefixes_cache, &mut prefix_docids_sorter, &mut conn)?;
         }
 
         // We fetch the docids associated to the newly added word prefix fst only.
@@ -107,6 +114,7 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
                 let mut writer = KvWriterDelAdd::new(&mut buffer);
                 writer.insert(DelAdd::Addition, data)?;
 
+                redis::cmd("INCR").arg(prefix.as_bytes()).query::<usize>(&mut conn).unwrap();
                 prefix_docids_sorter.insert(prefix, writer.into_inner()?)?;
             }
         }
@@ -140,10 +148,12 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
 fn write_prefixes_in_sorter(
     prefixes: &mut HashMap<Vec<u8>, Vec<Vec<u8>>>,
     sorter: &mut grenad::Sorter<MergeFn>,
+    conn: &mut redis::Connection,
 ) -> Result<()> {
     for (key, data_slices) in prefixes.drain() {
         for data in data_slices {
             if valid_lmdb_key(&key) {
+                redis::cmd("INCR").arg(key.as_slice()).query::<usize>(conn).unwrap();
                 sorter.insert(&key, data)?;
             }
         }
