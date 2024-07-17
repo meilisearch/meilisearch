@@ -25,12 +25,12 @@ pub enum MeilisearchHttpError {
     DocumentNotFound(String),
     #[error("Sending an empty filter is forbidden.")]
     EmptyFilter,
+    #[error("Invalid syntax for the filter parameter: `expected {}, found: {1}`.", .0.join(", "))]
+    InvalidExpression(&'static [&'static str], Value),
     #[error("Using `federationOptions` is not allowed in a non-federated search.\n Hint: remove `federationOptions` from query #{0} or add `federation: {{}}` to the request.")]
     FederationOptionsInNonFederatedRequest(usize),
     #[error("Inside `.queries[{0}]`: Using pagination options is not allowed in federated queries.\n Hint: remove `{1}` from query #{0} or remove `federation: {{}}` from the request")]
     PaginationInFederatedQuery(usize, &'static str),
-    #[error("Invalid syntax for the filter parameter: `expected {}, found: {1}`.", .0.join(", "))]
-    InvalidExpression(&'static [&'static str], Value),
     #[error("A {0} payload is missing.")]
     MissingPayload(PayloadType),
     #[error("Too many search requests running at the same time: {0}. Retry after 10s.")]

@@ -54,6 +54,7 @@ const MEILI_LOG_LEVEL: &str = "MEILI_LOG_LEVEL";
 const MEILI_EXPERIMENTAL_LOGS_MODE: &str = "MEILI_EXPERIMENTAL_LOGS_MODE";
 const MEILI_EXPERIMENTAL_REPLICATION_PARAMETERS: &str = "MEILI_EXPERIMENTAL_REPLICATION_PARAMETERS";
 const MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE: &str = "MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE";
+const MEILI_EXPERIMENTAL_CONTAINS_FILTER: &str = "MEILI_EXPERIMENTAL_CONTAINS_FILTER";
 const MEILI_EXPERIMENTAL_ENABLE_METRICS: &str = "MEILI_EXPERIMENTAL_ENABLE_METRICS";
 const MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE: &str = "MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE";
 const MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE: &str =
@@ -339,6 +340,13 @@ pub struct Opt {
     #[serde(default)]
     pub log_level: LogLevel,
 
+    /// Experimental contains filter feature. For more information, see: <https://github.com/orgs/meilisearch/discussions/763>
+    ///
+    /// Enables the experimental contains filter operator.
+    #[clap(long, env = MEILI_EXPERIMENTAL_CONTAINS_FILTER)]
+    #[serde(default)]
+    pub experimental_contains_filter: bool,
+
     /// Experimental metrics feature. For more information, see: <https://github.com/meilisearch/meilisearch/discussions/3518>
     ///
     /// Enables the Prometheus metrics on the `GET /metrics` endpoint.
@@ -483,6 +491,7 @@ impl Opt {
             config_file_path: _,
             #[cfg(feature = "analytics")]
             no_analytics,
+            experimental_contains_filter,
             experimental_enable_metrics,
             experimental_search_queue_size,
             experimental_logs_mode,
@@ -540,6 +549,10 @@ impl Opt {
 
         export_to_env_if_not_present(MEILI_DUMP_DIR, dump_dir);
         export_to_env_if_not_present(MEILI_LOG_LEVEL, log_level.to_string());
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_CONTAINS_FILTER,
+            experimental_contains_filter.to_string(),
+        );
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_ENABLE_METRICS,
             experimental_enable_metrics.to_string(),
@@ -617,6 +630,7 @@ impl Opt {
         InstanceTogglableFeatures {
             metrics: self.experimental_enable_metrics,
             logs_route: self.experimental_enable_logs_route,
+            contains_filter: self.experimental_contains_filter,
         }
     }
 }

@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 
 use deserr::Deserr;
 use either::Either;
+use index_scheduler::RoFeatures;
 use indexmap::IndexMap;
 use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::DeserrJsonError;
@@ -761,7 +762,8 @@ fn prepare_search<'t>(
     query: &'t SearchQuery,
     search_kind: &SearchKind,
     time_budget: TimeBudget,
-) -> Result<(milli::Search<'t>, bool, usize, usize), MeilisearchHttpError> {
+    features: RoFeatures,
+) -> Result<(milli::Search<'t>, bool, usize, usize), ResponseError> {
     let mut search = index.search(rtxn);
     search.time_budget(time_budget);
     if let Some(ranking_score_threshold) = query.ranking_score_threshold {
@@ -848,7 +850,7 @@ fn prepare_search<'t>(
     search.limit(limit);
 
     if let Some(ref filter) = query.filter {
-        if let Some(facets) = parse_filter(filter)? {
+        if let Some(facets) = parse_filter(filter, Code::InvalidSearchFilter, features)? {
             search.filter(facets);
         }
     }
@@ -872,7 +874,8 @@ pub fn perform_search(
     query: SearchQuery,
     search_kind: SearchKind,
     retrieve_vectors: RetrieveVectors,
-) -> Result<SearchResult, MeilisearchHttpError> {
+    features: RoFeatures,
+) -> Result<SearchResult, ResponseError> {
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
     let time_budget = match index.search_cutoff(&rtxn)? {
@@ -881,7 +884,7 @@ pub fn perform_search(
     };
 
     let (search, is_finite_pagination, max_total_hits, offset) =
-        prepare_search(index, &rtxn, &query, &search_kind, time_budget)?;
+        prepare_search(index, &rtxn, &query, &search_kind, time_budget, features)?;
 
     let (
         milli::SearchResult {
@@ -1337,7 +1340,8 @@ pub fn perform_facet_search(
     facet_query: Option<String>,
     facet_name: String,
     search_kind: SearchKind,
-) -> Result<FacetSearchResult, MeilisearchHttpError> {
+    features: RoFeatures,
+) -> Result<FacetSearchResult, ResponseError> {
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
     let time_budget = match index.search_cutoff(&rtxn)? {
@@ -1345,7 +1349,8 @@ pub fn perform_facet_search(
         None => TimeBudget::default(),
     };
 
-    let (search, _, _, _) = prepare_search(index, &rtxn, &search_query, &search_kind, time_budget)?;
+    let (search, _, _, _) =
+        prepare_search(index, &rtxn, &search_query, &search_kind, time_budget, features)?;
     let mut facet_search = SearchForFacetValues::new(
         facet_name,
         search,
@@ -1371,6 +1376,7 @@ pub fn perform_similar(
     embedder_name: String,
     embedder: Arc<Embedder>,
     retrieve_vectors: RetrieveVectors,
+    features: RoFeatures,
 ) -> Result<SimilarResult, ResponseError> {
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
@@ -1401,10 +1407,7 @@ pub fn perform_similar(
         milli::Similar::new(internal_id, offset, limit, index, &rtxn, embedder_name, embedder);
 
     if let Some(ref filter) = query.filter {
-        if let Some(facets) = parse_filter(filter)
-            // inject InvalidSimilarFilter code
-            .map_err(|e| ResponseError::from_msg(e.to_string(), Code::InvalidSimilarFilter))?
-        {
+        if let Some(facets) = parse_filter(filter, Code::InvalidSimilarFilter, features)? {
             similar.filter(facets);
         }
     }
@@ -1760,15 +1763,33 @@ fn format_value(
     }
 }
 
-pub(crate) fn parse_filter(facets: &Value) -> Result<Option<Filter>, MeilisearchHttpError> {
-    match facets {
-        Value::String(expr) => {
-            let condition = Filter::from_str(expr)?;
-            Ok(condition)
+pub(crate) fn parse_filter(
+    facets: &Value,
+    filter_parsing_error_code: Code,
+    features: RoFeatures,
+) -> Result<Option<Filter>, ResponseError> {
+    let filter = match facets {
+        Value::String(expr) => Filter::from_str(expr).map_err(|e| e.into()),
+        Value::Array(arr) => parse_filter_array(arr).map_err(|e| e.into()),
+        v => Err(MeilisearchHttpError::InvalidExpression(&["String", "Array"], v.clone()).into()),
+    };
+    let filter = filter.map_err(|err: ResponseError| {
+        ResponseError::from_msg(err.to_string(), filter_parsing_error_code)
+    })?;
+
+    if let Some(ref filter) = filter {
+        // If the contains operator is used while the contains filter features is not enabled, errors out
+        if let Some((token, error)) =
+            filter.use_contains_operator().zip(features.check_contains_filter().err())
+        {
+            return Err(ResponseError::from_msg(
+                token.as_external_error(error).to_string(),
+                Code::FeatureNotEnabled,
+            ));
         }
-        Value::Array(arr) => parse_filter_array(arr),
-        v => Err(MeilisearchHttpError::InvalidExpression(&["String", "Array"], v.clone())),
     }
+
+    Ok(filter)
 }
 
 fn parse_filter_array(arr: &[Value]) -> Result<Option<Filter>, MeilisearchHttpError> {

@@ -17,7 +17,8 @@ async fn add_remove_user_provided() {
       "vectorStore": true,
       "metrics": false,
       "logsRoute": false,
-      "editDocumentsByFunction": false
+      "editDocumentsByFunction": false,
+      "containsFilter": false
     }
     "###);
 
@@ -171,7 +172,8 @@ async fn generate_default_user_provided_documents(server: &Server) -> Index {
       "vectorStore": true,
       "metrics": false,
       "logsRoute": false,
-      "editDocumentsByFunction": false
+      "editDocumentsByFunction": false,
+      "containsFilter": false
     }
     "###);
 
@@ -622,7 +624,8 @@ async fn add_remove_one_vector_4588() {
       "vectorStore": true,
       "metrics": false,
       "logsRoute": false,
-      "editDocumentsByFunction": false
+      "editDocumentsByFunction": false,
+      "containsFilter": false
     }
     "###);
 

@@ -261,6 +261,7 @@ impl super::Analytics for SegmentAnalytics {
 #[derive(Debug, Clone, Serialize)]
 struct Infos {
     env: String,
+    experimental_contains_filter: bool,
     experimental_enable_metrics: bool,
     experimental_search_queue_size: usize,
     experimental_logs_mode: LogMode,
@@ -303,6 +304,7 @@ impl From<Opt> for Infos {
         // Thus we must not insert `..` at the end.
         let Opt {
             db_path,
+            experimental_contains_filter,
             experimental_enable_metrics,
             experimental_search_queue_size,
             experimental_logs_mode,
@@ -353,6 +355,7 @@ impl From<Opt> for Infos {
         // We consider information sensible if it contains a path, an address, or a key.
         Self {
             env,
+            experimental_contains_filter,
             experimental_enable_metrics,
             experimental_search_queue_size,
             experimental_logs_mode,

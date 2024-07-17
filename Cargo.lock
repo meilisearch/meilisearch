@@ -3542,6 +3542,7 @@ dependencies = [
  "maplit",
  "md5",
  "meili-snap",
+ "memchr",
  "memmap2",
  "mimalloc",
  "obkv",

@@ -26,6 +26,15 @@ impl Value {
             panic!("Didn't find any task id in: {self}");
         }
     }
+
+    // Panic if the json doesn't contain the `status` field set to "succeeded"
+    #[track_caller]
+    pub fn succeeded(&self) -> &Self {
+        if self["status"] != serde_json::Value::String(String::from("succeeded")) {
+            panic!("Called succeeded on {}", serde_json::to_string_pretty(&self.0).unwrap());
+        }
+        self
+    }
 }
 
 impl From<serde_json::Value> for Value {

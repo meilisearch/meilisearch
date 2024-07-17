@@ -2141,6 +2141,47 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn test_contains() {
+        let index = TempIndex::new();
+
+        index
+            .update_settings(|settings| {
+                settings.set_filterable_fields(hashset! { S("doggo") });
+            })
+            .unwrap();
+        index
+            .add_documents(documents!([
+                { "id": 0, "doggo": "kefir" },
+                { "id": 1, "doggo": "kefirounet" },
+                { "id": 2, "doggo": "kefkef" },
+                { "id": 3, "doggo": "fifir" },
+                { "id": 4, "doggo": "boubou" },
+                { "id": 5 },
+            ]))
+            .unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let mut search = index.search(&rtxn);
+        let search_result = search
+            .filter(Filter::from_str("doggo CONTAINS kefir").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0, 1]>");
+        let mut search = index.search(&rtxn);
+        let search_result = search
+            .filter(Filter::from_str("doggo CONTAINS KEF").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0, 1, 2]>");
+        let mut search = index.search(&rtxn);
+        let search_result = search
+            .filter(Filter::from_str("doggo NOT CONTAINS fir").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[2, 4, 5]>");
+    }
+
+    #[test]
     fn replace_documents_external_ids_and_soft_deletion_check() {
         use big_s::S;
         use maplit::hashset;

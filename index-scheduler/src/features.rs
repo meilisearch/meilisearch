@@ -81,6 +81,19 @@ impl RoFeatures {
             .into())
         }
     }
+
+    pub fn check_contains_filter(&self) -> Result<()> {
+        if self.runtime.contains_filter {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action: "Using `CONTAINS` in a filter",
+                feature: "contains filter",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/763",
+            }
+            .into())
+        }
+    }
 }
 
 impl FeatureData {
@@ -92,9 +105,11 @@ impl FeatureData {
         let txn = env.read_txn()?;
         let persisted_features: RuntimeTogglableFeatures =
             runtime_features_db.get(&txn, EXPERIMENTAL_FEATURES)?.unwrap_or_default();
+        let InstanceTogglableFeatures { metrics, logs_route, contains_filter } = instance_features;
         let runtime = Arc::new(RwLock::new(RuntimeTogglableFeatures {
-            metrics: instance_features.metrics || persisted_features.metrics,
-            logs_route: instance_features.logs_route || persisted_features.logs_route,
+            metrics: metrics || persisted_features.metrics,
+            logs_route: logs_route || persisted_features.logs_route,
+            contains_filter: contains_filter || persisted_features.contains_filter,
             ..persisted_features
         }));
 
