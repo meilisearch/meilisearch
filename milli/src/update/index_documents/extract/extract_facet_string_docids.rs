@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::BufReader;
 use std::iter::FromIterator;
+use std::num::NonZeroUsize;
 use std::{io, str};
 
 use charabia::normalizer::{Normalize, NormalizerOption};
@@ -9,13 +10,16 @@ use heed::types::SerdeJson;
 use heed::BytesEncode;
 
 use super::helpers::{create_sorter, sorter_into_reader, try_split_array_at, GrenadParameters};
+use super::REDIS_CLIENT;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
 use crate::heed_codec::{BEU16StrCodec, StrRefCodec};
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
+use crate::update::index_documents::cache::SorterCacheDelAddCboRoaringBitmap;
 use crate::update::index_documents::helpers::{
     merge_deladd_btreeset_string, merge_deladd_cbo_roaring_bitmaps,
 };
 use crate::update::settings::InnerIndexSettingsDiff;
+use crate::update::MergeFn;
 use crate::{FieldId, Result, MAX_FACET_VALUE_LENGTH};
 
 /// Extracts the facet string and the documents ids where this facet string appear.
@@ -28,11 +32,11 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     _settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<(grenad::Reader<BufReader<File>>, grenad::Reader<BufReader<File>>)> {
-    let mut conn = super::REDIS_CLIENT.get_connection().unwrap();
+    let mut conn = REDIS_CLIENT.get_connection().unwrap();
     let max_memory = indexer.max_memory_by_thread();
     let options = NormalizerOption { lossy: true, ..Default::default() };
 
-    let mut facet_string_docids_sorter = create_sorter(
+    let facet_string_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
         merge_deladd_cbo_roaring_bitmaps,
         indexer.chunk_compression_type,
@@ -40,6 +44,12 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
         indexer.max_nb_chunks,
         max_memory.map(|m| m / 2),
     );
+    let mut cached_facet_string_docids_sorter =
+        SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
+            NonZeroUsize::new(200).unwrap(),
+            facet_string_docids_sorter,
+            REDIS_CLIENT.get_connection().unwrap(),
+        );
 
     let mut normalized_facet_string_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
@@ -101,17 +111,19 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
 
         let key = FacetGroupKey { field_id, level: 0, left_bound: normalized_value };
         let key_bytes = FacetGroupKeyCodec::<StrRefCodec>::bytes_encode(&key).unwrap();
-
-        buffer.clear();
-        let mut obkv = KvWriterDelAdd::new(&mut buffer);
         for (deladd_key, _) in deladd_reader.iter() {
-            obkv.insert(deladd_key, document_id.to_ne_bytes())?;
+            match deladd_key {
+                DelAdd::Deletion => {
+                    cached_facet_string_docids_sorter.insert_del_u32(&key_bytes, document_id)?
+                }
+                DelAdd::Addition => {
+                    cached_facet_string_docids_sorter.insert_add_u32(&key_bytes, document_id)?
+                }
+            }
         }
-        obkv.finish()?;
-        redis::cmd("INCR").arg(key_bytes.as_ref()).query::<usize>(&mut conn).unwrap();
-        facet_string_docids_sorter.insert(&key_bytes, &buffer)?;
     }
 
     let normalized = sorter_into_reader(normalized_facet_string_docids_sorter, indexer)?;
-    sorter_into_reader(facet_string_docids_sorter, indexer).map(|s| (s, normalized))
+    sorter_into_reader(cached_facet_string_docids_sorter.into_sorter()?, indexer)
+        .map(|s| (s, normalized))
 }
