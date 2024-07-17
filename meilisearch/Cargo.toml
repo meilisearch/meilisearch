@@ -17,7 +17,7 @@ actix-cors = "0.7.0"
 actix-http = { version = "3.8.0", default-features = false, features = [
     "compress-brotli",
     "compress-gzip",
-    "rustls-0_21",
+    "rustls-0_23",
 ] }
 actix-utils = "3.0.1"
 actix-web = { version = "4.8.0", default-features = false, features = [
@@ -25,7 +25,7 @@ actix-web = { version = "4.8.0", default-features = false, features = [
     "compress-brotli",
     "compress-gzip",
     "cookies",
-    "rustls-0_21",
+    "rustls-0_23",
 ] }
 anyhow = { version = "1.0.86", features = ["backtrace"] }
 async-trait = "0.1.81"
@@ -72,8 +72,9 @@ reqwest = { version = "0.12.5", features = [
     "rustls-tls",
     "json",
 ], default-features = false }
-rustls = "0.21.12"
-rustls-pemfile = "1.0.4"
+rustls = { version = "0.23.11", features = ["ring"], default-features = false }
+rustls-pki-types = { version = "1.7.0", features = ["alloc"] }
+rustls-pemfile = "2.1.2"
 segment = { version = "0.2.4", optional = true }
 serde = { version = "1.0.204", features = ["derive"] }
 serde_json = { version = "1.0.120", features = ["preserve_order"] }
