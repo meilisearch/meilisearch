@@ -14,11 +14,9 @@ use clap::Parser;
 use meilisearch_types::features::InstanceTogglableFeatures;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::ThreadPoolNoAbortBuilder;
-use rustls::server::{
-    AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, ServerSessionMemoryCache,
-};
+use rustls::server::{ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::RootCertStore;
-use rustls_pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
+use rustls_pemfile::{certs, rsa_private_keys};
 use serde::{Deserialize, Serialize};
 use sysinfo::{MemoryRefreshKind, RefreshKind, System};
 use url::Url;
@@ -569,23 +567,21 @@ impl Opt {
 
     pub fn get_ssl_config(&self) -> anyhow::Result<Option<rustls::ServerConfig>> {
         if let (Some(cert_path), Some(key_path)) = (&self.ssl_cert_path, &self.ssl_key_path) {
-            let config = rustls::ServerConfig::builder().with_safe_defaults();
+            let config = rustls::ServerConfig::builder();
 
             let config = match &self.ssl_auth_path {
                 Some(auth_path) => {
                     let roots = load_certs(auth_path.to_path_buf())?;
                     let mut client_auth_roots = RootCertStore::empty();
                     for root in roots {
-                        client_auth_roots.add(&root).unwrap();
+                        client_auth_roots.add(root).unwrap();
                     }
-                    if self.ssl_require_auth {
-                        let verifier = AllowAnyAuthenticatedClient::new(client_auth_roots);
-                        config.with_client_cert_verifier(Arc::from(verifier))
-                    } else {
-                        let verifier =
-                            AllowAnyAnonymousOrAuthenticatedClient::new(client_auth_roots);
-                        config.with_client_cert_verifier(Arc::from(verifier))
+                    let mut client_verifier =
+                        WebPkiClientVerifier::builder(client_auth_roots.into());
+                    if !self.ssl_require_auth {
+                        client_verifier = client_verifier.allow_unauthenticated();
                     }
+                    config.with_client_cert_verifier(client_verifier.build()?)
                 }
                 None => config.with_no_client_auth(),
             };
@@ -594,7 +590,7 @@ impl Opt {
             let privkey = load_private_key(key_path.to_path_buf())?;
             let ocsp = load_ocsp(&self.ssl_ocsp_path)?;
             let mut config = config
-                .with_single_cert_with_ocsp_and_sct(certs, privkey, ocsp, vec![])
+                .with_single_cert_with_ocsp(certs, privkey, ocsp)
                 .map_err(|_| anyhow::anyhow!("bad certificates/private key"))?;
 
             config.key_log = Arc::new(rustls::KeyLogFile::new());
@@ -604,7 +600,7 @@ impl Opt {
             }
 
             if self.ssl_tickets {
-                config.ticketer = rustls::Ticketer::new().unwrap();
+                config.ticketer = rustls::crypto::ring::Ticketer::new().unwrap();
             }
 
             Ok(Some(config))
@@ -769,21 +765,26 @@ impl Deref for MaxThreads {
     }
 }
 
-fn load_certs(filename: PathBuf) -> anyhow::Result<Vec<rustls::Certificate>> {
+fn load_certs(
+    filename: PathBuf,
+) -> anyhow::Result<Vec<rustls::pki_types::CertificateDer<'static>>> {
     let certfile =
         fs::File::open(filename).map_err(|_| anyhow::anyhow!("cannot open certificate file"))?;
     let mut reader = BufReader::new(certfile);
     certs(&mut reader)
-        .map(|certs| certs.into_iter().map(rustls::Certificate).collect())
+        .collect::<Result<Vec<_>, _>>()
         .map_err(|_| anyhow::anyhow!("cannot read certificate file"))
 }
 
-fn load_private_key(filename: PathBuf) -> anyhow::Result<rustls::PrivateKey> {
+fn load_private_key(
+    filename: PathBuf,
+) -> anyhow::Result<rustls::pki_types::PrivateKeyDer<'static>> {
     let rsa_keys = {
         let keyfile = fs::File::open(filename.clone())
             .map_err(|_| anyhow::anyhow!("cannot open private key file"))?;
         let mut reader = BufReader::new(keyfile);
         rsa_private_keys(&mut reader)
+            .collect::<Result<Vec<_>, _>>()
             .map_err(|_| anyhow::anyhow!("file contains invalid rsa private key"))?
     };
 
@@ -791,19 +792,21 @@ fn load_private_key(filename: PathBuf) -> anyhow::Result<rustls::PrivateKey> {
         let keyfile = fs::File::open(filename)
             .map_err(|_| anyhow::anyhow!("cannot open private key file"))?;
         let mut reader = BufReader::new(keyfile);
-        pkcs8_private_keys(&mut reader).map_err(|_| {
-            anyhow::anyhow!(
-                "file contains invalid pkcs8 private key (encrypted keys not supported)"
-            )
-        })?
+        rustls_pemfile::pkcs8_private_keys(&mut reader).collect::<Result<Vec<_>, _>>().map_err(
+            |_| {
+                anyhow::anyhow!(
+                    "file contains invalid pkcs8 private key (encrypted keys not supported)"
+                )
+            },
+        )?
     };
 
     // prefer to load pkcs8 keys
     if !pkcs8_keys.is_empty() {
-        Ok(rustls::PrivateKey(pkcs8_keys[0].clone()))
+        Ok(rustls::pki_types::PrivateKeyDer::Pkcs8(pkcs8_keys[0].clone_key()))
     } else {
         assert!(!rsa_keys.is_empty());
-        Ok(rustls::PrivateKey(rsa_keys[0].clone()))
+        Ok(rustls::pki_types::PrivateKeyDer::Pkcs1(rsa_keys[0].clone_key()))
     }
 }
 
