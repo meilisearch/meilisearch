@@ -50,7 +50,7 @@ serde = { version = "1.0.204", features = ["derive"] }
 serde_json = { version = "1.0.120", features = ["preserve_order"] }
 slice-group-by = "0.3.1"
 smallstr = { version = "0.3.0", features = ["serde"] }
-smallvec = "1.13.2"
+smallvec = { version = "1.13.2", features = ["union"] }
 smartstring = "1.0.1"
 tempfile = "3.10.1"
 thiserror = "1.0.61"
@@ -88,6 +88,7 @@ tracing = "0.1.40"
 ureq = { version = "2.10.0", features = ["json"] }
 url = "2.5.2"
 rayon-par-bridge = "0.1.0"
+lru = "0.12.3"
 
 [dev-dependencies]
 mimalloc = { version = "0.1.43", default-features = false }
