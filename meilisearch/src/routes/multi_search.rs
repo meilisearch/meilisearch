@@ -112,7 +112,6 @@ pub async fn multi_search_with_post(
                         ));
                     }
 
-                    let features = index_scheduler.features();
                     let index = index_scheduler
                         .index(&index_uid)
                         .map_err(|err| {

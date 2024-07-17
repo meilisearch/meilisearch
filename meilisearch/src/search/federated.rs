@@ -473,14 +473,8 @@ pub fn perform_federated_search(
                     None => TimeBudget::default(),
                 };
 
-                let (mut search, _is_finite_pagination, _max_total_hits, _offset) = prepare_search(
-                    &index,
-                    &rtxn,
-                    &query,
-                    &search_kind,
-                    time_budget,
-                    index_scheduler.features(),
-                )?;
+                let (mut search, _is_finite_pagination, _max_total_hits, _offset) =
+                    prepare_search(&index, &rtxn, &query, &search_kind, time_budget, features)?;
 
                 search.scoring_strategy(milli::score_details::ScoringStrategy::Detailed);
                 search.offset(0);
