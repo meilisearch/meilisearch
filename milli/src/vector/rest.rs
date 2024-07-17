@@ -1,4 +1,5 @@
 use deserr::Deserr;
+use rand::Rng;
 use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
 use serde::{Deserialize, Serialize};
 
@@ -264,7 +265,7 @@ where
         }
     };
 
-    for attempt in 0..7 {
+    for attempt in 0..10 {
         let response = request.clone().send_json(&body);
         let result = check_response(response);
 
@@ -277,6 +278,11 @@ where
         }?;
 
         let retry_duration = retry_duration.min(std::time::Duration::from_secs(60)); // don't wait more than a minute
+
+        // randomly up to double the retry duration
+        let retry_duration = retry_duration
+            + rand::thread_rng().gen_range(std::time::Duration::ZERO..retry_duration);
+
         tracing::warn!("Attempt #{}, retrying after {}ms.", attempt, retry_duration.as_millis());
         std::thread::sleep(retry_duration);
     }

@@ -166,7 +166,16 @@ impl SettingsDiff {
                     ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
                 }
                 if url.apply(new_url) {
-                    ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
+                    match source {
+                        // do not regenerate on an url change in OpenAI
+                        Setting::Set(EmbedderSource::OpenAi) | Setting::Reset => {}
+                        _ => {
+                            ReindexAction::push_action(
+                                &mut reindex_action,
+                                ReindexAction::FullReindex,
+                            );
+                        }
+                    }
                 }
                 if query.apply(new_query) {
                     ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
@@ -271,7 +280,7 @@ fn apply_default_for_source(
             *model = Setting::Reset;
             *revision = Setting::NotSet;
             *dimensions = Setting::NotSet;
-            *url = Setting::NotSet;
+            *url = Setting::Reset;
             *query = Setting::NotSet;
             *input_field = Setting::NotSet;
             *path_to_embeddings = Setting::NotSet;
@@ -364,7 +373,7 @@ impl EmbeddingSettings {
                 EmbedderSource::Ollama,
                 EmbedderSource::Rest,
             ],
-            Self::URL => &[EmbedderSource::Ollama, EmbedderSource::Rest],
+            Self::URL => &[EmbedderSource::Ollama, EmbedderSource::Rest, EmbedderSource::OpenAi],
             Self::QUERY => &[EmbedderSource::Rest],
             Self::INPUT_FIELD => &[EmbedderSource::Rest],
             Self::PATH_TO_EMBEDDINGS => &[EmbedderSource::Rest],
@@ -390,6 +399,7 @@ impl EmbeddingSettings {
                 Self::DOCUMENT_TEMPLATE,
                 Self::DIMENSIONS,
                 Self::DISTRIBUTION,
+                Self::URL,
             ],
             EmbedderSource::HuggingFace => &[
                 Self::SOURCE,
@@ -494,6 +504,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 distribution: distribution.map(Setting::Set).unwrap_or_default(),
             },
             super::EmbedderOptions::OpenAi(super::openai::EmbedderOptions {
+                url,
                 api_key,
                 embedding_model,
                 dimensions,
@@ -505,7 +516,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 api_key: api_key.map(Setting::Set).unwrap_or_default(),
                 dimensions: dimensions.map(Setting::Set).unwrap_or_default(),
                 document_template: Setting::Set(prompt.template),
-                url: Setting::NotSet,
+                url: url.map(Setting::Set).unwrap_or_default(),
                 query: Setting::NotSet,
                 input_field: Setting::NotSet,
                 path_to_embeddings: Setting::NotSet,
@@ -607,6 +618,9 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
                         if let Some(model) = super::openai::EmbeddingModel::from_name(&model) {
                             options.embedding_model = model;
                         }
+                    }
+                    if let Some(url) = url.set() {
+                        options.url = Some(url);
                     }
                     if let Some(api_key) = api_key.set() {
                         options.api_key = Some(api_key);

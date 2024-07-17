@@ -32,6 +32,7 @@ use super::helpers::{as_cloneable_grenad, CursorClonableMmap, GrenadParameters};
 use super::{helpers, TypedChunk};
 use crate::index::IndexEmbeddingConfig;
 use crate::update::settings::InnerIndexSettingsDiff;
+use crate::vector::error::PossibleEmbeddingMistakes;
 use crate::{FieldId, Result, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 
 /// Extract data for each databases from obkv documents in parallel.
@@ -47,6 +48,7 @@ pub(crate) fn data_from_obkv_documents(
     embedders_configs: Arc<Vec<IndexEmbeddingConfig>>,
     settings_diff: Arc<InnerIndexSettingsDiff>,
     max_positions_per_attributes: Option<u32>,
+    possible_embedding_mistakes: Arc<PossibleEmbeddingMistakes>,
 ) -> Result<()> {
     let (original_pipeline_result, flattened_pipeline_result): (Result<_>, Result<_>) = rayon::join(
         || {
@@ -59,6 +61,7 @@ pub(crate) fn data_from_obkv_documents(
                         lmdb_writer_sx.clone(),
                         embedders_configs.clone(),
                         settings_diff.clone(),
+                        possible_embedding_mistakes.clone(),
                     )
                 })
                 .collect::<Result<()>>()
@@ -227,6 +230,7 @@ fn send_original_documents_data(
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     embedders_configs: Arc<Vec<IndexEmbeddingConfig>>,
     settings_diff: Arc<InnerIndexSettingsDiff>,
+    possible_embedding_mistakes: Arc<PossibleEmbeddingMistakes>,
 ) -> Result<()> {
     let original_documents_chunk =
         original_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
@@ -248,7 +252,7 @@ fn send_original_documents_data(
                 &embedders_configs,
                 &settings_diff,
             ) {
-                Ok(extracted_vectors) => {
+                Ok((extracted_vectors, unused_vectors_distribution)) => {
                     for ExtractedVectorPoints {
                         manual_vectors,
                         remove_vectors,
@@ -263,6 +267,9 @@ fn send_original_documents_data(
                             prompts,
                             indexer,
                             embedder.clone(),
+                            &embedder_name,
+                            &possible_embedding_mistakes,
+                            &unused_vectors_distribution,
                             request_threads(),
                         ) {
                             Ok(results) => Some(results),

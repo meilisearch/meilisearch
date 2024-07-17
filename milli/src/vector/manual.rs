@@ -20,7 +20,7 @@ impl Embedder {
 
     pub fn embed(&self, mut texts: Vec<String>) -> Result<Vec<Embeddings<f32>>, EmbedError> {
         let Some(text) = texts.pop() else { return Ok(Default::default()) };
-        Err(EmbedError::embed_on_manual_embedder(text))
+        Err(EmbedError::embed_on_manual_embedder(text.chars().take(250).collect()))
     }
 
     pub fn dimensions(&self) -> usize {

@@ -13,13 +13,15 @@ use roaring::RoaringBitmap;
 use serde_json::Value;
 
 use super::helpers::{create_writer, writer_into_reader, GrenadParameters};
+use crate::error::FaultSource;
 use crate::index::IndexEmbeddingConfig;
 use crate::prompt::Prompt;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::settings::InnerIndexSettingsDiff;
+use crate::vector::error::{EmbedErrorKind, PossibleEmbeddingMistakes, UnusedVectorsDistribution};
 use crate::vector::parsed_vectors::{ParsedVectorsDiff, VectorState, RESERVED_VECTORS_FIELD_NAME};
 use crate::vector::settings::{EmbedderAction, ReindexAction};
-use crate::vector::Embedder;
+use crate::vector::{Embedder, Embeddings};
 use crate::{try_split_array_at, DocumentId, FieldId, FieldsIdsMap, Result, ThreadPoolNoAbort};
 
 /// The length of the elements that are always in the buffer when inserting new values.
@@ -102,7 +104,8 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     embedders_configs: &[IndexEmbeddingConfig],
     settings_diff: &InnerIndexSettingsDiff,
-) -> Result<Vec<ExtractedVectorPoints>> {
+) -> Result<(Vec<ExtractedVectorPoints>, UnusedVectorsDistribution)> {
+    let mut unused_vectors_distribution = UnusedVectorsDistribution::new();
     let reindex_vectors = settings_diff.reindex_vectors();
 
     let old_fields_ids_map = &settings_diff.old.fields_ids_map;
@@ -319,6 +322,8 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                 delta,
             )?;
         }
+
+        unused_vectors_distribution.append(parsed_vectors);
     }
 
     let mut results = Vec::new();
@@ -355,7 +360,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
         })
     }
 
-    Ok(results)
+    Ok((results, unused_vectors_distribution))
 }
 
 fn extract_vector_document_diff(
@@ -547,6 +552,9 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
     prompt_reader: grenad::Reader<R>,
     indexer: GrenadParameters,
     embedder: Arc<Embedder>,
+    embedder_name: &str,
+    possible_embedding_mistakes: &PossibleEmbeddingMistakes,
+    unused_vectors_distribution: &UnusedVectorsDistribution,
     request_threads: &ThreadPoolNoAbort,
 ) -> Result<grenad::Reader<BufReader<File>>> {
     let n_chunks = embedder.chunk_count_hint(); // chunk level parallelism
@@ -583,13 +591,14 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
         current_chunk_ids.push(docid);
 
         if chunks.len() == chunks.capacity() {
-            let chunked_embeds = embedder
-                .embed_chunks(
-                    std::mem::replace(&mut chunks, Vec::with_capacity(n_chunks)),
-                    request_threads,
-                )
-                .map_err(crate::vector::Error::from)
-                .map_err(crate::Error::from)?;
+            let chunked_embeds = embed_chunks(
+                &embedder,
+                std::mem::replace(&mut chunks, Vec::with_capacity(n_chunks)),
+                embedder_name,
+                possible_embedding_mistakes,
+                unused_vectors_distribution,
+                request_threads,
+            )?;
 
             for (docid, embeddings) in chunks_ids
                 .iter()
@@ -604,10 +613,14 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
 
     // send last chunk
     if !chunks.is_empty() {
-        let chunked_embeds = embedder
-            .embed_chunks(std::mem::take(&mut chunks), request_threads)
-            .map_err(crate::vector::Error::from)
-            .map_err(crate::Error::from)?;
+        let chunked_embeds = embed_chunks(
+            &embedder,
+            std::mem::take(&mut chunks),
+            embedder_name,
+            possible_embedding_mistakes,
+            unused_vectors_distribution,
+            request_threads,
+        )?;
         for (docid, embeddings) in chunks_ids
             .iter()
             .flat_map(|docids| docids.iter())
@@ -618,10 +631,14 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
     }
 
     if !current_chunk.is_empty() {
-        let embeds = embedder
-            .embed_chunks(vec![std::mem::take(&mut current_chunk)], request_threads)
-            .map_err(crate::vector::Error::from)
-            .map_err(crate::Error::from)?;
+        let embeds = embed_chunks(
+            &embedder,
+            vec![std::mem::take(&mut current_chunk)],
+            embedder_name,
+            possible_embedding_mistakes,
+            unused_vectors_distribution,
+            request_threads,
+        )?;
 
         if let Some(embeds) = embeds.first() {
             for (docid, embeddings) in current_chunk_ids.iter().zip(embeds.iter()) {
@@ -631,4 +648,58 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
     }
 
     writer_into_reader(state_writer)
+}
+
+fn embed_chunks(
+    embedder: &Embedder,
+    text_chunks: Vec<Vec<String>>,
+    embedder_name: &str,
+    possible_embedding_mistakes: &PossibleEmbeddingMistakes,
+    unused_vectors_distribution: &UnusedVectorsDistribution,
+    request_threads: &ThreadPoolNoAbort,
+) -> Result<Vec<Vec<Embeddings<f32>>>> {
+    match embedder.embed_chunks(text_chunks, request_threads) {
+        Ok(chunks) => Ok(chunks),
+        Err(error) => {
+            if let FaultSource::Bug = error.fault {
+                Err(crate::Error::InternalError(crate::InternalError::VectorEmbeddingError(
+                    error.into(),
+                )))
+            } else {
+                let mut msg =
+                    format!(r"While embedding documents for embedder `{embedder_name}`: {error}");
+
+                if let EmbedErrorKind::ManualEmbed(_) = &error.kind {
+                    msg += &format!("\n- Note: `{embedder_name}` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.{embedder_name}`.");
+                }
+
+                let mut hint_count = 0;
+
+                for (vector_misspelling, count) in
+                    possible_embedding_mistakes.vector_mistakes().take(2)
+                {
+                    msg += &format!("\n- Hint: try replacing `{vector_misspelling}` by `_vectors` in {count} document(s).");
+                    hint_count += 1;
+                }
+
+                for (embedder_misspelling, count) in possible_embedding_mistakes
+                    .embedder_mistakes(embedder_name, unused_vectors_distribution)
+                    .take(2)
+                {
+                    msg += &format!("\n- Hint: try replacing `_vectors.{embedder_misspelling}` by `_vectors.{embedder_name}` in {count} document(s).");
+                    hint_count += 1;
+                }
+
+                if hint_count == 0 {
+                    if let EmbedErrorKind::ManualEmbed(_) = &error.kind {
+                        msg += &format!(
+                            "\n- Hint: opt-out for a document with `_vectors.{embedder_name}: null`"
+                        );
+                    }
+                }
+
+                Err(crate::Error::UserError(crate::UserError::DocumentEmbeddingError(msg)))
+            }
+        }
+    }
 }

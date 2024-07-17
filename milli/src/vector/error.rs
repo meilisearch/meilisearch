@@ -1,9 +1,11 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use hf_hub::api::sync::ApiError;
 
+use super::parsed_vectors::ParsedVectorsDiff;
 use crate::error::FaultSource;
-use crate::PanicCatched;
+use crate::{FieldDistribution, PanicCatched};
 
 #[derive(Debug, thiserror::Error)]
 #[error("Error while generating embeddings: {inner}")]
@@ -309,4 +311,69 @@ pub enum NewEmbedderErrorKind {
     CouldNotDetermineDimension(EmbedError),
     #[error("loading model failed: {0}")]
     LoadModel(candle_core::Error),
+}
+
+pub struct PossibleEmbeddingMistakes {
+    vectors_mistakes: BTreeMap<String, u64>,
+}
+
+impl PossibleEmbeddingMistakes {
+    pub fn new(field_distribution: &FieldDistribution) -> Self {
+        let mut vectors_mistakes = BTreeMap::new();
+        let builder = levenshtein_automata::LevenshteinAutomatonBuilder::new(2, true);
+        let automata = builder.build_dfa("_vectors");
+        for (field, count) in field_distribution {
+            if *count == 0 {
+                continue;
+            }
+            if field.contains('.') {
+                continue;
+            }
+            match automata.eval(field) {
+                levenshtein_automata::Distance::Exact(0) => continue,
+                levenshtein_automata::Distance::Exact(_) => {
+                    vectors_mistakes.insert(field.to_string(), *count);
+                }
+                levenshtein_automata::Distance::AtLeast(_) => continue,
+            }
+        }
+
+        Self { vectors_mistakes }
+    }
+
+    pub fn vector_mistakes(&self) -> impl Iterator<Item = (&str, u64)> {
+        self.vectors_mistakes.iter().map(|(misspelling, count)| (misspelling.as_str(), *count))
+    }
+
+    pub fn embedder_mistakes<'a>(
+        &'a self,
+        embedder_name: &'a str,
+        unused_vectors_distributions: &'a UnusedVectorsDistribution,
+    ) -> impl Iterator<Item = (&'a str, u64)> + 'a {
+        let builder = levenshtein_automata::LevenshteinAutomatonBuilder::new(2, true);
+        let automata = builder.build_dfa(embedder_name);
+
+        unused_vectors_distributions.0.iter().filter_map(move |(field, count)| {
+            match automata.eval(field) {
+                levenshtein_automata::Distance::Exact(0) => None,
+                levenshtein_automata::Distance::Exact(_) => Some((field.as_str(), *count)),
+                levenshtein_automata::Distance::AtLeast(_) => None,
+            }
+        })
+    }
+}
+
+#[derive(Default)]
+pub struct UnusedVectorsDistribution(BTreeMap<String, u64>);
+
+impl UnusedVectorsDistribution {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn append(&mut self, parsed_vectors_diff: ParsedVectorsDiff) {
+        for name in parsed_vectors_diff.into_new_vectors_keys_iter() {
+            *self.0.entry(name).or_default() += 1;
+        }
+    }
 }

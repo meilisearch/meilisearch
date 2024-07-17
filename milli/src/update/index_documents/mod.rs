@@ -427,6 +427,9 @@ where
         let settings_diff = Arc::new(settings_diff);
         let embedders_configs = Arc::new(self.index.embedding_configs(self.wtxn)?);
 
+        let possible_embedding_mistakes =
+            crate::vector::error::PossibleEmbeddingMistakes::new(&field_distribution);
+
         let backup_pool;
         let pool = match self.indexer_config.thread_pool {
             Some(ref pool) => pool,
@@ -542,6 +545,7 @@ where
                         embedders_configs.clone(),
                         settings_diff_cloned,
                         max_positions_per_attributes,
+                        Arc::new(possible_embedding_mistakes)
                     )
                 });
 

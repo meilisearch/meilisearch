@@ -10,6 +10,7 @@ use crate::ThreadPoolNoAbort;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct EmbedderOptions {
+    pub url: Option<String>,
     pub api_key: Option<String>,
     pub embedding_model: EmbeddingModel,
     pub dimensions: Option<usize>,
@@ -146,11 +147,13 @@ pub const OPENAI_EMBEDDINGS_URL: &str = "https://api.openai.com/v1/embeddings";
 
 impl EmbedderOptions {
     pub fn with_default_model(api_key: Option<String>) -> Self {
-        Self { api_key, embedding_model: Default::default(), dimensions: None, distribution: None }
-    }
-
-    pub fn with_embedding_model(api_key: Option<String>, embedding_model: EmbeddingModel) -> Self {
-        Self { api_key, embedding_model, dimensions: None, distribution: None }
+        Self {
+            api_key,
+            embedding_model: Default::default(),
+            dimensions: None,
+            distribution: None,
+            url: None,
+        }
     }
 }
 
@@ -175,11 +178,13 @@ impl Embedder {
             &inferred_api_key
         });
 
+        let url = options.url.as_deref().unwrap_or(OPENAI_EMBEDDINGS_URL).to_owned();
+
         let rest_embedder = RestEmbedder::new(RestEmbedderOptions {
             api_key: Some(api_key.clone()),
             distribution: None,
             dimensions: Some(options.dimensions()),
-            url: OPENAI_EMBEDDINGS_URL.to_owned(),
+            url,
             query: options.query(),
             input_field: vec!["input".to_owned()],
             input_type: crate::vector::rest::InputType::TextArray,
@@ -205,7 +210,6 @@ impl Embedder {
     }
 
     fn try_embed_tokenized(&self, text: &[String]) -> Result<Vec<Embeddings<f32>>, EmbedError> {
-        pub const OVERLAP_SIZE: usize = 200;
         let mut all_embeddings = Vec::with_capacity(text.len());
         for text in text {
             let max_token_count = self.options.embedding_model.max_token();
@@ -216,21 +220,10 @@ impl Embedder {
                 continue;
             }
 
-            let mut tokens = encoded.as_slice();
+            let tokens = &encoded.as_slice()[0..max_token_count];
             let mut embeddings_for_prompt = Embeddings::new(self.dimensions());
-            while tokens.len() > max_token_count {
-                let window = &tokens[..max_token_count];
-                let embedding = self.rest_embedder.embed_tokens(window)?;
-                embeddings_for_prompt.append(embedding.into_inner()).map_err(|got| {
-                    EmbedError::openai_unexpected_dimension(self.dimensions(), got.len())
-                })?;
 
-                tokens = &tokens[max_token_count - OVERLAP_SIZE..];
-            }
-
-            // end of text
             let embedding = self.rest_embedder.embed_tokens(tokens)?;
-
             embeddings_for_prompt.append(embedding.into_inner()).map_err(|got| {
                 EmbedError::openai_unexpected_dimension(self.dimensions(), got.len())
             })?;
