@@ -39,7 +39,24 @@ where
                 del.get_or_insert_with(RoaringBitmap::new).insert(n);
                 Ok(())
             }
-            None => match self.cache.push(key.into(), DelAddRoaringBitmap::new_del(n)) {
+            None => match self.cache.push(key.into(), DelAddRoaringBitmap::new_del_u32(n)) {
+                Some((key, deladd)) => self.write_entry_to_sorter(key, deladd),
+                None => Ok(()),
+            },
+        }
+    }
+
+    pub fn insert_del(
+        &mut self,
+        key: &[u8],
+        bitmap: RoaringBitmap,
+    ) -> Result<(), grenad::Error<U>> {
+        match self.cache.get_mut(key) {
+            Some(DelAddRoaringBitmap { del, add: _ }) => {
+                *del.get_or_insert_with(RoaringBitmap::new) |= bitmap;
+                Ok(())
+            }
+            None => match self.cache.push(key.into(), DelAddRoaringBitmap::new_del(bitmap)) {
                 Some((key, deladd)) => self.write_entry_to_sorter(key, deladd),
                 None => Ok(()),
             },
@@ -52,7 +69,24 @@ where
                 add.get_or_insert_with(RoaringBitmap::new).insert(n);
                 Ok(())
             }
-            None => match self.cache.push(key.into(), DelAddRoaringBitmap::new_add(n)) {
+            None => match self.cache.push(key.into(), DelAddRoaringBitmap::new_add_u32(n)) {
+                Some((key, deladd)) => self.write_entry_to_sorter(key, deladd),
+                None => Ok(()),
+            },
+        }
+    }
+
+    pub fn insert_add(
+        &mut self,
+        key: &[u8],
+        bitmap: RoaringBitmap,
+    ) -> Result<(), grenad::Error<U>> {
+        match self.cache.get_mut(key) {
+            Some(DelAddRoaringBitmap { del: _, add }) => {
+                *add.get_or_insert_with(RoaringBitmap::new) |= bitmap;
+                Ok(())
+            }
+            None => match self.cache.push(key.into(), DelAddRoaringBitmap::new_add(bitmap)) {
                 Some((key, deladd)) => self.write_entry_to_sorter(key, deladd),
                 None => Ok(()),
             },
@@ -66,7 +100,7 @@ where
                 add.get_or_insert_with(RoaringBitmap::new).insert(n);
                 Ok(())
             }
-            None => match self.cache.push(key.into(), DelAddRoaringBitmap::new_del_add(n)) {
+            None => match self.cache.push(key.into(), DelAddRoaringBitmap::new_del_add_u32(n)) {
                 Some((key, deladd)) => self.write_entry_to_sorter(key, deladd),
                 None => Ok(()),
             },
@@ -121,18 +155,30 @@ pub struct DelAddRoaringBitmap {
 }
 
 impl DelAddRoaringBitmap {
-    fn new_del_add(n: u32) -> Self {
+    fn new_del_add(bitmap: RoaringBitmap) -> Self {
+        DelAddRoaringBitmap { del: Some(bitmap.clone()), add: Some(bitmap) }
+    }
+
+    fn new_del_add_u32(n: u32) -> Self {
         DelAddRoaringBitmap {
             del: Some(RoaringBitmap::from([n])),
             add: Some(RoaringBitmap::from([n])),
         }
     }
 
-    fn new_del(n: u32) -> Self {
+    fn new_del(bitmap: RoaringBitmap) -> Self {
+        DelAddRoaringBitmap { del: Some(bitmap), add: None }
+    }
+
+    fn new_del_u32(n: u32) -> Self {
         DelAddRoaringBitmap { del: Some(RoaringBitmap::from([n])), add: None }
     }
 
-    fn new_add(n: u32) -> Self {
+    fn new_add(bitmap: RoaringBitmap) -> Self {
+        DelAddRoaringBitmap { del: None, add: Some(bitmap) }
+    }
+
+    fn new_add_u32(n: u32) -> Self {
         DelAddRoaringBitmap { del: None, add: Some(RoaringBitmap::from([n])) }
     }
 }

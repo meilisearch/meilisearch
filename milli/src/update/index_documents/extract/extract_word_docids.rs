@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::{self, BufReader};
+use std::num::NonZeroUsize;
 
 use heed::{BytesDecode, BytesEncode};
 use obkv::KvReaderU16;
@@ -15,6 +16,7 @@ use crate::error::SerializationError;
 use crate::heed_codec::StrBEU16Codec;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
 use crate::update::del_add::{is_noop_del_add_obkv, DelAdd, KvReaderDelAdd, KvWriterDelAdd};
+use crate::update::index_documents::cache::SorterCacheDelAddCboRoaringBitmap;
 use crate::update::index_documents::helpers::sorter_into_reader;
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::update::MergeFn;
@@ -38,9 +40,8 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     grenad::Reader<BufReader<File>>,
 )> {
     let max_memory = indexer.max_memory_by_thread();
-    let mut conn = REDIS_CLIENT.get_connection().unwrap();
 
-    let mut word_fid_docids_sorter = create_sorter(
+    let word_fid_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,
         merge_deladd_cbo_roaring_bitmaps,
         indexer.chunk_compression_type,
@@ -48,6 +49,12 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         indexer.max_nb_chunks,
         max_memory.map(|m| m / 3),
     );
+    let mut cached_word_fid_docids_sorter = SorterCacheDelAddCboRoaringBitmap::<20, _>::new(
+        NonZeroUsize::new(300).unwrap(),
+        word_fid_docids_sorter,
+        REDIS_CLIENT.get_connection().unwrap(),
+    );
+
     let mut key_buffer = Vec::new();
     let mut del_words = BTreeSet::new();
     let mut add_words = BTreeSet::new();
@@ -81,8 +88,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
             &mut key_buffer,
             &del_words,
             &add_words,
-            &mut word_fid_docids_sorter,
-            &mut conn,
+            &mut cached_word_fid_docids_sorter,
         )?;
 
         del_words.clear();
@@ -95,7 +101,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         tempfile::tempfile()?,
     );
 
-    let mut word_docids_sorter = create_sorter(
+    let word_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,
         merge_deladd_cbo_roaring_bitmaps,
         indexer.chunk_compression_type,
@@ -103,8 +109,13 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         indexer.max_nb_chunks,
         max_memory.map(|m| m / 3),
     );
+    let mut cached_word_docids_sorter = SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
+        NonZeroUsize::new(100).unwrap(),
+        word_docids_sorter,
+        REDIS_CLIENT.get_connection().unwrap(),
+    );
 
-    let mut exact_word_docids_sorter = create_sorter(
+    let exact_word_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,
         merge_deladd_cbo_roaring_bitmaps,
         indexer.chunk_compression_type,
@@ -112,9 +123,13 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         indexer.max_nb_chunks,
         max_memory.map(|m| m / 3),
     );
+    let mut cached_exact_word_docids_sorter = SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
+        NonZeroUsize::new(100).unwrap(),
+        exact_word_docids_sorter,
+        REDIS_CLIENT.get_connection().unwrap(),
+    );
 
-    let mut iter = word_fid_docids_sorter.into_stream_merger_iter()?;
-    let mut buffer = Vec::new();
+    let mut iter = cached_word_fid_docids_sorter.into_sorter()?.into_stream_merger_iter()?;
     // NOTE: replacing sorters by bitmap merging is less efficient, so, use sorters.
     while let Some((key, value)) = iter.next()? {
         // only keep the value if their is a change to apply in the DB.
@@ -127,36 +142,31 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
 
         // merge all deletions
         let obkv = KvReaderDelAdd::new(value);
+        let w = w.as_bytes();
         if let Some(value) = obkv.get(DelAdd::Deletion) {
             let delete_from_exact = settings_diff.old.exact_attributes.contains(&fid);
-            buffer.clear();
-            let mut obkv = KvWriterDelAdd::new(&mut buffer);
-            obkv.insert(DelAdd::Deletion, value)?;
-            redis::cmd("INCR").arg(w.as_bytes()).query::<usize>(&mut conn).unwrap();
+            let bitmap = CboRoaringBitmapCodec::deserialize_from(value)?;
             if delete_from_exact {
-                exact_word_docids_sorter.insert(w, obkv.into_inner().unwrap())?;
+                cached_exact_word_docids_sorter.insert_del(w, bitmap)?;
             } else {
-                word_docids_sorter.insert(w, obkv.into_inner().unwrap())?;
+                cached_word_docids_sorter.insert_del(w, bitmap)?;
             }
         }
         // merge all additions
         if let Some(value) = obkv.get(DelAdd::Addition) {
             let add_in_exact = settings_diff.new.exact_attributes.contains(&fid);
-            buffer.clear();
-            let mut obkv = KvWriterDelAdd::new(&mut buffer);
-            obkv.insert(DelAdd::Addition, value)?;
-            redis::cmd("INCR").arg(w.as_bytes()).query::<usize>(&mut conn).unwrap();
+            let bitmap = CboRoaringBitmapCodec::deserialize_from(value)?;
             if add_in_exact {
-                exact_word_docids_sorter.insert(w, obkv.into_inner().unwrap())?;
+                cached_exact_word_docids_sorter.insert_add(w, bitmap)?;
             } else {
-                word_docids_sorter.insert(w, obkv.into_inner().unwrap())?;
+                cached_word_docids_sorter.insert_add(w, bitmap)?;
             }
         }
     }
 
     Ok((
-        sorter_into_reader(word_docids_sorter, indexer)?,
-        sorter_into_reader(exact_word_docids_sorter, indexer)?,
+        sorter_into_reader(cached_word_docids_sorter.into_sorter()?, indexer)?,
+        sorter_into_reader(cached_exact_word_docids_sorter.into_sorter()?, indexer)?,
         writer_into_reader(word_fid_docids_writer)?,
     ))
 }
@@ -168,38 +178,34 @@ fn words_into_sorter(
     key_buffer: &mut Vec<u8>,
     del_words: &BTreeSet<Vec<u8>>,
     add_words: &BTreeSet<Vec<u8>>,
-    word_fid_docids_sorter: &mut grenad::Sorter<MergeFn>,
-    conn: &mut redis::Connection,
+    cached_word_fid_docids_sorter: &mut SorterCacheDelAddCboRoaringBitmap<20, MergeFn>,
 ) -> Result<()> {
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};
 
-    let mut buffer = Vec::new();
     for eob in merge_join_by(del_words.iter(), add_words.iter(), |d, a| d.cmp(a)) {
-        buffer.clear();
-        let mut value_writer = KvWriterDelAdd::new(&mut buffer);
         let word_bytes = match eob {
-            Left(word_bytes) => {
-                value_writer.insert(DelAdd::Deletion, document_id.to_ne_bytes()).unwrap();
-                word_bytes
-            }
-            Right(word_bytes) => {
-                value_writer.insert(DelAdd::Addition, document_id.to_ne_bytes()).unwrap();
-                word_bytes
-            }
-            Both(word_bytes, _) => {
-                value_writer.insert(DelAdd::Deletion, document_id.to_ne_bytes()).unwrap();
-                value_writer.insert(DelAdd::Addition, document_id.to_ne_bytes()).unwrap();
-                word_bytes
-            }
+            Left(word_bytes) => word_bytes,
+            Right(word_bytes) => word_bytes,
+            Both(word_bytes, _) => word_bytes,
         };
 
         key_buffer.clear();
         key_buffer.extend_from_slice(word_bytes);
         key_buffer.push(0);
         key_buffer.extend_from_slice(&fid.to_be_bytes());
-        redis::cmd("INCR").arg(key_buffer.as_slice()).query::<usize>(conn).unwrap();
-        word_fid_docids_sorter.insert(&key_buffer, value_writer.into_inner().unwrap())?;
+
+        match eob {
+            Left(_) => {
+                cached_word_fid_docids_sorter.insert_del_u32(key_buffer, document_id)?;
+            }
+            Right(_) => {
+                cached_word_fid_docids_sorter.insert_add_u32(key_buffer, document_id)?;
+            }
+            Both(_, _) => {
+                cached_word_fid_docids_sorter.insert_del_add_u32(key_buffer, document_id)?;
+            }
+        }
     }
 
     Ok(())
