@@ -62,6 +62,10 @@ We recommend using the standard `$HOME/.cache/lindera` directory:
 export LINDERA_CACHE=$HOME/.cache/lindera
 ```
 
+Furthermore, you can improve incremental compilation by setting the `MEILI_NO_VERGEN` environment variable.
+Setting this variable will prevent the Meilisearch binary from being rebuilt each time the directory that hosts the Meilisearch repository changes.
+Do not enable this environment variable for production builds (as it will break the `version` route, among other things).
+
 #### Snapshot-based tests
 
 We are using [insta](https://insta.rs) to perform snapshot-based testing.

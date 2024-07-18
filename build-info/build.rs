@@ -5,6 +5,13 @@ fn main() {
 }
 
 fn emit_git_variables() -> anyhow::Result<()> {
+    println!("cargo::rerun-if-env-changed=MEILI_NO_VERGEN");
+
+    let has_vergen =
+        !matches!(std::env::var_os("MEILI_NO_VERGEN"), Some(x) if x != "false" && x != "0");
+
+    anyhow::ensure!(has_vergen, "disabled via `MEILI_NO_VERGEN`");
+
     // Note: any code that needs VERGEN_ environment variables should take care to define them manually in the Dockerfile and pass them
     // in the corresponding GitHub workflow (publish_docker.yml).
     // This is due to the Dockerfile building the binary outside of the git directory.
