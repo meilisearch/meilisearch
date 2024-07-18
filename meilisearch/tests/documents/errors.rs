@@ -6,7 +6,7 @@ use crate::json;
 
 #[actix_rt::test]
 async fn get_all_documents_bad_offset() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("test");
 
     let (response, code) = index.get_all_documents_raw("?offset").await;
@@ -45,7 +45,7 @@ async fn get_all_documents_bad_offset() {
 
 #[actix_rt::test]
 async fn get_all_documents_bad_limit() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("test");
 
     let (response, code) = index.get_all_documents_raw("?limit").await;
@@ -84,7 +84,7 @@ async fn get_all_documents_bad_limit() {
 
 #[actix_rt::test]
 async fn get_all_documents_bad_filter() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("test");
 
     // Since the filter can't be parsed automatically by deserr, we have the wrong error message
@@ -162,7 +162,7 @@ async fn get_all_documents_bad_filter() {
 
 #[actix_rt::test]
 async fn delete_documents_batch() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("test");
 
     let (response, code) = index.delete_batch_raw(json!("doggo")).await;
@@ -179,7 +179,7 @@ async fn delete_documents_batch() {
 
 #[actix_rt::test]
 async fn replace_documents_missing_payload() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("test");
 
     let (response, code) =
@@ -221,7 +221,7 @@ async fn replace_documents_missing_payload() {
 
 #[actix_rt::test]
 async fn update_documents_missing_payload() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("test");
 
     let (response, code) = index.raw_update_documents("", Some("application/json"), "").await;
@@ -260,7 +260,7 @@ async fn update_documents_missing_payload() {
 
 #[actix_rt::test]
 async fn replace_documents_missing_content_type() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("test");
 
     let (response, code) = index.raw_add_documents("", Vec::new(), "").await;
@@ -289,7 +289,7 @@ async fn replace_documents_missing_content_type() {
 
 #[actix_rt::test]
 async fn update_documents_missing_content_type() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("test");
 
     let (response, code) = index.raw_update_documents("", None, "").await;
@@ -318,7 +318,7 @@ async fn update_documents_missing_content_type() {
 
 #[actix_rt::test]
 async fn replace_documents_bad_content_type() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("test");
 
     let (response, code) = index.raw_add_documents("", vec![("Content-Type", "doggo")], "").await;
@@ -335,7 +335,7 @@ async fn replace_documents_bad_content_type() {
 
 #[actix_rt::test]
 async fn update_documents_bad_content_type() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("test");
 
     let (response, code) = index.raw_update_documents("", Some("doggo"), "").await;
@@ -352,7 +352,7 @@ async fn update_documents_bad_content_type() {
 
 #[actix_rt::test]
 async fn replace_documents_bad_csv_delimiter() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("test");
 
     let (response, code) = index
@@ -401,7 +401,7 @@ async fn replace_documents_bad_csv_delimiter() {
 
 #[actix_rt::test]
 async fn update_documents_bad_csv_delimiter() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("test");
 
     let (response, code) =
@@ -448,7 +448,7 @@ async fn update_documents_bad_csv_delimiter() {
 
 #[actix_rt::test]
 async fn replace_documents_csv_delimiter_with_bad_content_type() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("test");
 
     let (response, code) = index
@@ -480,7 +480,7 @@ async fn replace_documents_csv_delimiter_with_bad_content_type() {
 
 #[actix_rt::test]
 async fn update_documents_csv_delimiter_with_bad_content_type() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("test");
 
     let (response, code) =
@@ -510,7 +510,7 @@ async fn update_documents_csv_delimiter_with_bad_content_type() {
 
 #[actix_rt::test]
 async fn delete_document_by_filter() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("tests-documents-errors-delete_document_by_filter");
 
     // send a bad payload type
@@ -674,7 +674,7 @@ async fn delete_document_by_filter() {
 
 #[actix_rt::test]
 async fn fetch_document_by_filter() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("doggo");
     index.update_settings_filterable_attributes(json!(["color"])).await;
     index
@@ -771,7 +771,7 @@ async fn fetch_document_by_filter() {
 
 #[actix_rt::test]
 async fn retrieve_vectors() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("doggo");
 
     // GET ALL DOCUMENTS BY QUERY

@@ -4,7 +4,7 @@ use crate::common::Server;
 
 #[actix_rt::test]
 async fn task_bad_uids() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.tasks_filter("uids=doggo").await;
     snapshot!(code, @"400 Bad Request");
@@ -53,7 +53,7 @@ async fn task_bad_uids() {
 
 #[actix_rt::test]
 async fn task_bad_canceled_by() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.tasks_filter("canceledBy=doggo").await;
     snapshot!(code, @"400 Bad Request");
@@ -91,7 +91,7 @@ async fn task_bad_canceled_by() {
 
 #[actix_rt::test]
 async fn task_bad_types() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.tasks_filter("types=doggo").await;
     snapshot!(code, @"400 Bad Request");
@@ -129,7 +129,7 @@ async fn task_bad_types() {
 
 #[actix_rt::test]
 async fn task_bad_statuses() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.tasks_filter("statuses=doggo").await;
     snapshot!(code, @"400 Bad Request");
@@ -167,7 +167,7 @@ async fn task_bad_statuses() {
 
 #[actix_rt::test]
 async fn task_bad_index_uids() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.tasks_filter("indexUids=the%20good%20doggo").await;
     snapshot!(code, @"400 Bad Request");
@@ -205,7 +205,7 @@ async fn task_bad_index_uids() {
 
 #[actix_rt::test]
 async fn task_bad_limit() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.tasks_filter("limit=doggo").await;
     snapshot!(code, @"400 Bad Request");
@@ -243,7 +243,7 @@ async fn task_bad_limit() {
 
 #[actix_rt::test]
 async fn task_bad_from() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.tasks_filter("from=doggo").await;
     snapshot!(code, @"400 Bad Request");
@@ -281,7 +281,7 @@ async fn task_bad_from() {
 
 #[actix_rt::test]
 async fn task_bad_after_enqueued_at() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.tasks_filter("afterEnqueuedAt=doggo").await;
     snapshot!(code, @"400 Bad Request");
@@ -319,7 +319,7 @@ async fn task_bad_after_enqueued_at() {
 
 #[actix_rt::test]
 async fn task_bad_before_enqueued_at() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.tasks_filter("beforeEnqueuedAt=doggo").await;
     snapshot!(code, @"400 Bad Request");
@@ -357,7 +357,7 @@ async fn task_bad_before_enqueued_at() {
 
 #[actix_rt::test]
 async fn task_bad_after_started_at() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.tasks_filter("afterStartedAt=doggo").await;
     snapshot!(code, @"400 Bad Request");
@@ -395,7 +395,7 @@ async fn task_bad_after_started_at() {
 
 #[actix_rt::test]
 async fn task_bad_before_started_at() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.tasks_filter("beforeStartedAt=doggo").await;
     snapshot!(code, @"400 Bad Request");
@@ -433,7 +433,7 @@ async fn task_bad_before_started_at() {
 
 #[actix_rt::test]
 async fn task_bad_after_finished_at() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.tasks_filter("afterFinishedAt=doggo").await;
     snapshot!(code, @"400 Bad Request");
@@ -471,7 +471,7 @@ async fn task_bad_after_finished_at() {
 
 #[actix_rt::test]
 async fn task_bad_before_finished_at() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.tasks_filter("beforeFinishedAt=doggo").await;
     snapshot!(code, @"400 Bad Request");

@@ -5,7 +5,7 @@ use crate::json;
 
 #[actix_rt::test]
 async fn get_indexes_bad_offset() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.list_indexes_raw("?offset=doggo").await;
     snapshot!(code, @"400 Bad Request");
@@ -21,7 +21,7 @@ async fn get_indexes_bad_offset() {
 
 #[actix_rt::test]
 async fn get_indexes_bad_limit() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.list_indexes_raw("?limit=doggo").await;
     snapshot!(code, @"400 Bad Request");
@@ -37,7 +37,7 @@ async fn get_indexes_bad_limit() {
 
 #[actix_rt::test]
 async fn get_indexes_unknown_field() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.list_indexes_raw("?doggo=nolimit").await;
     snapshot!(code, @"400 Bad Request");
@@ -53,7 +53,7 @@ async fn get_indexes_unknown_field() {
 
 #[actix_rt::test]
 async fn create_index_missing_uid() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.create_index(json!({ "primaryKey": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
@@ -69,7 +69,7 @@ async fn create_index_missing_uid() {
 
 #[actix_rt::test]
 async fn create_index_bad_uid() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.create_index(json!({ "uid": "the best doggo" })).await;
     snapshot!(code, @"400 Bad Request");
@@ -96,7 +96,7 @@ async fn create_index_bad_uid() {
 
 #[actix_rt::test]
 async fn create_index_bad_primary_key() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server
         .create_index(json!({ "uid": "doggo", "primaryKey": ["the", "best", "doggo"] }))
@@ -114,7 +114,7 @@ async fn create_index_bad_primary_key() {
 
 #[actix_rt::test]
 async fn create_index_unknown_field() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.create_index(json!({ "uid": "doggo", "doggo": "bernese" })).await;
     snapshot!(code, @"400 Bad Request");
@@ -130,7 +130,7 @@ async fn create_index_unknown_field() {
 
 #[actix_rt::test]
 async fn get_index_bad_uid() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("the good doggo");
 
     let (response, code) = index.get().await;
@@ -147,7 +147,7 @@ async fn get_index_bad_uid() {
 
 #[actix_rt::test]
 async fn update_index_bad_primary_key() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("doggo");
 
     let (response, code) = index.update_raw(json!({ "primaryKey": ["doggo"] })).await;
@@ -164,7 +164,7 @@ async fn update_index_bad_primary_key() {
 
 #[actix_rt::test]
 async fn update_index_immutable_uid() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("doggo");
 
     let (response, code) = index.update_raw(json!({ "uid": "doggo" })).await;
@@ -181,7 +181,7 @@ async fn update_index_immutable_uid() {
 
 #[actix_rt::test]
 async fn update_index_immutable_created_at() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("doggo");
 
     let (response, code) = index.update_raw(json!({ "createdAt": "doggo" })).await;
@@ -198,7 +198,7 @@ async fn update_index_immutable_created_at() {
 
 #[actix_rt::test]
 async fn update_index_immutable_updated_at() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("doggo");
 
     let (response, code) = index.update_raw(json!({ "updatedAt": "doggo" })).await;
@@ -215,7 +215,7 @@ async fn update_index_immutable_updated_at() {
 
 #[actix_rt::test]
 async fn update_index_unknown_field() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("doggo");
 
     let (response, code) = index.update_raw(json!({ "doggo": "bork" })).await;
@@ -232,7 +232,7 @@ async fn update_index_unknown_field() {
 
 #[actix_rt::test]
 async fn update_index_bad_uid() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("the good doggo");
 
     let (response, code) = index.update_raw(json!({ "primaryKey": "doggo" })).await;
@@ -249,7 +249,7 @@ async fn update_index_bad_uid() {
 
 #[actix_rt::test]
 async fn delete_index_bad_uid() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index("the good doggo");
 
     let (response, code) = index.delete().await;

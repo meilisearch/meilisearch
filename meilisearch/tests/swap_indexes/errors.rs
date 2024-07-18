@@ -5,7 +5,7 @@ use crate::json;
 
 #[actix_rt::test]
 async fn swap_indexes_bad_format() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.index_swap(json!("doggo")).await;
     snapshot!(code, @"400 Bad Request");
@@ -32,7 +32,7 @@ async fn swap_indexes_bad_format() {
 
 #[actix_rt::test]
 async fn swap_indexes_bad_indexes() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.index_swap(json!([{ "indexes": "doggo"}])).await;
     snapshot!(code, @"400 Bad Request");

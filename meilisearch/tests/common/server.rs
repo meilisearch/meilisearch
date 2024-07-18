@@ -51,7 +51,7 @@ impl Server {
         Server { service, _dir: Some(dir) }
     }
 
-    pub async fn new_shared() -> &'static Self {
+    pub fn new_shared() -> &'static Self {
         &TEST_SHARED_INSTANCE
     }
 
