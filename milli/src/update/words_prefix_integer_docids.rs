@@ -73,6 +73,7 @@ impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
             SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
                 NonZeroUsize::new(200).unwrap(),
                 prefix_integer_docids_sorter,
+                b"pid",
                 REDIS_CLIENT.get_connection().unwrap(),
             );
 

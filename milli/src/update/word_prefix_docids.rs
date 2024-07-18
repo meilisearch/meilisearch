@@ -68,6 +68,7 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
         let mut cached_prefix_docids_sorter = SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
             NonZeroUsize::new(200).unwrap(),
             prefix_docids_sorter,
+            b"pdi",
             REDIS_CLIENT.get_connection().unwrap(),
         );
 

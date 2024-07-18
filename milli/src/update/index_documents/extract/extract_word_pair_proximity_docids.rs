@@ -55,6 +55,7 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
             SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
                 NonZeroUsize::new(100).unwrap(),
                 sorter,
+                b"wpp",
                 super::REDIS_CLIENT.get_connection().unwrap(),
             )
         })

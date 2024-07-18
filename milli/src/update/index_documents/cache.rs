@@ -11,6 +11,7 @@ use crate::CboRoaringBitmapCodec;
 
 pub struct SorterCacheDelAddCboRoaringBitmap<const N: usize, MF> {
     cache: LruCache<SmallVec<[u8; N]>, DelAddRoaringBitmap>,
+    prefix: &'static [u8; 3],
     sorter: grenad::Sorter<MF>,
     deladd_buffer: Vec<u8>,
     cbo_buffer: Vec<u8>,
@@ -18,9 +19,15 @@ pub struct SorterCacheDelAddCboRoaringBitmap<const N: usize, MF> {
 }
 
 impl<const N: usize, MF> SorterCacheDelAddCboRoaringBitmap<N, MF> {
-    pub fn new(cap: NonZeroUsize, sorter: grenad::Sorter<MF>, conn: redis::Connection) -> Self {
+    pub fn new(
+        cap: NonZeroUsize,
+        sorter: grenad::Sorter<MF>,
+        prefix: &'static [u8; 3],
+        conn: redis::Connection,
+    ) -> Self {
         SorterCacheDelAddCboRoaringBitmap {
             cache: LruCache::new(cap),
+            prefix,
             sorter,
             deladd_buffer: Vec::new(),
             cbo_buffer: Vec::new(),
@@ -136,7 +143,10 @@ where
             }
             DelAddRoaringBitmap { del: None, add: None } => return Ok(()),
         }
-        redis::cmd("INCR").arg(key.as_ref()).query::<usize>(&mut self.conn).unwrap();
+        self.cbo_buffer.clear();
+        self.cbo_buffer.extend_from_slice(self.prefix);
+        self.cbo_buffer.extend_from_slice(&key);
+        redis::cmd("INCR").arg(&self.cbo_buffer).query::<usize>(&mut self.conn).unwrap();
         self.sorter.insert(key, value_writer.into_inner().unwrap())
     }
 

@@ -40,6 +40,7 @@ pub fn extract_facet_number_docids<R: io::Read + io::Seek>(
         SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
             NonZeroUsize::new(20).unwrap(),
             facet_number_docids_sorter,
+            b"fnd",
             super::REDIS_CLIENT.get_connection().unwrap(),
         );
 

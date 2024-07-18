@@ -52,6 +52,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     let mut cached_word_fid_docids_sorter = SorterCacheDelAddCboRoaringBitmap::<20, _>::new(
         NonZeroUsize::new(300).unwrap(),
         word_fid_docids_sorter,
+        b"wfd",
         REDIS_CLIENT.get_connection().unwrap(),
     );
 
@@ -112,6 +113,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     let mut cached_word_docids_sorter = SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
         NonZeroUsize::new(100).unwrap(),
         word_docids_sorter,
+        b"wdi",
         REDIS_CLIENT.get_connection().unwrap(),
     );
 
@@ -126,6 +128,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     let mut cached_exact_word_docids_sorter = SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
         NonZeroUsize::new(100).unwrap(),
         exact_word_docids_sorter,
+        b"ewd",
         REDIS_CLIENT.get_connection().unwrap(),
     );
 

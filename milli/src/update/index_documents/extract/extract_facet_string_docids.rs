@@ -48,6 +48,7 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
         SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
             NonZeroUsize::new(200).unwrap(),
             facet_string_docids_sorter,
+            b"fsd",
             REDIS_CLIENT.get_connection().unwrap(),
         );
 

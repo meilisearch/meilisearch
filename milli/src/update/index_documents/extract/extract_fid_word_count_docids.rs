@@ -43,6 +43,7 @@ pub fn extract_fid_word_count_docids<R: io::Read + io::Seek>(
         SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
             NonZeroUsize::new(300).unwrap(),
             fid_word_count_docids_sorter,
+            b"fwc",
             super::REDIS_CLIENT.get_connection().unwrap(),
         );
 
