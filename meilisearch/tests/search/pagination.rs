@@ -1,7 +1,6 @@
+use super::shared_index_with_documents;
 use crate::common::Server;
 use crate::json;
-
-use super::shared_index_with_documents;
 
 #[actix_rt::test]
 async fn default_search_should_return_estimated_total_hit() {
