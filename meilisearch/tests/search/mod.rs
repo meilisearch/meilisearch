@@ -17,7 +17,9 @@ mod search_queue;
 use meilisearch::Opt;
 use once_cell::sync::Lazy;
 use tempfile::TempDir;
+use uuid::Uuid;
 
+use crate::common::index::Index;
 use crate::common::{default_settings, Server, Value};
 use crate::json;
 
@@ -50,6 +52,29 @@ static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
         }
     ])
 });
+
+pub async fn shared_index_with_documents() -> &'static Index<'static> {
+    static INDEX: Lazy<Index<'static>> = Lazy::new(|| {
+        let server = Server::new_shared();
+        let uuid = Uuid::new_v4();
+        let index = server.index(uuid.to_string());
+        index
+    });
+    let index = Lazy::get(&INDEX);
+    // That means the lazy has never been initialized, we need to create the index and index the documents
+    if index.is_none() {
+        let documents = DOCUMENTS.clone();
+        let (response, _code) = INDEX.add_documents(documents, None).await;
+        INDEX.wait_task(response.uid()).await.succeeded();
+        let (response, _code) = INDEX
+            .update_settings(
+                json!({"filterableAttributes": ["id", "title"], "sortableAttributes": ["id", "title"]}),
+            )
+            .await;
+        INDEX.wait_task(response.uid()).await.succeeded();
+    }
+    &INDEX
+}
 
 static SCORE_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     json!([
@@ -135,6 +160,29 @@ static NESTED_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     ])
 });
 
+pub async fn shared_index_with_nested_documents() -> &'static Index<'static> {
+    static INDEX: Lazy<Index<'static>> = Lazy::new(|| {
+        let server = Server::new_shared();
+        let uuid = Uuid::new_v4();
+        let index = server.index(uuid.to_string());
+        index
+    });
+    let index = Lazy::get(&INDEX);
+    // That means the lazy has never been initialized, we need to create the index and index the documents
+    if index.is_none() {
+        let documents = NESTED_DOCUMENTS.clone();
+        let (response, _code) = INDEX.add_documents(documents, None).await;
+        INDEX.wait_task(response.uid()).await.succeeded();
+        let (response, _code) = INDEX
+            .update_settings(
+                json!({"filterableAttributes": ["father", "doggos"], "sortableAttributes": ["doggos"]}),
+            )
+            .await;
+        INDEX.wait_task(response.uid()).await.succeeded();
+    }
+    &INDEX
+}
+
 static FRUITS_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     json!([
         {
@@ -210,13 +258,7 @@ static VECTOR_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
 
 #[actix_rt::test]
 async fn simple_placeholder_search() {
-    let server = Server::new().await;
-    let index = server.index("basic");
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(json!({}), |response, code| {
             assert_eq!(code, 200, "{}", response);
@@ -224,11 +266,7 @@ async fn simple_placeholder_search() {
         })
         .await;
 
-    let index = server.index("nested");
-    let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-
+    let index = shared_index_with_nested_documents().await;
     index
         .search(json!({}), |response, code| {
             assert_eq!(code, 200, "{}", response);
@@ -239,13 +277,7 @@ async fn simple_placeholder_search() {
 
 #[actix_rt::test]
 async fn simple_search() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(json!({"q": "glass"}), |response, code| {
             assert_eq!(code, 200, "{}", response);
@@ -253,11 +285,7 @@ async fn simple_search() {
         })
         .await;
 
-    let index = server.index("nested");
-    let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-
+    let index = shared_index_with_nested_documents().await;
     index
         .search(json!({"q": "pésti"}), |response, code| {
             assert_eq!(code, 200, "{}", response);
@@ -289,13 +317,7 @@ async fn phrase_search_with_stop_word() {
 
 #[actix_rt::test]
 async fn negative_phrase_search() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(json!({"q": "-\"train your dragon\"" }), |response, code| {
             assert_eq!(code, 200, "{}", response);
@@ -311,13 +333,7 @@ async fn negative_phrase_search() {
 
 #[actix_rt::test]
 async fn negative_word_search() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(json!({"q": "-escape" }), |response, code| {
             assert_eq!(code, 200, "{}", response);
@@ -342,13 +358,7 @@ async fn negative_word_search() {
 
 #[actix_rt::test]
 async fn non_negative_search() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(json!({"q": "- escape" }), |response, code| {
             assert_eq!(code, 200, "{}", response);
@@ -440,13 +450,7 @@ async fn test_thai_language() {
 
 #[actix_rt::test]
 async fn search_multiple_params() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(
             json!({
@@ -463,11 +467,7 @@ async fn search_multiple_params() {
         )
         .await;
 
-    let index = server.index("nested");
-    let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-
+    let index = shared_index_with_nested_documents().await;
     index
         .search(
             json!({
@@ -553,15 +553,7 @@ async fn search_with_filter_string_notation() {
 
 #[actix_rt::test]
 async fn search_with_filter_array_notation() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-
+    let index = shared_index_with_documents().await;
     let (response, code) = index
         .search_post(json!({
             "filter": ["title = Gläss"]
@@ -607,15 +599,7 @@ async fn search_with_contains_filter() {
 
 #[actix_rt::test]
 async fn search_with_sort_on_numbers() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    index.update_settings(json!({"sortableAttributes": ["id"]})).await;
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(
             json!({
@@ -628,14 +612,7 @@ async fn search_with_sort_on_numbers() {
         )
         .await;
 
-    let index = server.index("nested");
-
-    index.update_settings(json!({"sortableAttributes": ["doggos.age"]})).await;
-
-    let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(3).await;
-
+    let index = shared_index_with_nested_documents().await;
     index
         .search(
             json!({
@@ -651,15 +628,7 @@ async fn search_with_sort_on_numbers() {
 
 #[actix_rt::test]
 async fn search_with_sort_on_strings() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    index.update_settings(json!({"sortableAttributes": ["title"]})).await;
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(
             json!({
@@ -672,14 +641,7 @@ async fn search_with_sort_on_strings() {
         )
         .await;
 
-    let index = server.index("nested");
-
-    index.update_settings(json!({"sortableAttributes": ["doggos.name"]})).await;
-
-    let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(3).await;
-
+    let index = shared_index_with_nested_documents().await;
     index
         .search(
             json!({
@@ -695,15 +657,7 @@ async fn search_with_sort_on_strings() {
 
 #[actix_rt::test]
 async fn search_with_multiple_sort() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    index.update_settings(json!({"sortableAttributes": ["id", "title"]})).await;
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-
+    let index = shared_index_with_documents().await;
     let (response, code) = index
         .search_post(json!({
             "sort": ["id:asc", "title:desc"]
@@ -715,15 +669,7 @@ async fn search_with_multiple_sort() {
 
 #[actix_rt::test]
 async fn search_facet_distribution() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(
             json!({
@@ -738,13 +684,7 @@ async fn search_facet_distribution() {
         )
         .await;
 
-    let index = server.index("nested");
-
-    index.update_settings(json!({"filterableAttributes": ["father", "doggos.name"]})).await;
-
-    let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(3).await;
+    let index = shared_index_with_nested_documents().await;
 
     // TODO: TAMO: fix the test
     index
@@ -770,9 +710,6 @@ async fn search_facet_distribution() {
             },
         )
         .await;
-
-    index.update_settings(json!({"filterableAttributes": ["doggos"]})).await;
-    index.wait_task(4).await;
 
     index
         .search(
@@ -808,9 +745,6 @@ async fn search_facet_distribution() {
             },
         )
         .await;
-
-    index.update_settings(json!({"filterableAttributes": ["doggos.name"]})).await;
-    index.wait_task(5).await;
 
     index
         .search(

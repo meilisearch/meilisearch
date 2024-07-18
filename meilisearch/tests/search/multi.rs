@@ -94,7 +94,7 @@ async fn simple_search_single_index() {
 
     let (response, code) = server
         .multi_search(json!({"queries": [
-        {"indexUid" : "test", "q": "glass"},
+        {"indexUid": "test", "q": "glass"},
         {"indexUid": "test", "q": "captain"},
         ]}))
         .await;

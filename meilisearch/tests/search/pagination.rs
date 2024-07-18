@@ -1,16 +1,11 @@
 use crate::common::Server;
 use crate::json;
-use crate::search::DOCUMENTS;
+
+use super::shared_index_with_documents;
 
 #[actix_rt::test]
 async fn default_search_should_return_estimated_total_hit() {
-    let server = Server::new().await;
-    let index = server.index("basic");
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(json!({}), |response, code| {
             assert_eq!(code, 200, "{}", response);
@@ -28,13 +23,7 @@ async fn default_search_should_return_estimated_total_hit() {
 
 #[actix_rt::test]
 async fn simple_search() {
-    let server = Server::new().await;
-    let index = server.index("basic");
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(json!({"page": 1}), |response, code| {
             assert_eq!(code, 200, "{}", response);
@@ -53,13 +42,7 @@ async fn simple_search() {
 
 #[actix_rt::test]
 async fn page_zero_should_not_return_any_result() {
-    let server = Server::new().await;
-    let index = server.index("basic");
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(json!({"page": 0}), |response, code| {
             assert_eq!(code, 200, "{}", response);
@@ -73,13 +56,7 @@ async fn page_zero_should_not_return_any_result() {
 
 #[actix_rt::test]
 async fn hits_per_page_1() {
-    let server = Server::new().await;
-    let index = server.index("basic");
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(json!({"hitsPerPage": 1}), |response, code| {
             assert_eq!(code, 200, "{}", response);
@@ -93,13 +70,7 @@ async fn hits_per_page_1() {
 
 #[actix_rt::test]
 async fn hits_per_page_0_should_not_return_any_result() {
-    let server = Server::new().await;
-    let index = server.index("basic");
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(json!({"hitsPerPage": 0}), |response, code| {
             assert_eq!(code, 200, "{}", response);
@@ -113,8 +84,8 @@ async fn hits_per_page_0_should_not_return_any_result() {
 
 #[actix_rt::test]
 async fn ensure_placeholder_search_hit_count_valid() {
-    let server = Server::new().await;
-    let index = server.index("basic");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = json!([
         {
@@ -143,15 +114,15 @@ async fn ensure_placeholder_search_hit_count_valid() {
             "distinct": 3,
         }
     ]);
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
-    let (_response, _code) = index
+    let (response, _code) = index
         .update_settings(
             json!({ "rankingRules": ["distinct:asc"], "distinctAttribute": "distinct"}),
         )
         .await;
-    index.wait_task(1).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     for page in 0..=4 {
         index
