@@ -2,7 +2,7 @@
 source: meilisearch/tests/dumps/mod.rs
 ---
 {
-  "uid": 1,
+  "uid": "[uid]",
   "indexUid": "pets",
   "status": "succeeded",
   "type": "documentAdditionOrUpdate",

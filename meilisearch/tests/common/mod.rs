@@ -81,6 +81,7 @@ impl Display for Value {
             f,
             "{}",
             json_string!(self, {
+                ".uid" => "[uid]",
                 ".enqueuedAt" => "[date]",
                 ".startedAt" => "[date]",
                 ".finishedAt" => "[date]",

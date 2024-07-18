@@ -2,7 +2,7 @@
 source: meilisearch/tests/search/distinct.rs
 ---
 {
-  "uid": 1,
+  "uid": "[uid]",
   "indexUid": "tamo",
   "status": "succeeded",
   "type": "settingsUpdate",

@@ -5,7 +5,7 @@ use crate::json;
 
 #[actix_rt::test]
 async fn logs_stream_bad_target() {
-    let server = Server::new().await;
+    let server = Server::new_shared().await;
 
     // Wrong type
     let (response, code) = server.service.post("/logs/stream", json!({ "target": true })).await;
@@ -58,7 +58,7 @@ async fn logs_stream_bad_target() {
 
 #[actix_rt::test]
 async fn logs_stream_bad_mode() {
-    let server = Server::new().await;
+    let server = Server::new_shared().await;
 
     // Wrong type
     let (response, code) = server.service.post("/logs/stream", json!({ "mode": true })).await;
@@ -99,7 +99,7 @@ async fn logs_stream_bad_mode() {
 
 #[actix_rt::test]
 async fn logs_stream_bad_profile_memory() {
-    let server = Server::new().await;
+    let server = Server::new_shared().await;
 
     // Wrong type
     let (response, code) =
@@ -156,7 +156,7 @@ async fn logs_stream_bad_profile_memory() {
 
 #[actix_rt::test]
 async fn logs_stream_without_enabling_the_route() {
-    let server = Server::new().await;
+    let server = Server::new_shared().await;
 
     let (response, code) = server.service.post("/logs/stream", json!({})).await;
     snapshot!(code, @"400 Bad Request");

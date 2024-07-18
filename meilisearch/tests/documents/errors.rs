@@ -6,7 +6,7 @@ use crate::json;
 
 #[actix_rt::test]
 async fn get_all_documents_bad_offset() {
-    let server = Server::new().await;
+    let server = Server::new_shared().await;
     let index = server.index("test");
 
     let (response, code) = index.get_all_documents_raw("?offset").await;
@@ -45,7 +45,7 @@ async fn get_all_documents_bad_offset() {
 
 #[actix_rt::test]
 async fn get_all_documents_bad_limit() {
-    let server = Server::new().await;
+    let server = Server::new_shared().await;
     let index = server.index("test");
 
     let (response, code) = index.get_all_documents_raw("?limit").await;
@@ -84,7 +84,7 @@ async fn get_all_documents_bad_limit() {
 
 #[actix_rt::test]
 async fn get_all_documents_bad_filter() {
-    let server = Server::new().await;
+    let server = Server::new_shared().await;
     let index = server.index("test");
 
     // Since the filter can't be parsed automatically by deserr, we have the wrong error message
@@ -123,35 +123,8 @@ async fn get_all_documents_bad_filter() {
     }
     "###);
 
-    let (response, code) = index.create(None).await;
-    snapshot!(code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
-    {
-      "taskUid": 0,
-      "indexUid": "test",
-      "status": "enqueued",
-      "type": "indexCreation",
-      "enqueuedAt": "[date]"
-    }
-    "###);
-    let response = server.wait_task(0).await;
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }), @r###"
-    {
-      "uid": 0,
-      "indexUid": "test",
-      "status": "succeeded",
-      "type": "indexCreation",
-      "canceledBy": null,
-      "details": {
-        "primaryKey": null
-      },
-      "error": null,
-      "duration": "[duration]",
-      "enqueuedAt": "[date]",
-      "startedAt": "[date]",
-      "finishedAt": "[date]"
-    }
-    "###);
+    let (response, _code) = index.create(None).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.get_all_documents_raw("?filter").await;
     snapshot!(code, @"200 OK");
@@ -189,7 +162,7 @@ async fn get_all_documents_bad_filter() {
 
 #[actix_rt::test]
 async fn delete_documents_batch() {
-    let server = Server::new().await;
+    let server = Server::new_shared().await;
     let index = server.index("test");
 
     let (response, code) = index.delete_batch_raw(json!("doggo")).await;
@@ -206,7 +179,7 @@ async fn delete_documents_batch() {
 
 #[actix_rt::test]
 async fn replace_documents_missing_payload() {
-    let server = Server::new().await;
+    let server = Server::new_shared().await;
     let index = server.index("test");
 
     let (response, code) =
@@ -248,7 +221,7 @@ async fn replace_documents_missing_payload() {
 
 #[actix_rt::test]
 async fn update_documents_missing_payload() {
-    let server = Server::new().await;
+    let server = Server::new_shared().await;
     let index = server.index("test");
 
     let (response, code) = index.raw_update_documents("", Some("application/json"), "").await;
@@ -287,7 +260,7 @@ async fn update_documents_missing_payload() {
 
 #[actix_rt::test]
 async fn replace_documents_missing_content_type() {
-    let server = Server::new().await;
+    let server = Server::new_shared().await;
     let index = server.index("test");
 
     let (response, code) = index.raw_add_documents("", Vec::new(), "").await;
@@ -316,7 +289,7 @@ async fn replace_documents_missing_content_type() {
 
 #[actix_rt::test]
 async fn update_documents_missing_content_type() {
-    let server = Server::new().await;
+    let server = Server::new_shared().await;
     let index = server.index("test");
 
     let (response, code) = index.raw_update_documents("", None, "").await;
@@ -345,7 +318,7 @@ async fn update_documents_missing_content_type() {
 
 #[actix_rt::test]
 async fn replace_documents_bad_content_type() {
-    let server = Server::new().await;
+    let server = Server::new_shared().await;
     let index = server.index("test");
 
     let (response, code) = index.raw_add_documents("", vec![("Content-Type", "doggo")], "").await;
@@ -362,7 +335,7 @@ async fn replace_documents_bad_content_type() {
 
 #[actix_rt::test]
 async fn update_documents_bad_content_type() {
-    let server = Server::new().await;
+    let server = Server::new_shared().await;
     let index = server.index("test");
 
     let (response, code) = index.raw_update_documents("", Some("doggo"), "").await;
@@ -379,7 +352,7 @@ async fn update_documents_bad_content_type() {
 
 #[actix_rt::test]
 async fn replace_documents_bad_csv_delimiter() {
-    let server = Server::new().await;
+    let server = Server::new_shared().await;
     let index = server.index("test");
 
     let (response, code) = index
@@ -428,7 +401,7 @@ async fn replace_documents_bad_csv_delimiter() {
 
 #[actix_rt::test]
 async fn update_documents_bad_csv_delimiter() {
-    let server = Server::new().await;
+    let server = Server::new_shared().await;
     let index = server.index("test");
 
     let (response, code) =
@@ -475,7 +448,7 @@ async fn update_documents_bad_csv_delimiter() {
 
 #[actix_rt::test]
 async fn replace_documents_csv_delimiter_with_bad_content_type() {
-    let server = Server::new().await;
+    let server = Server::new_shared().await;
     let index = server.index("test");
 
     let (response, code) = index
@@ -507,7 +480,7 @@ async fn replace_documents_csv_delimiter_with_bad_content_type() {
 
 #[actix_rt::test]
 async fn update_documents_csv_delimiter_with_bad_content_type() {
-    let server = Server::new().await;
+    let server = Server::new_shared().await;
     let index = server.index("test");
 
     let (response, code) =
@@ -537,13 +510,13 @@ async fn update_documents_csv_delimiter_with_bad_content_type() {
 
 #[actix_rt::test]
 async fn delete_document_by_filter() {
-    let server = Server::new().await;
-    let index = server.index("doggo");
+    let server = Server::new_shared().await;
+    let index = server.index("tests-documents-errors-delete_document_by_filter");
 
     // send a bad payload type
     let (response, code) = index.delete_document_by_filter(json!("hello")).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(response, @r###"
     {
       "message": "Invalid value type: expected an object, but found a string: `\"hello\"`",
       "code": "bad_request",
@@ -555,7 +528,7 @@ async fn delete_document_by_filter() {
     // send bad payload type
     let (response, code) = index.delete_document_by_filter(json!({ "filter": true })).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(response, @r###"
     {
       "message": "Invalid syntax for the filter parameter: `expected String, Array, found: true`.",
       "code": "invalid_document_filter",
@@ -567,7 +540,7 @@ async fn delete_document_by_filter() {
     // send bad filter
     let (response, code) = index.delete_document_by_filter(json!({ "filter": "hello"})).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(response, @r###"
     {
       "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `_geoRadius`, or `_geoBoundingBox` at `hello`.\n1:6 hello",
       "code": "invalid_document_filter",
@@ -579,7 +552,7 @@ async fn delete_document_by_filter() {
     // send empty filter
     let (response, code) = index.delete_document_by_filter(json!({ "filter": ""})).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(response, @r###"
     {
       "message": "Sending an empty filter is forbidden.",
       "code": "invalid_document_filter",
@@ -591,7 +564,7 @@ async fn delete_document_by_filter() {
     // do not send any filter
     let (response, code) = index.delete_document_by_filter(json!({})).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(response, @r###"
     {
       "message": "Missing field `filter`",
       "code": "missing_document_filter",
@@ -604,11 +577,11 @@ async fn delete_document_by_filter() {
     let (response, code) =
         index.delete_document_by_filter(json!({ "filter": "doggo = bernese"})).await;
     snapshot!(code, @"202 Accepted");
-    let response = server.wait_task(response["taskUid"].as_u64().unwrap()).await;
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]"}), @r###"
+    let response = server.wait_task(response.uid()).await;
+    snapshot!(response, @r###"
     {
-      "uid": 0,
-      "indexUid": "doggo",
+      "uid": "[uid]",
+      "indexUid": "tests-documents-errors-delete_document_by_filter",
       "status": "failed",
       "type": "documentDeletion",
       "canceledBy": null,
@@ -618,7 +591,7 @@ async fn delete_document_by_filter() {
         "originalFilter": "\"doggo = bernese\""
       },
       "error": {
-        "message": "Index `doggo` not found.",
+        "message": "Index `tests-documents-errors-delete_document_by_filter` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#index_not_found"
@@ -632,17 +605,17 @@ async fn delete_document_by_filter() {
 
     let (response, code) = index.create(None).await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response["taskUid"].as_u64().unwrap()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     // no filterable are set
     let (response, code) =
         index.delete_document_by_filter(json!({ "filter": "doggo = bernese"})).await;
     snapshot!(code, @"202 Accepted");
-    let response = server.wait_task(response["taskUid"].as_u64().unwrap()).await;
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]"}), @r###"
+    let response = server.wait_task(response.uid()).await;
+    snapshot!(response, @r###"
     {
-      "uid": 2,
-      "indexUid": "doggo",
+      "uid": "[uid]",
+      "indexUid": "tests-documents-errors-delete_document_by_filter",
       "status": "failed",
       "type": "documentDeletion",
       "canceledBy": null,
@@ -666,17 +639,17 @@ async fn delete_document_by_filter() {
 
     let (response, code) = index.update_settings_filterable_attributes(json!(["doggo"])).await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response["taskUid"].as_u64().unwrap()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     // not filterable while there is a filterable attribute
     let (response, code) =
         index.delete_document_by_filter(json!({ "filter": "catto = jorts"})).await;
     snapshot!(code, @"202 Accepted");
-    let response = server.wait_task(response["taskUid"].as_u64().unwrap()).await;
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]"}), @r###"
+    let response = server.wait_task(response.uid()).await;
+    snapshot!(response, @r###"
     {
-      "uid": 4,
-      "indexUid": "doggo",
+      "uid": "[uid]",
+      "indexUid": "tests-documents-errors-delete_document_by_filter",
       "status": "failed",
       "type": "documentDeletion",
       "canceledBy": null,
@@ -701,7 +674,7 @@ async fn delete_document_by_filter() {
 
 #[actix_rt::test]
 async fn fetch_document_by_filter() {
-    let server = Server::new().await;
+    let server = Server::new_shared().await;
     let index = server.index("doggo");
     index.update_settings_filterable_attributes(json!(["color"])).await;
     index
@@ -798,7 +771,7 @@ async fn fetch_document_by_filter() {
 
 #[actix_rt::test]
 async fn retrieve_vectors() {
-    let server = Server::new().await;
+    let server = Server::new_shared().await;
     let index = server.index("doggo");
 
     // GET ALL DOCUMENTS BY QUERY

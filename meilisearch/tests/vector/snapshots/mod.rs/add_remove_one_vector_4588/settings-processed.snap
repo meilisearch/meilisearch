@@ -2,7 +2,7 @@
 source: meilisearch/tests/vector/mod.rs
 ---
 {
-  "uid": 0,
+  "uid": "[uid]",
   "indexUid": "doggo",
   "status": "succeeded",
   "type": "settingsUpdate",

@@ -16,6 +16,7 @@ use tempfile::TempDir;
 use tokio::time::sleep;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::Layer;
+use uuid::Uuid;
 
 use super::index::Index;
 use super::service::Service;
@@ -30,8 +31,30 @@ pub struct Server {
 }
 
 pub static TEST_TEMP_DIR: Lazy<TempDir> = Lazy::new(|| TempDir::new().unwrap());
+pub static TEST_SHARED_INSTANCE: Lazy<Server> = Lazy::new(Server::init_new_shared_instance);
 
 impl Server {
+    fn init_new_shared_instance() -> Self {
+        let dir = TempDir::new().unwrap();
+
+        if cfg!(windows) {
+            std::env::set_var("TMP", TEST_TEMP_DIR.path());
+        } else {
+            std::env::set_var("TMPDIR", TEST_TEMP_DIR.path());
+        }
+
+        let options = default_settings(dir.path());
+
+        let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
+        let service = Service { index_scheduler, auth, options, api_key: None };
+
+        Server { service, _dir: Some(dir) }
+    }
+
+    pub async fn new_shared() -> &'static Self {
+        &TEST_SHARED_INSTANCE
+    }
+
     pub async fn new() -> Self {
         let dir = TempDir::new().unwrap();
 
@@ -106,6 +129,12 @@ impl Server {
             true,
         ))
         .await
+    }
+
+    /// Returns a view to an index. There is no guarantee that the index exists.
+    pub fn unique_index(&self) -> Index<'_> {
+        let uuid = Uuid::new_v4();
+        self.index_with_encoder(uuid.to_string(), Encoder::Plain)
     }
 
     /// Returns a view to an index. There is no guarantee that the index exists.

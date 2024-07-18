@@ -218,7 +218,7 @@ async fn user_provided_embeddings_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 2,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -247,7 +247,7 @@ async fn user_provided_embeddings_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 3,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -277,7 +277,7 @@ async fn user_provided_embeddings_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 4,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -306,7 +306,7 @@ async fn user_provided_embeddings_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 5,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -335,7 +335,7 @@ async fn user_provided_embeddings_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 6,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -364,7 +364,7 @@ async fn user_provided_embeddings_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 7,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -405,7 +405,7 @@ async fn user_provided_embeddings_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 10,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -433,7 +433,7 @@ async fn user_provided_embeddings_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 11,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -461,7 +461,7 @@ async fn user_provided_embeddings_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 12,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -497,7 +497,7 @@ async fn user_provided_vectors_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 2,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -526,7 +526,7 @@ async fn user_provided_vectors_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 3,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -555,7 +555,7 @@ async fn user_provided_vectors_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 4,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
