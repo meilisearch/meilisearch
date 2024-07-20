@@ -11,6 +11,8 @@ use smallvec::SmallVec;
 use crate::update::del_add::{DelAdd, KvWriterDelAdd};
 use crate::CboRoaringBitmapCodec;
 
+const DISABLED: bool = true;
+
 pub struct SorterCacheDelAddCboRoaringBitmap<const N: usize, MF> {
     cache: ArcCache<SmallVec<[u8; N]>, DelAddRoaringBitmap>,
     prefix: &'static [u8; 3],
@@ -43,6 +45,10 @@ where
     MF: for<'a> Fn(&[u8], &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>, U>,
 {
     pub fn insert_del_u32(&mut self, key: &[u8], n: u32) -> Result<(), grenad::Error<U>> {
+        if DISABLED {
+            return self.write_entry_to_sorter(key, DelAddRoaringBitmap::new_del_u32(n));
+        }
+
         let (cache, evicted) = self.cache.get_mut(key);
         match cache {
             Some(DelAddRoaringBitmap { del, add: _ }) => {
@@ -67,6 +73,10 @@ where
         key: &[u8],
         bitmap: RoaringBitmap,
     ) -> Result<(), grenad::Error<U>> {
+        if DISABLED {
+            return self.write_entry_to_sorter(key, DelAddRoaringBitmap::new_del(bitmap));
+        }
+
         let (cache, evicted) = self.cache.get_mut(key);
         match cache {
             Some(DelAddRoaringBitmap { del, add: _ }) => {
@@ -87,6 +97,10 @@ where
     }
 
     pub fn insert_add_u32(&mut self, key: &[u8], n: u32) -> Result<(), grenad::Error<U>> {
+        if DISABLED {
+            return self.write_entry_to_sorter(key, DelAddRoaringBitmap::new_add_u32(n));
+        }
+
         let (cache, evicted) = self.cache.get_mut(key);
         match cache {
             Some(DelAddRoaringBitmap { del: _, add }) => {
@@ -111,6 +125,10 @@ where
         key: &[u8],
         bitmap: RoaringBitmap,
     ) -> Result<(), grenad::Error<U>> {
+        if DISABLED {
+            return self.write_entry_to_sorter(key, DelAddRoaringBitmap::new_add(bitmap));
+        }
+
         let (cache, evicted) = self.cache.get_mut(key);
         match cache {
             Some(DelAddRoaringBitmap { del: _, add }) => {
@@ -131,6 +149,10 @@ where
     }
 
     pub fn insert_del_add_u32(&mut self, key: &[u8], n: u32) -> Result<(), grenad::Error<U>> {
+        if DISABLED {
+            return self.write_entry_to_sorter(key, DelAddRoaringBitmap::new_del_add_u32(n));
+        }
+
         let (cache, evicted) = self.cache.get_mut(key);
         match cache {
             Some(DelAddRoaringBitmap { del, add }) => {
@@ -151,9 +173,9 @@ where
         }
     }
 
-    fn write_entry_to_sorter(
+    fn write_entry_to_sorter<A: AsRef<[u8]>>(
         &mut self,
-        key: SmallVec<[u8; N]>,
+        key: A,
         deladd: DelAddRoaringBitmap,
     ) -> Result<(), grenad::Error<U>> {
         self.deladd_buffer.clear();
@@ -182,7 +204,7 @@ where
         }
         self.cbo_buffer.clear();
         self.cbo_buffer.extend_from_slice(self.prefix);
-        self.cbo_buffer.extend_from_slice(&key);
+        self.cbo_buffer.extend_from_slice(key.as_ref());
         redis::cmd("INCR").arg(&self.cbo_buffer).query::<usize>(&mut self.conn).unwrap();
         self.sorter.insert(key, value_writer.into_inner().unwrap())
     }
