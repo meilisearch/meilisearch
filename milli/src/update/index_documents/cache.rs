@@ -210,6 +210,10 @@ where
     }
 
     pub fn direct_insert(&mut self, key: &[u8], val: &[u8]) -> Result<(), grenad::Error<U>> {
+        self.cbo_buffer.clear();
+        self.cbo_buffer.extend_from_slice(self.prefix);
+        self.cbo_buffer.extend_from_slice(key);
+        self.conn.merge(&self.cbo_buffer, 1u32.to_ne_bytes()).unwrap();
         self.sorter.insert(key, val)
     }
 
