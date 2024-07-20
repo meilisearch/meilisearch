@@ -42,7 +42,7 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
             NonZeroUsize::new(300).unwrap(),
             word_position_docids_sorter,
             b"wpd",
-            super::REDIS_CLIENT.get_connection().unwrap(),
+            super::SLED_DB.clone(),
         );
 
     let mut del_word_positions: BTreeSet<(u16, Vec<u8>)> = BTreeSet::new();

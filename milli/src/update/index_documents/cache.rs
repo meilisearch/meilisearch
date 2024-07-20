@@ -19,7 +19,7 @@ pub struct SorterCacheDelAddCboRoaringBitmap<const N: usize, MF> {
     sorter: grenad::Sorter<MF>,
     deladd_buffer: Vec<u8>,
     cbo_buffer: Vec<u8>,
-    conn: redis::Connection,
+    conn: sled::Db,
 }
 
 impl<const N: usize, MF> SorterCacheDelAddCboRoaringBitmap<N, MF> {
@@ -27,7 +27,7 @@ impl<const N: usize, MF> SorterCacheDelAddCboRoaringBitmap<N, MF> {
         cap: NonZeroUsize,
         sorter: grenad::Sorter<MF>,
         prefix: &'static [u8; 3],
-        conn: redis::Connection,
+        conn: sled::Db,
     ) -> Self {
         SorterCacheDelAddCboRoaringBitmap {
             cache: ArcCache::new(cap),
@@ -205,7 +205,7 @@ where
         self.cbo_buffer.clear();
         self.cbo_buffer.extend_from_slice(self.prefix);
         self.cbo_buffer.extend_from_slice(key.as_ref());
-        redis::cmd("INCR").arg(&self.cbo_buffer).query::<usize>(&mut self.conn).unwrap();
+        self.conn.merge(&self.cbo_buffer, 1u32.to_ne_bytes()).unwrap();
         self.sorter.insert(key, value_writer.into_inner().unwrap())
     }
 

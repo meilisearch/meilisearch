@@ -14,7 +14,7 @@ use std::result::Result as StdResult;
 use std::sync::Arc;
 
 use crossbeam_channel::{Receiver, Sender};
-pub use extract::REDIS_CLIENT;
+pub use extract::SLED_DB;
 use grenad::{Merger, MergerBuilder};
 use heed::types::Str;
 use heed::Database;

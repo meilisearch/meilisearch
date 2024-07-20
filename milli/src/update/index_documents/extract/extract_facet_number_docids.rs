@@ -41,7 +41,7 @@ pub fn extract_facet_number_docids<R: io::Read + io::Seek>(
             NonZeroUsize::new(20).unwrap(),
             facet_number_docids_sorter,
             b"fnd",
-            super::REDIS_CLIENT.get_connection().unwrap(),
+            super::SLED_DB.clone(),
         );
 
     let mut cursor = fid_docid_facet_number.into_cursor()?;

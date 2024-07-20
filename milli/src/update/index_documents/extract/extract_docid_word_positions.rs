@@ -29,7 +29,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     settings_diff: &InnerIndexSettingsDiff,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<(grenad::Reader<BufReader<File>>, ScriptLanguageDocidsMap)> {
-    let mut conn = super::REDIS_CLIENT.get_connection().unwrap();
+    let conn = super::SLED_DB.clone();
 
     let max_positions_per_attributes = max_positions_per_attributes
         .map_or(MAX_POSITION_PER_ATTRIBUTE, |max| max.min(MAX_POSITION_PER_ATTRIBUTE));
@@ -150,7 +150,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         for (field_id, value) in obkv.iter() {
             key_buffer.truncate(mem::size_of::<u32>());
             key_buffer.extend_from_slice(&field_id.to_be_bytes());
-            redis::cmd("INCR").arg(key_buffer.as_slice()).query::<usize>(&mut conn).unwrap();
+            conn.merge(key_buffer.as_slice(), 1u32.to_ne_bytes()).unwrap();
             docid_word_positions_sorter.insert(&key_buffer, value)?;
         }
 

@@ -46,7 +46,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<ExtractedFacetValues> {
-    let mut conn = super::REDIS_CLIENT.get_connection().unwrap();
+    let mut conn = super::SLED_DB.clone();
     let max_memory = indexer.max_memory_by_thread();
 
     let mut fid_docid_facet_numbers_sorter = create_sorter(
@@ -334,7 +334,7 @@ fn insert_numbers_diff<MF>(
     key_buffer: &mut Vec<u8>,
     mut del_numbers: Vec<f64>,
     mut add_numbers: Vec<f64>,
-    conn: &mut redis::Connection,
+    conn: &mut sled::Db,
 ) -> Result<()>
 where
     MF: for<'a> Fn(&[u8], &[Cow<'a, [u8]>]) -> StdResult<Cow<'a, [u8]>, Error>,
@@ -366,7 +366,7 @@ where
                     let mut obkv = KvWriterDelAdd::memory();
                     obkv.insert(DelAdd::Deletion, bytes_of(&()))?;
                     let bytes = obkv.into_inner()?;
-                    redis::cmd("INCR").arg(key_buffer.as_slice()).query::<usize>(conn).unwrap();
+                    conn.merge(key_buffer.as_slice(), 1u32.to_ne_bytes()).unwrap();
                     fid_docid_facet_numbers_sorter.insert(&key_buffer, bytes)?;
                 }
             }
@@ -380,7 +380,7 @@ where
                     let mut obkv = KvWriterDelAdd::memory();
                     obkv.insert(DelAdd::Addition, bytes_of(&()))?;
                     let bytes = obkv.into_inner()?;
-                    redis::cmd("INCR").arg(key_buffer.as_slice()).query::<usize>(conn).unwrap();
+                    conn.merge(key_buffer.as_slice(), 1u32.to_ne_bytes()).unwrap();
                     fid_docid_facet_numbers_sorter.insert(&key_buffer, bytes)?;
                 }
             }
@@ -397,7 +397,7 @@ fn insert_strings_diff<MF>(
     key_buffer: &mut Vec<u8>,
     mut del_strings: Vec<(String, String)>,
     mut add_strings: Vec<(String, String)>,
-    conn: &mut redis::Connection,
+    conn: &mut sled::Db,
 ) -> Result<()>
 where
     MF: for<'a> Fn(&[u8], &[Cow<'a, [u8]>]) -> StdResult<Cow<'a, [u8]>, Error>,
@@ -426,7 +426,7 @@ where
                 let mut obkv = KvWriterDelAdd::memory();
                 obkv.insert(DelAdd::Deletion, original)?;
                 let bytes = obkv.into_inner()?;
-                redis::cmd("INCR").arg(key_buffer.as_slice()).query::<usize>(conn).unwrap();
+                conn.merge(key_buffer.as_slice(), 1u32.to_ne_bytes()).unwrap();
                 fid_docid_facet_strings_sorter.insert(&key_buffer, bytes)?;
             }
             EitherOrBoth::Right((normalized, original)) => {
@@ -436,7 +436,7 @@ where
                 let mut obkv = KvWriterDelAdd::memory();
                 obkv.insert(DelAdd::Addition, original)?;
                 let bytes = obkv.into_inner()?;
-                redis::cmd("INCR").arg(key_buffer.as_slice()).query::<usize>(conn).unwrap();
+                conn.merge(key_buffer.as_slice(), 1u32.to_ne_bytes()).unwrap();
                 fid_docid_facet_strings_sorter.insert(&key_buffer, bytes)?;
             }
         }

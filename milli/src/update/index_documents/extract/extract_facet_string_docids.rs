@@ -10,7 +10,7 @@ use heed::types::SerdeJson;
 use heed::BytesEncode;
 
 use super::helpers::{create_sorter, sorter_into_reader, try_split_array_at, GrenadParameters};
-use super::REDIS_CLIENT;
+use super::SLED_DB;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
 use crate::heed_codec::{BEU16StrCodec, StrRefCodec};
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
@@ -32,7 +32,7 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     _settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<(grenad::Reader<BufReader<File>>, grenad::Reader<BufReader<File>>)> {
-    let mut conn = REDIS_CLIENT.get_connection().unwrap();
+    let conn = SLED_DB.clone();
     let max_memory = indexer.max_memory_by_thread();
     let options = NormalizerOption { lossy: true, ..Default::default() };
 
@@ -49,7 +49,7 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
             NonZeroUsize::new(200).unwrap(),
             facet_string_docids_sorter,
             b"fsd",
-            REDIS_CLIENT.get_connection().unwrap(),
+            SLED_DB.clone(),
         );
 
     let mut normalized_facet_string_docids_sorter = create_sorter(
@@ -106,7 +106,7 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
 
             let key = (field_id, hyper_normalized_value.as_ref());
             let key_bytes = BEU16StrCodec::bytes_encode(&key).map_err(heed::Error::Encoding)?;
-            redis::cmd("INCR").arg(key_bytes.as_ref()).query::<usize>(&mut conn).unwrap();
+            conn.merge(key_bytes.as_ref(), 1u32.to_ne_bytes()).unwrap();
             normalized_facet_string_docids_sorter.insert(key_bytes, &buffer)?;
         }
 

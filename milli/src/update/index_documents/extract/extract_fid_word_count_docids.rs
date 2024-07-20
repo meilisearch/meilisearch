@@ -44,7 +44,7 @@ pub fn extract_fid_word_count_docids<R: io::Read + io::Seek>(
             NonZeroUsize::new(300).unwrap(),
             fid_word_count_docids_sorter,
             b"fwc",
-            super::REDIS_CLIENT.get_connection().unwrap(),
+            super::SLED_DB.clone(),
         );
 
     let mut key_buffer = Vec::new();

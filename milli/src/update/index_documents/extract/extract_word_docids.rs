@@ -11,7 +11,7 @@ use super::helpers::{
     create_sorter, create_writer, merge_deladd_cbo_roaring_bitmaps, try_split_array_at,
     writer_into_reader, GrenadParameters,
 };
-use super::REDIS_CLIENT;
+use super::SLED_DB;
 use crate::error::SerializationError;
 use crate::heed_codec::StrBEU16Codec;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
@@ -53,7 +53,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         NonZeroUsize::new(300).unwrap(),
         word_fid_docids_sorter,
         b"wfd",
-        REDIS_CLIENT.get_connection().unwrap(),
+        SLED_DB.clone(),
     );
 
     let mut key_buffer = Vec::new();
@@ -114,7 +114,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         NonZeroUsize::new(100).unwrap(),
         word_docids_sorter,
         b"wdi",
-        REDIS_CLIENT.get_connection().unwrap(),
+        SLED_DB.clone(),
     );
 
     let exact_word_docids_sorter = create_sorter(
@@ -129,7 +129,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         NonZeroUsize::new(100).unwrap(),
         exact_word_docids_sorter,
         b"ewd",
-        REDIS_CLIENT.get_connection().unwrap(),
+        SLED_DB.clone(),
     );
 
     let mut iter = cached_word_fid_docids_sorter.into_sorter()?.into_stream_merger_iter()?;
@@ -221,7 +221,7 @@ fn docids_into_writers<W>(
     deletions: &RoaringBitmap,
     additions: &RoaringBitmap,
     writer: &mut grenad::Writer<W>,
-    conn: &mut redis::Connection,
+    conn: &mut sled::Db,
 ) -> Result<()>
 where
     W: std::io::Write,
@@ -253,7 +253,7 @@ where
     }
 
     // insert everything in the same writer.
-    redis::cmd("INCR").arg(word.as_bytes()).query::<usize>(conn).unwrap();
+    conn.merge(word.as_bytes(), 1u32.to_ne_bytes()).unwrap();
     writer.insert(word.as_bytes(), obkv.into_inner().unwrap())?;
 
     Ok(())

@@ -56,7 +56,7 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
                 NonZeroUsize::new(100).unwrap(),
                 sorter,
                 b"wpp",
-                super::REDIS_CLIENT.get_connection().unwrap(),
+                super::SLED_DB.clone(),
             )
         })
         .collect();
