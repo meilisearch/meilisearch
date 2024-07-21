@@ -306,9 +306,10 @@ impl<K: Eq + Hash + Clone, V> ArcCache<K, V> {
             return evicted;
         }
 
-        // TODO not sure that I understand
         if self.frequent_set.contains(&key) {
-            self.frequent_set.get(&key);
+            if let Some(evicted_entry) = self.frequent_set.push(key, value) {
+                evicted.push(evicted_entry);
+            }
             return evicted;
         }
 
@@ -335,7 +336,9 @@ impl<K: Eq + Hash + Clone, V> ArcCache<K, V> {
             };
 
             self.p = (self.p + delta).min(self.capacity.get());
-            self.replace(&key);
+            if let Some(evicted_entry) = self.replace(&key) {
+                evicted.push(evicted_entry);
+            }
             self.recent_evicted.pop(&key);
             if let Some(evicted_entry) = self.frequent_set.push(key, value) {
                 evicted.push(evicted_entry);
