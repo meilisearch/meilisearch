@@ -263,9 +263,7 @@ pub struct ArcCache<K, V> {
     frequent_set: LruCache<K, V>,
     frequent_evicted: LruCache<K, ()>,
     capacity: NonZeroUsize,
-    // negative means shrinking recent and increasing frequent
-    // positive means shrinking frequent and increasing recent
-    p: isize,
+    p: usize,
 }
 
 impl<K: Eq + Hash, V> ArcCache<K, V> {
@@ -282,105 +280,131 @@ impl<K: Eq + Hash, V> ArcCache<K, V> {
 }
 
 impl<K: Eq + Hash + Clone, V> ArcCache<K, V> {
-    pub fn get_mut<Q>(&mut self, k: &Q) -> (Option<&mut V>, Option<(K, V)>)
+    fn get_mut<Q>(&mut self, k: &Q) -> (Option<&mut V>, Option<(K, V)>)
     where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
     {
-        let evicted = match self.recent_set.pop_entry(k) {
-            Some((key, value)) => self.frequent_set.push(key, value),
-            None => None,
-        };
-
-        (self.frequent_set.get_mut(k), evicted)
+        if let Some((key, value)) = self.recent_set.pop_entry(k) {
+            let evicted = self.frequent_set.push(key, value);
+            (self.frequent_set.get_mut(k), evicted)
+        } else {
+            (self.frequent_set.get_mut(k), None)
+        }
     }
 
-    pub fn push(&mut self, k: K, v: V) -> Vec<(K, V)> {
+    fn push(&mut self, key: K, value: V) -> Vec<(K, V)> {
         let mut evicted = Vec::new();
 
-        if self.frequent_set.contains(&k) {
-            if let Some(evicted_entry) = self.frequent_set.push(k, v) {
+        if self.recent_set.contains(&key) {
+            if let Some(evicted_entry) = self.recent_set.pop_entry(&key) {
                 evicted.push(evicted_entry);
             }
-        } else if let Some((k, v)) = self.recent_set.pop_entry(&k) {
-            if let Some(evicted_entry) = self.frequent_set.push(k, v) {
+            if let Some(evicted_entry) = self.frequent_set.push(key, value) {
                 evicted.push(evicted_entry);
             }
-        } else if self.frequent_evicted.contains(&k) {
-            let delta = if self.recent_evicted.len() > self.frequent_evicted.len() {
-                self.recent_evicted.len() / self.frequent_evicted.len()
-            } else {
-                1
-            };
+            return evicted;
+        }
 
-            if (delta as isize) < self.p {
-                self.p = self.p.saturating_sub(delta as isize);
-            } else {
-                self.p = 0;
-            }
+        // TODO not sure that I understand
+        if self.frequent_set.contains(&key) {
+            self.frequent_set.get(&key);
+            return evicted;
+        }
 
-            if self.recent_set.len() + self.frequent_set.len() >= self.capacity.get() {
-                if let Some(evicted_entry) = self.replace(true) {
-                    evicted.push(evicted_entry);
+        if self.recent_set.len() + self.frequent_set.len() == self.capacity.get() {
+            if self.recent_set.len() < self.capacity.get() {
+                if self.recent_set.len() + self.recent_evicted.len() == self.capacity.get() {
+                    self.recent_evicted.pop_lru();
                 }
+                if let Some((lru_key, lru_value)) = self.frequent_set.pop_lru() {
+                    self.frequent_evicted.put(lru_key.clone(), ());
+                    evicted.push((lru_key, lru_value));
+                }
+            } else if let Some((lru_key, lru_value)) = self.recent_set.pop_lru() {
+                self.recent_evicted.put(lru_key.clone(), ());
+                evicted.push((lru_key, lru_value));
             }
+        }
 
-            self.frequent_evicted.pop(&k);
-            if let Some(evicted_entry) = self.frequent_set.push(k, v) {
-                evicted.push(evicted_entry);
-            }
-        } else if self.recent_evicted.contains(&k) {
-            let delta = if self.frequent_evicted.len() > self.recent_evicted.len() {
+        if self.recent_evicted.contains(&key) {
+            let delta = if self.recent_evicted.len() >= self.frequent_evicted.len() {
+                1
+            } else {
                 self.frequent_evicted.len() / self.recent_evicted.len()
-            } else {
-                1
             };
 
-            if (delta as isize) <= (self.capacity.get() as isize) - self.p {
-                self.p = self.p.saturating_add(delta as isize);
-            } else {
-                self.p = self.capacity.get() as isize;
+            self.p = (self.p + delta).min(self.capacity.get());
+            self.replace(&key);
+            self.recent_evicted.pop(&key);
+            if let Some(evicted_entry) = self.frequent_set.push(key, value) {
+                evicted.push(evicted_entry);
             }
-
-            if self.recent_set.len() + self.frequent_set.len() >= self.capacity.get() {
-                if let Some(evicted_entry) = self.replace(false) {
+        } else if self.frequent_evicted.contains(&key) {
+            let delta = if self.frequent_evicted.len() >= self.recent_evicted.len() {
+                1
+            } else {
+                self.recent_evicted.len() / self.frequent_evicted.len()
+            };
+            self.p = self.p.saturating_sub(delta);
+            if let Some(evicted_entry) = self.replace(&key) {
+                evicted.push(evicted_entry);
+            }
+            self.frequent_evicted.pop(&key);
+            if let Some(evicted_entry) = self.frequent_set.push(key, value) {
+                evicted.push(evicted_entry);
+            }
+        } else {
+            if self.recent_set.len() + self.recent_evicted.len() == self.capacity.get() {
+                if self.recent_set.len() < self.capacity.get() {
+                    self.recent_evicted.pop_lru();
+                    if let Some(evicted_entry) = self.replace(&key) {
+                        evicted.push(evicted_entry);
+                    }
+                } else if let Some(evicted_entry) = self.recent_set.pop_lru() {
+                    evicted.push(evicted_entry);
+                }
+            } else if self.recent_set.len()
+                + self.frequent_set.len()
+                + self.recent_evicted.len()
+                + self.frequent_evicted.len()
+                >= self.capacity.get()
+            {
+                if self.recent_set.len()
+                    + self.frequent_set.len()
+                    + self.recent_evicted.len()
+                    + self.frequent_evicted.len()
+                    == 2 * self.capacity.get()
+                {
+                    self.frequent_evicted.pop_lru();
+                }
+                if let Some(evicted_entry) = self.replace(&key) {
                     evicted.push(evicted_entry);
                 }
             }
-
-            self.recent_evicted.pop(&k);
-            if let Some(evicted_entry) = self.frequent_set.push(k, v) {
-                evicted.push(evicted_entry)
-            }
-        } else if self.recent_set.len() + self.frequent_set.len() >= self.capacity.get() {
-            if let Some(evicted_entry) = self.replace(false) {
+            if let Some(evicted_entry) = self.recent_set.push(key, value) {
                 evicted.push(evicted_entry);
             }
-        } else if let Some(evicted_entry) = self.recent_set.push(k, v) {
-            evicted.push(evicted_entry);
         }
 
         evicted
     }
 
-    fn replace(&mut self, frequent_evicted_contains_key: bool) -> Option<(K, V)> {
+    fn replace(&mut self, key: &K) -> Option<(K, V)> {
         if !self.recent_set.is_empty()
-            && (self.recent_set.len() as isize > self.p
-                || (self.recent_set.len() as isize == self.p && frequent_evicted_contains_key))
+            && (self.recent_set.len() > self.p
+                || (self.frequent_evicted.contains(key) && self.recent_set.len() == self.p))
         {
-            match self.recent_set.pop_lru() {
-                Some((key, value)) => {
-                    self.recent_evicted.push(key.clone(), ());
-                    Some((key, value))
-                }
-                None => None,
+            if let Some((lru_key, lru_value)) = self.recent_set.pop_lru() {
+                self.recent_evicted.put(lru_key.clone(), ());
+                return Some((lru_key, lru_value));
             }
-        } else if let Some((key, value)) = self.frequent_set.pop_lru() {
-            self.frequent_evicted.push(key.clone(), ());
-            Some((key, value))
-        } else {
-            None
+        } else if let Some((lru_key, lru_value)) = self.frequent_set.pop_lru() {
+            self.frequent_evicted.put(lru_key.clone(), ());
+            return Some((lru_key, lru_value));
         }
+
+        None
     }
 }
 
