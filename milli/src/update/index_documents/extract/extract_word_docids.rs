@@ -253,7 +253,9 @@ where
     }
 
     // insert everything in the same writer.
-    conn.merge(word.as_bytes(), 1u32.to_ne_bytes()).unwrap();
+    let mut key = b"wod".to_vec();
+    key.extend_from_slice(word.as_bytes());
+    conn.merge(key, 1u32.to_ne_bytes()).unwrap();
     writer.insert(word.as_bytes(), obkv.into_inner().unwrap())?;
 
     Ok(())

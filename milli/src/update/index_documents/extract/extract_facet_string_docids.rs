@@ -106,7 +106,9 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
 
             let key = (field_id, hyper_normalized_value.as_ref());
             let key_bytes = BEU16StrCodec::bytes_encode(&key).map_err(heed::Error::Encoding)?;
-            conn.merge(key_bytes.as_ref(), 1u32.to_ne_bytes()).unwrap();
+            let mut key = b"nfs".to_vec();
+            key.extend_from_slice(&key_bytes);
+            conn.merge(key, 1u32.to_ne_bytes()).unwrap();
             normalized_facet_string_docids_sorter.insert(key_bytes, &buffer)?;
         }
 

@@ -150,7 +150,9 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         for (field_id, value) in obkv.iter() {
             key_buffer.truncate(mem::size_of::<u32>());
             key_buffer.extend_from_slice(&field_id.to_be_bytes());
-            conn.merge(key_buffer.as_slice(), 1u32.to_ne_bytes()).unwrap();
+            let mut key = b"dwp".to_vec();
+            key.extend_from_slice(&key_buffer);
+            conn.merge(key, 1u32.to_ne_bytes()).unwrap();
             docid_word_positions_sorter.insert(&key_buffer, value)?;
         }
 

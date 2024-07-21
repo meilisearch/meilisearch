@@ -366,7 +366,9 @@ where
                     let mut obkv = KvWriterDelAdd::memory();
                     obkv.insert(DelAdd::Deletion, bytes_of(&()))?;
                     let bytes = obkv.into_inner()?;
-                    conn.merge(key_buffer.as_slice(), 1u32.to_ne_bytes()).unwrap();
+                    let mut key = b"dfn".to_vec();
+                    key.extend_from_slice(key_buffer);
+                    conn.merge(key, 1u32.to_ne_bytes()).unwrap();
                     fid_docid_facet_numbers_sorter.insert(&key_buffer, bytes)?;
                 }
             }
@@ -380,7 +382,9 @@ where
                     let mut obkv = KvWriterDelAdd::memory();
                     obkv.insert(DelAdd::Addition, bytes_of(&()))?;
                     let bytes = obkv.into_inner()?;
-                    conn.merge(key_buffer.as_slice(), 1u32.to_ne_bytes()).unwrap();
+                    let mut key = b"dfn".to_vec();
+                    key.extend_from_slice(key_buffer);
+                    conn.merge(key, 1u32.to_ne_bytes()).unwrap();
                     fid_docid_facet_numbers_sorter.insert(&key_buffer, bytes)?;
                 }
             }
@@ -426,7 +430,9 @@ where
                 let mut obkv = KvWriterDelAdd::memory();
                 obkv.insert(DelAdd::Deletion, original)?;
                 let bytes = obkv.into_inner()?;
-                conn.merge(key_buffer.as_slice(), 1u32.to_ne_bytes()).unwrap();
+                let mut key = b"dfs".to_vec();
+                key.extend_from_slice(key_buffer);
+                conn.merge(key, 1u32.to_ne_bytes()).unwrap();
                 fid_docid_facet_strings_sorter.insert(&key_buffer, bytes)?;
             }
             EitherOrBoth::Right((normalized, original)) => {
@@ -436,7 +442,9 @@ where
                 let mut obkv = KvWriterDelAdd::memory();
                 obkv.insert(DelAdd::Addition, original)?;
                 let bytes = obkv.into_inner()?;
-                conn.merge(key_buffer.as_slice(), 1u32.to_ne_bytes()).unwrap();
+                let mut key = b"dfs".to_vec();
+                key.extend_from_slice(key_buffer);
+                conn.merge(key, 1u32.to_ne_bytes()).unwrap();
                 fid_docid_facet_strings_sorter.insert(&key_buffer, bytes)?;
             }
         }

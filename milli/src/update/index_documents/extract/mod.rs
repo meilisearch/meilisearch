@@ -43,11 +43,11 @@ pub static SLED_DB: once_cell::sync::Lazy<sled::Db> = once_cell::sync::Lazy::new
     ) -> Option<Vec<u8>> {
         let current_count = old_value.map_or(0, |b| b.try_into().map(u32::from_ne_bytes).unwrap());
         let new_count = merged_bytes.try_into().map(u32::from_ne_bytes).unwrap();
-        let count = current_count.saturating_add(new_count).to_be_bytes();
+        let count = current_count.saturating_add(new_count).to_ne_bytes();
         Some(count.to_vec())
     }
 
-    let db = sled::open("write-stats").unwrap();
+    let db = sled::open("write-stats.sled").unwrap();
     db.set_merge_operator(increment_u32);
     db
 });

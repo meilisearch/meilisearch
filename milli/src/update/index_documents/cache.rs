@@ -11,7 +11,7 @@ use smallvec::SmallVec;
 use crate::update::del_add::{DelAdd, KvWriterDelAdd};
 use crate::CboRoaringBitmapCodec;
 
-const DISABLED: bool = true;
+const ENABLED: bool = true;
 
 pub struct SorterCacheDelAddCboRoaringBitmap<const N: usize, MF> {
     cache: ArcCache<SmallVec<[u8; N]>, DelAddRoaringBitmap>,
@@ -45,7 +45,7 @@ where
     MF: for<'a> Fn(&[u8], &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>, U>,
 {
     pub fn insert_del_u32(&mut self, key: &[u8], n: u32) -> Result<(), grenad::Error<U>> {
-        if DISABLED {
+        if !ENABLED {
             return self.write_entry_to_sorter(key, DelAddRoaringBitmap::new_del_u32(n));
         }
 
@@ -73,7 +73,7 @@ where
         key: &[u8],
         bitmap: RoaringBitmap,
     ) -> Result<(), grenad::Error<U>> {
-        if DISABLED {
+        if !ENABLED {
             return self.write_entry_to_sorter(key, DelAddRoaringBitmap::new_del(bitmap));
         }
 
@@ -97,7 +97,7 @@ where
     }
 
     pub fn insert_add_u32(&mut self, key: &[u8], n: u32) -> Result<(), grenad::Error<U>> {
-        if DISABLED {
+        if !ENABLED {
             return self.write_entry_to_sorter(key, DelAddRoaringBitmap::new_add_u32(n));
         }
 
@@ -125,7 +125,7 @@ where
         key: &[u8],
         bitmap: RoaringBitmap,
     ) -> Result<(), grenad::Error<U>> {
-        if DISABLED {
+        if !ENABLED {
             return self.write_entry_to_sorter(key, DelAddRoaringBitmap::new_add(bitmap));
         }
 
@@ -149,7 +149,7 @@ where
     }
 
     pub fn insert_del_add_u32(&mut self, key: &[u8], n: u32) -> Result<(), grenad::Error<U>> {
-        if DISABLED {
+        if !ENABLED {
             return self.write_entry_to_sorter(key, DelAddRoaringBitmap::new_del_add_u32(n));
         }
 
