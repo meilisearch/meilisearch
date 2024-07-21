@@ -56,7 +56,7 @@ where
             }
             None => {
                 let value = DelAddRoaringBitmap::new_del_u32(n);
-                if let Some((key, deladd)) = self.cache.push(key.into(), value) {
+                for (key, deladd) in self.cache.push(key.into(), value) {
                     self.write_entry_to_sorter(key, deladd)?;
                 }
             }
@@ -84,7 +84,7 @@ where
             }
             None => {
                 let value = DelAddRoaringBitmap::new_del(bitmap);
-                if let Some((key, deladd)) = self.cache.push(key.into(), value) {
+                for (key, deladd) in self.cache.push(key.into(), value) {
                     self.write_entry_to_sorter(key, deladd)?;
                 }
             }
@@ -108,7 +108,7 @@ where
             }
             None => {
                 let value = DelAddRoaringBitmap::new_add_u32(n);
-                if let Some((key, deladd)) = self.cache.push(key.into(), value) {
+                for (key, deladd) in self.cache.push(key.into(), value) {
                     self.write_entry_to_sorter(key, deladd)?;
                 }
             }
@@ -136,7 +136,7 @@ where
             }
             None => {
                 let value = DelAddRoaringBitmap::new_add(bitmap);
-                if let Some((key, deladd)) = self.cache.push(key.into(), value) {
+                for (key, deladd) in self.cache.push(key.into(), value) {
                     self.write_entry_to_sorter(key, deladd)?;
                 }
             }
@@ -161,7 +161,7 @@ where
             }
             None => {
                 let value = DelAddRoaringBitmap::new_del_add_u32(n);
-                if let Some((key, deladd)) = self.cache.push(key.into(), value) {
+                for (key, deladd) in self.cache.push(key.into(), value) {
                     self.write_entry_to_sorter(key, deladd)?;
                 }
             }
@@ -259,55 +259,128 @@ impl DelAddRoaringBitmap {
 // TODO support custom State (3rd param S of LruCache)
 pub struct ArcCache<K, V> {
     recent_set: LruCache<K, V>,
-    // recent_evicted: LruCache<K, ()>,
+    recent_evicted: LruCache<K, ()>,
     frequent_set: LruCache<K, V>,
-    // frequent_evicted: LruCache<K, ()>,
-    // capacity: NonZeroUsize,
+    frequent_evicted: LruCache<K, ()>,
+    capacity: NonZeroUsize,
     // negative means shrinking recent and increasing frequent
     // positive means shrinking frequent and increasing recent
-    // target: isize,
+    p: isize,
 }
 
 impl<K: Eq + Hash, V> ArcCache<K, V> {
     pub fn new(cap: NonZeroUsize) -> Self {
         ArcCache {
             recent_set: LruCache::new(cap),
-            // recent_evicted: LruCache::new(cap),
+            recent_evicted: LruCache::new(cap),
             frequent_set: LruCache::new(cap),
-            // frequent_evicted: LruCache::new(cap),
-            // capacity: cap,
-            // target: 0,
+            frequent_evicted: LruCache::new(cap),
+            capacity: cap,
+            p: 0,
         }
     }
 }
 
 impl<K: Eq + Hash + Clone, V> ArcCache<K, V> {
-    pub fn get_mut<'a, Q>(&'a mut self, k: &Q) -> (Option<&'a mut V>, Option<(K, V)>)
+    pub fn get_mut<Q>(&mut self, k: &Q) -> (Option<&mut V>, Option<(K, V)>)
     where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
     {
-        // Rust is too dumb to let me get_mut directly...
-        if self.frequent_set.contains(k) {
-            return (self.frequent_set.get_mut(k), None);
-        }
+        let evicted = match self.recent_set.pop_entry(k) {
+            Some((key, value)) => self.frequent_set.push(key, value),
+            None => None,
+        };
 
-        if let Some((key, value)) = self.recent_set.pop_entry(k) {
-            let evicted = self.frequent_set.push(key, value);
-            let inserted = self.frequent_set.get_mut(k).unwrap();
-            // if let Some((evicted_key, _)) = evicted.as_ref() {
-            //     self.frequent_evicted.push(evicted_key.clone(), ());
-            // }
-            return (Some(inserted), evicted);
-        }
-
-        // TODO implement live resize of LRUs
-
-        (None, None)
+        (self.frequent_set.get_mut(k), evicted)
     }
 
-    pub fn push(&mut self, k: K, v: V) -> Option<(K, V)> {
-        self.frequent_set.push(k, v)
+    pub fn push(&mut self, k: K, v: V) -> SmallVec<[(K, V); 2]> {
+        let mut evicted = SmallVec::new();
+
+        if self.frequent_set.contains(&k) {
+            if let Some(evicted_entry) = self.frequent_set.push(k, v) {
+                evicted.push(evicted_entry);
+            }
+        } else if let Some((k, v)) = self.recent_set.pop_entry(&k) {
+            if let Some(evicted_entry) = self.frequent_set.push(k, v) {
+                evicted.push(evicted_entry);
+            }
+        } else if self.frequent_evicted.contains(&k) {
+            let delta = if self.recent_evicted.len() > self.frequent_evicted.len() {
+                self.recent_evicted.len() / self.frequent_evicted.len()
+            } else {
+                1
+            };
+
+            if (delta as isize) < self.p {
+                self.p = self.p.saturating_sub(delta as isize);
+            } else {
+                self.p = 0;
+            }
+
+            if self.recent_set.len() + self.frequent_set.len() >= self.capacity.get() {
+                if let Some(evicted_entry) = self.replace(true) {
+                    evicted.push(evicted_entry);
+                }
+            }
+
+            self.frequent_evicted.pop(&k);
+            if let Some(evicted_entry) = self.frequent_set.push(k, v) {
+                evicted.push(evicted_entry);
+            }
+        } else if self.recent_evicted.contains(&k) {
+            let delta = if self.frequent_evicted.len() > self.recent_evicted.len() {
+                self.frequent_evicted.len() / self.recent_evicted.len()
+            } else {
+                1
+            };
+
+            if (delta as isize) <= (self.capacity.get() as isize) - self.p {
+                self.p = self.p.saturating_add(delta as isize);
+            } else {
+                self.p = self.capacity.get() as isize;
+            }
+
+            if self.recent_set.len() + self.frequent_set.len() >= self.capacity.get() {
+                if let Some(evicted_entry) = self.replace(false) {
+                    evicted.push(evicted_entry);
+                }
+            }
+
+            self.recent_evicted.pop(&k);
+            if let Some(evicted_entry) = self.frequent_set.push(k, v) {
+                evicted.push(evicted_entry)
+            }
+        } else if self.recent_set.len() + self.frequent_set.len() >= self.capacity.get() {
+            if let Some(evicted_entry) = self.replace(false) {
+                evicted.push(evicted_entry);
+            }
+        } else if let Some(evicted_entry) = self.recent_set.push(k, v) {
+            evicted.push(evicted_entry);
+        }
+
+        evicted
+    }
+
+    fn replace(&mut self, frequent_evicted_contains_key: bool) -> Option<(K, V)> {
+        if !self.recent_set.is_empty()
+            && (self.recent_set.len() as isize > self.p
+                || (self.recent_set.len() as isize == self.p && frequent_evicted_contains_key))
+        {
+            match self.recent_set.pop_lru() {
+                Some((key, value)) => {
+                    self.recent_evicted.push(key.clone(), ());
+                    Some((key, value))
+                }
+                None => None,
+            }
+        } else if let Some((key, value)) = self.frequent_set.pop_lru() {
+            self.frequent_evicted.push(key.clone(), ());
+            Some((key, value))
+        } else {
+            None
+        }
     }
 }
 
