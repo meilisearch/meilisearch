@@ -295,8 +295,8 @@ impl<K: Eq + Hash + Clone, V> ArcCache<K, V> {
         (self.frequent_set.get_mut(k), evicted)
     }
 
-    pub fn push(&mut self, k: K, v: V) -> SmallVec<[(K, V); 2]> {
-        let mut evicted = SmallVec::new();
+    pub fn push(&mut self, k: K, v: V) -> Vec<(K, V)> {
+        let mut evicted = Vec::new();
 
         if self.frequent_set.contains(&k) {
             if let Some(evicted_entry) = self.frequent_set.push(k, v) {
