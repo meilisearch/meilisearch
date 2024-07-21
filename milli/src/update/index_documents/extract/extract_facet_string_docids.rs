@@ -46,7 +46,7 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
     );
     let mut cached_facet_string_docids_sorter =
         SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
-            NonZeroUsize::new(200).unwrap(),
+            NonZeroUsize::new(500).unwrap(),
             facet_string_docids_sorter,
             b"fsd",
             SLED_DB.clone(),
