@@ -9,6 +9,7 @@ expression: fakerest_config.embedder_options
     "dimensions": 384,
     "url": "http://localhost:7777",
     "request": "{{text}}",
-    "response": "{{embedding}}"
+    "response": "{{embedding}}",
+    "headers": {}
   }
 }
