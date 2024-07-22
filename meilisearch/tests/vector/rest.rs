@@ -161,6 +161,55 @@ async fn create_mock_single_response_in_array() -> (MockServer, Value) {
     (mock_server, embedder_settings)
 }
 
+async fn create_mock_raw_with_custom_header() -> (MockServer, Value) {
+    let mock_server = MockServer::start().await;
+
+    let counter = AtomicUsize::new(0);
+
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .respond_with(move |req: &Request| {
+            match req.headers.get("my-nonstandard-auth") {
+                Some(x) if x == "bearer of the ring" => {}
+                Some(x) => {
+                    return ResponseTemplate::new(401).set_body_json(
+                        json!({"error": format!("thou shall not pass, {}", x.to_str().unwrap())}),
+                    )
+                }
+                None => {
+                    return ResponseTemplate::new(401)
+                        .set_body_json(json!({"error": "missing header 'my-nonstandard-auth'"}))
+                }
+            }
+
+            let _req: String = match req.body_json() {
+                Ok(req) => req,
+                Err(error) => {
+                    return ResponseTemplate::new(400).set_body_json(json!({
+                      "error": format!("Invalid request: {error}")
+                    }));
+                }
+            };
+
+            let output = vec![counter.fetch_add(1, Ordering::Relaxed) as f32; 3];
+
+            ResponseTemplate::new(200).set_body_json(output)
+        })
+        .mount(&mock_server)
+        .await;
+    let url = mock_server.uri();
+
+    let embedder_settings = json!({
+        "source": "rest",
+        "url": url,
+        "request": "{{text}}",
+        "response": "{{embedding}}",
+        "headers": {"my-nonstandard-auth": "bearer of the ring"}
+    });
+
+    (mock_server, embedder_settings)
+}
+
 async fn create_mock_raw() -> (MockServer, Value) {
     let mock_server = MockServer::start().await;
 
@@ -1729,6 +1778,132 @@ async fn server_raw() {
       "offset": 0,
       "limit": 20,
       "total": 3
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn server_custom_header() {
+    let (mock, setting) = create_mock_raw_with_custom_header().await;
+
+    let server = get_server_vector().await;
+    let index = server.index("doggo");
+
+    let (response, code) = index
+  .update_settings(json!({
+    "embedders": {
+        "rest": json!({ "source": "rest", "url": mock.uri(), "request": "{{text}}", "response": "{{embedding}}" }),
+    },
+  }))
+  .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": 0,
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "embedders": {
+          "rest": {
+            "source": "rest",
+            "url": "[url]",
+            "request": "{{text}}",
+            "response": "{{embedding}}"
+          }
+        }
+      },
+      "error": {
+        "message": "Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with user error: could not authenticate against embedding server\n  - server replied with `{\"error\":\"missing header 'my-nonstandard-auth'\"}`",
+        "code": "vector_embedding_error",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let (response, code) = index
+.update_settings(json!({
+  "embedders": {
+      "rest": json!({ "source": "rest", "url": mock.uri(), "request": "{{text}}", "response": "{{embedding}}", "headers": {"my-nonstandard-auth": "Balrog"} }),
+  },
+}))
+.await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": 1,
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "embedders": {
+          "rest": {
+            "source": "rest",
+            "url": "[url]",
+            "request": "{{text}}",
+            "response": "{{embedding}}",
+            "headers": {
+              "my-nonstandard-auth": "Balrog"
+            }
+          }
+        }
+      },
+      "error": {
+        "message": "Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with user error: could not authenticate against embedding server\n  - server replied with `{\"error\":\"thou shall not pass, Balrog\"}`",
+        "code": "vector_embedding_error",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+              "rest": setting,
+          },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": 2,
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "embedders": {
+          "rest": {
+            "source": "rest",
+            "url": "[url]",
+            "request": "{{text}}",
+            "response": "{{embedding}}",
+            "headers": {
+              "my-nonstandard-auth": "bearer of the ring"
+            }
+          }
+        }
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
     }
     "###);
 }
