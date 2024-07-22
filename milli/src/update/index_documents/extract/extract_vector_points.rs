@@ -472,6 +472,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
     Ok((results, unused_vectors_distribution))
 }
 
+#[allow(clippy::too_many_arguments)] // feel free to find efficient way to factor arguments
 fn extract_vector_document_diff(
     docid: DocumentId,
     obkv: obkv::KvReader<'_, FieldId>,
