@@ -66,7 +66,7 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
             self.max_memory,
         );
         let mut cached_prefix_docids_sorter = SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
-            NonZeroUsize::new(500).unwrap(),
+            NonZeroUsize::new(1000).unwrap(),
             prefix_docids_sorter,
             b"pdi",
             SLED_DB.clone(),

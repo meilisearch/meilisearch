@@ -14,7 +14,7 @@ use crate::CboRoaringBitmapCodec;
 const ENABLED: bool = true;
 
 pub struct SorterCacheDelAddCboRoaringBitmap<const N: usize, MF> {
-    cache: ArcCache<SmallVec<[u8; N]>, DelAddRoaringBitmap>,
+    cache: LruCache<SmallVec<[u8; N]>, DelAddRoaringBitmap>,
     prefix: &'static [u8; 3],
     sorter: grenad::Sorter<MF>,
     deladd_buffer: Vec<u8>,
@@ -30,7 +30,7 @@ impl<const N: usize, MF> SorterCacheDelAddCboRoaringBitmap<N, MF> {
         conn: sled::Db,
     ) -> Self {
         SorterCacheDelAddCboRoaringBitmap {
-            cache: ArcCache::new(cap),
+            cache: LruCache::new(cap),
             prefix,
             sorter,
             deladd_buffer: Vec::new(),
@@ -49,7 +49,7 @@ where
             return self.write_entry_to_sorter(key, DelAddRoaringBitmap::new_del_u32(n));
         }
 
-        let (cache, evicted) = self.cache.get_mut(key);
+        let cache = self.cache.get_mut(key);
         match cache {
             Some(DelAddRoaringBitmap { del, add: _ }) => {
                 del.get_or_insert_with(RoaringBitmap::new).insert(n);
@@ -62,10 +62,7 @@ where
             }
         }
 
-        match evicted {
-            Some((key, value)) => self.write_entry_to_sorter(key, value),
-            None => Ok(()),
-        }
+        Ok(())
     }
 
     pub fn insert_del(
@@ -77,7 +74,7 @@ where
             return self.write_entry_to_sorter(key, DelAddRoaringBitmap::new_del(bitmap));
         }
 
-        let (cache, evicted) = self.cache.get_mut(key);
+        let cache = self.cache.get_mut(key);
         match cache {
             Some(DelAddRoaringBitmap { del, add: _ }) => {
                 *del.get_or_insert_with(RoaringBitmap::new) |= bitmap;
@@ -90,10 +87,7 @@ where
             }
         }
 
-        match evicted {
-            Some((key, value)) => self.write_entry_to_sorter(key, value),
-            None => Ok(()),
-        }
+        Ok(())
     }
 
     pub fn insert_add_u32(&mut self, key: &[u8], n: u32) -> Result<(), grenad::Error<U>> {
@@ -101,7 +95,7 @@ where
             return self.write_entry_to_sorter(key, DelAddRoaringBitmap::new_add_u32(n));
         }
 
-        let (cache, evicted) = self.cache.get_mut(key);
+        let cache = self.cache.get_mut(key);
         match cache {
             Some(DelAddRoaringBitmap { del: _, add }) => {
                 add.get_or_insert_with(RoaringBitmap::new).insert(n);
@@ -114,10 +108,7 @@ where
             }
         }
 
-        match evicted {
-            Some((key, value)) => self.write_entry_to_sorter(key, value),
-            None => Ok(()),
-        }
+        Ok(())
     }
 
     pub fn insert_add(
@@ -129,7 +120,7 @@ where
             return self.write_entry_to_sorter(key, DelAddRoaringBitmap::new_add(bitmap));
         }
 
-        let (cache, evicted) = self.cache.get_mut(key);
+        let cache = self.cache.get_mut(key);
         match cache {
             Some(DelAddRoaringBitmap { del: _, add }) => {
                 *add.get_or_insert_with(RoaringBitmap::new) |= bitmap;
@@ -142,10 +133,7 @@ where
             }
         }
 
-        match evicted {
-            Some((key, value)) => self.write_entry_to_sorter(key, value),
-            None => Ok(()),
-        }
+        Ok(())
     }
 
     pub fn insert_del_add_u32(&mut self, key: &[u8], n: u32) -> Result<(), grenad::Error<U>> {
@@ -153,7 +141,7 @@ where
             return self.write_entry_to_sorter(key, DelAddRoaringBitmap::new_del_add_u32(n));
         }
 
-        let (cache, evicted) = self.cache.get_mut(key);
+        let cache = self.cache.get_mut(key);
         match cache {
             Some(DelAddRoaringBitmap { del, add }) => {
                 del.get_or_insert_with(RoaringBitmap::new).insert(n);
@@ -167,10 +155,7 @@ where
             }
         }
 
-        match evicted {
-            Some((key, value)) => self.write_entry_to_sorter(key, value),
-            None => Ok(()),
-        }
+        Ok(())
     }
 
     fn write_entry_to_sorter<A: AsRef<[u8]>>(
@@ -218,7 +203,7 @@ where
     }
 
     pub fn into_sorter(mut self) -> Result<grenad::Sorter<MF>, grenad::Error<U>> {
-        let default_arc = ArcCache::new(NonZeroUsize::MIN);
+        let default_arc = LruCache::new(NonZeroUsize::MIN);
         for (key, deladd) in mem::replace(&mut self.cache, default_arc) {
             self.write_entry_to_sorter(key, deladd)?;
         }

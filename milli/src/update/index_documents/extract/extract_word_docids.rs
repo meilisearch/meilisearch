@@ -50,7 +50,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         max_memory.map(|m| m / 3),
     );
     let mut cached_word_fid_docids_sorter = SorterCacheDelAddCboRoaringBitmap::<20, _>::new(
-        NonZeroUsize::new(500).unwrap(),
+        NonZeroUsize::new(1000).unwrap(),
         word_fid_docids_sorter,
         b"wfd",
         SLED_DB.clone(),
@@ -111,7 +111,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         max_memory.map(|m| m / 3),
     );
     let mut cached_word_docids_sorter = SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
-        NonZeroUsize::new(500).unwrap(),
+        NonZeroUsize::new(1000).unwrap(),
         word_docids_sorter,
         b"wdi",
         SLED_DB.clone(),
@@ -126,7 +126,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         max_memory.map(|m| m / 3),
     );
     let mut cached_exact_word_docids_sorter = SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
-        NonZeroUsize::new(500).unwrap(),
+        NonZeroUsize::new(1000).unwrap(),
         exact_word_docids_sorter,
         b"ewd",
         SLED_DB.clone(),

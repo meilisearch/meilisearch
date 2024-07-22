@@ -39,7 +39,7 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
     );
     let mut cached_word_position_docids_sorter =
         SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
-            NonZeroUsize::new(500).unwrap(),
+            NonZeroUsize::new(1000).unwrap(),
             word_position_docids_sorter,
             b"wpd",
             super::SLED_DB.clone(),

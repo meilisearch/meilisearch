@@ -71,7 +71,7 @@ impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
         );
         let mut cached_prefix_integer_docids_sorter =
             SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
-                NonZeroUsize::new(500).unwrap(),
+                NonZeroUsize::new(1000).unwrap(),
                 prefix_integer_docids_sorter,
                 b"pid",
                 SLED_DB.clone(),

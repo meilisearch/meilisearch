@@ -53,7 +53,7 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
                 max_memory.map(|m| m / MAX_DISTANCE as usize),
             );
             SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
-                NonZeroUsize::new(500).unwrap(),
+                NonZeroUsize::new(1000).unwrap(),
                 sorter,
                 b"wpp",
                 super::SLED_DB.clone(),

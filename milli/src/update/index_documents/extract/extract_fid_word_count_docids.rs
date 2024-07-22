@@ -41,7 +41,7 @@ pub fn extract_fid_word_count_docids<R: io::Read + io::Seek>(
     );
     let mut cached_fid_word_count_docids_sorter =
         SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
-            NonZeroUsize::new(500).unwrap(),
+            NonZeroUsize::new(1000).unwrap(),
             fid_word_count_docids_sorter,
             b"fwc",
             super::SLED_DB.clone(),
