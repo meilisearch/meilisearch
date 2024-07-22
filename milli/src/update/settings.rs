@@ -67,6 +67,13 @@ impl<T> Setting<T> {
         }
     }
 
+    pub fn some_or_not_set(option: Option<T>) -> Self {
+        match option {
+            Some(value) => Setting::Set(value),
+            None => Setting::NotSet,
+        }
+    }
+
     pub const fn as_ref(&self) -> Setting<&T> {
         match *self {
             Self::Set(ref value) => Setting::Set(value),
