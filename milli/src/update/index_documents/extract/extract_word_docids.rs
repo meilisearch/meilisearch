@@ -11,7 +11,6 @@ use super::helpers::{
     create_sorter, create_writer, merge_deladd_cbo_roaring_bitmaps, try_split_array_at,
     writer_into_reader, GrenadParameters,
 };
-use super::SLED_DB;
 use crate::error::SerializationError;
 use crate::heed_codec::StrBEU16Codec;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
@@ -52,8 +51,6 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     let mut cached_word_fid_docids_sorter = SorterCacheDelAddCboRoaringBitmap::<20, _>::new(
         NonZeroUsize::new(1000).unwrap(),
         word_fid_docids_sorter,
-        b"wfd",
-        SLED_DB.clone(),
     );
 
     let mut key_buffer = Vec::new();
@@ -113,8 +110,6 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     let mut cached_word_docids_sorter = SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
         NonZeroUsize::new(1000).unwrap(),
         word_docids_sorter,
-        b"wdi",
-        SLED_DB.clone(),
     );
 
     let exact_word_docids_sorter = create_sorter(
@@ -128,8 +123,6 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     let mut cached_exact_word_docids_sorter = SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
         NonZeroUsize::new(1000).unwrap(),
         exact_word_docids_sorter,
-        b"ewd",
-        SLED_DB.clone(),
     );
 
     let mut iter = cached_word_fid_docids_sorter.into_sorter()?.into_stream_merger_iter()?;
@@ -221,7 +214,6 @@ fn docids_into_writers<W>(
     deletions: &RoaringBitmap,
     additions: &RoaringBitmap,
     writer: &mut grenad::Writer<W>,
-    conn: &mut sled::Db,
 ) -> Result<()>
 where
     W: std::io::Write,
@@ -253,9 +245,6 @@ where
     }
 
     // insert everything in the same writer.
-    let mut key = b"wod".to_vec();
-    key.extend_from_slice(word.as_bytes());
-    conn.merge(key, 1u32.to_ne_bytes()).unwrap();
     writer.insert(word.as_bytes(), obkv.into_inner().unwrap())?;
 
     Ok(())

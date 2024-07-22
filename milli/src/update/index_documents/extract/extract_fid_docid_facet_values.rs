@@ -46,7 +46,6 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<ExtractedFacetValues> {
-    let mut conn = super::SLED_DB.clone();
     let max_memory = indexer.max_memory_by_thread();
 
     let mut fid_docid_facet_numbers_sorter = create_sorter(
@@ -170,22 +169,20 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
                         add_value.map(|value| extract_facet_values(&value, add_geo_support));
 
                     // Those closures are just here to simplify things a bit.
-                    let mut insert_numbers_diff = |del_numbers, add_numbers, conn| {
+                    let mut insert_numbers_diff = |del_numbers, add_numbers| {
                         insert_numbers_diff(
                             &mut fid_docid_facet_numbers_sorter,
                             &mut numbers_key_buffer,
                             del_numbers,
                             add_numbers,
-                            conn,
                         )
                     };
-                    let mut insert_strings_diff = |del_strings, add_strings, conn| {
+                    let mut insert_strings_diff = |del_strings, add_strings| {
                         insert_strings_diff(
                             &mut fid_docid_facet_strings_sorter,
                             &mut strings_key_buffer,
                             del_strings,
                             add_strings,
-                            conn,
                         )
                     };
 
@@ -199,8 +196,8 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
                                 del_is_empty.insert(document);
                             }
                             Values { numbers, strings } => {
-                                insert_numbers_diff(numbers, vec![], &mut conn)?;
-                                insert_strings_diff(strings, vec![], &mut conn)?;
+                                insert_numbers_diff(numbers, vec![])?;
+                                insert_strings_diff(strings, vec![])?;
                             }
                         },
                         (None, Some(add_filterable_values)) => match add_filterable_values {
@@ -211,8 +208,8 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
                                 add_is_empty.insert(document);
                             }
                             Values { numbers, strings } => {
-                                insert_numbers_diff(vec![], numbers, &mut conn)?;
-                                insert_strings_diff(vec![], strings, &mut conn)?;
+                                insert_numbers_diff(vec![], numbers)?;
+                                insert_strings_diff(vec![], strings)?;
                             }
                         },
                         (Some(del_filterable_values), Some(add_filterable_values)) => {
@@ -227,31 +224,31 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
                                     add_is_null.insert(document);
                                 }
                                 (Null, Values { numbers, strings }) => {
-                                    insert_numbers_diff(vec![], numbers, &mut conn)?;
-                                    insert_strings_diff(vec![], strings, &mut conn)?;
+                                    insert_numbers_diff(vec![], numbers)?;
+                                    insert_strings_diff(vec![], strings)?;
                                     del_is_null.insert(document);
                                 }
                                 (Empty, Values { numbers, strings }) => {
-                                    insert_numbers_diff(vec![], numbers, &mut conn)?;
-                                    insert_strings_diff(vec![], strings, &mut conn)?;
+                                    insert_numbers_diff(vec![], numbers)?;
+                                    insert_strings_diff(vec![], strings)?;
                                     del_is_empty.insert(document);
                                 }
                                 (Values { numbers, strings }, Null) => {
                                     add_is_null.insert(document);
-                                    insert_numbers_diff(numbers, vec![], &mut conn)?;
-                                    insert_strings_diff(strings, vec![], &mut conn)?;
+                                    insert_numbers_diff(numbers, vec![])?;
+                                    insert_strings_diff(strings, vec![])?;
                                 }
                                 (Values { numbers, strings }, Empty) => {
                                     add_is_empty.insert(document);
-                                    insert_numbers_diff(numbers, vec![], &mut conn)?;
-                                    insert_strings_diff(strings, vec![], &mut conn)?;
+                                    insert_numbers_diff(numbers, vec![])?;
+                                    insert_strings_diff(strings, vec![])?;
                                 }
                                 (
                                     Values { numbers: del_numbers, strings: del_strings },
                                     Values { numbers: add_numbers, strings: add_strings },
                                 ) => {
-                                    insert_numbers_diff(del_numbers, add_numbers, &mut conn)?;
-                                    insert_strings_diff(del_strings, add_strings, &mut conn)?;
+                                    insert_numbers_diff(del_numbers, add_numbers)?;
+                                    insert_strings_diff(del_strings, add_strings)?;
                                 }
                             }
                         }
@@ -334,7 +331,6 @@ fn insert_numbers_diff<MF>(
     key_buffer: &mut Vec<u8>,
     mut del_numbers: Vec<f64>,
     mut add_numbers: Vec<f64>,
-    conn: &mut sled::Db,
 ) -> Result<()>
 where
     MF: for<'a> Fn(&[u8], &[Cow<'a, [u8]>]) -> StdResult<Cow<'a, [u8]>, Error>,
@@ -366,9 +362,6 @@ where
                     let mut obkv = KvWriterDelAdd::memory();
                     obkv.insert(DelAdd::Deletion, bytes_of(&()))?;
                     let bytes = obkv.into_inner()?;
-                    let mut key = b"dfn".to_vec();
-                    key.extend_from_slice(key_buffer);
-                    conn.merge(key, 1u32.to_ne_bytes()).unwrap();
                     fid_docid_facet_numbers_sorter.insert(&key_buffer, bytes)?;
                 }
             }
@@ -382,9 +375,6 @@ where
                     let mut obkv = KvWriterDelAdd::memory();
                     obkv.insert(DelAdd::Addition, bytes_of(&()))?;
                     let bytes = obkv.into_inner()?;
-                    let mut key = b"dfn".to_vec();
-                    key.extend_from_slice(key_buffer);
-                    conn.merge(key, 1u32.to_ne_bytes()).unwrap();
                     fid_docid_facet_numbers_sorter.insert(&key_buffer, bytes)?;
                 }
             }
@@ -401,7 +391,6 @@ fn insert_strings_diff<MF>(
     key_buffer: &mut Vec<u8>,
     mut del_strings: Vec<(String, String)>,
     mut add_strings: Vec<(String, String)>,
-    conn: &mut sled::Db,
 ) -> Result<()>
 where
     MF: for<'a> Fn(&[u8], &[Cow<'a, [u8]>]) -> StdResult<Cow<'a, [u8]>, Error>,
@@ -430,9 +419,6 @@ where
                 let mut obkv = KvWriterDelAdd::memory();
                 obkv.insert(DelAdd::Deletion, original)?;
                 let bytes = obkv.into_inner()?;
-                let mut key = b"dfs".to_vec();
-                key.extend_from_slice(key_buffer);
-                conn.merge(key, 1u32.to_ne_bytes()).unwrap();
                 fid_docid_facet_strings_sorter.insert(&key_buffer, bytes)?;
             }
             EitherOrBoth::Right((normalized, original)) => {
@@ -442,9 +428,6 @@ where
                 let mut obkv = KvWriterDelAdd::memory();
                 obkv.insert(DelAdd::Addition, original)?;
                 let bytes = obkv.into_inner()?;
-                let mut key = b"dfs".to_vec();
-                key.extend_from_slice(key_buffer);
-                conn.merge(key, 1u32.to_ne_bytes()).unwrap();
                 fid_docid_facet_strings_sorter.insert(&key_buffer, bytes)?;
             }
         }

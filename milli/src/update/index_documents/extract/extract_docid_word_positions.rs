@@ -29,8 +29,6 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     settings_diff: &InnerIndexSettingsDiff,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<(grenad::Reader<BufReader<File>>, ScriptLanguageDocidsMap)> {
-    let conn = super::SLED_DB.clone();
-
     let max_positions_per_attributes = max_positions_per_attributes
         .map_or(MAX_POSITION_PER_ATTRIBUTE, |max| max.min(MAX_POSITION_PER_ATTRIBUTE));
     let max_memory = indexer.max_memory_by_thread();
@@ -152,7 +150,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
             key_buffer.extend_from_slice(&field_id.to_be_bytes());
             let mut key = b"dwp".to_vec();
             key.extend_from_slice(&key_buffer);
-            conn.merge(key, 1u32.to_ne_bytes()).unwrap();
+            // conn.merge(key, 1u32.to_ne_bytes()).unwrap();
             docid_word_positions_sorter.insert(&key_buffer, value)?;
         }
 

@@ -15,7 +15,7 @@ use crate::update::index_documents::cache::SorterCacheDelAddCboRoaringBitmap;
 use crate::update::index_documents::{
     create_sorter, merge_deladd_cbo_roaring_bitmaps,
     merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, valid_lmdb_key,
-    write_sorter_into_database, CursorClonableMmap, MergeFn, SLED_DB,
+    write_sorter_into_database, CursorClonableMmap, MergeFn,
 };
 use crate::{CboRoaringBitmapCodec, Result};
 
@@ -73,8 +73,6 @@ impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
             SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
                 NonZeroUsize::new(1000).unwrap(),
                 prefix_integer_docids_sorter,
-                b"pid",
-                SLED_DB.clone(),
             );
 
         if !common_prefix_fst_words.is_empty() {

@@ -40,8 +40,6 @@ pub fn extract_facet_number_docids<R: io::Read + io::Seek>(
         SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
             NonZeroUsize::new(1000).unwrap(),
             facet_number_docids_sorter,
-            b"fnd",
-            super::SLED_DB.clone(),
         );
 
     let mut cursor = fid_docid_facet_number.into_cursor()?;

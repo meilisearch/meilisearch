@@ -10,7 +10,6 @@ use heed::types::SerdeJson;
 use heed::BytesEncode;
 
 use super::helpers::{create_sorter, sorter_into_reader, try_split_array_at, GrenadParameters};
-use super::SLED_DB;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
 use crate::heed_codec::{BEU16StrCodec, StrRefCodec};
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
@@ -32,7 +31,6 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     _settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<(grenad::Reader<BufReader<File>>, grenad::Reader<BufReader<File>>)> {
-    let conn = SLED_DB.clone();
     let max_memory = indexer.max_memory_by_thread();
     let options = NormalizerOption { lossy: true, ..Default::default() };
 
@@ -48,8 +46,6 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
         SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
             NonZeroUsize::new(1000).unwrap(),
             facet_string_docids_sorter,
-            b"fsd",
-            SLED_DB.clone(),
         );
 
     let mut normalized_facet_string_docids_sorter = create_sorter(
@@ -108,7 +104,7 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
             let key_bytes = BEU16StrCodec::bytes_encode(&key).map_err(heed::Error::Encoding)?;
             let mut key = b"nfs".to_vec();
             key.extend_from_slice(&key_bytes);
-            conn.merge(key, 1u32.to_ne_bytes()).unwrap();
+            // conn.merge(key, 1u32.to_ne_bytes()).unwrap();
             normalized_facet_string_docids_sorter.insert(key_bytes, &buffer)?;
         }
 

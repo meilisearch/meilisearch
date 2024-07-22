@@ -41,8 +41,6 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
         SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
             NonZeroUsize::new(1000).unwrap(),
             word_position_docids_sorter,
-            b"wpd",
-            super::SLED_DB.clone(),
         );
 
     let mut del_word_positions: BTreeSet<(u16, Vec<u8>)> = BTreeSet::new();

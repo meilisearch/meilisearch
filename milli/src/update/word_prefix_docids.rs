@@ -6,7 +6,6 @@ use heed::types::Str;
 use heed::Database;
 
 use super::index_documents::cache::SorterCacheDelAddCboRoaringBitmap;
-use super::index_documents::SLED_DB;
 use crate::update::del_add::deladd_serialize_add_side;
 use crate::update::index_documents::{
     create_sorter, merge_deladd_cbo_roaring_bitmaps,
@@ -68,8 +67,6 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
         let mut cached_prefix_docids_sorter = SorterCacheDelAddCboRoaringBitmap::<20, MergeFn>::new(
             NonZeroUsize::new(1000).unwrap(),
             prefix_docids_sorter,
-            b"pdi",
-            SLED_DB.clone(),
         );
 
         if !common_prefix_fst_words.is_empty() {
