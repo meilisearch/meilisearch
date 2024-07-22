@@ -17,11 +17,22 @@ pub struct EmbedderOptions {
     pub url: Option<String>,
     pub api_key: Option<String>,
     pub distribution: Option<DistributionShift>,
+    pub dimensions: Option<usize>,
 }
 
 impl EmbedderOptions {
-    pub fn with_default_model(api_key: Option<String>, url: Option<String>) -> Self {
-        Self { embedding_model: "nomic-embed-text".into(), api_key, url, distribution: None }
+    pub fn with_default_model(
+        api_key: Option<String>,
+        url: Option<String>,
+        dimensions: Option<usize>,
+    ) -> Self {
+        Self {
+            embedding_model: "nomic-embed-text".into(),
+            api_key,
+            url,
+            distribution: None,
+            dimensions,
+        }
     }
 }
 
@@ -31,7 +42,7 @@ impl Embedder {
         let rest_embedder = match RestEmbedder::new(
             RestEmbedderOptions {
                 api_key: options.api_key,
-                dimensions: None,
+                dimensions: options.dimensions,
                 distribution: options.distribution,
                 url: options.url.unwrap_or_else(get_ollama_path),
                 request: serde_json::json!({

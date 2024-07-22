@@ -152,7 +152,18 @@ impl SettingsDiff {
                     ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
                 }
                 if dimensions.apply(new_dimensions) {
-                    ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
+                    match source {
+                        // regenerate on dimensions change in OpenAI since truncation is supported
+                        Setting::Set(EmbedderSource::OpenAi) | Setting::Reset => {
+                            ReindexAction::push_action(
+                                &mut reindex_action,
+                                ReindexAction::FullReindex,
+                            );
+                        }
+                        // for all other embedders, the parameter is a hint that should not be able to change the result
+                        // and so won't cause a reindex by itself.
+                        _ => {}
+                    }
                 }
                 if url.apply(new_url) {
                     match source {
@@ -329,9 +340,12 @@ impl EmbeddingSettings {
             Self::API_KEY => {
                 &[EmbedderSource::OpenAi, EmbedderSource::Ollama, EmbedderSource::Rest]
             }
-            Self::DIMENSIONS => {
-                &[EmbedderSource::OpenAi, EmbedderSource::UserProvided, EmbedderSource::Rest]
-            }
+            Self::DIMENSIONS => &[
+                EmbedderSource::OpenAi,
+                EmbedderSource::UserProvided,
+                EmbedderSource::Ollama,
+                EmbedderSource::Rest,
+            ],
             Self::DOCUMENT_TEMPLATE => &[
                 EmbedderSource::HuggingFace,
                 EmbedderSource::OpenAi,
@@ -377,6 +391,7 @@ impl EmbeddingSettings {
                 Self::DOCUMENT_TEMPLATE,
                 Self::URL,
                 Self::API_KEY,
+                Self::DIMENSIONS,
                 Self::DISTRIBUTION,
             ],
             EmbedderSource::UserProvided => &[Self::SOURCE, Self::DIMENSIONS, Self::DISTRIBUTION],
@@ -486,12 +501,13 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 url,
                 api_key,
                 distribution,
+                dimensions,
             }) => Self {
                 source: Setting::Set(EmbedderSource::Ollama),
                 model: Setting::Set(embedding_model),
                 revision: Setting::NotSet,
                 api_key: api_key.map(Setting::Set).unwrap_or_default(),
-                dimensions: Setting::NotSet,
+                dimensions: dimensions.map(Setting::Set).unwrap_or_default(),
                 document_template: Setting::Set(prompt.template),
                 url: url.map(Setting::Set).unwrap_or_default(),
                 request: Setting::NotSet,
@@ -583,6 +599,7 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
                         super::ollama::EmbedderOptions::with_default_model(
                             api_key.set(),
                             url.set(),
+                            dimensions.set(),
                         );
                     if let Some(model) = model.set() {
                         options.embedding_model = model;

@@ -1667,8 +1667,6 @@ pub fn validate_embedding_settings(
             }
         }
         EmbedderSource::Ollama => {
-            // Dimensions get inferred, only model name is required
-            check_unset(&dimensions, EmbeddingSettings::DIMENSIONS, inferred_source, name)?;
             check_set(&model, EmbeddingSettings::MODEL, inferred_source, name)?;
             check_unset(&revision, EmbeddingSettings::REVISION, inferred_source, name)?;
 

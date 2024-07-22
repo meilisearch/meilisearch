@@ -202,22 +202,6 @@ impl Default for EmbedderOptions {
     }
 }
 
-impl EmbedderOptions {
-    /// Default options for the Hugging Face embedder
-    pub fn huggingface() -> Self {
-        Self::HuggingFace(hf::EmbedderOptions::new())
-    }
-
-    /// Default options for the OpenAI embedder
-    pub fn openai(api_key: Option<String>) -> Self {
-        Self::OpenAi(openai::EmbedderOptions::with_default_model(api_key))
-    }
-
-    pub fn ollama(api_key: Option<String>, url: Option<String>) -> Self {
-        Self::Ollama(ollama::EmbedderOptions::with_default_model(api_key, url))
-    }
-}
-
 impl Embedder {
     /// Spawns a new embedder built from its options.
     pub fn new(options: EmbedderOptions) -> std::result::Result<Self, NewEmbedderError> {
