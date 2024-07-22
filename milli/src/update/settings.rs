@@ -1544,6 +1544,7 @@ fn validate_prompt(
             request,
             response,
             distribution,
+            headers,
         }) => {
             // validate
             let template = crate::prompt::Prompt::new(template)
@@ -1561,6 +1562,7 @@ fn validate_prompt(
                 request,
                 response,
                 distribution,
+                headers,
             }))
         }
         new => Ok(new),
@@ -1584,6 +1586,7 @@ pub fn validate_embedding_settings(
         request,
         response,
         distribution,
+        headers,
     } = settings;
 
     if let Some(0) = dimensions.set() {
@@ -1622,6 +1625,7 @@ pub fn validate_embedding_settings(
             request,
             response,
             distribution,
+            headers,
         }));
     };
     match inferred_source {
@@ -1630,6 +1634,7 @@ pub fn validate_embedding_settings(
 
             check_unset(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
             check_unset(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
+            check_unset(&headers, EmbeddingSettings::HEADERS, inferred_source, name)?;
 
             if let Setting::Set(model) = &model {
                 let model = crate::vector::openai::EmbeddingModel::from_name(model.as_str())
@@ -1669,6 +1674,7 @@ pub fn validate_embedding_settings(
 
             check_unset(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
             check_unset(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
+            check_unset(&headers, EmbeddingSettings::HEADERS, inferred_source, name)?;
         }
         EmbedderSource::HuggingFace => {
             check_unset(&api_key, EmbeddingSettings::API_KEY, inferred_source, name)?;
@@ -1677,6 +1683,7 @@ pub fn validate_embedding_settings(
             check_unset(&url, EmbeddingSettings::URL, inferred_source, name)?;
             check_unset(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
             check_unset(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
+            check_unset(&headers, EmbeddingSettings::HEADERS, inferred_source, name)?;
         }
         EmbedderSource::UserProvided => {
             check_unset(&model, EmbeddingSettings::MODEL, inferred_source, name)?;
@@ -1693,6 +1700,7 @@ pub fn validate_embedding_settings(
             check_unset(&url, EmbeddingSettings::URL, inferred_source, name)?;
             check_unset(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
             check_unset(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
+            check_unset(&headers, EmbeddingSettings::HEADERS, inferred_source, name)?;
         }
         EmbedderSource::Rest => {
             check_unset(&model, EmbeddingSettings::MODEL, inferred_source, name)?;
@@ -1713,6 +1721,7 @@ pub fn validate_embedding_settings(
         request,
         response,
         distribution,
+        headers,
     }))
 }
 

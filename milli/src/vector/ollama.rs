@@ -41,6 +41,7 @@ impl Embedder {
                 response: serde_json::json!({
                     "embedding": super::rest::RESPONSE_PLACEHOLDER,
                 }),
+                headers: Default::default(),
             },
             super::rest::ConfigurationSource::Ollama,
         ) {

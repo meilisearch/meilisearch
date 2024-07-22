@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use deserr::Deserr;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
@@ -39,6 +41,9 @@ pub struct EmbeddingSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     pub response: Setting<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
+    pub headers: Setting<BTreeMap<String, String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     pub distribution: Setting<DistributionShift>,
@@ -105,6 +110,7 @@ impl SettingsDiff {
                     mut request,
                     mut response,
                     mut distribution,
+                    mut headers,
                 } = old;
 
                 let EmbeddingSettings {
@@ -118,6 +124,7 @@ impl SettingsDiff {
                     request: new_request,
                     response: new_response,
                     distribution: new_distribution,
+                    headers: new_headers,
                 } = new;
 
                 let mut reindex_action = None;
@@ -135,6 +142,7 @@ impl SettingsDiff {
                         &mut request,
                         &mut response,
                         &mut document_template,
+                        &mut headers,
                     )
                 }
                 if model.apply(new_model) {
@@ -173,6 +181,7 @@ impl SettingsDiff {
 
                 distribution.apply(new_distribution);
                 api_key.apply(new_api_key);
+                headers.apply(new_headers);
 
                 let updated_settings = EmbeddingSettings {
                     source,
@@ -185,6 +194,7 @@ impl SettingsDiff {
                     request,
                     response,
                     distribution,
+                    headers,
                 };
 
                 match reindex_action {
@@ -218,6 +228,7 @@ fn apply_default_for_source(
     request: &mut Setting<serde_json::Value>,
     response: &mut Setting<serde_json::Value>,
     document_template: &mut Setting<String>,
+    headers: &mut Setting<BTreeMap<String, String>>,
 ) {
     match source {
         Setting::Set(EmbedderSource::HuggingFace) => {
@@ -227,6 +238,7 @@ fn apply_default_for_source(
             *url = Setting::NotSet;
             *request = Setting::NotSet;
             *response = Setting::NotSet;
+            *headers = Setting::NotSet;
         }
         Setting::Set(EmbedderSource::Ollama) => {
             *model = Setting::Reset;
@@ -235,6 +247,7 @@ fn apply_default_for_source(
             *url = Setting::NotSet;
             *request = Setting::NotSet;
             *response = Setting::NotSet;
+            *headers = Setting::NotSet;
         }
         Setting::Set(EmbedderSource::OpenAi) | Setting::Reset => {
             *model = Setting::Reset;
@@ -243,6 +256,7 @@ fn apply_default_for_source(
             *url = Setting::Reset;
             *request = Setting::NotSet;
             *response = Setting::NotSet;
+            *headers = Setting::NotSet;
         }
         Setting::Set(EmbedderSource::Rest) => {
             *model = Setting::NotSet;
@@ -251,6 +265,7 @@ fn apply_default_for_source(
             *url = Setting::Reset;
             *request = Setting::Reset;
             *response = Setting::Reset;
+            *headers = Setting::Reset;
         }
         Setting::Set(EmbedderSource::UserProvided) => {
             *model = Setting::NotSet;
@@ -260,6 +275,7 @@ fn apply_default_for_source(
             *request = Setting::NotSet;
             *response = Setting::NotSet;
             *document_template = Setting::NotSet;
+            *headers = Setting::NotSet;
         }
         Setting::NotSet => {}
     }
@@ -293,6 +309,7 @@ impl EmbeddingSettings {
     pub const URL: &'static str = "url";
     pub const REQUEST: &'static str = "request";
     pub const RESPONSE: &'static str = "response";
+    pub const HEADERS: &'static str = "headers";
 
     pub const DISTRIBUTION: &'static str = "distribution";
 
@@ -324,6 +341,7 @@ impl EmbeddingSettings {
             Self::URL => &[EmbedderSource::Ollama, EmbedderSource::Rest, EmbedderSource::OpenAi],
             Self::REQUEST => &[EmbedderSource::Rest],
             Self::RESPONSE => &[EmbedderSource::Rest],
+            Self::HEADERS => &[EmbedderSource::Rest],
             Self::DISTRIBUTION => &[
                 EmbedderSource::HuggingFace,
                 EmbedderSource::Ollama,
@@ -370,6 +388,7 @@ impl EmbeddingSettings {
                 Self::URL,
                 Self::REQUEST,
                 Self::RESPONSE,
+                Self::HEADERS,
                 Self::DISTRIBUTION,
             ],
         }
@@ -440,6 +459,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 url: Setting::NotSet,
                 request: Setting::NotSet,
                 response: Setting::NotSet,
+                headers: Setting::NotSet,
                 distribution: distribution.map(Setting::Set).unwrap_or_default(),
             },
             super::EmbedderOptions::OpenAi(super::openai::EmbedderOptions {
@@ -458,6 +478,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 url: url.map(Setting::Set).unwrap_or_default(),
                 request: Setting::NotSet,
                 response: Setting::NotSet,
+                headers: Setting::NotSet,
                 distribution: distribution.map(Setting::Set).unwrap_or_default(),
             },
             super::EmbedderOptions::Ollama(super::ollama::EmbedderOptions {
@@ -475,6 +496,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 url: url.map(Setting::Set).unwrap_or_default(),
                 request: Setting::NotSet,
                 response: Setting::NotSet,
+                headers: Setting::NotSet,
                 distribution: distribution.map(Setting::Set).unwrap_or_default(),
             },
             super::EmbedderOptions::UserProvided(super::manual::EmbedderOptions {
@@ -490,6 +512,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 url: Setting::NotSet,
                 request: Setting::NotSet,
                 response: Setting::NotSet,
+                headers: Setting::NotSet,
                 distribution: distribution.map(Setting::Set).unwrap_or_default(),
             },
             super::EmbedderOptions::Rest(super::rest::EmbedderOptions {
@@ -499,6 +522,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 request,
                 response,
                 distribution,
+                headers,
             }) => Self {
                 source: Setting::Set(EmbedderSource::Rest),
                 model: Setting::NotSet,
@@ -510,6 +534,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 request: Setting::Set(request),
                 response: Setting::Set(response),
                 distribution: distribution.map(Setting::Set).unwrap_or_default(),
+                headers: Setting::Set(headers),
             },
         }
     }
@@ -529,6 +554,7 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
             request,
             response,
             distribution,
+            headers,
         } = value;
 
         if let Some(source) = source.set() {
@@ -598,6 +624,7 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
                             request: request.set().unwrap(),
                             response: response.set().unwrap(),
                             distribution: distribution.set(),
+                            headers: headers.set().unwrap_or_default(),
                         })
                 }
             }
