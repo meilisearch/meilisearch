@@ -63,15 +63,14 @@ pub use self::heed_codec::{
     UncheckedU8StrStrCodec,
 };
 pub use self::index::Index;
+pub use self::localized_attributes_rules::LocalizedAttributesRule;
+use self::localized_attributes_rules::LocalizedFieldIds;
 pub use self::search::facet::{FacetValueHit, SearchForFacetValues};
 pub use self::search::similar::Similar;
 pub use self::search::{
     FacetDistribution, Filter, FormatOptions, MatchBounds, MatcherBuilder, MatchingWords, OrderBy,
     Search, SearchResult, SemanticSearch, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
-
-pub use self::localized_attributes_rules::LocalizedAttributesRule;
-use self::localized_attributes_rules::LocalizedFieldIds;
 
 pub type Result<T> = std::result::Result<T, error::Error>;
 

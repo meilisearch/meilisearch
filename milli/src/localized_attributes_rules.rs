@@ -35,19 +35,17 @@ impl LocalizedAttributesRule {
 }
 
 fn match_pattern(pattern: &str, str: &str) -> bool {
-    let res = if pattern == "*" {
+    if pattern == "*" {
         true
     } else if pattern.starts_with('*') && pattern.ends_with('*') {
         str.contains(&pattern[1..pattern.len() - 1])
-    } else if pattern.ends_with('*') {
-        str.starts_with(&pattern[..pattern.len() - 1])
-    } else if pattern.starts_with('*') {
-        str.ends_with(&pattern[1..])
+    } else if let Some(pattern) = pattern.strip_prefix('*') {
+        str.ends_with(pattern)
+    } else if let Some(pattern) = pattern.strip_suffix('*') {
+        str.starts_with(pattern)
     } else {
         pattern == str
-    };
-
-    res
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -87,7 +85,7 @@ impl LocalizedFieldIds {
         Self { field_id_to_locales }
     }
 
-    pub fn locales<'a>(&'a self, fields_id: FieldId) -> Option<&'a [Language]> {
+    pub fn locales(&self, fields_id: FieldId) -> Option<&[Language]> {
         self.field_id_to_locales.get(&fields_id).map(Vec::as_slice)
     }
 }
@@ -98,17 +96,17 @@ mod tests {
 
     #[test]
     fn test_match_pattern() {
-        assert_eq!(match_pattern("*", "test"), true);
-        assert_eq!(match_pattern("test*", "test"), true);
-        assert_eq!(match_pattern("test*", "testa"), true);
-        assert_eq!(match_pattern("*test", "test"), true);
-        assert_eq!(match_pattern("*test", "atest"), true);
-        assert_eq!(match_pattern("*test*", "test"), true);
-        assert_eq!(match_pattern("*test*", "atesta"), true);
-        assert_eq!(match_pattern("*test*", "atest"), true);
-        assert_eq!(match_pattern("*test*", "testa"), true);
-        assert_eq!(match_pattern("test*test", "test"), false);
-        assert_eq!(match_pattern("*test", "testa"), false);
-        assert_eq!(match_pattern("test*", "atest"), false);
+        assert!(match_pattern("*", "test"));
+        assert!(match_pattern("test*", "test"));
+        assert!(match_pattern("test*", "testa"));
+        assert!(match_pattern("*test", "test"));
+        assert!(match_pattern("*test", "atest"));
+        assert!(match_pattern("*test*", "test"));
+        assert!(match_pattern("*test*", "atesta"));
+        assert!(match_pattern("*test*", "atest"));
+        assert!(match_pattern("*test*", "testa"));
+        assert!(!match_pattern("test*test", "test"));
+        assert!(!match_pattern("*test", "testa"));
+        assert!(!match_pattern("test*", "atest"));
     }
 }

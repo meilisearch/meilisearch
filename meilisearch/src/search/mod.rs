@@ -1657,6 +1657,7 @@ fn make_document(
     Ok(document)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn format_fields(
     document: &Document,
     field_ids_map: &FieldsIdsMap,

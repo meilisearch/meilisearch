@@ -489,7 +489,7 @@ make_setting_route!(
         analytics.publish(
             "LocalizedAttributesRules Updated".to_string(),
             json!({
-                "locales": rules.as_ref().map(|rules| rules.iter().map(|rule| rule.locales.iter().cloned()).flatten().collect::<std::collections::BTreeSet<_>>())
+                "locales": rules.as_ref().map(|rules| rules.iter().flat_map(|rule| rule.locales.iter().cloned()).collect::<std::collections::BTreeSet<_>>())
             }),
             Some(req),
         );
@@ -808,7 +808,7 @@ pub async fn update_all(
             },
             "embedders": crate::routes::indexes::settings::embedder_analytics(new_settings.embedders.as_ref().set()),
             "search_cutoff_ms": new_settings.search_cutoff_ms.as_ref().set(),
-            "locales": new_settings.localized_attributes.as_ref().set().map(|rules| rules.into_iter().map(|rule| rule.locales.iter().cloned()).flatten().collect::<std::collections::BTreeSet<_>>()),
+            "locales": new_settings.localized_attributes.as_ref().set().map(|rules| rules.iter().flat_map(|rule| rule.locales.iter().cloned()).collect::<std::collections::BTreeSet<_>>()),
         }),
         Some(&req),
     );

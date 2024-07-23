@@ -90,7 +90,7 @@ pub async fn search(
             facet_name,
             search_kind,
             index_scheduler.features(),
-            locales
+            locales,
         )
     })
     .await?;

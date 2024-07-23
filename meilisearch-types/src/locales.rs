@@ -1,8 +1,7 @@
 use deserr::Deserr;
+use milli::LocalizedAttributesRule;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-
-use milli::LocalizedAttributesRule;
 
 /// Generate a Locale enum and its From and Into implementations for milli::tokenizer::Language.
 ///

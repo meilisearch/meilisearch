@@ -780,7 +780,7 @@ impl SearchAggregator {
         ret.matching_strategy.insert(format!("{:?}", matching_strategy), 1);
 
         if let Some(locales) = locales {
-            ret.locales = locales.into_iter().copied().collect();
+            ret.locales = locales.iter().copied().collect();
         }
 
         ret.highlight_pre_tag = *highlight_pre_tag != DEFAULT_HIGHLIGHT_PRE_TAG();
