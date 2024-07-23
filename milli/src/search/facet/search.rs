@@ -3,7 +3,7 @@ use std::collections::BinaryHeap;
 use std::ops::ControlFlow;
 
 use charabia::normalizer::NormalizerOption;
-use charabia::Normalize;
+use charabia::{Language, Normalize, StrDetection, Token};
 use fst::automaton::{Automaton, Str};
 use fst::{IntoStreamer, Streamer};
 use roaring::RoaringBitmap;
@@ -23,6 +23,7 @@ pub struct SearchForFacetValues<'a> {
     search_query: Search<'a>,
     max_values: usize,
     is_hybrid: bool,
+    locales: Option<Vec<Language>>,
 }
 
 impl<'a> SearchForFacetValues<'a> {
@@ -37,6 +38,7 @@ impl<'a> SearchForFacetValues<'a> {
             search_query,
             max_values: DEFAULT_MAX_NUMBER_OF_VALUES_PER_FACET,
             is_hybrid,
+            locales: None,
         }
     }
 
@@ -47,6 +49,11 @@ impl<'a> SearchForFacetValues<'a> {
 
     pub fn max_values(&mut self, max: usize) -> &mut Self {
         self.max_values = max;
+        self
+    }
+
+    pub fn locales(&mut self, locales: Vec<Language>) -> &mut Self {
+        self.locales = Some(locales);
         self
     }
 
@@ -109,8 +116,7 @@ impl<'a> SearchForFacetValues<'a> {
 
         match self.query.as_ref() {
             Some(query) => {
-                let options = NormalizerOption { lossy: true, ..Default::default() };
-                let query = query.normalize(&options);
+                let query = normalize_facet_string(query, self.locales.as_deref());
                 let query = query.as_ref();
 
                 let authorize_typos = self.search_query.index.authorize_typos(rtxn)?;
@@ -329,4 +335,16 @@ impl ValuesCollection {
             }
         }
     }
+}
+fn normalize_facet_string(facet_string: &str, locales: Option<&[Language]>) -> String {
+    let options = NormalizerOption { lossy: true, ..Default::default() };
+    let mut detection = StrDetection::new(facet_string, locales);
+    let token = Token {
+        lemma: std::borrow::Cow::Borrowed(facet_string),
+        script: detection.script(),
+        language: detection.language(),
+        ..Default::default()
+    };
+
+    token.normalize(&options).lemma.to_string()
 }

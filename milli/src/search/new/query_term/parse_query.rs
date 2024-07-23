@@ -24,7 +24,7 @@ pub struct ExtractedTokens {
 #[tracing::instrument(level = "trace", skip_all, target = "search::query")]
 pub fn located_query_terms_from_tokens(
     ctx: &mut SearchContext<'_>,
-    query: NormalizedTokenIter<'_, '_>,
+    query: NormalizedTokenIter<'_, '_, '_, '_>,
     words_limit: Option<usize>,
 ) -> Result<ExtractedTokens> {
     let nbr_typos = number_of_typos_allowed(ctx)?;

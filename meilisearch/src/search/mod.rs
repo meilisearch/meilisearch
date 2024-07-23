@@ -1,6 +1,6 @@
 use core::fmt;
 use std::cmp::min;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -15,16 +15,17 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::locales::Locale;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{FacetValueHit, OrderBy, SearchForFacetValues, TimeBudget};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
-use milli::tokenizer::TokenizerBuilder;
+use milli::tokenizer::{Language, TokenizerBuilder};
 use milli::{
-    AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, Index, MatchBounds, MatcherBuilder,
-    SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
+    AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, Index, LocalizedAttributesRule,
+    MatchBounds, MatcherBuilder, SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
 use regex::Regex;
 use serde::Serialize;
@@ -100,6 +101,8 @@ pub struct SearchQuery {
     pub attributes_to_search_on: Option<Vec<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>, default)]
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>, default)]
+    pub locales: Option<Vec<Locale>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Deserr)]
@@ -169,6 +172,7 @@ impl fmt::Debug for SearchQuery {
             matching_strategy,
             attributes_to_search_on,
             ranking_score_threshold,
+            locales,
         } = self;
 
         let mut debug = f.debug_struct("SearchQuery");
@@ -248,6 +252,10 @@ impl fmt::Debug for SearchQuery {
         debug.field("crop_marker", &crop_marker);
         if let Some(ranking_score_threshold) = ranking_score_threshold {
             debug.field("ranking_score_threshold", &ranking_score_threshold);
+        }
+
+        if let Some(locales) = locales {
+            debug.field("locales", &locales);
         }
 
         debug.finish()
@@ -425,6 +433,8 @@ pub struct SearchQueryWithIndex {
     pub attributes_to_search_on: Option<Vec<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>, default)]
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>, default)]
+    pub locales: Option<Vec<Locale>>,
 
     #[deserr(default)]
     pub federation_options: Option<FederationOptions>,
@@ -477,6 +487,7 @@ impl SearchQueryWithIndex {
             attributes_to_search_on,
             hybrid,
             ranking_score_threshold,
+            locales,
         } = self;
         (
             index_uid,
@@ -506,6 +517,7 @@ impl SearchQueryWithIndex {
                 attributes_to_search_on,
                 hybrid,
                 ranking_score_threshold,
+                locales,
                 // do not use ..Default::default() here,
                 // rather add any missing field from `SearchQuery` to `SearchQueryWithIndex`
             },
@@ -866,6 +878,10 @@ fn prepare_search<'t>(
         search.sort_criteria(sort);
     }
 
+    if let Some(ref locales) = query.locales {
+        search.locales(locales.iter().copied().map(Into::into).collect());
+    }
+
     Ok((search, is_finite_pagination, max_total_hits, offset))
 }
 
@@ -917,6 +933,7 @@ pub fn perform_search(
         highlight_pre_tag,
         highlight_post_tag,
         crop_marker,
+        locales,
         // already used in prepare_search
         vector: _,
         hybrid: _,
@@ -941,6 +958,7 @@ pub fn perform_search(
         sort,
         show_ranking_score,
         show_ranking_score_details,
+        locales: locales.map(|l| l.iter().copied().map(Into::into).collect()),
     };
 
     let documents = make_hits(
@@ -1046,6 +1064,7 @@ struct AttributesFormat {
     sort: Option<Vec<String>>,
     show_ranking_score: bool,
     show_ranking_score_details: bool,
+    locales: Option<Vec<Language>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1093,19 +1112,16 @@ struct HitMaker<'a> {
     show_ranking_score_details: bool,
     sort: Option<Vec<String>>,
     show_matches_position: bool,
+    locales: Option<Vec<Language>>,
 }
 
 impl<'a> HitMaker<'a> {
     pub fn tokenizer<'b>(
-        script_lang_map: &'b HashMap<milli::tokenizer::Script, Vec<milli::tokenizer::Language>>,
         dictionary: Option<&'b [&'b str]>,
         separators: Option<&'b [&'b str]>,
     ) -> milli::tokenizer::Tokenizer<'b> {
         let mut tokenizer_builder = TokenizerBuilder::default();
         tokenizer_builder.create_char_map(true);
-        if !script_lang_map.is_empty() {
-            tokenizer_builder.allow_list(script_lang_map);
-        }
 
         if let Some(separators) = separators {
             tokenizer_builder.separators(separators);
@@ -1218,6 +1234,7 @@ impl<'a> HitMaker<'a> {
             show_ranking_score_details: format.show_ranking_score_details,
             show_matches_position: format.show_matches_position,
             sort: format.sort,
+            locales: format.locales,
         })
     }
 
@@ -1280,6 +1297,7 @@ impl<'a> HitMaker<'a> {
             &self.formatted_options,
             self.show_matches_position,
             &self.displayed_ids,
+            self.locales.as_deref(),
         )?;
 
         if let Some(sort) = self.sort.as_ref() {
@@ -1312,8 +1330,6 @@ fn make_hits<'a>(
 ) -> Result<Vec<SearchHit>, MeilisearchHttpError> {
     let mut documents = Vec::new();
 
-    let script_lang_map = index.script_language(rtxn)?;
-
     let dictionary = index.dictionary(rtxn)?;
     let dictionary: Option<Vec<_>> =
         dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
@@ -1321,8 +1337,7 @@ fn make_hits<'a>(
     let separators: Option<Vec<_>> =
         separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
 
-    let tokenizer =
-        HitMaker::tokenizer(&script_lang_map, dictionary.as_deref(), separators.as_deref());
+    let tokenizer = HitMaker::tokenizer(dictionary.as_deref(), separators.as_deref());
 
     let formatter_builder = HitMaker::formatter_builder(matching_words, tokenizer);
 
@@ -1341,6 +1356,7 @@ pub fn perform_facet_search(
     facet_name: String,
     search_kind: SearchKind,
     features: RoFeatures,
+    locales: Option<Vec<Language>>,
 ) -> Result<FacetSearchResult, ResponseError> {
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
@@ -1361,6 +1377,10 @@ pub fn perform_facet_search(
     }
     if let Some(max_facets) = index.max_values_per_facet(&rtxn)? {
         facet_search.max_values(max_facets as usize);
+    }
+
+    if let Some(locales) = locales {
+        facet_search.locales(locales);
     }
 
     Ok(FacetSearchResult {
@@ -1443,6 +1463,7 @@ pub fn perform_similar(
         sort: None,
         show_ranking_score,
         show_ranking_score_details,
+        locales: None,
     };
 
     let hits = make_hits(
@@ -1631,6 +1652,7 @@ fn format_fields(
     formatted_options: &BTreeMap<FieldId, FormatOptions>,
     compute_matches: bool,
     displayable_ids: &BTreeSet<FieldId>,
+    locales: Option<&[Language]>,
 ) -> Result<(Option<MatchesPosition>, Document), MeilisearchHttpError> {
     let mut matches_position = compute_matches.then(BTreeMap::new);
     let mut document = document.clone();
@@ -1664,6 +1686,14 @@ fn format_fields(
         let mut infos = Vec::new();
 
         *value = format_value(std::mem::take(value), builder, format, &mut infos, compute_matches);
+        *value = format_value(
+            std::mem::take(value),
+            builder,
+            format,
+            &mut infos,
+            compute_matches,
+            locales,
+        );
 
         if let Some(matches) = matches_position.as_mut() {
             if !infos.is_empty() {
@@ -1688,10 +1718,11 @@ fn format_value(
     format_options: Option<FormatOptions>,
     infos: &mut Vec<MatchBounds>,
     compute_matches: bool,
+    locales: Option<&[Language]>,
 ) -> Value {
     match value {
         Value::String(old_string) => {
-            let mut matcher = builder.build(&old_string);
+            let mut matcher = builder.build(&old_string, locales);
             if compute_matches {
                 let matches = matcher.matches();
                 infos.extend_from_slice(&matches[..]);
@@ -1718,6 +1749,7 @@ fn format_value(
                         }),
                         infos,
                         compute_matches,
+                        locales,
                     )
                 })
                 .collect(),
@@ -1737,6 +1769,7 @@ fn format_value(
                             }),
                             infos,
                             compute_matches,
+                            locales,
                         ),
                     )
                 })
@@ -1745,7 +1778,7 @@ fn format_value(
         Value::Number(number) => {
             let s = number.to_string();
 
-            let mut matcher = builder.build(&s);
+            let mut matcher = builder.build(&s, locales);
             if compute_matches {
                 let matches = matcher.matches();
                 infos.extend_from_slice(&matches[..]);

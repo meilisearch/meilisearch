@@ -1,4 +1,4 @@
-use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::collections::{BTreeSet, BinaryHeap, HashMap, HashSet};
 use std::fs;
 use std::mem::take;
 use std::path::{Path, PathBuf};
@@ -10,6 +10,7 @@ use actix_web::HttpRequest;
 use byte_unit::Byte;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::{AuthController, AuthFilter};
+use meilisearch_types::locales::Locale;
 use meilisearch_types::InstanceUid;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -653,6 +654,9 @@ pub struct SearchAggregator {
     // every time a search is done, we increment the counter linked to the used settings
     matching_strategy: HashMap<String, usize>,
 
+    // List of the unique Locales passed as parameter
+    locales: BTreeSet<Locale>,
+
     // pagination
     max_limit: usize,
     max_offset: usize,
@@ -707,6 +711,7 @@ impl SearchAggregator {
             attributes_to_search_on,
             hybrid,
             ranking_score_threshold,
+            locales,
         } = query;
 
         let mut ret = Self::default();
@@ -773,6 +778,10 @@ impl SearchAggregator {
         }
 
         ret.matching_strategy.insert(format!("{:?}", matching_strategy), 1);
+
+        if let Some(locales) = locales {
+            ret.locales = locales.into_iter().copied().collect();
+        }
 
         ret.highlight_pre_tag = *highlight_pre_tag != DEFAULT_HIGHLIGHT_PRE_TAG();
         ret.highlight_post_tag = *highlight_post_tag != DEFAULT_HIGHLIGHT_POST_TAG();
@@ -859,6 +868,7 @@ impl SearchAggregator {
             total_degraded,
             total_used_negative_operator,
             ranking_score_threshold,
+            ref mut locales,
         } = other;
 
         if self.timestamp.is_none() {
@@ -947,6 +957,9 @@ impl SearchAggregator {
         self.show_ranking_score |= show_ranking_score;
         self.show_ranking_score_details |= show_ranking_score_details;
         self.ranking_score_threshold |= ranking_score_threshold;
+
+        // locales
+        self.locales.append(locales);
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
@@ -991,6 +1004,7 @@ impl SearchAggregator {
             total_degraded,
             total_used_negative_operator,
             ranking_score_threshold,
+            locales,
         } = self;
 
         if total_received == 0 {
@@ -1060,6 +1074,7 @@ impl SearchAggregator {
                 "matching_strategy": {
                     "most_used_strategy": matching_strategy.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
                 },
+                "locales": locales,
                 "scoring": {
                     "show_ranking_score": show_ranking_score,
                     "show_ranking_score_details": show_ranking_score_details,
@@ -1150,6 +1165,7 @@ impl MultiSearchAggregator {
                     attributes_to_search_on: _,
                     hybrid: _,
                     ranking_score_threshold: _,
+                    locales: _,
                 } = query;
 
                 index_uid.as_str()
@@ -1307,6 +1323,7 @@ impl FacetSearchAggregator {
             attributes_to_search_on,
             hybrid,
             ranking_score_threshold,
+            locales,
         } = query;
 
         let mut ret = Self::default();
@@ -1322,7 +1339,8 @@ impl FacetSearchAggregator {
             || *matching_strategy != MatchingStrategy::default()
             || attributes_to_search_on.is_some()
             || hybrid.is_some()
-            || ranking_score_threshold.is_some();
+            || ranking_score_threshold.is_some()
+            || locales.is_some();
 
         ret
     }

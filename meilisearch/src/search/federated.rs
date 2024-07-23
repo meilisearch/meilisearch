@@ -380,9 +380,6 @@ pub fn perform_federated_search(
 
         let criteria = index.criteria(&rtxn)?;
 
-        // stuff we need for the hitmaker
-        let script_lang_map = index.script_language(&rtxn)?;
-
         let dictionary = index.dictionary(&rtxn)?;
         let dictionary: Option<Vec<_>> =
             dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
@@ -494,6 +491,7 @@ pub fn perform_federated_search(
                     sort: query.sort,
                     show_ranking_score: query.show_ranking_score,
                     show_ranking_score_details: query.show_ranking_score_details,
+                    locales: query.locales.map(|l| l.iter().copied().map(Into::into).collect()),
                 };
 
                 let milli::SearchResult {
@@ -509,11 +507,7 @@ pub fn perform_federated_search(
                 degraded |= query_degraded;
                 used_negative_operator |= query_used_negative_operator;
 
-                let tokenizer = HitMaker::tokenizer(
-                    &script_lang_map,
-                    dictionary.as_deref(),
-                    separators.as_deref(),
-                );
+                let tokenizer = HitMaker::tokenizer(dictionary.as_deref(), separators.as_deref());
 
                 let formatter_builder = HitMaker::formatter_builder(matching_words, tokenizer);
 

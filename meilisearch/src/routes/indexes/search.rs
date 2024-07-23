@@ -7,6 +7,7 @@ use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::locales::Locale;
 use meilisearch_types::milli;
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
@@ -89,6 +90,8 @@ pub struct SearchQueryGet {
     pub hybrid_semantic_ratio: Option<SemanticRatioGet>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchRankingScoreThreshold>)]
     pub ranking_score_threshold: Option<RankingScoreThresholdGet>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchLocales>)]
+    pub locales: Option<CS<Locale>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, deserr::Deserr)]
@@ -175,6 +178,7 @@ impl From<SearchQueryGet> for SearchQuery {
             attributes_to_search_on: other.attributes_to_search_on.map(|o| o.into_iter().collect()),
             hybrid,
             ranking_score_threshold: other.ranking_score_threshold.map(|o| o.0),
+            locales: other.locales.map(|o| o.into_iter().collect()),
         }
     }
 }

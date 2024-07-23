@@ -7,6 +7,7 @@ pub mod features;
 pub mod index_uid;
 pub mod index_uid_pattern;
 pub mod keys;
+pub mod locales;
 pub mod settings;
 pub mod star_or;
 pub mod task_view;

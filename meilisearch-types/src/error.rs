@@ -256,6 +256,7 @@ InvalidSearchCropLength               , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchCropMarker               , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchFacets                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchSemanticRatio            , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchLocales                  , InvalidRequest       , BAD_REQUEST ;
 InvalidFacetSearchFacetName           , InvalidRequest       , BAD_REQUEST ;
 InvalidSimilarId                      , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchFilter                   , InvalidRequest       , BAD_REQUEST ;

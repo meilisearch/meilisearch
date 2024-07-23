@@ -24,7 +24,7 @@ mod tests;
 use std::collections::HashSet;
 
 use bucket_sort::{bucket_sort, BucketSortOutput};
-use charabia::TokenizerBuilder;
+use charabia::{Language, TokenizerBuilder};
 use db_cache::DatabaseCache;
 use exact_attribute::ExactAttribute;
 use graph_based_ranking_rule::{Exactness, Fid, Position, Proximity, Typo};
@@ -639,6 +639,7 @@ pub fn execute_search(
     query_graph_logger: &mut dyn SearchLogger<QueryGraph>,
     time_budget: TimeBudget,
     ranking_score_threshold: Option<f64>,
+    locales: Option<&Vec<Language>>,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
@@ -670,9 +671,8 @@ pub fn execute_search(
             tokbuilder.words_dict(dictionary);
         }
 
-        let languages = ctx.index.languages(ctx.txn)?;
-        if !languages.is_empty() {
-            tokbuilder.allow_list(&languages);
+        if let Some(locales) = locales {
+            tokbuilder.allow_list(locales);
         }
 
         let tokenizer = tokbuilder.build();
