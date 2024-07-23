@@ -1,10 +1,9 @@
-use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::BufReader;
 use std::{io, mem, str};
 
-use charabia::{Language, Script, SeparatorKind, Token, TokenKind, Tokenizer, TokenizerBuilder};
+use charabia::{Language, SeparatorKind, Token, TokenKind, Tokenizer, TokenizerBuilder};
 use obkv::{KvReader, KvWriterU16};
 use roaring::RoaringBitmap;
 use serde_json::Value;
@@ -12,10 +11,8 @@ use serde_json::Value;
 use super::helpers::{create_sorter, keep_latest_obkv, sorter_into_reader, GrenadParameters};
 use crate::error::{InternalError, SerializationError};
 use crate::update::del_add::{del_add_from_two_obkvs, DelAdd, KvReaderDelAdd};
-use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
+use crate::update::settings::InnerIndexSettingsDiff;
 use crate::{FieldId, Result, MAX_POSITION_PER_ATTRIBUTE, MAX_WORD_LENGTH};
-
-pub type ScriptLanguageDocidsMap = HashMap<(Script, Language), (RoaringBitmap, RoaringBitmap)>;
 
 /// Extracts the word and positions where this word appear and
 /// prefixes it by the document id.
@@ -28,7 +25,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     settings_diff: &InnerIndexSettingsDiff,
     max_positions_per_attributes: Option<u32>,
-) -> Result<(grenad::Reader<BufReader<File>>, ScriptLanguageDocidsMap)> {
+) -> Result<grenad::Reader<BufReader<File>>> {
     let max_positions_per_attributes = max_positions_per_attributes
         .map_or(MAX_POSITION_PER_ATTRIBUTE, |max| max.min(MAX_POSITION_PER_ATTRIBUTE));
     let max_memory = indexer.max_memory_by_thread();
@@ -36,7 +33,6 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
 
     // initialize destination values.
     let mut documents_ids = RoaringBitmap::new();
-    let mut script_language_docids = HashMap::new();
     let mut docid_word_positions_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
         keep_latest_obkv,
@@ -109,9 +105,9 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         let (del, add): (Result<_>, Result<_>) = rayon::join(
             || {
                 // deletions
-                lang_safe_tokens_from_document(
+                tokens_from_document(
                     &obkv,
-                    &settings_diff.old,
+                    &settings_diff.old.searchable_fields_ids,
                     &del_tokenizer,
                     max_positions_per_attributes,
                     DelAdd::Deletion,
@@ -120,9 +116,9 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
             },
             || {
                 // additions
-                lang_safe_tokens_from_document(
+                tokens_from_document(
                     &obkv,
-                    &settings_diff.new,
+                    &settings_diff.new.searchable_fields_ids,
                     &add_tokenizer,
                     max_positions_per_attributes,
                     DelAdd::Addition,
@@ -131,8 +127,8 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
             },
         );
 
-        let (del_obkv, del_script_language_word_count) = del?;
-        let (add_obkv, add_script_language_word_count) = add?;
+        let del_obkv = del?;
+        let add_obkv = add?;
 
         // merge deletions and additions.
         // transforming two KV<FieldId, KV<u16, String>> into one KV<FieldId, KV<DelAdd, KV<u16, String>>>
@@ -150,31 +146,10 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
             key_buffer.extend_from_slice(&field_id.to_be_bytes());
             docid_word_positions_sorter.insert(&key_buffer, value)?;
         }
-
-        // update script_language_docids deletions.
-        for (script, languages_frequency) in del_script_language_word_count {
-            for (language, _) in languages_frequency {
-                let entry = script_language_docids
-                    .entry((script, language))
-                    .or_insert_with(|| (RoaringBitmap::new(), RoaringBitmap::new()));
-                entry.0.push(document_id);
-            }
-        }
-
-        // update script_language_docids additions.
-        for (script, languages_frequency) in add_script_language_word_count {
-            for (language, _) in languages_frequency {
-                let entry = script_language_docids
-                    .entry((script, language))
-                    .or_insert_with(|| (RoaringBitmap::new(), RoaringBitmap::new()));
-                entry.1.push(document_id);
-            }
-        }
     }
 
     // the returned sorter is serialized as: key: (DocId, FieldId), value: KV<DelAdd, KV<u16, String>>.
     sorter_into_reader(docid_word_positions_sorter, indexer)
-        .map(|reader| (reader, script_language_docids))
 }
 
 /// Check if any searchable fields of a document changed.
@@ -205,7 +180,7 @@ fn tokenizer_builder<'a>(
     stop_words: Option<&'a fst::Set<Vec<u8>>>,
     allowed_separators: Option<&'a [&str]>,
     dictionary: Option<&'a [&str]>,
-    script_language: Option<&'a HashMap<Script, Vec<Language>>>,
+    languages: Option<&'a Vec<Language>>,
 ) -> TokenizerBuilder<'a, Vec<u8>> {
     let mut tokenizer_builder = TokenizerBuilder::new();
     if let Some(stop_words) = stop_words {
@@ -218,79 +193,11 @@ fn tokenizer_builder<'a>(
         tokenizer_builder.separators(separators);
     }
 
-    if let Some(script_language) = script_language {
-        tokenizer_builder.allow_list(script_language);
+    if let Some(languages) = languages {
+        tokenizer_builder.allow_list(languages);
     }
 
     tokenizer_builder
-}
-
-/// Extract words mapped with their positions of a document,
-/// ensuring no Language detection mistakes was made.
-fn lang_safe_tokens_from_document<'a>(
-    obkv: &KvReader<'_, FieldId>,
-    settings: &InnerIndexSettings,
-    tokenizer: &Tokenizer<'_>,
-    max_positions_per_attributes: u32,
-    del_add: DelAdd,
-    buffers: &'a mut Buffers,
-) -> Result<(&'a [u8], HashMap<Script, Vec<(Language, usize)>>)> {
-    let mut script_language_word_count = HashMap::new();
-
-    tokens_from_document(
-        obkv,
-        &settings.searchable_fields_ids,
-        tokenizer,
-        max_positions_per_attributes,
-        del_add,
-        buffers,
-        &mut script_language_word_count,
-    )?;
-
-    // if we detect a potetial mistake in the language detection,
-    // we rerun the extraction forcing the tokenizer to detect the most frequently detected Languages.
-    // context: https://github.com/meilisearch/meilisearch/issues/3565
-    if script_language_word_count
-        .values()
-        .map(Vec::as_slice)
-        .any(potential_language_detection_error)
-    {
-        // build an allow list with the most frequent detected languages in the document.
-        let script_language: HashMap<_, _> =
-            script_language_word_count.iter().filter_map(most_frequent_languages).collect();
-
-        // if the allow list is empty, meaning that no Language is considered frequent,
-        // then we don't rerun the extraction.
-        if !script_language.is_empty() {
-            // build a new temporary tokenizer including the allow list.
-            let stop_words = settings.stop_words.as_ref();
-            let separators: Option<Vec<_>> = settings
-                .allowed_separators
-                .as_ref()
-                .map(|s| s.iter().map(String::as_str).collect());
-            let dictionary: Option<Vec<_>> =
-                settings.dictionary.as_ref().map(|s| s.iter().map(String::as_str).collect());
-            let mut builder =
-                tokenizer_builder(stop_words, separators.as_deref(), dictionary.as_deref(), None);
-            let tokenizer = builder.build();
-
-            script_language_word_count.clear();
-
-            // rerun the extraction.
-            tokens_from_document(
-                obkv,
-                &settings.searchable_fields_ids,
-                &tokenizer,
-                max_positions_per_attributes,
-                del_add,
-                buffers,
-                &mut script_language_word_count,
-            )?;
-        }
-    }
-
-    // returns a (KV<FieldId, KV<u16, String>>, HashMap<Script, Vec<(Language, usize)>>)
-    Ok((&buffers.obkv_buffer, script_language_word_count))
 }
 
 /// Extract words mapped with their positions of a document.
@@ -301,7 +208,6 @@ fn tokens_from_document<'a>(
     max_positions_per_attributes: u32,
     del_add: DelAdd,
     buffers: &'a mut Buffers,
-    script_language_word_count: &mut HashMap<Script, Vec<(Language, usize)>>,
 ) -> Result<&'a [u8]> {
     buffers.obkv_buffer.clear();
     let mut document_writer = KvWriterU16::new(&mut buffers.obkv_buffer);
@@ -326,16 +232,6 @@ fn tokens_from_document<'a>(
                         .take_while(|(p, _)| (*p as u32) < max_positions_per_attributes);
 
                     for (index, token) in tokens {
-                        // if a language has been detected for the token, we update the counter.
-                        if let Some(language) = token.language {
-                            let script = token.script;
-                            let entry = script_language_word_count.entry(script).or_default();
-                            match entry.iter_mut().find(|(l, _)| *l == language) {
-                                Some((_, n)) => *n += 1,
-                                None => entry.push((language, 1)),
-                            }
-                        }
-
                         // keep a word only if it is not empty and fit in a LMDB key.
                         let token = token.lemma().trim();
                         if !token.is_empty() && token.len() <= MAX_WORD_LENGTH {
@@ -421,39 +317,6 @@ fn process_tokens<'a>(
             Some((*offset, token))
         })
         .filter(|(_, t)| t.is_word())
-}
-
-fn potential_language_detection_error(languages_frequency: &[(Language, usize)]) -> bool {
-    if languages_frequency.len() > 1 {
-        let threshold = compute_language_frequency_threshold(languages_frequency);
-        languages_frequency.iter().any(|(_, c)| *c <= threshold)
-    } else {
-        false
-    }
-}
-
-fn most_frequent_languages(
-    (script, languages_frequency): (&Script, &Vec<(Language, usize)>),
-) -> Option<(Script, Vec<Language>)> {
-    if languages_frequency.len() > 1 {
-        let threshold = compute_language_frequency_threshold(languages_frequency);
-
-        let languages: Vec<_> =
-            languages_frequency.iter().filter(|(_, c)| *c > threshold).map(|(l, _)| *l).collect();
-
-        if languages.is_empty() {
-            None
-        } else {
-            Some((*script, languages))
-        }
-    } else {
-        None
-    }
-}
-
-fn compute_language_frequency_threshold(languages_frequency: &[(Language, usize)]) -> usize {
-    let total: usize = languages_frequency.iter().map(|(_, c)| c).sum();
-    total / 10 // 10% is a completely arbitrary value.
 }
 
 #[derive(Default)]

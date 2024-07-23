@@ -1,10 +1,9 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::{self, BufReader};
 
 use bytemuck::allocation::pod_collect_to_vec;
-use charabia::{Language, Script};
 use grenad::{Merger, MergerBuilder};
 use heed::types::Bytes;
 use heed::{BytesDecode, RwTxn};
@@ -94,7 +93,6 @@ pub(crate) enum TypedChunk {
         add_to_user_provided: RoaringBitmap,
         remove_from_user_provided: RoaringBitmap,
     },
-    ScriptLanguageDocids(HashMap<(Script, Language), (RoaringBitmap, RoaringBitmap)>),
 }
 
 impl TypedChunk {
@@ -113,8 +111,7 @@ impl TypedChunk {
             | (FieldIdFacetExistsDocids(_), FieldIdFacetExistsDocids(_))
             | (FieldIdFacetIsNullDocids(_), FieldIdFacetIsNullDocids(_))
             | (FieldIdFacetIsEmptyDocids(_), FieldIdFacetIsEmptyDocids(_))
-            | (GeoPoints(_), GeoPoints(_))
-            | (ScriptLanguageDocids(_), ScriptLanguageDocids(_)) => true,
+            | (GeoPoints(_), GeoPoints(_)) => true,
             (
                 VectorPoints { embedder_name: left, expected_dimension: left_dim, .. },
                 VectorPoints { embedder_name: right, expected_dimension: right_dim, .. },
@@ -774,33 +771,6 @@ pub(crate) fn write_typed_chunk_into_index(
             }
 
             tracing::debug!("Finished vector chunk for {}", embedder_name);
-        }
-        TypedChunk::ScriptLanguageDocids(_) => {
-            let span = tracing::trace_span!(target: "indexing::write_db", "script_language_docids");
-            let _entered = span.enter();
-
-            for typed_chunk in typed_chunks {
-                let TypedChunk::ScriptLanguageDocids(sl_map) = typed_chunk else { unreachable!() };
-                for (key, (deletion, addition)) in sl_map {
-                    let mut db_key_exists = false;
-                    let final_value = match index.script_language_docids.get(wtxn, &key)? {
-                        Some(db_values) => {
-                            db_key_exists = true;
-                            (db_values - deletion) | addition
-                        }
-                        None => addition,
-                    };
-
-                    if final_value.is_empty() {
-                        // If the database entry exists, delete it.
-                        if db_key_exists {
-                            index.script_language_docids.delete(wtxn, &key)?;
-                        }
-                    } else {
-                        index.script_language_docids.put(wtxn, &key, &final_value)?;
-                    }
-                }
-            }
         }
     }
 

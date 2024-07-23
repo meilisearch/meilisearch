@@ -1604,6 +1604,29 @@ impl Index {
         Ok(script_language)
     }
 
+    pub fn languages(&self, rtxn: &RoTxn<'_>) -> heed::Result<Vec<Language>> {
+        let mut script_language_doc_count: Vec<(Language, u64)> = Vec::new();
+        let mut total = 0;
+        for sl in self.script_language_docids.iter(rtxn)? {
+            let ((_script, language), docids) = sl?;
+
+            // keep only Languages that contains at least 1 document.
+            let remaining_documents_count = docids.len();
+            total += remaining_documents_count;
+            if remaining_documents_count > 0 {
+                script_language_doc_count.push((language, remaining_documents_count));
+            }
+        }
+
+        let threshold = total / 20; // 5% (arbitrary)
+
+        Ok(script_language_doc_count
+            .into_iter()
+            .filter(|(_, count)| *count > threshold)
+            .map(|(language, _)| language)
+            .collect())
+    }
+
     /// Put the embedding configs:
     /// 1. The name of the embedder
     /// 2. The configuration option for this embedder

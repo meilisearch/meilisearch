@@ -670,9 +670,9 @@ pub fn execute_search(
             tokbuilder.words_dict(dictionary);
         }
 
-        let script_lang_map = ctx.index.script_language(ctx.txn)?;
-        if !script_lang_map.is_empty() {
-            tokbuilder.allow_list(&script_lang_map);
+        let languages = ctx.index.languages(ctx.txn)?;
+        if !languages.is_empty() {
+            tokbuilder.allow_list(&languages);
         }
 
         let tokenizer = tokbuilder.build();
