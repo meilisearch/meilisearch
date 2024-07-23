@@ -1290,6 +1290,9 @@ impl<'a> HitMaker<'a> {
             document.insert("_vectors".into(), vectors.into());
         }
 
+        let localized_attributes =
+            self.index.localized_attributes_rules(self.rtxn)?.unwrap_or_default();
+
         let (matches_position, formatted) = format_fields(
             &displayed_document,
             &self.fields_ids_map,
@@ -1298,6 +1301,7 @@ impl<'a> HitMaker<'a> {
             self.show_matches_position,
             &self.displayed_ids,
             self.locales.as_deref(),
+            &localized_attributes,
         )?;
 
         if let Some(sort) = self.sort.as_ref() {
@@ -1364,6 +1368,14 @@ pub fn perform_facet_search(
         Some(cutoff) => TimeBudget::new(Duration::from_millis(cutoff)),
         None => TimeBudget::default(),
     };
+
+    let localized_attributes = index.localized_attributes_rules(&rtxn)?.unwrap_or_default();
+    let locales = locales.or_else(|| {
+        localized_attributes
+            .into_iter()
+            .find(|attr| attr.match_str(&facet_name))
+            .map(|attr| attr.locales)
+    });
 
     let (search, _, _, _) =
         prepare_search(index, &rtxn, &search_query, &search_kind, time_budget, features)?;
@@ -1653,6 +1665,7 @@ fn format_fields(
     compute_matches: bool,
     displayable_ids: &BTreeSet<FieldId>,
     locales: Option<&[Language]>,
+    localized_attributes: &[LocalizedAttributesRule],
 ) -> Result<(Option<MatchesPosition>, Document), MeilisearchHttpError> {
     let mut matches_position = compute_matches.then(BTreeMap::new);
     let mut document = document.clone();
@@ -1685,7 +1698,14 @@ fn format_fields(
             .reduce(|acc, option| acc.merge(option));
         let mut infos = Vec::new();
 
-        *value = format_value(std::mem::take(value), builder, format, &mut infos, compute_matches);
+        // if no locales has been provided, we try to find the locales in the localized_attributes.
+        let locales = locales.or_else(|| {
+            localized_attributes
+                .iter()
+                .find(|rule| rule.match_str(key))
+                .map(LocalizedAttributesRule::locales)
+        });
+
         *value = format_value(
             std::mem::take(value),
             builder,

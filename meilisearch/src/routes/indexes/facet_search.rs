@@ -6,6 +6,7 @@ use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::locales::Locale;
 use serde_json::Value;
 use tracing::debug;
 
@@ -48,6 +49,8 @@ pub struct FacetSearchQuery {
     pub attributes_to_search_on: Option<Vec<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>, default)]
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>, default)]
+    pub locales: Option<Vec<Locale>>,
 }
 
 pub async fn search(
@@ -67,6 +70,7 @@ pub async fn search(
 
     let facet_query = query.facet_query.clone();
     let facet_name = query.facet_name.clone();
+    let locales = query.locales.clone().map(|l| l.into_iter().map(Into::into).collect());
     let mut search_query = SearchQuery::from(query);
 
     // Tenant token search_rules.
@@ -86,6 +90,7 @@ pub async fn search(
             facet_name,
             search_kind,
             index_scheduler.features(),
+            locales
         )
     })
     .await?;
@@ -113,6 +118,7 @@ impl From<FacetSearchQuery> for SearchQuery {
             attributes_to_search_on,
             hybrid,
             ranking_score_threshold,
+            locales,
         } = value;
 
         SearchQuery {
@@ -141,6 +147,7 @@ impl From<FacetSearchQuery> for SearchQuery {
             attributes_to_search_on,
             hybrid,
             ranking_score_threshold,
+            locales,
         }
     }
 }

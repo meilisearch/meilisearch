@@ -475,6 +475,28 @@ make_setting_route!(
 );
 
 make_setting_route!(
+    "/localized-attributes",
+    put,
+    Vec<meilisearch_types::locales::LocalizedAttributesRuleView>,
+    meilisearch_types::deserr::DeserrJsonError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsLocalizedAttributes,
+    >,
+    localized_attributes,
+    "localizedAttributes",
+    analytics,
+    |rules: &Option<Vec<meilisearch_types::locales::LocalizedAttributesRuleView>>, req: &HttpRequest| {
+        use serde_json::json;
+        analytics.publish(
+            "LocalizedAttributesRules Updated".to_string(),
+            json!({
+                "locales": rules.as_ref().map(|rules| rules.iter().map(|rule| rule.locales.iter().cloned()).flatten().collect::<std::collections::BTreeSet<_>>())
+            }),
+            Some(req),
+        );
+    }
+);
+
+make_setting_route!(
     "/ranking-rules",
     put,
     Vec<meilisearch_types::settings::RankingRuleView>,
@@ -786,6 +808,7 @@ pub async fn update_all(
             },
             "embedders": crate::routes::indexes::settings::embedder_analytics(new_settings.embedders.as_ref().set()),
             "search_cutoff_ms": new_settings.search_cutoff_ms.as_ref().set(),
+            "locales": new_settings.localized_attributes.as_ref().set().map(|rules| rules.into_iter().map(|rule| rule.locales.iter().cloned()).flatten().collect::<std::collections::BTreeSet<_>>()),
         }),
         Some(&req),
     );

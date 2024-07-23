@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::{io, mem, str};
 
-use charabia::{Language, SeparatorKind, Token, TokenKind, Tokenizer, TokenizerBuilder};
+use charabia::{SeparatorKind, Token, TokenKind, Tokenizer, TokenizerBuilder};
 use obkv::{KvReader, KvWriterU16};
 use roaring::RoaringBitmap;
 use serde_json::Value;
@@ -11,7 +11,7 @@ use serde_json::Value;
 use super::helpers::{create_sorter, keep_latest_obkv, sorter_into_reader, GrenadParameters};
 use crate::error::{InternalError, SerializationError};
 use crate::update::del_add::{del_add_from_two_obkvs, DelAdd, KvReaderDelAdd};
-use crate::update::settings::InnerIndexSettingsDiff;
+use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
 use crate::{FieldId, Result, MAX_POSITION_PER_ATTRIBUTE, MAX_WORD_LENGTH};
 
 /// Extracts the word and positions where this word appear and
@@ -57,13 +57,9 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         .map(|s| s.iter().map(String::as_str).collect());
     let old_dictionary: Option<Vec<_>> =
         settings_diff.old.dictionary.as_ref().map(|s| s.iter().map(String::as_str).collect());
-    let mut del_builder = tokenizer_builder(
-        old_stop_words,
-        old_separators.as_deref(),
-        old_dictionary.as_deref(),
-        None,
-    );
-    let del_tokenizer = del_builder.build();
+    let del_builder =
+        tokenizer_builder(old_stop_words, old_separators.as_deref(), old_dictionary.as_deref());
+    let del_tokenizer = del_builder.into_tokenizer();
 
     let new_stop_words = settings_diff.new.stop_words.as_ref();
     let new_separators: Option<Vec<_>> = settings_diff
@@ -73,13 +69,9 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         .map(|s| s.iter().map(String::as_str).collect());
     let new_dictionary: Option<Vec<_>> =
         settings_diff.new.dictionary.as_ref().map(|s| s.iter().map(String::as_str).collect());
-    let mut add_builder = tokenizer_builder(
-        new_stop_words,
-        new_separators.as_deref(),
-        new_dictionary.as_deref(),
-        None,
-    );
-    let add_tokenizer = add_builder.build();
+    let add_builder =
+        tokenizer_builder(new_stop_words, new_separators.as_deref(), new_dictionary.as_deref());
+    let add_tokenizer = add_builder.into_tokenizer();
 
     // iterate over documents.
     let mut cursor = obkv_documents.into_cursor()?;
@@ -107,7 +99,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
                 // deletions
                 tokens_from_document(
                     &obkv,
-                    &settings_diff.old.searchable_fields_ids,
+                    &settings_diff.old,
                     &del_tokenizer,
                     max_positions_per_attributes,
                     DelAdd::Deletion,
@@ -118,7 +110,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
                 // additions
                 tokens_from_document(
                     &obkv,
-                    &settings_diff.new.searchable_fields_ids,
+                    &settings_diff.new,
                     &add_tokenizer,
                     max_positions_per_attributes,
                     DelAdd::Addition,
@@ -180,7 +172,6 @@ fn tokenizer_builder<'a>(
     stop_words: Option<&'a fst::Set<Vec<u8>>>,
     allowed_separators: Option<&'a [&str]>,
     dictionary: Option<&'a [&str]>,
-    languages: Option<&'a Vec<Language>>,
 ) -> TokenizerBuilder<'a, Vec<u8>> {
     let mut tokenizer_builder = TokenizerBuilder::new();
     if let Some(stop_words) = stop_words {
@@ -193,17 +184,13 @@ fn tokenizer_builder<'a>(
         tokenizer_builder.separators(separators);
     }
 
-    if let Some(languages) = languages {
-        tokenizer_builder.allow_list(languages);
-    }
-
     tokenizer_builder
 }
 
 /// Extract words mapped with their positions of a document.
 fn tokens_from_document<'a>(
     obkv: &KvReader<'a, FieldId>,
-    searchable_fields: &[FieldId],
+    settings: &InnerIndexSettings,
     tokenizer: &Tokenizer<'_>,
     max_positions_per_attributes: u32,
     del_add: DelAdd,
@@ -213,7 +200,7 @@ fn tokens_from_document<'a>(
     let mut document_writer = KvWriterU16::new(&mut buffers.obkv_buffer);
     for (field_id, field_bytes) in obkv.iter() {
         // if field is searchable.
-        if searchable_fields.as_ref().contains(&field_id) {
+        if settings.searchable_fields_ids.contains(&field_id) {
             // extract deletion or addition only.
             if let Some(field_bytes) = KvReaderDelAdd::new(field_bytes).get(del_add) {
                 // parse json.
@@ -228,7 +215,8 @@ fn tokens_from_document<'a>(
                 buffers.field_buffer.clear();
                 if let Some(field) = json_to_string(&value, &mut buffers.field_buffer) {
                     // create an iterator of token with their positions.
-                    let tokens = process_tokens(tokenizer.tokenize(field))
+                    let locales = settings.localized_searchable_fields_ids.locales(field_id);
+                    let tokens = process_tokens(tokenizer.tokenize_with_allow_list(field, locales))
                         .take_while(|(p, _)| (*p as u32) < max_positions_per_attributes);
 
                     for (index, token) in tokens {

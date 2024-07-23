@@ -4,7 +4,6 @@ use std::convert::TryInto;
 use std::fs::File;
 use std::path::Path;
 
-use charabia::{Language, Script};
 use heed::types::*;
 use heed::{CompactionOption, Database, RoTxn, RwTxn, Unspecified};
 use roaring::RoaringBitmap;
@@ -19,9 +18,7 @@ use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
     FieldIdCodec, OrderedF64Codec,
 };
-use crate::heed_codec::{
-    BEU16StrCodec, FstSetCodec, ScriptLanguageCodec, StrBEU16Codec, StrRefCodec,
-};
+use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec};
 use crate::order_by_map::OrderByMap;
 use crate::proximity::ProximityPrecision;
 use crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME;
@@ -29,8 +26,8 @@ use crate::vector::{Embedding, EmbeddingConfig};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
-    FieldidsWeightsMap, GeoPoint, ObkvCodec, Result, RoaringBitmapCodec, RoaringBitmapLenCodec,
-    Search, U8StrStrCodec, Weight, BEU16, BEU32, BEU64,
+    FieldidsWeightsMap, GeoPoint, LocalizedAttributesRule, ObkvCodec, Result, RoaringBitmapCodec,
+    RoaringBitmapLenCodec, Search, U8StrStrCodec, Weight, BEU16, BEU32, BEU64,
 };
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
@@ -73,6 +70,7 @@ pub mod main_key {
     pub const PROXIMITY_PRECISION: &str = "proximity-precision";
     pub const EMBEDDING_CONFIGS: &str = "embedding_configs";
     pub const SEARCH_CUTOFF: &str = "search_cutoff";
+    pub const LOCALIZED_ATTRIBUTES_RULES: &str = "localized_attributes_rules";
 }
 
 pub mod db_name {
@@ -101,7 +99,6 @@ pub mod db_name {
     pub const VECTOR_EMBEDDER_CATEGORY_ID: &str = "vector-embedder-category-id";
     pub const VECTOR_ARROY: &str = "vector-arroy";
     pub const DOCUMENTS: &str = "documents";
-    pub const SCRIPT_LANGUAGE_DOCIDS: &str = "script_language_docids";
 }
 
 #[derive(Clone)]
@@ -141,9 +138,6 @@ pub struct Index {
     pub word_prefix_position_docids: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
     /// Maps the word prefix and a field id with all the docids where the prefix appears inside the field
     pub word_prefix_fid_docids: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
-
-    /// Maps the script and language with all the docids that corresponds to it.
-    pub script_language_docids: Database<ScriptLanguageCodec, RoaringBitmapCodec>,
 
     /// Maps the facet field id and the docids for which this field exists
     pub facet_id_exists_docids: Database<FieldIdCodec, CboRoaringBitmapCodec>,
@@ -198,8 +192,6 @@ impl Index {
             env.create_database(&mut wtxn, Some(EXACT_WORD_PREFIX_DOCIDS))?;
         let word_pair_proximity_docids =
             env.create_database(&mut wtxn, Some(WORD_PAIR_PROXIMITY_DOCIDS))?;
-        let script_language_docids =
-            env.create_database(&mut wtxn, Some(SCRIPT_LANGUAGE_DOCIDS))?;
         let word_position_docids = env.create_database(&mut wtxn, Some(WORD_POSITION_DOCIDS))?;
         let word_fid_docids = env.create_database(&mut wtxn, Some(WORD_FIELD_ID_DOCIDS))?;
         let field_id_word_count_docids =
@@ -243,7 +235,6 @@ impl Index {
             word_prefix_docids,
             exact_word_prefix_docids,
             word_pair_proximity_docids,
-            script_language_docids,
             word_position_docids,
             word_fid_docids,
             word_prefix_position_docids,
@@ -1562,69 +1553,32 @@ impl Index {
         self.main.remap_key_type::<Str>().delete(txn, main_key::PROXIMITY_PRECISION)
     }
 
-    /* script  language docids */
-    /// Retrieve all the documents ids that correspond with (Script, Language) key, `None` if it is any.
-    pub fn script_language_documents_ids(
+    pub fn localized_attributes_rules(
         &self,
         rtxn: &RoTxn<'_>,
-        key: &(Script, Language),
-    ) -> heed::Result<Option<RoaringBitmap>> {
-        self.script_language_docids.get(rtxn, key)
+    ) -> heed::Result<Option<Vec<LocalizedAttributesRule>>> {
+        self.main
+            .remap_types::<Str, SerdeBincode<Vec<LocalizedAttributesRule>>>()
+            .get(rtxn, main_key::LOCALIZED_ATTRIBUTES_RULES)
     }
 
-    pub fn script_language(
+    pub(crate) fn put_localized_attributes_rules(
         &self,
-        rtxn: &RoTxn<'_>,
-    ) -> heed::Result<HashMap<Script, Vec<Language>>> {
-        let mut script_language: HashMap<Script, Vec<Language>> = HashMap::new();
-        let mut script_language_doc_count: Vec<(Script, Language, u64)> = Vec::new();
-        let mut total = 0;
-        for sl in self.script_language_docids.iter(rtxn)? {
-            let ((script, language), docids) = sl?;
-
-            // keep only Languages that contains at least 1 document.
-            let remaining_documents_count = docids.len();
-            total += remaining_documents_count;
-            if remaining_documents_count > 0 {
-                script_language_doc_count.push((script, language, remaining_documents_count));
-            }
-        }
-
-        let threshold = total / 20; // 5% (arbitrary)
-        for (script, language, count) in script_language_doc_count {
-            if count > threshold {
-                if let Some(languages) = script_language.get_mut(&script) {
-                    (*languages).push(language);
-                } else {
-                    script_language.insert(script, vec![language]);
-                }
-            }
-        }
-
-        Ok(script_language)
+        txn: &mut RwTxn<'_>,
+        val: Vec<LocalizedAttributesRule>,
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, SerdeBincode<Vec<LocalizedAttributesRule>>>().put(
+            txn,
+            main_key::LOCALIZED_ATTRIBUTES_RULES,
+            &val,
+        )
     }
 
-    pub fn languages(&self, rtxn: &RoTxn<'_>) -> heed::Result<Vec<Language>> {
-        let mut script_language_doc_count: Vec<(Language, u64)> = Vec::new();
-        let mut total = 0;
-        for sl in self.script_language_docids.iter(rtxn)? {
-            let ((_script, language), docids) = sl?;
-
-            // keep only Languages that contains at least 1 document.
-            let remaining_documents_count = docids.len();
-            total += remaining_documents_count;
-            if remaining_documents_count > 0 {
-                script_language_doc_count.push((language, remaining_documents_count));
-            }
-        }
-
-        let threshold = total / 20; // 5% (arbitrary)
-
-        Ok(script_language_doc_count
-            .into_iter()
-            .filter(|(_, count)| *count > threshold)
-            .map(|(language, _)| language)
-            .collect())
+    pub(crate) fn delete_localized_attributes_rules(
+        &self,
+        txn: &mut RwTxn<'_>,
+    ) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(txn, main_key::LOCALIZED_ATTRIBUTES_RULES)
     }
 
     /// Put the embedding configs:

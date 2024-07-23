@@ -130,3 +130,29 @@ make_locale! {
     Tgl,
     Hye
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserr, Serialize, Deserialize)]
+#[deserr(rename_all = camelCase)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalizedAttributesRuleView {
+    pub attribute_patterns: Vec<String>,
+    pub locales: Vec<Locale>,
+}
+
+impl From<LocalizedAttributesRule> for LocalizedAttributesRuleView {
+    fn from(rule: LocalizedAttributesRule) -> Self {
+        Self {
+            attribute_patterns: rule.attribute_patterns,
+            locales: rule.locales.into_iter().map(|l| l.into()).collect(),
+        }
+    }
+}
+
+impl From<LocalizedAttributesRuleView> for LocalizedAttributesRule {
+    fn from(view: LocalizedAttributesRuleView) -> Self {
+        Self {
+            attribute_patterns: view.attribute_patterns,
+            locales: view.locales.into_iter().map(|l| l.into()).collect(),
+        }
+    }
+}
