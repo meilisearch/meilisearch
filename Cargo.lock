@@ -934,7 +934,7 @@ dependencies = [
 [[package]]
 name = "charabia"
 version = "0.8.12"
-source = "git+https://github.com/meilisearch/charabia.git?branch=simplify-lang-detection#a95a9217265cee515708a679a2ed08ced1ac58a3"
+source = "git+https://github.com/meilisearch/charabia.git?branch=simplify-lang-detection#2992583137458afcebff5d44cae93fa46d9cf664"
 dependencies = [
  "aho-corasick",
  "csv",
@@ -2649,7 +2649,7 @@ checksum = "28b29a3cd74f0f4598934efe3aeba42bae0eb4680554128851ebbecb02af14e6"
 [[package]]
 name = "irg-kvariants"
 version = "0.1.1"
-source = "git+https://github.com/meilisearch/charabia.git?branch=simplify-lang-detection#a95a9217265cee515708a679a2ed08ced1ac58a3"
+source = "git+https://github.com/meilisearch/charabia.git?branch=simplify-lang-detection#2992583137458afcebff5d44cae93fa46d9cf664"
 dependencies = [
  "csv",
  "once_cell",
