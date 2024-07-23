@@ -103,7 +103,12 @@ impl Embedder {
         let config = std::fs::read_to_string(&config_filename)
             .map_err(|inner| NewEmbedderError::open_config(config_filename.clone(), inner))?;
         let config: Config = serde_json::from_str(&config).map_err(|inner| {
-            NewEmbedderError::deserialize_config(config, config_filename, inner)
+            NewEmbedderError::deserialize_config(
+                options.model.clone(),
+                config,
+                config_filename,
+                inner,
+            )
         })?;
         let mut tokenizer = Tokenizer::from_file(&tokenizer_filename)
             .map_err(|inner| NewEmbedderError::open_tokenizer(tokenizer_filename, inner))?;
