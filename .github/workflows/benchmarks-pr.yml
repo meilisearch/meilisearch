@@ -13,6 +13,37 @@ jobs:
     runs-on: benchmarks
     timeout-minutes: 4320 # 72h
     steps:
+      - name: Check permissions
+        id: permission
+        env:
+          PR_AUTHOR: ${{github.event.issue.user.login }}
+          COMMENT_AUTHOR: ${{github.event.comment.user.login }}
+          REPOSITORY: ${{github.repository}}
+          PR_ID: ${{github.event.issue.number}}
+        run: |
+          PR_REPOSITORY=$(gh api /repos/"$REPOSITORY"/pulls/"$PR_ID" --jq .head.repo.full_name)
+          if $(gh api /repos/"$REPOSITORY"/collaborators/"$PR_AUTHOR"/permission --jq .user.permissions.push)
+          then
+            echo "::notice title=Authentication success::PR author authenticated"
+          else
+            echo "::error title=Authentication error::PR author doesn't have push permission on this repository"
+            exit 1
+          fi
+          if $(gh api /repos/"$REPOSITORY"/collaborators/"$COMMENT_AUTHOR"/permission --jq .user.permissions.push)
+          then
+            echo "::notice title=Authentication success::Comment author authenticated"
+          else
+            echo "::error title=Authentication error::Comment author doesn't have push permission on this repository"
+            exit 1
+          fi
+          if [ "$PR_REPOSITORY" = "$REPOSITORY" ]
+          then
+            echo "::notice title=Authentication success::PR started from main repository"
+          else
+            echo "::error title=Authentication error::PR started from a fork"
+            exit 1
+          fi
+
       - uses: helix-editor/rust-toolchain@v1
         with:
           profile: minimal
