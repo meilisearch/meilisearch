@@ -11,6 +11,7 @@ use crate::ThreadPoolNoAbort;
 
 pub mod error;
 pub mod hf;
+pub mod json_template;
 pub mod manual;
 pub mod openai;
 pub mod parsed_vectors;
@@ -227,7 +228,9 @@ impl Embedder {
             EmbedderOptions::UserProvided(options) => {
                 Self::UserProvided(manual::Embedder::new(options))
             }
-            EmbedderOptions::Rest(options) => Self::Rest(rest::Embedder::new(options)?),
+            EmbedderOptions::Rest(options) => {
+                Self::Rest(rest::Embedder::new(options, rest::ConfigurationSource::User)?)
+            }
         })
     }
 

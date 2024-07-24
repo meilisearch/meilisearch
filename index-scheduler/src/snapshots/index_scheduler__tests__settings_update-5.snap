@@ -1,6 +1,6 @@
 ---
 source: index-scheduler/src/lib.rs
-expression: embedding_config.embedder_options
+expression: config.embedder_options
 ---
 {
   "Rest": {
@@ -8,16 +8,7 @@ expression: embedding_config.embedder_options
     "distribution": null,
     "dimensions": 4,
     "url": "http://localhost:7777",
-    "query": null,
-    "input_field": [
-      "input"
-    ],
-    "path_to_embeddings": [
-      "data"
-    ],
-    "embedding_object": [
-      "embedding"
-    ],
-    "input_type": "text"
+    "request": "{{text}}",
+    "response": "{{embedding}}"
   }
 }

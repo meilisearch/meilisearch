@@ -3047,6 +3047,8 @@ mod tests {
             api_key: Setting::Set(S("My super secret")),
             url: Setting::Set(S("http://localhost:7777")),
             dimensions: Setting::Set(4),
+            request: Setting::Set(serde_json::json!("{{text}}")),
+            response: Setting::Set(serde_json::json!("{{embedding}}")),
             ..Default::default()
         };
         embedders.insert(S("default"), Setting::Set(embedding_settings));
@@ -5006,6 +5008,8 @@ mod tests {
             api_key: Setting::Set(S("My super secret")),
             url: Setting::Set(S("http://localhost:7777")),
             dimensions: Setting::Set(384),
+            request: Setting::Set(serde_json::json!("{{text}}")),
+            response: Setting::Set(serde_json::json!("{{embedding}}")),
             ..Default::default()
         };
         embedders.insert(S("A_fakerest"), Setting::Set(embedding_settings));

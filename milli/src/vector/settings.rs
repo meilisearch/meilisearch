@@ -2,7 +2,6 @@ use deserr::Deserr;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 
-use super::rest::InputType;
 use super::{ollama, openai, DistributionShift};
 use crate::prompt::PromptData;
 use crate::update::Setting;
@@ -36,19 +35,10 @@ pub struct EmbeddingSettings {
     pub url: Setting<String>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    pub query: Setting<serde_json::Value>,
+    pub request: Setting<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    pub input_field: Setting<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    pub path_to_embeddings: Setting<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    pub embedding_object: Setting<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    pub input_type: Setting<InputType>,
+    pub response: Setting<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     pub distribution: Setting<DistributionShift>,
@@ -112,11 +102,8 @@ impl SettingsDiff {
                     mut dimensions,
                     mut document_template,
                     mut url,
-                    mut query,
-                    mut input_field,
-                    mut path_to_embeddings,
-                    mut embedding_object,
-                    mut input_type,
+                    mut request,
+                    mut response,
                     mut distribution,
                 } = old;
 
@@ -128,11 +115,8 @@ impl SettingsDiff {
                     dimensions: new_dimensions,
                     document_template: new_document_template,
                     url: new_url,
-                    query: new_query,
-                    input_field: new_input_field,
-                    path_to_embeddings: new_path_to_embeddings,
-                    embedding_object: new_embedding_object,
-                    input_type: new_input_type,
+                    request: new_request,
+                    response: new_response,
                     distribution: new_distribution,
                 } = new;
 
@@ -148,11 +132,8 @@ impl SettingsDiff {
                         &mut revision,
                         &mut dimensions,
                         &mut url,
-                        &mut query,
-                        &mut input_field,
-                        &mut path_to_embeddings,
-                        &mut embedding_object,
-                        &mut input_type,
+                        &mut request,
+                        &mut response,
                         &mut document_template,
                     )
                 }
@@ -177,19 +158,10 @@ impl SettingsDiff {
                         }
                     }
                 }
-                if query.apply(new_query) {
+                if request.apply(new_request) {
                     ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
                 }
-                if input_field.apply(new_input_field) {
-                    ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
-                }
-                if path_to_embeddings.apply(new_path_to_embeddings) {
-                    ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
-                }
-                if embedding_object.apply(new_embedding_object) {
-                    ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
-                }
-                if input_type.apply(new_input_type) {
+                if response.apply(new_response) {
                     ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
                 }
                 if document_template.apply(new_document_template) {
@@ -210,11 +182,8 @@ impl SettingsDiff {
                     dimensions,
                     document_template,
                     url,
-                    query,
-                    input_field,
-                    path_to_embeddings,
-                    embedding_object,
-                    input_type,
+                    request,
+                    response,
                     distribution,
                 };
 
@@ -246,11 +215,8 @@ fn apply_default_for_source(
     revision: &mut Setting<String>,
     dimensions: &mut Setting<usize>,
     url: &mut Setting<String>,
-    query: &mut Setting<serde_json::Value>,
-    input_field: &mut Setting<Vec<String>>,
-    path_to_embeddings: &mut Setting<Vec<String>>,
-    embedding_object: &mut Setting<Vec<String>>,
-    input_type: &mut Setting<InputType>,
+    request: &mut Setting<serde_json::Value>,
+    response: &mut Setting<serde_json::Value>,
     document_template: &mut Setting<String>,
 ) {
     match source {
@@ -259,55 +225,40 @@ fn apply_default_for_source(
             *revision = Setting::Reset;
             *dimensions = Setting::NotSet;
             *url = Setting::NotSet;
-            *query = Setting::NotSet;
-            *input_field = Setting::NotSet;
-            *path_to_embeddings = Setting::NotSet;
-            *embedding_object = Setting::NotSet;
-            *input_type = Setting::NotSet;
+            *request = Setting::NotSet;
+            *response = Setting::NotSet;
         }
         Setting::Set(EmbedderSource::Ollama) => {
             *model = Setting::Reset;
             *revision = Setting::NotSet;
             *dimensions = Setting::Reset;
             *url = Setting::NotSet;
-            *query = Setting::NotSet;
-            *input_field = Setting::NotSet;
-            *path_to_embeddings = Setting::NotSet;
-            *embedding_object = Setting::NotSet;
-            *input_type = Setting::NotSet;
+            *request = Setting::NotSet;
+            *response = Setting::NotSet;
         }
         Setting::Set(EmbedderSource::OpenAi) | Setting::Reset => {
             *model = Setting::Reset;
             *revision = Setting::NotSet;
             *dimensions = Setting::NotSet;
             *url = Setting::Reset;
-            *query = Setting::NotSet;
-            *input_field = Setting::NotSet;
-            *path_to_embeddings = Setting::NotSet;
-            *embedding_object = Setting::NotSet;
-            *input_type = Setting::NotSet;
+            *request = Setting::NotSet;
+            *response = Setting::NotSet;
         }
         Setting::Set(EmbedderSource::Rest) => {
             *model = Setting::NotSet;
             *revision = Setting::NotSet;
             *dimensions = Setting::Reset;
             *url = Setting::Reset;
-            *query = Setting::Reset;
-            *input_field = Setting::Reset;
-            *path_to_embeddings = Setting::Reset;
-            *embedding_object = Setting::Reset;
-            *input_type = Setting::Reset;
+            *request = Setting::Reset;
+            *response = Setting::Reset;
         }
         Setting::Set(EmbedderSource::UserProvided) => {
             *model = Setting::NotSet;
             *revision = Setting::NotSet;
             *dimensions = Setting::Reset;
             *url = Setting::NotSet;
-            *query = Setting::NotSet;
-            *input_field = Setting::NotSet;
-            *path_to_embeddings = Setting::NotSet;
-            *embedding_object = Setting::NotSet;
-            *input_type = Setting::NotSet;
+            *request = Setting::NotSet;
+            *response = Setting::NotSet;
             *document_template = Setting::NotSet;
         }
         Setting::NotSet => {}
@@ -340,11 +291,8 @@ impl EmbeddingSettings {
     pub const DOCUMENT_TEMPLATE: &'static str = "documentTemplate";
 
     pub const URL: &'static str = "url";
-    pub const QUERY: &'static str = "query";
-    pub const INPUT_FIELD: &'static str = "inputField";
-    pub const PATH_TO_EMBEDDINGS: &'static str = "pathToEmbeddings";
-    pub const EMBEDDING_OBJECT: &'static str = "embeddingObject";
-    pub const INPUT_TYPE: &'static str = "inputType";
+    pub const REQUEST: &'static str = "request";
+    pub const RESPONSE: &'static str = "response";
 
     pub const DISTRIBUTION: &'static str = "distribution";
 
@@ -374,11 +322,8 @@ impl EmbeddingSettings {
                 EmbedderSource::Rest,
             ],
             Self::URL => &[EmbedderSource::Ollama, EmbedderSource::Rest, EmbedderSource::OpenAi],
-            Self::QUERY => &[EmbedderSource::Rest],
-            Self::INPUT_FIELD => &[EmbedderSource::Rest],
-            Self::PATH_TO_EMBEDDINGS => &[EmbedderSource::Rest],
-            Self::EMBEDDING_OBJECT => &[EmbedderSource::Rest],
-            Self::INPUT_TYPE => &[EmbedderSource::Rest],
+            Self::REQUEST => &[EmbedderSource::Rest],
+            Self::RESPONSE => &[EmbedderSource::Rest],
             Self::DISTRIBUTION => &[
                 EmbedderSource::HuggingFace,
                 EmbedderSource::Ollama,
@@ -423,11 +368,8 @@ impl EmbeddingSettings {
                 Self::DIMENSIONS,
                 Self::DOCUMENT_TEMPLATE,
                 Self::URL,
-                Self::QUERY,
-                Self::INPUT_FIELD,
-                Self::PATH_TO_EMBEDDINGS,
-                Self::EMBEDDING_OBJECT,
-                Self::INPUT_TYPE,
+                Self::REQUEST,
+                Self::RESPONSE,
                 Self::DISTRIBUTION,
             ],
         }
@@ -496,11 +438,8 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 dimensions: Setting::NotSet,
                 document_template: Setting::Set(prompt.template),
                 url: Setting::NotSet,
-                query: Setting::NotSet,
-                input_field: Setting::NotSet,
-                path_to_embeddings: Setting::NotSet,
-                embedding_object: Setting::NotSet,
-                input_type: Setting::NotSet,
+                request: Setting::NotSet,
+                response: Setting::NotSet,
                 distribution: distribution.map(Setting::Set).unwrap_or_default(),
             },
             super::EmbedderOptions::OpenAi(super::openai::EmbedderOptions {
@@ -517,11 +456,8 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 dimensions: dimensions.map(Setting::Set).unwrap_or_default(),
                 document_template: Setting::Set(prompt.template),
                 url: url.map(Setting::Set).unwrap_or_default(),
-                query: Setting::NotSet,
-                input_field: Setting::NotSet,
-                path_to_embeddings: Setting::NotSet,
-                embedding_object: Setting::NotSet,
-                input_type: Setting::NotSet,
+                request: Setting::NotSet,
+                response: Setting::NotSet,
                 distribution: distribution.map(Setting::Set).unwrap_or_default(),
             },
             super::EmbedderOptions::Ollama(super::ollama::EmbedderOptions {
@@ -537,11 +473,8 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 dimensions: Setting::NotSet,
                 document_template: Setting::Set(prompt.template),
                 url: url.map(Setting::Set).unwrap_or_default(),
-                query: Setting::NotSet,
-                input_field: Setting::NotSet,
-                path_to_embeddings: Setting::NotSet,
-                embedding_object: Setting::NotSet,
-                input_type: Setting::NotSet,
+                request: Setting::NotSet,
+                response: Setting::NotSet,
                 distribution: distribution.map(Setting::Set).unwrap_or_default(),
             },
             super::EmbedderOptions::UserProvided(super::manual::EmbedderOptions {
@@ -555,22 +488,16 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 dimensions: Setting::Set(dimensions),
                 document_template: Setting::NotSet,
                 url: Setting::NotSet,
-                query: Setting::NotSet,
-                input_field: Setting::NotSet,
-                path_to_embeddings: Setting::NotSet,
-                embedding_object: Setting::NotSet,
-                input_type: Setting::NotSet,
+                request: Setting::NotSet,
+                response: Setting::NotSet,
                 distribution: distribution.map(Setting::Set).unwrap_or_default(),
             },
             super::EmbedderOptions::Rest(super::rest::EmbedderOptions {
                 api_key,
                 dimensions,
                 url,
-                query,
-                input_field,
-                path_to_embeddings,
-                embedding_object,
-                input_type,
+                request,
+                response,
                 distribution,
             }) => Self {
                 source: Setting::Set(EmbedderSource::Rest),
@@ -580,11 +507,8 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 dimensions: dimensions.map(Setting::Set).unwrap_or_default(),
                 document_template: Setting::Set(prompt.template),
                 url: Setting::Set(url),
-                query: Setting::Set(query),
-                input_field: Setting::Set(input_field),
-                path_to_embeddings: Setting::Set(path_to_embeddings),
-                embedding_object: Setting::Set(embedding_object),
-                input_type: Setting::Set(input_type),
+                request: Setting::Set(request),
+                response: Setting::Set(response),
                 distribution: distribution.map(Setting::Set).unwrap_or_default(),
             },
         }
@@ -602,11 +526,8 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
             dimensions,
             document_template,
             url,
-            query,
-            input_field,
-            path_to_embeddings,
-            embedding_object,
-            input_type,
+            request,
+            response,
             distribution,
         } = value;
 
@@ -669,22 +590,13 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
                         });
                 }
                 EmbedderSource::Rest => {
-                    let embedder_options = super::rest::EmbedderOptions::default();
-
                     this.embedder_options =
                         super::EmbedderOptions::Rest(super::rest::EmbedderOptions {
                             api_key: api_key.set(),
                             dimensions: dimensions.set(),
                             url: url.set().unwrap(),
-                            query: query.set().unwrap_or(embedder_options.query),
-                            input_field: input_field.set().unwrap_or(embedder_options.input_field),
-                            path_to_embeddings: path_to_embeddings
-                                .set()
-                                .unwrap_or(embedder_options.path_to_embeddings),
-                            embedding_object: embedding_object
-                                .set()
-                                .unwrap_or(embedder_options.embedding_object),
-                            input_type: input_type.set().unwrap_or(embedder_options.input_type),
+                            request: request.set().unwrap(),
+                            response: response.set().unwrap(),
                             distribution: distribution.set(),
                         })
                 }

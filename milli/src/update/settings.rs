@@ -1484,11 +1484,8 @@ fn validate_prompt(
             dimensions,
             document_template: Setting::Set(template),
             url,
-            query,
-            input_field,
-            path_to_embeddings,
-            embedding_object,
-            input_type,
+            request,
+            response,
             distribution,
         }) => {
             // validate
@@ -1504,11 +1501,8 @@ fn validate_prompt(
                 dimensions,
                 document_template: Setting::Set(template),
                 url,
-                query,
-                input_field,
-                path_to_embeddings,
-                embedding_object,
-                input_type,
+                request,
+                response,
                 distribution,
             }))
         }
@@ -1530,11 +1524,8 @@ pub fn validate_embedding_settings(
         dimensions,
         document_template,
         url,
-        query,
-        input_field,
-        path_to_embeddings,
-        embedding_object,
-        input_type,
+        request,
+        response,
         distribution,
     } = settings;
 
@@ -1553,6 +1544,15 @@ pub fn validate_embedding_settings(
         })?;
     }
 
+    if let Some(request) = request.as_ref().set() {
+        let request = crate::vector::rest::Request::new(request.to_owned())
+            .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))?;
+        if let Some(response) = response.as_ref().set() {
+            crate::vector::rest::Response::new(response.to_owned(), &request)
+                .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))?;
+        }
+    }
+
     let Some(inferred_source) = source.set() else {
         return Ok(Setting::Set(EmbeddingSettings {
             source,
@@ -1562,11 +1562,8 @@ pub fn validate_embedding_settings(
             dimensions,
             document_template,
             url,
-            query,
-            input_field,
-            path_to_embeddings,
-            embedding_object,
-            input_type,
+            request,
+            response,
             distribution,
         }));
     };
@@ -1574,21 +1571,8 @@ pub fn validate_embedding_settings(
         EmbedderSource::OpenAi => {
             check_unset(&revision, EmbeddingSettings::REVISION, inferred_source, name)?;
 
-            check_unset(&query, EmbeddingSettings::QUERY, inferred_source, name)?;
-            check_unset(&input_field, EmbeddingSettings::INPUT_FIELD, inferred_source, name)?;
-            check_unset(
-                &path_to_embeddings,
-                EmbeddingSettings::PATH_TO_EMBEDDINGS,
-                inferred_source,
-                name,
-            )?;
-            check_unset(
-                &embedding_object,
-                EmbeddingSettings::EMBEDDING_OBJECT,
-                inferred_source,
-                name,
-            )?;
-            check_unset(&input_type, EmbeddingSettings::INPUT_TYPE, inferred_source, name)?;
+            check_unset(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
+            check_unset(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
 
             if let Setting::Set(model) = &model {
                 let model = crate::vector::openai::EmbeddingModel::from_name(model.as_str())
@@ -1626,42 +1610,16 @@ pub fn validate_embedding_settings(
             check_set(&model, EmbeddingSettings::MODEL, inferred_source, name)?;
             check_unset(&revision, EmbeddingSettings::REVISION, inferred_source, name)?;
 
-            check_unset(&query, EmbeddingSettings::QUERY, inferred_source, name)?;
-            check_unset(&input_field, EmbeddingSettings::INPUT_FIELD, inferred_source, name)?;
-            check_unset(
-                &path_to_embeddings,
-                EmbeddingSettings::PATH_TO_EMBEDDINGS,
-                inferred_source,
-                name,
-            )?;
-            check_unset(
-                &embedding_object,
-                EmbeddingSettings::EMBEDDING_OBJECT,
-                inferred_source,
-                name,
-            )?;
-            check_unset(&input_type, EmbeddingSettings::INPUT_TYPE, inferred_source, name)?;
+            check_unset(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
+            check_unset(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
         }
         EmbedderSource::HuggingFace => {
             check_unset(&api_key, EmbeddingSettings::API_KEY, inferred_source, name)?;
             check_unset(&dimensions, EmbeddingSettings::DIMENSIONS, inferred_source, name)?;
 
             check_unset(&url, EmbeddingSettings::URL, inferred_source, name)?;
-            check_unset(&query, EmbeddingSettings::QUERY, inferred_source, name)?;
-            check_unset(&input_field, EmbeddingSettings::INPUT_FIELD, inferred_source, name)?;
-            check_unset(
-                &path_to_embeddings,
-                EmbeddingSettings::PATH_TO_EMBEDDINGS,
-                inferred_source,
-                name,
-            )?;
-            check_unset(
-                &embedding_object,
-                EmbeddingSettings::EMBEDDING_OBJECT,
-                inferred_source,
-                name,
-            )?;
-            check_unset(&input_type, EmbeddingSettings::INPUT_TYPE, inferred_source, name)?;
+            check_unset(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
+            check_unset(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
         }
         EmbedderSource::UserProvided => {
             check_unset(&model, EmbeddingSettings::MODEL, inferred_source, name)?;
@@ -1676,26 +1634,15 @@ pub fn validate_embedding_settings(
             check_set(&dimensions, EmbeddingSettings::DIMENSIONS, inferred_source, name)?;
 
             check_unset(&url, EmbeddingSettings::URL, inferred_source, name)?;
-            check_unset(&query, EmbeddingSettings::QUERY, inferred_source, name)?;
-            check_unset(&input_field, EmbeddingSettings::INPUT_FIELD, inferred_source, name)?;
-            check_unset(
-                &path_to_embeddings,
-                EmbeddingSettings::PATH_TO_EMBEDDINGS,
-                inferred_source,
-                name,
-            )?;
-            check_unset(
-                &embedding_object,
-                EmbeddingSettings::EMBEDDING_OBJECT,
-                inferred_source,
-                name,
-            )?;
-            check_unset(&input_type, EmbeddingSettings::INPUT_TYPE, inferred_source, name)?;
+            check_unset(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
+            check_unset(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
         }
         EmbedderSource::Rest => {
             check_unset(&model, EmbeddingSettings::MODEL, inferred_source, name)?;
             check_unset(&revision, EmbeddingSettings::REVISION, inferred_source, name)?;
             check_set(&url, EmbeddingSettings::URL, inferred_source, name)?;
+            check_set(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
+            check_set(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
         }
     }
     Ok(Setting::Set(EmbeddingSettings {
@@ -1706,11 +1653,8 @@ pub fn validate_embedding_settings(
         dimensions,
         document_template,
         url,
-        query,
-        input_field,
-        path_to_embeddings,
-        embedding_object,
-        input_type,
+        request,
+        response,
         distribution,
     }))
 }
