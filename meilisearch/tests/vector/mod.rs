@@ -487,10 +487,11 @@ async fn user_provided_embeddings_error() {
 #[actix_rt::test]
 async fn user_provided_vectors_error() {
     let server = Server::new().await;
+
     let index = generate_default_user_provided_documents(&server).await;
 
     // First case, we forget to specify `_vectors`
-    let documents = json!({"id": 42, "name": "kefir"});
+    let documents = json!([{"id": 40, "name": "kefir"}, {"id": 41, "name": "intel"}, {"id": 42, "name": "max"}, {"id": 43, "name": "venus"}, {"id": 44, "name": "eva"}]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
     let task = index.wait_task(value.uid()).await;
@@ -502,11 +503,11 @@ async fn user_provided_vectors_error() {
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
       "details": {
-        "receivedDocuments": 1,
+        "receivedDocuments": 5,
         "indexedDocuments": 0
       },
       "error": {
-        "message": "While embedding documents for embedder `manual`: user error: attempt to embed the following text in a configuration where embeddings must be user provided:\n  - ` id: 42\n name: kefir\n _vectors: \n _vectors.manual: \n _vectors.manual.regenerate: \n _vectors.manual.embeddings: \n`\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: opt-out for a document with `_vectors.manual: null`",
+        "message": "While embedding documents for embedder `manual`: no vectors provided for document \"40\" and at least 4 other document(s)\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: opt-out for a document with `_vectors.manual: null`",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -535,7 +536,7 @@ async fn user_provided_vectors_error() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "While embedding documents for embedder `manual`: user error: attempt to embed the following text in a configuration where embeddings must be user provided:\n  - ` id: 42\n name: kefir\n _vectors: \n _vectors.manual: \n _vectors.manual.regenerate: \n _vectors.manual.embeddings: \n _vector: manaul000\n _vector.manaul: \n`\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: try replacing `_vector` by `_vectors` in 1 document(s).",
+        "message": "While embedding documents for embedder `manual`: no vectors provided for document \"42\"\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: try replacing `_vector` by `_vectors` in 1 document(s).",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -564,7 +565,7 @@ async fn user_provided_vectors_error() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "While embedding documents for embedder `manual`: user error: attempt to embed the following text in a configuration where embeddings must be user provided:\n  - ` id: 42\n name: kefir\n _vectors: manaul000\n _vectors.manual: \n _vectors.manual.regenerate: \n _vectors.manual.embeddings: \n _vectors.manaul: \n`\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: try replacing `_vectors.manaul` by `_vectors.manual` in 1 document(s).",
+        "message": "While embedding documents for embedder `manual`: no vectors provided for document \"42\"\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: try replacing `_vectors.manaul` by `_vectors.manual` in 1 document(s).",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"

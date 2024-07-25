@@ -95,6 +95,84 @@ enum ExtractionAction {
     DocumentOperation(DocumentOperation),
 }
 
+struct ManualEmbedderErrors {
+    embedder_name: String,
+    docid: String,
+    other_docids: usize,
+}
+
+impl ManualEmbedderErrors {
+    pub fn push_error(
+        errors: &mut Option<ManualEmbedderErrors>,
+        embedder_name: &str,
+        document_id: impl Fn() -> Value,
+    ) {
+        match errors {
+            Some(errors) => {
+                if errors.embedder_name == embedder_name {
+                    errors.other_docids = errors.other_docids.saturating_add(1)
+                }
+            }
+            None => {
+                *errors = Some(Self {
+                    embedder_name: embedder_name.to_owned(),
+                    docid: document_id().to_string(),
+                    other_docids: 0,
+                });
+            }
+        }
+    }
+
+    pub fn to_result(
+        errors: Option<ManualEmbedderErrors>,
+        possible_embedding_mistakes: &PossibleEmbeddingMistakes,
+        unused_vectors_distribution: &UnusedVectorsDistribution,
+    ) -> Result<()> {
+        match errors {
+            Some(errors) => {
+                let embedder_name = &errors.embedder_name;
+                let mut msg = format!(
+                    r"While embedding documents for embedder `{embedder_name}`: no vectors provided for document {}{}",
+                    errors.docid,
+                    if errors.other_docids != 0 {
+                        format!(" and at least {} other document(s)", errors.other_docids)
+                    } else {
+                        "".to_string()
+                    }
+                );
+
+                msg += &format!("\n- Note: `{embedder_name}` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.{embedder_name}`.");
+
+                let mut hint_count = 0;
+
+                for (vector_misspelling, count) in
+                    possible_embedding_mistakes.vector_mistakes().take(2)
+                {
+                    msg += &format!("\n- Hint: try replacing `{vector_misspelling}` by `_vectors` in {count} document(s).");
+                    hint_count += 1;
+                }
+
+                for (embedder_misspelling, count) in possible_embedding_mistakes
+                    .embedder_mistakes(embedder_name, unused_vectors_distribution)
+                    .take(2)
+                {
+                    msg += &format!("\n- Hint: try replacing `_vectors.{embedder_misspelling}` by `_vectors.{embedder_name}` in {count} document(s).");
+                    hint_count += 1;
+                }
+
+                if hint_count == 0 {
+                    msg += &format!(
+                        "\n- Hint: opt-out for a document with `_vectors.{embedder_name}: null`"
+                    );
+                }
+
+                Err(crate::Error::UserError(crate::UserError::DocumentEmbeddingError(msg)))
+            }
+            None => Ok(()),
+        }
+    }
+}
+
 /// Extracts the embedding vector contained in each document under the `_vectors` field.
 ///
 /// Returns the generated grenad reader containing the docid as key associated to the Vec<f32>
@@ -104,8 +182,10 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     embedders_configs: &[IndexEmbeddingConfig],
     settings_diff: &InnerIndexSettingsDiff,
+    possible_embedding_mistakes: &PossibleEmbeddingMistakes,
 ) -> Result<(Vec<ExtractedVectorPoints>, UnusedVectorsDistribution)> {
     let mut unused_vectors_distribution = UnusedVectorsDistribution::new();
+    let mut manual_errors = None;
     let reindex_vectors = settings_diff.reindex_vectors();
 
     let old_fields_ids_map = &settings_diff.old.fields_ids_map;
@@ -246,7 +326,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
 
         for EmbedderVectorExtractor {
             embedder_name,
-            embedder: _,
+            embedder,
             prompt,
             prompts_writer,
             remove_vectors_writer,
@@ -255,6 +335,8 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
             action,
         } in extractors.iter_mut()
         {
+            let embedder_is_manual = matches!(**embedder, Embedder::UserProvided(_));
+
             let (old, new) = parsed_vectors.remove(embedder_name);
             let delta = match action {
                 ExtractionAction::SettingsFullReindex => match old {
@@ -285,11 +367,29 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                     // this happens only when an existing embedder changed. We cannot regenerate userProvided vectors
                     VectorState::Manual => VectorStateDelta::NoChange,
                     // generated vectors must be regenerated
-                    VectorState::Generated => regenerate_prompt(obkv, prompt, new_fields_ids_map)?,
+                    VectorState::Generated => {
+                        if embedder_is_manual {
+                            ManualEmbedderErrors::push_error(
+                                &mut manual_errors,
+                                embedder_name.as_str(),
+                                document_id,
+                            );
+                            continue;
+                        }
+                        regenerate_prompt(obkv, prompt, new_fields_ids_map)?
+                    }
                 },
                 // prompt regeneration is only triggered for existing embedders
                 ExtractionAction::SettingsRegeneratePrompts { old_prompt } => {
                     if old.must_regenerate() {
+                        if embedder_is_manual {
+                            ManualEmbedderErrors::push_error(
+                                &mut manual_errors,
+                                embedder_name.as_str(),
+                                document_id,
+                            );
+                            continue;
+                        }
                         regenerate_if_prompt_changed(
                             obkv,
                             (old_prompt, prompt),
@@ -311,6 +411,9 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                     (old, new),
                     (old_fields_ids_map, new_fields_ids_map),
                     document_id,
+                    embedder_name,
+                    embedder_is_manual,
+                    &mut manual_errors,
                 )?,
             };
             // and we finally push the unique vectors into the writer
@@ -325,6 +428,12 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
 
         unused_vectors_distribution.append(parsed_vectors);
     }
+
+    ManualEmbedderErrors::to_result(
+        manual_errors,
+        possible_embedding_mistakes,
+        &unused_vectors_distribution,
+    )?;
 
     let mut results = Vec::new();
 
@@ -363,6 +472,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
     Ok((results, unused_vectors_distribution))
 }
 
+#[allow(clippy::too_many_arguments)] // feel free to find efficient way to factor arguments
 fn extract_vector_document_diff(
     docid: DocumentId,
     obkv: obkv::KvReader<'_, FieldId>,
@@ -371,6 +481,9 @@ fn extract_vector_document_diff(
     (old, new): (VectorState, VectorState),
     (old_fields_ids_map, new_fields_ids_map): (&FieldsIdsMap, &FieldsIdsMap),
     document_id: impl Fn() -> Value,
+    embedder_name: &str,
+    embedder_is_manual: bool,
+    manual_errors: &mut Option<ManualEmbedderErrors>,
 ) -> Result<VectorStateDelta> {
     match (old.must_regenerate(), new.must_regenerate()) {
         (true, true) | (false, false) => {}
@@ -408,6 +521,10 @@ fn extract_vector_document_diff(
                 .any(|deladd| deladd.get(DelAdd::Addition).is_some());
 
             if document_is_kept {
+                if embedder_is_manual {
+                    ManualEmbedderErrors::push_error(manual_errors, embedder_name, document_id);
+                    return Ok(VectorStateDelta::NoChange);
+                }
                 // Don't give up if the old prompt was failing
                 let old_prompt = Some(&prompt).map(|p| {
                     p.render(obkv, DelAdd::Deletion, old_fields_ids_map).unwrap_or_default()
@@ -439,6 +556,10 @@ fn extract_vector_document_diff(
                 .map(|(_, deladd)| KvReaderDelAdd::new(deladd))
                 .any(|deladd| deladd.get(DelAdd::Addition).is_some());
             if document_is_kept {
+                if embedder_is_manual {
+                    ManualEmbedderErrors::push_error(manual_errors, embedder_name, document_id);
+                    return Ok(VectorStateDelta::NoChange);
+                }
                 // becomes autogenerated
                 VectorStateDelta::NowGenerated(prompt.render(
                     obkv,

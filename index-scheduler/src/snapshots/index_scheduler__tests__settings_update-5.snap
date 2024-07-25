@@ -9,6 +9,7 @@ expression: config.embedder_options
     "dimensions": 4,
     "url": "http://localhost:7777",
     "request": "{{text}}",
-    "response": "{{embedding}}"
+    "response": "{{embedding}}",
+    "headers": {}
   }
 }

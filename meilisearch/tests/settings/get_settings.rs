@@ -192,7 +192,8 @@ async fn secrets_are_hidden_in_settings() {
           "documentTemplate": "{% for field in fields %} {{ field.name }}: {{ field.value }}\n{% endfor %}",
           "url": "https://localhost:7777",
           "request": "{{text}}",
-          "response": "{{embedding}}"
+          "response": "{{embedding}}",
+          "headers": {}
         }
       },
       "searchCutoffMs": null,

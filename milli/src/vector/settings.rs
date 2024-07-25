@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use deserr::Deserr;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
@@ -39,6 +41,9 @@ pub struct EmbeddingSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     pub response: Setting<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
+    pub headers: Setting<BTreeMap<String, String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     pub distribution: Setting<DistributionShift>,
@@ -105,6 +110,7 @@ impl SettingsDiff {
                     mut request,
                     mut response,
                     mut distribution,
+                    mut headers,
                 } = old;
 
                 let EmbeddingSettings {
@@ -118,6 +124,7 @@ impl SettingsDiff {
                     request: new_request,
                     response: new_response,
                     distribution: new_distribution,
+                    headers: new_headers,
                 } = new;
 
                 let mut reindex_action = None;
@@ -135,6 +142,7 @@ impl SettingsDiff {
                         &mut request,
                         &mut response,
                         &mut document_template,
+                        &mut headers,
                     )
                 }
                 if model.apply(new_model) {
@@ -144,7 +152,18 @@ impl SettingsDiff {
                     ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
                 }
                 if dimensions.apply(new_dimensions) {
-                    ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
+                    match source {
+                        // regenerate on dimensions change in OpenAI since truncation is supported
+                        Setting::Set(EmbedderSource::OpenAi) | Setting::Reset => {
+                            ReindexAction::push_action(
+                                &mut reindex_action,
+                                ReindexAction::FullReindex,
+                            );
+                        }
+                        // for all other embedders, the parameter is a hint that should not be able to change the result
+                        // and so won't cause a reindex by itself.
+                        _ => {}
+                    }
                 }
                 if url.apply(new_url) {
                     match source {
@@ -173,6 +192,7 @@ impl SettingsDiff {
 
                 distribution.apply(new_distribution);
                 api_key.apply(new_api_key);
+                headers.apply(new_headers);
 
                 let updated_settings = EmbeddingSettings {
                     source,
@@ -185,6 +205,7 @@ impl SettingsDiff {
                     request,
                     response,
                     distribution,
+                    headers,
                 };
 
                 match reindex_action {
@@ -218,6 +239,7 @@ fn apply_default_for_source(
     request: &mut Setting<serde_json::Value>,
     response: &mut Setting<serde_json::Value>,
     document_template: &mut Setting<String>,
+    headers: &mut Setting<BTreeMap<String, String>>,
 ) {
     match source {
         Setting::Set(EmbedderSource::HuggingFace) => {
@@ -227,6 +249,7 @@ fn apply_default_for_source(
             *url = Setting::NotSet;
             *request = Setting::NotSet;
             *response = Setting::NotSet;
+            *headers = Setting::NotSet;
         }
         Setting::Set(EmbedderSource::Ollama) => {
             *model = Setting::Reset;
@@ -235,6 +258,7 @@ fn apply_default_for_source(
             *url = Setting::NotSet;
             *request = Setting::NotSet;
             *response = Setting::NotSet;
+            *headers = Setting::NotSet;
         }
         Setting::Set(EmbedderSource::OpenAi) | Setting::Reset => {
             *model = Setting::Reset;
@@ -243,6 +267,7 @@ fn apply_default_for_source(
             *url = Setting::Reset;
             *request = Setting::NotSet;
             *response = Setting::NotSet;
+            *headers = Setting::NotSet;
         }
         Setting::Set(EmbedderSource::Rest) => {
             *model = Setting::NotSet;
@@ -251,6 +276,7 @@ fn apply_default_for_source(
             *url = Setting::Reset;
             *request = Setting::Reset;
             *response = Setting::Reset;
+            *headers = Setting::Reset;
         }
         Setting::Set(EmbedderSource::UserProvided) => {
             *model = Setting::NotSet;
@@ -260,6 +286,7 @@ fn apply_default_for_source(
             *request = Setting::NotSet;
             *response = Setting::NotSet;
             *document_template = Setting::NotSet;
+            *headers = Setting::NotSet;
         }
         Setting::NotSet => {}
     }
@@ -293,6 +320,7 @@ impl EmbeddingSettings {
     pub const URL: &'static str = "url";
     pub const REQUEST: &'static str = "request";
     pub const RESPONSE: &'static str = "response";
+    pub const HEADERS: &'static str = "headers";
 
     pub const DISTRIBUTION: &'static str = "distribution";
 
@@ -312,9 +340,12 @@ impl EmbeddingSettings {
             Self::API_KEY => {
                 &[EmbedderSource::OpenAi, EmbedderSource::Ollama, EmbedderSource::Rest]
             }
-            Self::DIMENSIONS => {
-                &[EmbedderSource::OpenAi, EmbedderSource::UserProvided, EmbedderSource::Rest]
-            }
+            Self::DIMENSIONS => &[
+                EmbedderSource::OpenAi,
+                EmbedderSource::UserProvided,
+                EmbedderSource::Ollama,
+                EmbedderSource::Rest,
+            ],
             Self::DOCUMENT_TEMPLATE => &[
                 EmbedderSource::HuggingFace,
                 EmbedderSource::OpenAi,
@@ -324,6 +355,7 @@ impl EmbeddingSettings {
             Self::URL => &[EmbedderSource::Ollama, EmbedderSource::Rest, EmbedderSource::OpenAi],
             Self::REQUEST => &[EmbedderSource::Rest],
             Self::RESPONSE => &[EmbedderSource::Rest],
+            Self::HEADERS => &[EmbedderSource::Rest],
             Self::DISTRIBUTION => &[
                 EmbedderSource::HuggingFace,
                 EmbedderSource::Ollama,
@@ -359,6 +391,7 @@ impl EmbeddingSettings {
                 Self::DOCUMENT_TEMPLATE,
                 Self::URL,
                 Self::API_KEY,
+                Self::DIMENSIONS,
                 Self::DISTRIBUTION,
             ],
             EmbedderSource::UserProvided => &[Self::SOURCE, Self::DIMENSIONS, Self::DISTRIBUTION],
@@ -370,6 +403,7 @@ impl EmbeddingSettings {
                 Self::URL,
                 Self::REQUEST,
                 Self::RESPONSE,
+                Self::HEADERS,
                 Self::DISTRIBUTION,
             ],
         }
@@ -433,14 +467,15 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
             }) => Self {
                 source: Setting::Set(EmbedderSource::HuggingFace),
                 model: Setting::Set(model),
-                revision: revision.map(Setting::Set).unwrap_or_default(),
+                revision: Setting::some_or_not_set(revision),
                 api_key: Setting::NotSet,
                 dimensions: Setting::NotSet,
                 document_template: Setting::Set(prompt.template),
                 url: Setting::NotSet,
                 request: Setting::NotSet,
                 response: Setting::NotSet,
-                distribution: distribution.map(Setting::Set).unwrap_or_default(),
+                headers: Setting::NotSet,
+                distribution: Setting::some_or_not_set(distribution),
             },
             super::EmbedderOptions::OpenAi(super::openai::EmbedderOptions {
                 url,
@@ -452,30 +487,33 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 source: Setting::Set(EmbedderSource::OpenAi),
                 model: Setting::Set(embedding_model.name().to_owned()),
                 revision: Setting::NotSet,
-                api_key: api_key.map(Setting::Set).unwrap_or_default(),
-                dimensions: dimensions.map(Setting::Set).unwrap_or_default(),
+                api_key: Setting::some_or_not_set(api_key),
+                dimensions: Setting::some_or_not_set(dimensions),
                 document_template: Setting::Set(prompt.template),
-                url: url.map(Setting::Set).unwrap_or_default(),
+                url: Setting::some_or_not_set(url),
                 request: Setting::NotSet,
                 response: Setting::NotSet,
-                distribution: distribution.map(Setting::Set).unwrap_or_default(),
+                headers: Setting::NotSet,
+                distribution: Setting::some_or_not_set(distribution),
             },
             super::EmbedderOptions::Ollama(super::ollama::EmbedderOptions {
                 embedding_model,
                 url,
                 api_key,
                 distribution,
+                dimensions,
             }) => Self {
                 source: Setting::Set(EmbedderSource::Ollama),
                 model: Setting::Set(embedding_model),
                 revision: Setting::NotSet,
-                api_key: api_key.map(Setting::Set).unwrap_or_default(),
-                dimensions: Setting::NotSet,
+                api_key: Setting::some_or_not_set(api_key),
+                dimensions: Setting::some_or_not_set(dimensions),
                 document_template: Setting::Set(prompt.template),
-                url: url.map(Setting::Set).unwrap_or_default(),
+                url: Setting::some_or_not_set(url),
                 request: Setting::NotSet,
                 response: Setting::NotSet,
-                distribution: distribution.map(Setting::Set).unwrap_or_default(),
+                headers: Setting::NotSet,
+                distribution: Setting::some_or_not_set(distribution),
             },
             super::EmbedderOptions::UserProvided(super::manual::EmbedderOptions {
                 dimensions,
@@ -490,7 +528,8 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 url: Setting::NotSet,
                 request: Setting::NotSet,
                 response: Setting::NotSet,
-                distribution: distribution.map(Setting::Set).unwrap_or_default(),
+                headers: Setting::NotSet,
+                distribution: Setting::some_or_not_set(distribution),
             },
             super::EmbedderOptions::Rest(super::rest::EmbedderOptions {
                 api_key,
@@ -499,17 +538,19 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 request,
                 response,
                 distribution,
+                headers,
             }) => Self {
                 source: Setting::Set(EmbedderSource::Rest),
                 model: Setting::NotSet,
                 revision: Setting::NotSet,
-                api_key: api_key.map(Setting::Set).unwrap_or_default(),
-                dimensions: dimensions.map(Setting::Set).unwrap_or_default(),
+                api_key: Setting::some_or_not_set(api_key),
+                dimensions: Setting::some_or_not_set(dimensions),
                 document_template: Setting::Set(prompt.template),
                 url: Setting::Set(url),
                 request: Setting::Set(request),
                 response: Setting::Set(response),
-                distribution: distribution.map(Setting::Set).unwrap_or_default(),
+                distribution: Setting::some_or_not_set(distribution),
+                headers: Setting::Set(headers),
             },
         }
     }
@@ -529,6 +570,7 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
             request,
             response,
             distribution,
+            headers,
         } = value;
 
         if let Some(source) = source.set() {
@@ -557,6 +599,7 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
                         super::ollama::EmbedderOptions::with_default_model(
                             api_key.set(),
                             url.set(),
+                            dimensions.set(),
                         );
                     if let Some(model) = model.set() {
                         options.embedding_model = model;
@@ -598,6 +641,7 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
                             request: request.set().unwrap(),
                             response: response.set().unwrap(),
                             distribution: distribution.set(),
+                            headers: headers.set().unwrap_or_default(),
                         })
                 }
             }

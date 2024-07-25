@@ -2744,6 +2744,7 @@ mod tests {
                         request: Setting::NotSet,
                         response: Setting::NotSet,
                         distribution: Setting::NotSet,
+                        headers: Setting::NotSet,
                     }),
                 );
                 settings.set_embedder_settings(embedders);

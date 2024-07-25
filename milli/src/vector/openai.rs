@@ -195,6 +195,7 @@ impl Embedder {
                     super::rest::REPEAT_PLACEHOLDER
                     ]
                 }),
+                headers: Default::default(),
             },
             super::rest::ConfigurationSource::OpenAi,
         )?;

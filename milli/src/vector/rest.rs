@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use deserr::Deserr;
 use rand::Rng;
 use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
@@ -80,6 +82,7 @@ pub struct Embedder {
 struct EmbedderData {
     client: ureq::Agent,
     bearer: Option<String>,
+    headers: BTreeMap<String, String>,
     url: String,
     request: Request,
     response: Response,
@@ -94,6 +97,7 @@ pub struct EmbedderOptions {
     pub url: String,
     pub request: serde_json::Value,
     pub response: serde_json::Value,
+    pub headers: BTreeMap<String, String>,
 }
 
 impl std::hash::Hash for EmbedderOptions {
@@ -138,6 +142,7 @@ impl Embedder {
             request,
             response,
             configuration_source,
+            headers: options.headers,
         };
 
         let dimensions = if let Some(dimensions) = options.dimensions {
@@ -223,7 +228,10 @@ where
     } else {
         request
     };
-    let request = request.set("Content-Type", "application/json");
+    let mut request = request.set("Content-Type", "application/json");
+    for (header, value) in &data.headers {
+        request = request.set(header.as_str(), value.as_str());
+    }
 
     let body = data.request.inject_texts(inputs);
 

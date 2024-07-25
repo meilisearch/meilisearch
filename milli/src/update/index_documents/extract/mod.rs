@@ -251,6 +251,7 @@ fn send_original_documents_data(
                 indexer,
                 &embedders_configs,
                 &settings_diff,
+                &possible_embedding_mistakes,
             ) {
                 Ok((extracted_vectors, unused_vectors_distribution)) => {
                     for ExtractedVectorPoints {
