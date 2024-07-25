@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use std::path::Path;
+use std::str::FromStr as _;
 use std::time::Duration;
 
 use actix_http::body::MessageBody;
@@ -8,7 +9,7 @@ use actix_web::dev::ServiceResponse;
 use actix_web::http::StatusCode;
 use byte_unit::{Byte, Unit};
 use clap::Parser;
-use meilisearch::option::{IndexerOpts, MaxMemory, Opt};
+use meilisearch::option::{IndexerOpts, MaxMemory, MaxThreads, Opt};
 use meilisearch::{analytics, create_app, setup_meilisearch, SubscriberForSecondLayer};
 use once_cell::sync::Lazy;
 use tempfile::TempDir;
@@ -239,7 +240,7 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
             // memory has to be unlimited because several meilisearch are running in test context.
             max_indexing_memory: MaxMemory::unlimited(),
             skip_index_budget: true,
-            ..Parser::parse_from(None as Option<&str>)
+            max_indexing_threads: MaxThreads::from_str("1").unwrap(),
         },
         experimental_enable_metrics: false,
         ..Parser::parse_from(None as Option<&str>)
