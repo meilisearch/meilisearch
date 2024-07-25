@@ -28,7 +28,7 @@ use crate::vector::settings::{
     WriteBackToDocuments,
 };
 use crate::vector::{Embedder, EmbeddingConfig, EmbeddingConfigs};
-use crate::{FieldId, FieldsIdsMap, Index, Result};
+use crate::{FieldId, FieldsIdsMap, Index, LocalizedAttributesRule, LocalizedFieldIds, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum Setting<T> {
@@ -159,6 +159,7 @@ pub struct Settings<'a, 't, 'i> {
     proximity_precision: Setting<ProximityPrecision>,
     embedder_settings: Setting<BTreeMap<String, Setting<EmbeddingSettings>>>,
     search_cutoff: Setting<u64>,
+    localized_attributes_rules: Setting<Vec<LocalizedAttributesRule>>,
 }
 
 impl<'a, 't, 'i> Settings<'a, 't, 'i> {
@@ -193,6 +194,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             proximity_precision: Setting::NotSet,
             embedder_settings: Setting::NotSet,
             search_cutoff: Setting::NotSet,
+            localized_attributes_rules: Setting::NotSet,
             indexer_config,
         }
     }
@@ -389,6 +391,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
     pub fn reset_search_cutoff(&mut self) {
         self.search_cutoff = Setting::Reset;
+    }
+
+    pub fn set_localized_attributes_rules(&mut self, value: Vec<LocalizedAttributesRule>) {
+        self.localized_attributes_rules = Setting::Set(value);
+    }
+
+    pub fn reset_localized_attributes_rules(&mut self) {
+        self.localized_attributes_rules = Setting::Reset;
     }
 
     #[tracing::instrument(
@@ -1118,6 +1128,23 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(changed)
     }
 
+    fn update_localized_attributes_rules(&mut self) -> Result<()> {
+        match &self.localized_attributes_rules {
+            Setting::Set(new) => {
+                let old = self.index.localized_attributes_rules(self.wtxn)?;
+                if old.as_ref() != Some(new) {
+                    self.index.put_localized_attributes_rules(self.wtxn, new.clone())?;
+                }
+            }
+            Setting::Reset => {
+                self.index.delete_localized_attributes_rules(self.wtxn)?;
+            }
+            Setting::NotSet => (),
+        }
+
+        Ok(())
+    }
+
     pub fn execute<FP, FA>(mut self, progress_callback: FP, should_abort: FA) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
@@ -1151,6 +1178,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.update_searchable()?;
         self.update_exact_attributes()?;
         self.update_proximity_precision()?;
+        self.update_localized_attributes_rules()?;
 
         let embedding_config_updates = self.update_embedding_configs()?;
 
@@ -1229,6 +1257,8 @@ impl InnerIndexSettingsDiff {
                 || old_settings.allowed_separators != new_settings.allowed_separators
                 || old_settings.dictionary != new_settings.dictionary
                 || old_settings.proximity_precision != new_settings.proximity_precision
+                || old_settings.localized_searchable_fields_ids
+                    != new_settings.localized_searchable_fields_ids
         };
 
         let cache_exact_attributes = old_settings.exact_attributes != new_settings.exact_attributes;
@@ -1304,6 +1334,7 @@ impl InnerIndexSettingsDiff {
         }
 
         (existing_fields - old_faceted_fields) != (existing_fields - new_faceted_fields)
+            || self.old.localized_faceted_fields_ids != self.new.localized_faceted_fields_ids
     }
 
     pub fn reindex_vectors(&self) -> bool {
@@ -1341,6 +1372,8 @@ pub(crate) struct InnerIndexSettings {
     pub geo_fields_ids: Option<(FieldId, FieldId)>,
     pub non_searchable_fields_ids: Vec<FieldId>,
     pub non_faceted_fields_ids: Vec<FieldId>,
+    pub localized_searchable_fields_ids: LocalizedFieldIds,
+    pub localized_faceted_fields_ids: LocalizedFieldIds,
 }
 
 impl InnerIndexSettings {
@@ -1382,6 +1415,17 @@ impl InnerIndexSettings {
             }
             None => None,
         };
+        let localized_attributes_rules = index.localized_attributes_rules(rtxn)?;
+        let localized_searchable_fields_ids = LocalizedFieldIds::new(
+            &localized_attributes_rules,
+            &fields_ids_map,
+            searchable_fields_ids.iter().cloned(),
+        );
+        let localized_faceted_fields_ids = LocalizedFieldIds::new(
+            &localized_attributes_rules,
+            &fields_ids_map,
+            faceted_fields_ids.iter().cloned(),
+        );
 
         let vectors_fids = fields_ids_map.nested_ids(RESERVED_VECTORS_FIELD_NAME);
         searchable_fields_ids.retain(|id| !vectors_fids.contains(id));
@@ -1403,6 +1447,8 @@ impl InnerIndexSettings {
             geo_fields_ids,
             non_searchable_fields_ids: vectors_fids.clone(),
             non_faceted_fields_ids: vectors_fids.clone(),
+            localized_searchable_fields_ids,
+            localized_faceted_fields_ids,
         })
     }
 
@@ -1418,6 +1464,12 @@ impl InnerIndexSettings {
         index.put_faceted_fields(wtxn, &new_facets)?;
 
         self.faceted_fields_ids = index.faceted_fields_ids(wtxn)?;
+        let localized_attributes_rules = index.localized_attributes_rules(wtxn)?;
+        self.localized_faceted_fields_ids = LocalizedFieldIds::new(
+            &localized_attributes_rules,
+            &self.fields_ids_map,
+            self.faceted_fields_ids.iter().cloned(),
+        );
         Ok(())
     }
 
@@ -1441,8 +1493,13 @@ impl InnerIndexSettings {
                 &self.fields_ids_map,
             )?;
         }
-        let searchable_fields_ids = index.searchable_fields_ids(wtxn)?;
-        self.searchable_fields_ids = searchable_fields_ids;
+        self.searchable_fields_ids = index.searchable_fields_ids(wtxn)?;
+        let localized_attributes_rules = index.localized_attributes_rules(wtxn)?;
+        self.localized_searchable_fields_ids = LocalizedFieldIds::new(
+            &localized_attributes_rules,
+            &self.fields_ids_map,
+            self.searchable_fields_ids.iter().cloned(),
+        );
 
         Ok(())
     }
@@ -2573,6 +2630,7 @@ mod tests {
                     proximity_precision,
                     embedder_settings,
                     search_cutoff,
+                    localized_attributes_rules,
                 } = settings;
                 assert!(matches!(searchable_fields, Setting::NotSet));
                 assert!(matches!(displayed_fields, Setting::NotSet));
@@ -2597,6 +2655,7 @@ mod tests {
                 assert!(matches!(proximity_precision, Setting::NotSet));
                 assert!(matches!(embedder_settings, Setting::NotSet));
                 assert!(matches!(search_cutoff, Setting::NotSet));
+                assert!(matches!(localized_attributes_rules, Setting::NotSet));
             })
             .unwrap();
     }

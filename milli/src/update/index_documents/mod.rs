@@ -3389,44 +3389,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "all-tokenizations")]
-    fn stored_detected_script_and_language_should_not_return_deleted_documents() {
-        use charabia::{Language, Script};
-        let index = TempIndex::new();
-        let mut wtxn = index.write_txn().unwrap();
-        index
-            .add_documents_using_wtxn(
-                &mut wtxn,
-                documents!([
-                { "id": "0", "title": "The quick (\"brown\") fox can't jump 32.3 feet, right? Brr, it's 29.3°F!" },
-                { "id": "1", "title": "人人生而自由﹐在尊嚴和權利上一律平等。他們賦有理性和良心﹐並應以兄弟關係的精神互相對待。" },
-                { "id": "2", "title": "הַשּׁוּעָל הַמָּהִיר (״הַחוּם״) לֹא יָכוֹל לִקְפֹּץ 9.94 מֶטְרִים, נָכוֹן? ברר, 1.5°C- בַּחוּץ!" },
-                { "id": "3", "title": "関西国際空港限定トートバッグ すもももももももものうち" },
-                { "id": "4", "title": "ภาษาไทยง่ายนิดเดียว" },
-                { "id": "5", "title": "The quick 在尊嚴和權利上一律平等。" },
-            ]))
-            .unwrap();
-
-        let key_cmn = (Script::Cj, Language::Cmn);
-        let cj_cmn_docs =
-            index.script_language_documents_ids(&wtxn, &key_cmn).unwrap().unwrap_or_default();
-        let mut expected_cj_cmn_docids = RoaringBitmap::new();
-        expected_cj_cmn_docids.push(1);
-        expected_cj_cmn_docids.push(5);
-        assert_eq!(cj_cmn_docs, expected_cj_cmn_docids);
-
-        delete_documents(&mut wtxn, &index, &["1"]);
-        wtxn.commit().unwrap();
-
-        let rtxn = index.read_txn().unwrap();
-        let cj_cmn_docs =
-            index.script_language_documents_ids(&rtxn, &key_cmn).unwrap().unwrap_or_default();
-        let mut expected_cj_cmn_docids = RoaringBitmap::new();
-        expected_cj_cmn_docids.push(5);
-        assert_eq!(cj_cmn_docs, expected_cj_cmn_docids);
-    }
-
-    #[test]
     fn delete_words_exact_attributes() {
         let index = TempIndex::new();
 

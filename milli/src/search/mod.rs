@@ -1,6 +1,7 @@
 use std::fmt;
 use std::sync::Arc;
 
+use charabia::Language;
 use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
@@ -52,6 +53,7 @@ pub struct Search<'a> {
     semantic: Option<SemanticSearch>,
     time_budget: TimeBudget,
     ranking_score_threshold: Option<f64>,
+    locales: Option<Vec<Language>>,
 }
 
 impl<'a> Search<'a> {
@@ -72,6 +74,7 @@ impl<'a> Search<'a> {
             rtxn,
             index,
             semantic: None,
+            locales: None,
             time_budget: TimeBudget::max(),
             ranking_score_threshold: None,
         }
@@ -160,6 +163,11 @@ impl<'a> Search<'a> {
         self
     }
 
+    pub fn locales(&mut self, locales: Vec<Language>) -> &mut Search<'a> {
+        self.locales = Some(locales);
+        self
+    }
+
     pub fn execute_for_candidates(&self, has_vector_search: bool) -> Result<RoaringBitmap> {
         if has_vector_search {
             let ctx = SearchContext::new(self.index, self.rtxn)?;
@@ -232,6 +240,7 @@ impl<'a> Search<'a> {
                 &mut DefaultSearchLogger,
                 self.time_budget.clone(),
                 self.ranking_score_threshold,
+                self.locales.as_ref(),
             )?,
         };
 
@@ -272,6 +281,7 @@ impl fmt::Debug for Search<'_> {
             semantic,
             time_budget,
             ranking_score_threshold,
+            locales,
         } = self;
         f.debug_struct("Search")
             .field("query", query)
@@ -292,6 +302,7 @@ impl fmt::Debug for Search<'_> {
             )
             .field("time_budget", time_budget)
             .field("ranking_score_threshold", ranking_score_threshold)
+            .field("locales", locales)
             .finish()
     }
 }

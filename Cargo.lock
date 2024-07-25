@@ -934,19 +934,15 @@ dependencies = [
 [[package]]
 name = "charabia"
 version = "0.8.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9868a22f10dee80498a8a2b6c641d80bf28ea4495fcf71c2dc4836c2dd23958c"
+source = "git+https://github.com/meilisearch/charabia.git?branch=simplify-lang-detection#2992583137458afcebff5d44cae93fa46d9cf664"
 dependencies = [
  "aho-corasick",
- "cow-utils",
  "csv",
- "deunicode",
  "either",
  "fst",
  "irg-kvariants",
  "jieba-rs",
  "lindera",
- "litemap",
  "once_cell",
  "pinyin",
  "serde",
@@ -954,7 +950,6 @@ dependencies = [
  "unicode-normalization",
  "wana_kana",
  "whatlang",
- "zerovec",
 ]
 
 [[package]]
@@ -1144,12 +1139,6 @@ name = "core-foundation-sys"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e496a50fda8aacccc86d7529e2c1e0892dbd0f898a6b5645b5561b89c3210efa"
-
-[[package]]
-name = "cow-utils"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79bb3adfaf5f75d24b01aee375f7555907840fa2800e5ec8fa3b9e2031830173"
 
 [[package]]
 name = "cpufeatures"
@@ -1550,12 +1539,6 @@ dependencies = [
  "quote",
  "syn 2.0.60",
 ]
-
-[[package]]
-name = "deunicode"
-version = "1.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "339544cc9e2c4dc3fc7149fd630c5f22263a4fdf18a98afd0075784968b5cf00"
 
 [[package]]
 name = "digest"
@@ -2666,8 +2649,7 @@ checksum = "28b29a3cd74f0f4598934efe3aeba42bae0eb4680554128851ebbecb02af14e6"
 [[package]]
 name = "irg-kvariants"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef2af7c331f2536964a32b78a7d2e0963d78b42f4a76323b16cc7d94b1ddce26"
+source = "git+https://github.com/meilisearch/charabia.git?branch=simplify-lang-detection#2992583137458afcebff5d44cae93fa46d9cf664"
 dependencies = [
  "csv",
  "once_cell",
@@ -3277,12 +3259,6 @@ dependencies = [
  "time",
  "unicode-segmentation",
 ]
-
-[[package]]
-name = "litemap"
-version = "0.7.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "643cb0b8d4fcc284004d5fd0d67ccf61dfffadb7f75e1e71bc420f4688a3a704"
 
 [[package]]
 name = "lmdb-master-sys"
@@ -6504,15 +6480,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.60",
-]
-
-[[package]]
-name = "zerovec"
-version = "0.10.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa2b893d79df23bfb12d5461018d408ea19dfafe76c2c7ef6d4eba614f8ff079"
-dependencies = [
- "zerofrom",
 ]
 
 [[package]]

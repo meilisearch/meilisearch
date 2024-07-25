@@ -174,6 +174,7 @@ impl<'a> Search<'a> {
             semantic: self.semantic.clone(),
             time_budget: self.time_budget.clone(),
             ranking_score_threshold: self.ranking_score_threshold,
+            locales: self.locales.clone(),
         };
 
         let semantic = search.semantic.take();

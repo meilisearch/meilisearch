@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use crate::deserr::DeserrJsonError;
 use crate::error::deserr_codes::*;
 use crate::facet_values_sort::FacetValuesSort;
+use crate::locales::LocalizedAttributesRuleView;
 
 /// The maximum number of results that the engine
 /// will be able to return in one search call.
@@ -198,6 +199,9 @@ pub struct Settings<T> {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsSearchCutoffMs>)]
     pub search_cutoff_ms: Setting<u64>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsLocalizedAttributes>)]
+    pub localized_attributes: Setting<Vec<LocalizedAttributesRuleView>>,
 
     #[serde(skip)]
     #[deserr(skip)]
@@ -261,6 +265,7 @@ impl Settings<Checked> {
             pagination: Setting::Reset,
             embedders: Setting::Reset,
             search_cutoff_ms: Setting::Reset,
+            localized_attributes: Setting::Reset,
             _kind: PhantomData,
         }
     }
@@ -284,7 +289,8 @@ impl Settings<Checked> {
             pagination,
             embedders,
             search_cutoff_ms,
-            ..
+            localized_attributes: localized_attributes_rules,
+            _kind,
         } = self;
 
         Settings {
@@ -305,6 +311,7 @@ impl Settings<Checked> {
             pagination,
             embedders,
             search_cutoff_ms,
+            localized_attributes: localized_attributes_rules,
             _kind: PhantomData,
         }
     }
@@ -352,6 +359,7 @@ impl Settings<Unchecked> {
             pagination: self.pagination,
             embedders: self.embedders,
             search_cutoff_ms: self.search_cutoff_ms,
+            localized_attributes: self.localized_attributes,
             _kind: PhantomData,
         }
     }
@@ -402,6 +410,7 @@ pub fn apply_settings_to_builder(
         pagination,
         embedders,
         search_cutoff_ms,
+        localized_attributes: localized_attributes_rules,
         _kind,
     } = settings;
 
@@ -482,6 +491,13 @@ pub fn apply_settings_to_builder(
     match proximity_precision {
         Setting::Set(ref precision) => builder.set_proximity_precision((*precision).into()),
         Setting::Reset => builder.reset_proximity_precision(),
+        Setting::NotSet => (),
+    }
+
+    match localized_attributes_rules {
+        Setting::Set(ref rules) => builder
+            .set_localized_attributes_rules(rules.iter().cloned().map(|r| r.into()).collect()),
+        Setting::Reset => builder.reset_localized_attributes_rules(),
         Setting::NotSet => (),
     }
 
@@ -679,6 +695,8 @@ pub fn settings(
 
     let search_cutoff_ms = index.search_cutoff(rtxn)?;
 
+    let localized_attributes_rules = index.localized_attributes_rules(rtxn)?;
+
     let mut settings = Settings {
         displayed_attributes: match displayed_attributes {
             Some(attrs) => Setting::Set(attrs),
@@ -709,6 +727,10 @@ pub fn settings(
         embedders,
         search_cutoff_ms: match search_cutoff_ms {
             Some(cutoff) => Setting::Set(cutoff),
+            None => Setting::Reset,
+        },
+        localized_attributes: match localized_attributes_rules {
+            Some(rules) => Setting::Set(rules.into_iter().map(|r| r.into()).collect()),
             None => Setting::Reset,
         },
         _kind: PhantomData,
@@ -902,6 +924,7 @@ pub(crate) mod test {
             faceting: Setting::NotSet,
             pagination: Setting::NotSet,
             embedders: Setting::NotSet,
+            localized_attributes: Setting::NotSet,
             search_cutoff_ms: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
@@ -930,6 +953,7 @@ pub(crate) mod test {
             faceting: Setting::NotSet,
             pagination: Setting::NotSet,
             embedders: Setting::NotSet,
+            localized_attributes: Setting::NotSet,
             search_cutoff_ms: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };

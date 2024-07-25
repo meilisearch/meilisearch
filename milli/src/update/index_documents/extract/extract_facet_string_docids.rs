@@ -5,6 +5,7 @@ use std::iter::FromIterator;
 use std::{io, str};
 
 use charabia::normalizer::{Normalize, NormalizerOption};
+use charabia::{Language, StrDetection, Token};
 use heed::types::SerdeJson;
 use heed::BytesEncode;
 
@@ -26,10 +27,9 @@ use crate::{FieldId, Result, MAX_FACET_VALUE_LENGTH};
 pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
     docid_fid_facet_string: grenad::Reader<R>,
     indexer: GrenadParameters,
-    _settings_diff: &InnerIndexSettingsDiff,
+    settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<(grenad::Reader<BufReader<File>>, grenad::Reader<BufReader<File>>)> {
     let max_memory = indexer.max_memory_by_thread();
-    let options = NormalizerOption { lossy: true, ..Default::default() };
 
     let mut facet_string_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
@@ -54,12 +54,8 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
     while let Some((key, deladd_original_value_bytes)) = cursor.move_on_next()? {
         let deladd_reader = KvReaderDelAdd::new(deladd_original_value_bytes);
 
-        // nothing to do if we delete and re-add the value.
-        if deladd_reader.get(DelAdd::Deletion).is_some()
-            && deladd_reader.get(DelAdd::Addition).is_some()
-        {
-            continue;
-        }
+        let is_same_value = deladd_reader.get(DelAdd::Deletion).is_some()
+            && deladd_reader.get(DelAdd::Addition).is_some();
 
         let (field_id_bytes, bytes) = try_split_array_at(key).unwrap();
         let field_id = FieldId::from_be_bytes(field_id_bytes);
@@ -72,29 +68,66 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
 
         // Facet search normalization
         {
-            let mut hyper_normalized_value = normalized_value.normalize(&options);
-            let normalized_truncated_facet: String;
-            if hyper_normalized_value.len() > MAX_FACET_VALUE_LENGTH {
-                normalized_truncated_facet = hyper_normalized_value
-                    .char_indices()
-                    .take_while(|(idx, _)| *idx < MAX_FACET_VALUE_LENGTH)
-                    .map(|(_, c)| c)
-                    .collect();
-                hyper_normalized_value = normalized_truncated_facet.into();
-            }
+            let locales = settings_diff.old.localized_faceted_fields_ids.locales(field_id);
+            let old_hyper_normalized_value = normalize_facet_string(normalized_value, locales);
+            let locales = settings_diff.new.localized_faceted_fields_ids.locales(field_id);
+            let new_hyper_normalized_value = normalize_facet_string(normalized_value, locales);
+
             let set = BTreeSet::from_iter(std::iter::once(normalized_value));
 
-            buffer.clear();
-            let mut obkv = KvWriterDelAdd::new(&mut buffer);
-            for (deladd_key, _) in deladd_reader.iter() {
-                let val = SerdeJson::bytes_encode(&set).map_err(heed::Error::Encoding)?;
-                obkv.insert(deladd_key, val)?;
-            }
-            obkv.finish()?;
+            // if the facet string is the same, we can put the deletion and addition in the same obkv.
+            if old_hyper_normalized_value == new_hyper_normalized_value {
+                // nothing to do if we delete and re-add the value.
+                if is_same_value {
+                    continue;
+                }
 
-            let key = (field_id, hyper_normalized_value.as_ref());
-            let key_bytes = BEU16StrCodec::bytes_encode(&key).map_err(heed::Error::Encoding)?;
-            normalized_facet_string_docids_sorter.insert(key_bytes, &buffer)?;
+                buffer.clear();
+                let mut obkv = KvWriterDelAdd::new(&mut buffer);
+                for (deladd_key, _) in deladd_reader.iter() {
+                    let val = SerdeJson::bytes_encode(&set).map_err(heed::Error::Encoding)?;
+                    obkv.insert(deladd_key, val)?;
+                }
+                obkv.finish()?;
+
+                let key: (u16, &str) = (field_id, new_hyper_normalized_value.as_ref());
+                let key_bytes = BEU16StrCodec::bytes_encode(&key).map_err(heed::Error::Encoding)?;
+                normalized_facet_string_docids_sorter.insert(key_bytes, &buffer)?;
+            } else {
+                // if the facet string is different, we need to insert the deletion and addition in different obkv because the related key is different.
+                // deletion
+                if deladd_reader.get(DelAdd::Deletion).is_some() {
+                    // insert old value
+                    let val = SerdeJson::bytes_encode(&set).map_err(heed::Error::Encoding)?;
+                    buffer.clear();
+                    let mut obkv = KvWriterDelAdd::new(&mut buffer);
+                    obkv.insert(DelAdd::Deletion, val)?;
+                    obkv.finish()?;
+                    let key: (u16, &str) = (field_id, old_hyper_normalized_value.as_ref());
+                    let key_bytes =
+                        BEU16StrCodec::bytes_encode(&key).map_err(heed::Error::Encoding)?;
+                    normalized_facet_string_docids_sorter.insert(key_bytes, &buffer)?;
+                }
+
+                // addition
+                if deladd_reader.get(DelAdd::Addition).is_some() {
+                    // insert new value
+                    let val = SerdeJson::bytes_encode(&set).map_err(heed::Error::Encoding)?;
+                    buffer.clear();
+                    let mut obkv = KvWriterDelAdd::new(&mut buffer);
+                    obkv.insert(DelAdd::Addition, val)?;
+                    obkv.finish()?;
+                    let key: (u16, &str) = (field_id, new_hyper_normalized_value.as_ref());
+                    let key_bytes =
+                        BEU16StrCodec::bytes_encode(&key).map_err(heed::Error::Encoding)?;
+                    normalized_facet_string_docids_sorter.insert(key_bytes, &buffer)?;
+                }
+            }
+        }
+
+        // nothing to do if we delete and re-add the value.
+        if is_same_value {
+            continue;
         }
 
         let key = FacetGroupKey { field_id, level: 0, left_bound: normalized_value };
@@ -111,4 +144,25 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
 
     let normalized = sorter_into_reader(normalized_facet_string_docids_sorter, indexer)?;
     sorter_into_reader(facet_string_docids_sorter, indexer).map(|s| (s, normalized))
+}
+
+/// Normalizes the facet string and truncates it to the max length.
+fn normalize_facet_string(facet_string: &str, locales: Option<&[Language]>) -> String {
+    let options = NormalizerOption { lossy: true, ..Default::default() };
+    let mut detection = StrDetection::new(facet_string, locales);
+    let token = Token {
+        lemma: std::borrow::Cow::Borrowed(facet_string),
+        script: detection.script(),
+        language: detection.language(),
+        ..Default::default()
+    };
+
+    // truncate the facet string to the max length
+    token
+        .normalize(&options)
+        .lemma
+        .char_indices()
+        .take_while(|(idx, _)| *idx < MAX_FACET_VALUE_LENGTH)
+        .map(|(_, c)| c)
+        .collect()
 }

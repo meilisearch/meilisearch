@@ -68,6 +68,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 logger,
                 TimeBudget::max(),
                 None,
+                None,
             )?;
             if let Some((logger, dir)) = detailed_logger {
                 logger.finish(&mut ctx, Path::new(dir))?;

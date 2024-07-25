@@ -16,6 +16,7 @@ pub mod facet;
 mod fields_ids_map;
 pub mod heed_codec;
 pub mod index;
+mod localized_attributes_rules;
 pub mod order_by_map;
 pub mod prompt;
 pub mod proximity;
@@ -62,6 +63,8 @@ pub use self::heed_codec::{
     UncheckedU8StrStrCodec,
 };
 pub use self::index::Index;
+pub use self::localized_attributes_rules::LocalizedAttributesRule;
+use self::localized_attributes_rules::LocalizedFieldIds;
 pub use self::search::facet::{FacetValueHit, SearchForFacetValues};
 pub use self::search::similar::Similar;
 pub use self::search::{

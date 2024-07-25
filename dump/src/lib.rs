@@ -286,6 +286,7 @@ pub(crate) mod test {
             pagination: Setting::NotSet,
             embedders: Setting::NotSet,
             search_cutoff_ms: Setting::NotSet,
+            localized_attributes: Setting::NotSet,
             _kind: std::marker::PhantomData,
         };
         settings.check()

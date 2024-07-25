@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use charabia::{SeparatorKind, Token, Tokenizer};
+use charabia::{Language, SeparatorKind, Token, Tokenizer};
 pub use matching_words::MatchingWords;
 use matching_words::{MatchType, PartialMatch, WordId};
 use serde::Serialize;
@@ -46,7 +46,11 @@ impl<'m> MatcherBuilder<'m> {
         self
     }
 
-    pub fn build<'t>(&self, text: &'t str) -> Matcher<'t, 'm, '_> {
+    pub fn build<'t, 'lang>(
+        &self,
+        text: &'t str,
+        locales: Option<&'lang [Language]>,
+    ) -> Matcher<'t, 'm, '_, 'lang> {
         let crop_marker = match &self.crop_marker {
             Some(marker) => marker.as_str(),
             None => DEFAULT_CROP_MARKER,
@@ -68,6 +72,7 @@ impl<'m> MatcherBuilder<'m> {
             highlight_prefix,
             highlight_suffix,
             matches: None,
+            locales,
         }
     }
 }
@@ -107,17 +112,18 @@ pub struct MatchBounds {
 
 /// Structure used to analyze a string, compute words that match,
 /// and format the source string, returning a highlighted and cropped sub-string.
-pub struct Matcher<'t, 'tokenizer, 'b> {
+pub struct Matcher<'t, 'tokenizer, 'b, 'lang> {
     text: &'t str,
     matching_words: &'b MatchingWords,
     tokenizer: &'b Tokenizer<'tokenizer>,
+    locales: Option<&'lang [Language]>,
     crop_marker: &'b str,
     highlight_prefix: &'b str,
     highlight_suffix: &'b str,
     matches: Option<(Vec<Token<'t>>, Vec<Match>)>,
 }
 
-impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_> {
+impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
     /// Iterates over tokens and save any of them that matches the query.
     fn compute_matches(&mut self) -> &mut Self {
         /// some words are counted as matches only if they are close together and in the good order,
@@ -173,7 +179,8 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_> {
             false
         }
 
-        let tokens: Vec<_> = self.tokenizer.tokenize(self.text).collect();
+        let tokens: Vec<_> =
+            self.tokenizer.tokenize_with_allow_list(self.text, self.locales).collect();
         let mut matches = Vec::new();
 
         let mut words_positions = tokens
@@ -530,6 +537,7 @@ mod tests {
                 &mut crate::DefaultSearchLogger,
                 TimeBudget::max(),
                 None,
+                None,
             )
             .unwrap();
 
@@ -553,19 +561,19 @@ mod tests {
 
         // Text without any match.
         let text = "A quick brown fox can not jump 32 feet, right? Brr, it is cold!";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // no crop and no highlight should return complete text.
         assert_eq!(&matcher.format(format_options), &text);
 
         // Text containing all matches.
         let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // no crop and no highlight should return complete text.
         assert_eq!(&matcher.format(format_options), &text);
 
         // Text containing some matches.
         let text = "Natalie risk her future to build a world with the boy she loves.";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // no crop and no highlight should return complete text.
         assert_eq!(&matcher.format(format_options), &text);
     }
@@ -580,23 +588,23 @@ mod tests {
 
         // empty text.
         let text = "";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         assert_eq!(&matcher.format(format_options), "");
 
         // text containing only separators.
         let text = ":-)";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         assert_eq!(&matcher.format(format_options), ":-)");
 
         // Text without any match.
         let text = "A quick brown fox can not jump 32 feet, right? Brr, it is cold!";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // no crop should return complete text, because there is no matches.
         assert_eq!(&matcher.format(format_options), &text);
 
         // Text containing all matches.
         let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // no crop should return complete text with highlighted matches.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -605,7 +613,7 @@ mod tests {
 
         // Text containing some matches.
         let text = "Natalie risk her future to build a world with the boy she loves.";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // no crop should return complete text with highlighted matches.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -622,7 +630,7 @@ mod tests {
 
         // Text containing prefix match.
         let text = "Ŵôřlḑôle";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // no crop should return complete text with highlighted matches.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -631,7 +639,7 @@ mod tests {
 
         // Text containing unicode match.
         let text = "Ŵôřlḑ";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // no crop should return complete text with highlighted matches.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -643,7 +651,7 @@ mod tests {
 
         // Text containing unicode match.
         let text = "Westfália";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // no crop should return complete text with highlighted matches.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -661,7 +669,7 @@ mod tests {
 
         // empty text.
         let text = "";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         insta::assert_snapshot!(
             matcher.format(format_options),
             @""
@@ -669,7 +677,7 @@ mod tests {
 
         // text containing only separators.
         let text = ":-)";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         insta::assert_snapshot!(
             matcher.format(format_options),
             @":-)"
@@ -677,7 +685,7 @@ mod tests {
 
         // Text without any match.
         let text = "A quick brown fox can not jump 32 feet, right? Brr, it is cold!";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // no highlight should return 10 first words with a marker at the end.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -686,7 +694,7 @@ mod tests {
 
         // Text without any match starting by a separator.
         let text = "(A quick brown fox can not jump 32 feet, right? Brr, it is cold!)";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // no highlight should return 10 first words with a marker at the end.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -695,7 +703,7 @@ mod tests {
 
         // Test phrase propagation
         let text = "Natalie risk her future. Split The World is a book written by Emily Henry. I never read it.";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // should crop the phrase instead of croping around the match.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -704,7 +712,7 @@ mod tests {
 
         // Text containing some matches.
         let text = "Natalie risk her future to build a world with the boy she loves.";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // no highlight should return 10 last words with a marker at the start.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -713,7 +721,7 @@ mod tests {
 
         // Text containing all matches.
         let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // no highlight should return 10 last words with a marker at the start.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -722,7 +730,7 @@ mod tests {
 
         // Text containing a match unordered and a match ordered.
         let text = "The world split void void void void void void void void void split the world void void";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // crop should return 10 last words with a marker at the start.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -731,7 +739,7 @@ mod tests {
 
         // Text containing matches with different density.
         let text = "split void the void void world void void void void void void void void void void split the world void void";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // crop should return 10 last words with a marker at the start.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -740,7 +748,7 @@ mod tests {
 
         // Text containing matches with same word.
         let text = "split split split split split split void void void void void void void void void void split the world void void";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // crop should return 10 last words with a marker at the start.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -758,7 +766,7 @@ mod tests {
 
         // empty text.
         let text = "";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         insta::assert_snapshot!(
             matcher.format(format_options),
             @""
@@ -766,7 +774,7 @@ mod tests {
 
         // text containing only separators.
         let text = ":-)";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         insta::assert_snapshot!(
             matcher.format(format_options),
             @":-)"
@@ -774,7 +782,7 @@ mod tests {
 
         // Text without any match.
         let text = "A quick brown fox can not jump 32 feet, right? Brr, it is cold!";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // both should return 10 first words with a marker at the end.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -783,7 +791,7 @@ mod tests {
 
         // Text containing some matches.
         let text = "Natalie risk her future to build a world with the boy she loves.";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // both should return 10 last words with a marker at the start and highlighted matches.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -792,7 +800,7 @@ mod tests {
 
         // Text containing all matches.
         let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // both should return 10 last words with a marker at the start and highlighted matches.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -801,7 +809,7 @@ mod tests {
 
         // Text containing a match unordered and a match ordered.
         let text = "The world split void void void void void void void void void split the world void void";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // crop should return 10 last words with a marker at the start.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -824,7 +832,7 @@ mod tests {
         let text = "The groundbreaking invention had the power to split the world between those who embraced progress and those who resisted change!";
 
         let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "\"the world\"");
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // should return 10 words with a marker at the start as well the end, and the highlighted matches.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -832,7 +840,7 @@ mod tests {
         );
 
         let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "those \"and those\"");
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // should highlight "those" and the phrase "and those".
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -851,7 +859,7 @@ mod tests {
 
         // set a smaller crop size
         let format_options = FormatOptions { highlight: false, crop: Some(2) };
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // because crop size < query size, partially format matches.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -860,7 +868,7 @@ mod tests {
 
         // set a smaller crop size
         let format_options = FormatOptions { highlight: false, crop: Some(1) };
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // because crop size < query size, partially format matches.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -869,7 +877,7 @@ mod tests {
 
         // set  crop size to 0
         let format_options = FormatOptions { highlight: false, crop: Some(0) };
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         // because crop size is 0, crop is ignored.
         insta::assert_snapshot!(
             matcher.format(format_options),
@@ -889,7 +897,7 @@ mod tests {
         let format_options = FormatOptions { highlight: true, crop: None };
 
         let text = "the do or die can't be he do and or isn't he";
-        let mut matcher = builder.build(text);
+        let mut matcher = builder.build(text, None);
         insta::assert_snapshot!(
             matcher.format(format_options),
             @"_the_ _do_ _or_ die can't be he do and or isn'_t_ _he_"
