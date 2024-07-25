@@ -40,19 +40,7 @@ macro_rules! make_locale {
         impl std::fmt::Display for LocaleFormatError {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 let valid_locales = [$(Locale::$language),+].iter().map(|l| format!("`{}`", json!(l).as_str().unwrap())).collect::<Vec<_>>().join(", ");
-                write!(f, "Unknown value `{}`, expected one of {}", self.invalid_locale, valid_locales)
-            }
-        }
-
-        impl std::error::Error for LocaleFormatError {}
-
-        impl std::str::FromStr for Locale {
-            type Err = LocaleFormatError;
-
-            fn from_str(s: &str) -> Result<Self, Self::Err> {
-                milli::tokenizer::Language::from_code(s).map(Self::from).ok_or(LocaleFormatError {
-                    invalid_locale: s.to_string(),
-                })
+                write!(f, "Unsupported locale `{}`, expected one of {}", self.invalid_locale, valid_locales)
             }
         }
     };
@@ -128,6 +116,18 @@ make_locale! {
     Cat,
     Tgl,
     Hye
+}
+
+impl std::error::Error for LocaleFormatError {}
+
+impl std::str::FromStr for Locale {
+    type Err = LocaleFormatError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        milli::tokenizer::Language::from_code(s)
+            .map(Self::from)
+            .ok_or(LocaleFormatError { invalid_locale: s.to_string() })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserr, Serialize, Deserialize)]

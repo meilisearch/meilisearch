@@ -346,5 +346,5 @@ fn normalize_facet_string(facet_string: &str, locales: Option<&[Language]>) -> S
         ..Default::default()
     };
 
-    token.normalize(&options).lemma.to_string()
+    token.normalize(&options).lemma.into_owned()
 }

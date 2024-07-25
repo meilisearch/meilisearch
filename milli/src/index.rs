@@ -1558,7 +1558,7 @@ impl Index {
         rtxn: &RoTxn<'_>,
     ) -> heed::Result<Option<Vec<LocalizedAttributesRule>>> {
         self.main
-            .remap_types::<Str, SerdeBincode<Vec<LocalizedAttributesRule>>>()
+            .remap_types::<Str, SerdeJson<Vec<LocalizedAttributesRule>>>()
             .get(rtxn, main_key::LOCALIZED_ATTRIBUTES_RULES)
     }
 
@@ -1567,7 +1567,7 @@ impl Index {
         txn: &mut RwTxn<'_>,
         val: Vec<LocalizedAttributesRule>,
     ) -> heed::Result<()> {
-        self.main.remap_types::<Str, SerdeBincode<Vec<LocalizedAttributesRule>>>().put(
+        self.main.remap_types::<Str, SerdeJson<Vec<LocalizedAttributesRule>>>().put(
             txn,
             main_key::LOCALIZED_ATTRIBUTES_RULES,
             &val,

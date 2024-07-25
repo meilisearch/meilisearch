@@ -103,12 +103,41 @@ async fn simple_search() {
 
     // english
     index
-        .search(json!({"q": "Atta", "attributesToRetrieve": ["id"]}), |response, code| {
+        .search(json!({"q": "Atta", "attributesToHighlight": ["*"]}), |response, code| {
             snapshot!(response, @r###"
             {
               "hits": [
                 {
-                  "id": 852
+                  "name_en": "Attack on Titan",
+                  "name_ja": "進撃の巨人",
+                  "author_en": "Hajime Isayama",
+                  "author_ja": "諫山 創",
+                  "description_en": "Attack on Titan is a Japanese manga series written and illustrated by Hajime Isayama",
+                  "description_ja": "進撃の巨人は、日本の漫画シリーズであり、諫山 創によって作画されている。",
+                  "id": 852,
+                  "_vectors": {
+                    "manual": [
+                      1.0,
+                      2.0,
+                      3.0
+                    ]
+                  },
+                  "_formatted": {
+                    "name_en": "<em>Atta</em>ck on Titan",
+                    "name_ja": "進撃の巨人",
+                    "author_en": "Hajime Isayama",
+                    "author_ja": "諫山 創",
+                    "description_en": "<em>Atta</em>ck on Titan is a Japanese manga series written and illustrated by Hajime Isayama",
+                    "description_ja": "進撃の巨人は、日本の漫画シリーズであり、諫山 創によって作画されている。",
+                    "id": "852",
+                    "_vectors": {
+                      "manual": [
+                        "1.0",
+                        "2.0",
+                        "3.0"
+                      ]
+                    }
+                  }
                 }
               ],
               "query": "Atta",
@@ -124,12 +153,35 @@ async fn simple_search() {
 
     // japanese
     index
-        .search(json!({"q": "進撃", "attributesToRetrieve": ["id"]}), |response, code| {
+        .search(json!({"q": "進撃", "attributesToHighlight": ["*"]}), |response, code| {
             snapshot!(response, @r###"
             {
               "hits": [
                 {
-                  "id": 853
+                  "name_zh": "进击的巨人",
+                  "author_zh": "諫山創",
+                  "description_zh": "进击的巨人是日本的漫画系列，由諫山 創作画。",
+                  "id": 853,
+                  "_vectors": {
+                    "manual": [
+                      1.0,
+                      2.0,
+                      3.0
+                    ]
+                  },
+                  "_formatted": {
+                    "name_zh": "<em>进击</em>的巨人",
+                    "author_zh": "諫山創",
+                    "description_zh": "<em>进击</em>的巨人是日本的漫画系列，由諫山 創作画。",
+                    "id": "853",
+                    "_vectors": {
+                      "manual": [
+                        "1.0",
+                        "2.0",
+                        "3.0"
+                      ]
+                    }
+                  }
                 }
               ],
               "query": "進撃",
@@ -145,25 +197,77 @@ async fn simple_search() {
 
     index
         .search(
-            json!({"q": "進撃", "attributesToRetrieve": ["id"], "locales": ["jpn"]}),
+            json!({"q": "進撃", "locales": ["jpn"], "attributesToHighlight": ["*"]}),
             |response, code| {
                 snapshot!(response, @r###"
-            {
-              "hits": [
                 {
-                  "id": 852
-                },
-                {
-                  "id": 853
+                  "hits": [
+                    {
+                      "name_en": "Attack on Titan",
+                      "name_ja": "進撃の巨人",
+                      "author_en": "Hajime Isayama",
+                      "author_ja": "諫山 創",
+                      "description_en": "Attack on Titan is a Japanese manga series written and illustrated by Hajime Isayama",
+                      "description_ja": "進撃の巨人は、日本の漫画シリーズであり、諫山 創によって作画されている。",
+                      "id": 852,
+                      "_vectors": {
+                        "manual": [
+                          1.0,
+                          2.0,
+                          3.0
+                        ]
+                      },
+                      "_formatted": {
+                        "name_en": "Attack on Titan",
+                        "name_ja": "<em>進撃</em>の巨人",
+                        "author_en": "Hajime Isayama",
+                        "author_ja": "諫山 創",
+                        "description_en": "Attack on Titan is a Japanese manga series written and illustrated by Hajime Isayama",
+                        "description_ja": "<em>進撃</em>の巨人は、日本の漫画シリーズであり、諫山 創によって作画されている。",
+                        "id": "852",
+                        "_vectors": {
+                          "manual": [
+                            "1.0",
+                            "2.0",
+                            "3.0"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "name_zh": "进击的巨人",
+                      "author_zh": "諫山創",
+                      "description_zh": "进击的巨人是日本的漫画系列，由諫山 創作画。",
+                      "id": 853,
+                      "_vectors": {
+                        "manual": [
+                          1.0,
+                          2.0,
+                          3.0
+                        ]
+                      },
+                      "_formatted": {
+                        "name_zh": "进击的巨人",
+                        "author_zh": "諫山創",
+                        "description_zh": "进击的巨人是日本的漫画系列，由諫山 創作画。",
+                        "id": "853",
+                        "_vectors": {
+                          "manual": [
+                            "1.0",
+                            "2.0",
+                            "3.0"
+                          ]
+                        }
+                      }
+                    }
+                  ],
+                  "query": "進撃",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 2
                 }
-              ],
-              "query": "進撃",
-              "processingTimeMs": "[duration]",
-              "limit": 20,
-              "offset": 0,
-              "estimatedTotalHits": 2
-            }
-            "###);
+                "###);
                 snapshot!(code, @"200 OK");
             },
         )
@@ -171,15 +275,67 @@ async fn simple_search() {
 
     // chinese
     index
-        .search(json!({"q": "进击", "attributesToRetrieve": ["id"]}), |response, code| {
+        .search(json!({"q": "进击", "attributesToHighlight": ["*"]}), |response, code| {
             snapshot!(response, @r###"
             {
               "hits": [
                 {
-                  "id": 853
+                  "name_zh": "进击的巨人",
+                  "author_zh": "諫山創",
+                  "description_zh": "进击的巨人是日本的漫画系列，由諫山 創作画。",
+                  "id": 853,
+                  "_vectors": {
+                    "manual": [
+                      1.0,
+                      2.0,
+                      3.0
+                    ]
+                  },
+                  "_formatted": {
+                    "name_zh": "<em>进击</em>的巨人",
+                    "author_zh": "諫山創",
+                    "description_zh": "<em>进击</em>的巨人是日本的漫画系列，由諫山 創作画。",
+                    "id": "853",
+                    "_vectors": {
+                      "manual": [
+                        "1.0",
+                        "2.0",
+                        "3.0"
+                      ]
+                    }
+                  }
                 },
                 {
-                  "id": 852
+                  "name_en": "Attack on Titan",
+                  "name_ja": "進撃の巨人",
+                  "author_en": "Hajime Isayama",
+                  "author_ja": "諫山 創",
+                  "description_en": "Attack on Titan is a Japanese manga series written and illustrated by Hajime Isayama",
+                  "description_ja": "進撃の巨人は、日本の漫画シリーズであり、諫山 創によって作画されている。",
+                  "id": 852,
+                  "_vectors": {
+                    "manual": [
+                      1.0,
+                      2.0,
+                      3.0
+                    ]
+                  },
+                  "_formatted": {
+                    "name_en": "Attack on Titan",
+                    "name_ja": "<em>進撃</em>の巨人",
+                    "author_en": "Hajime Isayama",
+                    "author_ja": "諫山 創",
+                    "description_en": "Attack on Titan is a Japanese manga series written and illustrated by Hajime Isayama",
+                    "description_ja": "<em>進撃</em>の巨人は、日本の漫画シリーズであり、諫山 創によって作画されている。",
+                    "id": "852",
+                    "_vectors": {
+                      "manual": [
+                        "1.0",
+                        "2.0",
+                        "3.0"
+                      ]
+                    }
+                  }
                 }
               ],
               "query": "进击",
@@ -226,7 +382,7 @@ async fn force_locales() {
     // chinese detection
     index
         .search(
-            json!({"q": "\"进击的巨人\"", "attributesToRetrieve": ["id"]}),
+            json!({"q": "\"进击的巨人\"", "attributesToHighlight": ["*"]}),
             |response, code| {
                 snapshot!(response, @r###"
                 {
@@ -246,13 +402,36 @@ async fn force_locales() {
     // force japanese
     index
         .search(
-            json!({"q": "\"进击的巨人\"", "attributesToRetrieve": ["id"], "locales": ["jpn"]}),
+            json!({"q": "\"进击的巨人\"", "locales": ["jpn"], "attributesToHighlight": ["*"]}),
             |response, code| {
                 snapshot!(response, @r###"
                 {
                   "hits": [
                     {
-                      "id": 853
+                      "name_zh": "进击的巨人",
+                      "author_zh": "諫山創",
+                      "description_zh": "进击的巨人是日本的漫画系列，由諫山 創作画。",
+                      "id": 853,
+                      "_vectors": {
+                        "manual": [
+                          1.0,
+                          2.0,
+                          3.0
+                        ]
+                      },
+                      "_formatted": {
+                        "name_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                        "author_zh": "諫山創",
+                        "description_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                        "id": "853",
+                        "_vectors": {
+                          "manual": [
+                            "1.0",
+                            "2.0",
+                            "3.0"
+                          ]
+                        }
+                      }
                     }
                   ],
                   "query": "\"进击的巨人\"",
@@ -300,7 +479,7 @@ async fn force_locales_with_pattern() {
     // chinese detection
     index
         .search(
-            json!({"q": "\"进击的巨人\"", "attributesToRetrieve": ["id"]}),
+            json!({"q": "\"进击的巨人\"", "attributesToHighlight": ["*"]}),
             |response, code| {
                 snapshot!(response, @r###"
                 {
@@ -320,13 +499,36 @@ async fn force_locales_with_pattern() {
     // force japanese
     index
         .search(
-            json!({"q": "\"进击的巨人\"", "attributesToRetrieve": ["id"], "locales": ["jpn"]}),
+            json!({"q": "\"进击的巨人\"", "locales": ["jpn"], "attributesToHighlight": ["*"]}),
             |response, code| {
                 snapshot!(response, @r###"
                 {
                   "hits": [
                     {
-                      "id": 853
+                      "name_zh": "进击的巨人",
+                      "author_zh": "諫山創",
+                      "description_zh": "进击的巨人是日本的漫画系列，由諫山 創作画。",
+                      "id": 853,
+                      "_vectors": {
+                        "manual": [
+                          1.0,
+                          2.0,
+                          3.0
+                        ]
+                      },
+                      "_formatted": {
+                        "name_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                        "author_zh": "諫山創",
+                        "description_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                        "id": "853",
+                        "_vectors": {
+                          "manual": [
+                            "1.0",
+                            "2.0",
+                            "3.0"
+                          ]
+                        }
+                      }
                     }
                   ],
                   "query": "\"进击的巨人\"",
@@ -372,7 +574,7 @@ async fn force_locales_with_pattern_nested() {
     // chinese
     index
         .search(
-            json!({"q": "\"进击的巨人\"", "attributesToRetrieve": ["id"], "locales": ["cmn"]}),
+            json!({"q": "\"进击的巨人\"", "locales": ["cmn"], "attributesToHighlight": ["*"]}),
             |response, code| {
                 snapshot!(response, @r###"
                 {
@@ -392,13 +594,60 @@ async fn force_locales_with_pattern_nested() {
     // force japanese
     index
         .search(
-            json!({"q": "\"进击的巨人\"", "attributesToRetrieve": ["id"], "locales": ["jpn"]}),
+            json!({"q": "\"进击的巨人\"", "locales": ["jpn"], "attributesToHighlight": ["*"]}),
             |response, code| {
                 snapshot!(response, @r###"
                 {
                   "hits": [
                     {
-                      "id": 852
+                      "document_en": {
+                        "name": "Attack on Titan",
+                        "description": "Attack on Titan is a Japanese manga series written and illustrated by Hajime Isayama",
+                        "author": "Hajime Isayama"
+                      },
+                      "document_ja": {
+                        "name": "進撃の巨人",
+                        "description": "進撃の巨人は、日本の漫画シリーズであり、諫山 創によって作画されている。",
+                        "author": "諫山 創"
+                      },
+                      "document_zh": {
+                        "name": "进击的巨人",
+                        "description": "进击的巨人是日本的漫画系列，由諫山 創作画。",
+                        "author": "諫山創"
+                      },
+                      "id": 852,
+                      "_vectors": {
+                        "manual": [
+                          1.0,
+                          2.0,
+                          3.0
+                        ]
+                      },
+                      "_formatted": {
+                        "document_en": {
+                          "name": "Attack on Titan",
+                          "description": "Attack on Titan is a Japanese manga series written and illustrated by Hajime Isayama",
+                          "author": "Hajime Isayama"
+                        },
+                        "document_ja": {
+                          "name": "進撃の巨人",
+                          "description": "進撃の巨人は、日本の漫画シリーズであり、諫山 創によって作画されている。",
+                          "author": "諫山 創"
+                        },
+                        "document_zh": {
+                          "name": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                          "description": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                          "author": "諫山創"
+                        },
+                        "id": "852",
+                        "_vectors": {
+                          "manual": [
+                            "1.0",
+                            "2.0",
+                            "3.0"
+                          ]
+                        }
+                      }
                     }
                   ],
                   "query": "\"进击的巨人\"",
@@ -406,6 +655,357 @@ async fn force_locales_with_pattern_nested() {
                   "limit": 20,
                   "offset": 0,
                   "estimatedTotalHits": 1
+                }
+                "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
+}
+#[actix_rt::test]
+async fn force_different_locales_with_pattern() {
+    let server = Server::new().await;
+
+    let index = server.index("test");
+    let documents = DOCUMENTS.clone();
+    let (response, _) = index
+        .update_settings(
+            json!({
+                "searchableAttributes": ["name_en", "name_ja", "name_zh", "author_en", "author_ja", "author_zh", "description_en", "description_ja", "description_zh"],
+                "localizedAttributes": [
+                    // force japanese
+                    {"attributePatterns": ["*_zh"], "locales": ["jpn"]},
+                    // force chinese
+                    {"attributePatterns": ["*_ja"], "locales": ["cmn"]}
+                ]
+            }),
+        )
+        .await;
+    snapshot!(response, @r###"
+    {
+      "taskUid": 0,
+      "indexUid": "test",
+      "status": "enqueued",
+      "type": "settingsUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
+    index.add_documents(documents, None).await;
+    index.wait_task(1).await;
+
+    // force chinese
+    index
+        .search(
+            json!({"q": "\"进击的巨人\"", "locales": ["cmn"], "attributesToHighlight": ["*"]}),
+            |response, code| {
+                snapshot!(response, @r###"
+                {
+                  "hits": [],
+                  "query": "\"进击的巨人\"",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 0
+                }
+                "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
+
+    // force japanese
+    index
+        .search(
+            json!({"q": "\"进击的巨人\"", "locales": ["jpn"], "attributesToHighlight": ["*"]}),
+            |response, code| {
+                snapshot!(response, @r###"
+                {
+                  "hits": [
+                    {
+                      "name_zh": "进击的巨人",
+                      "author_zh": "諫山創",
+                      "description_zh": "进击的巨人是日本的漫画系列，由諫山 創作画。",
+                      "id": 853,
+                      "_vectors": {
+                        "manual": [
+                          1.0,
+                          2.0,
+                          3.0
+                        ]
+                      },
+                      "_formatted": {
+                        "name_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                        "author_zh": "諫山創",
+                        "description_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                        "id": "853",
+                        "_vectors": {
+                          "manual": [
+                            "1.0",
+                            "2.0",
+                            "3.0"
+                          ]
+                        }
+                      }
+                    }
+                  ],
+                  "query": "\"进击的巨人\"",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 1
+                }
+                "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
+async fn force_different_locales_with_pattern_nested() {
+    let server = Server::new().await;
+
+    let index = server.index("test");
+    let documents = NESTED_DOCUMENTS.clone();
+    let (response, _) = index
+        .update_settings(json!({
+            "searchableAttributes": ["document_en", "document_ja", "document_zh"],
+            "localizedAttributes": [
+              // force japanese
+              {"attributePatterns": ["*_zh.*"], "locales": ["jpn"]},
+              // force chinese
+              {"attributePatterns": ["document_ja.*", "document_zh.*"], "locales": ["cmn"]}
+            ]
+        }))
+        .await;
+    snapshot!(response, @r###"
+    {
+      "taskUid": 0,
+      "indexUid": "test",
+      "status": "enqueued",
+      "type": "settingsUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
+    index.add_documents(documents, None).await;
+    index.wait_task(1).await;
+
+    // chinese
+    index
+        .search(
+            json!({"q": "\"进击的巨人\"", "locales": ["cmn"], "attributesToHighlight": ["*"]}),
+            |response, code| {
+                snapshot!(response, @r###"
+                {
+                  "hits": [],
+                  "query": "\"进击的巨人\"",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 0
+                }
+                "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
+
+    // force japanese
+    index
+        .search(
+            json!({"q": "\"进击的巨人\"", "locales": ["jpn"], "attributesToHighlight": ["*"]}),
+            |response, code| {
+                snapshot!(response, @r###"
+                {
+                  "hits": [
+                    {
+                      "document_en": {
+                        "name": "Attack on Titan",
+                        "description": "Attack on Titan is a Japanese manga series written and illustrated by Hajime Isayama",
+                        "author": "Hajime Isayama"
+                      },
+                      "document_ja": {
+                        "name": "進撃の巨人",
+                        "description": "進撃の巨人は、日本の漫画シリーズであり、諫山 創によって作画されている。",
+                        "author": "諫山 創"
+                      },
+                      "document_zh": {
+                        "name": "进击的巨人",
+                        "description": "进击的巨人是日本的漫画系列，由諫山 創作画。",
+                        "author": "諫山創"
+                      },
+                      "id": 852,
+                      "_vectors": {
+                        "manual": [
+                          1.0,
+                          2.0,
+                          3.0
+                        ]
+                      },
+                      "_formatted": {
+                        "document_en": {
+                          "name": "Attack on Titan",
+                          "description": "Attack on Titan is a Japanese manga series written and illustrated by Hajime Isayama",
+                          "author": "Hajime Isayama"
+                        },
+                        "document_ja": {
+                          "name": "進撃の巨人",
+                          "description": "進撃の巨人は、日本の漫画シリーズであり、諫山 創によって作画されている。",
+                          "author": "諫山 創"
+                        },
+                        "document_zh": {
+                          "name": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                          "description": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                          "author": "諫山創"
+                        },
+                        "id": "852",
+                        "_vectors": {
+                          "manual": [
+                            "1.0",
+                            "2.0",
+                            "3.0"
+                          ]
+                        }
+                      }
+                    }
+                  ],
+                  "query": "\"进击的巨人\"",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 1
+                }
+                "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
+async fn settings_change() {
+    let server = Server::new().await;
+
+    let index = server.index("test");
+    let documents = NESTED_DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(0).await;
+    let (response, _) = index
+        .update_settings(json!({
+            "searchableAttributes": ["document_en", "document_ja", "document_zh"],
+            "localizedAttributes": [
+                // force japanese
+                {"attributePatterns": ["document_ja.*", "*_zh.*"], "locales": ["jpn"]}
+            ]
+        }))
+        .await;
+    snapshot!(response, @r###"
+    {
+      "taskUid": 1,
+      "indexUid": "test",
+      "status": "enqueued",
+      "type": "settingsUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
+    index.wait_task(1).await;
+
+    // chinese
+    index
+        .search(
+            json!({"q": "\"进击的巨人\"", "locales": ["cmn"], "attributesToHighlight": ["*"]}),
+            |response, code| {
+                snapshot!(response, @r###"
+                {
+                  "hits": [],
+                  "query": "\"进击的巨人\"",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 0
+                }
+                "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
+
+    // force japanese
+    index
+        .search(
+            json!({"q": "\"进击的巨人\"", "locales": ["jpn"], "attributesToHighlight": ["*"]}),
+            |response, code| {
+                snapshot!(response, @r###"
+                {
+                  "hits": [],
+                  "query": "\"进击的巨人\"",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 0
+                }
+                "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
+
+    // change settings
+    let (response, _) = index
+        .update_settings(json!({
+            "searchableAttributes": ["document_en", "document_ja", "document_zh"],
+            "localizedAttributes": [
+              // force japanese
+              {"attributePatterns": ["*_zh.*"], "locales": ["jpn"]},
+              // force chinese
+              {"attributePatterns": ["document_ja.*"], "locales": ["cmn"]}
+            ]
+        }))
+        .await;
+    snapshot!(response, @r###"
+    {
+      "taskUid": 2,
+      "indexUid": "test",
+      "status": "enqueued",
+      "type": "settingsUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
+    index.wait_task(2).await;
+
+    // chinese
+    index
+        .search(
+            json!({"q": "\"进击的巨人\"", "locales": ["cmn"], "attributesToHighlight": ["*"]}),
+            |response, code| {
+                snapshot!(response, @r###"
+                {
+                  "hits": [],
+                  "query": "\"进击的巨人\"",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 0
+                }
+                "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
+
+    // force japanese
+    index
+        .search(
+            json!({"q": "\"进击的巨人\"", "locales": ["jpn"], "attributesToHighlight": ["*"]}),
+            |response, code| {
+                snapshot!(response, @r###"
+                {
+                  "hits": [],
+                  "query": "\"进击的巨人\"",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 0
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -428,9 +1028,7 @@ async fn invalid_locales() {
     index.add_documents(documents, None).await;
     index.wait_task(1).await;
 
-    let (response, code) = index
-        .search_post(json!({"q": "Atta", "attributesToRetrieve": ["id"], "locales": ["invalid"]}))
-        .await;
+    let (response, code) = index.search_post(json!({"q": "Atta", "locales": ["invalid"]})).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -442,17 +1040,12 @@ async fn invalid_locales() {
     "###);
 
     let (response, code) = index
-        .search_get(
-            &yaup::to_string(
-                &json!({"q": "Atta", "attributesToRetrieve": ["id"], "locales": ["invalid"]}),
-            )
-            .unwrap(),
-        )
+        .search_get(&yaup::to_string(&json!({"q": "Atta", "locales": ["invalid"]})).unwrap())
         .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid value in parameter `locales`: Unknown value `invalid`, expected one of `epo`, `eng`, `rus`, `cmn`, `spa`, `por`, `ita`, `ben`, `fra`, `deu`, `ukr`, `kat`, `ara`, `hin`, `jpn`, `heb`, `yid`, `pol`, `amh`, `jav`, `kor`, `nob`, `dan`, `swe`, `fin`, `tur`, `nld`, `hun`, `ces`, `ell`, `bul`, `bel`, `mar`, `kan`, `ron`, `slv`, `hrv`, `srp`, `mkd`, `lit`, `lav`, `est`, `tam`, `vie`, `urd`, `tha`, `guj`, `uzb`, `pan`, `aze`, `ind`, `tel`, `pes`, `mal`, `ori`, `mya`, `nep`, `sin`, `khm`, `tuk`, `aka`, `zul`, `sna`, `afr`, `lat`, `slk`, `cat`, `tgl`, `hye`",
+      "message": "Invalid value in parameter `locales`: Unsupported locale `invalid`, expected one of `epo`, `eng`, `rus`, `cmn`, `spa`, `por`, `ita`, `ben`, `fra`, `deu`, `ukr`, `kat`, `ara`, `hin`, `jpn`, `heb`, `yid`, `pol`, `amh`, `jav`, `kor`, `nob`, `dan`, `swe`, `fin`, `tur`, `nld`, `hun`, `ces`, `ell`, `bul`, `bel`, `mar`, `kan`, `ron`, `slv`, `hrv`, `srp`, `mkd`, `lit`, `lav`, `est`, `tam`, `vie`, `urd`, `tha`, `guj`, `uzb`, `pan`, `aze`, `ind`, `tel`, `pes`, `mal`, `ori`, `mya`, `nep`, `sin`, `khm`, `tuk`, `aka`, `zul`, `sna`, `afr`, `lat`, `slk`, `cat`, `tgl`, `hye`",
       "code": "invalid_search_locales",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_locales"

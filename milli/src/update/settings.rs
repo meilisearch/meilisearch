@@ -1128,22 +1128,21 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(changed)
     }
 
-    fn update_localized_attributes_rules(&mut self) -> Result<bool> {
-        let changed = match &self.localized_attributes_rules {
+    fn update_localized_attributes_rules(&mut self) -> Result<()> {
+        match &self.localized_attributes_rules {
             Setting::Set(new) => {
                 let old = self.index.localized_attributes_rules(self.wtxn)?;
-                if old.as_ref() == Some(new) {
-                    false
-                } else {
+                if old.as_ref() != Some(new) {
                     self.index.put_localized_attributes_rules(self.wtxn, new.clone())?;
-                    true
                 }
             }
-            Setting::Reset => self.index.delete_localized_attributes_rules(self.wtxn)?,
-            Setting::NotSet => false,
-        };
+            Setting::Reset => {
+                self.index.delete_localized_attributes_rules(self.wtxn)?;
+            }
+            Setting::NotSet => (),
+        }
 
-        Ok(changed)
+        Ok(())
     }
 
     pub fn execute<FP, FA>(mut self, progress_callback: FP, should_abort: FA) -> Result<()>

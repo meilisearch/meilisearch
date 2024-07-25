@@ -71,6 +71,8 @@ impl LocalizedFieldIds {
                 for rule in rules {
                     if rule.match_str(field_name) {
                         locales.extend(rule.locales.iter());
+                        // Take the first rule that matches
+                        break;
                     }
                 }
 
