@@ -264,6 +264,85 @@ async fn simple_search() {
         })
         .await;
 }
+#[actix_rt::test]
+async fn filter_should_not_return_documents_with_missing_filterable_value() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = NESTED_DOCUMENTS.clone();
+
+    let (_, code) = index
+        .update_settings(json!({"filterableAttributes": ["custom_propertie.999.options"]}))
+        .await;
+    meili_snap::snapshot!(code, @"202 Accepted");
+    index
+        .add_documents(
+            json!([
+              {
+                "id": 951,
+                "custom_propertie": {
+                  "999": {
+                    "type": "multi",
+                    "options": [
+                      {
+                          "slug": "group_1",
+                          "age": 6,
+                      },
+                      {
+                          "slug": "group_2",
+                          "age": 8,
+                      },
+                    ]
+                  }
+                },
+            }]),
+            None,
+        )
+        .await;
+    index.wait_task(1).await;
+
+    index
+        .search(
+            json!({"filter": "custom_propertie.999.options.slug IN ['group_2']"}),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                assert_eq!(response["hits"].as_array().unwrap().len(), 1);
+            },
+        )
+        .await;
+
+    index
+        .add_documents(
+            json!([
+              {
+                "id": 951,
+                "custom_propertie": {
+                  "999": {
+                    "type": "multi",
+                    "options": [
+                      {
+                          "slug": "group_1",
+                          "age": 6,
+                      },
+                    ]
+                  }
+                },
+            }]),
+            None,
+        )
+        .await;
+    index.wait_task(2).await;
+
+    index
+        .search(
+            json!({"filter": "custom_propertie.999.options.slug IN ['group_2']"}),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                assert_eq!(response["hits"].as_array().unwrap().len(), 1);
+            },
+        )
+        .await;
+}
 
 #[actix_rt::test]
 async fn phrase_search_with_stop_word() {
