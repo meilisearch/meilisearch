@@ -25,7 +25,7 @@ jobs:
       run: |
         apt-get update && apt-get install -y curl
         apt-get install build-essential -y
-    - uses: helix-editor/rust-toolchain@v1
+    - uses: dtolnay/rust-toolchain@v1.70
     - name: Install cargo-deb
       run: cargo install cargo-deb
     - uses: actions/checkout@v3
