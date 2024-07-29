@@ -682,6 +682,7 @@ generate_configure!(
     filterable_attributes,
     sortable_attributes,
     displayed_attributes,
+    localized_attributes,
     searchable_attributes,
     distinct_attribute,
     proximity_precision,
