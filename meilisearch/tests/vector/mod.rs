@@ -1,3 +1,4 @@
+mod openai;
 mod rest;
 mod settings;
 
@@ -6,6 +7,22 @@ use meili_snap::{json_string, snapshot};
 use crate::common::index::Index;
 use crate::common::{GetAllDocumentsOptions, Server};
 use crate::json;
+
+async fn get_server_vector() -> Server {
+    let server = Server::new().await;
+    let (value, code) = server.set_features(json!({"vectorStore": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r###"
+  {
+    "vectorStore": true,
+    "metrics": false,
+    "logsRoute": false,
+    "editDocumentsByFunction": false,
+    "containsFilter": false
+  }
+  "###);
+    server
+}
 
 #[actix_rt::test]
 async fn add_remove_user_provided() {

@@ -5,9 +5,9 @@ use reqwest::IntoUrl;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
-use crate::common::{Server, Value};
+use crate::common::Value;
 use crate::json;
-use crate::vector::GetAllDocumentsOptions;
+use crate::vector::{get_server_vector, GetAllDocumentsOptions};
 
 async fn create_mock() -> (MockServer, Value) {
     let mock_server = MockServer::start().await;
@@ -263,22 +263,6 @@ async fn dummy_testing_the_mock() {
     snapshot!(body, @r###"{"data":[3,3,3]}"###);
     let body = post(&mock.uri()).await.unwrap().text().await.unwrap();
     snapshot!(body, @r###"{"data":[4,4,4]}"###);
-}
-
-async fn get_server_vector() -> Server {
-    let server = Server::new().await;
-    let (value, code) = server.set_features(json!({"vectorStore": true})).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(value, @r###"
-    {
-      "vectorStore": true,
-      "metrics": false,
-      "logsRoute": false,
-      "editDocumentsByFunction": false,
-      "containsFilter": false
-    }
-    "###);
-    server
 }
 
 #[actix_rt::test]
