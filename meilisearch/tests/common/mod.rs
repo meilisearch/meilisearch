@@ -167,26 +167,31 @@ pub static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
         {
             "title": "Shazam!",
             "id": "287947",
+            "color": ["green", "blue"],
             "_vectors": { "manual": [1, 2, 3]},
         },
         {
             "title": "Captain Marvel",
             "id": "299537",
+            "color": ["yellow", "blue"],
             "_vectors": { "manual": [1, 2, 54] },
         },
         {
             "title": "Escape Room",
             "id": "522681",
+            "color": ["yellow", "red"],
             "_vectors": { "manual": [10, -23, 32] },
         },
         {
             "title": "How to Train Your Dragon: The Hidden World",
             "id": "166428",
+            "color": ["green", "red"],
             "_vectors": { "manual": [-100, 231, 32] },
         },
         {
             "title": "Gläss",
             "id": "450465",
+            "color": ["blue", "red"],
             "_vectors": { "manual": [-100, 340, 90] },
         }
     ])

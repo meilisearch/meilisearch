@@ -742,6 +742,10 @@ async fn test_score_details() {
                   {
                     "title": "How to Train Your Dragon: The Hidden World",
                     "id": "166428",
+                    "color": [
+                      "green",
+                      "red"
+                    ],
                     "_vectors": {
                       "manual": [
                         -100.0,
@@ -1168,6 +1172,10 @@ async fn experimental_feature_vector_store() {
       {
         "title": "Shazam!",
         "id": "287947",
+        "color": [
+          "green",
+          "blue"
+        ],
         "_vectors": {
           "manual": {
             "embeddings": [
@@ -1185,6 +1193,10 @@ async fn experimental_feature_vector_store() {
       {
         "title": "Captain Marvel",
         "id": "299537",
+        "color": [
+          "yellow",
+          "blue"
+        ],
         "_vectors": {
           "manual": {
             "embeddings": [
@@ -1202,6 +1214,10 @@ async fn experimental_feature_vector_store() {
       {
         "title": "Gläss",
         "id": "450465",
+        "color": [
+          "blue",
+          "red"
+        ],
         "_vectors": {
           "manual": {
             "embeddings": [
@@ -1219,6 +1235,10 @@ async fn experimental_feature_vector_store() {
       {
         "title": "How to Train Your Dragon: The Hidden World",
         "id": "166428",
+        "color": [
+          "green",
+          "red"
+        ],
         "_vectors": {
           "manual": {
             "embeddings": [
@@ -1236,6 +1256,10 @@ async fn experimental_feature_vector_store() {
       {
         "title": "Escape Room",
         "id": "522681",
+        "color": [
+          "yellow",
+          "red"
+        ],
         "_vectors": {
           "manual": {
             "embeddings": [
@@ -1502,6 +1526,10 @@ async fn simple_search_with_strange_synonyms() {
               {
                 "title": "How to Train Your Dragon: The Hidden World",
                 "id": "166428",
+                "color": [
+                  "green",
+                  "red"
+                ],
                 "_vectors": {
                   "manual": [
                     -100.0,
@@ -1523,6 +1551,10 @@ async fn simple_search_with_strange_synonyms() {
               {
                 "title": "How to Train Your Dragon: The Hidden World",
                 "id": "166428",
+                "color": [
+                  "green",
+                  "red"
+                ],
                 "_vectors": {
                   "manual": [
                     -100.0,
@@ -1544,6 +1576,10 @@ async fn simple_search_with_strange_synonyms() {
               {
                 "title": "How to Train Your Dragon: The Hidden World",
                 "id": "166428",
+                "color": [
+                  "green",
+                  "red"
+                ],
                 "_vectors": {
                   "manual": [
                     -100.0,

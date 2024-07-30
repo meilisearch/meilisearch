@@ -14,6 +14,7 @@ use meilisearch::option::{IndexerOpts, MaxMemory, MaxThreads, Opt};
 use meilisearch::{analytics, create_app, setup_meilisearch, SubscriberForSecondLayer};
 use once_cell::sync::Lazy;
 use tempfile::TempDir;
+use tokio::sync::OnceCell;
 use tokio::time::sleep;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::Layer;
@@ -34,9 +35,12 @@ pub struct Server<State = Owned> {
 }
 
 pub static TEST_TEMP_DIR: Lazy<TempDir> = Lazy::new(|| TempDir::new().unwrap());
-pub static TEST_SHARED_INSTANCE: Lazy<Server<Shared>> = Lazy::new(Server::init_new_shared_instance);
 
 impl Server<Owned> {
+    fn to_shared(self) -> Server<Shared> {
+        Server { service: self.service, _dir: self._dir, _marker: PhantomData }
+    }
+
     pub async fn new() -> Self {
         let dir = TempDir::new().unwrap();
 
@@ -80,6 +84,34 @@ impl Server<Owned> {
         let service = Service { index_scheduler, auth, options, api_key: None };
 
         Ok(Server { service, _dir: None, _marker: PhantomData })
+    }
+
+    pub fn use_api_key(&mut self, api_key: impl AsRef<str>) {
+        self.service.api_key = Some(api_key.as_ref().to_string());
+    }
+
+    /// Fetch and use the default admin key for nexts http requests.
+    pub async fn use_admin_key(&mut self, master_key: impl AsRef<str>) {
+        self.use_api_key(master_key);
+        let (response, code) = self.list_api_keys("").await;
+        assert_eq!(200, code, "{:?}", response);
+        let admin_key = &response["results"][1]["key"];
+        self.use_api_key(admin_key.as_str().unwrap());
+    }
+
+    pub async fn add_api_key(&self, content: Value) -> (Value, StatusCode) {
+        let url = "/keys";
+        self.service.post(url, content).await
+    }
+
+    pub async fn patch_api_key(&self, key: impl AsRef<str>, content: Value) -> (Value, StatusCode) {
+        let url = format!("/keys/{}", key.as_ref());
+        self.service.patch(url, content).await
+    }
+
+    pub async fn delete_api_key(&self, key: impl AsRef<str>) -> (Value, StatusCode) {
+        let url = format!("/keys/{}", key.as_ref());
+        self.service.delete(url).await
     }
 
     /// Returns a view to an index. There is no guarantee that the index exists.
@@ -157,7 +189,19 @@ impl Server<Shared> {
     }
 
     pub fn new_shared() -> &'static Server<Shared> {
-        &TEST_SHARED_INSTANCE
+        static SERVER: Lazy<Server<Shared>> = Lazy::new(Server::init_new_shared_instance);
+        &SERVER
+    }
+
+    pub async fn new_shared_with_admin_key() -> &'static Server<Shared> {
+        static SERVER: OnceCell<Server<Shared>> = OnceCell::const_new();
+        SERVER
+            .get_or_init(|| async {
+                let mut server = Server::new_auth().await;
+                server.use_admin_key("MASTER_KEY").await;
+                server.to_shared()
+            })
+            .await
     }
 
     /// You shouldn't access random indexes on a shared instance thus this method
@@ -241,6 +285,31 @@ impl<State> Server<State> {
             true,
         ))
         .await
+    }
+
+    pub async fn list_api_keys(&self, params: &str) -> (Value, StatusCode) {
+        let url = format!("/keys{params}");
+        self.service.get(url).await
+    }
+
+    pub async fn dummy_request(
+        &self,
+        method: impl AsRef<str>,
+        url: impl AsRef<str>,
+    ) -> (Value, StatusCode) {
+        match method.as_ref() {
+            "POST" => self.service.post(url, json!({})).await,
+            "PUT" => self.service.put(url, json!({})).await,
+            "PATCH" => self.service.patch(url, json!({})).await,
+            "GET" => self.service.get(url).await,
+            "DELETE" => self.service.delete(url).await,
+            _ => unreachable!(),
+        }
+    }
+
+    pub async fn get_api_key(&self, key: impl AsRef<str>) -> (Value, StatusCode) {
+        let url = format!("/keys/{}", key.as_ref());
+        self.service.get(url).await
     }
 
     pub(super) fn _index(&self, uid: impl AsRef<str>) -> Index<'_> {
