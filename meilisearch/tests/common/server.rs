@@ -414,8 +414,8 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
             // memory has to be unlimited because several meilisearch are running in test context.
             max_indexing_memory: MaxMemory::unlimited(),
             skip_index_budget: true,
-            // We cannot use more than 1 indexing threads otherwise some tests become non-deterministic
-            max_indexing_threads: MaxThreads::from_str("1").unwrap(),
+            // Having 2 threads makes the tests way faster
+            max_indexing_threads: MaxThreads::from_str("2").unwrap(),
         },
         experimental_enable_metrics: false,
         ..Parser::parse_from(None as Option<&str>)
