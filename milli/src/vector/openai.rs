@@ -183,7 +183,7 @@ impl Embedder {
 
         let rest_embedder = RestEmbedder::new(
             RestEmbedderOptions {
-                api_key: Some(api_key.clone()),
+                api_key: (!api_key.is_empty()).then(|| api_key.clone()),
                 distribution: None,
                 dimensions: Some(options.dimensions()),
                 url,
