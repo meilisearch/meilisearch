@@ -1110,7 +1110,7 @@ async fn document_addition_with_huge_int_primary_key() {
     snapshot!(response,
         @r###"
     {
-      "uid": 0,
+      "uid": "[uid]",
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1402,7 +1402,7 @@ async fn error_document_field_limit_reached_over_multiple_documents() {
     snapshot!(response,
         @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1436,7 +1436,7 @@ async fn error_document_field_limit_reached_over_multiple_documents() {
     snapshot!(response,
         @r###"
     {
-      "uid": 2,
+      "uid": "[uid]",
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -1485,7 +1485,7 @@ async fn error_document_field_limit_reached_in_one_nested_document() {
     snapshot!(response,
         @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1528,7 +1528,7 @@ async fn error_document_field_limit_reached_over_multiple_documents_with_nested_
     snapshot!(response,
         @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1563,7 +1563,7 @@ async fn error_document_field_limit_reached_over_multiple_documents_with_nested_
     snapshot!(response,
         @r###"
     {
-      "uid": 2,
+      "uid": "[uid]",
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -2209,7 +2209,7 @@ async fn add_invalid_geo_and_then_settings() {
     let ret = index.wait_task(ret.uid()).await;
     snapshot!(ret, @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -2231,7 +2231,7 @@ async fn add_invalid_geo_and_then_settings() {
     let ret = index.wait_task(ret.uid()).await;
     snapshot!(ret, @r###"
     {
-      "uid": 2,
+      "uid": "[uid]",
       "indexUid": "test",
       "status": "failed",
       "type": "settingsUpdate",

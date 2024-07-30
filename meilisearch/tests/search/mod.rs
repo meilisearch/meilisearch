@@ -15,208 +15,17 @@ mod restrict_searchable;
 mod search_queue;
 
 use meilisearch::Opt;
-use once_cell::sync::Lazy;
 use tempfile::TempDir;
 
-use crate::common::{default_settings, Server, Value};
+use crate::common::{
+    default_settings, shared_index_with_documents, shared_index_with_nested_documents, Server,
+    DOCUMENTS, FRUITS_DOCUMENTS, NESTED_DOCUMENTS, SCORE_DOCUMENTS, VECTOR_DOCUMENTS,
+};
 use crate::json;
-
-static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
-    json!([
-        {
-            "title": "Shazam!",
-            "id": "287947",
-            "_vectors": { "manual": [1, 2, 3]},
-        },
-        {
-            "title": "Captain Marvel",
-            "id": "299537",
-            "_vectors": { "manual": [1, 2, 54] },
-        },
-        {
-            "title": "Escape Room",
-            "id": "522681",
-            "_vectors": { "manual": [10, -23, 32] },
-        },
-        {
-            "title": "How to Train Your Dragon: The Hidden World",
-            "id": "166428",
-            "_vectors": { "manual": [-100, 231, 32] },
-        },
-        {
-            "title": "Gläss",
-            "id": "450465",
-            "_vectors": { "manual": [-100, 340, 90] },
-        }
-    ])
-});
-
-static SCORE_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
-    json!([
-        {
-            "title": "Batman the dark knight returns: Part 1",
-            "id": "A",
-        },
-        {
-            "title": "Batman the dark knight returns: Part 2",
-            "id": "B",
-        },
-        {
-            "title": "Batman Returns",
-            "id": "C",
-        },
-        {
-            "title": "Batman",
-            "id": "D",
-        },
-        {
-            "title": "Badman",
-            "id": "E",
-        }
-    ])
-});
-
-static NESTED_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
-    json!([
-        {
-            "id": 852,
-            "father": "jean",
-            "mother": "michelle",
-            "doggos": [
-                {
-                    "name": "bobby",
-                    "age": 2,
-                },
-                {
-                    "name": "buddy",
-                    "age": 4,
-                },
-            ],
-            "cattos": "pésti",
-            "_vectors": { "manual": [1, 2, 3]},
-        },
-        {
-            "id": 654,
-            "father": "pierre",
-            "mother": "sabine",
-            "doggos": [
-                {
-                    "name": "gros bill",
-                    "age": 8,
-                },
-            ],
-            "cattos": ["simba", "pestiféré"],
-            "_vectors": { "manual": [1, 2, 54] },
-        },
-        {
-            "id": 750,
-            "father": "romain",
-            "mother": "michelle",
-            "cattos": ["enigma"],
-            "_vectors": { "manual": [10, 23, 32] },
-        },
-        {
-            "id": 951,
-            "father": "jean-baptiste",
-            "mother": "sophie",
-            "doggos": [
-                {
-                    "name": "turbo",
-                    "age": 5,
-                },
-                {
-                    "name": "fast",
-                    "age": 6,
-                },
-            ],
-            "cattos": ["moumoute", "gomez"],
-            "_vectors": { "manual": [10, 23, 32] },
-        },
-    ])
-});
-
-static FRUITS_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
-    json!([
-        {
-            "name": "Exclusive sale: green apple",
-            "id": "green-apple-boosted",
-            "BOOST": true
-        },
-        {
-            "name": "Pear",
-            "id": "pear",
-        },
-        {
-            "name": "Red apple gala",
-            "id": "red-apple-gala",
-        },
-        {
-            "name": "Exclusive sale: Red Tomato",
-            "id": "red-tomatoes-boosted",
-            "BOOST": true
-        },
-        {
-            "name": "Exclusive sale: Red delicious apple",
-            "id": "red-delicious-boosted",
-            "BOOST": true,
-        }
-    ])
-});
-
-static VECTOR_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
-    json!([
-      {
-        "id": "A",
-        "description": "the dog barks at the cat",
-        "_vectors": {
-          // dimensions [canine, feline, young]
-          "animal": [0.9, 0.8, 0.05],
-          // dimensions [negative/positive, energy]
-          "sentiment": [-0.1, 0.55]
-        }
-      },
-      {
-        "id": "B",
-        "description": "the kitten scratched the beagle",
-        "_vectors": {
-          // dimensions [canine, feline, young]
-          "animal": [0.8, 0.9, 0.5],
-          // dimensions [negative/positive, energy]
-          "sentiment": [-0.2, 0.65]
-        }
-      },
-      {
-        "id": "C",
-        "description": "the dog had to stay alone today",
-        "_vectors": {
-          // dimensions [canine, feline, young]
-          "animal": [0.85, 0.02, 0.1],
-          // dimensions [negative/positive, energy]
-          "sentiment": [-1.0, 0.1]
-        }
-      },
-      {
-        "id": "D",
-        "description": "the little boy pets the puppy",
-        "_vectors": {
-          // dimensions [canine, feline, young]
-          "animal": [0.8, 0.09, 0.8],
-          // dimensions [negative/positive, energy]
-          "sentiment": [0.8, 0.3]
-        }
-      },
-    ])
-});
 
 #[actix_rt::test]
 async fn simple_placeholder_search() {
-    let server = Server::new().await;
-    let index = server.index("basic");
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(json!({}), |response, code| {
             assert_eq!(code, 200, "{}", response);
@@ -224,11 +33,7 @@ async fn simple_placeholder_search() {
         })
         .await;
 
-    let index = server.index("nested");
-    let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-
+    let index = shared_index_with_nested_documents().await;
     index
         .search(json!({}), |response, code| {
             assert_eq!(code, 200, "{}", response);
@@ -239,13 +44,7 @@ async fn simple_placeholder_search() {
 
 #[actix_rt::test]
 async fn simple_search() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(json!({"q": "glass"}), |response, code| {
             assert_eq!(code, 200, "{}", response);
@@ -253,11 +52,7 @@ async fn simple_search() {
         })
         .await;
 
-    let index = server.index("nested");
-    let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-
+    let index = shared_index_with_nested_documents().await;
     index
         .search(json!({"q": "pésti"}), |response, code| {
             assert_eq!(code, 200, "{}", response);
@@ -289,13 +84,7 @@ async fn phrase_search_with_stop_word() {
 
 #[actix_rt::test]
 async fn negative_phrase_search() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(json!({"q": "-\"train your dragon\"" }), |response, code| {
             assert_eq!(code, 200, "{}", response);
@@ -311,13 +100,7 @@ async fn negative_phrase_search() {
 
 #[actix_rt::test]
 async fn negative_word_search() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(json!({"q": "-escape" }), |response, code| {
             assert_eq!(code, 200, "{}", response);
@@ -342,13 +125,7 @@ async fn negative_word_search() {
 
 #[actix_rt::test]
 async fn non_negative_search() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(json!({"q": "- escape" }), |response, code| {
             assert_eq!(code, 200, "{}", response);
@@ -440,13 +217,7 @@ async fn test_thai_language() {
 
 #[actix_rt::test]
 async fn search_multiple_params() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(
             json!({
@@ -463,11 +234,7 @@ async fn search_multiple_params() {
         )
         .await;
 
-    let index = server.index("nested");
-    let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-
+    let index = shared_index_with_nested_documents().await;
     index
         .search(
             json!({
@@ -553,15 +320,7 @@ async fn search_with_filter_string_notation() {
 
 #[actix_rt::test]
 async fn search_with_filter_array_notation() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-
+    let index = shared_index_with_documents().await;
     let (response, code) = index
         .search_post(json!({
             "filter": ["title = Gläss"]
@@ -607,15 +366,7 @@ async fn search_with_contains_filter() {
 
 #[actix_rt::test]
 async fn search_with_sort_on_numbers() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    index.update_settings(json!({"sortableAttributes": ["id"]})).await;
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(
             json!({
@@ -628,14 +379,7 @@ async fn search_with_sort_on_numbers() {
         )
         .await;
 
-    let index = server.index("nested");
-
-    index.update_settings(json!({"sortableAttributes": ["doggos.age"]})).await;
-
-    let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(3).await;
-
+    let index = shared_index_with_nested_documents().await;
     index
         .search(
             json!({
@@ -651,15 +395,7 @@ async fn search_with_sort_on_numbers() {
 
 #[actix_rt::test]
 async fn search_with_sort_on_strings() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    index.update_settings(json!({"sortableAttributes": ["title"]})).await;
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(
             json!({
@@ -672,14 +408,7 @@ async fn search_with_sort_on_strings() {
         )
         .await;
 
-    let index = server.index("nested");
-
-    index.update_settings(json!({"sortableAttributes": ["doggos.name"]})).await;
-
-    let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(3).await;
-
+    let index = shared_index_with_nested_documents().await;
     index
         .search(
             json!({
@@ -695,15 +424,7 @@ async fn search_with_sort_on_strings() {
 
 #[actix_rt::test]
 async fn search_with_multiple_sort() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    index.update_settings(json!({"sortableAttributes": ["id", "title"]})).await;
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-
+    let index = shared_index_with_documents().await;
     let (response, code) = index
         .search_post(json!({
             "sort": ["id:asc", "title:desc"]
@@ -715,15 +436,7 @@ async fn search_with_multiple_sort() {
 
 #[actix_rt::test]
 async fn search_facet_distribution() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-
-    let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-
+    let index = shared_index_with_documents().await;
     index
         .search(
             json!({
@@ -738,13 +451,7 @@ async fn search_facet_distribution() {
         )
         .await;
 
-    let index = server.index("nested");
-
-    index.update_settings(json!({"filterableAttributes": ["father", "doggos.name"]})).await;
-
-    let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(3).await;
+    let index = shared_index_with_nested_documents().await;
 
     // TODO: TAMO: fix the test
     index
@@ -770,9 +477,6 @@ async fn search_facet_distribution() {
             },
         )
         .await;
-
-    index.update_settings(json!({"filterableAttributes": ["doggos"]})).await;
-    index.wait_task(4).await;
 
     index
         .search(
@@ -808,9 +512,6 @@ async fn search_facet_distribution() {
             },
         )
         .await;
-
-    index.update_settings(json!({"filterableAttributes": ["doggos.name"]})).await;
-    index.wait_task(5).await;
 
     index
         .search(
@@ -1041,6 +742,10 @@ async fn test_score_details() {
                   {
                     "title": "How to Train Your Dragon: The Hidden World",
                     "id": "166428",
+                    "color": [
+                      "green",
+                      "red"
+                    ],
                     "_vectors": {
                       "manual": [
                         -100.0,
@@ -1467,6 +1172,10 @@ async fn experimental_feature_vector_store() {
       {
         "title": "Shazam!",
         "id": "287947",
+        "color": [
+          "green",
+          "blue"
+        ],
         "_vectors": {
           "manual": {
             "embeddings": [
@@ -1484,6 +1193,10 @@ async fn experimental_feature_vector_store() {
       {
         "title": "Captain Marvel",
         "id": "299537",
+        "color": [
+          "yellow",
+          "blue"
+        ],
         "_vectors": {
           "manual": {
             "embeddings": [
@@ -1501,6 +1214,10 @@ async fn experimental_feature_vector_store() {
       {
         "title": "Gläss",
         "id": "450465",
+        "color": [
+          "blue",
+          "red"
+        ],
         "_vectors": {
           "manual": {
             "embeddings": [
@@ -1518,6 +1235,10 @@ async fn experimental_feature_vector_store() {
       {
         "title": "How to Train Your Dragon: The Hidden World",
         "id": "166428",
+        "color": [
+          "green",
+          "red"
+        ],
         "_vectors": {
           "manual": {
             "embeddings": [
@@ -1535,6 +1256,10 @@ async fn experimental_feature_vector_store() {
       {
         "title": "Escape Room",
         "id": "522681",
+        "color": [
+          "yellow",
+          "red"
+        ],
         "_vectors": {
           "manual": {
             "embeddings": [
@@ -1801,6 +1526,10 @@ async fn simple_search_with_strange_synonyms() {
               {
                 "title": "How to Train Your Dragon: The Hidden World",
                 "id": "166428",
+                "color": [
+                  "green",
+                  "red"
+                ],
                 "_vectors": {
                   "manual": [
                     -100.0,
@@ -1822,6 +1551,10 @@ async fn simple_search_with_strange_synonyms() {
               {
                 "title": "How to Train Your Dragon: The Hidden World",
                 "id": "166428",
+                "color": [
+                  "green",
+                  "red"
+                ],
                 "_vectors": {
                   "manual": [
                     -100.0,
@@ -1843,6 +1576,10 @@ async fn simple_search_with_strange_synonyms() {
               {
                 "title": "How to Train Your Dragon: The Hidden World",
                 "id": "166428",
+                "color": [
+                  "green",
+                  "red"
+                ],
                 "_vectors": {
                   "manual": [
                     -100.0,

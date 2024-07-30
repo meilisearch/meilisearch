@@ -94,7 +94,7 @@ async fn simple_search_single_index() {
 
     let (response, code) = server
         .multi_search(json!({"queries": [
-        {"indexUid" : "test", "q": "glass"},
+        {"indexUid": "test", "q": "glass"},
         {"indexUid": "test", "q": "captain"},
         ]}))
         .await;
@@ -107,6 +107,10 @@ async fn simple_search_single_index() {
           {
             "title": "Gläss",
             "id": "450465",
+            "color": [
+              "blue",
+              "red"
+            ],
             "_vectors": {
               "manual": [
                 -100.0,
@@ -128,6 +132,10 @@ async fn simple_search_single_index() {
           {
             "title": "Captain Marvel",
             "id": "299537",
+            "color": [
+              "yellow",
+              "blue"
+            ],
             "_vectors": {
               "manual": [
                 1.0,
@@ -168,6 +176,10 @@ async fn federation_single_search_single_index() {
         {
           "title": "Gläss",
           "id": "450465",
+          "color": [
+            "blue",
+            "red"
+          ],
           "_vectors": {
             "manual": [
               -100.0,
@@ -287,6 +299,10 @@ async fn federation_two_search_single_index() {
         {
           "title": "Gläss",
           "id": "450465",
+          "color": [
+            "blue",
+            "red"
+          ],
           "_vectors": {
             "manual": [
               -100.0,
@@ -303,6 +319,10 @@ async fn federation_two_search_single_index() {
         {
           "title": "Captain Marvel",
           "id": "299537",
+          "color": [
+            "yellow",
+            "blue"
+          ],
           "_vectors": {
             "manual": [
               1.0,
@@ -454,6 +474,10 @@ async fn simple_search_two_indexes() {
           {
             "title": "Gläss",
             "id": "450465",
+            "color": [
+              "blue",
+              "red"
+            ],
             "_vectors": {
               "manual": [
                 -100.0,
@@ -555,6 +579,10 @@ async fn federation_two_search_two_indexes() {
         {
           "title": "Gläss",
           "id": "450465",
+          "color": [
+            "blue",
+            "red"
+          ],
           "_vectors": {
             "manual": [
               -100.0,
@@ -673,6 +701,10 @@ async fn federation_multiple_search_multiple_indexes() {
         {
           "title": "Gläss",
           "id": "450465",
+          "color": [
+            "blue",
+            "red"
+          ],
           "_vectors": {
             "manual": [
               -100.0,
@@ -735,6 +767,10 @@ async fn federation_multiple_search_multiple_indexes() {
         {
           "title": "Captain Marvel",
           "id": "299537",
+          "color": [
+            "yellow",
+            "blue"
+          ],
           "_vectors": {
             "manual": [
               1.0,
@@ -751,6 +787,10 @@ async fn federation_multiple_search_multiple_indexes() {
         {
           "title": "Escape Room",
           "id": "522681",
+          "color": [
+            "yellow",
+            "red"
+          ],
           "_vectors": {
             "manual": [
               10.0,
@@ -852,6 +892,10 @@ async fn federation_multiple_search_multiple_indexes() {
         {
           "title": "How to Train Your Dragon: The Hidden World",
           "id": "166428",
+          "color": [
+            "green",
+            "red"
+          ],
           "_vectors": {
             "manual": [
               -100.0,
@@ -2053,6 +2097,10 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
         {
           "title": "Captain Marvel",
           "id": "299537",
+          "color": [
+            "yellow",
+            "blue"
+          ],
           "_vectors": {
             "manual": [
               1.0,
@@ -2070,6 +2118,10 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
         {
           "title": "Escape Room",
           "id": "522681",
+          "color": [
+            "yellow",
+            "red"
+          ],
           "_vectors": {
             "manual": [
               10.0,
@@ -2087,6 +2139,10 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
         {
           "title": "Gläss",
           "id": "450465",
+          "color": [
+            "blue",
+            "red"
+          ],
           "_vectors": {
             "manual": [
               -100.0,
@@ -2104,6 +2160,10 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
         {
           "title": "How to Train Your Dragon: The Hidden World",
           "id": "166428",
+          "color": [
+            "green",
+            "red"
+          ],
           "_vectors": {
             "manual": [
               -100.0,
@@ -2121,6 +2181,10 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
         {
           "title": "Shazam!",
           "id": "287947",
+          "color": [
+            "green",
+            "blue"
+          ],
           "_vectors": {
             "manual": [
               1.0,
@@ -2158,6 +2222,10 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
         {
           "title": "Captain Marvel",
           "id": "299537",
+          "color": [
+            "yellow",
+            "blue"
+          ],
           "_vectors": {
             "manual": [
               1.0,
@@ -2341,6 +2409,10 @@ async fn federation_sort_different_ranking_rules() {
         {
           "title": "Captain Marvel",
           "id": "299537",
+          "color": [
+            "yellow",
+            "blue"
+          ],
           "_vectors": {
             "manual": [
               1.0,
@@ -2358,6 +2430,10 @@ async fn federation_sort_different_ranking_rules() {
         {
           "title": "Escape Room",
           "id": "522681",
+          "color": [
+            "yellow",
+            "red"
+          ],
           "_vectors": {
             "manual": [
               10.0,
@@ -2375,6 +2451,10 @@ async fn federation_sort_different_ranking_rules() {
         {
           "title": "Gläss",
           "id": "450465",
+          "color": [
+            "blue",
+            "red"
+          ],
           "_vectors": {
             "manual": [
               -100.0,
@@ -2392,6 +2472,10 @@ async fn federation_sort_different_ranking_rules() {
         {
           "title": "How to Train Your Dragon: The Hidden World",
           "id": "166428",
+          "color": [
+            "green",
+            "red"
+          ],
           "_vectors": {
             "manual": [
               -100.0,
@@ -2409,6 +2493,10 @@ async fn federation_sort_different_ranking_rules() {
         {
           "title": "Shazam!",
           "id": "287947",
+          "color": [
+            "green",
+            "blue"
+          ],
           "_vectors": {
             "manual": [
               1.0,
@@ -2622,6 +2710,10 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
         {
           "title": "Captain Marvel",
           "id": "299537",
+          "color": [
+            "yellow",
+            "blue"
+          ],
           "_vectors": {
             "manual": [
               1.0,
@@ -2659,6 +2751,10 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
         {
           "title": "Escape Room",
           "id": "522681",
+          "color": [
+            "yellow",
+            "red"
+          ],
           "_vectors": {
             "manual": [
               10.0,
@@ -2676,6 +2772,10 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
         {
           "title": "Gläss",
           "id": "450465",
+          "color": [
+            "blue",
+            "red"
+          ],
           "_vectors": {
             "manual": [
               -100.0,
@@ -2693,6 +2793,10 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
         {
           "title": "How to Train Your Dragon: The Hidden World",
           "id": "166428",
+          "color": [
+            "green",
+            "red"
+          ],
           "_vectors": {
             "manual": [
               -100.0,
@@ -2710,6 +2814,10 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
         {
           "title": "Shazam!",
           "id": "287947",
+          "color": [
+            "green",
+            "blue"
+          ],
           "_vectors": {
             "manual": [
               1.0,
@@ -2767,6 +2875,10 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
         {
           "title": "Captain Marvel",
           "id": "299537",
+          "color": [
+            "yellow",
+            "blue"
+          ],
           "_vectors": {
             "manual": [
               1.0,

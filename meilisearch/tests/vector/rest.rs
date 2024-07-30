@@ -896,7 +896,7 @@ async fn bad_settings() {
     let task = server.wait_task(response.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 0,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -941,7 +941,7 @@ async fn bad_settings() {
     let task = server.wait_task(response.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 2,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -990,7 +990,7 @@ async fn add_vector_and_user_provided() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1086,7 +1086,7 @@ async fn server_returns_bad_request() {
     let task = server.wait_task(response.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 0,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -1125,7 +1125,7 @@ async fn server_returns_bad_request() {
     let task = server.wait_task(response.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "settingsUpdate",
@@ -1154,7 +1154,7 @@ async fn server_returns_bad_request() {
     let task = server.wait_task(response.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 2,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -1198,7 +1198,7 @@ async fn server_returns_bad_response() {
     let task = server.wait_task(response.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 0,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -1251,7 +1251,7 @@ async fn server_returns_bad_response() {
     let task = server.wait_task(response.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -1306,7 +1306,7 @@ async fn server_returns_bad_response() {
     let task = server.wait_task(response.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 2,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -1361,7 +1361,7 @@ async fn server_returns_bad_response() {
     let task = server.wait_task(response.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 3,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -1426,7 +1426,7 @@ async fn server_returns_bad_response() {
     let task = server.wait_task(response.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 4,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -1493,7 +1493,7 @@ async fn server_returns_multiple() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1598,7 +1598,7 @@ async fn server_single_input_returns_in_array() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1703,7 +1703,7 @@ async fn server_raw() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1800,7 +1800,7 @@ async fn server_custom_header() {
     let task = server.wait_task(response.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 0,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -1839,7 +1839,7 @@ async fn server_custom_header() {
     let task = server.wait_task(response.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -1881,7 +1881,7 @@ async fn server_custom_header() {
     let task = server.wait_task(response.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 2,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "settingsUpdate",

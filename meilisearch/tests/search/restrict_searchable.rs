@@ -8,8 +8,8 @@ use crate::json;
 async fn index_with_documents<'a>(server: &'a Server, documents: &Value) -> Index<'a> {
     let index = server.index("test");
 
-    index.add_documents(documents.clone(), None).await;
-    index.wait_task(0).await;
+    let (task, _code) = index.add_documents(documents.clone(), None).await;
+    index.wait_task(task.uid()).await.succeeded();
     index
 }
 

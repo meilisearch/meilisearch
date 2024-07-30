@@ -2000,11 +2000,13 @@ mod tests {
         fn advance_till(&mut self, breakpoints: impl IntoIterator<Item = Breakpoint>) {
             for breakpoint in breakpoints {
                 let b = self.advance();
-                let state = snapshot_index_scheduler(&self.index_scheduler);
                 assert_eq!(
-                    b, breakpoint,
-                    "Was expecting the breakpoint `{:?}` but instead got `{:?}`.\n{state}",
-                    breakpoint, b
+                    b,
+                    breakpoint,
+                    "Was expecting the breakpoint `{:?}` but instead got `{:?}`.\n{}",
+                    breakpoint,
+                    b,
+                    snapshot_index_scheduler(&self.index_scheduler)
                 );
             }
         }
@@ -2028,7 +2030,6 @@ mod tests {
         // Wait for one successful batch.
         #[track_caller]
         fn advance_one_successful_batch(&mut self) {
-            self.index_scheduler.assert_internally_consistent();
             self.advance_till([Start, BatchCreated]);
             loop {
                 match self.advance() {
@@ -2047,7 +2048,6 @@ mod tests {
             }
 
             self.advance_till([AfterProcessing]);
-            self.index_scheduler.assert_internally_consistent();
         }
 
         // Wait for one failed batch.

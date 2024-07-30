@@ -11,6 +11,9 @@ use crate::index_mapper::IndexMapper;
 use crate::{IndexScheduler, Kind, Status, BEI128};
 
 pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
+    // Since we'll snapshot the index right afterward, we don't need to ensure it's internally consistent for every run.
+    // We can only do it for the release run, where the function runs way faster.
+    #[cfg(not(debug_assertions))]
     scheduler.assert_internally_consistent();
 
     let IndexScheduler {

@@ -5,8 +5,8 @@ use crate::json;
 
 #[actix_rt::test]
 async fn settings_bad_displayed_attributes() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index.update_settings(json!({ "displayedAttributes": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
@@ -33,8 +33,8 @@ async fn settings_bad_displayed_attributes() {
 
 #[actix_rt::test]
 async fn settings_bad_searchable_attributes() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index.update_settings(json!({ "searchableAttributes": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
@@ -61,8 +61,8 @@ async fn settings_bad_searchable_attributes() {
 
 #[actix_rt::test]
 async fn settings_bad_filterable_attributes() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index.update_settings(json!({ "filterableAttributes": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
@@ -89,8 +89,8 @@ async fn settings_bad_filterable_attributes() {
 
 #[actix_rt::test]
 async fn settings_bad_sortable_attributes() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index.update_settings(json!({ "sortableAttributes": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
@@ -117,8 +117,8 @@ async fn settings_bad_sortable_attributes() {
 
 #[actix_rt::test]
 async fn settings_bad_ranking_rules() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index.update_settings(json!({ "rankingRules": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
@@ -145,8 +145,8 @@ async fn settings_bad_ranking_rules() {
 
 #[actix_rt::test]
 async fn settings_bad_stop_words() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index.update_settings(json!({ "stopWords": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
@@ -173,8 +173,8 @@ async fn settings_bad_stop_words() {
 
 #[actix_rt::test]
 async fn settings_bad_synonyms() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index.update_settings(json!({ "synonyms": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
@@ -201,8 +201,8 @@ async fn settings_bad_synonyms() {
 
 #[actix_rt::test]
 async fn settings_bad_distinct_attribute() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index.update_settings(json!({ "distinctAttribute": ["doggo"] })).await;
     snapshot!(code, @"400 Bad Request");
@@ -229,8 +229,8 @@ async fn settings_bad_distinct_attribute() {
 
 #[actix_rt::test]
 async fn settings_bad_typo_tolerance() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index.update_settings(json!({ "typoTolerance": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
@@ -284,8 +284,8 @@ async fn settings_bad_typo_tolerance() {
 
 #[actix_rt::test]
 async fn settings_bad_faceting() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index.update_settings(json!({ "faceting": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
@@ -312,8 +312,8 @@ async fn settings_bad_faceting() {
 
 #[actix_rt::test]
 async fn settings_bad_pagination() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index.update_settings(json!({ "pagination": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
@@ -340,8 +340,8 @@ async fn settings_bad_pagination() {
 
 #[actix_rt::test]
 async fn settings_bad_search_cutoff_ms() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index.update_settings(json!({ "searchCutoffMs": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");

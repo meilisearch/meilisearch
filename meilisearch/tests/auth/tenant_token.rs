@@ -6,7 +6,7 @@ use once_cell::sync::Lazy;
 use time::{Duration, OffsetDateTime};
 
 use super::authorization::{ALL_ACTIONS, AUTHORIZATIONS};
-use crate::common::{Server, Value};
+use crate::common::{Server, Value, DOCUMENTS};
 use crate::json;
 
 fn generate_tenant_token(
@@ -21,36 +21,6 @@ fn generate_tenant_token(
     encode(&Header::default(), &body, &EncodingKey::from_secret(parent_key.as_ref().as_bytes()))
         .unwrap()
 }
-
-static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
-    json!([
-        {
-            "title": "Shazam!",
-            "id": "287947",
-            "color": ["green", "blue"]
-        },
-        {
-            "title": "Captain Marvel",
-            "id": "299537",
-            "color": ["yellow", "blue"]
-        },
-        {
-            "title": "Escape Room",
-            "id": "522681",
-            "color": ["yellow", "red"]
-        },
-        {
-            "title": "How to Train Your Dragon: The Hidden World",
-            "id": "166428",
-            "color": ["green", "red"]
-        },
-        {
-            "title": "Glass",
-            "id": "450465",
-            "color": ["blue", "red"]
-        }
-    ])
-});
 
 static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
     json!({

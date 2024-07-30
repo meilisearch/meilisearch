@@ -66,8 +66,8 @@ async fn list_tasks() {
 async fn list_tasks_with_star_filters() {
     let server = Server::new().await;
     let index = server.index("test");
-    index.create(None).await;
-    index.wait_task(0).await;
+    let (task, _code) = index.create(None).await;
+    index.wait_task(task.uid()).await;
     index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
@@ -744,7 +744,7 @@ async fn test_summarized_index_deletion() {
     snapshot!(task,
         @r###"
     {
-      "uid": 0,
+      "uid": "[uid]",
       "indexUid": "test",
       "status": "failed",
       "type": "indexDeletion",
@@ -774,7 +774,7 @@ async fn test_summarized_index_deletion() {
     snapshot!(task,
         @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -796,7 +796,7 @@ async fn test_summarized_index_deletion() {
     snapshot!(task,
         @r###"
     {
-      "uid": 2,
+      "uid": "[uid]",
       "indexUid": "test",
       "status": "succeeded",
       "type": "indexDeletion",
@@ -818,7 +818,7 @@ async fn test_summarized_index_deletion() {
     snapshot!(task,
         @r###"
     {
-      "uid": 3,
+      "uid": "[uid]",
       "indexUid": "test",
       "status": "failed",
       "type": "indexDeletion",
