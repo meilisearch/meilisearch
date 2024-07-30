@@ -1816,7 +1816,7 @@ async fn server_custom_header() {
         }
       },
       "error": {
-        "message": "Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with user error: could not authenticate against embedding server\n  - server replied with `{\"error\":\"missing header 'my-nonstandard-auth'\"}`",
+        "message": "Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with user error: could not authenticate against embedding server\n  - server replied with `{\"error\":\"missing header 'my-nonstandard-auth'\"}`\n  - Hint: Check the `apiKey` parameter in the embedder configuration",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -1858,7 +1858,7 @@ async fn server_custom_header() {
         }
       },
       "error": {
-        "message": "Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with user error: could not authenticate against embedding server\n  - server replied with `{\"error\":\"thou shall not pass, Balrog\"}`",
+        "message": "Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with user error: could not authenticate against embedding server\n  - server replied with `{\"error\":\"thou shall not pass, Balrog\"}`\n  - Hint: Check the `apiKey` parameter in the embedder configuration",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
