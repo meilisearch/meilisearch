@@ -55,16 +55,17 @@ where
         let index_scheduler = req.app_data::<Data<IndexScheduler>>().unwrap();
         let features = index_scheduler.features();
 
+        let request_path = req.path();
+        let request_pattern = req.match_pattern();
+        let metric_path = request_pattern.as_ref().map_or(request_path, String::as_str).to_string();
+        let request_method = req.method().to_string();
+
         if features.check_metrics().is_ok() {
-            let request_path = req.path();
             let is_registered_resource = req.resource_map().has_resource(request_path);
             if is_registered_resource {
-                let request_pattern = req.match_pattern();
-                let metric_path = request_pattern.as_ref().map_or(request_path, String::as_str);
-                let request_method = req.method().to_string();
                 histogram_timer = Some(
                     crate::metrics::MEILISEARCH_HTTP_RESPONSE_TIME_SECONDS
-                        .with_label_values(&[&request_method, metric_path])
+                        .with_label_values(&[&request_method, &metric_path])
                         .start_timer(),
                 );
             }
@@ -76,11 +77,7 @@ where
             let res = fut.await?;
 
             crate::metrics::MEILISEARCH_HTTP_REQUESTS_TOTAL
-                .with_label_values(&[
-                    res.request().method().as_str(),
-                    res.request().path(),
-                    res.status().as_str(),
-                ])
+                .with_label_values(&[&request_method, &metric_path, res.status().as_str()])
                 .inc();
 
             if let Some(histogram_timer) = histogram_timer {
