@@ -685,6 +685,7 @@ generate_configure!(
     searchable_attributes,
     distinct_attribute,
     proximity_precision,
+    localized_attributes,
     stop_words,
     separator_tokens,
     non_separator_tokens,
