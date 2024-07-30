@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::marker::PhantomData;
 use std::panic::{catch_unwind, resume_unwind, UnwindSafe};
 use std::time::Duration;
 
@@ -9,19 +10,24 @@ use urlencoding::encode as urlencode;
 use super::encoder::Encoder;
 use super::service::Service;
 use super::Value;
+use super::{Owned, Shared};
 use crate::json;
 
-pub struct Index<'a> {
+pub struct Index<'a, State = Owned> {
     pub uid: String,
     pub service: &'a Service,
-    pub encoder: Encoder,
+    pub(super) encoder: Encoder,
+    pub(super) marker: PhantomData<State>,
 }
 
-#[allow(dead_code)]
-impl Index<'_> {
-    pub async fn get(&self) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}", urlencode(self.uid.as_ref()));
-        self.service.get(url).await
+impl<'a> Index<'a, Owned> {
+    pub fn to_shared(&self) -> Index<'a, Shared> {
+        Index {
+            uid: self.uid.clone(),
+            service: self.service,
+            encoder: self.encoder,
+            marker: PhantomData,
+        }
     }
 
     pub async fn load_test_set(&self) -> u64 {
@@ -57,11 +63,7 @@ impl Index<'_> {
     }
 
     pub async fn create(&self, primary_key: Option<&str>) -> (Value, StatusCode) {
-        let body = json!({
-            "uid": self.uid,
-            "primaryKey": primary_key,
-        });
-        self.service.post_encoded("/indexes", body, self.encoder).await
+        self._create(primary_key).await
     }
 
     pub async fn update_raw(&self, body: Value) -> (Value, StatusCode) {
@@ -88,13 +90,7 @@ impl Index<'_> {
         documents: Value,
         primary_key: Option<&str>,
     ) -> (Value, StatusCode) {
-        let url = match primary_key {
-            Some(key) => {
-                format!("/indexes/{}/documents?primaryKey={}", urlencode(self.uid.as_ref()), key)
-            }
-            None => format!("/indexes/{}/documents", urlencode(self.uid.as_ref())),
-        };
-        self.service.post_encoded(url, documents, self.encoder).await
+        self._add_documents(documents, primary_key).await
     }
 
     pub async fn raw_add_documents(
@@ -136,77 +132,8 @@ impl Index<'_> {
         }
     }
 
-    pub async fn wait_task(&self, update_id: u64) -> Value {
-        // try several times to get status, or panic to not wait forever
-        let url = format!("/tasks/{}", update_id);
-        for _ in 0..100 {
-            let (response, status_code) = self.service.get(&url).await;
-            assert_eq!(200, status_code, "response: {}", response);
-
-            if response["status"] == "succeeded" || response["status"] == "failed" {
-                return response;
-            }
-
-            // wait 0.5 second.
-            sleep(Duration::from_millis(500)).await;
-        }
-        panic!("Timeout waiting for update id");
-    }
-
-    pub async fn get_task(&self, update_id: u64) -> (Value, StatusCode) {
-        let url = format!("/tasks/{}", update_id);
-        self.service.get(url).await
-    }
-
     pub async fn list_tasks(&self) -> (Value, StatusCode) {
         let url = format!("/tasks?indexUids={}", self.uid);
-        self.service.get(url).await
-    }
-
-    pub async fn filtered_tasks(
-        &self,
-        types: &[&str],
-        statuses: &[&str],
-        canceled_by: &[&str],
-    ) -> (Value, StatusCode) {
-        let mut url = format!("/tasks?indexUids={}", self.uid);
-        if !types.is_empty() {
-            let _ = write!(url, "&types={}", types.join(","));
-        }
-        if !statuses.is_empty() {
-            let _ = write!(url, "&statuses={}", statuses.join(","));
-        }
-        if !canceled_by.is_empty() {
-            let _ = write!(url, "&canceledBy={}", canceled_by.join(","));
-        }
-        self.service.get(url).await
-    }
-
-    pub async fn get_document(&self, id: u64, options: Option<Value>) -> (Value, StatusCode) {
-        let mut url = format!("/indexes/{}/documents/{}", urlencode(self.uid.as_ref()), id);
-        if let Some(options) = options {
-            write!(url, "{}", yaup::to_string(&options).unwrap()).unwrap();
-        }
-        self.service.get(url).await
-    }
-
-    pub async fn get_document_by_filter(&self, payload: Value) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/documents/fetch", urlencode(self.uid.as_ref()));
-        self.service.post(url, payload).await
-    }
-
-    pub async fn get_all_documents_raw(&self, options: &str) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/documents{}", urlencode(self.uid.as_ref()), options);
-        self.service.get(url).await
-    }
-
-    pub async fn get_all_documents(&self, options: GetAllDocumentsOptions) -> (Value, StatusCode) {
-        let url = format!(
-            "/indexes/{}/documents{}",
-            urlencode(self.uid.as_ref()),
-            yaup::to_string(&options).unwrap()
-        );
-
         self.service.get(url).await
     }
 
@@ -237,14 +164,8 @@ impl Index<'_> {
         self.service.post_encoded(url, body, self.encoder).await
     }
 
-    pub async fn settings(&self) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/settings", urlencode(self.uid.as_ref()));
-        self.service.get(url).await
-    }
-
     pub async fn update_settings(&self, settings: Value) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/settings", urlencode(self.uid.as_ref()));
-        self.service.patch_encoded(url, settings, self.encoder).await
+        self._update_settings(settings).await
     }
 
     pub async fn update_settings_displayed_attributes(
@@ -325,6 +246,146 @@ impl Index<'_> {
     pub async fn delete_settings(&self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/settings", urlencode(self.uid.as_ref()));
         self.service.delete(url).await
+    }
+
+    pub async fn update_distinct_attribute(&self, value: Value) -> (Value, StatusCode) {
+        let url =
+            format!("/indexes/{}/settings/{}", urlencode(self.uid.as_ref()), "distinct-attribute");
+        self.service.put_encoded(url, value, self.encoder).await
+    }
+}
+
+impl<'a> Index<'a, Shared> {
+    /// You cannot modify the content of a shared index, thus the delete_document_by_filter call
+    /// must fail. If the task successfully enqueue itself, we'll wait for the task to finishes,
+    /// and if it succeed the function will panic.
+    pub async fn delete_document_by_filter_fail(&self, body: Value) -> (Value, StatusCode) {
+        let (mut task, code) = self._delete_document_by_filter(body).await;
+        if code.is_success() {
+            task = self.wait_task(task.uid()).await;
+            if task.is_success() {
+                panic!(
+                    "`delete_document_by_filter_fail` succeeded: {}",
+                    serde_json::to_string_pretty(&task).unwrap()
+                );
+            }
+        }
+        (task, code)
+    }
+}
+
+#[allow(dead_code)]
+impl<State> Index<'_, State> {
+    pub async fn get(&self) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}", urlencode(self.uid.as_ref()));
+        self.service.get(url).await
+    }
+
+    /// add_documents is not allowed on shared index but we need to use it to initialize
+    /// a bunch of very common indexes in `common/mod.rs`.
+    pub(super) async fn _add_documents(
+        &self,
+        documents: Value,
+        primary_key: Option<&str>,
+    ) -> (Value, StatusCode) {
+        let url = match primary_key {
+            Some(key) => {
+                format!("/indexes/{}/documents?primaryKey={}", urlencode(self.uid.as_ref()), key)
+            }
+            None => format!("/indexes/{}/documents", urlencode(self.uid.as_ref())),
+        };
+        self.service.post_encoded(url, documents, self.encoder).await
+    }
+
+    pub(super) async fn _update_settings(&self, settings: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings", urlencode(self.uid.as_ref()));
+        self.service.patch_encoded(url, settings, self.encoder).await
+    }
+
+    pub(super) async fn _delete_document_by_filter(&self, body: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/documents/delete", urlencode(self.uid.as_ref()));
+        self.service.post_encoded(url, body, self.encoder).await
+    }
+
+    pub(super) async fn _create(&self, primary_key: Option<&str>) -> (Value, StatusCode) {
+        let body = json!({
+            "uid": self.uid,
+            "primaryKey": primary_key,
+        });
+        self.service.post_encoded("/indexes", body, self.encoder).await
+    }
+    pub async fn wait_task(&self, update_id: u64) -> Value {
+        // try several times to get status, or panic to not wait forever
+        let url = format!("/tasks/{}", update_id);
+        for _ in 0..100 {
+            let (response, status_code) = self.service.get(&url).await;
+            assert_eq!(200, status_code, "response: {}", response);
+
+            if response["status"] == "succeeded" || response["status"] == "failed" {
+                return response;
+            }
+
+            // wait 0.5 second.
+            sleep(Duration::from_millis(500)).await;
+        }
+        panic!("Timeout waiting for update id");
+    }
+
+    pub async fn get_task(&self, update_id: u64) -> (Value, StatusCode) {
+        let url = format!("/tasks/{}", update_id);
+        self.service.get(url).await
+    }
+
+    pub async fn filtered_tasks(
+        &self,
+        types: &[&str],
+        statuses: &[&str],
+        canceled_by: &[&str],
+    ) -> (Value, StatusCode) {
+        let mut url = format!("/tasks?indexUids={}", self.uid);
+        if !types.is_empty() {
+            let _ = write!(url, "&types={}", types.join(","));
+        }
+        if !statuses.is_empty() {
+            let _ = write!(url, "&statuses={}", statuses.join(","));
+        }
+        if !canceled_by.is_empty() {
+            let _ = write!(url, "&canceledBy={}", canceled_by.join(","));
+        }
+        self.service.get(url).await
+    }
+
+    pub async fn get_document(&self, id: u64, options: Option<Value>) -> (Value, StatusCode) {
+        let mut url = format!("/indexes/{}/documents/{}", urlencode(self.uid.as_ref()), id);
+        if let Some(options) = options {
+            write!(url, "{}", yaup::to_string(&options).unwrap()).unwrap();
+        }
+        self.service.get(url).await
+    }
+
+    pub async fn get_document_by_filter(&self, payload: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/documents/fetch", urlencode(self.uid.as_ref()));
+        self.service.post(url, payload).await
+    }
+
+    pub async fn get_all_documents_raw(&self, options: &str) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/documents{}", urlencode(self.uid.as_ref()), options);
+        self.service.get(url).await
+    }
+
+    pub async fn get_all_documents(&self, options: GetAllDocumentsOptions) -> (Value, StatusCode) {
+        let url = format!(
+            "/indexes/{}/documents{}",
+            urlencode(self.uid.as_ref()),
+            yaup::to_string(&options).unwrap()
+        );
+
+        self.service.get(url).await
+    }
+
+    pub async fn settings(&self) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings", urlencode(self.uid.as_ref()));
+        self.service.get(url).await
     }
 
     pub async fn stats(&self) -> (Value, StatusCode) {
@@ -409,12 +470,6 @@ impl Index<'_> {
     pub async fn facet_search(&self, query: Value) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/facet-search", urlencode(self.uid.as_ref()));
         self.service.post_encoded(url, query, self.encoder).await
-    }
-
-    pub async fn update_distinct_attribute(&self, value: Value) -> (Value, StatusCode) {
-        let url =
-            format!("/indexes/{}/settings/{}", urlencode(self.uid.as_ref()), "distinct-attribute");
-        self.service.put_encoded(url, value, self.encoder).await
     }
 
     pub async fn get_distinct_attribute(&self) -> (Value, StatusCode) {

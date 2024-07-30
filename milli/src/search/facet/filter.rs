@@ -75,25 +75,21 @@ impl<'a> Display for FilterError<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::AttributeNotFilterable { attribute, filterable_fields } => {
+                write!(f, "Attribute `{attribute}` is not filterable.")?;
                 if filterable_fields.is_empty() {
-                    write!(
-                        f,
-                        "Attribute `{}` is not filterable. This index does not have configured filterable attributes.",
-                        attribute,
-                    )
+                    write!(f, " This index does not have configured filterable attributes.")
                 } else {
-                    let filterables_list = filterable_fields
-                        .iter()
-                        .map(AsRef::as_ref)
-                        .collect::<Vec<&str>>()
-                        .join(" ");
-
-                    write!(
-                        f,
-                        "Attribute `{}` is not filterable. Available filterable attributes are: `{}`.",
-                        attribute,
-                        filterables_list,
-                    )
+                    write!(f, " Available filterable attributes are: ")?;
+                    let mut filterables_list =
+                        filterable_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>();
+                    filterables_list.sort_unstable();
+                    for (idx, filterable) in filterables_list.iter().enumerate() {
+                        write!(f, "`{filterable}`")?;
+                        if idx != filterables_list.len() - 1 {
+                            write!(f, ", ")?;
+                        }
+                    }
+                    write!(f, ".")
                 }
             }
             Self::TooDeep => write!(

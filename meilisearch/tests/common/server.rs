@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use std::marker::PhantomData;
 use std::path::Path;
 use std::str::FromStr as _;
 use std::time::Duration;
@@ -20,41 +21,22 @@ use uuid::Uuid;
 
 use super::index::Index;
 use super::service::Service;
+use super::{Owned, Shared};
 use crate::common::encoder::Encoder;
 use crate::common::Value;
 use crate::json;
 
-pub struct Server {
+pub struct Server<State = Owned> {
     pub service: Service,
     // hold ownership to the tempdir while we use the server instance.
     _dir: Option<TempDir>,
+    _marker: PhantomData<State>,
 }
 
 pub static TEST_TEMP_DIR: Lazy<TempDir> = Lazy::new(|| TempDir::new().unwrap());
-pub static TEST_SHARED_INSTANCE: Lazy<Server> = Lazy::new(Server::init_new_shared_instance);
+pub static TEST_SHARED_INSTANCE: Lazy<Server<Shared>> = Lazy::new(Server::init_new_shared_instance);
 
-impl Server {
-    fn init_new_shared_instance() -> Self {
-        let dir = TempDir::new().unwrap();
-
-        if cfg!(windows) {
-            std::env::set_var("TMP", TEST_TEMP_DIR.path());
-        } else {
-            std::env::set_var("TMPDIR", TEST_TEMP_DIR.path());
-        }
-
-        let options = default_settings(dir.path());
-
-        let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
-        let service = Service { index_scheduler, auth, options, api_key: None };
-
-        Server { service, _dir: Some(dir) }
-    }
-
-    pub fn new_shared() -> &'static Self {
-        &TEST_SHARED_INSTANCE
-    }
-
+impl Server<Owned> {
     pub async fn new() -> Self {
         let dir = TempDir::new().unwrap();
 
@@ -69,7 +51,7 @@ impl Server {
         let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
         let service = Service { index_scheduler, auth, options, api_key: None };
 
-        Server { service, _dir: Some(dir) }
+        Server { service, _dir: Some(dir), _marker: PhantomData }
     }
 
     pub async fn new_auth_with_options(mut options: Opt, dir: TempDir) -> Self {
@@ -84,7 +66,7 @@ impl Server {
         let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
         let service = Service { index_scheduler, auth, options, api_key: None };
 
-        Server { service, _dir: Some(dir) }
+        Server { service, _dir: Some(dir), _marker: PhantomData }
     }
 
     pub async fn new_auth() -> Self {
@@ -97,9 +79,139 @@ impl Server {
         let (index_scheduler, auth) = setup_meilisearch(&options)?;
         let service = Service { index_scheduler, auth, options, api_key: None };
 
-        Ok(Server { service, _dir: None })
+        Ok(Server { service, _dir: None, _marker: PhantomData })
     }
 
+    /// Returns a view to an index. There is no guarantee that the index exists.
+    pub fn index(&self, uid: impl AsRef<str>) -> Index<'_> {
+        self.index_with_encoder(uid, Encoder::Plain)
+    }
+
+    pub async fn create_index(&self, body: Value) -> (Value, StatusCode) {
+        self.service.post("/indexes", body).await
+    }
+
+    pub fn index_with_encoder(&self, uid: impl AsRef<str>, encoder: Encoder) -> Index<'_> {
+        Index {
+            uid: uid.as_ref().to_string(),
+            service: &self.service,
+            encoder,
+            marker: PhantomData,
+        }
+    }
+
+    pub async fn list_indexes(
+        &self,
+        offset: Option<usize>,
+        limit: Option<usize>,
+    ) -> (Value, StatusCode) {
+        let (offset, limit) = (
+            offset.map(|offset| format!("offset={offset}")),
+            limit.map(|limit| format!("limit={limit}")),
+        );
+        let query_parameter = offset
+            .as_ref()
+            .zip(limit.as_ref())
+            .map(|(offset, limit)| format!("{offset}&{limit}"))
+            .or_else(|| offset.xor(limit));
+        if let Some(query_parameter) = query_parameter {
+            self.service.get(format!("/indexes?{query_parameter}")).await
+        } else {
+            self.service.get("/indexes").await
+        }
+    }
+
+    pub async fn stats(&self) -> (Value, StatusCode) {
+        self.service.get("/stats").await
+    }
+
+    pub async fn tasks(&self) -> (Value, StatusCode) {
+        self.service.get("/tasks").await
+    }
+
+    pub async fn set_features(&self, value: Value) -> (Value, StatusCode) {
+        self.service.patch("/experimental-features", value).await
+    }
+
+    pub async fn get_metrics(&self) -> (Value, StatusCode) {
+        self.service.get("/metrics").await
+    }
+}
+
+impl Server<Shared> {
+    fn init_new_shared_instance() -> Server<Shared> {
+        let dir = TempDir::new().unwrap();
+
+        if cfg!(windows) {
+            std::env::set_var("TMP", TEST_TEMP_DIR.path());
+        } else {
+            std::env::set_var("TMPDIR", TEST_TEMP_DIR.path());
+        }
+
+        let options = default_settings(dir.path());
+
+        let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
+        let service = Service { index_scheduler, auth, options, api_key: None };
+
+        Server { service, _dir: Some(dir), _marker: PhantomData }
+    }
+
+    pub fn new_shared() -> &'static Server<Shared> {
+        &TEST_SHARED_INSTANCE
+    }
+
+    /// You shouldn't access random indexes on a shared instance thus this method
+    /// must fail.
+    pub async fn get_index_fail(&self, uid: impl AsRef<str>) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}", urlencoding::encode(uid.as_ref()));
+        let (value, code) = self.service.get(url).await;
+        if code.is_success() {
+            panic!("`get_index_fail` succeeded with uid: {}", uid.as_ref());
+        }
+        (value, code)
+    }
+
+    pub async fn delete_index_fail(&self, uid: impl AsRef<str>) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}", urlencoding::encode(uid.as_ref()));
+        let (value, code) = self.service.delete(url).await;
+        if code.is_success() {
+            panic!("`delete_index_fail` succeeded with uid: {}", uid.as_ref());
+        }
+        (value, code)
+    }
+
+    pub async fn update_raw_index_fail(
+        &self,
+        uid: impl AsRef<str>,
+        body: Value,
+    ) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}", urlencoding::encode(uid.as_ref()));
+        let (value, code) = self.service.patch_encoded(url, body, Encoder::Plain).await;
+        if code.is_success() {
+            panic!("`update_raw_index_fail` succeeded with uid: {}", uid.as_ref());
+        }
+        (value, code)
+    }
+
+    /// Since this call updates the state of the instance, it must fail.
+    /// If it doesn't fail, the test will panic to help you debug what
+    /// is going on.
+    pub async fn create_index_fail(&self, body: Value) -> (Value, StatusCode) {
+        let (mut task, code) = self._create_index(body).await;
+        if code.is_success() {
+            task = self.wait_task(task.uid()).await;
+            if task.is_success() {
+                panic!(
+                    "`create_index_fail` succeeded: {}",
+                    serde_json::to_string_pretty(&task).unwrap()
+                );
+            }
+        }
+        (task, code)
+    }
+}
+
+impl<State> Server<State> {
     pub async fn init_web_app(
         &self,
     ) -> impl actix_web::dev::Service<
@@ -131,23 +243,28 @@ impl Server {
         .await
     }
 
+    pub(super) fn _index(&self, uid: impl AsRef<str>) -> Index<'_> {
+        Index {
+            uid: uid.as_ref().to_string(),
+            service: &self.service,
+            encoder: Encoder::Plain,
+            marker: PhantomData,
+        }
+    }
+
     /// Returns a view to an index. There is no guarantee that the index exists.
     pub fn unique_index(&self) -> Index<'_> {
         let uuid = Uuid::new_v4();
-        self.index_with_encoder(uuid.to_string(), Encoder::Plain)
+        Index {
+            uid: uuid.to_string(),
+            service: &self.service,
+            encoder: Encoder::Plain,
+            marker: PhantomData,
+        }
     }
 
-    /// Returns a view to an index. There is no guarantee that the index exists.
-    pub fn index(&self, uid: impl AsRef<str>) -> Index<'_> {
-        self.index_with_encoder(uid, Encoder::Plain)
-    }
-
-    pub async fn create_index(&self, body: Value) -> (Value, StatusCode) {
+    pub(super) async fn _create_index(&self, body: Value) -> (Value, StatusCode) {
         self.service.post("/indexes", body).await
-    }
-
-    pub fn index_with_encoder(&self, uid: impl AsRef<str>, encoder: Encoder) -> Index<'_> {
-        Index { uid: uid.as_ref().to_string(), service: &self.service, encoder }
     }
 
     pub async fn multi_search(&self, queries: Value) -> (Value, StatusCode) {
@@ -158,45 +275,12 @@ impl Server {
         self.service.get(format!("/indexes{parameters}")).await
     }
 
-    pub async fn list_indexes(
-        &self,
-        offset: Option<usize>,
-        limit: Option<usize>,
-    ) -> (Value, StatusCode) {
-        let (offset, limit) = (
-            offset.map(|offset| format!("offset={offset}")),
-            limit.map(|limit| format!("limit={limit}")),
-        );
-        let query_parameter = offset
-            .as_ref()
-            .zip(limit.as_ref())
-            .map(|(offset, limit)| format!("{offset}&{limit}"))
-            .or_else(|| offset.xor(limit));
-        if let Some(query_parameter) = query_parameter {
-            self.service.get(format!("/indexes?{query_parameter}")).await
-        } else {
-            self.service.get("/indexes").await
-        }
-    }
-
-    pub async fn version(&self) -> (Value, StatusCode) {
-        self.service.get("/version").await
-    }
-
-    pub async fn stats(&self) -> (Value, StatusCode) {
-        self.service.get("/stats").await
-    }
-
-    pub async fn tasks(&self) -> (Value, StatusCode) {
-        self.service.get("/tasks").await
-    }
-
     pub async fn tasks_filter(&self, filter: &str) -> (Value, StatusCode) {
         self.service.get(format!("/tasks?{}", filter)).await
     }
 
-    pub async fn get_dump_status(&self, uid: &str) -> (Value, StatusCode) {
-        self.service.get(format!("/dumps/{}/status", uid)).await
+    pub async fn version(&self) -> (Value, StatusCode) {
+        self.service.get("/version").await
     }
 
     pub async fn create_dump(&self) -> (Value, StatusCode) {
@@ -243,14 +327,6 @@ impl Server {
 
     pub async fn get_features(&self) -> (Value, StatusCode) {
         self.service.get("/experimental-features").await
-    }
-
-    pub async fn set_features(&self, value: Value) -> (Value, StatusCode) {
-        self.service.patch("/experimental-features", value).await
-    }
-
-    pub async fn get_metrics(&self) -> (Value, StatusCode) {
-        self.service.get("/metrics").await
     }
 }
 

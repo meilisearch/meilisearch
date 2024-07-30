@@ -1,15 +1,13 @@
 use meili_snap::*;
 
-use crate::common::Server;
+use crate::common::{shared_does_not_exists_index, Server};
 use crate::json;
 
 #[actix_rt::test]
 async fn search_unexisting_index() {
-    let server = Server::new_shared();
-    let index = server.index("search_unexisting_index");
-
+    let index = shared_does_not_exists_index().await;
     let expected_response = json!({
-        "message": "Index `search_unexisting_index` not found.",
+        "message": "Index `DOES_NOT_EXISTS` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#index_not_found"
@@ -937,8 +935,7 @@ async fn sort_reserved_attribute() {
 #[actix_rt::test]
 async fn sort_unsortable_attribute() {
     let server = Server::new_shared();
-    let index = server.index("sort_unsortable_attribute");
-
+    let index = server.unique_index();
     let (response, _code) = index.update_settings(json!({"sortableAttributes": ["id"]})).await;
     index.wait_task(response.uid()).await.succeeded();
 
