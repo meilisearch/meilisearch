@@ -651,7 +651,7 @@ async fn fetch_document_by_filter() {
     let server = Server::new_shared();
     let index = server.unique_index();
     index.update_settings_filterable_attributes(json!(["color"])).await;
-    index
+    let (task, _code) = index
         .add_documents(
             json!([
                 { "id": 0, "color": "red" },
@@ -662,7 +662,7 @@ async fn fetch_document_by_filter() {
             Some("id"),
         )
         .await;
-    index.wait_task(1).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.get_document_by_filter(json!(null)).await;
     snapshot!(code, @"400 Bad Request");
@@ -745,8 +745,9 @@ async fn fetch_document_by_filter() {
 
 #[actix_rt::test]
 async fn retrieve_vectors() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
+    let index = shared_empty_index().await;
+
+    // GET ALL DOCUMENTS BY QUERY
     let (response, _code) = index.get_all_documents_raw("?retrieveVectors=tamo").await;
     snapshot!(response, @r###"
     {
