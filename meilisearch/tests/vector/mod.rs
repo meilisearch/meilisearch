@@ -1,10 +1,13 @@
 mod rest;
 mod settings;
 
+use std::str::FromStr;
+
 use meili_snap::{json_string, snapshot};
+use meilisearch::option::MaxThreads;
 
 use crate::common::index::Index;
-use crate::common::{GetAllDocumentsOptions, Server};
+use crate::common::{default_settings, GetAllDocumentsOptions, Server};
 use crate::json;
 
 #[actix_rt::test]
@@ -486,7 +489,11 @@ async fn user_provided_embeddings_error() {
 
 #[actix_rt::test]
 async fn user_provided_vectors_error() {
-    let server = Server::new().await;
+    let temp = tempfile::tempdir().unwrap();
+    let mut options = default_settings(temp.path());
+    // If we have more than one indexing thread the error messages below may become inconsistent
+    options.indexer_options.max_indexing_threads = MaxThreads::from_str("1").unwrap();
+    let server = Server::new_with_options(options).await.unwrap();
 
     let index = generate_default_user_provided_documents(&server).await;
 
