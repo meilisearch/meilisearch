@@ -113,11 +113,17 @@ pub fn to_call_stats<R: std::io::Read>(
 
                 let span = *span;
                 if let Some(parent_id) = span.parent_id {
-                    let (_, _, parent_self_time) = spans.get_mut(&parent_id).unwrap();
+                    let Some((_, _, parent_self_time)) = spans.get_mut(&parent_id) else {
+                        tracing::warn!("could not find referenced parent span");
+                        continue;
+                    };
                     parent_self_time.add_child_range(self_range.clone())
                 }
                 total_self_time.add_child_range(self_range);
-                let (_, call_list) = calls.get_mut(&span.call_id).unwrap();
+                let Some((_, call_list)) = calls.get_mut(&span.call_id) else {
+                    tracing::warn!("could not find referenced call");
+                    continue;
+                };
                 call_list.push((end - begin, self_duration));
             }
             Entry::SpanClose(SpanClose { id, time: _ }) => {
