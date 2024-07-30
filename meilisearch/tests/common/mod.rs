@@ -149,17 +149,17 @@ pub async fn shared_does_not_exists_index() -> &'static Index<'static, Shared> {
 }
 
 pub async fn shared_empty_index() -> &'static Index<'static, Shared> {
-    static INDEX: Lazy<Index<'static, Shared>> = Lazy::new(|| {
-        let server = Server::new_shared();
-        server._index("EMPTY_INDEX").to_shared()
-    });
-    let index = Lazy::get(&INDEX);
-    // That means the lazy has never been initialized, we need to create the index and index the documents
-    if index.is_none() {
-        let (response, _code) = INDEX._create(None).await;
-        INDEX.wait_task(response.uid()).await.succeeded();
-    }
-    &INDEX
+    static INDEX: OnceCell<Index<'static, Shared>> = OnceCell::const_new();
+
+    INDEX
+        .get_or_init(|| async {
+            let server = Server::new_shared();
+            let index = server._index("EMPTY_INDEX").to_shared();
+            let (response, _code) = index._create(None).await;
+            index.wait_task(response.uid()).await.succeeded();
+            index
+        })
+        .await
 }
 
 pub static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
