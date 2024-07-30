@@ -12,6 +12,7 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 #[allow(unused)]
 pub use server::{default_settings, Server};
+use tokio::sync::OnceCell;
 
 use crate::common::index::Index;
 
@@ -192,25 +193,21 @@ pub static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
 });
 
 pub async fn shared_index_with_documents() -> &'static Index<'static, Shared> {
-    // We cannot store a `Shared` index directly because we need to do more initialization work later on
-    static INDEX: Lazy<Index<'static, Shared>> = Lazy::new(|| {
+    static INDEX: OnceCell<Index<'static, Shared>> = OnceCell::const_new();
+    INDEX.get_or_init(|| async {
         let server = Server::new_shared();
-        server._index("SHARED_DOCUMENTS").to_shared()
-    });
-    let index = Lazy::get(&INDEX);
-    // That means the lazy has never been initialized, we need to create the index and index the documents
-    if index.is_none() {
+        let index = server._index("SHARED_DOCUMENTS").to_shared();
         let documents = DOCUMENTS.clone();
-        let (response, _code) = INDEX._add_documents(documents, None).await;
-        INDEX.wait_task(response.uid()).await.succeeded();
-        let (response, _code) = INDEX
+        let (response, _code) = index._add_documents(documents, None).await;
+        index.wait_task(response.uid()).await.succeeded();
+        let (response, _code) = index
             ._update_settings(
                 json!({"filterableAttributes": ["id", "title"], "sortableAttributes": ["id", "title"]}),
             )
             .await;
-        INDEX.wait_task(response.uid()).await.succeeded();
-    }
-    &INDEX
+        index.wait_task(response.uid()).await.succeeded();
+        index
+    }).await
 }
 
 pub static SCORE_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
@@ -298,24 +295,21 @@ pub static NESTED_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
 });
 
 pub async fn shared_index_with_nested_documents() -> &'static Index<'static, Shared> {
-    static INDEX: Lazy<Index<'static, Shared>> = Lazy::new(|| {
+    static INDEX: OnceCell<Index<'static, Shared>> = OnceCell::const_new();
+    INDEX.get_or_init(|| async {
         let server = Server::new_shared();
-        server._index("SHARED_NESTED_DOCUMENTS").to_shared()
-    });
-    let index = Lazy::get(&INDEX);
-    // That means the lazy has never been initialized, we need to create the index and index the documents
-    if index.is_none() {
+        let index = server._index("SHARED_NESTED_DOCUMENTS").to_shared();
         let documents = NESTED_DOCUMENTS.clone();
-        let (response, _code) = INDEX._add_documents(documents, None).await;
-        INDEX.wait_task(response.uid()).await.succeeded();
-        let (response, _code) = INDEX
+        let (response, _code) = index._add_documents(documents, None).await;
+        index.wait_task(response.uid()).await.succeeded();
+        let (response, _code) = index
             ._update_settings(
                 json!({"filterableAttributes": ["father", "doggos"], "sortableAttributes": ["doggos"]}),
             )
             .await;
-        INDEX.wait_task(response.uid()).await.succeeded();
-    }
-    &INDEX
+        index.wait_task(response.uid()).await.succeeded();
+        index
+    }).await
 }
 
 pub static FRUITS_DOCUMENTS: Lazy<Value> = Lazy::new(|| {

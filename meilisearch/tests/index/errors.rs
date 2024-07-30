@@ -1,6 +1,6 @@
 use meili_snap::*;
 
-use crate::common::{shared_does_not_exists_index, Server};
+use crate::common::Server;
 use crate::json;
 
 #[actix_rt::test]
