@@ -37,7 +37,7 @@ pub struct Server<State = Owned> {
 pub static TEST_TEMP_DIR: Lazy<TempDir> = Lazy::new(|| TempDir::new().unwrap());
 
 impl Server<Owned> {
-    fn to_shared(self) -> Server<Shared> {
+    fn into_shared(self) -> Server<Shared> {
         Server { service: self.service, _dir: self._dir, _marker: PhantomData }
     }
 
@@ -199,7 +199,7 @@ impl Server<Shared> {
             .get_or_init(|| async {
                 let mut server = Server::new_auth().await;
                 server.use_admin_key("MASTER_KEY").await;
-                server.to_shared()
+                server.into_shared()
             })
             .await
     }
