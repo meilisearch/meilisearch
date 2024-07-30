@@ -9,6 +9,7 @@ static DEFAULT_SETTINGS_VALUES: Lazy<HashMap<&'static str, Value>> = Lazy::new(|
     let mut map = HashMap::new();
     map.insert("displayed_attributes", json!(["*"]));
     map.insert("searchable_attributes", json!(["*"]));
+    map.insert("localized_attributes", json!(null));
     map.insert("filterable_attributes", json!([]));
     map.insert("distinct_attribute", json!(null));
     map.insert(
@@ -409,6 +410,7 @@ macro_rules! test_setting_routes {
 test_setting_routes!(
     filterable_attributes put,
     displayed_attributes put,
+    localized_attributes put,
     searchable_attributes put,
     distinct_attribute put,
     stop_words put,
