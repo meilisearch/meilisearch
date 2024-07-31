@@ -2,7 +2,7 @@
 source: meilisearch/tests/search/errors.rs
 ---
 {
-  "uid": 0,
+  "uid": "[uid]",
   "indexUid": "tamo",
   "status": "succeeded",
   "type": "indexCreation",

@@ -43,7 +43,7 @@ async fn update_embedder() {
     let ret = server.wait_task(response.uid()).await;
     snapshot!(ret, @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "settingsUpdate",
