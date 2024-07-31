@@ -363,7 +363,7 @@ async fn it_works() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -593,7 +593,7 @@ async fn tokenize_long_text() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -649,7 +649,7 @@ async fn bad_api_key() {
 
     snapshot!(task, @r###"
     {
-      "uid": 0,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -681,7 +681,7 @@ async fn bad_api_key() {
 
     snapshot!(task, @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -724,7 +724,7 @@ async fn bad_api_key() {
     let task = server.wait_task(response.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 2,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -792,7 +792,7 @@ async fn bad_model() {
 
     snapshot!(task, @r###"
     {
-      "uid": 0,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -869,7 +869,7 @@ async fn bad_dimensions() {
 
     snapshot!(task, @r###"
     {
-      "uid": 0,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -976,7 +976,7 @@ async fn smaller_dimensions() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1207,7 +1207,7 @@ async fn small_embedding_model() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1437,7 +1437,7 @@ async fn legacy_embedding_model() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1668,7 +1668,7 @@ async fn it_still_works() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
