@@ -68,10 +68,18 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
 
         // Facet search normalization
         {
-            let locales = settings_diff.old.localized_faceted_fields_ids.locales(field_id);
-            let old_hyper_normalized_value = normalize_facet_string(normalized_value, locales);
-            let locales = settings_diff.new.localized_faceted_fields_ids.locales(field_id);
-            let new_hyper_normalized_value = normalize_facet_string(normalized_value, locales);
+            let old_locales = settings_diff.old.localized_faceted_fields_ids.locales(field_id);
+            let new_locales = settings_diff.new.localized_faceted_fields_ids.locales(field_id);
+
+            if is_same_value && old_locales == new_locales {
+                // optimization: skip costly normalizations if the values and locales stayed the same
+                // TODO: splitting the cases between a settings diff and a document update would possibly allow for more optimizations,
+                // such as skipping the locales check when doing a documents update.
+                continue;
+            }
+
+            let old_hyper_normalized_value = normalize_facet_string(normalized_value, old_locales);
+            let new_hyper_normalized_value = normalize_facet_string(normalized_value, new_locales);
 
             let set = BTreeSet::from_iter(std::iter::once(normalized_value));
 
