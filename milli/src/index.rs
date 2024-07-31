@@ -9,7 +9,6 @@ use heed::{CompactionOption, Database, RoTxn, RwTxn, Unspecified};
 use roaring::RoaringBitmap;
 use rstar::RTree;
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
 
 use crate::documents::PrimaryKey;
 use crate::error::{InternalError, UserError};
@@ -173,8 +172,8 @@ impl Index {
     pub fn new_with_creation_dates<P: AsRef<Path>>(
         mut options: heed::EnvOpenOptions,
         path: P,
-        created_at: OffsetDateTime,
-        updated_at: OffsetDateTime,
+        created_at: time::OffsetDateTime,
+        updated_at: time::OffsetDateTime,
     ) -> Result<Index> {
         use db_name::*;
 
@@ -256,22 +255,22 @@ impl Index {
     }
 
     pub fn new<P: AsRef<Path>>(options: heed::EnvOpenOptions, path: P) -> Result<Index> {
-        let now = OffsetDateTime::now_utc();
+        let now = time::OffsetDateTime::now_utc();
         Self::new_with_creation_dates(options, path, now, now)
     }
 
     fn set_creation_dates(
         env: &heed::Env,
         main: Database<Unspecified, Unspecified>,
-        created_at: OffsetDateTime,
-        updated_at: OffsetDateTime,
+        created_at: time::OffsetDateTime,
+        updated_at: time::OffsetDateTime,
     ) -> heed::Result<()> {
         let mut txn = env.write_txn()?;
         // The db was just created, we update its metadata with the relevant information.
         let main = main.remap_types::<Str, SerdeJson<OffsetDateTime>>();
         if main.get(&txn, main_key::CREATED_AT_KEY)?.is_none() {
-            main.put(&mut txn, main_key::UPDATED_AT_KEY, &updated_at)?;
-            main.put(&mut txn, main_key::CREATED_AT_KEY, &created_at)?;
+            main.put(&mut txn, main_key::UPDATED_AT_KEY, &OffsetDateTime(updated_at))?;
+            main.put(&mut txn, main_key::CREATED_AT_KEY, &OffsetDateTime(created_at))?;
             txn.commit()?;
         }
         Ok(())
@@ -371,7 +370,7 @@ impl Index {
         wtxn: &mut RwTxn<'_>,
         primary_key: &str,
     ) -> heed::Result<()> {
-        self.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
+        self.set_updated_at(wtxn, &time::OffsetDateTime::now_utc())?;
         self.main.remap_types::<Str, Str>().put(wtxn, main_key::PRIMARY_KEY_KEY, primary_key)
     }
 
@@ -1323,7 +1322,7 @@ impl Index {
     }
 
     /// Returns the index creation time.
-    pub fn created_at(&self, rtxn: &RoTxn<'_>) -> Result<OffsetDateTime> {
+    pub fn created_at(&self, rtxn: &RoTxn<'_>) -> Result<time::OffsetDateTime> {
         Ok(self
             .main
             .remap_types::<Str, SerdeJson<OffsetDateTime>>()
@@ -1331,11 +1330,12 @@ impl Index {
             .ok_or(InternalError::DatabaseMissingEntry {
                 db_name: db_name::MAIN,
                 key: Some(main_key::CREATED_AT_KEY),
-            })?)
+            })?
+            .0)
     }
 
     /// Returns the index last updated time.
-    pub fn updated_at(&self, rtxn: &RoTxn<'_>) -> Result<OffsetDateTime> {
+    pub fn updated_at(&self, rtxn: &RoTxn<'_>) -> Result<time::OffsetDateTime> {
         Ok(self
             .main
             .remap_types::<Str, SerdeJson<OffsetDateTime>>()
@@ -1343,18 +1343,19 @@ impl Index {
             .ok_or(InternalError::DatabaseMissingEntry {
                 db_name: db_name::MAIN,
                 key: Some(main_key::UPDATED_AT_KEY),
-            })?)
+            })?
+            .0)
     }
 
     pub(crate) fn set_updated_at(
         &self,
         wtxn: &mut RwTxn<'_>,
-        time: &OffsetDateTime,
+        time: &time::OffsetDateTime,
     ) -> heed::Result<()> {
         self.main.remap_types::<Str, SerdeJson<OffsetDateTime>>().put(
             wtxn,
             main_key::UPDATED_AT_KEY,
-            time,
+            &OffsetDateTime(*time),
         )
     }
 
@@ -1680,6 +1681,10 @@ pub struct IndexEmbeddingConfig {
     pub config: EmbeddingConfig,
     pub user_provided: RoaringBitmap,
 }
+
+#[derive(Serialize, Deserialize)]
+#[serde(transparent)]
+struct OffsetDateTime(#[serde(with = "time::serde::rfc3339")] time::OffsetDateTime);
 
 #[cfg(test)]
 pub(crate) mod tests {
