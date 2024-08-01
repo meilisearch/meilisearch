@@ -66,7 +66,7 @@ jobs:
             fetch-depth: 0 # fetch full history to be able to get main commit sha
             ref: ${{ steps.comment-branch.outputs.head_ref }}
 
-        - uses: dtolnay/rust-toolchain@1.79
+        - uses: dtolnay/rust-toolchain@1.90
           with:
             profile: minimal
 

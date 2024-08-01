@@ -45,7 +45,7 @@ jobs:
       run: |
         apt-get update && apt-get install -y curl
         apt-get install build-essential -y
-    - uses: dtolnay/rust-toolchain@1.79
+    - uses: dtolnay/rust-toolchain@1.90
     - name: Build
       run: cargo build --release --locked
     # No need to upload binaries for dry run (cron)
@@ -75,7 +75,7 @@ jobs:
             asset_name: meilisearch-windows-amd64.exe
     steps:
     - uses: actions/checkout@v3
-    - uses: dtolnay/rust-toolchain@1.79
+    - uses: dtolnay/rust-toolchain@1.90
     - name: Build
       run: cargo build --release --locked
     # No need to upload binaries for dry run (cron)
@@ -101,7 +101,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Installing Rust toolchain
-        uses: dtolnay/rust-toolchain@1.79
+        uses: dtolnay/rust-toolchain@1.90
         with:
           profile: minimal
           target: ${{ matrix.target }}
@@ -148,7 +148,7 @@ jobs:
           add-apt-repository "deb [arch=$(dpkg --print-architecture)] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
           apt-get update -y && apt-get install -y docker-ce
       - name: Installing Rust toolchain
-        uses: dtolnay/rust-toolchain@1.79
+        uses: dtolnay/rust-toolchain@1.90
         with:
           profile: minimal
           target: ${{ matrix.target }}

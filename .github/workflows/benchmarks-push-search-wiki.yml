@@ -15,7 +15,7 @@ jobs:
     runs-on: benchmarks
     steps:
       - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@1.79
+      - uses: dtolnay/rust-toolchain@1.90
         with:
           profile: minimal
 
