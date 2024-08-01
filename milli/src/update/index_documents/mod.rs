@@ -290,7 +290,7 @@ where
 
                 match result? {
                     DocumentEdition::Deleted(docid) => {
-                        documents_to_remove.push(docid);
+                        documents_to_remove.insert(docid);
                     }
                     DocumentEdition::Edited(new_document) => {
                         documents_batch_builder.append_json_object(&new_document)?;
