@@ -1,3 +1,4 @@
+mod openai;
 mod rest;
 mod settings;
 
@@ -6,6 +7,22 @@ use meili_snap::{json_string, snapshot};
 use crate::common::index::Index;
 use crate::common::{GetAllDocumentsOptions, Server};
 use crate::json;
+
+async fn get_server_vector() -> Server {
+    let server = Server::new().await;
+    let (value, code) = server.set_features(json!({"vectorStore": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r###"
+  {
+    "vectorStore": true,
+    "metrics": false,
+    "logsRoute": false,
+    "editDocumentsByFunction": false,
+    "containsFilter": false
+  }
+  "###);
+    server
+}
 
 #[actix_rt::test]
 async fn add_remove_user_provided() {
@@ -218,7 +235,7 @@ async fn user_provided_embeddings_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 2,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -247,7 +264,7 @@ async fn user_provided_embeddings_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 3,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -277,7 +294,7 @@ async fn user_provided_embeddings_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 4,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -306,7 +323,7 @@ async fn user_provided_embeddings_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 5,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -335,7 +352,7 @@ async fn user_provided_embeddings_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 6,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -364,7 +381,7 @@ async fn user_provided_embeddings_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 7,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -405,7 +422,7 @@ async fn user_provided_embeddings_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 10,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -433,7 +450,7 @@ async fn user_provided_embeddings_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 11,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -461,7 +478,7 @@ async fn user_provided_embeddings_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 12,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -497,7 +514,7 @@ async fn user_provided_vectors_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 2,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -526,7 +543,7 @@ async fn user_provided_vectors_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 3,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -555,7 +572,7 @@ async fn user_provided_vectors_error() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
-      "uid": 4,
+      "uid": "[uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",

@@ -275,7 +275,10 @@ fn check_response(
         Err(ureq::Error::Status(code, response)) => {
             let error_response: Option<String> = response.into_string().ok();
             Err(match code {
-                401 => Retry::give_up(EmbedError::rest_unauthorized(error_response)),
+                401 => Retry::give_up(EmbedError::rest_unauthorized(
+                    error_response,
+                    configuration_source,
+                )),
                 429 => Retry::rate_limited(EmbedError::rest_too_many_requests(error_response)),
                 400 => Retry::give_up(EmbedError::rest_bad_request(
                     error_response,
