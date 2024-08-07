@@ -35,6 +35,7 @@ pub type TaskId = u32;
 use std::collections::{BTreeMap, HashMap};
 use std::io::{self, BufReader, Read};
 use std::ops::{Bound, RangeBounds};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering::{self, Relaxed};
 use std::sync::atomic::{AtomicBool, AtomicU32};
@@ -615,15 +616,20 @@ impl IndexScheduler {
                 run.wake_up.wait_timeout(std::time::Duration::from_secs(60));
 
                 loop {
-                    match run.tick() {
-                        Ok(TickOutcome::TickAgain(_)) => (),
-                        Ok(TickOutcome::WaitForSignal) => run.wake_up.wait(),
-                        Err(e) => {
+                    let ret = catch_unwind(AssertUnwindSafe(|| run.tick()));
+                    match ret {
+                        Ok(Ok(TickOutcome::TickAgain(_))) => (),
+                        Ok(Ok(TickOutcome::WaitForSignal)) => run.wake_up.wait(),
+                        Ok(Err(e)) => {
                             tracing::error!("{e}");
                             // Wait one second when an irrecoverable error occurs.
                             if !e.is_recoverable() {
                                 std::thread::sleep(Duration::from_secs(1));
                             }
+                        }
+                        Err(_panic) => {
+                            tracing::error!("Internal error: Unexpected panic in the `IndexScheduler::run` method.");
+
                         }
                     }
                 }
