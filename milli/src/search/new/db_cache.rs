@@ -110,18 +110,18 @@ impl<'ctx> DatabaseCache<'ctx> {
             .map_err(Into::into)
     }
 
-    fn get_value_from_keys<'v, K1, KC, DC>(
+    fn get_value_from_keys<'v, K1, KC>(
         txn: &'ctx RoTxn<'_>,
         cache_key: K1,
         db_keys: &'v [KC::EItem],
         cache: &mut FxHashMap<K1, Option<Cow<'ctx, [u8]>>>,
         db: Database<KC, Bytes>,
+        universe: Option<&RoaringBitmap>,
         merger: MergeFn,
-    ) -> Result<Option<DC::DItem>>
+    ) -> Result<Option<RoaringBitmap>>
     where
         K1: Copy + Eq + Hash,
         KC: BytesEncode<'v>,
-        DC: BytesDecodeOwned,
         KC::EItem: Sized,
     {
         if let Entry::Vacant(entry) = cache.entry(cache_key) {
@@ -146,16 +146,22 @@ impl<'ctx> DatabaseCache<'ctx> {
             entry.insert(bitmap_ptr);
         }
 
-        match cache.get(&cache_key).unwrap() {
-            Some(Cow::Borrowed(bytes)) => DC::bytes_decode_owned(bytes)
+        let bitmap_bytes = match cache.get(&cache_key).unwrap() {
+            Some(Cow::Borrowed(bytes)) => bytes,
+            Some(Cow::Owned(bytes)) => bytes.as_slice(),
+            None => return Ok(None),
+        };
+
+        match (bitmap_bytes, universe) {
+            (bytes, Some(universe)) => {
+                CboRoaringBitmapCodec::intersection_with_serialized(bytes, universe)
+                    .map(Some)
+                    .map_err(Into::into)
+            }
+            (bytes, None) => CboRoaringBitmapCodec::bytes_decode_owned(bytes)
                 .map(Some)
                 .map_err(heed::Error::Decoding)
                 .map_err(Into::into),
-            Some(Cow::Owned(bytes)) => DC::bytes_decode_owned(bytes)
-                .map(Some)
-                .map_err(heed::Error::Decoding)
-                .map_err(Into::into),
-            None => Ok(None),
         }
     }
 }
@@ -207,12 +213,13 @@ impl<'ctx> SearchContext<'ctx> {
                 let keys: Vec<_> =
                     restricted_fids.tolerant.iter().map(|(fid, _)| (interned, *fid)).collect();
 
-                DatabaseCache::get_value_from_keys::<_, _, CboRoaringBitmapCodec>(
+                DatabaseCache::get_value_from_keys::<_, _>(
                     self.txn,
                     word,
                     &keys[..],
                     &mut self.db_cache.word_docids,
                     self.index.word_fid_docids.remap_data_type::<Bytes>(),
+                    universe,
                     merge_cbo_roaring_bitmaps,
                 )
             }
@@ -238,12 +245,13 @@ impl<'ctx> SearchContext<'ctx> {
                 let keys: Vec<_> =
                     restricted_fids.exact.iter().map(|(fid, _)| (interned, *fid)).collect();
 
-                DatabaseCache::get_value_from_keys::<_, _, CboRoaringBitmapCodec>(
+                DatabaseCache::get_value_from_keys::<_, _>(
                     self.txn,
                     word,
                     &keys[..],
                     &mut self.db_cache.exact_word_docids,
                     self.index.word_fid_docids.remap_data_type::<Bytes>(),
+                    universe,
                     merge_cbo_roaring_bitmaps,
                 )
             }
@@ -294,12 +302,13 @@ impl<'ctx> SearchContext<'ctx> {
                 let keys: Vec<_> =
                     restricted_fids.tolerant.iter().map(|(fid, _)| (interned, *fid)).collect();
 
-                DatabaseCache::get_value_from_keys::<_, _, CboRoaringBitmapCodec>(
+                DatabaseCache::get_value_from_keys::<_, _>(
                     self.txn,
                     prefix,
                     &keys[..],
                     &mut self.db_cache.word_prefix_docids,
                     self.index.word_prefix_fid_docids.remap_data_type::<Bytes>(),
+                    universe,
                     merge_cbo_roaring_bitmaps,
                 )
             }
@@ -325,12 +334,13 @@ impl<'ctx> SearchContext<'ctx> {
                 let keys: Vec<_> =
                     restricted_fids.exact.iter().map(|(fid, _)| (interned, *fid)).collect();
 
-                DatabaseCache::get_value_from_keys::<_, _, CboRoaringBitmapCodec>(
+                DatabaseCache::get_value_from_keys::<_, _>(
                     self.txn,
                     prefix,
                     &keys[..],
                     &mut self.db_cache.exact_word_prefix_docids,
                     self.index.word_prefix_fid_docids.remap_data_type::<Bytes>(),
+                    universe,
                     merge_cbo_roaring_bitmaps,
                 )
             }
