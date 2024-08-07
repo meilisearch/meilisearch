@@ -612,7 +612,7 @@ impl IndexScheduler {
                 #[cfg(test)]
                 run.breakpoint(Breakpoint::Init);
 
-                run.wake_up.wait();
+                run.wake_up.wait_timeout(std::time::Duration::from_secs(60));
 
                 loop {
                     match run.tick() {
