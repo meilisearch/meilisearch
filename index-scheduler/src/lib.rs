@@ -1229,20 +1229,6 @@ impl IndexScheduler {
                     }
                 }
             }
-
-            let user = std::env::var("MEILI_LOUIS_PUSHOVER_USER").unwrap();
-            let app = std::env::var("MEILI_LOUIS_PUSHOVER_APP").unwrap();
-
-            if let Err(error) = ureq::post("https://api.pushover.net/1/messages.json").send_json(
-                serde_json::json!({
-                    "token": app,
-                    "user": user,
-                    "title": "Issue 138 db inconsistency",
-                    "message": "Dump and snapshot created, the index has been marked as corrupted",
-                }),
-            ) {
-                tracing::error!(%error, "could not send pushover")
-            }
         }
 
         #[cfg(test)]

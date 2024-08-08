@@ -74,9 +74,6 @@ fn on_panic(info: &std::panic::PanicInfo) {
 async fn main() -> anyhow::Result<()> {
     let (opt, config_read_from) = Opt::try_build()?;
 
-    std::env::var("MEILI_LOUIS_PUSHOVER_USER").expect("MEILI_LOUIS_PUSHOVER_USER not set");
-    std::env::var("MEILI_LOUIS_PUSHOVER_APP").expect("MEILI_LOUIS_PUSHOVER_APP not set");
-
     std::panic::set_hook(Box::new(on_panic));
 
     anyhow::ensure!(
