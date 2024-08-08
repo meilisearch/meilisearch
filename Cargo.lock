@@ -71,6 +71,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "zstd",
 ]
 
 [[package]]
@@ -92,6 +93,7 @@ dependencies = [
  "bytestring",
  "cfg-if",
  "http 0.2.11",
+ "regex",
  "regex-lite",
  "serde",
  "tracing",
@@ -197,6 +199,7 @@ dependencies = [
  "mime",
  "once_cell",
  "pin-project-lite",
+ "regex",
  "regex-lite",
  "serde",
  "serde_json",
@@ -3532,6 +3535,10 @@ dependencies = [
  "tracing-trace",
  "url",
  "urlencoding",
+ "utoipa",
+ "utoipa-rapidoc",
+ "utoipa-redoc",
+ "utoipa-scalar",
  "uuid",
  "wiremock",
  "yaup",
@@ -3587,6 +3594,7 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
+ "utoipa",
  "uuid",
 ]
 
@@ -3698,6 +3706,7 @@ dependencies = [
  "uell",
  "ureq",
  "url",
+ "utoipa",
  "uuid",
 ]
 
@@ -5952,6 +5961,67 @@ name = "utf8parse"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
+
+[[package]]
+name = "utoipa"
+version = "5.0.0-rc.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3cf66139459b75afa33caddb62bb2afee3838923b630b9e0ef38c369e543382f"
+dependencies = [
+ "indexmap",
+ "serde",
+ "serde_json",
+ "utoipa-gen",
+]
+
+[[package]]
+name = "utoipa-gen"
+version = "5.0.0-rc.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c136da726bb82a527afa1fdf3f4619eaf104e2982f071f25239cef1c67c79eb"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "regex",
+ "syn 2.0.60",
+ "uuid",
+]
+
+[[package]]
+name = "utoipa-rapidoc"
+version = "4.0.1-rc.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4d3324d5874fb734762214827dd30b47aa78510d12abab674a97f6d7c53688f"
+dependencies = [
+ "actix-web",
+ "serde",
+ "serde_json",
+ "utoipa",
+]
+
+[[package]]
+name = "utoipa-redoc"
+version = "4.0.1-rc.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4375bb6b0cb78a240c973f5e99977c482f3e92aeea1907367caa28776b9aaf9"
+dependencies = [
+ "actix-web",
+ "serde",
+ "serde_json",
+ "utoipa",
+]
+
+[[package]]
+name = "utoipa-scalar"
+version = "0.2.0-rc.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7dc122c11f9642b20b3be88b60c1a3672319811f139698ac6999e72992ac7c7e"
+dependencies = [
+ "actix-web",
+ "serde",
+ "serde_json",
+ "utoipa",
+]
 
 [[package]]
 name = "uuid"

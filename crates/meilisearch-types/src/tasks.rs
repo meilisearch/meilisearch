@@ -9,6 +9,7 @@ use milli::Object;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize, Serializer};
 use time::{Duration, OffsetDateTime};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::batches::BatchId;
@@ -151,7 +152,7 @@ pub enum KindWithContent {
     SnapshotCreation,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexSwap {
     pub indexes: (String, String),
@@ -363,9 +364,22 @@ impl From<&KindWithContent> for Option<Details> {
     }
 }
 
+/// The status of a task.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence, PartialOrd, Ord,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Sequence,
+    PartialOrd,
+    Ord,
+    ToSchema,
 )]
+#[schema(example = json!(Status::Processing))]
 #[serde(rename_all = "camelCase")]
 pub enum Status {
     Enqueued,
@@ -424,10 +438,23 @@ impl fmt::Display for ParseTaskStatusError {
 }
 impl std::error::Error for ParseTaskStatusError {}
 
+/// The type of the task.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence, PartialOrd, Ord,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Sequence,
+    PartialOrd,
+    Ord,
+    ToSchema,
 )]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase", example = json!(enum_iterator::all::<Kind>().collect::<Vec<_>>()))]
 pub enum Kind {
     DocumentAdditionOrUpdate,
     DocumentEdition,
@@ -444,6 +471,10 @@ pub enum Kind {
 }
 
 impl Kind {
+    pub fn all_variants() -> Vec<Self> {
+        enum_iterator::all::<Kind>().collect()
+    }
+
     pub fn related_to_one_index(&self) -> bool {
         match self {
             Kind::DocumentAdditionOrUpdate
