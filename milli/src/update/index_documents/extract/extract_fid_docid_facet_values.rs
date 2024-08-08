@@ -317,11 +317,15 @@ fn deladd_obkv_cbo_roaring_bitmaps(
 }
 
 /// Truncates a string to the biggest valid LMDB key size.
-fn truncate_string(s: String) -> String {
-    s.char_indices()
-        .take_while(|(idx, _)| idx + 4 < MAX_FACET_VALUE_LENGTH)
-        .map(|(_, c)| c)
-        .collect()
+fn truncate_str(s: &str) -> &str {
+    let index = s
+        .char_indices()
+        .map(|(idx, _)| idx)
+        .chain(std::iter::once(s.len()))
+        .take_while(|idx| idx <= &MAX_FACET_VALUE_LENGTH)
+        .last();
+
+    &s[..index.unwrap_or(0)]
 }
 
 /// Computes the diff between both Del and Add numbers and
@@ -466,7 +470,7 @@ where
                     obkv.insert(DelAdd::Addition, add)?;
                 }
 
-                let truncated = truncate_string(normalized.clone());
+                let truncated = truncate_str(normalized);
                 key_buffer.extend_from_slice(truncated.as_bytes());
 
                 let bytes = obkv.into_inner()?;
@@ -490,7 +494,7 @@ where
                 (DelAdd::Addition, normalized, original)
             }
         };
-        let truncated = truncate_string(normalized.clone());
+        let truncated = truncate_str(normalized);
         key_buffer.extend_from_slice(truncated.as_bytes());
 
         let mut obkv = KvWriterDelAdd::memory();
