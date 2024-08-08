@@ -1,20 +1,22 @@
 use std::collections::BTreeMap;
 
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::GuardedData;
+use crate::search_queue::SearchQueue;
+use crate::Opt;
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
+use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::tasks::{Kind, Status, Task, TaskId};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tracing::debug;
-
-use crate::extractors::authentication::policies::*;
-use crate::extractors::authentication::GuardedData;
-use crate::search_queue::SearchQueue;
-use crate::Opt;
+use utoipa::OpenApi;
+use utoipa_scalar::{Scalar, Servable as ScalarServable};
 
 const PAGINATION_DEFAULT_LIMIT: usize = 20;
 
@@ -29,8 +31,19 @@ mod snapshot;
 mod swap_indexes;
 pub mod tasks;
 
+#[derive(OpenApi)]
+#[openapi(
+     nest((path = "/tasks", api = tasks::TaskApi) ),
+    // paths(get_todos, create_todo, delete_todo, get_todo_by_id, update_todo, search_todos),
+    // components(schemas(TaskId))
+)]
+pub struct MeilisearchApi;
+
 pub fn configure(cfg: &mut web::ServiceConfig) {
+    let openapi = MeilisearchApi::openapi();
+
     cfg.service(web::scope("/tasks").configure(tasks::configure))
+        .service(Scalar::with_url("/scalar", openapi.clone()))
         .service(web::resource("/health").route(web::get().to(get_health)))
         .service(web::scope("/logs").configure(logs::configure))
         .service(web::scope("/keys").configure(api_key::configure))

@@ -7,9 +7,11 @@ use aweb::rt::task::JoinError;
 use convert_case::Casing;
 use milli::heed::{Error as HeedError, MdbError};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct ResponseError {
     #[serde(skip)]
     pub code: StatusCode,

@@ -16,6 +16,7 @@ use std::ops::Deref;
 use std::str::FromStr;
 
 use deserr::{DeserializeError, Deserr, MergeWithError, ValueKind};
+use utoipa::ToSchema;
 
 use super::{DeserrParseBoolError, DeserrParseIntError};
 use crate::index_uid::IndexUid;
@@ -28,6 +29,12 @@ use crate::tasks::{Kind, Status};
 /// `Option<Param<T>>` instead of `Param<Option<T>>`.
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Param<T>(pub T);
+
+impl<'a, T: ToSchema<'a>> ToSchema<'a> for Param<T> {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::schema::Schema>) {
+        T::schema()
+    }
+}
 
 impl<T> Deref for Param<T> {
     type Target = T;

@@ -21,6 +21,7 @@ use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::Layer;
+use utoipa::OpenApi;
 
 #[global_allocator]
 static ALLOC: MiMalloc = MiMalloc;

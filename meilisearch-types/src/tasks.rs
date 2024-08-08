@@ -9,6 +9,7 @@ use milli::Object;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize, Serializer};
 use time::{Duration, OffsetDateTime};
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::error::ResponseError;
@@ -361,7 +362,9 @@ impl From<&KindWithContent> for Option<Details> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence)]
+/// The status of a task.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence, ToSchema)]
+#[schema(example = json!(Status::Processing))]
 #[serde(rename_all = "camelCase")]
 pub enum Status {
     Enqueued,
@@ -420,8 +423,10 @@ impl fmt::Display for ParseTaskStatusError {
 }
 impl std::error::Error for ParseTaskStatusError {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence)]
+/// The type of the task.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase", example = json!(Kind::DocumentAdditionOrUpdate))]
 pub enum Kind {
     DocumentAdditionOrUpdate,
     DocumentEdition,
