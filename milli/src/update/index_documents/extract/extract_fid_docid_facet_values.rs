@@ -9,7 +9,7 @@ use std::result::Result as StdResult;
 use bytemuck::bytes_of;
 use grenad::Sorter;
 use heed::BytesEncode;
-use itertools::{merge_join_by, EitherOrBoth};
+use itertools::{merge_join_by, EitherOrBoth, Itertools};
 use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 use serde_json::{from_slice, Value};
@@ -401,36 +401,102 @@ where
     del_strings.dedup();
     add_strings.dedup();
 
+    let del_strings = del_strings.iter().chunk_by(|(normalized, _)| normalized);
+    let add_strings = add_strings.iter().chunk_by(|(normalized, _)| normalized);
+
     let merged_strings_iter = itertools::merge_join_by(
         del_strings.into_iter().filter(|(n, _)| !n.is_empty()),
         add_strings.into_iter().filter(|(n, _)| !n.is_empty()),
-        |del, add| del.cmp(add),
+        |(normalized_del, _), (normalized_add, _)| normalized_del.cmp(normalized_add),
     );
 
     // insert normalized and original facet string in sorter
     for eob in merged_strings_iter {
         key_buffer.truncate(TRUNCATE_SIZE);
-        match eob {
-            EitherOrBoth::Both(_, _) => (), // no need to touch anything
-            EitherOrBoth::Left((normalized, original)) => {
-                let truncated = truncate_string(normalized);
+        let (side, normalized, original) = match eob {
+            EitherOrBoth::Both((normalized, del), (_, add)) => {
+                let merged_strings_iter =
+                    itertools::merge_join_by(del, add, |(_, original_del), (_, original_add)| {
+                        original_del.cmp(original_add)
+                    });
+
+                // FIXME: we're in a bit of a pickle here, because we're only saving **one** original value per side,
+                // but we possibly have multiple original values that changed in the case where the field is an
+                // array of multiple values that normalize to the same value.
+                // (e.g. "foo" = ["bar", "Bar", "bAr", "baR"]. I'm not judging why you would do that ¯\_(ツ)_/¯)
+                //
+                // We'll work best effort by ignoring when the same value appears in both sides, deleting the first
+                // value that is only in the old version, and adding the first value that is only in the new version
+                let mut obkv = KvWriterDelAdd::memory();
+                let mut del = None;
+                let mut add = None;
+                let mut both = None;
+
+                for eob in merged_strings_iter {
+                    match eob {
+                        EitherOrBoth::Both((_normalized, original), _) => {
+                            both = match both {
+                                Some(both) => Some(both),
+                                None => Some(original),
+                            }
+                        }
+                        EitherOrBoth::Left((_normalized, original)) => {
+                            del = match del {
+                                Some(del) => Some(del),
+                                None => Some(original),
+                            };
+                        }
+                        EitherOrBoth::Right((_normalized, original)) => {
+                            add = match add {
+                                Some(add) => Some(add),
+                                None => Some(original),
+                            }
+                        }
+                    }
+                }
+
+                if let Some(del) = del {
+                    obkv.insert(DelAdd::Deletion, del)?;
+                }
+                if let Some(add) = add
+                    // prefer the newly added, but if there is none, keep a value in the list of values
+                    // since the normalized value appears both in old and new, we should never remove it.
+                    .or(both)
+                {
+                    obkv.insert(DelAdd::Addition, add)?;
+                }
+
+                let truncated = truncate_string(normalized.clone());
                 key_buffer.extend_from_slice(truncated.as_bytes());
 
-                let mut obkv = KvWriterDelAdd::memory();
-                obkv.insert(DelAdd::Deletion, original)?;
                 let bytes = obkv.into_inner()?;
                 fid_docid_facet_strings_sorter.insert(&key_buffer, bytes)?;
+                continue;
             }
-            EitherOrBoth::Right((normalized, original)) => {
-                let truncated = truncate_string(normalized);
-                key_buffer.extend_from_slice(truncated.as_bytes());
+            EitherOrBoth::Left((_normalized, mut original)) => {
+                // FIXME: we only consider the first value for the purpose of facet search
+                // another structure is needed, able to retain all originals associated with a normalized value.
+                let Some((normalized, original)) = original.next() else {
+                    continue;
+                };
+                (DelAdd::Deletion, normalized, original)
+            }
+            EitherOrBoth::Right((_normalized, mut original)) => {
+                // FIXME: we only consider the first value for the purpose of facet search
+                // another structure is needed, able to retain all originals associated with a normalized value.
+                let Some((normalized, original)) = original.next() else {
+                    continue;
+                };
+                (DelAdd::Addition, normalized, original)
+            }
+        };
+        let truncated = truncate_string(normalized.clone());
+        key_buffer.extend_from_slice(truncated.as_bytes());
 
-                let mut obkv = KvWriterDelAdd::memory();
-                obkv.insert(DelAdd::Addition, original)?;
-                let bytes = obkv.into_inner()?;
-                fid_docid_facet_strings_sorter.insert(&key_buffer, bytes)?;
-            }
-        }
+        let mut obkv = KvWriterDelAdd::memory();
+        obkv.insert(side, original)?;
+        let bytes = obkv.into_inner()?;
+        fid_docid_facet_strings_sorter.insert(&key_buffer, bytes)?;
     }
 
     Ok(())
