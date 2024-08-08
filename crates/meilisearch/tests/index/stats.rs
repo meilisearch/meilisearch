@@ -3,8 +3,8 @@ use crate::json;
 
 #[actix_rt::test]
 async fn stats() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared().await;
+    let index = server.unique_index();
     let (task, code) = index.create(Some("id")).await;
 
     assert_eq!(code, 202);
@@ -47,8 +47,8 @@ async fn stats() {
 
 #[actix_rt::test]
 async fn error_get_stats_unexisting_index() {
-    let server = Server::new().await;
-    let (response, code) = server.index("test").stats().await;
+    let server = Server::new_shared().await;
+    let (response, code) = server.unique_index().stats().await;
 
     let expected_response = json!({
         "message": "Index `test` not found.",
