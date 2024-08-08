@@ -47,11 +47,11 @@ async fn stats() {
 
 #[actix_rt::test]
 async fn error_get_stats_unexisting_index() {
-    let server = Server::new_shared().await;
-    let (response, code) = server.unique_index().stats().await;
+    let index = shared_does_not_exists_index();
+    let (response, code) = index.stats().await;
 
     let expected_response = json!({
-        "message": "Index `test` not found.",
+        "message": "Index `DOES_NOT_EXISTS` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#index_not_found"
