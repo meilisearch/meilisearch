@@ -2,7 +2,9 @@ use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
 use crate::common::encoder::Encoder;
-use crate::common::Server;
+use crate::common::{
+    shared_does_not_exists_index, shared_empty_index, shared_index_with_documents, Server,
+};
 use crate::json;
 
 #[actix_rt::test]
