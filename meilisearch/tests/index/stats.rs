@@ -1,5 +1,5 @@
 use crate::common::{
-    shared_does_not_exists_index, shared_empty_index, shared_index_with_documents, Server,
+    shared_does_not_exists_index, Server,
 };
 
 use crate::json;
