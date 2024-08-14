@@ -269,28 +269,16 @@ fn extract_facet_string_docids_settings<R: io::Read + io::Seek>(
 }
 
 /// Normalizes the facet string and truncates it to the max length.
-#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 fn normalize_facet_string(facet_string: &str, locales: Option<&[Language]>) -> String {
     let options: NormalizerOption = NormalizerOption { lossy: true, ..Default::default() };
     let mut detection = StrDetection::new(facet_string, locales);
 
-    let script = {
-        let span = tracing::trace_span!(target: "indexing::extract::extract_facet_string_docids", "detect_script");
-        let _entered = span.enter();
-
-        detection.script()
-    };
-
-    let language = {
-        let span = tracing::trace_span!(target: "indexing::extract::extract_facet_string_docids", "detect_language");
-        let _entered = span.enter();
-
-        // Detect the language of the facet string only if several locales are explicitly provided.
-        match locales {
-            Some(&[language]) => Some(language),
-            Some(multiple_locales) if multiple_locales.len() > 1 => detection.language(),
-            _ => None,
-        }
+    let script = detection.script();
+    // Detect the language of the facet string only if several locales are explicitly provided.
+    let language = match locales {
+        Some(&[language]) => Some(language),
+        Some(multiple_locales) if multiple_locales.len() > 1 => detection.language(),
+        _ => None,
     };
 
     let token = Token {
@@ -299,10 +287,6 @@ fn normalize_facet_string(facet_string: &str, locales: Option<&[Language]>) -> S
         language,
         ..Default::default()
     };
-
-    let span =
-        tracing::trace_span!(target: "indexing::extract::extract_facet_string_docids", "normalize");
-    let _entered = span.enter();
 
     // truncate the facet string to the max length
     token
