@@ -339,10 +339,18 @@ impl ValuesCollection {
 fn normalize_facet_string(facet_string: &str, locales: Option<&[Language]>) -> String {
     let options = NormalizerOption { lossy: true, ..Default::default() };
     let mut detection = StrDetection::new(facet_string, locales);
+
+    // Detect the language of the facet string only if several locales are explicitly provided.
+    let language = match locales {
+        Some(&[language]) => Some(language),
+        Some(multiple_locales) if multiple_locales.len() > 1 => detection.language(),
+        _ => None,
+    };
+
     let token = Token {
         lemma: std::borrow::Cow::Borrowed(facet_string),
         script: detection.script(),
-        language: detection.language(),
+        language,
         ..Default::default()
     };
 
