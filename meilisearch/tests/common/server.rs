@@ -134,19 +134,21 @@ impl Server<Owned> {
 
     pub async fn list_indexes(
         &self,
+        term: Option<&str>,
         offset: Option<usize>,
         limit: Option<usize>,
     ) -> (Value, StatusCode) {
-        let (offset, limit) = (
+        let (term, offset, limit) = (
+            term.map(|term| format!("term={term}")),
             offset.map(|offset| format!("offset={offset}")),
             limit.map(|limit| format!("limit={limit}")),
         );
-        let query_parameter = offset
-            .as_ref()
-            .zip(limit.as_ref())
-            .map(|(offset, limit)| format!("{offset}&{limit}"))
-            .or_else(|| offset.xor(limit));
-        if let Some(query_parameter) = query_parameter {
+        let query_parameter = vec![term, offset, limit]
+            .into_iter()
+            .filter_map(|param| param)
+            .collect::<Vec<String>>()
+            .join("&");
+        if !query_parameter.is_empty() {
             self.service.get(format!("/indexes?{query_parameter}")).await
         } else {
             self.service.get("/indexes").await

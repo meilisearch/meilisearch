@@ -16,7 +16,7 @@ async fn import_dump_v1_movie_raw() {
     let options = Opt { import_dump: Some(path), ..default_settings(temp.path()) };
     let server = Server::new_with_options(options).await.unwrap();
 
-    let (indexes, code) = server.list_indexes(None, None).await;
+    let (indexes, code) = server.list_indexes(None, None, None).await;
     snapshot!(code, @"200 OK");
 
     assert_eq!(indexes["results"].as_array().unwrap().len(), 1);
@@ -153,7 +153,7 @@ async fn import_dump_v1_movie_with_settings() {
     let options = Opt { import_dump: Some(path), ..default_settings(temp.path()) };
     let server = Server::new_with_options(options).await.unwrap();
 
-    let (indexes, code) = server.list_indexes(None, None).await;
+    let (indexes, code) = server.list_indexes(None, None, None).await;
     snapshot!(code, @"200 OK");
 
     assert_eq!(indexes["results"].as_array().unwrap().len(), 1);
@@ -316,7 +316,7 @@ async fn import_dump_v1_rubygems_with_settings() {
     let options = Opt { import_dump: Some(path), ..default_settings(temp.path()) };
     let server = Server::new_with_options(options).await.unwrap();
 
-    let (indexes, code) = server.list_indexes(None, None).await;
+    let (indexes, code) = server.list_indexes(None, None, None).await;
     snapshot!(code, @"200 OK");
 
     assert_eq!(indexes["results"].as_array().unwrap().len(), 1);
@@ -463,7 +463,7 @@ async fn import_dump_v2_movie_raw() {
         Opt { import_dump: Some(GetDump::MoviesRawV2.path()), ..default_settings(temp.path()) };
     let server = Server::new_with_options(options).await.unwrap();
 
-    let (indexes, code) = server.list_indexes(None, None).await;
+    let (indexes, code) = server.list_indexes(None, None, None).await;
     snapshot!(code, @"200 OK");
 
     assert_eq!(indexes["results"].as_array().unwrap().len(), 1);
@@ -600,7 +600,7 @@ async fn import_dump_v2_movie_with_settings() {
     };
     let server = Server::new_with_options(options).await.unwrap();
 
-    let (indexes, code) = server.list_indexes(None, None).await;
+    let (indexes, code) = server.list_indexes(None, None, None).await;
     snapshot!(code, @"200 OK");
 
     assert_eq!(indexes["results"].as_array().unwrap().len(), 1);
@@ -747,7 +747,7 @@ async fn import_dump_v2_rubygems_with_settings() {
     };
     let server = Server::new_with_options(options).await.unwrap();
 
-    let (indexes, code) = server.list_indexes(None, None).await;
+    let (indexes, code) = server.list_indexes(None, None, None).await;
     snapshot!(code, @"200 OK");
 
     assert_eq!(indexes["results"].as_array().unwrap().len(), 1);
@@ -891,7 +891,7 @@ async fn import_dump_v3_movie_raw() {
         Opt { import_dump: Some(GetDump::MoviesRawV3.path()), ..default_settings(temp.path()) };
     let server = Server::new_with_options(options).await.unwrap();
 
-    let (indexes, code) = server.list_indexes(None, None).await;
+    let (indexes, code) = server.list_indexes(None, None, None).await;
     snapshot!(code, @"200 OK");
 
     assert_eq!(indexes["results"].as_array().unwrap().len(), 1);
@@ -1028,7 +1028,7 @@ async fn import_dump_v3_movie_with_settings() {
     };
     let server = Server::new_with_options(options).await.unwrap();
 
-    let (indexes, code) = server.list_indexes(None, None).await;
+    let (indexes, code) = server.list_indexes(None, None, None).await;
     snapshot!(code, @"200 OK");
 
     assert_eq!(indexes["results"].as_array().unwrap().len(), 1);
@@ -1175,7 +1175,7 @@ async fn import_dump_v3_rubygems_with_settings() {
     };
     let server = Server::new_with_options(options).await.unwrap();
 
-    let (indexes, code) = server.list_indexes(None, None).await;
+    let (indexes, code) = server.list_indexes(None, None, None).await;
     snapshot!(code, @"200 OK");
 
     assert_eq!(indexes["results"].as_array().unwrap().len(), 1);
@@ -1319,7 +1319,7 @@ async fn import_dump_v4_movie_raw() {
         Opt { import_dump: Some(GetDump::MoviesRawV4.path()), ..default_settings(temp.path()) };
     let server = Server::new_with_options(options).await.unwrap();
 
-    let (indexes, code) = server.list_indexes(None, None).await;
+    let (indexes, code) = server.list_indexes(None, None, None).await;
     snapshot!(code, @"200 OK");
 
     assert_eq!(indexes["results"].as_array().unwrap().len(), 1);
@@ -1456,7 +1456,7 @@ async fn import_dump_v4_movie_with_settings() {
     };
     let server = Server::new_with_options(options).await.unwrap();
 
-    let (indexes, code) = server.list_indexes(None, None).await;
+    let (indexes, code) = server.list_indexes(None, None, None).await;
     snapshot!(code, @"200 OK");
 
     assert_eq!(indexes["results"].as_array().unwrap().len(), 1);
@@ -1603,7 +1603,7 @@ async fn import_dump_v4_rubygems_with_settings() {
     };
     let server = Server::new_with_options(options).await.unwrap();
 
-    let (indexes, code) = server.list_indexes(None, None).await;
+    let (indexes, code) = server.list_indexes(None, None, None).await;
     snapshot!(code, @"200 OK");
 
     assert_eq!(indexes["results"].as_array().unwrap().len(), 1);
@@ -1748,7 +1748,7 @@ async fn import_dump_v5() {
     let mut server = Server::new_auth_with_options(options, temp).await;
     server.use_api_key("MASTER_KEY");
 
-    let (indexes, code) = server.list_indexes(None, None).await;
+    let (indexes, code) = server.list_indexes(None, None, None).await;
     assert_eq!(code, 200, "{indexes}");
 
     assert_eq!(indexes["results"].as_array().unwrap().len(), 2);
@@ -1858,7 +1858,7 @@ async fn import_dump_v6_containing_experimental_features() {
     let mut server = Server::new_auth_with_options(options, temp).await;
     server.use_api_key("MASTER_KEY");
 
-    let (indexes, code) = server.list_indexes(None, None).await;
+    let (indexes, code) = server.list_indexes(None, None, None).await;
     assert_eq!(code, 200, "{indexes}");
 
     assert_eq!(indexes["results"].as_array().unwrap().len(), 1);
@@ -2026,7 +2026,7 @@ async fn generate_and_import_dump_containing_vectors() {
     let mut server = Server::new_auth_with_options(opt, temp).await;
     server.use_api_key("MASTER_KEY");
 
-    let (indexes, code) = server.list_indexes(None, None).await;
+    let (indexes, code) = server.list_indexes(None, None, None).await;
     assert_eq!(code, 200, "{indexes}");
 
     snapshot!(indexes["results"].as_array().unwrap().len(), @"1");

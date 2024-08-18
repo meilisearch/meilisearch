@@ -45,7 +45,7 @@ async fn error_get_unexisting_index() {
 #[actix_rt::test]
 async fn no_index_return_empty_list() {
     let server = Server::new().await;
-    let (response, code) = server.list_indexes(None, None).await;
+    let (response, code) = server.list_indexes(None, None, None).await;
     assert_eq!(code, 200);
     assert!(response["results"].is_array());
     assert!(response["results"].as_array().unwrap().is_empty());
@@ -59,7 +59,7 @@ async fn list_multiple_indexes() {
 
     server.index("test").wait_task(1).await;
 
-    let (response, code) = server.list_indexes(None, None).await;
+    let (response, code) = server.list_indexes(None, None, None).await;
     assert_eq!(code, 200);
     assert!(response["results"].is_array());
     let arr = response["results"].as_array().unwrap();
@@ -78,7 +78,7 @@ async fn get_and_paginate_indexes() {
     }
 
     // basic
-    let (response, code) = server.list_indexes(None, None).await;
+    let (response, code) = server.list_indexes(None, None, None).await;
     assert_eq!(code, 200);
     assert_eq!(response["limit"], json!(20));
     assert_eq!(response["offset"], json!(0));
@@ -93,7 +93,7 @@ async fn get_and_paginate_indexes() {
         .all(|(expected, entry)| entry["uid"] == expected));
 
     // with an offset
-    let (response, code) = server.list_indexes(Some(15), None).await;
+    let (response, code) = server.list_indexes(None, Some(15), None).await;
     assert_eq!(code, 200);
     assert_eq!(response["limit"], json!(20));
     assert_eq!(response["offset"], json!(15));
@@ -107,7 +107,7 @@ async fn get_and_paginate_indexes() {
         .all(|(expected, entry)| entry["uid"] == expected));
 
     // with an offset and not enough elements
-    let (response, code) = server.list_indexes(Some(45), None).await;
+    let (response, code) = server.list_indexes(None, Some(45), None).await;
     assert_eq!(code, 200);
     assert_eq!(response["limit"], json!(20));
     assert_eq!(response["offset"], json!(45));
@@ -121,7 +121,7 @@ async fn get_and_paginate_indexes() {
         .all(|(expected, entry)| entry["uid"] == expected));
 
     // with a limit lower than the default
-    let (response, code) = server.list_indexes(None, Some(5)).await;
+    let (response, code) = server.list_indexes(None, None, Some(5)).await;
     assert_eq!(code, 200);
     assert_eq!(response["limit"], json!(5));
     assert_eq!(response["offset"], json!(0));
@@ -135,7 +135,7 @@ async fn get_and_paginate_indexes() {
         .all(|(expected, entry)| entry["uid"] == expected));
 
     // with a limit higher than the default
-    let (response, code) = server.list_indexes(None, Some(40)).await;
+    let (response, code) = server.list_indexes(None, None, Some(40)).await;
     assert_eq!(code, 200);
     assert_eq!(response["limit"], json!(40));
     assert_eq!(response["offset"], json!(0));
@@ -149,7 +149,7 @@ async fn get_and_paginate_indexes() {
         .all(|(expected, entry)| entry["uid"] == expected));
 
     // with a limit higher than the default
-    let (response, code) = server.list_indexes(None, Some(80)).await;
+    let (response, code) = server.list_indexes(None, None, Some(80)).await;
     assert_eq!(code, 200);
     assert_eq!(response["limit"], json!(80));
     assert_eq!(response["offset"], json!(0));
@@ -163,7 +163,7 @@ async fn get_and_paginate_indexes() {
         .all(|(expected, entry)| entry["uid"] == expected));
 
     // with a limit and an offset
-    let (response, code) = server.list_indexes(Some(20), Some(10)).await;
+    let (response, code) = server.list_indexes(None, Some(20), Some(10)).await;
     assert_eq!(code, 200);
     assert_eq!(response["limit"], json!(10));
     assert_eq!(response["offset"], json!(20));
@@ -175,6 +175,26 @@ async fn get_and_paginate_indexes() {
         .map(|idx| format!("test_{idx:02}"))
         .zip(arr)
         .all(|(expected, entry)| entry["uid"] == expected));
+}
+
+#[actix_rt::test]
+async fn filter_indexes() {
+    let server = Server::new().await;
+    for (i, uid) in vec!["tes_t", "2test", "test1", "2_test_2", "temp"].iter().enumerate() {
+        server.index(uid).create(None).await;
+        server.index(uid).wait_task(i as u64).await;
+    }
+
+    let (response, code) = server.list_indexes(Some("test"), None, None).await;
+    assert_eq!(code, 200);
+    assert_eq!(response["limit"], json!(20));
+    assert_eq!(response["offset"], json!(0));
+    assert_eq!(response["total"], json!(3));
+    assert!(response["results"].is_array());
+
+    // ensuring that all indexes contain the term
+    let arr = response["results"].as_array().unwrap();
+    assert!(arr.iter().all(|entry| entry["uid"].as_str().unwrap().contains("test")));
 }
 
 #[actix_rt::test]

@@ -398,7 +398,7 @@ async fn list_authorized_indexes_restricted_index() {
     let key = response["key"].as_str().unwrap();
     server.use_api_key(key);
 
-    let (response, code) = server.list_indexes(None, None).await;
+    let (response, code) = server.list_indexes(None, None, None).await;
     assert_eq!(200, code, "{:?}", &response);
 
     let response = response["results"].as_array().unwrap();
@@ -439,7 +439,7 @@ async fn list_authorized_indexes_no_index_restriction() {
     let key = response["key"].as_str().unwrap();
     server.use_api_key(key);
 
-    let (response, code) = server.list_indexes(None, None).await;
+    let (response, code) = server.list_indexes(None, None, None).await;
     assert_eq!(200, code, "{:?}", &response);
 
     let response = response["results"].as_array().unwrap();

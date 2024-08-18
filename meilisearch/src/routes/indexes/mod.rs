@@ -79,28 +79,35 @@ impl IndexView {
     }
 }
 
-#[derive(Deserr, Debug, Clone, Copy)]
+#[derive(Deserr, Debug, Clone)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct ListIndexes {
+    #[deserr(default)]
+    pub term: Option<Param<String>>,
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexOffset>)]
     pub offset: Param<usize>,
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidIndexLimit>)]
     pub limit: Param<usize>,
 }
 impl ListIndexes {
-    fn as_pagination(self) -> Pagination {
+    fn as_pagination(&self) -> Pagination {
         Pagination { offset: self.offset.0, limit: self.limit.0 }
     }
 }
 
 pub async fn list_indexes(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, Data<IndexScheduler>>,
-    paginate: AwebQueryParameter<ListIndexes, DeserrQueryParamError>,
+    params: AwebQueryParameter<ListIndexes, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
-    debug!(parameters = ?paginate, "List indexes");
+    debug!(parameters = ?params, "List indexes");
     let filters = index_scheduler.filters();
     let indexes: Vec<Option<IndexView>> =
         index_scheduler.try_for_each_index(|uid, index| -> Result<Option<IndexView>, _> {
+            if let Some(term) = params.term.as_deref() {
+                if !uid.contains(term) {
+                    return Ok(None);
+                }
+            }
             if !filters.is_index_authorized(uid) {
                 return Ok(None);
             }
@@ -108,7 +115,7 @@ pub async fn list_indexes(
         })?;
     // Won't cause to open all indexes because IndexView doesn't keep the `Index` opened.
     let indexes: Vec<IndexView> = indexes.into_iter().flatten().collect();
-    let ret = paginate.as_pagination().auto_paginate_sized(indexes.into_iter());
+    let ret = params.as_pagination().auto_paginate_sized(indexes.into_iter());
 
     debug!(returns = ?ret, "List indexes");
     Ok(HttpResponse::Ok().json(ret))
