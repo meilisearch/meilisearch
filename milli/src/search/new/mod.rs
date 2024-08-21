@@ -49,6 +49,7 @@ pub use self::geo_sort::Strategy as GeoSortStrategy;
 use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
 use self::vector_sort::VectorSort;
+use crate::localized_attributes_rules::LocalizedFieldIds;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::apply_distinct_rule;
 use crate::vector::Embedder;
@@ -671,9 +672,44 @@ pub fn execute_search(
             tokbuilder.words_dict(dictionary);
         }
 
-        if let Some(locales) = locales {
-            tokbuilder.allow_list(locales);
-        }
+        let db_locales;
+        match locales {
+            Some(locales) => {
+                if !locales.is_empty() {
+                    tokbuilder.allow_list(locales);
+                }
+            }
+            None => {
+                // If no locales are specified, we use the locales specified in the localized attributes rules
+                let localized_attributes_rules = ctx.index.localized_attributes_rules(ctx.txn)?;
+                let fields_ids_map = ctx.index.fields_ids_map(ctx.txn)?;
+                let searchable_fields = ctx.index.searchable_fields_ids(ctx.txn)?;
+
+                let localized_fields = match &ctx.restricted_fids {
+                    // if AttributeToSearchOn is set, use the restricted list of ids
+                    Some(restricted_fids) => {
+                        let iter = restricted_fids
+                            .exact
+                            .iter()
+                            .chain(restricted_fids.tolerant.iter())
+                            .map(|(fid, _)| *fid);
+
+                        LocalizedFieldIds::new(&localized_attributes_rules, &fields_ids_map, iter)
+                    }
+                    // Otherwise use the full list of ids coming from the index searchable fields
+                    None => LocalizedFieldIds::new(
+                        &localized_attributes_rules,
+                        &fields_ids_map,
+                        searchable_fields.into_iter(),
+                    ),
+                };
+
+                db_locales = localized_fields.all_locales();
+                if !db_locales.is_empty() {
+                    tokbuilder.allow_list(&db_locales);
+                }
+            }
+        };
 
         let tokenizer = tokbuilder.build();
         drop(entered);
