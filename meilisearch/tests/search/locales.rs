@@ -386,12 +386,39 @@ async fn force_locales() {
             |response, code| {
                 snapshot!(response, @r###"
                 {
-                  "hits": [],
+                  "hits": [
+                    {
+                      "name_zh": "进击的巨人",
+                      "author_zh": "諫山創",
+                      "description_zh": "进击的巨人是日本的漫画系列，由諫山 創作画。",
+                      "id": 853,
+                      "_vectors": {
+                        "manual": [
+                          1.0,
+                          2.0,
+                          3.0
+                        ]
+                      },
+                      "_formatted": {
+                        "name_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                        "author_zh": "諫山創",
+                        "description_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                        "id": "853",
+                        "_vectors": {
+                          "manual": [
+                            "1.0",
+                            "2.0",
+                            "3.0"
+                          ]
+                        }
+                      }
+                    }
+                  ],
                   "query": "\"进击的巨人\"",
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 0
+                  "estimatedTotalHits": 1
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -483,12 +510,39 @@ async fn force_locales_with_pattern() {
             |response, code| {
                 snapshot!(response, @r###"
                 {
-                  "hits": [],
+                  "hits": [
+                    {
+                      "name_zh": "进击的巨人",
+                      "author_zh": "諫山創",
+                      "description_zh": "进击的巨人是日本的漫画系列，由諫山 創作画。",
+                      "id": 853,
+                      "_vectors": {
+                        "manual": [
+                          1.0,
+                          2.0,
+                          3.0
+                        ]
+                      },
+                      "_formatted": {
+                        "name_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                        "author_zh": "諫山創",
+                        "description_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                        "id": "853",
+                        "_vectors": {
+                          "manual": [
+                            "1.0",
+                            "2.0",
+                            "3.0"
+                          ]
+                        }
+                      }
+                    }
+                  ],
                   "query": "\"进击的巨人\"",
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 0
+                  "estimatedTotalHits": 1
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -717,6 +771,275 @@ async fn force_different_locales_with_pattern() {
     index
         .search(
             json!({"q": "\"进击的巨人\"", "locales": ["jpn"], "attributesToHighlight": ["*"]}),
+            |response, code| {
+                snapshot!(response, @r###"
+                {
+                  "hits": [
+                    {
+                      "name_zh": "进击的巨人",
+                      "author_zh": "諫山創",
+                      "description_zh": "进击的巨人是日本的漫画系列，由諫山 創作画。",
+                      "id": 853,
+                      "_vectors": {
+                        "manual": [
+                          1.0,
+                          2.0,
+                          3.0
+                        ]
+                      },
+                      "_formatted": {
+                        "name_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                        "author_zh": "諫山創",
+                        "description_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                        "id": "853",
+                        "_vectors": {
+                          "manual": [
+                            "1.0",
+                            "2.0",
+                            "3.0"
+                          ]
+                        }
+                      }
+                    }
+                  ],
+                  "query": "\"进击的巨人\"",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 1
+                }
+                "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
+async fn auto_infer_locales_at_search_with_attributes_to_search_on() {
+    let server = Server::new().await;
+
+    let index = server.index("test");
+    let documents = DOCUMENTS.clone();
+    let (response, _) = index
+        .update_settings(
+            json!({
+                "searchableAttributes": ["name_en", "name_ja", "name_zh", "author_en", "author_ja", "author_zh", "description_en", "description_ja", "description_zh"],
+                "localizedAttributes": [
+                    // force japanese
+                    {"attributePatterns": ["*_zh"], "locales": ["jpn"]},
+                    // force chinese
+                    {"attributePatterns": ["*_ja"], "locales": ["cmn"]},
+                    // any language
+                    {"attributePatterns": ["*_en"], "locales": []}
+                ]
+            }),
+        )
+        .await;
+    snapshot!(response, @r###"
+    {
+      "taskUid": 0,
+      "indexUid": "test",
+      "status": "enqueued",
+      "type": "settingsUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
+    index.add_documents(documents, None).await;
+    index.wait_task(1).await;
+
+    // auto infer any language
+    index
+        .search(
+            json!({"q": "\"进击的巨人\"", "attributesToHighlight": ["*"]}),
+            |response, code| {
+                snapshot!(response, @r###"
+                {
+                  "hits": [],
+                  "query": "\"进击的巨人\"",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 0
+                }
+                "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
+
+    // should infer chinese
+    index
+            .search(
+                json!({"q": "\"进击的巨人\"", "attributesToHighlight": ["*"], "attributesToSearchOn": ["name_zh", "description_zh"]}),
+                |response, code| {
+                    snapshot!(response, @r###"
+                    {
+                      "hits": [
+                        {
+                          "name_zh": "进击的巨人",
+                          "author_zh": "諫山創",
+                          "description_zh": "进击的巨人是日本的漫画系列，由諫山 創作画。",
+                          "id": 853,
+                          "_vectors": {
+                            "manual": [
+                              1.0,
+                              2.0,
+                              3.0
+                            ]
+                          },
+                          "_formatted": {
+                            "name_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                            "author_zh": "諫山創",
+                            "description_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                            "id": "853",
+                            "_vectors": {
+                              "manual": [
+                                "1.0",
+                                "2.0",
+                                "3.0"
+                              ]
+                            }
+                          }
+                        }
+                      ],
+                      "query": "\"进击的巨人\"",
+                      "processingTimeMs": "[duration]",
+                      "limit": 20,
+                      "offset": 0,
+                      "estimatedTotalHits": 1
+                    }
+                    "###);
+                    snapshot!(code, @"200 OK");
+                },
+            )
+            .await;
+}
+
+#[actix_rt::test]
+async fn auto_infer_locales_at_search() {
+    let server = Server::new().await;
+
+    let index = server.index("test");
+    let documents = DOCUMENTS.clone();
+    let (response, _) = index
+        .update_settings(
+            json!({
+                "searchableAttributes": ["name_en", "name_ja", "name_zh", "author_en", "author_ja", "author_zh", "description_en", "description_ja", "description_zh"],
+                "localizedAttributes": [
+                    // force japanese
+                    {"attributePatterns": ["*"], "locales": ["jpn"]},
+                ]
+            }),
+        )
+        .await;
+    snapshot!(response, @r###"
+    {
+      "taskUid": 0,
+      "indexUid": "test",
+      "status": "enqueued",
+      "type": "settingsUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
+    index.add_documents(documents, None).await;
+    index.wait_task(1).await;
+
+    index
+        .search(
+            json!({"q": "\"进击的巨人\"", "attributesToHighlight": ["*"]}),
+            |response, code| {
+                snapshot!(response, @r###"
+                {
+                  "hits": [
+                    {
+                      "name_zh": "进击的巨人",
+                      "author_zh": "諫山創",
+                      "description_zh": "进击的巨人是日本的漫画系列，由諫山 創作画。",
+                      "id": 853,
+                      "_vectors": {
+                        "manual": [
+                          1.0,
+                          2.0,
+                          3.0
+                        ]
+                      },
+                      "_formatted": {
+                        "name_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                        "author_zh": "諫山創",
+                        "description_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                        "id": "853",
+                        "_vectors": {
+                          "manual": [
+                            "1.0",
+                            "2.0",
+                            "3.0"
+                          ]
+                        }
+                      }
+                    }
+                  ],
+                  "query": "\"进击的巨人\"",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 1
+                }
+                "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
+
+    index
+            .search(
+                json!({"q": "\"进击的巨人\"", "attributesToHighlight": ["*"]}),
+                |response, code| {
+                    snapshot!(response, @r###"
+                    {
+                      "hits": [
+                        {
+                          "name_zh": "进击的巨人",
+                          "author_zh": "諫山創",
+                          "description_zh": "进击的巨人是日本的漫画系列，由諫山 創作画。",
+                          "id": 853,
+                          "_vectors": {
+                            "manual": [
+                              1.0,
+                              2.0,
+                              3.0
+                            ]
+                          },
+                          "_formatted": {
+                            "name_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                            "author_zh": "諫山創",
+                            "description_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                            "id": "853",
+                            "_vectors": {
+                              "manual": [
+                                "1.0",
+                                "2.0",
+                                "3.0"
+                              ]
+                            }
+                          }
+                        }
+                      ],
+                      "query": "\"进击的巨人\"",
+                      "processingTimeMs": "[duration]",
+                      "limit": 20,
+                      "offset": 0,
+                      "estimatedTotalHits": 1
+                    }
+                    "###);
+                    snapshot!(code, @"200 OK");
+                },
+            )
+            .await;
+
+    index
+        .search(
+            json!({"q": "\"进击的巨人\"", "attributesToHighlight": ["*"]}),
             |response, code| {
                 snapshot!(response, @r###"
                 {
