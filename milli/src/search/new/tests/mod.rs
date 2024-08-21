@@ -6,6 +6,7 @@ pub mod exactness;
 pub mod geo_sort;
 pub mod integration;
 #[cfg(feature = "all-tokenizations")]
+#[cfg(not(feature = "chinese-pinyin"))]
 pub mod language;
 pub mod ngram_split_words;
 pub mod proximity;

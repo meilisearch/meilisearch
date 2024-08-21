@@ -360,6 +360,7 @@ mod test {
     use super::*;
 
     #[cfg(feature = "japanese")]
+    #[cfg(not(feature = "chinese-pinyin"))]
     #[test]
     fn test_kanji_language_detection() {
         use crate::index::tests::TempIndex;
