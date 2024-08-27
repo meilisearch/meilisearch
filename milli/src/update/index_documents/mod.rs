@@ -2740,6 +2740,7 @@ mod tests {
                         api_key: Setting::NotSet,
                         dimensions: Setting::Set(3),
                         document_template: Setting::NotSet,
+                        document_template_max_bytes: Setting::NotSet,
                         url: Setting::NotSet,
                         request: Setting::NotSet,
                         response: Setting::NotSet,
