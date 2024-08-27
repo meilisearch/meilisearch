@@ -258,6 +258,8 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     },
     #[error("`.embedders.{embedder_name}.dimensions`: `dimensions` cannot be zero")]
     InvalidSettingsDimensions { embedder_name: String },
+    #[error("`.embedders.{embedder_name}.documentTemplateMaxBytes`: `documentTemplateMaxBytes` cannot be zero")]
+    InvalidSettingsDocumentTemplateMaxBytes { embedder_name: String },
     #[error("`.embedders.{embedder_name}.url`: could not parse `{url}`: {inner_error}")]
     InvalidUrl { embedder_name: String, inner_error: url::ParseError, url: String },
     #[error("Document editions cannot modify a document's primary key")]
