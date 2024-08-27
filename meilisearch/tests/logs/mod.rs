@@ -44,6 +44,7 @@ async fn basic_test_log_stream_route() {
     let app = actix_web::test::init_service(create_app(
         server.service.index_scheduler.clone().into(),
         server.service.auth.clone().into(),
+        server.service.search_queue.clone().into(),
         server.service.options.clone(),
         (route_layer_handle, stderr_layer_handle),
         analytics::MockAnalytics::new(&server.service.options),
