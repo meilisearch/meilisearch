@@ -62,8 +62,18 @@ pub enum EmbedErrorKind {
     RestResponseDeserialization(std::io::Error),
     #[error("expected a response containing {0} embeddings, got only {1}")]
     RestResponseEmbeddingCount(usize, usize),
-    #[error("could not authenticate against embedding server{}", option_info(.0.as_deref(), "server replied with "))]
-    RestUnauthorized(Option<String>),
+    #[error("could not authenticate against {embedding} server{server_reply}{hint}", embedding=match *.1 {
+        ConfigurationSource::User => "embedding",
+        ConfigurationSource::OpenAi => "OpenAI",
+        ConfigurationSource::Ollama => "ollama"
+    },
+    server_reply=option_info(.0.as_deref(), "server replied with "),
+    hint=match *.1 {
+        ConfigurationSource::User => "\n  - Hint: Check the `apiKey` parameter in the embedder configuration",
+        ConfigurationSource::OpenAi => "\n  - Hint: Check the `apiKey` parameter in the embedder configuration, and the `MEILI_OPENAI_API_KEY` and `OPENAI_API_KEY` environment variables",
+        ConfigurationSource::Ollama => "\n  - Hint: Check the `apiKey` parameter in the embedder configuration"
+    })]
+    RestUnauthorized(Option<String>, ConfigurationSource),
     #[error("sent too many requests to embedding server{}", option_info(.0.as_deref(), "server replied with "))]
     RestTooManyRequests(Option<String>),
     #[error("sent a bad request to embedding server{}{}",
@@ -136,8 +146,14 @@ impl EmbedError {
         }
     }
 
-    pub(crate) fn rest_unauthorized(error_response: Option<String>) -> EmbedError {
-        Self { kind: EmbedErrorKind::RestUnauthorized(error_response), fault: FaultSource::User }
+    pub(crate) fn rest_unauthorized(
+        error_response: Option<String>,
+        configuration_source: ConfigurationSource,
+    ) -> EmbedError {
+        Self {
+            kind: EmbedErrorKind::RestUnauthorized(error_response, configuration_source),
+            fault: FaultSource::User,
+        }
     }
 
     pub(crate) fn rest_too_many_requests(error_response: Option<String>) -> EmbedError {

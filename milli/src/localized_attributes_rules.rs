@@ -90,6 +90,21 @@ impl LocalizedFieldIds {
     pub fn locales(&self, fields_id: FieldId) -> Option<&[Language]> {
         self.field_id_to_locales.get(&fields_id).map(Vec::as_slice)
     }
+
+    pub fn all_locales(&self) -> Vec<Language> {
+        let mut locales = Vec::new();
+        for field_locales in self.field_id_to_locales.values() {
+            if !field_locales.is_empty() {
+                locales.extend(field_locales);
+            } else {
+                // If a field has no locales, we consider it as not localized
+                return Vec::new();
+            }
+        }
+        locales.sort();
+        locales.dedup();
+        locales
+    }
 }
 
 #[cfg(test)]

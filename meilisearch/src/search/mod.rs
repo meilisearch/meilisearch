@@ -1369,12 +1369,18 @@ pub fn perform_facet_search(
         None => TimeBudget::default(),
     };
 
+    // In the faceted search context, we want to use the intersection between the locales provided by the user
+    // and the locales of the facet string.
+    // If the facet string is not localized, we **ignore** the locales provided by the user because the facet data has no locale.
+    // If the user does not provide locales, we use the locales of the facet string.
     let localized_attributes = index.localized_attributes_rules(&rtxn)?.unwrap_or_default();
-    let locales = locales.or_else(|| {
-        localized_attributes
+    let localized_attributes_locales =
+        localized_attributes.into_iter().find(|attr| attr.match_str(&facet_name));
+    let locales = localized_attributes_locales.map(|attr| {
+        attr.locales
             .into_iter()
-            .find(|attr| attr.match_str(&facet_name))
-            .map(|attr| attr.locales)
+            .filter(|locale| locales.as_ref().map_or(true, |locales| locales.contains(locale)))
+            .collect()
     });
 
     let (search, _, _, _) =

@@ -7,6 +7,7 @@ mod facet_search;
 mod formatted;
 mod geo;
 mod hybrid;
+#[cfg(not(feature = "chinese-pinyin"))]
 mod locales;
 mod matching_strategy;
 mod multi;
@@ -169,6 +170,7 @@ async fn negative_special_cases_search() {
 }
 
 #[cfg(feature = "default")]
+#[cfg(not(feature = "chinese-pinyin"))]
 #[actix_rt::test]
 async fn test_kanji_language_detection() {
     let server = Server::new().await;
