@@ -1,7 +1,9 @@
 #![allow(dead_code)]
 
+use std::num::NonZeroUsize;
 use std::path::Path;
 use std::str::FromStr as _;
+use std::sync::Arc;
 use std::time::Duration;
 
 use actix_http::body::MessageBody;
@@ -10,6 +12,7 @@ use actix_web::http::StatusCode;
 use byte_unit::{Byte, Unit};
 use clap::Parser;
 use meilisearch::option::{IndexerOpts, MaxMemory, MaxThreads, Opt};
+use meilisearch::search_queue::SearchQueue;
 use meilisearch::{analytics, create_app, setup_meilisearch, SubscriberForSecondLayer};
 use once_cell::sync::Lazy;
 use tempfile::TempDir;
@@ -32,6 +35,12 @@ pub struct Server {
 pub static TEST_TEMP_DIR: Lazy<TempDir> = Lazy::new(|| TempDir::new().unwrap());
 
 impl Server {
+    fn new_search_queue(options: &Opt) -> Arc<SearchQueue> {
+        let search_queue =
+            SearchQueue::new(options.experimental_search_queue_size, NonZeroUsize::new(1).unwrap());
+        Arc::new(search_queue)
+    }
+
     pub async fn new() -> Self {
         let dir = TempDir::new().unwrap();
 
@@ -44,7 +53,13 @@ impl Server {
         let options = default_settings(dir.path());
 
         let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
-        let service = Service { index_scheduler, auth, options, api_key: None };
+        let service = Service {
+            index_scheduler,
+            auth,
+            search_queue: Self::new_search_queue(&options),
+            options,
+            api_key: None,
+        };
 
         Server { service, _dir: Some(dir) }
     }
@@ -59,7 +74,13 @@ impl Server {
         options.master_key = Some("MASTER_KEY".to_string());
 
         let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
-        let service = Service { index_scheduler, auth, options, api_key: None };
+        let service = Service {
+            index_scheduler,
+            auth,
+            search_queue: Self::new_search_queue(&options),
+            options,
+            api_key: None,
+        };
 
         Server { service, _dir: Some(dir) }
     }
@@ -72,7 +93,13 @@ impl Server {
 
     pub async fn new_with_options(options: Opt) -> Result<Self, anyhow::Error> {
         let (index_scheduler, auth) = setup_meilisearch(&options)?;
-        let service = Service { index_scheduler, auth, options, api_key: None };
+        let service = Service {
+            index_scheduler,
+            auth,
+            search_queue: Self::new_search_queue(&options),
+            options,
+            api_key: None,
+        };
 
         Ok(Server { service, _dir: None })
     }
@@ -100,6 +127,7 @@ impl Server {
         actix_web::test::init_service(create_app(
             self.service.index_scheduler.clone().into(),
             self.service.auth.clone().into(),
+            self.service.search_queue.clone().into(),
             self.service.options.clone(),
             (route_layer_handle, stderr_layer_handle),
             analytics::MockAnalytics::new(&self.service.options),

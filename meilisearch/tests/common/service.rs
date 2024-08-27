@@ -5,6 +5,7 @@ use actix_web::http::StatusCode;
 use actix_web::test;
 use actix_web::test::TestRequest;
 use index_scheduler::IndexScheduler;
+use meilisearch::search_queue::SearchQueue;
 use meilisearch::{analytics, create_app, Opt, SubscriberForSecondLayer};
 use meilisearch_auth::AuthController;
 use tracing::level_filters::LevelFilter;
@@ -16,6 +17,7 @@ use crate::common::Value;
 pub struct Service {
     pub index_scheduler: Arc<IndexScheduler>,
     pub auth: Arc<AuthController>,
+    pub search_queue: Arc<SearchQueue>,
     pub options: Opt,
     pub api_key: Option<String>,
 }
@@ -123,6 +125,7 @@ impl Service {
         let app = test::init_service(create_app(
             self.index_scheduler.clone().into(),
             self.auth.clone().into(),
+            self.search_queue.clone().into(),
             self.options.clone(),
             (route_layer_handle, stderr_layer_handle),
             analytics::MockAnalytics::new(&self.options),
