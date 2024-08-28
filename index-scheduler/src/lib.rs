@@ -5403,6 +5403,9 @@ mod tests {
                     ),
                     prompt: PromptData {
                         template: "{{doc.doggo}}",
+                        max_bytes: Some(
+                            400,
+                        ),
                     },
                 },
                 user_provided: RoaringBitmap<[1, 2]>,
@@ -5618,6 +5621,9 @@ mod tests {
                     ),
                     prompt: PromptData {
                         template: "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
+                        max_bytes: Some(
+                            400,
+                        ),
                     },
                 },
                 user_provided: RoaringBitmap<[0]>,
@@ -5658,6 +5664,9 @@ mod tests {
                     ),
                     prompt: PromptData {
                         template: "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
+                        max_bytes: Some(
+                            400,
+                        ),
                     },
                 },
                 user_provided: RoaringBitmap<[]>,

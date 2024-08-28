@@ -302,7 +302,8 @@ async fn create_mock_with_template(
         "source": "openAi",
         "url": url,
         "apiKey": API_KEY,
-        "documentTemplate": document_template
+        "documentTemplate": document_template,
+        "documentTemplateMaxBytes": 8000000,
     });
 
     model_dimensions.add_to_settings(&mut embedder_settings);
@@ -693,6 +694,7 @@ async fn bad_api_key() {
             "model": "text-embedding-3-large",
             "apiKey": "XXX...",
             "documentTemplate": "{%- if doc.gender == \"F\" -%}Une chienne nommée {{doc.name}}, née en {{doc.birthyear}}\n        {%- else -%}\n        Un chien nommé {{doc.name}}, né en {{doc.birthyear}}\n        {%- endif %}, de race {{doc.breed}}.",
+            "documentTemplateMaxBytes": 8000000,
             "url": "[url]"
           }
         }
@@ -735,6 +737,7 @@ async fn bad_api_key() {
             "source": "openAi",
             "model": "text-embedding-3-large",
             "documentTemplate": "{%- if doc.gender == \"F\" -%}Une chienne nommée {{doc.name}}, née en {{doc.birthyear}}\n        {%- else -%}\n        Un chien nommé {{doc.name}}, né en {{doc.birthyear}}\n        {%- endif %}, de race {{doc.breed}}.",
+            "documentTemplateMaxBytes": 8000000,
             "url": "[url]"
           }
         }
