@@ -33,12 +33,24 @@ pub struct SearchQueue {
 
 /// You should only run search requests while holding this permit.
 /// Once it's dropped, a new search request will be able to process.
+/// You should always try to drop the permit yourself calling the `drop` async method on it.
 #[derive(Debug)]
 pub struct Permit {
     sender: mpsc::Sender<()>,
 }
 
+impl Permit {
+    /// Drop the permit giving back on permit to the search queue.
+    pub async fn drop(self) {
+        // if the channel is closed then the whole instance is down
+        let _ = self.sender.send(()).await;
+    }
+}
+
 impl Drop for Permit {
+    /// The implicit drop implementation can still be called in multiple cases:
+    /// - We forgot to call the explicit one somewhere => this should be fixed on our side asap
+    /// - The future is cancelled while running and the permit dropped with it
     fn drop(&mut self) {
         let sender = self.sender.clone();
         // if the channel is closed then the whole instance is down

@@ -38,6 +38,25 @@ async fn search_queue_register() {
 }
 
 #[actix_rt::test]
+async fn search_queue_register_with_explicit_drop() {
+    let queue = SearchQueue::new(4, NonZeroUsize::new(2).unwrap());
+
+    // First, use all the cores
+    let permit1 = queue.try_get_search_permit().await.unwrap();
+    let _permit2 = queue.try_get_search_permit().await.unwrap();
+
+    // If we free one spot we should be able to register one new search
+    permit1.drop().await;
+
+    let permit3 = queue.try_get_search_permit().await.unwrap();
+
+    // And again
+    permit3.drop().await;
+
+    let _permit4 = queue.try_get_search_permit().await.unwrap();
+}
+
+#[actix_rt::test]
 async fn wait_till_cores_are_available() {
     let queue = Arc::new(SearchQueue::new(4, NonZeroUsize::new(1).unwrap()));
 
