@@ -1251,6 +1251,14 @@ impl Index {
 
     /* documents */
 
+    /// Returns a document by using the document id.
+    pub fn document<'t>(&self, rtxn: &'t RoTxn, id: DocumentId) -> Result<obkv::KvReaderU16<'t>> {
+        self.documents
+            .get(rtxn, &id)?
+            .ok_or(UserError::UnknownInternalDocumentId { document_id: id })
+            .map_err(Into::into)
+    }
+
     /// Returns an iterator over the requested documents. The next item will be an error if a document is missing.
     pub fn iter_documents<'a, 't: 'a>(
         &'a self,

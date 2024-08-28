@@ -2231,6 +2231,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "grenad"
+version = "0.4.7"
+source = "git+https://github.com/meilisearch/grenad?branch=various-improvements#d7512aedb854c247acc7cd18d0bfa148d3779923"
+dependencies = [
+ "bytemuck",
+ "byteorder",
+ "tempfile",
+]
+
+[[package]]
 name = "h2"
 version = "0.3.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3314,6 +3324,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90ed8c1e510134f979dbc4f070f87d4313098b704861a105fe34231c70a3901c"
 
 [[package]]
+name = "lru"
+version = "0.12.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "37ee39891760e7d94734f6f63fedc29a2e4a152f836120753a72503f09fcf904"
+dependencies = [
+ "hashbrown 0.14.3",
+]
+
+[[package]]
 name = "lzma-rs"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3415,7 +3434,7 @@ dependencies = [
  "mimalloc",
  "mime",
  "num_cpus",
- "obkv",
+ "obkv 0.2.2",
  "once_cell",
  "ordered-float",
  "parking_lot",
@@ -3565,7 +3584,8 @@ dependencies = [
  "fst",
  "fxhash",
  "geoutils",
- "grenad",
+ "grenad 0.4.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "grenad 0.4.7 (git+https://github.com/meilisearch/grenad?branch=various-improvements)",
  "heed",
  "hf-hub",
  "indexmap",
@@ -3574,13 +3594,15 @@ dependencies = [
  "json-depth-checker",
  "levenshtein_automata",
  "liquid",
+ "lru",
  "maplit",
  "md5",
  "meili-snap",
  "memchr",
  "memmap2",
  "mimalloc",
- "obkv",
+ "obkv 0.2.2",
+ "obkv 0.3.0",
  "once_cell",
  "ordered-float",
  "rand",
@@ -3832,6 +3854,11 @@ name = "obkv"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2e27bcfe835a379d32352112f6b8dbae2d99d16a5fff42abe6e5ba5386c1e5a"
+
+[[package]]
+name = "obkv"
+version = "0.3.0"
+source = "git+https://github.com/kerollmops/obkv?branch=unsized-kvreader#d248eb7edd3453ff758afc2883f6ae25684eb69e"
 
 [[package]]
 name = "once_cell"
