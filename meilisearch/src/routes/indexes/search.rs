@@ -233,11 +233,12 @@ pub async fn search_with_url_query(
 
     let search_kind = search_kind(&query, index_scheduler.get_ref(), &index, features)?;
     let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors, features)?;
-    let _permit = search_queue.try_get_search_permit().await?;
+    let permit = search_queue.try_get_search_permit().await?;
     let search_result = tokio::task::spawn_blocking(move || {
         perform_search(&index, query, search_kind, retrieve_vector, index_scheduler.features())
     })
     .await?;
+    permit.drop().await;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
@@ -276,11 +277,12 @@ pub async fn search_with_post(
     let search_kind = search_kind(&query, index_scheduler.get_ref(), &index, features)?;
     let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors, features)?;
 
-    let _permit = search_queue.try_get_search_permit().await?;
+    let permit = search_queue.try_get_search_permit().await?;
     let search_result = tokio::task::spawn_blocking(move || {
         perform_search(&index, query, search_kind, retrieve_vectors, index_scheduler.features())
     })
     .await?;
+    permit.drop().await;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
         if search_result.degraded {
