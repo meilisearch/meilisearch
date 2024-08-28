@@ -93,8 +93,9 @@ pub async fn search(
             locales,
         )
     })
-    .await?;
+    .await;
     permit.drop().await;
+    let search_result = search_result?;
 
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);

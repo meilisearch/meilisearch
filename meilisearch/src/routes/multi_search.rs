@@ -81,6 +81,7 @@ pub async fn multi_search_with_post(
                 perform_federated_search(&index_scheduler, queries, federation, features)
             })
             .await;
+            permit.drop().await;
 
             if let Ok(Ok(_)) = search_result {
                 multi_aggregate.succeed();
@@ -143,6 +144,7 @@ pub async fn multi_search_with_post(
                 Ok(search_results)
             }
             .await;
+            permit.drop().await;
 
             if search_results.is_ok() {
                 multi_aggregate.succeed();
@@ -162,7 +164,6 @@ pub async fn multi_search_with_post(
             HttpResponse::Ok().json(SearchResults { results: search_results })
         }
     };
-    permit.drop().await;
 
     Ok(response)
 }
