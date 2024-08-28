@@ -57,6 +57,24 @@ async fn search_queue_register_with_explicit_drop() {
 }
 
 #[actix_rt::test]
+async fn search_queue_register_with_time_to_abort() {
+    let queue = Arc::new(
+        SearchQueue::new(1, NonZeroUsize::new(1).unwrap())
+            .with_time_to_abort(Duration::from_secs(1)),
+    );
+
+    // First, use all the cores
+    let permit1 = queue.try_get_search_permit().await.unwrap();
+    let q = queue.clone();
+    let permit2 = tokio::task::spawn(async move { q.try_get_search_permit().await });
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    permit1.drop().await;
+    let ret = permit2.await.unwrap();
+
+    snapshot!(ret.unwrap_err(), @"Too many search requests running at the same time: 1. Retry after 10s.");
+}
+
+#[actix_rt::test]
 async fn wait_till_cores_are_available() {
     let queue = Arc::new(SearchQueue::new(4, NonZeroUsize::new(1).unwrap()));
 
