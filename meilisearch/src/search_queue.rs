@@ -48,8 +48,10 @@ impl Permit {
 }
 
 impl Drop for Permit {
+    /// The implicit drop implementation can still be called in multiple cases:
+    /// - We forgot to call the explicit one somewhere => this should be fixed on our side asap
+    /// - The future is cancelled while running and the permit dropped with it
     fn drop(&mut self) {
-        tracing::warn!("Internal error, a search permit was lazily dropped. If you see this message, please open an issue on the meilisearch repository at <https://github.com/meilisearch/meilisearch/issues/new?template=bug_report.md&title=[INTERNAL%20ERROR]%20Meilisearch%20lazily%20dropped%20a%20search%20permit>");
         let sender = self.sender.clone();
         // if the channel is closed then the whole instance is down
         std::mem::drop(tokio::spawn(async move { sender.send(()).await }));
