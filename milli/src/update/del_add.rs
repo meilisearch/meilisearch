@@ -30,6 +30,24 @@ impl Key for DelAdd {
     }
 }
 
+// TODO remove this implementation
+impl obkv2::Key for DelAdd {
+    const BYTES_SIZE: usize = std::mem::size_of::<DelAdd>();
+    type BYTES = [u8; <Self as obkv2::Key>::BYTES_SIZE];
+
+    fn to_be_bytes(&self) -> Self::BYTES {
+        u8::to_be_bytes(*self as u8)
+    }
+
+    fn from_be_bytes(array: Self::BYTES) -> Self {
+        match u8::from_be_bytes(array) {
+            0 => Self::Deletion,
+            1 => Self::Addition,
+            otherwise => unreachable!("DelAdd has only 2 variants, unknown variant: {}", otherwise),
+        }
+    }
+}
+
 /// Creates a Kv<K, Kv<DelAdd, value>> from Kv<K, value>
 ///
 /// Deletion: put all the values under DelAdd::Deletion

@@ -1,0 +1,3 @@
+mod del_add_roaring_bitmap_merger;
+
+pub use del_add_roaring_bitmap_merger::DelAddRoaringBitmapMerger;

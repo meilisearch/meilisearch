@@ -2,6 +2,7 @@ mod document_change;
 // mod extract;
 mod channel;
 mod items_pool;
+mod merge;
 
 mod global_fields_ids_map;
 
@@ -22,18 +23,25 @@ mod indexer {
     use roaring::RoaringBitmap;
     use serde_json::Value;
 
+    use super::channel::{MergerReceiver, MergerSender};
     use super::document_change::{Deletion, DocumentChange, Insertion, Update};
     use super::items_pool::ItemsPool;
+    use super::merge;
     use crate::documents::{
         obkv_to_object, DocumentIdExtractionError, DocumentsBatchReader, PrimaryKey,
     };
+    use crate::update::del_add::DelAdd;
+    use crate::update::new::channel::MergerOperation;
     use crate::update::{AvailableDocumentsIds, IndexDocumentsMethod};
     use crate::{
-        DocumentId, Error, FieldId, FieldsIdsMap, Index, InternalError, Result, UserError,
+        CboRoaringBitmapCodec, DocumentId, Error, FieldId, FieldsIdsMap, Index, InternalError,
+        Result, UserError,
     };
 
     pub type KvReaderFieldId = obkv2::KvReader<FieldId>;
+    pub type KvReaderDelAdd = obkv2::KvReader<DelAdd>;
     pub type KvWriterFieldId<W> = obkv2::KvWriter<W, FieldId>;
+    pub type KvWriterDelAdd<W> = obkv2::KvWriter<W, DelAdd>;
 
     pub struct DocumentOperationIndexer {
         operations: Vec<Payload>,
@@ -355,7 +363,101 @@ mod indexer {
 
     pub struct UpdateByFunctionIndexer;
 
-    // fn
+    enum Operation {
+        Write(RoaringBitmap),
+        Delete,
+        Ignore,
+    }
+
+    /// A function that merges the DelAdd CboRoaringBitmaps with the current bitmap.
+    fn merge_cbo_bitmaps(
+        current: Option<&[u8]>,
+        del: Option<&[u8]>,
+        add: Option<&[u8]>,
+    ) -> Result<Operation> {
+        let bitmap = match current {
+            Some(current_bitmap_bytes) => {
+                let bitmap_without_del = match del {
+                    Some(del_bytes) => {
+                        let del_bitmap = CboRoaringBitmapCodec::deserialize_from(del_bytes)?;
+                        CboRoaringBitmapCodec::intersection_with_serialized(
+                            current_bitmap_bytes,
+                            &del_bitmap,
+                        )?
+                    }
+                    None => CboRoaringBitmapCodec::deserialize_from(current_bitmap_bytes)?,
+                };
+
+                match add {
+                    Some(add_bytes) => {
+                        let add = CboRoaringBitmapCodec::deserialize_from(add_bytes)?;
+                        bitmap_without_del | add
+                    }
+                    None => bitmap_without_del,
+                }
+            }
+            None => match add {
+                Some(add_bytes) => CboRoaringBitmapCodec::deserialize_from(add_bytes)?,
+                None => return Ok(Operation::Ignore),
+            },
+        };
+
+        if bitmap.is_empty() {
+            Ok(Operation::Delete)
+        } else {
+            Ok(Operation::Write(bitmap))
+        }
+    }
+
+    /// Return the slice directly from the serialize_into method
+    fn cbo_serialize_into_vec<'b>(bitmap: &RoaringBitmap, buffer: &'b mut Vec<u8>) -> &'b [u8] {
+        buffer.clear();
+        CboRoaringBitmapCodec::serialize_into(bitmap, buffer);
+        buffer.as_slice()
+    }
+
+    /// TODO We must return some infos/stats
+    fn merge_grenad_entries(
+        receiver: MergerReceiver,
+        sender: MergerSender,
+        rtxn: &RoTxn,
+        index: &Index,
+    ) -> Result<()> {
+        let mut buffer = Vec::new();
+
+        for merger_operation in receiver {
+            match merger_operation {
+                MergerOperation::WordDocidsCursors(cursors) => {
+                    let sender = sender.word_docids();
+                    let database = index.word_docids.remap_types::<Bytes, Bytes>();
+
+                    let mut builder = grenad2::MergerBuilder::new(merge::DelAddRoaringBitmapMerger);
+                    builder.extend(cursors);
+                    /// TODO manage the error correctly
+                    let mut merger_iter = builder.build().into_stream_merger_iter().unwrap();
+
+                    // TODO manage the error correctly
+                    while let Some((key, deladd)) = merger_iter.next().unwrap() {
+                        let current = database.get(rtxn, key)?;
+                        let deladd: &KvReaderDelAdd = deladd.into();
+                        let del = deladd.get(DelAdd::Deletion);
+                        let add = deladd.get(DelAdd::Addition);
+
+                        match merge_cbo_bitmaps(current, del, add)? {
+                            Operation::Write(bitmap) => {
+                                let value = cbo_serialize_into_vec(&bitmap, &mut buffer);
+                                sender.write(key, value).unwrap();
+                            }
+                            Operation::Delete => sender.delete(key).unwrap(),
+                            Operation::Ignore => (),
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
 
     /// Reads the previous version of a document from the database, the new versions
     /// in the grenad update files and merges them to generate a new boxed obkv.
