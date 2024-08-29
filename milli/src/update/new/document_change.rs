@@ -40,7 +40,11 @@ impl DocumentChange {
 }
 
 impl Deletion {
-    pub fn new(docid: DocumentId, external_docid: String, current: Box<KvReaderFieldId>) -> Self {
+    pub fn create(
+        docid: DocumentId,
+        external_docid: String,
+        current: Box<KvReaderFieldId>,
+    ) -> Self {
         Self { docid, external_docid, current }
     }
 
@@ -54,6 +58,10 @@ impl Deletion {
 }
 
 impl Insertion {
+    pub fn create(docid: DocumentId, external_docid: String, new: Box<KvReaderFieldId>) -> Self {
+        Insertion { docid, external_docid, new }
+    }
+
     fn docid(&self) -> DocumentId {
         self.docid
     }
@@ -64,6 +72,15 @@ impl Insertion {
 }
 
 impl Update {
+    pub fn create(
+        docid: DocumentId,
+        external_docid: String,
+        current: Box<KvReaderFieldId>,
+        new: Box<KvReaderFieldId>,
+    ) -> Self {
+        Update { docid, external_docid, current, new }
+    }
+
     fn docid(&self) -> DocumentId {
         self.docid
     }
