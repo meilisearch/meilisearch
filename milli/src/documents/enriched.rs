@@ -69,7 +69,7 @@ impl<R: io::Read + io::Seek> EnrichedDocumentsBatchReader<R> {
 
 #[derive(Debug, Clone)]
 pub struct EnrichedDocument<'a> {
-    pub document: KvReader<'a, FieldId>,
+    pub document: &'a KvReader<FieldId>,
     pub document_id: DocumentId,
 }
 

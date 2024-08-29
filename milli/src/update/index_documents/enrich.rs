@@ -145,7 +145,7 @@ pub fn enrich_documents_batch<R: Read + Seek>(
 #[tracing::instrument(level = "trace", skip(uuid_buffer, documents_batch_index, document)
 target = "indexing::documents")]
 fn fetch_or_generate_document_id(
-    document: &obkv::KvReader<'_, FieldId>,
+    document: &obkv::KvReader<FieldId>,
     documents_batch_index: &DocumentsBatchIndex,
     primary_key: PrimaryKey<'_>,
     autogenerate_docids: bool,

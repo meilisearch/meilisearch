@@ -83,10 +83,10 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     if !settings_diff.settings_update_only || old_faceted_fids != new_faceted_fids {
         let mut cursor = obkv_documents.into_cursor()?;
         while let Some((docid_bytes, value)) = cursor.move_on_next()? {
-            let obkv = obkv::KvReader::new(value);
+            let obkv = obkv::KvReader::from_slice(value);
             let get_document_json_value = move |field_id, side| {
                 obkv.get(field_id)
-                    .map(KvReaderDelAdd::new)
+                    .map(KvReaderDelAdd::from_slice)
                     .and_then(|kv| kv.get(side))
                     .map(from_slice)
                     .transpose()

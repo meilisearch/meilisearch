@@ -307,7 +307,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
         debug_assert!(from_utf8(external_id_bytes).is_ok());
         let docid = DocumentId::from_be_bytes(docid_bytes);
 
-        let obkv = obkv::KvReader::new(value);
+        let obkv = obkv::KvReader::from_slice(value);
         key_buffer.clear();
         key_buffer.extend_from_slice(docid_bytes.as_slice());
 
@@ -475,7 +475,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
 #[allow(clippy::too_many_arguments)] // feel free to find efficient way to factor arguments
 fn extract_vector_document_diff(
     docid: DocumentId,
-    obkv: obkv::KvReader<'_, FieldId>,
+    obkv: &obkv::KvReader<FieldId>,
     prompt: &Prompt,
     (add_to_user_provided, remove_from_user_provided): (&mut RoaringBitmap, &mut RoaringBitmap),
     (old, new): (VectorState, VectorState),
@@ -517,7 +517,7 @@ fn extract_vector_document_diff(
             // Do we keep this document?
             let document_is_kept = obkv
                 .iter()
-                .map(|(_, deladd)| KvReaderDelAdd::new(deladd))
+                .map(|(_, deladd)| KvReaderDelAdd::from_slice(deladd))
                 .any(|deladd| deladd.get(DelAdd::Addition).is_some());
 
             if document_is_kept {
@@ -553,7 +553,7 @@ fn extract_vector_document_diff(
             // Do we keep this document?
             let document_is_kept = obkv
                 .iter()
-                .map(|(_, deladd)| KvReaderDelAdd::new(deladd))
+                .map(|(_, deladd)| KvReaderDelAdd::from_slice(deladd))
                 .any(|deladd| deladd.get(DelAdd::Addition).is_some());
             if document_is_kept {
                 if embedder_is_manual {
@@ -579,7 +579,7 @@ fn extract_vector_document_diff(
             // Do we keep this document?
             let document_is_kept = obkv
                 .iter()
-                .map(|(_, deladd)| KvReaderDelAdd::new(deladd))
+                .map(|(_, deladd)| KvReaderDelAdd::from_slice(deladd))
                 .any(|deladd| deladd.get(DelAdd::Addition).is_some());
             if document_is_kept {
                 // if the new version of documents has the vectors in the DB,
@@ -597,7 +597,7 @@ fn extract_vector_document_diff(
 }
 
 fn regenerate_if_prompt_changed(
-    obkv: obkv::KvReader<'_, FieldId>,
+    obkv: &obkv::KvReader<FieldId>,
     (old_prompt, new_prompt): (&Prompt, &Prompt),
     (old_fields_ids_map, new_fields_ids_map): (&FieldsIdsMap, &FieldsIdsMap),
 ) -> Result<VectorStateDelta> {
@@ -612,7 +612,7 @@ fn regenerate_if_prompt_changed(
 }
 
 fn regenerate_prompt(
-    obkv: obkv::KvReader<'_, FieldId>,
+    obkv: &obkv::KvReader<FieldId>,
     prompt: &Prompt,
     new_fields_ids_map: &FieldsIdsMap,
 ) -> Result<VectorStateDelta> {

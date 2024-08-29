@@ -135,7 +135,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
                 if !valid_lmdb_key(key) {
                     continue;
                 }
-                let value = KvReaderDelAdd::new(value);
+                let value = KvReaderDelAdd::from_slice(value);
 
                 // DB is empty, it is safe to ignore Del operations
                 let Some(value) = value.get(DelAdd::Addition) else {
@@ -161,7 +161,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
                     continue;
                 }
 
-                let value = KvReaderDelAdd::new(value);
+                let value = KvReaderDelAdd::from_slice(value);
 
                 // the value is a CboRoaringBitmap, but I still need to prepend the
                 // group size for level 0 (= 1) to it

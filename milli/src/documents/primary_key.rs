@@ -52,7 +52,7 @@ impl<'a> PrimaryKey<'a> {
 
     pub fn document_id(
         &self,
-        document: &obkv::KvReader<'_, FieldId>,
+        document: &obkv::KvReader<FieldId>,
         fields: &impl FieldIdMapper,
     ) -> Result<StdResult<String, DocumentIdExtractionError>> {
         match self {

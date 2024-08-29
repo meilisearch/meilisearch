@@ -58,17 +58,17 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         let document_id = u32::from_be_bytes(document_id_bytes);
         let fid = u16::from_be_bytes(fid_bytes);
 
-        let del_add_reader = KvReaderDelAdd::new(value);
+        let del_add_reader = KvReaderDelAdd::from_slice(value);
         // extract all unique words to remove.
         if let Some(deletion) = del_add_reader.get(DelAdd::Deletion) {
-            for (_pos, word) in KvReaderU16::new(deletion).iter() {
+            for (_pos, word) in KvReaderU16::from_slice(deletion).iter() {
                 del_words.insert(word.to_vec());
             }
         }
 
         // extract all unique additional words.
         if let Some(addition) = del_add_reader.get(DelAdd::Addition) {
-            for (_pos, word) in KvReaderU16::new(addition).iter() {
+            for (_pos, word) in KvReaderU16::from_slice(addition).iter() {
                 add_words.insert(word.to_vec());
             }
         }
@@ -115,7 +115,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     // NOTE: replacing sorters by bitmap merging is less efficient, so, use sorters.
     while let Some((key, value)) = iter.next()? {
         // only keep the value if their is a change to apply in the DB.
-        if !is_noop_del_add_obkv(KvReaderDelAdd::new(value)) {
+        if !is_noop_del_add_obkv(KvReaderDelAdd::from_slice(value)) {
             word_fid_docids_writer.insert(key, value)?;
         }
 
@@ -123,7 +123,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
             .map_err(|_| SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
 
         // merge all deletions
-        let obkv = KvReaderDelAdd::new(value);
+        let obkv = KvReaderDelAdd::from_slice(value);
         if let Some(value) = obkv.get(DelAdd::Deletion) {
             let delete_from_exact = settings_diff.old.exact_attributes.contains(&fid);
             buffer.clear();

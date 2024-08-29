@@ -92,8 +92,8 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
                 }
 
                 // deletions
-                if let Some(deletion) = KvReaderDelAdd::new(value).get(DelAdd::Deletion) {
-                    for (position, word) in KvReaderU16::new(deletion).iter() {
+                if let Some(deletion) = KvReaderDelAdd::from_slice(value).get(DelAdd::Deletion) {
+                    for (position, word) in KvReaderU16::from_slice(deletion).iter() {
                         // drain the proximity window until the head word is considered close to the word we are inserting.
                         while del_word_positions.front().map_or(false, |(_w, p)| {
                             index_proximity(*p as u32, position as u32) >= MAX_DISTANCE
@@ -125,8 +125,8 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
                 }
 
                 // additions
-                if let Some(addition) = KvReaderDelAdd::new(value).get(DelAdd::Addition) {
-                    for (position, word) in KvReaderU16::new(addition).iter() {
+                if let Some(addition) = KvReaderDelAdd::from_slice(value).get(DelAdd::Addition) {
+                    for (position, word) in KvReaderU16::from_slice(addition).iter() {
                         // drain the proximity window until the head word is considered close to the word we are inserting.
                         while add_word_positions.front().map_or(false, |(_w, p)| {
                             index_proximity(*p as u32, position as u32) >= MAX_DISTANCE

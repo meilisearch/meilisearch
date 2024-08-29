@@ -109,7 +109,7 @@ impl FacetsUpdateIncremental {
             }
             current_field_id = Some(key.field_id);
 
-            let value = KvReader::new(value);
+            let value = KvReader::from_slice(value);
             let docids_to_delete = value
                 .get(DelAdd::Deletion)
                 .map(CboRoaringBitmapCodec::bytes_decode)

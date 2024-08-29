@@ -1,5 +1,5 @@
 use heed::RoTxn;
-use obkv2::KvReader;
+use obkv::KvReader;
 
 use super::indexer::KvReaderFieldId;
 use crate::{DocumentId, FieldId};

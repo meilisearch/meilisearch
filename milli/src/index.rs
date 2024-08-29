@@ -1252,7 +1252,7 @@ impl Index {
     /* documents */
 
     /// Returns a document by using the document id.
-    pub fn document<'t>(&self, rtxn: &'t RoTxn, id: DocumentId) -> Result<obkv::KvReaderU16<'t>> {
+    pub fn document<'t>(&self, rtxn: &'t RoTxn, id: DocumentId) -> Result<&'t obkv::KvReaderU16> {
         self.documents
             .get(rtxn, &id)?
             .ok_or(UserError::UnknownInternalDocumentId { document_id: id })
@@ -1264,7 +1264,7 @@ impl Index {
         &'a self,
         rtxn: &'t RoTxn<'t>,
         ids: impl IntoIterator<Item = DocumentId> + 'a,
-    ) -> Result<impl Iterator<Item = Result<(DocumentId, obkv::KvReaderU16<'t>)>> + 'a> {
+    ) -> Result<impl Iterator<Item = Result<(DocumentId, &'t obkv::KvReaderU16)>> + 'a> {
         Ok(ids.into_iter().map(move |id| {
             let kv = self
                 .documents
@@ -1279,7 +1279,7 @@ impl Index {
         &self,
         rtxn: &'t RoTxn<'t>,
         ids: impl IntoIterator<Item = DocumentId>,
-    ) -> Result<Vec<(DocumentId, obkv::KvReaderU16<'t>)>> {
+    ) -> Result<Vec<(DocumentId, &'t obkv::KvReaderU16)>> {
         self.iter_documents(rtxn, ids)?.collect()
     }
 
@@ -1287,7 +1287,7 @@ impl Index {
     pub fn all_documents<'a, 't: 'a>(
         &'a self,
         rtxn: &'t RoTxn<'t>,
-    ) -> Result<impl Iterator<Item = Result<(DocumentId, obkv::KvReaderU16<'t>)>> + 'a> {
+    ) -> Result<impl Iterator<Item = Result<(DocumentId, &'t obkv::KvReaderU16)>> + 'a> {
         self.iter_documents(rtxn, self.documents_ids(rtxn)?)
     }
 

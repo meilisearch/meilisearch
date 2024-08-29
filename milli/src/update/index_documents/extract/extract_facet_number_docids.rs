@@ -45,7 +45,7 @@ pub fn extract_facet_number_docids<R: io::Read + io::Seek>(
 
         buffer.clear();
         let mut obkv = KvWriterDelAdd::new(&mut buffer);
-        for (deladd_key, _) in KvReaderDelAdd::new(deladd_obkv_bytes).iter() {
+        for (deladd_key, _) in KvReaderDelAdd::from_slice(deladd_obkv_bytes).iter() {
             obkv.insert(deladd_key, document_id.to_ne_bytes())?;
         }
         obkv.finish()?;

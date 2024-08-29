@@ -162,7 +162,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let mut vectors_buffer = Vec::new();
             while let Some((key, reader)) = iter.next()? {
                 let mut writer: KvWriter<_, FieldId> = KvWriter::memory();
-                let reader: KvReader<'_, FieldId> = KvReader::new(reader);
+                let reader: &KvReader<FieldId> = reader.into();
 
                 let (document_id_bytes, external_id_bytes) = try_split_array_at(key)
                     .ok_or(SerializationError::Decoding { db_name: Some(DOCUMENTS) })?;
@@ -170,7 +170,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 let external_id = std::str::from_utf8(external_id_bytes)?;
 
                 for (field_id, value) in reader.iter() {
-                    let del_add_reader = KvReaderDelAdd::new(value);
+                    let del_add_reader = KvReaderDelAdd::from_slice(value);
 
                     if let Some(addition) = del_add_reader.get(DelAdd::Addition) {
                         let addition = if vectors_fid == Some(field_id) {
@@ -529,7 +529,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 index.field_id_docid_facet_f64s.remap_types::<Bytes, Bytes>();
             let mut iter = merger.into_stream_merger_iter()?;
             while let Some((key, value)) = iter.next()? {
-                let reader = KvReaderDelAdd::new(value);
+                let reader = KvReaderDelAdd::from_slice(value);
                 if valid_lmdb_key(key) {
                     match (reader.get(DelAdd::Deletion), reader.get(DelAdd::Addition)) {
                         (None, None) => {}
@@ -563,7 +563,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 index.field_id_docid_facet_strings.remap_types::<Bytes, Bytes>();
             let mut iter = merger.into_stream_merger_iter()?;
             while let Some((key, value)) = iter.next()? {
-                let reader = KvReaderDelAdd::new(value);
+                let reader = KvReaderDelAdd::from_slice(value);
                 if valid_lmdb_key(key) {
                     match (reader.get(DelAdd::Deletion), reader.get(DelAdd::Addition)) {
                         (None, None) => {}
@@ -600,7 +600,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 // convert the key back to a u32 (4 bytes)
                 let docid = key.try_into().map(DocumentId::from_be_bytes).unwrap();
 
-                let deladd_obkv = KvReaderDelAdd::new(value);
+                let deladd_obkv = KvReaderDelAdd::from_slice(value);
                 if let Some(value) = deladd_obkv.get(DelAdd::Deletion) {
                     let geopoint = extract_geo_point(value, docid);
                     rtree.remove(&geopoint);
@@ -723,7 +723,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 let (left, _index) = try_split_array_at(key).unwrap();
                 let docid = DocumentId::from_be_bytes(left);
 
-                let vector_deladd_obkv = KvReaderDelAdd::new(value);
+                let vector_deladd_obkv = KvReaderDelAdd::from_slice(value);
                 if let Some(value) = vector_deladd_obkv.get(DelAdd::Deletion) {
                     let vector: Vec<f32> = pod_collect_to_vec(value);
 
@@ -852,7 +852,7 @@ where
         if valid_lmdb_key(key) {
             let (proximity_to_insert, word1, word2) =
                 U8StrStrCodec::bytes_decode(key).map_err(heed::Error::Decoding)?;
-            let data_to_insert = match KvReaderDelAdd::new(value).get(DelAdd::Addition) {
+            let data_to_insert = match KvReaderDelAdd::from_slice(value).get(DelAdd::Addition) {
                 Some(value) => {
                     CboRoaringBitmapCodec::bytes_decode(value).map_err(heed::Error::Decoding)?
                 }

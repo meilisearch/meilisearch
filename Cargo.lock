@@ -3434,7 +3434,7 @@ dependencies = [
  "mimalloc",
  "mime",
  "num_cpus",
- "obkv 0.2.2",
+ "obkv",
  "once_cell",
  "ordered-float",
  "parking_lot",
@@ -3601,8 +3601,7 @@ dependencies = [
  "memchr",
  "memmap2",
  "mimalloc",
- "obkv 0.2.2",
- "obkv 0.3.0",
+ "obkv",
  "once_cell",
  "ordered-float",
  "rand",
@@ -3851,14 +3850,8 @@ dependencies = [
 
 [[package]]
 name = "obkv"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2e27bcfe835a379d32352112f6b8dbae2d99d16a5fff42abe6e5ba5386c1e5a"
-
-[[package]]
-name = "obkv"
 version = "0.3.0"
-source = "git+https://github.com/kerollmops/obkv?branch=unsized-kvreader#5289a6658cd471f4212c1edc1a40b2a3c3d11fe0"
+source = "git+https://github.com/kerollmops/obkv?branch=unsized-kvreader#9c2900d106fa84e7079b288e7f7c366ec7cae948"
 
 [[package]]
 name = "once_cell"

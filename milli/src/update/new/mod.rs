@@ -4,7 +4,8 @@ mod channel;
 mod items_pool;
 mod merge;
 
-mod global_fields_ids_map;
+/// TODO remove this
+// mod global_fields_ids_map;
 
 pub type StdResult<T, E> = std::result::Result<T, E>;
 
@@ -27,8 +28,7 @@ mod indexer {
 
     use super::channel::{
         extractors_merger_channels, merger_writer_channels, EntryOperation,
-        ExtractorsMergerChannels, MergerReceiver, MergerSender, MergerWriterChannels,
-        WriterOperation,
+        ExtractorsMergerChannels, MergerReceiver, MergerSender, WriterOperation,
     };
     use super::document_change::{Deletion, DocumentChange, Insertion, Update};
     use super::items_pool::ItemsPool;
@@ -44,10 +44,10 @@ mod indexer {
         Result, UserError,
     };
 
-    pub type KvReaderFieldId = obkv2::KvReader<FieldId>;
-    pub type KvReaderDelAdd = obkv2::KvReader<DelAdd>;
-    pub type KvWriterFieldId<W> = obkv2::KvWriter<W, FieldId>;
-    pub type KvWriterDelAdd<W> = obkv2::KvWriter<W, DelAdd>;
+    pub type KvReaderFieldId = obkv::KvReader<FieldId>;
+    pub type KvReaderDelAdd = obkv::KvReader<DelAdd>;
+    pub type KvWriterFieldId<W> = obkv::KvWriter<W, FieldId>;
+    pub type KvWriterDelAdd<W> = obkv::KvWriter<W, DelAdd>;
 
     pub struct DocumentOperationIndexer {
         operations: Vec<Payload>,
@@ -105,7 +105,7 @@ mod indexer {
             rtxn: &'a RoTxn,
             mut fields_ids_map: FieldsIdsMap,
             primary_key: &'a PrimaryKey<'a>,
-        ) -> Result<impl ParallelIterator<Item = DocumentChange> + 'a> {
+        ) -> Result<impl ParallelIterator<Item = Result<Option<DocumentChange>>> + 'a> {
             let documents_ids = index.documents_ids(rtxn)?;
             let mut available_docids = AvailableDocumentsIds::from_documents_ids(&documents_ids);
             let mut docids_version_offsets = HashMap::<String, _>::new();
@@ -198,7 +198,7 @@ mod indexer {
             }
 
             let items = Arc::new(ItemsPool::new(|| index.read_txn().map_err(crate::Error::from)));
-            docids_version_offsets.into_par_iter().map_with(
+            Ok(docids_version_offsets.into_par_iter().map_with(
                 items,
                 |context_pool, (external_docid, (internal_docid, operations))| {
                     context_pool.with(|rtxn| match self.method {
@@ -221,58 +221,7 @@ mod indexer {
                         ),
                     })
                 },
-            );
-
-            Ok(vec![].into_par_iter())
-
-            // let mut file_count: usize = 0;
-            // for result in WalkDir::new(update_files_path)
-            //     // TODO handle errors
-            //     .sort_by_key(|entry| entry.metadata().unwrap().created().unwrap())
-            // {
-            //     let entry = result?;
-            //     if !entry.file_type().is_file() {
-            //         continue;
-            //     }
-
-            //     let file = File::open(entry.path())
-            //         .with_context(|| format!("While opening {}", entry.path().display()))?;
-            //     let content = unsafe {
-            //         Mmap::map(&file)
-            //             .map(Arc::new)
-            //             .with_context(|| format!("While memory mapping {}", entry.path().display()))?
-            //     };
-
-            //     let reader =
-            //         crate::documents::DocumentsBatchReader::from_reader(Cursor::new(content.as_ref()))?;
-            //     let (mut batch_cursor, batch_index) = reader.into_cursor_and_fields_index();
-            //     batch_index.iter().for_each(|(_, name)| {
-            //         fields_ids_map.insert(name);
-            //     });
-            //     let mut offset: u32 = 0;
-            //     while let Some(document) = batch_cursor.next_document()? {
-            //         let primary_key = batch_index.id(primary_key).unwrap();
-            //         let document_id = document.get(primary_key).unwrap();
-            //         let document_id = std::str::from_utf8(document_id).unwrap();
-
-            //         let document_offset = DocumentOffset { content: content.clone(), offset };
-            //         match docids_version_offsets.get_mut(document_id) {
-            //             None => {
-            //                 let docid = match maindb.external_documents_ids.get(rtxn, document_id)? {
-            //                     Some(docid) => docid,
-            //                     None => sequential_docids.next().context("no more available docids")?,
-            //                 };
-            //                 docids_version_offsets
-            //                     .insert(document_id.into(), (docid, smallvec![document_offset]));
-            //             }
-            //             Some((_, offsets)) => offsets.push(document_offset),
-            //         }
-            //         offset += 1;
-            //         p.inc(1);
-            //     }
-
-            //     file_count += 1;
-            // }
+            ))
         }
     }
 

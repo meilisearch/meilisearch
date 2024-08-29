@@ -75,7 +75,7 @@ fn extract_facet_string_docids_document_update<R: io::Read + io::Seek>(
     let mut buffer = Vec::new();
     let mut cursor = docid_fid_facet_string.into_cursor()?;
     while let Some((key, deladd_original_value_bytes)) = cursor.move_on_next()? {
-        let deladd_reader = KvReaderDelAdd::new(deladd_original_value_bytes);
+        let deladd_reader = KvReaderDelAdd::from_slice(deladd_original_value_bytes);
 
         let is_same_value = deladd_reader.get(DelAdd::Deletion).is_some()
             && deladd_reader.get(DelAdd::Addition).is_some();
@@ -163,7 +163,7 @@ fn extract_facet_string_docids_settings<R: io::Read + io::Seek>(
     let mut buffer = Vec::new();
     let mut cursor = docid_fid_facet_string.into_cursor()?;
     while let Some((key, deladd_original_value_bytes)) = cursor.move_on_next()? {
-        let deladd_reader = KvReaderDelAdd::new(deladd_original_value_bytes);
+        let deladd_reader = KvReaderDelAdd::from_slice(deladd_original_value_bytes);
 
         let is_same_value = deladd_reader.get(DelAdd::Deletion).is_some()
             && deladd_reader.get(DelAdd::Addition).is_some();

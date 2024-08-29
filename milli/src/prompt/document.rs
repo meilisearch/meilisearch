@@ -30,13 +30,13 @@ impl ParsedValue {
 
 impl<'a> Document<'a> {
     pub fn new(
-        data: obkv::KvReaderU16<'a>,
+        data: &'a obkv::KvReaderU16,
         side: DelAdd,
         inverted_field_map: &'a FieldsIdsMap,
     ) -> Self {
         let mut out_data = BTreeMap::new();
         for (fid, raw) in data {
-            let obkv = KvReaderDelAdd::new(raw);
+            let obkv = KvReaderDelAdd::from_slice(raw);
             let Some(raw) = obkv.get(side) else {
                 continue;
             };

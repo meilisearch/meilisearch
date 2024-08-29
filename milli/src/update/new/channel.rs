@@ -1,4 +1,3 @@
-use core::slice::SlicePattern;
 use std::fs::File;
 
 use crossbeam_channel::{IntoIter, Receiver, SendError, Sender};
@@ -44,11 +43,11 @@ impl KeyValueEntry {
     }
 
     pub fn key(&self) -> &[u8] {
-        &self.data.as_slice()[..self.key_length]
+        &self.data.as_ref()[..self.key_length]
     }
 
     pub fn value(&self) -> &[u8] {
-        &self.data.as_slice()[self.key_length..]
+        &self.data.as_ref()[self.key_length..]
     }
 }
 

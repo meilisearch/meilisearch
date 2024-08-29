@@ -187,7 +187,7 @@ fn index_facet_search(
 ) -> Result<()> {
     let mut iter = normalized_delta_data.into_stream_merger_iter()?;
     while let Some((key_bytes, delta_bytes)) = iter.next()? {
-        let deladd_reader = KvReaderDelAdd::new(delta_bytes);
+        let deladd_reader = KvReaderDelAdd::from_slice(delta_bytes);
 
         let database_set = index
             .facet_id_normalized_string_strings

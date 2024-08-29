@@ -45,19 +45,23 @@ pub fn extract_fid_word_count_docids<R: io::Read + io::Seek>(
             .ok_or(SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
         let document_id = u32::from_be_bytes(document_id_bytes);
 
-        let del_add_reader = KvReaderDelAdd::new(value);
+        let del_add_reader = KvReaderDelAdd::from_slice(value);
         let deletion = del_add_reader
             // get deleted words
             .get(DelAdd::Deletion)
             // count deleted words
-            .map(|deletion| KvReaderU16::new(deletion).iter().take(MAX_COUNTED_WORDS + 1).count())
+            .map(|deletion| {
+                KvReaderU16::from_slice(deletion).iter().take(MAX_COUNTED_WORDS + 1).count()
+            })
             // keep the count if under or equal to MAX_COUNTED_WORDS
             .filter(|&word_count| word_count <= MAX_COUNTED_WORDS);
         let addition = del_add_reader
             // get added words
             .get(DelAdd::Addition)
             // count added words
-            .map(|addition| KvReaderU16::new(addition).iter().take(MAX_COUNTED_WORDS + 1).count())
+            .map(|addition| {
+                KvReaderU16::from_slice(addition).iter().take(MAX_COUNTED_WORDS + 1).count()
+            })
             // keep the count if under or equal to MAX_COUNTED_WORDS
             .filter(|&word_count| word_count <= MAX_COUNTED_WORDS);
 

@@ -45,8 +45,8 @@ pub fn keep_latest_obkv<'a>(_key: &[u8], obkvs: &[Cow<'a, [u8]>]) -> Result<Cow<
 }
 
 pub fn merge_two_del_add_obkvs(
-    base: obkv::KvReaderU16<'_>,
-    update: obkv::KvReaderU16<'_>,
+    base: &obkv::KvReaderU16,
+    update: &obkv::KvReaderU16,
     merge_additions: bool,
     buffer: &mut Vec<u8>,
 ) {
@@ -66,7 +66,7 @@ pub fn merge_two_del_add_obkvs(
                     // If merge_additions is false, recreate an obkv keeping the deletions only.
                     value_buffer.clear();
                     let mut value_writer = KvWriterDelAdd::new(&mut value_buffer);
-                    let base_reader = KvReaderDelAdd::new(v);
+                    let base_reader = KvReaderDelAdd::from_slice(v);
 
                     if let Some(deletion) = base_reader.get(DelAdd::Deletion) {
                         value_writer.insert(DelAdd::Deletion, deletion).unwrap();
@@ -80,8 +80,8 @@ pub fn merge_two_del_add_obkvs(
                 // merge deletions and additions.
                 value_buffer.clear();
                 let mut value_writer = KvWriterDelAdd::new(&mut value_buffer);
-                let base_reader = KvReaderDelAdd::new(base);
-                let update_reader = KvReaderDelAdd::new(update);
+                let base_reader = KvReaderDelAdd::from_slice(base);
+                let update_reader = KvReaderDelAdd::from_slice(update);
 
                 // keep newest deletion.
                 if let Some(deletion) = update_reader
@@ -131,8 +131,8 @@ fn inner_merge_del_add_obkvs<'a>(
             break;
         }
 
-        let newest = obkv::KvReader::new(&acc);
-        let oldest = obkv::KvReader::new(&current[1..]);
+        let newest = obkv::KvReader::from_slice(&acc);
+        let oldest = obkv::KvReader::from_slice(&current[1..]);
         merge_two_del_add_obkvs(oldest, newest, merge_additions, &mut buffer);
 
         // we want the result of the merge into our accumulator.
@@ -187,7 +187,7 @@ pub fn merge_deladd_cbo_roaring_bitmaps<'a>(
         let mut del_bitmaps_bytes = Vec::new();
         let mut add_bitmaps_bytes = Vec::new();
         for value in values {
-            let obkv = KvReaderDelAdd::new(value);
+            let obkv = KvReaderDelAdd::from_slice(value);
             if let Some(bitmap_bytes) = obkv.get(DelAdd::Deletion) {
                 del_bitmaps_bytes.push(bitmap_bytes);
             }
@@ -217,7 +217,7 @@ pub fn merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap<'a>(
     buffer: &'a mut Vec<u8>,
 ) -> Result<Option<&'a [u8]>> {
     Ok(CboRoaringBitmapCodec::merge_deladd_into(
-        KvReaderDelAdd::new(deladd_obkv),
+        KvReaderDelAdd::from_slice(deladd_obkv),
         previous,
         buffer,
     )?)
@@ -236,7 +236,7 @@ pub fn merge_deladd_btreeset_string<'a>(
         let mut del_set = BTreeSet::new();
         let mut add_set = BTreeSet::new();
         for value in values {
-            let obkv = KvReaderDelAdd::new(value);
+            let obkv = KvReaderDelAdd::from_slice(value);
             if let Some(bytes) = obkv.get(DelAdd::Deletion) {
                 let set = serde_json::from_slice::<BTreeSet<String>>(bytes).unwrap();
                 for value in set {
