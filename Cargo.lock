@@ -3858,7 +3858,7 @@ checksum = "a2e27bcfe835a379d32352112f6b8dbae2d99d16a5fff42abe6e5ba5386c1e5a"
 [[package]]
 name = "obkv"
 version = "0.3.0"
-source = "git+https://github.com/kerollmops/obkv?branch=unsized-kvreader#d248eb7edd3453ff758afc2883f6ae25684eb69e"
+source = "git+https://github.com/kerollmops/obkv?branch=unsized-kvreader#5289a6658cd471f4212c1edc1a40b2a3c3d11fe0"
 
 [[package]]
 name = "once_cell"

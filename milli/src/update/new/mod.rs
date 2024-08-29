@@ -1,8 +1,11 @@
 mod document_change;
 // mod extract;
+mod channel;
 mod items_pool;
 
 mod global_fields_ids_map;
+
+pub type StdResult<T, E> = std::result::Result<T, E>;
 
 mod indexer {
     use std::borrow::Cow;
@@ -352,11 +355,13 @@ mod indexer {
 
     pub struct UpdateByFunctionIndexer;
 
+    // fn
+
     /// Reads the previous version of a document from the database, the new versions
     /// in the grenad update files and merges them to generate a new boxed obkv.
     ///
     /// This function is only meant to be used when doing an update and not a replacement.
-    pub fn merge_document_for_updates(
+    fn merge_document_for_updates(
         rtxn: &RoTxn,
         index: &Index,
         fields_ids_map: &FieldsIdsMap,
@@ -431,7 +436,7 @@ mod indexer {
     /// Returns only the most recent version of a document based on the updates from the payloads.
     ///
     /// This function is only meant to be used when doing a replacement and not an update.
-    pub fn merge_document_for_replacements(
+    fn merge_document_for_replacements(
         rtxn: &RoTxn,
         index: &Index,
         fields_ids_map: &FieldsIdsMap,
