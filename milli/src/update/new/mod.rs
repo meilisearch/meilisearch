@@ -15,15 +15,21 @@ mod indexer {
     use std::io::Cursor;
     use std::os::unix::fs::MetadataExt;
     use std::sync::Arc;
+    use std::thread;
 
+    use big_s::S;
     use heed::types::Bytes;
-    use heed::RoTxn;
+    use heed::{RoTxn, RwTxn};
     use memmap2::Mmap;
     use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
     use roaring::RoaringBitmap;
     use serde_json::Value;
 
-    use super::channel::{MergerReceiver, MergerSender};
+    use super::channel::{
+        extractors_merger_channels, merger_writer_channels, EntryOperation,
+        ExtractorsMergerChannels, MergerReceiver, MergerSender, MergerWriterChannels,
+        WriterOperation,
+    };
     use super::document_change::{Deletion, DocumentChange, Insertion, Update};
     use super::items_pool::ItemsPool;
     use super::merge;
@@ -362,6 +368,44 @@ mod indexer {
     }
 
     pub struct UpdateByFunctionIndexer;
+
+    /// TODO return stats
+    /// TODO take the rayon ThreadPool
+    pub fn index<PI>(wtxn: &mut RwTxn, index: &Index, document_changes: PI) -> Result<()>
+    where
+        PI: IntoParallelIterator<Item = Result<DocumentChange>> + Send,
+        PI::Iter: Clone,
+    {
+        let (merger_sender, writer_receiver) = merger_writer_channels(100);
+        let ExtractorsMergerChannels { merger_receiver, deladd_cbo_roaring_bitmap_sender } =
+            extractors_merger_channels(100);
+
+        thread::scope(|s| {
+            thread::Builder::new().name(S("indexer-extractors")).spawn_scoped(s, || {
+                document_changes.into_par_iter().for_each(|_dc| ());
+            });
+
+            // TODO manage the errors correctly
+            thread::Builder::new().name(S("indexer-merger")).spawn_scoped(s, || {
+                let rtxn = index.read_txn().unwrap();
+                merge_grenad_entries(merger_receiver, merger_sender, &rtxn, index).unwrap()
+            });
+
+            // TODO Split this code into another function
+            for operation in writer_receiver {
+                let database = operation.database(index);
+                match operation {
+                    WriterOperation::WordDocids(operation) => match operation {
+                        EntryOperation::Delete(e) => database.delete(wtxn, e.entry()).map(drop)?,
+                        EntryOperation::Write(e) => database.put(wtxn, e.key(), e.value())?,
+                    },
+                    WriterOperation::Document(e) => database.put(wtxn, &e.key(), e.content())?,
+                }
+            }
+
+            Ok(())
+        })
+    }
 
     enum Operation {
         Write(RoaringBitmap),

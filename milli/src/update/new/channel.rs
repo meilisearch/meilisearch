@@ -1,6 +1,7 @@
+use core::slice::SlicePattern;
 use std::fs::File;
 
-use crossbeam_channel::{Receiver, RecvError, SendError, Sender};
+use crossbeam_channel::{IntoIter, Receiver, SendError, Sender};
 use heed::types::Bytes;
 
 use super::indexer::KvReaderFieldId;
@@ -8,20 +9,9 @@ use super::StdResult;
 use crate::{DocumentId, Index};
 
 /// The capacity of the channel is currently in number of messages.
-pub fn merger_writer_channels(cap: usize) -> MergerWriterChannels {
+pub fn merger_writer_channels(cap: usize) -> (MergerSender, WriterReceiver) {
     let (sender, receiver) = crossbeam_channel::bounded(cap);
-
-    MergerWriterChannels {
-        writer_receiver: WriterReceiver(receiver),
-        merger_sender: MergerSender(sender.clone()),
-        document_sender: DocumentSender(sender),
-    }
-}
-
-pub struct MergerWriterChannels {
-    pub writer_receiver: WriterReceiver,
-    pub merger_sender: MergerSender,
-    pub document_sender: DocumentSender,
+    (MergerSender(sender), WriterReceiver(receiver))
 }
 
 /// The capacity of the channel is currently in number of messages.
@@ -53,8 +43,12 @@ impl KeyValueEntry {
         KeyValueEntry { key_length: key.len(), data: data.into_boxed_slice() }
     }
 
-    pub fn entry(&self) -> (&[u8], &[u8]) {
-        self.data.split_at(self.key_length)
+    pub fn key(&self) -> &[u8] {
+        &self.data.as_slice()[..self.key_length]
+    }
+
+    pub fn value(&self) -> &[u8] {
+        &self.data.as_slice()[self.key_length..]
     }
 }
 
@@ -72,7 +66,7 @@ impl KeyEntry {
     }
 }
 
-enum EntryOperation {
+pub enum EntryOperation {
     Delete(KeyEntry),
     Write(KeyValueEntry),
 }
@@ -91,9 +85,12 @@ impl DocumentEntry {
         DocumentEntry { docid, content }
     }
 
-    pub fn entry(&self) -> ([u8; 4], &[u8]) {
-        let docid = self.docid.to_be_bytes();
-        (docid, &self.content)
+    pub fn key(&self) -> [u8; 4] {
+        self.docid.to_be_bytes()
+    }
+
+    pub fn content(&self) -> &[u8] {
+        &self.content
     }
 }
 
@@ -113,9 +110,12 @@ impl WriterOperation {
 
 pub struct WriterReceiver(Receiver<WriterOperation>);
 
-impl WriterReceiver {
-    pub fn recv(&self) -> StdResult<WriterOperation, RecvError> {
-        self.0.recv()
+impl IntoIterator for WriterReceiver {
+    type Item = WriterOperation;
+    type IntoIter = IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 
@@ -167,7 +167,7 @@ pub struct MergerReceiver(Receiver<MergerOperation>);
 
 impl IntoIterator for MergerReceiver {
     type Item = MergerOperation;
-    type IntoIter = crossbeam_channel::IntoIter<Self::Item>;
+    type IntoIter = IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
