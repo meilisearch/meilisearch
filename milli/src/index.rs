@@ -1311,7 +1311,7 @@ impl Index {
         })?;
         Ok(self.iter_documents(rtxn, ids)?.map(move |entry| -> Result<_> {
             let (_docid, obkv) = entry?;
-            match primary_key.document_id(&obkv, &fields)? {
+            match primary_key.document_id(obkv, &fields)? {
                 Ok(document_id) => Ok(document_id),
                 Err(_) => Err(InternalError::DocumentsError(
                     crate::documents::Error::InvalidDocumentFormat,

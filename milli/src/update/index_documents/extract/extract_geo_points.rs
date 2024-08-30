@@ -40,11 +40,9 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
         };
 
         // extract old version
-        let del_lat_lng =
-            extract_lat_lng(&obkv, &settings_diff.old, DelAdd::Deletion, document_id)?;
+        let del_lat_lng = extract_lat_lng(obkv, &settings_diff.old, DelAdd::Deletion, document_id)?;
         // extract new version
-        let add_lat_lng =
-            extract_lat_lng(&obkv, &settings_diff.new, DelAdd::Addition, document_id)?;
+        let add_lat_lng = extract_lat_lng(obkv, &settings_diff.new, DelAdd::Addition, document_id)?;
 
         if del_lat_lng != add_lat_lng {
             let mut obkv = KvWriterDelAdd::memory();

@@ -8,7 +8,7 @@ use obkv::{KvReader, KvWriterU16};
 use roaring::RoaringBitmap;
 use serde_json::Value;
 
-use super::helpers::{create_sorter, keep_latest_obkv, sorter_into_reader, GrenadParameters};
+use super::helpers::{create_sorter, sorter_into_reader, GrenadParameters, KeepLatestObkv};
 use crate::error::{InternalError, SerializationError};
 use crate::update::del_add::{del_add_from_two_obkvs, DelAdd, KvReaderDelAdd};
 use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
@@ -35,7 +35,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     let mut documents_ids = RoaringBitmap::new();
     let mut docid_word_positions_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
-        keep_latest_obkv,
+        KeepLatestObkv,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -83,7 +83,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         let obkv = KvReader::<FieldId>::from_slice(value);
 
         // if the searchable fields didn't change, skip the searchable indexing for this document.
-        if !force_reindexing && !searchable_fields_changed(&obkv, settings_diff) {
+        if !force_reindexing && !searchable_fields_changed(obkv, settings_diff) {
             continue;
         }
 
@@ -98,7 +98,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
             || {
                 // deletions
                 tokens_from_document(
-                    &obkv,
+                    obkv,
                     &settings_diff.old,
                     &del_tokenizer,
                     max_positions_per_attributes,
@@ -109,7 +109,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
             || {
                 // additions
                 tokens_from_document(
-                    &obkv,
+                    obkv,
                     &settings_diff.new,
                     &add_tokenizer,
                     max_positions_per_attributes,
@@ -126,8 +126,8 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         // transforming two KV<FieldId, KV<u16, String>> into one KV<FieldId, KV<DelAdd, KV<u16, String>>>
         value_buffer.clear();
         del_add_from_two_obkvs(
-            &KvReader::<FieldId>::from_slice(del_obkv),
-            &KvReader::<FieldId>::from_slice(add_obkv),
+            KvReader::<FieldId>::from_slice(del_obkv),
+            KvReader::<FieldId>::from_slice(add_obkv),
             &mut value_buffer,
         )?;
 

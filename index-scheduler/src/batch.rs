@@ -909,10 +909,8 @@ impl IndexScheduler {
                             while let Some(doc) =
                                 cursor.next_document().map_err(milli::Error::from)?
                             {
-                                dump_content_file.push_document(&obkv_to_object(
-                                    &doc,
-                                    &documents_batch_index,
-                                )?)?;
+                                dump_content_file
+                                    .push_document(&obkv_to_object(doc, &documents_batch_index)?)?;
                             }
                             dump_content_file.flush()?;
                         }

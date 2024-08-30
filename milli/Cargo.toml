@@ -28,10 +28,7 @@ fst = "0.4.7"
 fxhash = "0.2.1"
 geoutils = "0.5.1"
 grenad = { version = "0.4.7", default-features = false, features = [
-    "rayon",
-    "tempfile",
-] }
-grenad2 = { package = "grenad", version = "0.4.7", default-features = false, features = [
+    "rayon", # TODO Should we keep this feature
     "tempfile"
 ], git = "https://github.com/meilisearch/grenad", branch = "various-improvements" }
 heed = { version = "0.20.3", default-features = false, features = [

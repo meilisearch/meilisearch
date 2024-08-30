@@ -2221,22 +2221,12 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 [[package]]
 name = "grenad"
 version = "0.4.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "350d89047298d3b1b40050acd11ab76e487b854a104b760ebc5a7f375093de77"
+source = "git+https://github.com/meilisearch/grenad?branch=various-improvements#58ac87d852413571102f44c5e55ca13509a3f1a0"
 dependencies = [
  "bytemuck",
  "byteorder",
+ "either",
  "rayon",
- "tempfile",
-]
-
-[[package]]
-name = "grenad"
-version = "0.4.7"
-source = "git+https://github.com/meilisearch/grenad?branch=various-improvements#d7512aedb854c247acc7cd18d0bfa148d3779923"
-dependencies = [
- "bytemuck",
- "byteorder",
  "tempfile",
 ]
 
@@ -2848,7 +2838,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e310b3a6b5907f99202fcdb4960ff45b93735d7c7d96b760fcff8db2dc0e103d"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.4",
+ "windows-targets 0.48.1",
 ]
 
 [[package]]
@@ -3584,8 +3574,7 @@ dependencies = [
  "fst",
  "fxhash",
  "geoutils",
- "grenad 0.4.7 (registry+https://github.com/rust-lang/crates.io-index)",
- "grenad 0.4.7 (git+https://github.com/meilisearch/grenad?branch=various-improvements)",
+ "grenad",
  "heed",
  "hf-hub",
  "indexmap",

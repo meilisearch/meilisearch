@@ -198,7 +198,7 @@ mod indexer {
             }
 
             let items = Arc::new(ItemsPool::new(|| index.read_txn().map_err(crate::Error::from)));
-            Ok(docids_version_offsets.into_par_iter().map_with(
+            docids_version_offsets.into_par_iter().map_with(
                 items,
                 |context_pool, (external_docid, (internal_docid, operations))| {
                     context_pool.with(|rtxn| match self.method {
@@ -221,7 +221,9 @@ mod indexer {
                         ),
                     })
                 },
-            ))
+            );
+
+            Ok(vec![].into_par_iter())
         }
     }
 
@@ -334,13 +336,13 @@ mod indexer {
         thread::scope(|s| {
             thread::Builder::new().name(S("indexer-extractors")).spawn_scoped(s, || {
                 document_changes.into_par_iter().for_each(|_dc| ());
-            });
+            })?;
 
             // TODO manage the errors correctly
             thread::Builder::new().name(S("indexer-merger")).spawn_scoped(s, || {
                 let rtxn = index.read_txn().unwrap();
                 merge_grenad_entries(merger_receiver, merger_sender, &rtxn, index).unwrap()
-            });
+            })?;
 
             // TODO Split this code into another function
             for operation in writer_receiver {
@@ -426,7 +428,7 @@ mod indexer {
                     let sender = sender.word_docids();
                     let database = index.word_docids.remap_types::<Bytes, Bytes>();
 
-                    let mut builder = grenad2::MergerBuilder::new(merge::DelAddRoaringBitmapMerger);
+                    let mut builder = grenad::MergerBuilder::new(merge::DelAddRoaringBitmapMerger);
                     builder.extend(cursors);
                     /// TODO manage the error correctly
                     let mut merger_iter = builder.build().into_stream_merger_iter().unwrap();

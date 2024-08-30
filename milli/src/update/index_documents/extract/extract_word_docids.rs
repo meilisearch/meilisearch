@@ -7,8 +7,8 @@ use obkv::KvReaderU16;
 use roaring::RoaringBitmap;
 
 use super::helpers::{
-    create_sorter, create_writer, merge_deladd_cbo_roaring_bitmaps, try_split_array_at,
-    writer_into_reader, GrenadParameters,
+    create_sorter, create_writer, try_split_array_at, writer_into_reader, GrenadParameters,
+    MergeDeladdCboRoaringBitmaps,
 };
 use crate::error::SerializationError;
 use crate::heed_codec::StrBEU16Codec;
@@ -16,7 +16,6 @@ use crate::index::db_name::DOCID_WORD_POSITIONS;
 use crate::update::del_add::{is_noop_del_add_obkv, DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::index_documents::helpers::sorter_into_reader;
 use crate::update::settings::InnerIndexSettingsDiff;
-use crate::update::MergeFn;
 use crate::{CboRoaringBitmapCodec, DocumentId, FieldId, Result};
 
 /// Extracts the word and the documents ids where this word appear.
@@ -40,7 +39,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
 
     let mut word_fid_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,
-        merge_deladd_cbo_roaring_bitmaps,
+        MergeDeladdCboRoaringBitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -94,7 +93,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
 
     let mut word_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,
-        merge_deladd_cbo_roaring_bitmaps,
+        MergeDeladdCboRoaringBitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -103,7 +102,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
 
     let mut exact_word_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,
-        merge_deladd_cbo_roaring_bitmaps,
+        MergeDeladdCboRoaringBitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -163,7 +162,7 @@ fn words_into_sorter(
     key_buffer: &mut Vec<u8>,
     del_words: &BTreeSet<Vec<u8>>,
     add_words: &BTreeSet<Vec<u8>>,
-    word_fid_docids_sorter: &mut grenad::Sorter<MergeFn>,
+    word_fid_docids_sorter: &mut grenad::Sorter<MergeDeladdCboRoaringBitmaps>,
 ) -> Result<()> {
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};

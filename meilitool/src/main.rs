@@ -244,7 +244,7 @@ fn export_a_dump(
                         format!("While iterating on content file {:?}", content_file_uuid)
                     })? {
                         dump_content_file
-                            .push_document(&obkv_to_object(&doc, &documents_batch_index)?)?;
+                            .push_document(&obkv_to_object(doc, &documents_batch_index)?)?;
                     }
                     dump_content_file.flush()?;
                     count += 1;

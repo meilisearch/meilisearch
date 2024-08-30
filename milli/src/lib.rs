@@ -431,7 +431,7 @@ mod tests {
         writer.insert(id1, b"1234").unwrap();
         writer.insert(id2, b"4321").unwrap();
         let contents = writer.into_inner().unwrap();
-        let obkv = obkv::KvReaderU16::new(&contents);
+        let obkv = obkv::KvReaderU16::from_slice(&contents);
 
         let expected = json!({
             "field1": 1234,

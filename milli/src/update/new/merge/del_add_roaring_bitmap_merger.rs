@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::io;
 
-use grenad2::MergeFunction;
+use grenad::MergeFunction;
 use roaring::RoaringBitmap;
 
 use crate::update::del_add::DelAdd;

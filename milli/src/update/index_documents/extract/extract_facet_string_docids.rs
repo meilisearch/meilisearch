@@ -15,7 +15,7 @@ use crate::heed_codec::{BEU16StrCodec, StrRefCodec};
 use crate::localized_attributes_rules::LocalizedFieldIds;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::index_documents::helpers::{
-    merge_deladd_btreeset_string, merge_deladd_cbo_roaring_bitmaps,
+    MergeDeladdBtreesetString, MergeDeladdCboRoaringBitmaps,
 };
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::{FieldId, Result, MAX_FACET_VALUE_LENGTH};
@@ -56,7 +56,7 @@ fn extract_facet_string_docids_document_update<R: io::Read + io::Seek>(
 
     let mut facet_string_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
-        merge_deladd_cbo_roaring_bitmaps,
+        MergeDeladdCboRoaringBitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -65,7 +65,7 @@ fn extract_facet_string_docids_document_update<R: io::Read + io::Seek>(
 
     let mut normalized_facet_string_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
-        merge_deladd_btreeset_string,
+        MergeDeladdBtreesetString,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -144,7 +144,7 @@ fn extract_facet_string_docids_settings<R: io::Read + io::Seek>(
 
     let mut facet_string_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
-        merge_deladd_cbo_roaring_bitmaps,
+        MergeDeladdCboRoaringBitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -153,7 +153,7 @@ fn extract_facet_string_docids_settings<R: io::Read + io::Seek>(
 
     let mut normalized_facet_string_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
-        merge_deladd_btreeset_string,
+        MergeDeladdBtreesetString,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,

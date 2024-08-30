@@ -159,7 +159,7 @@ impl DocumentSender {
 }
 
 pub enum MergerOperation {
-    WordDocidsCursors(Vec<grenad2::ReaderCursor<File>>),
+    WordDocidsCursors(Vec<grenad::ReaderCursor<File>>),
 }
 
 pub struct MergerReceiver(Receiver<MergerOperation>);

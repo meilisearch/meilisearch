@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
 use std::io::{Read, Seek};
 
+use either::Either;
 use fxhash::FxHashMap;
 use itertools::Itertools;
 use obkv::{KvReader, KvReaderU16, KvWriter};
@@ -13,10 +14,10 @@ use serde_json::Value;
 use smartstring::SmartString;
 
 use super::helpers::{
-    create_sorter, create_writer, keep_first, obkvs_keep_last_addition_merge_deletions,
-    obkvs_merge_additions_and_deletions, sorter_into_reader, MergeFn,
+    create_sorter, create_writer, sorter_into_reader, EitherObkvMerge,
+    ObkvsKeepLastAdditionMergeDeletions, ObkvsMergeAdditionsAndDeletions,
 };
-use super::{IndexDocumentsMethod, IndexerConfig};
+use super::{IndexDocumentsMethod, IndexerConfig, KeepFirst};
 use crate::documents::{DocumentsBatchIndex, EnrichedDocument, EnrichedDocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
 use crate::index::{db_name, main_key};
@@ -59,8 +60,8 @@ pub struct Transform<'a, 'i> {
     // Both grenad follows the same format:
     // key | value
     // u32 | 1 byte for the Operation byte, the rest is the obkv of the document stored
-    original_sorter: grenad::Sorter<MergeFn>,
-    flattened_sorter: grenad::Sorter<MergeFn>,
+    original_sorter: grenad::Sorter<EitherObkvMerge>,
+    flattened_sorter: grenad::Sorter<EitherObkvMerge>,
 
     replaced_documents_ids: RoaringBitmap,
     new_documents_ids: RoaringBitmap,
@@ -108,17 +109,19 @@ impl<'a, 'i> Transform<'a, 'i> {
         index_documents_method: IndexDocumentsMethod,
         _autogenerate_docids: bool,
     ) -> Result<Self> {
+        use IndexDocumentsMethod::{ReplaceDocuments, UpdateDocuments};
+
         // We must choose the appropriate merge function for when two or more documents
         // with the same user id must be merged or fully replaced in the same batch.
         let merge_function = match index_documents_method {
-            IndexDocumentsMethod::ReplaceDocuments => obkvs_keep_last_addition_merge_deletions,
-            IndexDocumentsMethod::UpdateDocuments => obkvs_merge_additions_and_deletions,
+            ReplaceDocuments => Either::Left(ObkvsKeepLastAdditionMergeDeletions),
+            UpdateDocuments => Either::Right(ObkvsMergeAdditionsAndDeletions),
         };
 
         // We initialize the sorter with the user indexing settings.
         let original_sorter = create_sorter(
             grenad::SortAlgorithm::Stable,
-            merge_function,
+            merge_function.clone(),
             indexer_settings.chunk_compression_type,
             indexer_settings.chunk_compression_level,
             indexer_settings.max_nb_chunks,
@@ -979,7 +982,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         let mut original_sorter = if settings_diff.reindex_vectors() {
             Some(create_sorter(
                 grenad::SortAlgorithm::Stable,
-                keep_first,
+                KeepFirst,
                 self.indexer_settings.chunk_compression_type,
                 self.indexer_settings.chunk_compression_level,
                 self.indexer_settings.max_nb_chunks,
@@ -1023,7 +1026,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             if settings_diff.reindex_searchable() || settings_diff.reindex_facets() {
                 Some(create_sorter(
                     grenad::SortAlgorithm::Stable,
-                    keep_first,
+                    KeepFirst,
                     self.indexer_settings.chunk_compression_type,
                     self.indexer_settings.chunk_compression_level,
                     self.indexer_settings.max_nb_chunks,
@@ -1162,6 +1165,8 @@ fn drop_and_reuse<U, T>(mut vec: Vec<U>) -> Vec<T> {
 
 #[cfg(test)]
 mod test {
+    use grenad::MergeFunction;
+
     use super::*;
 
     #[test]
@@ -1219,25 +1224,32 @@ mod test {
         .unwrap();
         additive_doc_0_1.insert(0, Operation::Addition as u8);
 
-        let ret = obkvs_merge_additions_and_deletions(&[], &[Cow::from(additive_doc_0.as_slice())])
-            .unwrap();
+        let ret = MergeFunction::merge(
+            &ObkvsMergeAdditionsAndDeletions,
+            &[],
+            &[Cow::from(additive_doc_0.as_slice())],
+        )
+        .unwrap();
         assert_eq!(*ret, additive_doc_0);
 
-        let ret = obkvs_merge_additions_and_deletions(
+        let ret = MergeFunction::merge(
+            &ObkvsMergeAdditionsAndDeletions,
             &[],
             &[Cow::from(deletive_doc_0.as_slice()), Cow::from(additive_doc_0.as_slice())],
         )
         .unwrap();
         assert_eq!(*ret, del_add_doc_0);
 
-        let ret = obkvs_merge_additions_and_deletions(
+        let ret = MergeFunction::merge(
+            &ObkvsMergeAdditionsAndDeletions,
             &[],
             &[Cow::from(additive_doc_0.as_slice()), Cow::from(deletive_doc_0.as_slice())],
         )
         .unwrap();
         assert_eq!(*ret, deletive_doc_0);
 
-        let ret = obkvs_merge_additions_and_deletions(
+        let ret = MergeFunction::merge(
+            &ObkvsMergeAdditionsAndDeletions,
             &[],
             &[
                 Cow::from(additive_doc_1.as_slice()),
@@ -1248,21 +1260,24 @@ mod test {
         .unwrap();
         assert_eq!(*ret, del_add_doc_0);
 
-        let ret = obkvs_merge_additions_and_deletions(
+        let ret = MergeFunction::merge(
+            &ObkvsMergeAdditionsAndDeletions,
             &[],
             &[Cow::from(additive_doc_1.as_slice()), Cow::from(additive_doc_0.as_slice())],
         )
         .unwrap();
         assert_eq!(*ret, additive_doc_0_1);
 
-        let ret = obkvs_keep_last_addition_merge_deletions(
+        let ret = MergeFunction::merge(
+            &ObkvsKeepLastAdditionMergeDeletions,
             &[],
             &[Cow::from(additive_doc_1.as_slice()), Cow::from(additive_doc_0.as_slice())],
         )
         .unwrap();
         assert_eq!(*ret, additive_doc_0);
 
-        let ret = obkvs_keep_last_addition_merge_deletions(
+        let ret = MergeFunction::merge(
+            &ObkvsKeepLastAdditionMergeDeletions,
             &[],
             &[
                 Cow::from(deletive_doc_0.as_slice()),
