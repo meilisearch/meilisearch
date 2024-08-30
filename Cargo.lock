@@ -3851,7 +3851,7 @@ dependencies = [
 [[package]]
 name = "obkv"
 version = "0.3.0"
-source = "git+https://github.com/kerollmops/obkv?branch=unsized-kvreader#9c2900d106fa84e7079b288e7f7c366ec7cae948"
+source = "git+https://github.com/kerollmops/obkv?branch=unsized-kvreader#ce535874008ecac554f02e0c670e6caf62134d6b"
 
 [[package]]
 name = "once_cell"

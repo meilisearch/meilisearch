@@ -268,9 +268,11 @@ mod indexer {
                         .into()),
                     }?;
 
-                    /// TODO create a function for this
-                    let current = current.as_bytes().to_vec().into_boxed_slice().into();
-                    Ok(DocumentChange::Deletion(Deletion::create(docid, external_docid, current)))
+                    Ok(DocumentChange::Deletion(Deletion::create(
+                        docid,
+                        external_docid,
+                        current.boxed(),
+                    )))
                 })
             }))
         }
@@ -483,10 +485,11 @@ mod indexer {
         if operations.is_empty() {
             match current {
                 Some(current) => {
-                    /// TODO create a function for this
-                    let current = current.as_bytes().to_vec().into_boxed_slice().into();
-                    let deletion = Deletion::create(docid, external_docid, current);
-                    return Ok(Some(DocumentChange::Deletion(deletion)));
+                    return Ok(Some(DocumentChange::Deletion(Deletion::create(
+                        docid,
+                        external_docid,
+                        current.boxed(),
+                    ))));
                 }
                 None => return Ok(None),
             }
@@ -511,14 +514,11 @@ mod indexer {
 
         let mut writer = KvWriterFieldId::memory();
         document.into_iter().for_each(|(id, value)| writer.insert(id, value).unwrap());
-        /// TODO create a function for this conversion
-        let new = writer.into_inner().unwrap().into_boxed_slice().into();
+        let new = writer.into_boxed();
 
         match current {
             Some(current) => {
-                /// TODO create a function for this conversion
-                let current = current.as_bytes().to_vec().into_boxed_slice().into();
-                let update = Update::create(docid, external_docid, current, new);
+                let update = Update::create(docid, external_docid, current.boxed(), new);
                 Ok(Some(DocumentChange::Update(update)))
             }
             None => {
@@ -561,14 +561,11 @@ mod indexer {
                 document_entries
                     .into_iter()
                     .for_each(|(id, value)| writer.insert(id, value).unwrap());
-                /// TODO create a function for this conversion
-                let new = writer.into_inner().unwrap().into_boxed_slice().into();
+                let new = writer.into_boxed();
 
                 match current {
                     Some(current) => {
-                        /// TODO create a function for this conversion
-                        let current = current.as_bytes().to_vec().into_boxed_slice().into();
-                        let update = Update::create(docid, external_docid, current, new);
+                        let update = Update::create(docid, external_docid, current.boxed(), new);
                         Ok(Some(DocumentChange::Update(update)))
                     }
                     None => {
@@ -577,17 +574,13 @@ mod indexer {
                     }
                 }
             }
-            Some(DocumentOperation::Deletion) => {
-                match current {
-                    Some(current) => {
-                        /// TODO create a function for this conversion
-                        let current = current.as_bytes().to_vec().into_boxed_slice().into();
-                        let deletion = Deletion::create(docid, external_docid, current);
-                        Ok(Some(DocumentChange::Deletion(deletion)))
-                    }
-                    None => Ok(None),
+            Some(DocumentOperation::Deletion) => match current {
+                Some(current) => {
+                    let deletion = Deletion::create(docid, external_docid, current.boxed());
+                    Ok(Some(DocumentChange::Deletion(deletion)))
                 }
-            }
+                None => Ok(None),
+            },
             None => Ok(None),
         }
     }
