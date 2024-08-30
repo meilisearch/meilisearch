@@ -27,7 +27,7 @@ use crate::update::del_add::{
 };
 use crate::update::index_documents::GrenadParameters;
 use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
-use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
+use crate::update::{AvailableIds, UpdateIndexingStep};
 use crate::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use crate::vector::settings::{EmbedderAction, WriteBackToDocuments};
 use crate::{
@@ -55,7 +55,7 @@ pub struct Transform<'a, 'i> {
 
     indexer_settings: &'a IndexerConfig,
     pub index_documents_method: IndexDocumentsMethod,
-    available_documents_ids: AvailableDocumentsIds,
+    available_documents_ids: AvailableIds,
 
     // Both grenad follows the same format:
     // key | value
@@ -143,7 +143,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             index,
             fields_ids_map: index.fields_ids_map(wtxn)?,
             indexer_settings,
-            available_documents_ids: AvailableDocumentsIds::from_documents_ids(&documents_ids),
+            available_documents_ids: AvailableIds::new(&documents_ids),
             original_sorter,
             flattened_sorter,
             index_documents_method,

@@ -1,5 +1,6 @@
-pub use self::available_documents_ids::AvailableDocumentsIds;
+pub use self::available_ids::AvailableIds;
 pub use self::clear_documents::ClearDocuments;
+pub use self::concurrent_available_ids::ConcurrentAvailableIds;
 pub use self::facet::bulk::FacetsUpdateBulk;
 pub use self::facet::incremental::FacetsUpdateIncrementalInner;
 pub use self::index_documents::*;
@@ -10,8 +11,9 @@ pub use self::word_prefix_docids::WordPrefixDocids;
 pub use self::words_prefix_integer_docids::WordPrefixIntegerDocids;
 pub use self::words_prefixes_fst::WordsPrefixesFst;
 
-mod available_documents_ids;
+mod available_ids;
 mod clear_documents;
+mod concurrent_available_ids;
 pub(crate) mod del_add;
 pub(crate) mod facet;
 mod index_documents;

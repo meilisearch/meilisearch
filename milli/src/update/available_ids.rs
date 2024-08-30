@@ -3,12 +3,12 @@ use std::ops::RangeInclusive;
 
 use roaring::bitmap::{IntoIter, RoaringBitmap};
 
-pub struct AvailableDocumentsIds {
+pub struct AvailableIds {
     iter: Chain<IntoIter, RangeInclusive<u32>>,
 }
 
-impl AvailableDocumentsIds {
-    pub fn from_documents_ids(docids: &RoaringBitmap) -> AvailableDocumentsIds {
+impl AvailableIds {
+    pub fn new(docids: &RoaringBitmap) -> AvailableIds {
         match docids.max() {
             Some(last_id) => {
                 let mut available = RoaringBitmap::from_iter(0..last_id);
@@ -20,17 +20,17 @@ impl AvailableDocumentsIds {
                     None => 1..=0, // empty range iterator
                 };
 
-                AvailableDocumentsIds { iter: available.into_iter().chain(iter) }
+                AvailableIds { iter: available.into_iter().chain(iter) }
             }
             None => {
                 let empty = RoaringBitmap::new().into_iter();
-                AvailableDocumentsIds { iter: empty.chain(0..=u32::MAX) }
+                AvailableIds { iter: empty.chain(0..=u32::MAX) }
             }
         }
     }
 }
 
-impl Iterator for AvailableDocumentsIds {
+impl Iterator for AvailableIds {
     type Item = u32;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -45,7 +45,7 @@ mod tests {
     #[test]
     fn empty() {
         let base = RoaringBitmap::new();
-        let left = AvailableDocumentsIds::from_documents_ids(&base);
+        let left = AvailableIds::new(&base);
         let right = 0..=u32::MAX;
         left.zip(right).take(500).for_each(|(l, r)| assert_eq!(l, r));
     }
@@ -58,7 +58,7 @@ mod tests {
         base.insert(100);
         base.insert(405);
 
-        let left = AvailableDocumentsIds::from_documents_ids(&base);
+        let left = AvailableIds::new(&base);
         let right = (0..=u32::MAX).filter(|&n| n != 0 && n != 10 && n != 100 && n != 405);
         left.zip(right).take(500).for_each(|(l, r)| assert_eq!(l, r));
     }
