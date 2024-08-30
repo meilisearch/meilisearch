@@ -2,7 +2,6 @@ mod document_change;
 // mod extract;
 mod channel;
 mod items_pool;
-mod merge;
 
 /// TODO remove this
 // mod global_fields_ids_map;
@@ -38,7 +37,9 @@ mod indexer {
     };
     use crate::update::del_add::DelAdd;
     use crate::update::new::channel::MergerOperation;
-    use crate::update::{AvailableDocumentsIds, IndexDocumentsMethod};
+    use crate::update::{
+        AvailableDocumentsIds, IndexDocumentsMethod, MergeDeladdCboRoaringBitmaps,
+    };
     use crate::{
         CboRoaringBitmapCodec, DocumentId, Error, FieldId, FieldsIdsMap, Index, InternalError,
         Result, UserError,
@@ -428,7 +429,7 @@ mod indexer {
                     let sender = sender.word_docids();
                     let database = index.word_docids.remap_types::<Bytes, Bytes>();
 
-                    let mut builder = grenad::MergerBuilder::new(merge::DelAddRoaringBitmapMerger);
+                    let mut builder = grenad::MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
                     builder.extend(cursors);
                     /// TODO manage the error correctly
                     let mut merger_iter = builder.build().into_stream_merger_iter().unwrap();
