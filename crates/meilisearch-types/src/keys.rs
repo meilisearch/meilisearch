@@ -2,7 +2,8 @@ use std::convert::Infallible;
 use std::hash::Hash;
 use std::str::FromStr;
 
-use deserr::{DeserializeError, Deserr, MergeWithError, ValuePointerRef};
+use bitflags::bitflags;
+use deserr::{take_cf_content, DeserializeError, Deserr, MergeWithError, ValuePointerRef};
 use enum_iterator::Sequence;
 use milli::update::Setting;
 use serde::{Deserialize, Serialize};
@@ -179,112 +180,247 @@ fn parse_expiration_date(
     }
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Hash, Sequence, Deserr)]
-#[repr(u8)]
-pub enum Action {
+bitflags! {
+    #[derive(Copy, Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
+    #[repr(transparent)]
+    pub struct Action: u8 {
     #[serde(rename = "*")]
-    #[deserr(rename = "*")]
-    All = 0,
+    const All = 0;
     #[serde(rename = "search")]
-    #[deserr(rename = "search")]
-    Search,
+    const Search = 1;
     #[serde(rename = "documents.*")]
-    #[deserr(rename = "documents.*")]
-    DocumentsAll,
+    const DocumentsAll = 2;
     #[serde(rename = "documents.add")]
-    #[deserr(rename = "documents.add")]
-    DocumentsAdd,
+    const DocumentsAdd = 3;
     #[serde(rename = "documents.get")]
-    #[deserr(rename = "documents.get")]
-    DocumentsGet,
+    const DocumentsGet = 4;
     #[serde(rename = "documents.delete")]
-    #[deserr(rename = "documents.delete")]
-    DocumentsDelete,
+    const DocumentsDelete = 5;
     #[serde(rename = "indexes.*")]
-    #[deserr(rename = "indexes.*")]
-    IndexesAll,
+    const IndexesAll = 6;
     #[serde(rename = "indexes.create")]
-    #[deserr(rename = "indexes.create")]
-    IndexesAdd,
+    const IndexesAdd = 7;
     #[serde(rename = "indexes.get")]
-    #[deserr(rename = "indexes.get")]
-    IndexesGet,
+    const IndexesGet = 8;
     #[serde(rename = "indexes.update")]
-    #[deserr(rename = "indexes.update")]
-    IndexesUpdate,
+    const IndexesUpdate = 9;
     #[serde(rename = "indexes.delete")]
-    #[deserr(rename = "indexes.delete")]
-    IndexesDelete,
+    const IndexesDelete = 10;
     #[serde(rename = "indexes.swap")]
-    #[deserr(rename = "indexes.swap")]
-    IndexesSwap,
+    const IndexesSwap = 11;
     #[serde(rename = "tasks.*")]
-    #[deserr(rename = "tasks.*")]
-    TasksAll,
+    const TasksAll = 12;
     #[serde(rename = "tasks.cancel")]
-    #[deserr(rename = "tasks.cancel")]
-    TasksCancel,
+    const TasksCancel = 13;
     #[serde(rename = "tasks.delete")]
-    #[deserr(rename = "tasks.delete")]
-    TasksDelete,
+    const TasksDelete = 14;
     #[serde(rename = "tasks.get")]
-    #[deserr(rename = "tasks.get")]
-    TasksGet,
+    const TasksGet = 15;
     #[serde(rename = "settings.*")]
-    #[deserr(rename = "settings.*")]
-    SettingsAll,
+    const SettingsAll = 16;
     #[serde(rename = "settings.get")]
-    #[deserr(rename = "settings.get")]
-    SettingsGet,
+    const SettingsGet = 17;
     #[serde(rename = "settings.update")]
-    #[deserr(rename = "settings.update")]
-    SettingsUpdate,
+    const SettingsUpdate = 18;
     #[serde(rename = "stats.*")]
-    #[deserr(rename = "stats.*")]
-    StatsAll,
+    const StatsAll = 19;
     #[serde(rename = "stats.get")]
-    #[deserr(rename = "stats.get")]
-    StatsGet,
+    const StatsGet = 20;
     #[serde(rename = "metrics.*")]
-    #[deserr(rename = "metrics.*")]
-    MetricsAll,
+    const MetricsAll = 21;
     #[serde(rename = "metrics.get")]
-    #[deserr(rename = "metrics.get")]
-    MetricsGet,
+    const MetricsGet = 22;
     #[serde(rename = "dumps.*")]
-    #[deserr(rename = "dumps.*")]
-    DumpsAll,
+    const DumpsAll = 23;
     #[serde(rename = "dumps.create")]
-    #[deserr(rename = "dumps.create")]
-    DumpsCreate,
+    const DumpsCreate = 24;
     #[serde(rename = "snapshots.*")]
-    #[deserr(rename = "snapshots.*")]
-    SnapshotsAll,
+    const SnapshotsAll = 25;
     #[serde(rename = "snapshots.create")]
-    #[deserr(rename = "snapshots.create")]
-    SnapshotsCreate,
+    const SnapshotsCreate = 26;
     #[serde(rename = "version")]
-    #[deserr(rename = "version")]
-    Version,
+    const Version = 27;
     #[serde(rename = "keys.create")]
-    #[deserr(rename = "keys.create")]
-    KeysAdd,
+    const KeysAdd = 28;
     #[serde(rename = "keys.get")]
-    #[deserr(rename = "keys.get")]
-    KeysGet,
+    const KeysGet = 29;
     #[serde(rename = "keys.update")]
-    #[deserr(rename = "keys.update")]
-    KeysUpdate,
+    const KeysUpdate = 30;
     #[serde(rename = "keys.delete")]
-    #[deserr(rename = "keys.delete")]
-    KeysDelete,
+    const KeysDelete = 31;
     #[serde(rename = "experimental.get")]
-    #[deserr(rename = "experimental.get")]
-    ExperimentalFeaturesGet,
+    const ExperimentalFeaturesGet = 32;
     #[serde(rename = "experimental.update")]
-    #[deserr(rename = "experimental.update")]
-    ExperimentalFeaturesUpdate,
+    const ExperimentalFeaturesUpdate = 33;
+    }
 }
+
+impl<E: DeserializeError> Deserr<E> for Action {
+    fn deserialize_from_value<V: deserr::IntoValue>(
+        value: deserr::Value<V>,
+        location: deserr::ValuePointerRef<'_>,
+    ) -> Result<Self, E> {
+        match value {
+            deserr::Value::String(s) => match s.as_str() {
+                "*" => Ok(Action::All),
+                "search" => Ok(Action::Search),
+                "documents.*" => Ok(Action::DocumentsAll),
+                "documents.add" => Ok(Action::DocumentsAdd),
+                "documents.get" => Ok(Action::DocumentsGet),
+                "documents.delete" => Ok(Action::DocumentsDelete),
+                "indexes.*" => Ok(Action::IndexesAll),
+                "indexes.create" => Ok(Action::IndexesAdd),
+                "indexes.get" => Ok(Action::IndexesGet),
+                "indexes.update" => Ok(Action::IndexesUpdate),
+                "indexes.delete" => Ok(Action::IndexesDelete),
+                "indexes.swap" => Ok(Action::IndexesSwap),
+                "tasks.*" => Ok(Action::TasksAll),
+                "tasks.cancel" => Ok(Action::TasksCancel),
+                "tasks.delete" => Ok(Action::TasksDelete),
+                "tasks.get" => Ok(Action::TasksGet),
+                "settings.*" => Ok(Action::SettingsAll),
+                "settings.get" => Ok(Action::SettingsGet),
+                "settings.update" => Ok(Action::SettingsUpdate),
+                "stats.*" => Ok(Action::StatsAll),
+                "stats.get" => Ok(Action::StatsGet),
+                "metrics.*" => Ok(Action::MetricsAll),
+                "metrics.get" => Ok(Action::MetricsGet),
+                "dumps.*" => Ok(Action::DumpsAll),
+                "dumps.create" => Ok(Action::DumpsCreate),
+                "snapshots.*" => Ok(Action::SnapshotsAll),
+                "snapshots.create" => Ok(Action::SnapshotsCreate),
+                "version" => Ok(Action::Version),
+                "keys.create" => Ok(Action::KeysAdd),
+                "keys.get" => Ok(Action::KeysGet),
+                "keys.update" => Ok(Action::KeysUpdate),
+                "keys.delete" => Ok(Action::KeysDelete),
+                "experimental.get" => Ok(Action::ExperimentalFeaturesGet),
+                "experimental.update" => Ok(Action::ExperimentalFeaturesUpdate),
+                _ => Err(deserr::take_cf_content(E::error::<std::convert::Infallible>(
+                    None,
+                    deserr::ErrorKind::Unexpected { msg: format!("TODO {}", s) },
+                    location,
+                ))),
+            },
+
+            value => Err(take_cf_content(E::error(
+                None,
+                deserr::ErrorKind::IncorrectValueKind {
+                    actual: value,
+                    accepted: &[deserr::ValueKind::String],
+                },
+                location,
+            ))),
+        }
+    }
+}
+
+// #[derive(Copy, Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Hash, Sequence, Deserr)]
+// #[repr(u8)]
+// pub enum Action {
+//     #[serde(rename = "*")]
+//     #[deserr(rename = "*")]
+//     All = 0,
+//     #[serde(rename = "search")]
+//     #[deserr(rename = "search")]
+//     Search,
+//     #[serde(rename = "documents.*")]
+//     #[deserr(rename = "documents.*")]
+//     DocumentsAll,
+//     #[serde(rename = "documents.add")]
+//     #[deserr(rename = "documents.add")]
+//     DocumentsAdd,
+//     #[serde(rename = "documents.get")]
+//     #[deserr(rename = "documents.get")]
+//     DocumentsGet,
+//     #[serde(rename = "documents.delete")]
+//     #[deserr(rename = "documents.delete")]
+//     DocumentsDelete,
+//     #[serde(rename = "indexes.*")]
+//     #[deserr(rename = "indexes.*")]
+//     IndexesAll,
+//     #[serde(rename = "indexes.create")]
+//     #[deserr(rename = "indexes.create")]
+//     IndexesAdd,
+//     #[serde(rename = "indexes.get")]
+//     #[deserr(rename = "indexes.get")]
+//     IndexesGet,
+//     #[serde(rename = "indexes.update")]
+//     #[deserr(rename = "indexes.update")]
+//     IndexesUpdate,
+//     #[serde(rename = "indexes.delete")]
+//     #[deserr(rename = "indexes.delete")]
+//     IndexesDelete,
+//     #[serde(rename = "indexes.swap")]
+//     #[deserr(rename = "indexes.swap")]
+//     IndexesSwap,
+//     #[serde(rename = "tasks.*")]
+//     #[deserr(rename = "tasks.*")]
+//     TasksAll,
+//     #[serde(rename = "tasks.cancel")]
+//     #[deserr(rename = "tasks.cancel")]
+//     TasksCancel,
+//     #[serde(rename = "tasks.delete")]
+//     #[deserr(rename = "tasks.delete")]
+//     TasksDelete,
+//     #[serde(rename = "tasks.get")]
+//     #[deserr(rename = "tasks.get")]
+//     TasksGet,
+//     #[serde(rename = "settings.*")]
+//     #[deserr(rename = "settings.*")]
+//     SettingsAll,
+//     #[serde(rename = "settings.get")]
+//     #[deserr(rename = "settings.get")]
+//     SettingsGet,
+//     #[serde(rename = "settings.update")]
+//     #[deserr(rename = "settings.update")]
+//     SettingsUpdate,
+//     #[serde(rename = "stats.*")]
+//     #[deserr(rename = "stats.*")]
+//     StatsAll,
+//     #[serde(rename = "stats.get")]
+//     #[deserr(rename = "stats.get")]
+//     StatsGet,
+//     #[serde(rename = "metrics.*")]
+//     #[deserr(rename = "metrics.*")]
+//     MetricsAll,
+//     #[serde(rename = "metrics.get")]
+//     #[deserr(rename = "metrics.get")]
+//     MetricsGet,
+//     #[serde(rename = "dumps.*")]
+//     #[deserr(rename = "dumps.*")]
+//     DumpsAll,
+//     #[serde(rename = "dumps.create")]
+//     #[deserr(rename = "dumps.create")]
+//     DumpsCreate,
+//     #[serde(rename = "snapshots.*")]
+//     #[deserr(rename = "snapshots.*")]
+//     SnapshotsAll,
+//     #[serde(rename = "snapshots.create")]
+//     #[deserr(rename = "snapshots.create")]
+//     SnapshotsCreate,
+//     #[serde(rename = "version")]
+//     #[deserr(rename = "version")]
+//     Version,
+//     #[serde(rename = "keys.create")]
+//     #[deserr(rename = "keys.create")]
+//     KeysAdd,
+//     #[serde(rename = "keys.get")]
+//     #[deserr(rename = "keys.get")]
+//     KeysGet,
+//     #[serde(rename = "keys.update")]
+//     #[deserr(rename = "keys.update")]
+//     KeysUpdate,
+//     #[serde(rename = "keys.delete")]
+//     #[deserr(rename = "keys.delete")]
+//     KeysDelete,
+//     #[serde(rename = "experimental.get")]
+//     #[deserr(rename = "experimental.get")]
+//     ExperimentalFeaturesGet,
+//     #[serde(rename = "experimental.update")]
+//     #[deserr(rename = "experimental.update")]
+//     ExperimentalFeaturesUpdate,
+// }
 
 impl Action {
     pub const fn from_repr(repr: u8) -> Option<Self> {
