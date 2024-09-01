@@ -402,37 +402,28 @@ mod indexer {
         del: Option<&[u8]>,
         add: Option<&[u8]>,
     ) -> Result<Operation> {
-        let bitmap = match current {
-            Some(current_bitmap_bytes) => {
-                let bitmap_without_del = match del {
-                    Some(del_bytes) => {
-                        let del_bitmap = CboRoaringBitmapCodec::deserialize_from(del_bytes)?;
-                        CboRoaringBitmapCodec::intersection_with_serialized(
-                            current_bitmap_bytes,
-                            &del_bitmap,
-                        )?
-                    }
-                    None => CboRoaringBitmapCodec::deserialize_from(current_bitmap_bytes)?,
-                };
+        let current = current.map(CboRoaringBitmapCodec::deserialize_from).transpose()?;
+        let del = del.map(CboRoaringBitmapCodec::deserialize_from).transpose()?;
+        let add = add.map(CboRoaringBitmapCodec::deserialize_from).transpose()?;
 
-                match add {
-                    Some(add_bytes) => {
-                        let add = CboRoaringBitmapCodec::deserialize_from(add_bytes)?;
-                        bitmap_without_del | add
-                    }
-                    None => bitmap_without_del,
+        match (current, del, add) {
+            (None, None, None) => Ok(Operation::Ignore), // but it's strange
+            (None, None, Some(add)) => Ok(Operation::Write(add)),
+            (None, Some(_del), None) => Ok(Operation::Ignore), // but it's strange
+            (None, Some(_del), Some(add)) => Ok(Operation::Write(add)),
+            (Some(_current), None, None) => Ok(Operation::Ignore), // but it's strange
+            (Some(current), None, Some(add)) => Ok(Operation::Write(current | add)),
+            (Some(current), Some(del), add) => {
+                let output = match add {
+                    Some(add) => (current - del) | add,
+                    None => current - del,
+                };
+                if output.is_empty() {
+                    Ok(Operation::Delete)
+                } else {
+                    Ok(Operation::Write(output))
                 }
             }
-            None => match add {
-                Some(add_bytes) => CboRoaringBitmapCodec::deserialize_from(add_bytes)?,
-                None => return Ok(Operation::Ignore),
-            },
-        };
-
-        if bitmap.is_empty() {
-            Ok(Operation::Delete)
-        } else {
-            Ok(Operation::Write(bitmap))
         }
     }
 
