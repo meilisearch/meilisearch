@@ -1100,6 +1100,7 @@ async fn server_returns_bad_request() {
 
     let (response, code) = index
         .update_settings(json!({
+          "searchableAttributes": ["name", "missing_field"],
           "embedders": {
               "rest": json!({ "source": "rest", "url": mock.uri(), "request": "{{text}}", "response": "{{embedding}}", "dimensions": 3 }),
           },
@@ -1115,6 +1116,10 @@ async fn server_returns_bad_request() {
       "type": "settingsUpdate",
       "canceledBy": null,
       "details": {
+        "searchableAttributes": [
+          "name",
+          "missing_field"
+        ],
         "embedders": {
           "rest": {
             "source": "rest",
@@ -1148,7 +1153,7 @@ async fn server_returns_bad_request() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "While embedding documents for embedder `rest`: user error: sent a bad request to embedding server\n  - Hint: check that the `request` in the embedder configuration matches the remote server's API\n  - server replied with `{\"error\":\"Invalid request: invalid type: string \\\" id: 1\\\\n name: kefir\\\\n\\\", expected struct MultipleRequest at line 1 column 24\"}`",
+        "message": "While embedding documents for embedder `rest`: user error: sent a bad request to embedding server\n  - Hint: check that the `request` in the embedder configuration matches the remote server's API\n  - server replied with `{\"error\":\"Invalid request: invalid type: string \\\"name: kefir\\\\n\\\", expected struct MultipleRequest at line 1 column 15\"}`",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
