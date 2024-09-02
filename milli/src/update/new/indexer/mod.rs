@@ -1,13 +1,13 @@
 use std::thread;
 
 use big_s::S;
-pub use document_deletion::DocumentDeletionIndexer;
-pub use document_operation::DocumentOperationIndexer;
+pub use document_deletion::DocumentDeletion;
+pub use document_operation::DocumentOperation;
 use heed::RwTxn;
-pub use partial_dump::PartialDumpIndexer;
+pub use partial_dump::PartialDump;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rayon::ThreadPool;
-pub use update_by_function::UpdateByFunctionIndexer;
+pub use update_by_function::UpdateByFunction;
 
 use super::channel::{
     extractors_merger_channels, merger_writer_channels, EntryOperation, ExtractorsMergerChannels,

@@ -8,11 +8,11 @@ use crate::documents::PrimaryKey;
 use crate::update::new::{Deletion, DocumentChange, ItemsPool};
 use crate::{FieldsIdsMap, Index, InternalError, Result};
 
-pub struct DocumentDeletionIndexer {
+pub struct DocumentDeletion {
     pub to_delete: RoaringBitmap,
 }
 
-impl DocumentDeletionIndexer {
+impl DocumentDeletion {
     pub fn new() -> Self {
         Self { to_delete: Default::default() }
     }
@@ -22,7 +22,7 @@ impl DocumentDeletionIndexer {
     }
 }
 
-impl<'p> Indexer<'p> for DocumentDeletionIndexer {
+impl<'p> Indexer<'p> for DocumentDeletion {
     type Parameter = (&'p Index, &'p FieldsIdsMap, &'p PrimaryKey<'p>);
 
     fn document_changes(

@@ -1,8 +1,4 @@
 pub use document_change::{Deletion, DocumentChange, Insertion, Update};
-pub use indexer::{
-    index, DocumentDeletionIndexer, DocumentOperationIndexer, PartialDumpIndexer,
-    UpdateByFunctionIndexer,
-};
 pub use items_pool::ItemsPool;
 
 use super::del_add::DelAdd;
@@ -13,7 +9,7 @@ mod merger;
 // mod extract;
 // mod global_fields_ids_map;
 mod channel;
-mod indexer;
+pub mod indexer;
 mod items_pool;
 
 /// TODO move them elsewhere

@@ -6,17 +6,17 @@ use crate::update::concurrent_available_ids::ConcurrentAvailableIds;
 use crate::update::new::{DocumentChange, Insertion, KvWriterFieldId};
 use crate::{all_obkv_to_json, Error, FieldsIdsMap, Object, Result, UserError};
 
-pub struct PartialDumpIndexer<I> {
+pub struct PartialDump<I> {
     pub iter: I,
 }
 
-impl<I> PartialDumpIndexer<I> {
+impl<I> PartialDump<I> {
     pub fn new_from_jsonlines(iter: I) -> Self {
-        PartialDumpIndexer { iter }
+        PartialDump { iter }
     }
 }
 
-impl<'p, I> Indexer<'p> for PartialDumpIndexer<I>
+impl<'p, I> Indexer<'p> for PartialDump<I>
 where
     I: IntoIterator<Item = Object>,
     I::IntoIter: Send + 'p,
@@ -45,6 +45,7 @@ where
                 let key = fields_ids_map.id(key).unwrap();
                 /// TODO better error management
                 let value = serde_json::to_vec(&value).unwrap();
+                /// TODO it is not ordered
                 writer.insert(key, value).unwrap();
             });
 

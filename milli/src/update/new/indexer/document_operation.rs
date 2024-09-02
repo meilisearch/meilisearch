@@ -19,9 +19,9 @@ use crate::update::new::{Deletion, Insertion, KvReaderFieldId, KvWriterFieldId, 
 use crate::update::{AvailableIds, IndexDocumentsMethod};
 use crate::{DocumentId, Error, FieldsIdsMap, Index, Result, UserError};
 
-pub struct DocumentOperationIndexer {
-    pub(crate) operations: Vec<Payload>,
-    pub(crate) index_documents_method: IndexDocumentsMethod,
+pub struct DocumentOperation {
+    operations: Vec<Payload>,
+    index_documents_method: IndexDocumentsMethod,
 }
 
 pub enum Payload {
@@ -34,7 +34,7 @@ pub struct PayloadStats {
     pub bytes: u64,
 }
 
-pub enum DocumentOperation {
+enum InnerDocOp {
     Addition(DocumentOffset),
     Deletion,
 }
@@ -48,7 +48,7 @@ pub struct DocumentOffset {
     pub offset: u32,
 }
 
-impl DocumentOperationIndexer {
+impl DocumentOperation {
     pub fn new(method: IndexDocumentsMethod) -> Self {
         Self { operations: Default::default(), index_documents_method: method }
     }
@@ -70,7 +70,7 @@ impl DocumentOperationIndexer {
     }
 }
 
-impl<'p> Indexer<'p> for DocumentOperationIndexer {
+impl<'p> Indexer<'p> for DocumentOperation {
     type Parameter = (&'p Index, &'p RoTxn<'static>, &'p mut FieldsIdsMap, &'p PrimaryKey<'p>);
 
     fn document_changes(
@@ -120,7 +120,7 @@ impl<'p> Indexer<'p> for DocumentOperationIndexer {
 
                         let content = content.clone();
                         let document_offset = DocumentOffset { content, offset };
-                        let document_operation = DocumentOperation::Addition(document_offset);
+                        let document_operation = InnerDocOp::Addition(document_offset);
 
                         match docids_version_offsets.get_mut(&external_document_id) {
                             None => {
@@ -160,10 +160,10 @@ impl<'p> Indexer<'p> for DocumentOperationIndexer {
 
                                 docids_version_offsets.insert(
                                     external_document_id,
-                                    (docid, vec![DocumentOperation::Deletion]),
+                                    (docid, vec![InnerDocOp::Deletion]),
                                 );
                             }
-                            Some((_, offsets)) => offsets.push(DocumentOperation::Deletion),
+                            Some((_, offsets)) => offsets.push(InnerDocOp::Deletion),
                         }
                     }
                 }
@@ -204,7 +204,7 @@ fn merge_document_for_updates(
     fields_ids_map: &FieldsIdsMap,
     docid: DocumentId,
     external_docid: String,
-    operations: &[DocumentOperation],
+    operations: &[InnerDocOp],
 ) -> Result<Option<DocumentChange>> {
     let mut document = BTreeMap::<_, Cow<_>>::new();
     let current = index.documents.remap_data_type::<Bytes>().get(rtxn, &docid)?;
@@ -226,14 +226,12 @@ fn merge_document_for_updates(
             });
         }
     }
+
     if operations.is_empty() {
         match current {
             Some(current) => {
-                return Ok(Some(DocumentChange::Deletion(Deletion::create(
-                    docid,
-                    external_docid,
-                    current.boxed(),
-                ))));
+                let deletion = Deletion::create(docid, external_docid, current.boxed());
+                return Ok(Some(DocumentChange::Deletion(deletion)));
             }
             None => return Ok(None),
         }
@@ -241,8 +239,8 @@ fn merge_document_for_updates(
 
     for operation in operations {
         let DocumentOffset { content, offset } = match operation {
-            DocumentOperation::Addition(offset) => offset,
-            DocumentOperation::Deletion => {
+            InnerDocOp::Addition(offset) => offset,
+            InnerDocOp::Deletion => {
                 unreachable!("Deletion in document operations")
             }
         };
@@ -283,13 +281,13 @@ fn merge_document_for_replacements(
     fields_ids_map: &FieldsIdsMap,
     docid: DocumentId,
     external_docid: String,
-    operations: &[DocumentOperation],
+    operations: &[InnerDocOp],
 ) -> Result<Option<DocumentChange>> {
     let current = index.documents.remap_data_type::<Bytes>().get(rtxn, &docid)?;
     let current: Option<&KvReaderFieldId> = current.map(Into::into);
 
     match operations.last() {
-        Some(DocumentOperation::Addition(DocumentOffset { content, offset })) => {
+        Some(InnerDocOp::Addition(DocumentOffset { content, offset })) => {
             let reader = DocumentsBatchReader::from_reader(Cursor::new(content.as_ref()))?;
             let (mut cursor, batch_index) = reader.into_cursor_and_fields_index();
             let update = cursor.get(*offset)?.expect("must exists");
@@ -318,13 +316,13 @@ fn merge_document_for_replacements(
                 }
             }
         }
-        Some(DocumentOperation::Deletion) => match current {
+        Some(InnerDocOp::Deletion) => match current {
             Some(current) => {
                 let deletion = Deletion::create(docid, external_docid, current.boxed());
                 Ok(Some(DocumentChange::Deletion(deletion)))
             }
             None => Ok(None),
         },
-        None => Ok(None),
+        None => Ok(None), // but it's strange
     }
 }
