@@ -1,7 +1,7 @@
 use heed::RoTxn;
 use obkv::KvReader;
 
-use super::indexer::KvReaderFieldId;
+use crate::update::new::KvReaderFieldId;
 use crate::{DocumentId, FieldId};
 
 pub enum DocumentChange {

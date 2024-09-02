@@ -3,8 +3,8 @@ use std::fs::File;
 use crossbeam_channel::{IntoIter, Receiver, SendError, Sender};
 use heed::types::Bytes;
 
-use super::indexer::KvReaderFieldId;
 use super::StdResult;
+use crate::update::new::KvReaderFieldId;
 use crate::{DocumentId, Index};
 
 /// The capacity of the channel is currently in number of messages.
