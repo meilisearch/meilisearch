@@ -196,11 +196,22 @@ impl SettingsDiff {
                         ReindexAction::RegeneratePrompts,
                     );
                 }
+
                 if document_template_max_bytes.apply(new_document_template_max_bytes) {
-                    ReindexAction::push_action(
-                        &mut reindex_action,
-                        ReindexAction::RegeneratePrompts,
-                    )
+                    let previous_document_template_max_bytes =
+                        document_template_max_bytes.set().unwrap_or(default_max_bytes().get());
+                    let new_document_template_max_bytes =
+                        new_document_template_max_bytes.set().unwrap_or(default_max_bytes().get());
+
+                    // only reindex if the size increased. Reasoning:
+                    // - size decrease is a performance optimization, so we don't reindex and we keep the more accurate vectors
+                    // - size increase is an accuracy optimization, so we want to reindex
+                    if new_document_template_max_bytes > previous_document_template_max_bytes {
+                        ReindexAction::push_action(
+                            &mut reindex_action,
+                            ReindexAction::RegeneratePrompts,
+                        )
+                    }
                 }
 
                 distribution.apply(new_distribution);
