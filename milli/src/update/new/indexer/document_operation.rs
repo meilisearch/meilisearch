@@ -11,7 +11,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::super::document_change::DocumentChange;
 use super::super::items_pool::ItemsPool;
-use super::Indexer;
+use super::DocumentChanges;
 use crate::documents::{
     obkv_to_object, DocumentIdExtractionError, DocumentsBatchReader, PrimaryKey,
 };
@@ -70,7 +70,7 @@ impl DocumentOperation {
     }
 }
 
-impl<'p> Indexer<'p> for DocumentOperation {
+impl<'p> DocumentChanges<'p> for DocumentOperation {
     type Parameter = (&'p Index, &'p RoTxn<'static>, &'p mut FieldsIdsMap, &'p PrimaryKey<'p>);
 
     fn document_changes(

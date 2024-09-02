@@ -10,7 +10,7 @@ use rayon::ThreadPool;
 pub use update_by_function::UpdateByFunction;
 
 use super::channel::{
-    extractors_merger_channels, merger_writer_channels, EntryOperation, ExtractorsMergerChannels,
+    extractors_merger_channels, merger_writer_channel, EntryOperation, ExtractorsMergerChannels,
     WriterOperation,
 };
 use super::document_change::DocumentChange;
@@ -22,7 +22,7 @@ mod document_operation;
 mod partial_dump;
 mod update_by_function;
 
-pub trait Indexer<'p> {
+pub trait DocumentChanges<'p> {
     type Parameter: 'p;
 
     fn document_changes(
@@ -36,7 +36,6 @@ pub trait Indexer<'p> {
 /// Give it the output of the [`Indexer::document_changes`] method and it will execute it in the [`rayon::ThreadPool`].
 ///
 /// TODO return stats
-/// TODO take the rayon ThreadPool
 pub fn index<PI>(
     wtxn: &mut RwTxn,
     index: &Index,
@@ -44,25 +43,31 @@ pub fn index<PI>(
     document_changes: PI,
 ) -> Result<()>
 where
-    PI: IntoParallelIterator<Item = Result<DocumentChange>> + Send,
+    PI: IntoParallelIterator<Item = Result<Option<DocumentChange>>> + Send,
     PI::Iter: Clone,
 {
-    let (merger_sender, writer_receiver) = merger_writer_channels(100);
+    let (merger_sender, writer_receiver) = merger_writer_channel(100);
     let ExtractorsMergerChannels { merger_receiver, deladd_cbo_roaring_bitmap_sender } =
         extractors_merger_channels(100);
 
     thread::scope(|s| {
         // TODO manage the errors correctly
-        thread::Builder::new().name(S("indexer-extractors")).spawn_scoped(s, || {
-            pool.in_place_scope(|_s| {
-                document_changes.into_par_iter().for_each(|_dc| ());
-            })
-        })?;
+        let handle =
+            thread::Builder::new().name(S("indexer-extractors")).spawn_scoped(s, || {
+                pool.in_place_scope(|_s| {
+                    // word docids
+                    // document_changes.into_par_iter().try_for_each(|_dc| Ok(()) as Result<_>)
+                    // let grenads = extractor_function(document_changes)?;
+                    // deladd_cbo_roaring_bitmap_sender.word_docids(grenads)?;
+
+                    Ok(()) as Result<_>
+                })
+            })?;
 
         // TODO manage the errors correctly
-        thread::Builder::new().name(S("indexer-merger")).spawn_scoped(s, || {
+        let handle2 = thread::Builder::new().name(S("indexer-merger")).spawn_scoped(s, || {
             let rtxn = index.read_txn().unwrap();
-            merge_grenad_entries(merger_receiver, merger_sender, &rtxn, index).unwrap()
+            merge_grenad_entries(merger_receiver, merger_sender, &rtxn, index)
         })?;
 
         // TODO Split this code into another function
@@ -76,6 +81,10 @@ where
                 WriterOperation::Document(e) => database.put(wtxn, &e.key(), e.content())?,
             }
         }
+
+        /// TODO handle the panicking threads
+        handle.join().unwrap()?;
+        handle2.join().unwrap()?;
 
         Ok(())
     })

@@ -1,12 +1,12 @@
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use super::Indexer;
+use super::DocumentChanges;
 use crate::update::new::DocumentChange;
 use crate::Result;
 
 pub struct UpdateByFunction;
 
-impl<'p> Indexer<'p> for UpdateByFunction {
+impl<'p> DocumentChanges<'p> for UpdateByFunction {
     type Parameter = ();
 
     fn document_changes(

@@ -8,7 +8,7 @@ use crate::update::new::KvReaderFieldId;
 use crate::{DocumentId, Index};
 
 /// The capacity of the channel is currently in number of messages.
-pub fn merger_writer_channels(cap: usize) -> (MergerSender, WriterReceiver) {
+pub fn merger_writer_channel(cap: usize) -> (MergerSender, WriterReceiver) {
     let (sender, receiver) = crossbeam_channel::bounded(cap);
     (MergerSender(sender), WriterReceiver(receiver))
 }

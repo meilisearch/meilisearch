@@ -3,7 +3,7 @@ use std::sync::Arc;
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use roaring::RoaringBitmap;
 
-use super::Indexer;
+use super::DocumentChanges;
 use crate::documents::PrimaryKey;
 use crate::update::new::{Deletion, DocumentChange, ItemsPool};
 use crate::{FieldsIdsMap, Index, InternalError, Result};
@@ -22,7 +22,7 @@ impl DocumentDeletion {
     }
 }
 
-impl<'p> Indexer<'p> for DocumentDeletion {
+impl<'p> DocumentChanges<'p> for DocumentDeletion {
     type Parameter = (&'p Index, &'p FieldsIdsMap, &'p PrimaryKey<'p>);
 
     fn document_changes(

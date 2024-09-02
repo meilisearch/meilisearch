@@ -1,6 +1,6 @@
 use rayon::iter::{ParallelBridge, ParallelIterator};
 
-use super::Indexer;
+use super::DocumentChanges;
 use crate::documents::{DocumentIdExtractionError, PrimaryKey};
 use crate::update::concurrent_available_ids::ConcurrentAvailableIds;
 use crate::update::new::{DocumentChange, Insertion, KvWriterFieldId};
@@ -16,7 +16,7 @@ impl<I> PartialDump<I> {
     }
 }
 
-impl<'p, I> Indexer<'p> for PartialDump<I>
+impl<'p, I> DocumentChanges<'p> for PartialDump<I>
 where
     I: IntoIterator<Item = Object>,
     I::IntoIter: Send + 'p,
