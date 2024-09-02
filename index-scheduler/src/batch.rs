@@ -1441,6 +1441,8 @@ impl IndexScheduler {
 
                 for task in tasks.iter_mut() {
                     let before = to_delete.len();
+                    task.status = Status::Succeeded;
+
                     match &task.kind {
                         KindWithContent::DocumentDeletion { index_uid: _, documents_ids } => {
                             for id in documents_ids {
@@ -1456,18 +1458,40 @@ impl IndexScheduler {
                         }
                         KindWithContent::DocumentDeletionByFilter { index_uid: _, filter_expr } => {
                             let before = to_delete.len();
-                            let filter = Filter::from_json(filter_expr)?;
+                            let filter = match Filter::from_json(filter_expr) {
+                                Ok(filter) => filter,
+                                Err(err) => {
+                                    // theorically, this should be catched by deserr before reaching the index-scheduler and cannot happens
+                                    task.status = Status::Failed;
+                                    task.error = match err {
+                                        milli::Error::UserError(
+                                            milli::UserError::InvalidFilterExpression { .. },
+                                        ) => Some(
+                                            Error::from(err)
+                                                .with_custom_error_code(Code::InvalidDocumentFilter)
+                                                .into(),
+                                        ),
+                                        e => Some(e.into()),
+                                    };
+                                    None
+                                }
+                            };
                             if let Some(filter) = filter {
-                                let candidates = filter.evaluate(index_wtxn, index).map_err(
-                                    |err| match err {
+                                let candidates =
+                                    filter.evaluate(index_wtxn, index).map_err(|err| match err {
                                         milli::Error::UserError(
                                             milli::UserError::InvalidFilter(_),
                                         ) => Error::from(err)
                                             .with_custom_error_code(Code::InvalidDocumentFilter),
                                         e => e.into(),
-                                    },
-                                )?;
-                                to_delete |= candidates;
+                                    });
+                                match candidates {
+                                    Ok(candidates) => to_delete |= candidates,
+                                    Err(err) => {
+                                        task.status = Status::Failed;
+                                        task.error = Some(err.into());
+                                    }
+                                };
                             }
                             let will_be_removed = to_delete.len() - before;
                             if let Some(Details::DocumentDeletionByFilter {
@@ -1483,7 +1507,6 @@ impl IndexScheduler {
                         }
                         _ => unreachable!(),
                     }
-                    task.status = Status::Succeeded;
                 }
 
                 let config = IndexDocumentsConfig {
