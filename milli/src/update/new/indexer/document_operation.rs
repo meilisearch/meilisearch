@@ -210,17 +210,22 @@ fn merge_document_for_updates(
     let current = index.documents.remap_data_type::<Bytes>().get(rtxn, &docid)?;
     let current: Option<&KvReaderFieldId> = current.map(Into::into);
 
-    if let Some(current) = current {
-        current.into_iter().for_each(|(k, v)| {
-            document.insert(k, v.into());
-        });
+    if operations.is_empty() {
+        return Ok(None); // but it's strange
     }
 
-    let last_deletion =
-        operations.iter().rposition(|operation| matches!(operation, DocumentOperation::Deletion));
-
+    let last_deletion = operations.iter().rposition(|op| matches!(op, InnerDocOp::Deletion));
     let operations = &operations[last_deletion.map_or(0, |i| i + 1)..];
 
+    // If there was a deletion we must not start
+    // from the original document but from scratch.
+    if last_deletion.is_none() {
+        if let Some(current) = current {
+            current.into_iter().for_each(|(k, v)| {
+                document.insert(k, v.into());
+            });
+        }
+    }
     if operations.is_empty() {
         match current {
             Some(current) => {
