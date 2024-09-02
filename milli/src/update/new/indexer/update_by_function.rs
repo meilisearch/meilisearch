@@ -12,7 +12,7 @@ impl<'p> DocumentChanges<'p> for UpdateByFunction {
     fn document_changes(
         self,
         _param: Self::Parameter,
-    ) -> Result<impl ParallelIterator<Item = Result<Option<DocumentChange>>> + 'p> {
+    ) -> Result<impl ParallelIterator<Item = Result<DocumentChange>> + 'p> {
         todo!();
         Ok(vec![].into_par_iter())
     }

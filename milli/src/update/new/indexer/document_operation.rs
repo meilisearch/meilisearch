@@ -76,7 +76,7 @@ impl<'p> DocumentChanges<'p> for DocumentOperation {
     fn document_changes(
         self,
         param: Self::Parameter,
-    ) -> Result<impl ParallelIterator<Item = Result<Option<DocumentChange>>> + 'p> {
+    ) -> Result<impl ParallelIterator<Item = Result<DocumentChange>> + 'p> {
         let (index, rtxn, fields_ids_map, primary_key) = param;
 
         let documents_ids = index.documents_ids(rtxn)?;
@@ -170,27 +170,85 @@ impl<'p> DocumentChanges<'p> for DocumentOperation {
             }
         }
 
-        Ok(docids_version_offsets.into_par_iter().map_with(
-            Arc::new(ItemsPool::new(|| index.read_txn().map_err(crate::Error::from))),
-            move |context_pool, (external_docid, (internal_docid, operations))| {
-                context_pool.with(|rtxn| {
-                    use IndexDocumentsMethod as Idm;
-                    let document_merge_function = match self.index_documents_method {
-                        Idm::ReplaceDocuments => merge_document_for_replacements,
-                        Idm::UpdateDocuments => merge_document_for_updates,
-                    };
+        Ok(docids_version_offsets
+            .into_par_iter()
+            .map_with(
+                Arc::new(ItemsPool::new(|| index.read_txn().map_err(crate::Error::from))),
+                move |context_pool, (external_docid, (internal_docid, operations))| {
+                    context_pool.with(|rtxn| {
+                        use IndexDocumentsMethod as Idm;
+                        let document_merge_function = match self.index_documents_method {
+                            Idm::ReplaceDocuments => merge_document_for_replacements,
+                            Idm::UpdateDocuments => merge_document_for_updates,
+                        };
 
-                    document_merge_function(
-                        rtxn,
-                        index,
-                        fields_ids_map,
-                        internal_docid,
-                        external_docid,
-                        &operations,
-                    )
-                })
-            },
-        ))
+                        document_merge_function(
+                            rtxn,
+                            index,
+                            fields_ids_map,
+                            internal_docid,
+                            external_docid,
+                            &operations,
+                        )
+                    })
+                },
+            )
+            .filter_map(Result::transpose))
+    }
+}
+
+/// Returns only the most recent version of a document based on the updates from the payloads.
+///
+/// This function is only meant to be used when doing a replacement and not an update.
+fn merge_document_for_replacements(
+    rtxn: &RoTxn,
+    index: &Index,
+    fields_ids_map: &FieldsIdsMap,
+    docid: DocumentId,
+    external_docid: String,
+    operations: &[InnerDocOp],
+) -> Result<Option<DocumentChange>> {
+    let current = index.documents.remap_data_type::<Bytes>().get(rtxn, &docid)?;
+    let current: Option<&KvReaderFieldId> = current.map(Into::into);
+
+    match operations.last() {
+        Some(InnerDocOp::Addition(DocumentOffset { content, offset })) => {
+            let reader = DocumentsBatchReader::from_reader(Cursor::new(content.as_ref()))?;
+            let (mut cursor, batch_index) = reader.into_cursor_and_fields_index();
+            let update = cursor.get(*offset)?.expect("must exists");
+
+            let mut document_entries = Vec::new();
+            update.into_iter().for_each(|(k, v)| {
+                let field_name = batch_index.name(k).unwrap();
+                let id = fields_ids_map.id(field_name).unwrap();
+                document_entries.push((id, v));
+            });
+
+            document_entries.sort_unstable_by_key(|(id, _)| *id);
+
+            let mut writer = KvWriterFieldId::memory();
+            document_entries.into_iter().for_each(|(id, value)| writer.insert(id, value).unwrap());
+            let new = writer.into_boxed();
+
+            match current {
+                Some(current) => {
+                    let update = Update::create(docid, external_docid, current.boxed(), new);
+                    Ok(Some(DocumentChange::Update(update)))
+                }
+                None => {
+                    let insertion = Insertion::create(docid, external_docid, new);
+                    Ok(Some(DocumentChange::Insertion(insertion)))
+                }
+            }
+        }
+        Some(InnerDocOp::Deletion) => match current {
+            Some(current) => {
+                let deletion = Deletion::create(docid, external_docid, current.boxed());
+                Ok(Some(DocumentChange::Deletion(deletion)))
+            }
+            None => Ok(None),
+        },
+        None => Ok(None), // but it's strange
     }
 }
 
@@ -269,60 +327,5 @@ fn merge_document_for_updates(
             let insertion = Insertion::create(docid, external_docid, new);
             Ok(Some(DocumentChange::Insertion(insertion)))
         }
-    }
-}
-
-/// Returns only the most recent version of a document based on the updates from the payloads.
-///
-/// This function is only meant to be used when doing a replacement and not an update.
-fn merge_document_for_replacements(
-    rtxn: &RoTxn,
-    index: &Index,
-    fields_ids_map: &FieldsIdsMap,
-    docid: DocumentId,
-    external_docid: String,
-    operations: &[InnerDocOp],
-) -> Result<Option<DocumentChange>> {
-    let current = index.documents.remap_data_type::<Bytes>().get(rtxn, &docid)?;
-    let current: Option<&KvReaderFieldId> = current.map(Into::into);
-
-    match operations.last() {
-        Some(InnerDocOp::Addition(DocumentOffset { content, offset })) => {
-            let reader = DocumentsBatchReader::from_reader(Cursor::new(content.as_ref()))?;
-            let (mut cursor, batch_index) = reader.into_cursor_and_fields_index();
-            let update = cursor.get(*offset)?.expect("must exists");
-
-            let mut document_entries = Vec::new();
-            update.into_iter().for_each(|(k, v)| {
-                let field_name = batch_index.name(k).unwrap();
-                let id = fields_ids_map.id(field_name).unwrap();
-                document_entries.push((id, v));
-            });
-
-            document_entries.sort_unstable_by_key(|(id, _)| *id);
-
-            let mut writer = KvWriterFieldId::memory();
-            document_entries.into_iter().for_each(|(id, value)| writer.insert(id, value).unwrap());
-            let new = writer.into_boxed();
-
-            match current {
-                Some(current) => {
-                    let update = Update::create(docid, external_docid, current.boxed(), new);
-                    Ok(Some(DocumentChange::Update(update)))
-                }
-                None => {
-                    let insertion = Insertion::create(docid, external_docid, new);
-                    Ok(Some(DocumentChange::Insertion(insertion)))
-                }
-            }
-        }
-        Some(InnerDocOp::Deletion) => match current {
-            Some(current) => {
-                let deletion = Deletion::create(docid, external_docid, current.boxed());
-                Ok(Some(DocumentChange::Deletion(deletion)))
-            }
-            None => Ok(None),
-        },
-        None => Ok(None), // but it's strange
     }
 }

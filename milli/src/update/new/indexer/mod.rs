@@ -1,4 +1,4 @@
-use std::thread;
+use std::thread::{self, Builder};
 
 use big_s::S;
 pub use document_deletion::DocumentDeletion;
@@ -28,7 +28,7 @@ pub trait DocumentChanges<'p> {
     fn document_changes(
         self,
         param: Self::Parameter,
-    ) -> Result<impl ParallelIterator<Item = Result<Option<DocumentChange>>> + 'p>;
+    ) -> Result<impl ParallelIterator<Item = Result<DocumentChange>> + 'p>;
 }
 
 /// This is the main function of this crate.
@@ -43,7 +43,7 @@ pub fn index<PI>(
     document_changes: PI,
 ) -> Result<()>
 where
-    PI: IntoParallelIterator<Item = Result<Option<DocumentChange>>> + Send,
+    PI: IntoParallelIterator<Item = Result<DocumentChange>> + Send,
     PI::Iter: Clone,
 {
     let (merger_sender, writer_receiver) = merger_writer_channel(100);
@@ -52,20 +52,19 @@ where
 
     thread::scope(|s| {
         // TODO manage the errors correctly
-        let handle =
-            thread::Builder::new().name(S("indexer-extractors")).spawn_scoped(s, || {
-                pool.in_place_scope(|_s| {
-                    // word docids
-                    // document_changes.into_par_iter().try_for_each(|_dc| Ok(()) as Result<_>)
-                    // let grenads = extractor_function(document_changes)?;
-                    // deladd_cbo_roaring_bitmap_sender.word_docids(grenads)?;
+        let handle = Builder::new().name(S("indexer-extractors")).spawn_scoped(s, || {
+            pool.in_place_scope(|_s| {
+                // word docids
+                // document_changes.into_par_iter().try_for_each(|_dc| Ok(()) as Result<_>)
+                // let grenads = extractor_function(document_changes)?;
+                // deladd_cbo_roaring_bitmap_sender.word_docids(grenads)?;
 
-                    Ok(()) as Result<_>
-                })
-            })?;
+                Ok(()) as Result<_>
+            })
+        })?;
 
         // TODO manage the errors correctly
-        let handle2 = thread::Builder::new().name(S("indexer-merger")).spawn_scoped(s, || {
+        let handle2 = Builder::new().name(S("indexer-merger")).spawn_scoped(s, || {
             let rtxn = index.read_txn().unwrap();
             merge_grenad_entries(merger_receiver, merger_sender, &rtxn, index)
         })?;

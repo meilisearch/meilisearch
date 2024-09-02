@@ -31,7 +31,7 @@ where
     fn document_changes(
         self,
         param: Self::Parameter,
-    ) -> Result<impl ParallelIterator<Item = Result<Option<DocumentChange>>> + 'p> {
+    ) -> Result<impl ParallelIterator<Item = Result<DocumentChange>> + 'p> {
         let (fields_ids_map, concurrent_available_ids, primary_key) = param;
 
         Ok(self.iter.into_iter().par_bridge().map(|object| {
@@ -68,7 +68,7 @@ where
             }?;
 
             let insertion = Insertion::create(docid, external_docid, document);
-            Ok(Some(DocumentChange::Insertion(insertion)))
+            Ok(DocumentChange::Insertion(insertion))
         }))
     }
 }

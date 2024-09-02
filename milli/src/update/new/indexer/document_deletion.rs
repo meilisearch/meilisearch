@@ -28,7 +28,7 @@ impl<'p> DocumentChanges<'p> for DocumentDeletion {
     fn document_changes(
         self,
         param: Self::Parameter,
-    ) -> Result<impl ParallelIterator<Item = Result<Option<DocumentChange>>> + 'p> {
+    ) -> Result<impl ParallelIterator<Item = Result<DocumentChange>> + 'p> {
         let (index, fields, primary_key) = param;
         let items = Arc::new(ItemsPool::new(|| index.read_txn().map_err(crate::Error::from)));
         Ok(self.to_delete.into_iter().par_bridge().map_with(items, |items, docid| {
@@ -42,11 +42,11 @@ impl<'p> DocumentChanges<'p> for DocumentDeletion {
                     .into()),
                 }?;
 
-                Ok(Some(DocumentChange::Deletion(Deletion::create(
+                Ok(DocumentChange::Deletion(Deletion::create(
                     docid,
                     external_docid,
                     current.boxed(),
-                ))))
+                )))
             })
         }))
     }
