@@ -1764,6 +1764,7 @@ mod tests {
     use crossbeam::channel::RecvTimeoutError;
     use file_store::File;
     use insta::assert_json_snapshot;
+    use maplit::btreeset;
     use meili_snap::{json_string, snapshot};
     use meilisearch_auth::AuthFilter;
     use meilisearch_types::document_formats::DocumentFormatError;
@@ -2551,6 +2552,117 @@ mod tests {
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
         snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
+    }
+
+    #[test]
+    fn fail_in_process_batch_for_document_deletion() {
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        use meilisearch_types::settings::{Settings, Unchecked};
+        let mut new_settings: Box<Settings<Unchecked>> = Box::default();
+        new_settings.filterable_attributes = Setting::Set(btreeset!(S("catto")));
+
+        index_scheduler
+            .register(
+                KindWithContent::SettingsUpdate {
+                    index_uid: S("doggos"),
+                    new_settings,
+                    is_deletion: false,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
+            .unwrap();
+
+        let content = r#"[
+            { "id": 1, "doggo": "jean bob" },
+            { "id": 2, "catto": "jorts" },
+            { "id": 3, "doggo": "bork" }
+        ]"#;
+
+        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+        file.persist().unwrap();
+        index_scheduler
+            .register(
+                KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_setting_and_document_addition");
+
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_adding_the_settings");
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_adding_the_documents");
+
+        index_scheduler
+            .register(
+                KindWithContent::DocumentDeletion {
+                    index_uid: S("doggos"),
+                    documents_ids: vec![S("1")],
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        // This one should not be catched by Meilisearch but it's still nice to handle it because if one day we break the filters it could happens
+        index_scheduler
+            .register(
+                KindWithContent::DocumentDeletionByFilter {
+                    index_uid: S("doggos"),
+                    filter_expr: serde_json::json!(true),
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        // Should fail because the ids are not filterable
+        index_scheduler
+            .register(
+                KindWithContent::DocumentDeletionByFilter {
+                    index_uid: S("doggos"),
+                    filter_expr: serde_json::json!("id = 2"),
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        index_scheduler
+            .register(
+                KindWithContent::DocumentDeletionByFilter {
+                    index_uid: S("doggos"),
+                    filter_expr: serde_json::json!("catto EXISTS"),
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_document_deletions");
+
+        // Everything should be batched together
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_removing_the_documents");
+
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents_remaining_should_only_be_bork");
     }
 
     #[test]
