@@ -4,16 +4,20 @@ use liquid::model::{
 use liquid::{ObjectView, ValueView};
 
 use super::document::Document;
-use crate::FieldsIdsMap;
+use super::{FieldMetadata, FieldsIdsMapWithMetadata};
 #[derive(Debug, Clone)]
 pub struct Fields<'a>(Vec<FieldValue<'a>>);
 
 impl<'a> Fields<'a> {
-    pub fn new(document: &'a Document<'a>, field_id_map: &'a FieldsIdsMap) -> Self {
+    pub fn new(document: &'a Document<'a>, field_id_map: &'a FieldsIdsMapWithMetadata<'a>) -> Self {
         Self(
             std::iter::repeat(document)
                 .zip(field_id_map.iter())
-                .map(|(document, (_fid, name))| FieldValue { document, name })
+                .map(|(document, (fid, name))| FieldValue {
+                    document,
+                    name,
+                    metadata: field_id_map.metadata(fid).unwrap_or_default(),
+                })
                 .collect(),
         )
     }
@@ -23,6 +27,7 @@ impl<'a> Fields<'a> {
 pub struct FieldValue<'a> {
     name: &'a str,
     document: &'a Document<'a>,
+    metadata: FieldMetadata,
 }
 
 impl<'a> ValueView for FieldValue<'a> {
@@ -74,6 +79,10 @@ impl<'a> FieldValue<'a> {
         self.document.get(self.name).unwrap_or(&LiquidValue::Nil)
     }
 
+    pub fn is_searchable(&self) -> &bool {
+        &self.metadata.searchable
+    }
+
     pub fn is_empty(&self) -> bool {
         self.size() == 0
     }
@@ -89,12 +98,14 @@ impl<'a> ObjectView for FieldValue<'a> {
     }
 
     fn keys<'k>(&'k self) -> Box<dyn Iterator<Item = KStringCow<'k>> + 'k> {
-        Box::new(["name", "value"].iter().map(|&x| KStringCow::from_static(x)))
+        Box::new(["name", "value", "is_searchable"].iter().map(|&x| KStringCow::from_static(x)))
     }
 
     fn values<'k>(&'k self) -> Box<dyn Iterator<Item = &'k dyn ValueView> + 'k> {
         Box::new(
-            std::iter::once(self.name() as &dyn ValueView).chain(std::iter::once(self.value())),
+            std::iter::once(self.name() as &dyn ValueView)
+                .chain(std::iter::once(self.value()))
+                .chain(std::iter::once(self.is_searchable() as &dyn ValueView)),
         )
     }
 
@@ -103,13 +114,14 @@ impl<'a> ObjectView for FieldValue<'a> {
     }
 
     fn contains_key(&self, index: &str) -> bool {
-        index == "name" || index == "value"
+        index == "name" || index == "value" || index == "is_searchable"
     }
 
     fn get<'s>(&'s self, index: &str) -> Option<&'s dyn ValueView> {
         match index {
             "name" => Some(self.name()),
             "value" => Some(self.value()),
+            "is_searchable" => Some(self.is_searchable()),
             _ => None,
         }
     }
