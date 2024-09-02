@@ -18,7 +18,7 @@ pub(crate) mod del_add;
 pub(crate) mod facet;
 mod index_documents;
 mod indexer_config;
-mod new;
+pub mod new;
 mod settings;
 mod update_step;
 mod word_prefix_docids;
