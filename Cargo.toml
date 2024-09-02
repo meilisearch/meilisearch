@@ -64,3 +64,6 @@ opt-level = 3
 opt-level = 3
 [profile.bench.package.yada]
 opt-level = 3
+
+[patch.crates-io]
+roaring = { git = "https://github.com/RoaringBitmap/roaring-rs", branch = "clone-iter-slice" }

@@ -7,8 +7,8 @@ use crate::FieldId;
 mod document_change;
 mod merger;
 // mod extract;
-// mod global_fields_ids_map;
 mod channel;
+//mod global_fields_ids_map;
 pub mod indexer;
 mod items_pool;
 

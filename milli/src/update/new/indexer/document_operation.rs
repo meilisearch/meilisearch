@@ -34,6 +34,7 @@ pub struct PayloadStats {
     pub bytes: u64,
 }
 
+#[derive(Clone)]
 enum InnerDocOp {
     Addition(DocumentOffset),
     Deletion,
@@ -41,6 +42,7 @@ enum InnerDocOp {
 
 /// Represents an offset where a document lives
 /// in an mmapped grenad reader file.
+#[derive(Clone)]
 pub struct DocumentOffset {
     /// The mmapped grenad reader file.
     pub content: Arc<Mmap>, // grenad::Reader
@@ -76,7 +78,7 @@ impl<'p> DocumentChanges<'p> for DocumentOperation {
     fn document_changes(
         self,
         param: Self::Parameter,
-    ) -> Result<impl ParallelIterator<Item = Result<DocumentChange>> + 'p> {
+    ) -> Result<impl ParallelIterator<Item = Result<DocumentChange>> + Clone + 'p> {
         let (index, rtxn, fields_ids_map, primary_key) = param;
 
         let documents_ids = index.documents_ids(rtxn)?;
@@ -170,6 +172,11 @@ impl<'p> DocumentChanges<'p> for DocumentOperation {
             }
         }
 
+        /// TODO is it the best way to provide FieldsIdsMap to the parallel iterator?
+        let fields_ids_map = fields_ids_map.clone();
+        // We must drain the HashMap into a Vec because rayon::hash_map::IntoIter: !Clone
+        let docids_version_offsets: Vec<_> = docids_version_offsets.drain().collect();
+
         Ok(docids_version_offsets
             .into_par_iter()
             .map_with(
@@ -177,6 +184,7 @@ impl<'p> DocumentChanges<'p> for DocumentOperation {
                 move |context_pool, (external_docid, (internal_docid, operations))| {
                     context_pool.with(|rtxn| {
                         use IndexDocumentsMethod as Idm;
+
                         let document_merge_function = match self.index_documents_method {
                             Idm::ReplaceDocuments => merge_document_for_replacements,
                             Idm::UpdateDocuments => merge_document_for_updates,
@@ -185,7 +193,7 @@ impl<'p> DocumentChanges<'p> for DocumentOperation {
                         document_merge_function(
                             rtxn,
                             index,
-                            fields_ids_map,
+                            &fields_ids_map,
                             internal_docid,
                             external_docid,
                             &operations,

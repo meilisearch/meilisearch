@@ -1,9 +1,10 @@
+use std::fs::File;
 use std::thread::{self, Builder};
 
 use big_s::S;
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::DocumentOperation;
-use heed::RwTxn;
+use heed::{RoTxn, RwTxn};
 pub use partial_dump::PartialDump;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rayon::ThreadPool;
@@ -15,7 +16,11 @@ use super::channel::{
 };
 use super::document_change::DocumentChange;
 use super::merger::merge_grenad_entries;
-use crate::{Index, Result};
+use super::StdResult;
+use crate::documents::{
+    obkv_to_object, DocumentsBatchCursor, DocumentsBatchIndex, PrimaryKey, DEFAULT_PRIMARY_KEY,
+};
+use crate::{Index, Result, UserError};
 
 mod document_deletion;
 mod document_operation;
@@ -28,7 +33,7 @@ pub trait DocumentChanges<'p> {
     fn document_changes(
         self,
         param: Self::Parameter,
-    ) -> Result<impl ParallelIterator<Item = Result<DocumentChange>> + 'p>;
+    ) -> Result<impl ParallelIterator<Item = Result<DocumentChange>> + Clone + 'p>;
 }
 
 /// This is the main function of this crate.
@@ -40,7 +45,7 @@ pub fn index<PI>(
     wtxn: &mut RwTxn,
     index: &Index,
     pool: &ThreadPool,
-    document_changes: PI,
+    _document_changes: PI,
 ) -> Result<()>
 where
     PI: IntoParallelIterator<Item = Result<DocumentChange>> + Send,
@@ -87,4 +92,57 @@ where
 
         Ok(())
     })
+}
+
+/// TODO move this elsewhere
+pub fn guess_primary_key<'a>(
+    rtxn: &'a RoTxn<'a>,
+    index: &Index,
+    mut cursor: DocumentsBatchCursor<File>,
+    documents_batch_index: &'a DocumentsBatchIndex,
+) -> Result<StdResult<PrimaryKey<'a>, UserError>> {
+    // The primary key *field id* that has already been set for this index or the one
+    // we will guess by searching for the first key that contains "id" as a substring.
+    match index.primary_key(rtxn)? {
+        Some(primary_key) => match PrimaryKey::new(primary_key, documents_batch_index) {
+            Some(primary_key) => Ok(Ok(primary_key)),
+            None => match cursor.next_document()? {
+                Some(first_document) => Ok(Err(UserError::MissingDocumentId {
+                    primary_key: primary_key.to_string(),
+                    document: obkv_to_object(first_document, documents_batch_index)?,
+                })),
+                None => unreachable!("Called with reader.is_empty()"),
+            },
+        },
+        None => {
+            let mut guesses: Vec<(u16, &str)> = documents_batch_index
+                .iter()
+                .filter(|(_, name)| name.to_lowercase().ends_with(DEFAULT_PRIMARY_KEY))
+                .map(|(field_id, name)| (*field_id, name.as_str()))
+                .collect();
+
+            // sort the keys in a deterministic, obvious way, so that fields are always in the same order.
+            guesses.sort_by(|(_, left_name), (_, right_name)| {
+                // shortest name first
+                left_name.len().cmp(&right_name.len()).then_with(
+                    // then alphabetical order
+                    || left_name.cmp(right_name),
+                )
+            });
+
+            match guesses.as_slice() {
+                [] => Ok(Err(UserError::NoPrimaryKeyCandidateFound)),
+                [(field_id, name)] => {
+                    tracing::info!("Primary key was not specified in index. Inferred to '{name}'");
+                    Ok(Ok(PrimaryKey::Flat { name, field_id: *field_id }))
+                }
+                multiple => Ok(Err(UserError::MultiplePrimaryKeyCandidatesFound {
+                    candidates: multiple
+                        .iter()
+                        .map(|(_, candidate)| candidate.to_string())
+                        .collect(),
+                })),
+            }
+        }
+    }
 }

@@ -7,7 +7,7 @@ use crate::update::new::{DocumentChange, Insertion, KvWriterFieldId};
 use crate::{all_obkv_to_json, Error, FieldsIdsMap, Object, Result, UserError};
 
 pub struct PartialDump<I> {
-    pub iter: I,
+    iter: I,
 }
 
 impl<I> PartialDump<I> {
@@ -19,7 +19,7 @@ impl<I> PartialDump<I> {
 impl<'p, I> DocumentChanges<'p> for PartialDump<I>
 where
     I: IntoIterator<Item = Object>,
-    I::IntoIter: Send + 'p,
+    I::IntoIter: Send + Clone + 'p,
     I::Item: Send,
 {
     type Parameter = (&'p FieldsIdsMap, &'p ConcurrentAvailableIds, &'p PrimaryKey<'p>);
@@ -31,7 +31,7 @@ where
     fn document_changes(
         self,
         param: Self::Parameter,
-    ) -> Result<impl ParallelIterator<Item = Result<DocumentChange>> + 'p> {
+    ) -> Result<impl ParallelIterator<Item = Result<DocumentChange>> + Clone + 'p> {
         let (fields_ids_map, concurrent_available_ids, primary_key) = param;
 
         Ok(self.iter.into_iter().par_bridge().map(|object| {

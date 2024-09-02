@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::FieldId;
 
+mod global;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FieldsIdsMap {
     names_ids: BTreeMap<String, FieldId>,
