@@ -73,7 +73,7 @@ impl DocumentOperation {
 }
 
 impl<'p> DocumentChanges<'p> for DocumentOperation {
-    type Parameter = (&'p Index, &'p RoTxn<'static>, &'p mut FieldsIdsMap, &'p PrimaryKey<'p>);
+    type Parameter = (&'p Index, &'p RoTxn<'p>, &'p mut FieldsIdsMap, &'p PrimaryKey<'p>);
 
     fn document_changes(
         self,
