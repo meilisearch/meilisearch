@@ -204,7 +204,13 @@ impl Server<Shared> {
         let options = default_settings(dir.path());
 
         let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
-        let service = Service { index_scheduler, auth, options, api_key: None };
+        let service = Service {
+            index_scheduler,
+            auth,
+            api_key: None,
+            search_queue: Self::new_search_queue(&options),
+            options,
+        };
 
         Server { service, _dir: Some(dir), _marker: PhantomData }
     }
