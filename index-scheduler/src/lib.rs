@@ -5617,7 +5617,7 @@ mod tests {
                         },
                     ),
                     prompt: PromptData {
-                        template: "{% for field in fields %} {{ field.name }}: {{ field.value }}\n{% endfor %}",
+                        template: "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
                     },
                 },
                 user_provided: RoaringBitmap<[0]>,
@@ -5657,7 +5657,7 @@ mod tests {
                         },
                     ),
                     prompt: PromptData {
-                        template: "{% for field in fields %} {{ field.name }}: {{ field.value }}\n{% endfor %}",
+                        template: "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
                     },
                 },
                 user_provided: RoaringBitmap<[]>,
