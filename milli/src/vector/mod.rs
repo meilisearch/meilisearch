@@ -305,6 +305,16 @@ impl Embedder {
             Embedder::Rest(embedder) => embedder.distribution(),
         }
     }
+
+    pub fn uses_document_template(&self) -> bool {
+        match self {
+            Embedder::HuggingFace(_)
+            | Embedder::OpenAi(_)
+            | Embedder::Ollama(_)
+            | Embedder::Rest(_) => true,
+            Embedder::UserProvided(_) => false,
+        }
+    }
 }
 
 /// Describes the mean and sigma of distribution of embedding similarity in the embedding space.
