@@ -6,6 +6,7 @@ use actix_web::test;
 
 use crate::common::{Server, Value};
 
+#[derive(Debug)]
 enum HttpVerb {
     Put,
     Patch,
@@ -80,7 +81,7 @@ async fn error_json_bad_content_type() {
         let status_code = res.status();
         let body = test::read_body(res).await;
         let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-        assert_eq!(status_code, 415, "calling the route `{}` without content-type is supposed to throw a bad media type error", route);
+        assert_eq!(status_code, 415, "calling the route `{verb:?} {route}` without content-type is supposed to throw a bad media type error:\n{}", String::from_utf8_lossy(&body));
         assert_eq!(
             response,
             json!({

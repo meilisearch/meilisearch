@@ -11,13 +11,11 @@ use actix_web::http::StatusCode;
 use byte_unit::{Byte, Unit};
 use clap::Parser;
 use meilisearch::option::{IndexerOpts, MaxMemory, MaxThreads, Opt};
-use meilisearch::{analytics, create_app, setup_meilisearch, SubscriberForSecondLayer};
+use meilisearch::setup_meilisearch;
 use once_cell::sync::Lazy;
 use tempfile::TempDir;
 use tokio::sync::OnceCell;
 use tokio::time::sleep;
-use tracing::level_filters::LevelFilter;
-use tracing_subscriber::Layer;
 use uuid::Uuid;
 
 use super::index::Index;
@@ -183,7 +181,7 @@ impl Server<Shared> {
         let options = default_settings(dir.path());
 
         let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
-        let service = Service { index_scheduler, auth, options, api_key: None };
+        let service = Service { index_scheduler, auth, api_key: None, options };
 
         Server { service, _dir: Some(dir), _marker: PhantomData }
     }
@@ -263,28 +261,7 @@ impl<State> Server<State> {
         Response = ServiceResponse<impl MessageBody>,
         Error = actix_web::Error,
     > {
-        let (_route_layer, route_layer_handle) =
-            tracing_subscriber::reload::Layer::new(None.with_filter(
-                tracing_subscriber::filter::Targets::new().with_target("", LevelFilter::OFF),
-            ));
-        let (_stderr_layer, stderr_layer_handle) = tracing_subscriber::reload::Layer::new(
-            (Box::new(
-                tracing_subscriber::fmt::layer()
-                    .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE),
-            )
-                as Box<dyn tracing_subscriber::Layer<SubscriberForSecondLayer> + Send + Sync>)
-                .with_filter(tracing_subscriber::filter::Targets::new()),
-        );
-
-        actix_web::test::init_service(create_app(
-            self.service.index_scheduler.clone().into(),
-            self.service.auth.clone().into(),
-            self.service.options.clone(),
-            (route_layer_handle, stderr_layer_handle),
-            analytics::MockAnalytics::new(&self.service.options),
-            true,
-        ))
-        .await
+        self.service.init_web_app().await
     }
 
     pub async fn list_api_keys(&self, params: &str) -> (Value, StatusCode) {
