@@ -65,7 +65,7 @@ where
 
     thread::scope(|s| {
         // TODO manage the errors correctly
-        let handle = Builder::new().name(S("indexer-extractors")).spawn_scoped(s, || {
+        let handle = Builder::new().name(S("indexer-extractors")).spawn_scoped(s, move || {
             pool.in_place_scope(|_s| {
                 let document_changes = document_changes.into_par_iter();
                 // word docids
@@ -85,7 +85,7 @@ where
         })?;
 
         // TODO manage the errors correctly
-        let handle2 = Builder::new().name(S("indexer-merger")).spawn_scoped(s, || {
+        let handle2 = Builder::new().name(S("indexer-merger")).spawn_scoped(s, move || {
             let rtxn = index.read_txn().unwrap();
             merge_grenad_entries(merger_receiver, merger_sender, &rtxn, index)
         })?;

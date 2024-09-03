@@ -6,7 +6,6 @@ use super::channel::{MergerReceiver, MergerSender};
 use super::KvReaderDelAdd;
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::MergerOperation;
-use crate::update::MergeDeladdCboRoaringBitmaps;
 use crate::{CboRoaringBitmapCodec, Index, Result};
 
 /// TODO We must return some infos/stats
