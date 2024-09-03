@@ -270,10 +270,6 @@ mod test {
         let value = obkv.into_inner().unwrap();
         let obkv = KvReader::from_slice(value.as_slice());
 
-        fields_ids_map.insert("doggo.age");
-        fields_ids_map.insert("catto.catto.name");
-        fields_ids_map.insert("catto.catto.age");
-
         let mut tb = TokenizerBuilder::default();
         let document_tokenizer = DocumentTokenizer {
             tokenizer: &tb.build(),
@@ -282,9 +278,12 @@ mod test {
             max_positions_per_attributes: 1000,
         };
 
+        let fields_ids_map_lock = std::sync::RwLock::new(fields_ids_map);
+        let mut global_fields_ids_map = GlobalFieldsIdsMap::new(&fields_ids_map_lock);
+
         let mut words = std::collections::BTreeMap::new();
         document_tokenizer
-            .tokenize_document(obkv, &fields_ids_map, &mut |fid, pos, word| {
+            .tokenize_document(obkv, &mut global_fields_ids_map, &mut |fid, pos, word| {
                 words.insert([fid, pos], word.to_string());
             })
             .unwrap();
