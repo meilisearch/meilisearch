@@ -1,9 +1,11 @@
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use actix_web::http::header::ContentType;
 use actix_web::http::StatusCode;
 use actix_web::test;
 use actix_web::test::TestRequest;
+use actix_web::web::Data;
 use index_scheduler::IndexScheduler;
 use meilisearch::search_queue::SearchQueue;
 use meilisearch::{analytics, create_app, Opt, SubscriberForSecondLayer};
@@ -17,7 +19,6 @@ use crate::common::Value;
 pub struct Service {
     pub index_scheduler: Arc<IndexScheduler>,
     pub auth: Arc<AuthController>,
-    pub search_queue: Arc<SearchQueue>,
     pub options: Opt,
     pub api_key: Option<String>,
 }
@@ -121,11 +122,15 @@ impl Service {
                 as Box<dyn tracing_subscriber::Layer<SubscriberForSecondLayer> + Send + Sync>)
                 .with_filter(tracing_subscriber::filter::Targets::new()),
         );
+        let search_queue = SearchQueue::new(
+            self.options.experimental_search_queue_size,
+            NonZeroUsize::new(1).unwrap(),
+        );
 
         let app = test::init_service(create_app(
             self.index_scheduler.clone().into(),
             self.auth.clone().into(),
-            self.search_queue.clone().into(),
+            Data::new(search_queue),
             self.options.clone(),
             (route_layer_handle, stderr_layer_handle),
             analytics::MockAnalytics::new(&self.options),

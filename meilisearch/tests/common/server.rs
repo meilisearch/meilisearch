@@ -10,6 +10,7 @@ use std::time::Duration;
 use actix_http::body::MessageBody;
 use actix_web::dev::ServiceResponse;
 use actix_web::http::StatusCode;
+use actix_web::web::Data;
 use byte_unit::{Byte, Unit};
 use clap::Parser;
 use meilisearch::option::{IndexerOpts, MaxMemory, MaxThreads, Opt};
@@ -56,13 +57,7 @@ impl Server<Owned> {
         let options = default_settings(dir.path());
 
         let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
-        let service = Service {
-            index_scheduler,
-            auth,
-            search_queue: Self::new_search_queue(&options),
-            options,
-            api_key: None,
-        };
+        let service = Service { index_scheduler, auth, options, api_key: None };
 
         Server { service, _dir: Some(dir), _marker: PhantomData }
     }
@@ -77,13 +72,7 @@ impl Server<Owned> {
         options.master_key = Some("MASTER_KEY".to_string());
 
         let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
-        let service = Service {
-            index_scheduler,
-            auth,
-            search_queue: Self::new_search_queue(&options),
-            options,
-            api_key: None,
-        };
+        let service = Service { index_scheduler, auth, options, api_key: None };
 
         Server { service, _dir: Some(dir), _marker: PhantomData }
     }
@@ -96,13 +85,7 @@ impl Server<Owned> {
 
     pub async fn new_with_options(options: Opt) -> Result<Self, anyhow::Error> {
         let (index_scheduler, auth) = setup_meilisearch(&options)?;
-        let service = Service {
-            index_scheduler,
-            auth,
-            search_queue: Self::new_search_queue(&options),
-            options,
-            api_key: None,
-        };
+        let service = Service { index_scheduler, auth, options, api_key: None };
 
         Ok(Server { service, _dir: None, _marker: PhantomData })
     }
@@ -204,13 +187,7 @@ impl Server<Shared> {
         let options = default_settings(dir.path());
 
         let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
-        let service = Service {
-            index_scheduler,
-            auth,
-            api_key: None,
-            search_queue: Self::new_search_queue(&options),
-            options,
-        };
+        let service = Service { index_scheduler, auth, api_key: None, options };
 
         Server { service, _dir: Some(dir), _marker: PhantomData }
     }
@@ -283,12 +260,6 @@ impl Server<Shared> {
 }
 
 impl<State> Server<State> {
-    fn new_search_queue(options: &Opt) -> Arc<SearchQueue> {
-        let search_queue =
-            SearchQueue::new(options.experimental_search_queue_size, NonZeroUsize::new(1).unwrap());
-        Arc::new(search_queue)
-    }
-
     pub async fn init_web_app(
         &self,
     ) -> impl actix_web::dev::Service<
@@ -308,11 +279,15 @@ impl<State> Server<State> {
                 as Box<dyn tracing_subscriber::Layer<SubscriberForSecondLayer> + Send + Sync>)
                 .with_filter(tracing_subscriber::filter::Targets::new()),
         );
+        let search_queue = SearchQueue::new(
+            self.service.options.experimental_search_queue_size,
+            NonZeroUsize::new(1).unwrap(),
+        );
 
         actix_web::test::init_service(create_app(
             self.service.index_scheduler.clone().into(),
             self.service.auth.clone().into(),
-            self.service.search_queue.clone().into(),
+            Data::new(search_queue),
             self.service.options.clone(),
             (route_layer_handle, stderr_layer_handle),
             analytics::MockAnalytics::new(&self.service.options),
