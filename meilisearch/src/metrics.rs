@@ -5,6 +5,13 @@ use prometheus::{
 };
 
 lazy_static! {
+    pub static ref MEILISEARCH_BUILD_INFO: IntGaugeVec = register_int_gauge_vec!(
+          opts!(
+            "meilisearch_build_info",
+            "A metric with a constant '1' value labelled by version from which meilisearch was built"),
+          & ["revision", "version"]
+    )
+    .expect("Can't create a metric");
     pub static ref MEILISEARCH_HTTP_REQUESTS_TOTAL: IntCounterVec = register_int_counter_vec!(
         opts!("meilisearch_http_requests_total", "Meilisearch HTTP requests total"),
         &["method", "path", "status"]
