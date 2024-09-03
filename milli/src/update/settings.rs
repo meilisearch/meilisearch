@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::TryInto;
+use std::num::NonZeroUsize;
 use std::result::Result as StdResult;
 use std::sync::Arc;
 
@@ -19,6 +20,7 @@ use crate::index::{
     IndexEmbeddingConfig, DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;
+use crate::prompt::default_max_bytes;
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
@@ -1573,16 +1575,30 @@ fn validate_prompt(
             api_key,
             dimensions,
             document_template: Setting::Set(template),
+            document_template_max_bytes,
             url,
             request,
             response,
             distribution,
             headers,
         }) => {
+            let max_bytes = match document_template_max_bytes.set() {
+                Some(max_bytes) => NonZeroUsize::new(max_bytes).ok_or_else(|| {
+                    crate::error::UserError::InvalidSettingsDocumentTemplateMaxBytes {
+                        embedder_name: name.to_owned(),
+                    }
+                })?,
+                None => default_max_bytes(),
+            };
+
             // validate
-            let template = crate::prompt::Prompt::new(template)
-                .map(|prompt| crate::prompt::PromptData::from(prompt).template)
-                .map_err(|inner| UserError::InvalidPromptForEmbeddings(name.to_owned(), inner))?;
+            let template = crate::prompt::Prompt::new(
+                template,
+                // always specify a max_bytes
+                Some(max_bytes),
+            )
+            .map(|prompt| crate::prompt::PromptData::from(prompt).template)
+            .map_err(|inner| UserError::InvalidPromptForEmbeddings(name.to_owned(), inner))?;
 
             Ok(Setting::Set(EmbeddingSettings {
                 source,
@@ -1591,6 +1607,7 @@ fn validate_prompt(
                 api_key,
                 dimensions,
                 document_template: Setting::Set(template),
+                document_template_max_bytes,
                 url,
                 request,
                 response,
@@ -1615,6 +1632,7 @@ pub fn validate_embedding_settings(
         api_key,
         dimensions,
         document_template,
+        document_template_max_bytes,
         url,
         request,
         response,
@@ -1654,6 +1672,7 @@ pub fn validate_embedding_settings(
             api_key,
             dimensions,
             document_template,
+            document_template_max_bytes,
             url,
             request,
             response,
@@ -1726,6 +1745,12 @@ pub fn validate_embedding_settings(
                 inferred_source,
                 name,
             )?;
+            check_unset(
+                &document_template_max_bytes,
+                EmbeddingSettings::DOCUMENT_TEMPLATE_MAX_BYTES,
+                inferred_source,
+                name,
+            )?;
             check_set(&dimensions, EmbeddingSettings::DIMENSIONS, inferred_source, name)?;
 
             check_unset(&url, EmbeddingSettings::URL, inferred_source, name)?;
@@ -1748,6 +1773,7 @@ pub fn validate_embedding_settings(
         api_key,
         dimensions,
         document_template,
+        document_template_max_bytes,
         url,
         request,
         response,

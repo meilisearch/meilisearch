@@ -191,6 +191,7 @@ async fn secrets_are_hidden_in_settings() {
           "apiKey": "My suXXXXXX...",
           "dimensions": 4,
           "documentTemplate": "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
+          "documentTemplateMaxBytes": 400,
           "url": "https://localhost:7777",
           "request": "{{text}}",
           "response": "{{embedding}}",

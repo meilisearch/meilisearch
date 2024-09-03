@@ -1,11 +1,12 @@
 use std::collections::BTreeMap;
+use std::num::NonZeroUsize;
 
 use deserr::Deserr;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 
 use super::{ollama, openai, DistributionShift};
-use crate::prompt::PromptData;
+use crate::prompt::{default_max_bytes, PromptData};
 use crate::update::Setting;
 use crate::vector::EmbeddingConfig;
 use crate::UserError;
@@ -32,6 +33,9 @@ pub struct EmbeddingSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     pub document_template: Setting<String>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
+    pub document_template_max_bytes: Setting<usize>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     pub url: Setting<String>,
@@ -111,6 +115,7 @@ impl SettingsDiff {
                     mut response,
                     mut distribution,
                     mut headers,
+                    mut document_template_max_bytes,
                 } = old;
 
                 let EmbeddingSettings {
@@ -125,6 +130,7 @@ impl SettingsDiff {
                     response: new_response,
                     distribution: new_distribution,
                     headers: new_headers,
+                    document_template_max_bytes: new_document_template_max_bytes,
                 } = new;
 
                 let mut reindex_action = None;
@@ -142,6 +148,7 @@ impl SettingsDiff {
                         &mut request,
                         &mut response,
                         &mut document_template,
+                        &mut document_template_max_bytes,
                         &mut headers,
                     )
                 }
@@ -190,6 +197,23 @@ impl SettingsDiff {
                     );
                 }
 
+                if document_template_max_bytes.apply(new_document_template_max_bytes) {
+                    let previous_document_template_max_bytes =
+                        document_template_max_bytes.set().unwrap_or(default_max_bytes().get());
+                    let new_document_template_max_bytes =
+                        new_document_template_max_bytes.set().unwrap_or(default_max_bytes().get());
+
+                    // only reindex if the size increased. Reasoning:
+                    // - size decrease is a performance optimization, so we don't reindex and we keep the more accurate vectors
+                    // - size increase is an accuracy optimization, so we want to reindex
+                    if new_document_template_max_bytes > previous_document_template_max_bytes {
+                        ReindexAction::push_action(
+                            &mut reindex_action,
+                            ReindexAction::RegeneratePrompts,
+                        )
+                    }
+                }
+
                 distribution.apply(new_distribution);
                 api_key.apply(new_api_key);
                 headers.apply(new_headers);
@@ -206,6 +230,7 @@ impl SettingsDiff {
                     response,
                     distribution,
                     headers,
+                    document_template_max_bytes,
                 };
 
                 match reindex_action {
@@ -239,6 +264,7 @@ fn apply_default_for_source(
     request: &mut Setting<serde_json::Value>,
     response: &mut Setting<serde_json::Value>,
     document_template: &mut Setting<String>,
+    document_template_max_bytes: &mut Setting<usize>,
     headers: &mut Setting<BTreeMap<String, String>>,
 ) {
     match source {
@@ -286,6 +312,7 @@ fn apply_default_for_source(
             *request = Setting::NotSet;
             *response = Setting::NotSet;
             *document_template = Setting::NotSet;
+            *document_template_max_bytes = Setting::NotSet;
             *headers = Setting::NotSet;
         }
         Setting::NotSet => {}
@@ -316,6 +343,7 @@ impl EmbeddingSettings {
     pub const API_KEY: &'static str = "apiKey";
     pub const DIMENSIONS: &'static str = "dimensions";
     pub const DOCUMENT_TEMPLATE: &'static str = "documentTemplate";
+    pub const DOCUMENT_TEMPLATE_MAX_BYTES: &'static str = "documentTemplateMaxBytes";
 
     pub const URL: &'static str = "url";
     pub const REQUEST: &'static str = "request";
@@ -459,6 +487,8 @@ impl std::fmt::Display for EmbedderSource {
 impl From<EmbeddingConfig> for EmbeddingSettings {
     fn from(value: EmbeddingConfig) -> Self {
         let EmbeddingConfig { embedder_options, prompt } = value;
+        let document_template_max_bytes =
+            Setting::Set(prompt.max_bytes.unwrap_or(default_max_bytes()).get());
         match embedder_options {
             super::EmbedderOptions::HuggingFace(super::hf::EmbedderOptions {
                 model,
@@ -471,6 +501,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 api_key: Setting::NotSet,
                 dimensions: Setting::NotSet,
                 document_template: Setting::Set(prompt.template),
+                document_template_max_bytes,
                 url: Setting::NotSet,
                 request: Setting::NotSet,
                 response: Setting::NotSet,
@@ -490,6 +521,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 api_key: Setting::some_or_not_set(api_key),
                 dimensions: Setting::some_or_not_set(dimensions),
                 document_template: Setting::Set(prompt.template),
+                document_template_max_bytes,
                 url: Setting::some_or_not_set(url),
                 request: Setting::NotSet,
                 response: Setting::NotSet,
@@ -509,6 +541,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 api_key: Setting::some_or_not_set(api_key),
                 dimensions: Setting::some_or_not_set(dimensions),
                 document_template: Setting::Set(prompt.template),
+                document_template_max_bytes,
                 url: Setting::some_or_not_set(url),
                 request: Setting::NotSet,
                 response: Setting::NotSet,
@@ -525,6 +558,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 api_key: Setting::NotSet,
                 dimensions: Setting::Set(dimensions),
                 document_template: Setting::NotSet,
+                document_template_max_bytes: Setting::NotSet,
                 url: Setting::NotSet,
                 request: Setting::NotSet,
                 response: Setting::NotSet,
@@ -546,6 +580,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 api_key: Setting::some_or_not_set(api_key),
                 dimensions: Setting::some_or_not_set(dimensions),
                 document_template: Setting::Set(prompt.template),
+                document_template_max_bytes,
                 url: Setting::Set(url),
                 request: Setting::Set(request),
                 response: Setting::Set(response),
@@ -566,6 +601,7 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
             api_key,
             dimensions,
             document_template,
+            document_template_max_bytes,
             url,
             request,
             response,
@@ -648,7 +684,12 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
         }
 
         if let Setting::Set(template) = document_template {
-            this.prompt = PromptData { template }
+            let max_bytes = document_template_max_bytes
+                .set()
+                .and_then(NonZeroUsize::new)
+                .unwrap_or(default_max_bytes());
+
+            this.prompt = PromptData { template, max_bytes: Some(max_bytes) }
         }
 
         this
