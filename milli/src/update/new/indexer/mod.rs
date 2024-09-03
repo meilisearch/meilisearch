@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::sync::RwLock;
 use std::thread::{self, Builder};
 
 use big_s::S;
@@ -22,7 +23,7 @@ use crate::documents::{
     obkv_to_object, DocumentsBatchCursor, DocumentsBatchIndex, PrimaryKey, DEFAULT_PRIMARY_KEY,
 };
 use crate::update::GrenadParameters;
-use crate::{Index, Result, UserError};
+use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
 
 mod document_deletion;
 mod document_operation;
@@ -34,6 +35,7 @@ pub trait DocumentChanges<'p> {
 
     fn document_changes(
         self,
+        fields_ids_map: &mut FieldsIdsMap,
         param: Self::Parameter,
     ) -> Result<impl ParallelIterator<Item = Result<DocumentChange>> + Clone + 'p>;
 }
@@ -46,6 +48,7 @@ pub trait DocumentChanges<'p> {
 pub fn index<PI>(
     wtxn: &mut RwTxn,
     index: &Index,
+    fields_ids_map: FieldsIdsMap,
     pool: &ThreadPool,
     document_changes: PI,
 ) -> Result<()>
@@ -57,6 +60,9 @@ where
     let ExtractorsMergerChannels { merger_receiver, deladd_cbo_roaring_bitmap_sender } =
         extractors_merger_channels(100);
 
+    let fields_ids_map_lock = RwLock::new(fields_ids_map);
+    let global_fields_ids_map = GlobalFieldsIdsMap::new(&fields_ids_map_lock);
+
     thread::scope(|s| {
         // TODO manage the errors correctly
         let handle = Builder::new().name(S("indexer-extractors")).spawn_scoped(s, || {
@@ -65,7 +71,7 @@ where
                 // word docids
                 let merger = WordDocidsExtractor::run_extraction(
                     index,
-                    todo!(),
+                    &global_fields_ids_map,
                     /// TODO: GrenadParameters::default() should be removed in favor a passed parameter
                     GrenadParameters::default(),
                     document_changes.clone(),
@@ -100,8 +106,13 @@ where
         handle.join().unwrap()?;
         handle2.join().unwrap()?;
 
-        Ok(())
-    })
+        Ok(()) as Result<_>
+    })?;
+
+    let fields_ids_map = fields_ids_map_lock.into_inner().unwrap();
+    index.put_fields_ids_map(wtxn, &fields_ids_map)?;
+
+    Ok(())
 }
 
 /// TODO move this elsewhere

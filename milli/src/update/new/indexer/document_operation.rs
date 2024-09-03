@@ -73,13 +73,14 @@ impl DocumentOperation {
 }
 
 impl<'p> DocumentChanges<'p> for DocumentOperation {
-    type Parameter = (&'p Index, &'p RoTxn<'p>, &'p mut FieldsIdsMap, &'p PrimaryKey<'p>);
+    type Parameter = (&'p Index, &'p RoTxn<'p>, &'p PrimaryKey<'p>);
 
     fn document_changes(
         self,
+        fields_ids_map: &mut FieldsIdsMap,
         param: Self::Parameter,
     ) -> Result<impl ParallelIterator<Item = Result<DocumentChange>> + Clone + 'p> {
-        let (index, rtxn, fields_ids_map, primary_key) = param;
+        let (index, rtxn, primary_key) = param;
 
         let documents_ids = index.documents_ids(rtxn)?;
         let mut available_docids = AvailableIds::new(&documents_ids);
@@ -174,7 +175,7 @@ impl<'p> DocumentChanges<'p> for DocumentOperation {
 
         /// TODO is it the best way to provide FieldsIdsMap to the parallel iterator?
         let fields_ids_map = fields_ids_map.clone();
-        // We must drain the HashMap into a Vec because rayon::hash_map::IntoIter: !Clone
+        // TODO We must drain the HashMap into a Vec because rayon::hash_map::IntoIter: !Clone
         let docids_version_offsets: Vec<_> = docids_version_offsets.drain().collect();
 
         Ok(docids_version_offsets

@@ -27,6 +27,7 @@ impl<'p> DocumentChanges<'p> for DocumentDeletion {
 
     fn document_changes(
         self,
+        _fields_ids_map: &mut FieldsIdsMap,
         param: Self::Parameter,
     ) -> Result<impl ParallelIterator<Item = Result<DocumentChange>> + Clone + 'p> {
         let (index, fields, primary_key) = param;

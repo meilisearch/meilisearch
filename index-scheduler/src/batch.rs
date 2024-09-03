@@ -36,7 +36,7 @@ use meilisearch_types::milli::update::{
 use meilisearch_types::milli::vector::parsed_vectors::{
     ExplicitVectors, VectorOrArrayOfVectors, RESERVED_VECTORS_FIELD_NAME,
 };
-use meilisearch_types::milli::{self, Filter, Object, UserError};
+use meilisearch_types::milli::{self, Filter, GlobalFieldsIdsMap, Object, UserError};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::{compression, Index, VERSION_FILE_NAME};
@@ -1302,49 +1302,6 @@ impl IndexScheduler {
                 let primary_key =
                     guess_primary_key(&rtxn, index, cursor, &documents_batch_index)?.unwrap();
 
-                // if let Some(primary_key) = primary_key {
-                //     match index.primary_key(index_wtxn)? {
-                //         // if a primary key was set AND had already been defined in the index
-                //         // but to a different value, we can make the whole batch fail.
-                //         Some(pk) => {
-                //             if primary_key != pk {
-                //                 return Err(milli::Error::from(
-                //                     milli::UserError::PrimaryKeyCannotBeChanged(pk.to_string()),
-                //                 )
-                //                 .into());
-                //             }
-                //         }
-                //         // if the primary key was set and there was no primary key set for this index
-                //         // we set it to the received value before starting the indexing process.
-                //         None => {
-                //             todo!();
-                //             let mut builder =
-                //                 milli::update::Settings::new(index_wtxn, index, indexer_config);
-                //             builder.set_primary_key(primary_key);
-                //             builder.execute(
-                //                 |indexing_step| tracing::debug!(update = ?indexing_step),
-                //                 || must_stop_processing.clone().get(),
-                //             )?;
-                //             primary_key_has_been_set = true;
-                //         }
-                //     }
-                // }
-
-                // let config = IndexDocumentsConfig { update_method: method, ..Default::default() };
-
-                // let embedder_configs = index.embedding_configs(index_wtxn)?;
-                // // TODO: consider Arc'ing the map too (we only need read access + we'll be cloning it multiple times, so really makes sense)
-                // let embedders = self.embedders(embedder_configs)?;
-
-                // let mut builder = milli::update::IndexDocuments::new(
-                //     index_wtxn,
-                //     index,
-                //     indexer_config,
-                //     config,
-                //     |indexing_step| tracing::trace!(?indexing_step, "Update"),
-                //     || must_stop_processing.get(),
-                // )?;
-
                 let mut indexer = indexer::DocumentOperation::new(method);
                 for (operation, task) in operations.into_iter().zip(tasks.iter_mut()) {
                     match operation {
@@ -1401,12 +1358,10 @@ impl IndexScheduler {
                     // let pool = indexer_config.thread_pool.unwrap();
                     let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
                     // let fields_ids_map = RwLock::new(fields_ids_map);
-                    let param = (index, &rtxn, &mut fields_ids_map, &primary_key);
-                    let document_changes = indexer.document_changes(param)?;
-                    indexer::index(index_wtxn, index, &pool, document_changes)?;
-
-                    /// TODO we must store it or not?
-                    let fields_ids_map = fields_ids_map;
+                    let param = (index, &rtxn, &primary_key);
+                    let document_changes = indexer.document_changes(&mut fields_ids_map, param)?;
+                    /// TODO pass/write the FieldsIdsMap
+                    indexer::index(index_wtxn, index, fields_ids_map, &pool, document_changes)?;
 
                     // tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
                 } else if primary_key_has_been_set {

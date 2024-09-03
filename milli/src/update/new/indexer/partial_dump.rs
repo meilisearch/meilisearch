@@ -30,6 +30,7 @@ where
     ///   - We recommend sending chunks of documents in this `PartialDumpIndexer` we therefore need to create a custom take_while_size method (that doesn't drop items).
     fn document_changes(
         self,
+        _fields_ids_map: &mut FieldsIdsMap,
         param: Self::Parameter,
     ) -> Result<impl ParallelIterator<Item = Result<DocumentChange>> + Clone + 'p> {
         let (fields_ids_map, concurrent_available_ids, primary_key) = param;

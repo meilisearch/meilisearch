@@ -55,7 +55,7 @@ pub use self::error::{
 };
 pub use self::external_documents_ids::ExternalDocumentsIds;
 pub use self::fieldids_weights_map::FieldidsWeightsMap;
-pub use self::fields_ids_map::FieldsIdsMap;
+pub use self::fields_ids_map::{FieldsIdsMap, GlobalFieldsIdsMap};
 pub use self::heed_codec::{
     BEU16StrCodec, BEU32StrCodec, BoRoaringBitmapCodec, BoRoaringBitmapLenCodec,
     CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, FieldIdWordCountCodec, ObkvCodec,

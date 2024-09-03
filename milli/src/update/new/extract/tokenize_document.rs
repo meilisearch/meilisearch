@@ -1,11 +1,14 @@
-use crate::{
-    update::new::KvReaderFieldId, FieldId, FieldsIdsMap, Index, InternalError,
-    LocalizedAttributesRule, Result, MAX_POSITION_PER_ATTRIBUTE, MAX_WORD_LENGTH,
-};
+use std::collections::HashMap;
+
 use charabia::{SeparatorKind, Token, TokenKind, Tokenizer, TokenizerBuilder};
 use heed::RoTxn;
 use serde_json::Value;
-use std::collections::HashMap;
+
+use crate::update::new::KvReaderFieldId;
+use crate::{
+    FieldId, FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, LocalizedAttributesRule,
+    Result, MAX_POSITION_PER_ATTRIBUTE, MAX_WORD_LENGTH,
+};
 
 pub struct DocumentTokenizer<'a> {
     pub tokenizer: &'a Tokenizer<'a>,
@@ -18,18 +21,24 @@ impl<'a> DocumentTokenizer<'a> {
     pub fn tokenize_document(
         &self,
         obkv: &KvReaderFieldId,
-        field_id_map: &FieldsIdsMap,
+        field_id_map: &mut GlobalFieldsIdsMap,
         token_fn: &mut impl FnMut(FieldId, u16, &str),
     ) -> Result<()> {
         let mut field_position = HashMap::new();
+        let mut field_name = String::new();
         for (field_id, field_bytes) in obkv {
-            let Some(field_name) = field_id_map.name(field_id) else {
+            let Some(field_name) = field_id_map.name(field_id).map(|s| {
+                field_name.clear();
+                field_name.push_str(s);
+                &field_name
+            }) else {
                 unreachable!("field id not found in field id map");
             };
 
             let mut tokenize_field = |name: &str, value: &Value| {
-                let Some(field_id) = field_id_map.id(name) else {
-                    unreachable!("field name not found in field id map");
+                let Some(field_id) = field_id_map.id_or_insert(name) else {
+                    /// TODO: better error
+                    panic!("it's over 9000");
                 };
 
                 let position =
@@ -75,7 +84,7 @@ impl<'a> DocumentTokenizer<'a> {
 
             // if the current field is searchable or contains a searchable attribute
             if self.searchable_attributes.map_or(true, |attributes| {
-                attributes.iter().any(|name| perm_json_p::contained_in(name, field_name))
+                attributes.iter().any(|name| perm_json_p::contained_in(name, &field_name))
             }) {
                 // parse json.
                 match serde_json::from_slice(field_bytes).map_err(InternalError::SerdeJson)? {
@@ -224,11 +233,12 @@ mod perm_json_p {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use charabia::TokenizerBuilder;
     use meili_snap::snapshot;
     use obkv::KvReader;
     use serde_json::json;
+
+    use super::*;
     #[test]
     fn test_tokenize_document() {
         let mut fields_ids_map = FieldsIdsMap::new();

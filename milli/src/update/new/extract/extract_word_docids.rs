@@ -1,32 +1,20 @@
 use std::fs::File;
 
 use charabia::TokenizerBuilder;
-use grenad::Merger;
-use grenad::ReaderCursor;
+use grenad::{Merger, ReaderCursor};
 use heed::RoTxn;
-use rayon::iter::IntoParallelIterator;
-use rayon::iter::ParallelBridge;
-use rayon::iter::ParallelIterator;
+use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
 
-use crate::update::MergeDeladdCboRoaringBitmaps;
-use crate::{
-    update::{
-        create_sorter,
-        new::{DocumentChange, ItemsPool},
-        GrenadParameters,
-    },
-    FieldsIdsMap, Index, Result, MAX_POSITION_PER_ATTRIBUTE,
-};
-
-use super::{
-    cache::{CachedSorter, DelAddRoaringBitmapMerger},
-    tokenize_document::DocumentTokenizer,
-};
+use super::cache::CachedSorter;
+use super::tokenize_document::DocumentTokenizer;
+use crate::update::new::{DocumentChange, ItemsPool};
+use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
+use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, MAX_POSITION_PER_ATTRIBUTE};
 
 pub trait SearchableExtractor {
     fn run_extraction(
         index: &Index,
-        fields_ids_map: &FieldsIdsMap,
+        fields_ids_map: &GlobalFieldsIdsMap,
         indexer: GrenadParameters,
         document_changes: impl IntoParallelIterator<Item = Result<DocumentChange>>,
     ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>> {
@@ -62,12 +50,13 @@ pub trait SearchableExtractor {
             Ok((
                 index.read_txn()?,
                 &document_tokenizer,
+                fields_ids_map.clone(),
                 CachedSorter::new(
                     // TODO use a better value
                     100.try_into().unwrap(),
                     create_sorter(
                         grenad::SortAlgorithm::Stable,
-                        DelAddRoaringBitmapMerger,
+                        MergeDeladdCboRoaringBitmaps,
                         indexer.chunk_compression_type,
                         indexer.chunk_compression_level,
                         indexer.max_nb_chunks,
@@ -78,12 +67,12 @@ pub trait SearchableExtractor {
         });
 
         document_changes.into_par_iter().try_for_each(|document_change| {
-            context_pool.with(|(rtxn, document_tokenizer, cached_sorter)| {
+            context_pool.with(|(rtxn, document_tokenizer, fields_ids_map, cached_sorter)| {
                 Self::extract_document_change(
                     &*rtxn,
                     index,
                     document_tokenizer,
-                    &fields_ids_map,
+                    fields_ids_map,
                     cached_sorter,
                     document_change?,
                 )
@@ -91,7 +80,7 @@ pub trait SearchableExtractor {
         })?;
 
         let mut builder = grenad::MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
-        for (_rtxn, _tokenizer, cache) in context_pool.into_items() {
+        for (_rtxn, _tokenizer, _fields_ids_map, cache) in context_pool.into_items() {
             let sorter = cache.into_sorter()?;
             let readers = sorter.into_reader_cursors()?;
             builder.extend(readers);
@@ -104,8 +93,8 @@ pub trait SearchableExtractor {
         rtxn: &RoTxn,
         index: &Index,
         document_tokenizer: &DocumentTokenizer,
-        fields_ids_map: &FieldsIdsMap,
-        cached_sorter: &mut CachedSorter<DelAddRoaringBitmapMerger>,
+        fields_ids_map: &mut GlobalFieldsIdsMap,
+        cached_sorter: &mut CachedSorter<MergeDeladdCboRoaringBitmaps>,
         document_change: DocumentChange,
     ) -> Result<()>;
 }
@@ -116,9 +105,8 @@ impl SearchableExtractor for WordDocidsExtractor {
         rtxn: &RoTxn,
         index: &Index,
         document_tokenizer: &DocumentTokenizer,
-        fields_ids_map: &FieldsIdsMap,
-        // TODO: DelAddRoaringBitmapMerger should be CBO
-        cached_sorter: &mut CachedSorter<DelAddRoaringBitmapMerger>,
+        fields_ids_map: &mut GlobalFieldsIdsMap,
+        cached_sorter: &mut CachedSorter<MergeDeladdCboRoaringBitmaps>,
         document_change: DocumentChange,
     ) -> crate::Result<()> {
         match document_change {

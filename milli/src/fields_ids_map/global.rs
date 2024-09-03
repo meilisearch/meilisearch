@@ -4,11 +4,13 @@ use std::sync::RwLock;
 use crate::{FieldId, FieldsIdsMap};
 
 /// A fields ids map that can be globally updated to add fields
+#[derive(Debug, Clone)]
 pub struct GlobalFieldsIdsMap<'indexing> {
     global: &'indexing RwLock<FieldsIdsMap>,
     local: LocalFieldsIdsMap,
 }
 
+#[derive(Debug, Clone)]
 struct LocalFieldsIdsMap {
     names_ids: BTreeMap<String, FieldId>,
     ids_names: BTreeMap<FieldId, String>,
