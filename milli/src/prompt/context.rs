@@ -5,7 +5,7 @@ use liquid::{ObjectView, ValueView};
 
 use super::document::Document;
 use super::fields::Fields;
-use crate::FieldsIdsMap;
+use super::FieldsIdsMapWithMetadata;
 
 #[derive(Debug, Clone)]
 pub struct Context<'a> {
@@ -14,7 +14,7 @@ pub struct Context<'a> {
 }
 
 impl<'a> Context<'a> {
-    pub fn new(document: &'a Document<'a>, field_id_map: &'a FieldsIdsMap) -> Self {
+    pub fn new(document: &'a Document<'a>, field_id_map: &'a FieldsIdsMapWithMetadata<'a>) -> Self {
         Self { document, fields: Fields::new(document, field_id_map) }
     }
 }

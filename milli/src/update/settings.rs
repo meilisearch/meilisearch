@@ -1238,7 +1238,7 @@ impl InnerIndexSettingsDiff {
         old_settings: InnerIndexSettings,
         new_settings: InnerIndexSettings,
         primary_key_id: Option<FieldId>,
-        embedding_config_updates: BTreeMap<String, EmbedderAction>,
+        mut embedding_config_updates: BTreeMap<String, EmbedderAction>,
         settings_update_only: bool,
     ) -> Self {
         let only_additional_fields = match (
@@ -1272,6 +1272,32 @@ impl InnerIndexSettingsDiff {
 
         let cache_user_defined_searchables = old_settings.user_defined_searchable_fields
             != new_settings.user_defined_searchable_fields;
+
+        // if the user-defined searchables changed, then we need to reindex prompts.
+        if cache_user_defined_searchables {
+            for (embedder_name, (config, _)) in new_settings.embedding_configs.inner_as_ref() {
+                // skip embedders that don't use document templates
+                if !config.uses_document_template() {
+                    continue;
+                }
+
+                // note: this could currently be entry.or_insert(..), but we're future-proofing with an explicit match
+                // this always makes the code clearer by explicitly handling the cases
+                match embedding_config_updates.entry(embedder_name.clone()) {
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        entry.insert(EmbedderAction::Reindex(ReindexAction::RegeneratePrompts));
+                    }
+                    std::collections::btree_map::Entry::Occupied(entry) => match entry.get() {
+                        EmbedderAction::WriteBackToDocuments(_) => { /* we are deleting this embedder, so no point in regeneration */
+                        }
+                        EmbedderAction::Reindex(ReindexAction::FullReindex) => { /* we are already fully reindexing */
+                        }
+                        EmbedderAction::Reindex(ReindexAction::RegeneratePrompts) => { /* we are already regenerating prompts */
+                        }
+                    },
+                };
+            }
+        }
 
         InnerIndexSettingsDiff {
             old: old_settings,
