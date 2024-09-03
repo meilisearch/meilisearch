@@ -2,7 +2,7 @@ use heed::RoTxn;
 use obkv::KvReader;
 
 use crate::update::new::KvReaderFieldId;
-use crate::{DocumentId, FieldId, Index};
+use crate::{DocumentId, FieldId, Index, Result};
 
 pub enum DocumentChange {
     Deletion(Deletion),
@@ -52,8 +52,12 @@ impl Deletion {
         self.docid
     }
 
-    pub fn current(&self, rtxn: &RoTxn, index: &Index) -> &KvReader<FieldId> {
-        unimplemented!()
+    pub fn current<'a>(
+        &self,
+        rtxn: &'a RoTxn,
+        index: &'a Index,
+    ) -> Result<Option<&'a KvReader<FieldId>>> {
+        index.documents.get(rtxn, &self.docid).map_err(crate::Error::from)
     }
 }
 
@@ -67,7 +71,7 @@ impl Insertion {
     }
 
     pub fn new(&self) -> &KvReader<FieldId> {
-        unimplemented!()
+        self.new.as_ref()
     }
 }
 
@@ -85,11 +89,15 @@ impl Update {
         self.docid
     }
 
-    pub fn current(&self, rtxn: &RoTxn, index: &Index) -> &KvReader<FieldId> {
-        unimplemented!()
+    pub fn current<'a>(
+        &self,
+        rtxn: &'a RoTxn,
+        index: &'a Index,
+    ) -> Result<Option<&'a KvReader<FieldId>>> {
+        index.documents.get(rtxn, &self.docid).map_err(crate::Error::from)
     }
 
     pub fn new(&self) -> &KvReader<FieldId> {
-        unimplemented!()
+        self.new.as_ref()
     }
 }

@@ -115,7 +115,7 @@ impl SearchableExtractor for WordDocidsExtractor {
                     cached_sorter.insert_del_u32(word.as_bytes(), inner.docid()).unwrap();
                 };
                 document_tokenizer.tokenize_document(
-                    inner.current(rtxn, index),
+                    inner.current(rtxn, index)?.unwrap(),
                     fields_ids_map,
                     &mut token_fn,
                 )?;
@@ -125,7 +125,7 @@ impl SearchableExtractor for WordDocidsExtractor {
                     cached_sorter.insert_del_u32(word.as_bytes(), inner.docid()).unwrap();
                 };
                 document_tokenizer.tokenize_document(
-                    inner.current(rtxn, index),
+                    inner.current(rtxn, index)?.unwrap(),
                     fields_ids_map,
                     &mut token_fn,
                 )?;
