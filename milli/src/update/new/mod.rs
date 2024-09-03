@@ -4,13 +4,12 @@ pub use items_pool::ItemsPool;
 use super::del_add::DelAdd;
 use crate::FieldId;
 
-mod document_change;
-mod merger;
-// mod extract;
 mod channel;
-//mod global_fields_ids_map;
+mod document_change;
+mod extract;
 pub mod indexer;
 mod items_pool;
+mod merger;
 
 /// TODO move them elsewhere
 pub type StdResult<T, E> = std::result::Result<T, E>;

@@ -15,11 +15,13 @@ use super::channel::{
     WriterOperation,
 };
 use super::document_change::DocumentChange;
+use super::extract::{SearchableExtractor, WordDocidsExtractor};
 use super::merger::merge_grenad_entries;
 use super::StdResult;
 use crate::documents::{
     obkv_to_object, DocumentsBatchCursor, DocumentsBatchIndex, PrimaryKey, DEFAULT_PRIMARY_KEY,
 };
+use crate::update::GrenadParameters;
 use crate::{Index, Result, UserError};
 
 mod document_deletion;
@@ -45,7 +47,7 @@ pub fn index<PI>(
     wtxn: &mut RwTxn,
     index: &Index,
     pool: &ThreadPool,
-    _document_changes: PI,
+    document_changes: PI,
 ) -> Result<()>
 where
     PI: IntoParallelIterator<Item = Result<DocumentChange>> + Send,
@@ -59,10 +61,18 @@ where
         // TODO manage the errors correctly
         let handle = Builder::new().name(S("indexer-extractors")).spawn_scoped(s, || {
             pool.in_place_scope(|_s| {
+                let document_changes = document_changes.into_par_iter();
                 // word docids
-                // document_changes.into_par_iter().try_for_each(|_dc| Ok(()) as Result<_>)
-                // let grenads = extractor_function(document_changes)?;
-                // deladd_cbo_roaring_bitmap_sender.word_docids(grenads)?;
+                let merger = WordDocidsExtractor::run_extraction(
+                    index,
+                    todo!(),
+                    /// TODO: GrenadParameters::default() should be removed in favor a passed parameter
+                    GrenadParameters::default(),
+                    document_changes.clone(),
+                )?;
+
+                /// TODO: manage the errors correctly
+                deladd_cbo_roaring_bitmap_sender.word_docids(merger).unwrap();
 
                 Ok(()) as Result<_>
             })

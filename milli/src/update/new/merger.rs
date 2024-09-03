@@ -20,14 +20,12 @@ pub fn merge_grenad_entries(
 
     for merger_operation in receiver {
         match merger_operation {
-            MergerOperation::WordDocidsCursors(cursors) => {
+            MergerOperation::WordDocidsMerger(merger) => {
                 let sender = sender.word_docids();
                 let database = index.word_docids.remap_types::<Bytes, Bytes>();
 
-                let mut builder = grenad::MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
-                builder.extend(cursors);
                 /// TODO manage the error correctly
-                let mut merger_iter = builder.build().into_stream_merger_iter().unwrap();
+                let mut merger_iter = merger.into_stream_merger_iter().unwrap();
 
                 // TODO manage the error correctly
                 while let Some((key, deladd)) = merger_iter.next().unwrap() {

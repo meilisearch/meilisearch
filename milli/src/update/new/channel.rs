@@ -1,10 +1,12 @@
 use std::fs::File;
 
 use crossbeam_channel::{IntoIter, Receiver, SendError, Sender};
+use grenad::Merger;
 use heed::types::Bytes;
 
 use super::StdResult;
 use crate::update::new::KvReaderFieldId;
+use crate::update::MergeDeladdCboRoaringBitmaps;
 use crate::{DocumentId, Index};
 
 /// The capacity of the channel is currently in number of messages.
@@ -159,7 +161,7 @@ impl DocumentSender {
 }
 
 pub enum MergerOperation {
-    WordDocidsCursors(Vec<grenad::ReaderCursor<File>>),
+    WordDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
 }
 
 pub struct MergerReceiver(Receiver<MergerOperation>);
@@ -175,3 +177,16 @@ impl IntoIterator for MergerReceiver {
 
 #[derive(Clone)]
 pub struct DeladdCboRoaringBitmapSender(Sender<MergerOperation>);
+
+impl DeladdCboRoaringBitmapSender {
+    pub fn word_docids(
+        &self,
+        merger: Merger<File, MergeDeladdCboRoaringBitmaps>,
+    ) -> StdResult<(), SendError<()>> {
+        let operation = MergerOperation::WordDocidsMerger(merger);
+        match self.0.send(operation) {
+            Ok(()) => Ok(()),
+            Err(SendError(_)) => Err(SendError(())),
+        }
+    }
+}

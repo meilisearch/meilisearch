@@ -2,7 +2,7 @@ use heed::RoTxn;
 use obkv::KvReader;
 
 use crate::update::new::KvReaderFieldId;
-use crate::{DocumentId, FieldId};
+use crate::{DocumentId, FieldId, Index};
 
 pub enum DocumentChange {
     Deletion(Deletion),
@@ -12,14 +12,14 @@ pub enum DocumentChange {
 
 pub struct Deletion {
     docid: DocumentId,
-    external_docid: String, // ?
-    current: Box<KvReaderFieldId>,
+    external_docid: String,        // ?
+    current: Box<KvReaderFieldId>, // ?
 }
 
 pub struct Update {
     docid: DocumentId,
-    external_docid: String, // ?
-    current: Box<KvReaderFieldId>,
+    external_docid: String,        // ?
+    current: Box<KvReaderFieldId>, // ?
     new: Box<KvReaderFieldId>,
 }
 
@@ -30,7 +30,7 @@ pub struct Insertion {
 }
 
 impl DocumentChange {
-    fn docid(&self) -> DocumentId {
+    pub fn docid(&self) -> DocumentId {
         match &self {
             Self::Deletion(inner) => inner.docid(),
             Self::Update(inner) => inner.docid(),
@@ -48,11 +48,11 @@ impl Deletion {
         Self { docid, external_docid, current }
     }
 
-    fn docid(&self) -> DocumentId {
+    pub fn docid(&self) -> DocumentId {
         self.docid
     }
 
-    fn current(&self, rtxn: &RoTxn) -> &KvReader<FieldId> {
+    pub fn current(&self, rtxn: &RoTxn, index: &Index) -> &KvReader<FieldId> {
         unimplemented!()
     }
 }
@@ -62,11 +62,11 @@ impl Insertion {
         Insertion { docid, external_docid, new }
     }
 
-    fn docid(&self) -> DocumentId {
+    pub fn docid(&self) -> DocumentId {
         self.docid
     }
 
-    fn new(&self) -> &KvReader<FieldId> {
+    pub fn new(&self) -> &KvReader<FieldId> {
         unimplemented!()
     }
 }
@@ -81,15 +81,15 @@ impl Update {
         Update { docid, external_docid, current, new }
     }
 
-    fn docid(&self) -> DocumentId {
+    pub fn docid(&self) -> DocumentId {
         self.docid
     }
 
-    fn current(&self, rtxn: &RoTxn) -> &KvReader<FieldId> {
+    pub fn current(&self, rtxn: &RoTxn, index: &Index) -> &KvReader<FieldId> {
         unimplemented!()
     }
 
-    fn new(&self) -> &KvReader<FieldId> {
+    pub fn new(&self) -> &KvReader<FieldId> {
         unimplemented!()
     }
 }

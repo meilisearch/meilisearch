@@ -1,84 +1,180 @@
-pub fn extract_word_docids(
-    document_change: DocumentChange,
-    _tokenizer: &Tokenizer,
-    output: &mut CachedSorter<DelAddRoaringBitmapMerger>,
-) -> grenad::Result<(), io::Error> {
-    match document_change {
-        DocumentChange::Deletion(inner) => {
-            unimplemented!()
+use std::fs::File;
+
+use charabia::TokenizerBuilder;
+use grenad::Merger;
+use grenad::ReaderCursor;
+use heed::RoTxn;
+use rayon::iter::IntoParallelIterator;
+use rayon::iter::ParallelBridge;
+use rayon::iter::ParallelIterator;
+
+use crate::update::MergeDeladdCboRoaringBitmaps;
+use crate::{
+    update::{
+        create_sorter,
+        new::{DocumentChange, ItemsPool},
+        GrenadParameters,
+    },
+    FieldsIdsMap, Index, Result, MAX_POSITION_PER_ATTRIBUTE,
+};
+
+use super::{
+    cache::{CachedSorter, DelAddRoaringBitmapMerger},
+    tokenize_document::DocumentTokenizer,
+};
+
+pub trait SearchableExtractor {
+    fn run_extraction(
+        index: &Index,
+        fields_ids_map: &FieldsIdsMap,
+        indexer: GrenadParameters,
+        document_changes: impl IntoParallelIterator<Item = Result<DocumentChange>>,
+    ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>> {
+        let max_memory = indexer.max_memory_by_thread();
+
+        let rtxn = index.read_txn()?;
+        let stop_words = index.stop_words(&rtxn)?;
+        let allowed_separators = index.allowed_separators(&rtxn)?;
+        let allowed_separators: Option<Vec<_>> =
+            allowed_separators.as_ref().map(|s| s.iter().map(String::as_str).collect());
+        let dictionary = index.dictionary(&rtxn)?;
+        let dictionary: Option<Vec<_>> =
+            dictionary.as_ref().map(|s| s.iter().map(String::as_str).collect());
+        let builder = tokenizer_builder(
+            stop_words.as_ref(),
+            allowed_separators.as_deref(),
+            dictionary.as_deref(),
+        );
+        let tokenizer = builder.into_tokenizer();
+
+        let user_defined_searchable_fields = index.user_defined_searchable_fields(&rtxn)?;
+        let localized_attributes_rules =
+            index.localized_attributes_rules(&rtxn)?.unwrap_or_default();
+
+        let document_tokenizer = DocumentTokenizer {
+            tokenizer: &tokenizer,
+            searchable_attributes: user_defined_searchable_fields.as_deref(),
+            localized_attributes_rules: &localized_attributes_rules,
+            max_positions_per_attributes: MAX_POSITION_PER_ATTRIBUTE,
+        };
+
+        let context_pool = ItemsPool::new(|| {
+            Ok((
+                index.read_txn()?,
+                &document_tokenizer,
+                CachedSorter::new(
+                    // TODO use a better value
+                    100.try_into().unwrap(),
+                    create_sorter(
+                        grenad::SortAlgorithm::Stable,
+                        DelAddRoaringBitmapMerger,
+                        indexer.chunk_compression_type,
+                        indexer.chunk_compression_level,
+                        indexer.max_nb_chunks,
+                        max_memory,
+                    ),
+                ),
+            ))
+        });
+
+        document_changes.into_par_iter().try_for_each(|document_change| {
+            context_pool.with(|(rtxn, document_tokenizer, cached_sorter)| {
+                Self::extract_document_change(
+                    &*rtxn,
+                    index,
+                    document_tokenizer,
+                    &fields_ids_map,
+                    cached_sorter,
+                    document_change?,
+                )
+            })
+        })?;
+
+        let mut builder = grenad::MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
+        for (_rtxn, _tokenizer, cache) in context_pool.into_items() {
+            let sorter = cache.into_sorter()?;
+            let readers = sorter.into_reader_cursors()?;
+            builder.extend(readers);
         }
-        DocumentChange::Update(inner) => {
-            unimplemented!()
-        }
-        DocumentChange::Insertion(inner) => {
-            unimplemented!()
-        }
+
+        Ok(builder.build())
     }
 
-    let normalizer_options = NormalizerOption::default();
-
-    if let Some(previous_doc) = previous_doc {
-        for (_, v) in previous_doc.iter() {
-            // Only manage the direct JSON strings
-            // TODO manage the JSON strings correctly (escaped chars)
-            if v.first().zip(v.last()) == Some((&b'"', &b'"')) {
-                let s = std::str::from_utf8(&v[1..v.len() - 1]).unwrap();
-                // for token in tokenizer.tokenize(s).filter(|t| t.is_word()) {
-                //     let key = token.lemma().normalize(&normalizer_options);
-                for token in s.split_whitespace() {
-                    let key = token.normalize(&normalizer_options);
-                    output.insert_del_u32(key.as_bytes(), docid)?;
-                }
-            }
-        }
-    }
-
-    for (_, v) in new_doc.iter() {
-        // Only manage the direct JSON strings
-        // TODO manage the JSON strings correctly (escaped chars)
-        if v.first().zip(v.last()) == Some((&b'"', &b'"')) {
-            let s = std::str::from_utf8(&v[1..v.len() - 1]).unwrap();
-            // for token in tokenizer.tokenize(s).filter(|t| t.is_word()) {
-            //     let key = token.lemma().normalize(&normalizer_options);
-            for token in s.split_whitespace() {
-                let key = token.normalize(&normalizer_options);
-                output.insert_add_u32(key.as_bytes(), docid)?;
-            }
-        }
-    }
-
-    Ok(())
+    fn extract_document_change(
+        rtxn: &RoTxn,
+        index: &Index,
+        document_tokenizer: &DocumentTokenizer,
+        fields_ids_map: &FieldsIdsMap,
+        cached_sorter: &mut CachedSorter<DelAddRoaringBitmapMerger>,
+        document_change: DocumentChange,
+    ) -> Result<()>;
 }
 
-/// take an iterator on tokens and compute their relative position depending on separator kinds
-/// if it's an `Hard` separator we add an additional relative proximity of 8 between words,
-/// else we keep the standard proximity of 1 between words.
-fn process_tokens<'a>(
-    tokens: impl Iterator<Item = Token<'a>>,
-) -> impl Iterator<Item = (usize, Token<'a>)> {
-    tokens
-        .skip_while(|token| token.is_separator())
-        .scan((0, None), |(offset, prev_kind), mut token| {
-            match token.kind {
-                TokenKind::Word | TokenKind::StopWord if !token.lemma().is_empty() => {
-                    *offset += match *prev_kind {
-                        Some(TokenKind::Separator(SeparatorKind::Hard)) => 8,
-                        Some(_) => 1,
-                        None => 0,
-                    };
-                    *prev_kind = Some(token.kind)
-                }
-                TokenKind::Separator(SeparatorKind::Hard) => {
-                    *prev_kind = Some(token.kind);
-                }
-                TokenKind::Separator(SeparatorKind::Soft)
-                    if *prev_kind != Some(TokenKind::Separator(SeparatorKind::Hard)) =>
-                {
-                    *prev_kind = Some(token.kind);
-                }
-                _ => token.kind = TokenKind::Unknown,
+pub struct WordDocidsExtractor;
+impl SearchableExtractor for WordDocidsExtractor {
+    fn extract_document_change(
+        rtxn: &RoTxn,
+        index: &Index,
+        document_tokenizer: &DocumentTokenizer,
+        fields_ids_map: &FieldsIdsMap,
+        // TODO: DelAddRoaringBitmapMerger should be CBO
+        cached_sorter: &mut CachedSorter<DelAddRoaringBitmapMerger>,
+        document_change: DocumentChange,
+    ) -> crate::Result<()> {
+        match document_change {
+            DocumentChange::Deletion(inner) => {
+                let mut token_fn = |_fid, _pos: u16, word: &str| {
+                    cached_sorter.insert_del_u32(word.as_bytes(), inner.docid()).unwrap();
+                };
+                document_tokenizer.tokenize_document(
+                    inner.current(rtxn, index),
+                    fields_ids_map,
+                    &mut token_fn,
+                )?;
             }
-            Some((*offset, token))
-        })
-        .filter(|(_, t)| t.is_word())
+            DocumentChange::Update(inner) => {
+                let mut token_fn = |_fid, _pos, word: &str| {
+                    cached_sorter.insert_del_u32(word.as_bytes(), inner.docid()).unwrap();
+                };
+                document_tokenizer.tokenize_document(
+                    inner.current(rtxn, index),
+                    fields_ids_map,
+                    &mut token_fn,
+                )?;
+
+                let mut token_fn = |_fid, _pos, word: &str| {
+                    cached_sorter.insert_add_u32(word.as_bytes(), inner.docid()).unwrap();
+                };
+                document_tokenizer.tokenize_document(inner.new(), fields_ids_map, &mut token_fn)?;
+            }
+            DocumentChange::Insertion(inner) => {
+                let mut token_fn = |_fid, _pos, word: &str| {
+                    cached_sorter.insert_add_u32(word.as_bytes(), inner.docid()).unwrap();
+                };
+                document_tokenizer.tokenize_document(inner.new(), fields_ids_map, &mut token_fn)?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Factorize tokenizer building.
+fn tokenizer_builder<'a>(
+    stop_words: Option<&'a fst::Set<&'a [u8]>>,
+    allowed_separators: Option<&'a [&str]>,
+    dictionary: Option<&'a [&str]>,
+) -> TokenizerBuilder<'a, &'a [u8]> {
+    let mut tokenizer_builder = TokenizerBuilder::new();
+    if let Some(stop_words) = stop_words {
+        tokenizer_builder.stop_words(stop_words);
+    }
+    if let Some(dictionary) = dictionary {
+        tokenizer_builder.words_dict(dictionary);
+    }
+    if let Some(separators) = allowed_separators {
+        tokenizer_builder.separators(separators);
+    }
+
+    tokenizer_builder
 }

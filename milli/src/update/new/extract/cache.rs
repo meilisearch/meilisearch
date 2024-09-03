@@ -2,12 +2,12 @@ use std::borrow::Cow;
 use std::num::NonZeroUsize;
 use std::{io, mem};
 
-use grenad2::{MergeFunction, Sorter};
+use grenad::{MergeFunction, Sorter};
 use lru::LruCache;
 use roaring::RoaringBitmap;
 use smallvec::SmallVec;
 
-use crate::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
+use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 
 #[derive(Debug)]
 pub struct CachedSorter<MF> {
