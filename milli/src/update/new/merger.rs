@@ -79,6 +79,32 @@ pub fn merge_grenad_entries(
                 let main_sender = sender.main();
                 main_sender.write_words_fst(&words_fst_mmap).unwrap();
             }
+            MergerOperation::WordFidDocidsMerger(merger) => {
+                let word_docids_sender = sender.word_fid_docids();
+                let database = index.word_fid_docids.remap_types::<Bytes, Bytes>();
+
+                /// TODO manage the error correctly
+                let mut merger_iter = merger.into_stream_merger_iter().unwrap();
+
+                // TODO manage the error correctly
+                while let Some((key, deladd)) = merger_iter.next().unwrap() {
+                    let current = database.get(rtxn, key)?;
+                    let deladd: &KvReaderDelAdd = deladd.into();
+                    let del = deladd.get(DelAdd::Deletion);
+                    let add = deladd.get(DelAdd::Addition);
+
+                    match merge_cbo_bitmaps(current, del, add)? {
+                        Operation::Write(bitmap) => {
+                            let value = cbo_bitmap_serialize_into_vec(&bitmap, &mut buffer);
+                            word_docids_sender.write(key, value).unwrap();
+                        }
+                        Operation::Delete => {
+                            word_docids_sender.delete(key).unwrap();
+                        }
+                        Operation::Ignore => (),
+                    }
+                }
+            }
             MergerOperation::InsertDocument { docid, document } => {
                 documents_ids.insert(docid);
                 sender.documents().uncompressed(docid, &document).unwrap();

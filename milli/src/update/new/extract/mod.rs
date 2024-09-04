@@ -1,5 +1,7 @@
 mod cache;
 mod searchable;
 
-pub use searchable::SearchableExtractor;
-pub use searchable::WordDocidsExtractor;
+pub use searchable::{
+    ExactWordDocidsExtractor, SearchableExtractor, WordDocidsExtractor, WordFidDocidsExtractor,
+    WordPositionDocidsExtractor,
+};

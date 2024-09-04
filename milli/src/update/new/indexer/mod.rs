@@ -11,11 +11,9 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rayon::ThreadPool;
 pub use update_by_function::UpdateByFunction;
 
-use super::channel::{
-    extractors_merger_channels, merger_writer_channel, EntryOperation, ExtractorsMergerChannels,
-};
+use super::channel::{extractors_merger_channels, merger_writer_channel, EntryOperation};
 use super::document_change::DocumentChange;
-use super::extract::{SearchableExtractor, WordDocidsExtractor};
+use super::extract::{SearchableExtractor, WordDocidsExtractor, WordFidDocidsExtractor};
 use super::merger::merge_grenad_entries;
 use super::StdResult;
 use crate::documents::{
@@ -56,11 +54,8 @@ where
     PI::Iter: Clone,
 {
     let (merger_sender, writer_receiver) = merger_writer_channel(100);
-    let ExtractorsMergerChannels {
-        merger_receiver,
-        deladd_cbo_roaring_bitmap_sender,
-        extracted_documents_sender,
-    } = extractors_merger_channels(100);
+    // This channel acts as a rendezvous point to ensure that we are one task ahead
+    let (extractor_sender, merger_receiver) = extractors_merger_channels(0);
 
     let fields_ids_map_lock = RwLock::new(fields_ids_map);
     let global_fields_ids_map = GlobalFieldsIdsMap::new(&fields_ids_map_lock);
@@ -76,17 +71,19 @@ where
                     match result? {
                         DocumentChange::Deletion(deletion) => {
                             let docid = deletion.docid();
-                            extracted_documents_sender.delete(docid).unwrap();
+                            extractor_sender.document_delete(docid).unwrap();
                         }
                         DocumentChange::Update(update) => {
                             let docid = update.docid();
                             let content = update.new();
-                            extracted_documents_sender.insert(docid, content.boxed()).unwrap();
+                            extractor_sender.document_insert(docid, content.boxed()).unwrap();
                         }
                         DocumentChange::Insertion(insertion) => {
                             let docid = insertion.docid();
                             let content = insertion.new();
-                            extracted_documents_sender.insert(docid, content.boxed()).unwrap();
+                            extractor_sender.document_insert(docid, content.boxed()).unwrap();
+
+                            // extracted_dictionary_sender.send(self, dictionary: &[u8]);
                         }
                     }
                     Ok(()) as Result<_>
@@ -102,7 +99,19 @@ where
                 )?;
 
                 /// TODO: manage the errors correctly
-                deladd_cbo_roaring_bitmap_sender.word_docids(merger).unwrap();
+                extractor_sender.word_docids(merger).unwrap();
+
+                // word fid docids
+                let merger = WordFidDocidsExtractor::run_extraction(
+                    index,
+                    &global_fields_ids_map,
+                    /// TODO: GrenadParameters::default() should be removed in favor a passed parameter
+                    GrenadParameters::default(),
+                    document_changes.clone(),
+                )?;
+
+                /// TODO: manage the errors correctly
+                extractor_sender.word_fid_docids(merger).unwrap();
 
                 Ok(()) as Result<_>
             })
