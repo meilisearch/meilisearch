@@ -210,9 +210,23 @@ impl FacetedExtractor for FieldIdFacetStringDocidsExtractor {
     }
 }
 
-// Extract fieldid facet isempty docids
 // Extract fieldid facet isnull docids
-// Extract fieldid facet exists docids
+
+pub struct FieldIdFacetExistsDocidsExtractor;
+impl FacetedExtractor for FieldIdFacetExistsDocidsExtractor {
+    fn attributes_to_extract<'a>(rtxn: &'a RoTxn, index: &'a Index) -> Result<HashSet<String>> {
+        index.user_defined_faceted_fields(rtxn)
+    }
+
+    fn build_key<'b>(
+        field_id: FieldId,
+        _value: &Value,
+        output: &'b mut Vec<u8>,
+    ) -> Option<&'b [u8]> {
+        output.extend_from_slice(&field_id.to_be_bytes());
+        Some(&*output)
+    }
+}
 
 pub struct FieldIdFacetIsEmptyDocidsExtractor;
 impl FacetedExtractor for FieldIdFacetIsEmptyDocidsExtractor {
