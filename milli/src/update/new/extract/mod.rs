@@ -1,6 +1,5 @@
 mod cache;
-mod extract_word_docids;
-mod tokenize_document;
+mod searchable;
 
-pub use extract_word_docids::SearchableExtractor;
-pub use extract_word_docids::WordDocidsExtractor;
+pub use searchable::SearchableExtractor;
+pub use searchable::WordDocidsExtractor;
