@@ -13,7 +13,6 @@ pub use update_by_function::UpdateByFunction;
 
 use super::channel::{
     extractors_merger_channels, merger_writer_channel, EntryOperation, ExtractorsMergerChannels,
-    WriterOperation,
 };
 use super::document_change::DocumentChange;
 use super::extract::{SearchableExtractor, WordDocidsExtractor};
@@ -57,8 +56,11 @@ where
     PI::Iter: Clone,
 {
     let (merger_sender, writer_receiver) = merger_writer_channel(100);
-    let ExtractorsMergerChannels { merger_receiver, deladd_cbo_roaring_bitmap_sender } =
-        extractors_merger_channels(100);
+    let ExtractorsMergerChannels {
+        merger_receiver,
+        deladd_cbo_roaring_bitmap_sender,
+        extracted_documents_sender,
+    } = extractors_merger_channels(100);
 
     let fields_ids_map_lock = RwLock::new(fields_ids_map);
     let global_fields_ids_map = GlobalFieldsIdsMap::new(&fields_ids_map_lock);
@@ -68,6 +70,28 @@ where
         let handle = Builder::new().name(S("indexer-extractors")).spawn_scoped(s, move || {
             pool.in_place_scope(|_s| {
                 let document_changes = document_changes.into_par_iter();
+
+                // document but we need to create a function that collects and compresses documents.
+                document_changes.clone().into_par_iter().try_for_each(|result| {
+                    match result? {
+                        DocumentChange::Deletion(deletion) => {
+                            let docid = deletion.docid();
+                            extracted_documents_sender.delete(docid).unwrap();
+                        }
+                        DocumentChange::Update(update) => {
+                            let docid = update.docid();
+                            let content = update.new();
+                            extracted_documents_sender.insert(docid, content.boxed()).unwrap();
+                        }
+                        DocumentChange::Insertion(insertion) => {
+                            let docid = insertion.docid();
+                            let content = insertion.new();
+                            extracted_documents_sender.insert(docid, content.boxed()).unwrap();
+                        }
+                    }
+                    Ok(()) as Result<_>
+                })?;
+
                 // word docids
                 let merger = WordDocidsExtractor::run_extraction(
                     index,
@@ -90,15 +114,15 @@ where
             merge_grenad_entries(merger_receiver, merger_sender, &rtxn, index)
         })?;
 
-        // TODO Split this code into another function
         for operation in writer_receiver {
             let database = operation.database(index);
-            match operation {
-                WriterOperation::WordDocids(operation) => match operation {
-                    EntryOperation::Delete(e) => database.delete(wtxn, e.entry()).map(drop)?,
-                    EntryOperation::Write(e) => database.put(wtxn, e.key(), e.value())?,
-                },
-                WriterOperation::Document(e) => database.put(wtxn, &e.key(), e.content())?,
+            match operation.entry() {
+                EntryOperation::Delete(e) => {
+                    if !database.delete(wtxn, e.entry())? {
+                        unreachable!("We tried to delete an unknown key")
+                    }
+                }
+                EntryOperation::Write(e) => database.put(wtxn, e.key(), e.value())?,
             }
         }
 

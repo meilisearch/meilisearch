@@ -1,13 +1,11 @@
 use std::collections::HashMap;
 
-use charabia::{SeparatorKind, Token, TokenKind, Tokenizer, TokenizerBuilder};
-use heed::RoTxn;
+use charabia::{SeparatorKind, Token, TokenKind, Tokenizer};
 use serde_json::Value;
 
 use crate::update::new::KvReaderFieldId;
 use crate::{
-    FieldId, FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, LocalizedAttributesRule,
-    Result, MAX_POSITION_PER_ATTRIBUTE, MAX_WORD_LENGTH,
+    FieldId, GlobalFieldsIdsMap, InternalError, LocalizedAttributesRule, Result, MAX_WORD_LENGTH,
 };
 
 pub struct DocumentTokenizer<'a> {
@@ -239,6 +237,8 @@ mod test {
     use serde_json::json;
 
     use super::*;
+    use crate::FieldsIdsMap;
+
     #[test]
     fn test_tokenize_document() {
         let mut fields_ids_map = FieldsIdsMap::new();

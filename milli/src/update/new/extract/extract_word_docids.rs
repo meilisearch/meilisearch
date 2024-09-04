@@ -1,15 +1,15 @@
 use std::fs::File;
 
 use charabia::TokenizerBuilder;
-use grenad::{Merger, ReaderCursor};
+use grenad::Merger;
 use heed::RoTxn;
-use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::cache::CachedSorter;
 use super::tokenize_document::DocumentTokenizer;
 use crate::update::new::{DocumentChange, ItemsPool};
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
-use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, MAX_POSITION_PER_ATTRIBUTE};
+use crate::{GlobalFieldsIdsMap, Index, Result, MAX_POSITION_PER_ATTRIBUTE};
 
 pub trait SearchableExtractor {
     fn run_extraction(
