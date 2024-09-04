@@ -1,5 +1,5 @@
-use std::num::NonZeroUsize;
 use std::mem;
+use std::num::NonZeroUsize;
 
 use grenad::{MergeFunction, Sorter};
 use lru::LruCache;
@@ -10,16 +10,16 @@ use crate::update::del_add::{DelAdd, KvWriterDelAdd};
 use crate::CboRoaringBitmapCodec;
 
 #[derive(Debug)]
-pub struct CachedSorter<MF> {
+pub struct CboCachedSorter<MF> {
     cache: lru::LruCache<SmallVec<[u8; 20]>, DelAddRoaringBitmap>,
     sorter: Sorter<MF>,
     deladd_buffer: Vec<u8>,
     cbo_buffer: Vec<u8>,
 }
 
-impl<MF> CachedSorter<MF> {
+impl<MF> CboCachedSorter<MF> {
     pub fn new(cap: NonZeroUsize, sorter: Sorter<MF>) -> Self {
-        CachedSorter {
+        CboCachedSorter {
             cache: lru::LruCache::new(cap),
             sorter,
             deladd_buffer: Vec::new(),
@@ -28,7 +28,7 @@ impl<MF> CachedSorter<MF> {
     }
 }
 
-impl<MF: MergeFunction> CachedSorter<MF> {
+impl<MF: MergeFunction> CboCachedSorter<MF> {
     pub fn insert_del_u32(&mut self, key: &[u8], n: u32) -> grenad::Result<(), MF::Error> {
         match self.cache.get_mut(key) {
             Some(DelAddRoaringBitmap { del, add: _ }) => {

@@ -1,22 +1,22 @@
 mod extract_word_docids;
 mod tokenize_document;
 
+use std::borrow::Cow;
+use std::fs::File;
+
 pub use extract_word_docids::{
     ExactWordDocidsExtractor, WordDocidsExtractor, WordFidDocidsExtractor,
     WordPositionDocidsExtractor,
 };
-use std::borrow::Cow;
-use std::fs::File;
-
 use grenad::Merger;
 use heed::RoTxn;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use tokenize_document::{tokenizer_builder, DocumentTokenizer};
 
-use super::cache::CachedSorter;
+use super::cache::CboCachedSorter;
 use crate::update::new::{DocumentChange, ItemsPool};
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
 use crate::{FieldId, GlobalFieldsIdsMap, Index, Result, MAX_POSITION_PER_ATTRIBUTE};
-use tokenize_document::{tokenizer_builder, DocumentTokenizer};
 
 pub trait SearchableExtractor {
     fn run_extraction(
@@ -60,7 +60,7 @@ pub trait SearchableExtractor {
                 index.read_txn()?,
                 &document_tokenizer,
                 fields_ids_map.clone(),
-                CachedSorter::new(
+                CboCachedSorter::new(
                     // TODO use a better value
                     100.try_into().unwrap(),
                     create_sorter(
@@ -103,14 +103,16 @@ pub trait SearchableExtractor {
         index: &Index,
         document_tokenizer: &DocumentTokenizer,
         fields_ids_map: &mut GlobalFieldsIdsMap,
-        cached_sorter: &mut CachedSorter<MergeDeladdCboRoaringBitmaps>,
+        cached_sorter: &mut CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
         document_change: DocumentChange,
     ) -> Result<()> {
         match document_change {
             DocumentChange::Deletion(inner) => {
                 let mut token_fn = |fid, pos: u16, word: &str| {
                     let key = Self::build_key(fid, pos, word);
+                    /// TODO manage the error
                     cached_sorter.insert_del_u32(&key, inner.docid()).unwrap();
+                    Ok(())
                 };
                 document_tokenizer.tokenize_document(
                     inner.current(rtxn, index)?.unwrap(),
@@ -121,7 +123,9 @@ pub trait SearchableExtractor {
             DocumentChange::Update(inner) => {
                 let mut token_fn = |fid, pos, word: &str| {
                     let key = Self::build_key(fid, pos, word);
+                    /// TODO manage the error
                     cached_sorter.insert_del_u32(&key, inner.docid()).unwrap();
+                    Ok(())
                 };
                 document_tokenizer.tokenize_document(
                     inner.current(rtxn, index)?.unwrap(),
@@ -131,14 +135,18 @@ pub trait SearchableExtractor {
 
                 let mut token_fn = |fid, pos, word: &str| {
                     let key = Self::build_key(fid, pos, word);
+                    /// TODO manage the error
                     cached_sorter.insert_add_u32(&key, inner.docid()).unwrap();
+                    Ok(())
                 };
                 document_tokenizer.tokenize_document(inner.new(), fields_ids_map, &mut token_fn)?;
             }
             DocumentChange::Insertion(inner) => {
                 let mut token_fn = |fid, pos, word: &str| {
                     let key = Self::build_key(fid, pos, word);
+                    /// TODO manage the error
                     cached_sorter.insert_add_u32(&key, inner.docid()).unwrap();
+                    Ok(())
                 };
                 document_tokenizer.tokenize_document(inner.new(), fields_ids_map, &mut token_fn)?;
             }
@@ -152,5 +160,5 @@ pub trait SearchableExtractor {
 
     fn attributes_to_skip<'a>(rtxn: &'a RoTxn, index: &'a Index) -> Result<Vec<&'a str>>;
 
-    fn build_key<'a>(field_id: FieldId, position: u16, word: &'a str) -> Cow<'a, [u8]>;
+    fn build_key(field_id: FieldId, position: u16, word: &str) -> Cow<'_, [u8]>;
 }

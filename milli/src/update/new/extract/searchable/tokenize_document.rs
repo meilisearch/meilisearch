@@ -1,13 +1,15 @@
 use std::collections::HashMap;
 
 use charabia::{SeparatorKind, Token, TokenKind, Tokenizer, TokenizerBuilder};
-use heed::RoTxn;
 use serde_json::Value;
 
+use crate::update::new::extract::perm_json_p::{
+    seek_leaf_values_in_array, seek_leaf_values_in_object, select_field,
+};
 use crate::update::new::KvReaderFieldId;
 use crate::{
-    FieldId, FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, LocalizedAttributesRule,
-    Result, MAX_POSITION_PER_ATTRIBUTE, MAX_WORD_LENGTH,
+    FieldId, GlobalFieldsIdsMap, InternalError, LocalizedAttributesRule, Result, UserError,
+    MAX_WORD_LENGTH,
 };
 
 pub struct DocumentTokenizer<'a> {
@@ -23,7 +25,7 @@ impl<'a> DocumentTokenizer<'a> {
         &self,
         obkv: &KvReaderFieldId,
         field_id_map: &mut GlobalFieldsIdsMap,
-        token_fn: &mut impl FnMut(FieldId, u16, &str),
+        token_fn: &mut impl FnMut(FieldId, u16, &str) -> Result<()>,
     ) -> Result<()> {
         let mut field_position = HashMap::new();
         let mut field_name = String::new();
@@ -38,22 +40,23 @@ impl<'a> DocumentTokenizer<'a> {
 
             let mut tokenize_field = |name: &str, value: &Value| {
                 let Some(field_id) = field_id_map.id_or_insert(name) else {
-                    /// TODO: better error
-                    panic!("it's over 9000");
+                    return Err(UserError::AttributeLimitReached.into());
                 };
 
                 let position =
                     field_position.entry(field_id).and_modify(|counter| *counter += 8).or_insert(0);
                 if *position as u32 >= self.max_positions_per_attributes {
-                    return;
+                    return Ok(());
                 }
 
                 match value {
                     Value::Number(n) => {
                         let token = n.to_string();
                         if let Ok(position) = (*position).try_into() {
-                            token_fn(field_id, position, token.as_str());
+                            token_fn(field_id, position, token.as_str())?;
                         }
+
+                        Ok(())
                     }
                     Value::String(text) => {
                         // create an iterator of token with their positions.
@@ -74,41 +77,40 @@ impl<'a> DocumentTokenizer<'a> {
                             if !token.is_empty() && token.len() <= MAX_WORD_LENGTH {
                                 *position = index;
                                 if let Ok(position) = (*position).try_into() {
-                                    token_fn(field_id, position, token);
+                                    token_fn(field_id, position, token)?;
                                 }
                             }
                         }
+
+                        Ok(())
                     }
-                    _ => (),
+                    _ => Ok(()),
                 }
             };
 
             // if the current field is searchable or contains a searchable attribute
-            if perm_json_p::select_field(
-                &field_name,
-                self.attribute_to_extract.as_deref(),
-                self.attribute_to_skip,
-            ) {
+            if select_field(&field_name, self.attribute_to_extract, self.attribute_to_skip) {
                 // parse json.
                 match serde_json::from_slice(field_bytes).map_err(InternalError::SerdeJson)? {
-                    Value::Object(object) => perm_json_p::seek_leaf_values_in_object(
+                    Value::Object(object) => seek_leaf_values_in_object(
                         &object,
-                        self.attribute_to_extract.as_deref(),
+                        self.attribute_to_extract,
                         self.attribute_to_skip,
                         &field_name,
                         &mut tokenize_field,
-                    ),
-                    Value::Array(array) => perm_json_p::seek_leaf_values_in_array(
+                    )?,
+                    Value::Array(array) => seek_leaf_values_in_array(
                         &array,
-                        self.attribute_to_extract.as_deref(),
+                        self.attribute_to_extract,
                         self.attribute_to_skip,
                         &field_name,
                         &mut tokenize_field,
-                    ),
-                    value => tokenize_field(&field_name, &value),
+                    )?,
+                    value => tokenize_field(&field_name, &value)?,
                 }
             }
         }
+
         Ok(())
     }
 }
@@ -167,105 +169,6 @@ pub fn tokenizer_builder<'a>(
     tokenizer_builder
 }
 
-/// TODO move in permissive json pointer
-mod perm_json_p {
-    use serde_json::{Map, Value};
-    const SPLIT_SYMBOL: char = '.';
-
-    /// Returns `true` if the `selector` match the `key`.
-    ///
-    /// ```text
-    /// Example:
-    /// `animaux`           match `animaux`
-    /// `animaux.chien`     match `animaux`
-    /// `animaux.chien`     match `animaux`
-    /// `animaux.chien.nom` match `animaux`
-    /// `animaux.chien.nom` match `animaux.chien`
-    /// -----------------------------------------
-    /// `animaux`    doesn't match `animaux.chien`
-    /// `animaux.`   doesn't match `animaux`
-    /// `animaux.ch` doesn't match `animaux.chien`
-    /// `animau`     doesn't match `animaux`
-    /// ```
-    pub fn contained_in(selector: &str, key: &str) -> bool {
-        selector.starts_with(key)
-            && selector[key.len()..].chars().next().map(|c| c == SPLIT_SYMBOL).unwrap_or(true)
-    }
-
-    pub fn seek_leaf_values_in_object(
-        value: &Map<String, Value>,
-        selectors: Option<&[&str]>,
-        skip_selectors: &[&str],
-        base_key: &str,
-        seeker: &mut impl FnMut(&str, &Value),
-    ) {
-        for (key, value) in value.iter() {
-            let base_key = if base_key.is_empty() {
-                key.to_string()
-            } else {
-                format!("{}{}{}", base_key, SPLIT_SYMBOL, key)
-            };
-
-            // here if the user only specified `doggo` we need to iterate in all the fields of `doggo`
-            // so we check the contained_in on both side
-            let should_continue = select_field(&base_key, selectors, skip_selectors);
-            if should_continue {
-                match value {
-                    Value::Object(object) => seek_leaf_values_in_object(
-                        object,
-                        selectors,
-                        skip_selectors,
-                        &base_key,
-                        seeker,
-                    ),
-                    Value::Array(array) => seek_leaf_values_in_array(
-                        array,
-                        selectors,
-                        skip_selectors,
-                        &base_key,
-                        seeker,
-                    ),
-                    value => seeker(&base_key, value),
-                }
-            }
-        }
-    }
-
-    pub fn seek_leaf_values_in_array(
-        values: &[Value],
-        selectors: Option<&[&str]>,
-        skip_selectors: &[&str],
-        base_key: &str,
-        seeker: &mut impl FnMut(&str, &Value),
-    ) {
-        for value in values {
-            match value {
-                Value::Object(object) => {
-                    seek_leaf_values_in_object(object, selectors, skip_selectors, base_key, seeker)
-                }
-                Value::Array(array) => {
-                    seek_leaf_values_in_array(array, selectors, skip_selectors, base_key, seeker)
-                }
-                value => seeker(base_key, value),
-            }
-        }
-    }
-
-    pub fn select_field(
-        field_name: &str,
-        selectors: Option<&[&str]>,
-        skip_selectors: &[&str],
-    ) -> bool {
-        selectors.map_or(true, |selectors| {
-            selectors.iter().any(|selector| {
-                contained_in(selector, &field_name) || contained_in(&field_name, selector)
-            })
-        }) && !skip_selectors.iter().any(|skip_selector| {
-            contained_in(skip_selector, &field_name) || contained_in(&field_name, skip_selector)
-        })
-    }
-}
-
 #[cfg(test)]
 mod test {
     use charabia::TokenizerBuilder;
@@ -274,6 +177,8 @@ mod test {
     use serde_json::json;
 
     use super::*;
+    use crate::FieldsIdsMap;
+
     #[test]
     fn test_tokenize_document() {
         let mut fields_ids_map = FieldsIdsMap::new();
@@ -329,6 +234,7 @@ mod test {
         document_tokenizer
             .tokenize_document(obkv, &mut global_fields_ids_map, &mut |fid, pos, word| {
                 words.insert([fid, pos], word.to_string());
+                Ok(())
             })
             .unwrap();
 

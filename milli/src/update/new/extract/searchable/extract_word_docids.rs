@@ -19,6 +19,7 @@ impl SearchableExtractor for WordDocidsExtractor {
         index.exact_attributes(rtxn).map_err(Into::into)
     }
 
+    /// TODO write in an external Vec buffer
     fn build_key<'a>(_field_id: FieldId, _position: u16, word: &'a str) -> Cow<'a, [u8]> {
         Cow::Borrowed(word.as_bytes())
     }

@@ -127,6 +127,19 @@ where
                     &extractor_sender,
                 )?;
 
+                // TODO THIS IS TOO MUCH
+                // Extract fieldid docid facet number
+                // Extract fieldid docid facet string
+                // Extract facetid string fst
+
+                // Extract fieldid facet isempty docids
+                // Extract fieldid facet isnull docids
+                // Extract fieldid facet exists docids
+
+                // TODO This is the normal system
+                // Extract fieldid facet number docids
+                // Extract fieldid facet string docids
+
                 Ok(()) as Result<_>
             })
         })?;

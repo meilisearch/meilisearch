@@ -52,6 +52,7 @@ impl Deletion {
         self.docid
     }
 
+    // TODO shouldn't we use the one in self?
     pub fn current<'a>(
         &self,
         rtxn: &'a RoTxn,

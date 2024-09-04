@@ -1,7 +1,5 @@
 use std::fs::File;
-use std::io;
 
-use fst::set::OpBuilder;
 use fst::{Set, SetBuilder};
 use grenad::Merger;
 use heed::types::Bytes;
@@ -15,7 +13,6 @@ use super::channel::{
     WordFidDocids, WordPositionDocids,
 };
 use super::KvReaderDelAdd;
-use crate::index::main_key::WORDS_FST_KEY;
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::MergerOperation;
 use crate::update::MergeDeladdCboRoaringBitmaps;
@@ -210,7 +207,7 @@ fn cbo_bitmap_serialize_into_vec<'b>(bitmap: &RoaringBitmap, buffer: &'b mut Vec
 }
 
 /// TODO Return the slice directly from the serialize_into method
-fn serialize_bitmap_into_vec<'b>(bitmap: &RoaringBitmap, buffer: &'b mut Vec<u8>) {
+fn serialize_bitmap_into_vec(bitmap: &RoaringBitmap, buffer: &mut Vec<u8>) {
     buffer.clear();
     bitmap.serialize_into(buffer).unwrap();
     // buffer.as_slice()
