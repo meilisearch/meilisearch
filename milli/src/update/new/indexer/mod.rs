@@ -11,14 +11,21 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rayon::ThreadPool;
 pub use update_by_function::UpdateByFunction;
 
-use super::channel::{extractors_merger_channels, merger_writer_channel, EntryOperation};
+use super::channel::{
+    extractors_merger_channels, merger_writer_channel, EntryOperation, ExactWordDocids, WordDocids,
+    WordFidDocids, WordPositionDocids,
+};
 use super::document_change::DocumentChange;
-use super::extract::{SearchableExtractor, WordDocidsExtractor, WordFidDocidsExtractor};
+use super::extract::{
+    ExactWordDocidsExtractor, SearchableExtractor, WordDocidsExtractor, WordFidDocidsExtractor,
+    WordPositionDocidsExtractor,
+};
 use super::merger::merge_grenad_entries;
 use super::StdResult;
 use crate::documents::{
     obkv_to_object, DocumentsBatchCursor, DocumentsBatchIndex, PrimaryKey, DEFAULT_PRIMARY_KEY,
 };
+use crate::update::new::channel::{DatabaseType, ExtractorSender};
 use crate::update::GrenadParameters;
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
 
@@ -82,36 +89,43 @@ where
                             let docid = insertion.docid();
                             let content = insertion.new();
                             extractor_sender.document_insert(docid, content.boxed()).unwrap();
-
                             // extracted_dictionary_sender.send(self, dictionary: &[u8]);
                         }
                     }
                     Ok(()) as Result<_>
                 })?;
 
-                // word docids
-                let merger = WordDocidsExtractor::run_extraction(
+                extract_and_send_docids::<WordDocidsExtractor, WordDocids>(
                     index,
                     &global_fields_ids_map,
-                    /// TODO: GrenadParameters::default() should be removed in favor a passed parameter
                     GrenadParameters::default(),
                     document_changes.clone(),
+                    &extractor_sender,
                 )?;
 
-                /// TODO: manage the errors correctly
-                extractor_sender.word_docids(merger).unwrap();
-
-                // word fid docids
-                let merger = WordFidDocidsExtractor::run_extraction(
+                extract_and_send_docids::<WordFidDocidsExtractor, WordFidDocids>(
                     index,
                     &global_fields_ids_map,
-                    /// TODO: GrenadParameters::default() should be removed in favor a passed parameter
                     GrenadParameters::default(),
                     document_changes.clone(),
+                    &extractor_sender,
                 )?;
 
-                /// TODO: manage the errors correctly
-                extractor_sender.word_fid_docids(merger).unwrap();
+                extract_and_send_docids::<ExactWordDocidsExtractor, ExactWordDocids>(
+                    index,
+                    &global_fields_ids_map,
+                    GrenadParameters::default(),
+                    document_changes.clone(),
+                    &extractor_sender,
+                )?;
+
+                extract_and_send_docids::<WordPositionDocidsExtractor, WordPositionDocids>(
+                    index,
+                    &global_fields_ids_map,
+                    GrenadParameters::default(),
+                    document_changes.clone(),
+                    &extractor_sender,
+                )?;
 
                 Ok(()) as Result<_>
             })
@@ -146,6 +160,20 @@ where
     index.put_fields_ids_map(wtxn, &fields_ids_map)?;
 
     Ok(())
+}
+
+/// TODO: GrenadParameters::default() should be removed in favor a passed parameter
+/// TODO: manage the errors correctly
+/// TODO: we must have a single trait that also gives the extractor type
+fn extract_and_send_docids<E: SearchableExtractor, D: DatabaseType>(
+    index: &Index,
+    fields_ids_map: &GlobalFieldsIdsMap,
+    indexer: GrenadParameters,
+    document_changes: impl IntoParallelIterator<Item = Result<DocumentChange>>,
+    sender: &ExtractorSender,
+) -> Result<()> {
+    let merger = E::run_extraction(index, fields_ids_map, indexer, document_changes)?;
+    Ok(sender.send_searchable::<D>(merger).unwrap())
 }
 
 /// TODO move this elsewhere

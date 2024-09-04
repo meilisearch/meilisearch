@@ -1,16 +1,24 @@
+use std::fs::File;
+use std::io;
+
 use fst::set::OpBuilder;
 use fst::{Set, SetBuilder};
+use grenad::Merger;
 use heed::types::Bytes;
-use heed::RoTxn;
+use heed::{Database, RoTxn};
 use memmap2::Mmap;
 use roaring::RoaringBitmap;
 use tempfile::tempfile;
 
-use super::channel::{MergerReceiver, MergerSender};
+use super::channel::{
+    DatabaseType, DocidsSender, ExactWordDocids, MergerReceiver, MergerSender, WordDocids,
+    WordFidDocids, WordPositionDocids,
+};
 use super::KvReaderDelAdd;
 use crate::index::main_key::WORDS_FST_KEY;
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::MergerOperation;
+use crate::update::MergeDeladdCboRoaringBitmaps;
 use crate::{CboRoaringBitmapCodec, Index, Result};
 
 /// TODO We must return some infos/stats
@@ -26,34 +34,18 @@ pub fn merge_grenad_entries(
     for merger_operation in receiver {
         match merger_operation {
             MergerOperation::WordDocidsMerger(merger) => {
-                let word_docids_sender = sender.word_docids();
-                let database = index.word_docids.remap_types::<Bytes, Bytes>();
                 let mut add_words_fst = SetBuilder::new(tempfile()?)?;
                 let mut del_words_fst = SetBuilder::new(tempfile()?)?;
 
-                /// TODO manage the error correctly
-                let mut merger_iter = merger.into_stream_merger_iter().unwrap();
-
-                // TODO manage the error correctly
-                while let Some((key, deladd)) = merger_iter.next().unwrap() {
-                    let current = database.get(rtxn, key)?;
-                    let deladd: &KvReaderDelAdd = deladd.into();
-                    let del = deladd.get(DelAdd::Deletion);
-                    let add = deladd.get(DelAdd::Addition);
-
-                    match merge_cbo_bitmaps(current, del, add)? {
-                        Operation::Write(bitmap) => {
-                            let value = cbo_bitmap_serialize_into_vec(&bitmap, &mut buffer);
-                            word_docids_sender.write(key, value).unwrap();
-                            add_words_fst.insert(key)?;
-                        }
-                        Operation::Delete => {
-                            word_docids_sender.delete(key).unwrap();
-                            del_words_fst.insert(key)?;
-                        }
-                        Operation::Ignore => (),
-                    }
-                }
+                merge_and_send_docids(
+                    merger,
+                    index.word_docids.remap_types(),
+                    rtxn,
+                    &mut buffer,
+                    sender.docids::<WordDocids>(),
+                    |key| add_words_fst.insert(key),
+                    |key| del_words_fst.insert(key),
+                )?;
 
                 // Move that into a dedicated function
                 let words_fst = index.words_fst(rtxn)?;
@@ -66,7 +58,6 @@ pub fn merge_grenad_entries(
                 let del_words_fst_mmap = unsafe { Mmap::map(&del_words_fst_file)? };
                 let del_words_fst = Set::new(&del_words_fst_mmap)?;
 
-                // TO BE IMPROVED @many
                 let diff = words_fst.op().add(&del_words_fst).difference();
                 let stream = add_words_fst.op().add(diff).union();
 
@@ -79,31 +70,38 @@ pub fn merge_grenad_entries(
                 let main_sender = sender.main();
                 main_sender.write_words_fst(&words_fst_mmap).unwrap();
             }
+            MergerOperation::ExactWordDocidsMerger(merger) => {
+                merge_and_send_docids(
+                    merger,
+                    index.exact_word_docids.remap_types(),
+                    rtxn,
+                    &mut buffer,
+                    sender.docids::<ExactWordDocids>(),
+                    |_key| Ok(()),
+                    |_key| Ok(()),
+                )?;
+            }
             MergerOperation::WordFidDocidsMerger(merger) => {
-                let word_docids_sender = sender.word_fid_docids();
-                let database = index.word_fid_docids.remap_types::<Bytes, Bytes>();
-
-                /// TODO manage the error correctly
-                let mut merger_iter = merger.into_stream_merger_iter().unwrap();
-
-                // TODO manage the error correctly
-                while let Some((key, deladd)) = merger_iter.next().unwrap() {
-                    let current = database.get(rtxn, key)?;
-                    let deladd: &KvReaderDelAdd = deladd.into();
-                    let del = deladd.get(DelAdd::Deletion);
-                    let add = deladd.get(DelAdd::Addition);
-
-                    match merge_cbo_bitmaps(current, del, add)? {
-                        Operation::Write(bitmap) => {
-                            let value = cbo_bitmap_serialize_into_vec(&bitmap, &mut buffer);
-                            word_docids_sender.write(key, value).unwrap();
-                        }
-                        Operation::Delete => {
-                            word_docids_sender.delete(key).unwrap();
-                        }
-                        Operation::Ignore => (),
-                    }
-                }
+                merge_and_send_docids(
+                    merger,
+                    index.word_fid_docids.remap_types(),
+                    rtxn,
+                    &mut buffer,
+                    sender.docids::<WordFidDocids>(),
+                    |_key| Ok(()),
+                    |_key| Ok(()),
+                )?;
+            }
+            MergerOperation::WordPositionDocidsMerger(merger) => {
+                merge_and_send_docids(
+                    merger,
+                    index.word_position_docids.remap_types(),
+                    rtxn,
+                    &mut buffer,
+                    sender.docids::<WordPositionDocids>(),
+                    |_key| Ok(()),
+                    |_key| Ok(()),
+                )?;
             }
             MergerOperation::InsertDocument { docid, document } => {
                 documents_ids.insert(docid);
@@ -124,6 +122,39 @@ pub fn merge_grenad_entries(
     sender.send_documents_ids(&buffer).unwrap();
 
     // ...
+
+    Ok(())
+}
+
+fn merge_and_send_docids<D: DatabaseType>(
+    merger: Merger<File, MergeDeladdCboRoaringBitmaps>,
+    database: Database<Bytes, Bytes>,
+    rtxn: &RoTxn<'_>,
+    buffer: &mut Vec<u8>,
+    word_docids_sender: DocidsSender<'_, D>,
+    mut add_key: impl FnMut(&[u8]) -> fst::Result<()>,
+    mut del_key: impl FnMut(&[u8]) -> fst::Result<()>,
+) -> Result<()> {
+    let mut merger_iter = merger.into_stream_merger_iter().unwrap();
+    while let Some((key, deladd)) = merger_iter.next().unwrap() {
+        let current = database.get(rtxn, key)?;
+        let deladd: &KvReaderDelAdd = deladd.into();
+        let del = deladd.get(DelAdd::Deletion);
+        let add = deladd.get(DelAdd::Addition);
+
+        match merge_cbo_bitmaps(current, del, add)? {
+            Operation::Write(bitmap) => {
+                let value = cbo_bitmap_serialize_into_vec(&bitmap, buffer);
+                word_docids_sender.write(key, value).unwrap();
+                add_key(key)?;
+            }
+            Operation::Delete => {
+                word_docids_sender.delete(key).unwrap();
+                del_key(key)?;
+            }
+            Operation::Ignore => (),
+        }
+    }
 
     Ok(())
 }
