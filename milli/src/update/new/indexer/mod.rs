@@ -131,7 +131,9 @@ where
                 // Extract fieldid docid facet number
                 // Extract fieldid docid facet string
                 // Extract facetid string fst
+                // Extract facetid normalized string strings
 
+                // TODO Inverted Indexes again
                 // Extract fieldid facet isempty docids
                 // Extract fieldid facet isnull docids
                 // Extract fieldid facet exists docids

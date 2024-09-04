@@ -186,7 +186,6 @@ impl FacetedExtractor for FieldIdFacetNumberDocidsExtractor {
     }
 }
 
-/// TODO It doesn't keep the original string in the value
 pub struct FieldIdFacetStringDocidsExtractor;
 impl FacetedExtractor for FieldIdFacetStringDocidsExtractor {
     fn attributes_to_extract<'a>(rtxn: &'a RoTxn, index: &'a Index) -> Result<HashSet<String>> {
@@ -208,6 +207,37 @@ impl FacetedExtractor for FieldIdFacetStringDocidsExtractor {
         output.extend_from_slice(truncated.as_bytes());
 
         Some(&*output)
+    }
+}
+
+// Extract fieldid facet isempty docids
+// Extract fieldid facet isnull docids
+// Extract fieldid facet exists docids
+
+pub struct FieldIdFacetIsEmptyDocidsExtractor;
+impl FacetedExtractor for FieldIdFacetIsEmptyDocidsExtractor {
+    fn attributes_to_extract<'a>(rtxn: &'a RoTxn, index: &'a Index) -> Result<HashSet<String>> {
+        index.user_defined_faceted_fields(rtxn)
+    }
+
+    fn build_key<'b>(
+        field_id: FieldId,
+        value: &Value,
+        output: &'b mut Vec<u8>,
+    ) -> Option<&'b [u8]> {
+        let is_empty = match value {
+            Value::Null | Value::Bool(_) | Value::Number(_) => false,
+            Value::String(s) => s.is_empty(),
+            Value::Array(a) => a.is_empty(),
+            Value::Object(o) => o.is_empty(),
+        };
+
+        if is_empty {
+            output.extend_from_slice(&field_id.to_be_bytes());
+            Some(&*output)
+        } else {
+            None
+        }
     }
 }
 
