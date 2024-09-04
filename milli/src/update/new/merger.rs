@@ -49,26 +49,8 @@ pub fn merge_grenad_entries(
 
                 // Move that into a dedicated function
                 let words_fst = index.words_fst(rtxn)?;
-
-                let add_words_fst_file = add_words_fst.into_inner()?;
-                let add_words_fst_mmap = unsafe { Mmap::map(&add_words_fst_file)? };
-                let add_words_fst = Set::new(&add_words_fst_mmap)?;
-
-                let del_words_fst_file = del_words_fst.into_inner()?;
-                let del_words_fst_mmap = unsafe { Mmap::map(&del_words_fst_file)? };
-                let del_words_fst = Set::new(&del_words_fst_mmap)?;
-
-                let diff = words_fst.op().add(&del_words_fst).difference();
-                let stream = add_words_fst.op().add(diff).union();
-
-                let mut words_fst = SetBuilder::new(tempfile()?)?;
-                words_fst.extend_stream(stream)?;
-                let words_fst_file = words_fst.into_inner()?;
-                let words_fst_mmap = unsafe { Mmap::map(&words_fst_file)? };
-
-                // PLEASE SEND THIS AS AN MMAP
-                let main_sender = sender.main();
-                main_sender.write_words_fst(&words_fst_mmap).unwrap();
+                let mmap = compute_new_words_fst(add_words_fst, del_words_fst, words_fst)?;
+                sender.main().write_words_fst(mmap).unwrap();
             }
             MergerOperation::ExactWordDocidsMerger(merger) => {
                 merge_and_send_docids(
@@ -124,6 +106,30 @@ pub fn merge_grenad_entries(
     // ...
 
     Ok(())
+}
+
+fn compute_new_words_fst(
+    add_words_fst: SetBuilder<File>,
+    del_words_fst: SetBuilder<File>,
+    words_fst: Set<std::borrow::Cow<'_, [u8]>>,
+) -> Result<Mmap> {
+    let add_words_fst_file = add_words_fst.into_inner()?;
+    let add_words_fst_mmap = unsafe { Mmap::map(&add_words_fst_file)? };
+    let add_words_fst = Set::new(&add_words_fst_mmap)?;
+
+    let del_words_fst_file = del_words_fst.into_inner()?;
+    let del_words_fst_mmap = unsafe { Mmap::map(&del_words_fst_file)? };
+    let del_words_fst = Set::new(&del_words_fst_mmap)?;
+
+    let diff = words_fst.op().add(&del_words_fst).difference();
+    let stream = add_words_fst.op().add(diff).union();
+
+    let mut words_fst = SetBuilder::new(tempfile()?)?;
+    words_fst.extend_stream(stream)?;
+    let words_fst_file = words_fst.into_inner()?;
+    let words_fst_mmap = unsafe { Mmap::map(&words_fst_file)? };
+
+    Ok(words_fst_mmap)
 }
 
 fn merge_and_send_docids<D: DatabaseType>(
