@@ -1,20 +1,19 @@
 use std::collections::HashSet;
+use std::fmt::Debug;
 use std::fs::File;
 
-use grenad::Merger;
+use grenad::{MergeFunction, Merger};
 use heed::RoTxn;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde_json::Value;
 
 use super::cache::CboCachedSorter;
-use super::perm_json_p;
-use crate::facet::value_encoding::f64_into_bytes;
-use crate::update::new::{DocumentChange, ItemsPool, KvReaderFieldId};
+use crate::update::new::{DocumentChange, ItemsPool};
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
-use crate::{
-    normalize_facet, FieldId, GlobalFieldsIdsMap, Index, InternalError, Result, UserError,
-    MAX_FACET_VALUE_LENGTH,
-};
+use crate::{DocumentId, FieldId, GlobalFieldsIdsMap, Index, Result};
+
+mod extract_facets;
+mod facet_document;
 
 pub trait FacetedExtractor {
     fn run_extraction(
@@ -74,6 +73,27 @@ pub trait FacetedExtractor {
         Ok(builder.build())
     }
 
+    // TODO Shorten this
+    fn facet_fn_with_options<MF>(
+        buffer: &mut Vec<u8>,
+        cached_sorter: &mut CboCachedSorter<MF>,
+        cache_fn: impl Fn(&mut CboCachedSorter<MF>, &[u8], u32) -> grenad::Result<(), MF::Error>,
+        docid: DocumentId,
+        fid: FieldId,
+        value: &Value,
+    ) -> Result<()>
+    where
+        MF: MergeFunction,
+        MF::Error: Debug,
+    {
+        buffer.clear();
+        match Self::build_key(fid, value, buffer) {
+            // TODO manage errors
+            Some(key) => Ok(cache_fn(cached_sorter, &key, docid).unwrap()),
+            None => Ok(()),
+        }
+    }
+
     fn extract_document_change(
         rtxn: &RoTxn,
         index: &Index,
@@ -84,73 +104,69 @@ pub trait FacetedExtractor {
         document_change: DocumentChange,
     ) -> Result<()> {
         match document_change {
-            DocumentChange::Deletion(inner) => {
-                let mut facet_del_fn = |fid, value: &Value| -> Result<()> {
-                    buffer.clear();
-                    match Self::build_key(fid, value, buffer) {
-                        // TODO manage errors
-                        Some(key) => Ok(cached_sorter.insert_del_u32(&key, inner.docid()).unwrap()),
-                        None => Ok(()),
-                    }
-                };
-
-                extract_document_facets(
-                    attributes_to_extract,
-                    inner.current(rtxn, index)?.unwrap(),
-                    fields_ids_map,
-                    &mut facet_del_fn,
-                )
-            }
+            DocumentChange::Deletion(inner) => facet_document::extract_document_facets(
+                attributes_to_extract,
+                inner.current(rtxn, index)?.unwrap(),
+                fields_ids_map,
+                &mut |fid, value| {
+                    Self::facet_fn_with_options(
+                        buffer,
+                        cached_sorter,
+                        CboCachedSorter::insert_del_u32,
+                        inner.docid(),
+                        fid,
+                        value,
+                    )
+                },
+            ),
             DocumentChange::Update(inner) => {
-                let mut facet_del_fn = |fid, value: &Value| -> Result<()> {
-                    buffer.clear();
-                    match Self::build_key(fid, value, buffer) {
-                        // TODO manage errors
-                        Some(key) => Ok(cached_sorter.insert_del_u32(&key, inner.docid()).unwrap()),
-                        None => Ok(()),
-                    }
-                };
-
-                extract_document_facets(
+                facet_document::extract_document_facets(
                     attributes_to_extract,
                     inner.current(rtxn, index)?.unwrap(),
                     fields_ids_map,
-                    &mut facet_del_fn,
+                    &mut |fid, value| {
+                        Self::facet_fn_with_options(
+                            buffer,
+                            cached_sorter,
+                            CboCachedSorter::insert_del_u32,
+                            inner.docid(),
+                            fid,
+                            value,
+                        )
+                    },
                 )?;
 
-                let mut facet_add_fn = |fid, value: &Value| -> Result<()> {
-                    buffer.clear();
-                    match Self::build_key(fid, value, buffer) {
-                        // TODO manage errors
-                        Some(key) => Ok(cached_sorter.insert_add_u32(&key, inner.docid()).unwrap()),
-                        None => Ok(()),
-                    }
-                };
-
-                extract_document_facets(
+                facet_document::extract_document_facets(
                     attributes_to_extract,
                     inner.new(),
                     fields_ids_map,
-                    &mut facet_add_fn,
+                    &mut |fid, value| {
+                        Self::facet_fn_with_options(
+                            buffer,
+                            cached_sorter,
+                            CboCachedSorter::insert_add_u32,
+                            inner.docid(),
+                            fid,
+                            value,
+                        )
+                    },
                 )
             }
-            DocumentChange::Insertion(inner) => {
-                let mut facet_add_fn = |fid, value: &Value| -> Result<()> {
-                    buffer.clear();
-                    match Self::build_key(fid, value, buffer) {
-                        // TODO manage errors
-                        Some(key) => Ok(cached_sorter.insert_add_u32(&key, inner.docid()).unwrap()),
-                        None => Ok(()),
-                    }
-                };
-
-                extract_document_facets(
-                    attributes_to_extract,
-                    inner.new(),
-                    fields_ids_map,
-                    &mut facet_add_fn,
-                )
-            }
+            DocumentChange::Insertion(inner) => facet_document::extract_document_facets(
+                attributes_to_extract,
+                inner.new(),
+                fields_ids_map,
+                &mut |fid, value| {
+                    Self::facet_fn_with_options(
+                        buffer,
+                        cached_sorter,
+                        CboCachedSorter::insert_add_u32,
+                        inner.docid(),
+                        fid,
+                        value,
+                    )
+                },
+            ),
         }
     }
 
@@ -159,175 +175,4 @@ pub trait FacetedExtractor {
 
     fn build_key<'b>(field_id: FieldId, value: &Value, output: &'b mut Vec<u8>)
         -> Option<&'b [u8]>;
-}
-
-pub struct FieldIdFacetNumberDocidsExtractor;
-impl FacetedExtractor for FieldIdFacetNumberDocidsExtractor {
-    fn attributes_to_extract<'a>(rtxn: &'a RoTxn, index: &'a Index) -> Result<HashSet<String>> {
-        index.user_defined_faceted_fields(rtxn)
-    }
-
-    fn build_key<'b>(
-        field_id: FieldId,
-        value: &Value,
-        output: &'b mut Vec<u8>,
-    ) -> Option<&'b [u8]> {
-        let number = value.as_number()?;
-        let n = number.as_f64()?;
-        let ordered = f64_into_bytes(n)?;
-
-        // fid - level - orderedf64 - orignalf64
-        output.extend_from_slice(&field_id.to_be_bytes());
-        output.push(1); // level 0
-        output.extend_from_slice(&ordered);
-        output.extend_from_slice(&n.to_be_bytes());
-
-        Some(&*output)
-    }
-}
-
-pub struct FieldIdFacetStringDocidsExtractor;
-impl FacetedExtractor for FieldIdFacetStringDocidsExtractor {
-    fn attributes_to_extract<'a>(rtxn: &'a RoTxn, index: &'a Index) -> Result<HashSet<String>> {
-        index.user_defined_faceted_fields(rtxn)
-    }
-
-    fn build_key<'b>(
-        field_id: FieldId,
-        value: &Value,
-        output: &'b mut Vec<u8>,
-    ) -> Option<&'b [u8]> {
-        let string = value.as_str()?;
-        let normalize = normalize_facet(string);
-        let truncated = truncate_str(&normalize);
-
-        // fid - level - normalized string
-        output.extend_from_slice(&field_id.to_be_bytes());
-        output.push(1); // level 0
-        output.extend_from_slice(truncated.as_bytes());
-
-        Some(&*output)
-    }
-}
-
-pub struct FieldIdFacetIsNullDocidsExtractor;
-impl FacetedExtractor for FieldIdFacetIsNullDocidsExtractor {
-    fn attributes_to_extract<'a>(rtxn: &'a RoTxn, index: &'a Index) -> Result<HashSet<String>> {
-        index.user_defined_faceted_fields(rtxn)
-    }
-
-    fn build_key<'b>(
-        field_id: FieldId,
-        value: &Value,
-        output: &'b mut Vec<u8>,
-    ) -> Option<&'b [u8]> {
-        if value.is_null() {
-            output.extend_from_slice(&field_id.to_be_bytes());
-            Some(&*output)
-        } else {
-            None
-        }
-    }
-}
-
-pub struct FieldIdFacetExistsDocidsExtractor;
-impl FacetedExtractor for FieldIdFacetExistsDocidsExtractor {
-    fn attributes_to_extract<'a>(rtxn: &'a RoTxn, index: &'a Index) -> Result<HashSet<String>> {
-        index.user_defined_faceted_fields(rtxn)
-    }
-
-    fn build_key<'b>(
-        field_id: FieldId,
-        _value: &Value,
-        output: &'b mut Vec<u8>,
-    ) -> Option<&'b [u8]> {
-        output.extend_from_slice(&field_id.to_be_bytes());
-        Some(&*output)
-    }
-}
-
-pub struct FieldIdFacetIsEmptyDocidsExtractor;
-impl FacetedExtractor for FieldIdFacetIsEmptyDocidsExtractor {
-    fn attributes_to_extract<'a>(rtxn: &'a RoTxn, index: &'a Index) -> Result<HashSet<String>> {
-        index.user_defined_faceted_fields(rtxn)
-    }
-
-    fn build_key<'b>(
-        field_id: FieldId,
-        value: &Value,
-        output: &'b mut Vec<u8>,
-    ) -> Option<&'b [u8]> {
-        let is_empty = match value {
-            Value::Null | Value::Bool(_) | Value::Number(_) => false,
-            Value::String(s) => s.is_empty(),
-            Value::Array(a) => a.is_empty(),
-            Value::Object(o) => o.is_empty(),
-        };
-
-        if is_empty {
-            output.extend_from_slice(&field_id.to_be_bytes());
-            Some(&*output)
-        } else {
-            None
-        }
-    }
-}
-
-pub fn extract_document_facets(
-    attributes_to_extract: &[&str],
-    obkv: &KvReaderFieldId,
-    field_id_map: &mut GlobalFieldsIdsMap,
-    facet_fn: &mut impl FnMut(FieldId, &Value) -> Result<()>,
-) -> Result<()> {
-    let mut field_name = String::new();
-    for (field_id, field_bytes) in obkv {
-        let Some(field_name) = field_id_map.name(field_id).map(|s| {
-            field_name.clear();
-            field_name.push_str(s);
-            &field_name
-        }) else {
-            unreachable!("field id not found in field id map");
-        };
-
-        let mut tokenize_field = |name: &str, value: &Value| match field_id_map.id_or_insert(name) {
-            Some(field_id) => facet_fn(field_id, value),
-            None => Err(UserError::AttributeLimitReached.into()),
-        };
-
-        // if the current field is searchable or contains a searchable attribute
-        if perm_json_p::select_field(field_name, Some(attributes_to_extract), &[]) {
-            // parse json.
-            match serde_json::from_slice(field_bytes).map_err(InternalError::SerdeJson)? {
-                Value::Object(object) => perm_json_p::seek_leaf_values_in_object(
-                    &object,
-                    Some(attributes_to_extract),
-                    &[], // skip no attributes
-                    field_name,
-                    &mut tokenize_field,
-                )?,
-                Value::Array(array) => perm_json_p::seek_leaf_values_in_array(
-                    &array,
-                    Some(attributes_to_extract),
-                    &[], // skip no attributes
-                    field_name,
-                    &mut tokenize_field,
-                )?,
-                value => tokenize_field(field_name, &value)?,
-            }
-        }
-    }
-
-    Ok(())
-}
-
-/// Truncates a string to the biggest valid LMDB key size.
-fn truncate_str(s: &str) -> &str {
-    let index = s
-        .char_indices()
-        .map(|(idx, _)| idx)
-        .chain(std::iter::once(s.len()))
-        .take_while(|idx| idx <= &MAX_FACET_VALUE_LENGTH)
-        .last();
-
-    &s[..index.unwrap_or(0)]
 }

@@ -2,11 +2,12 @@ mod cache;
 mod faceted;
 mod searchable;
 
-pub use faceted::{
-    FacetedExtractor, FieldIdFacetExistsDocidsExtractor, FieldIdFacetIsEmptyDocidsExtractor,
+pub use faceted::modname::{
+    FieldIdFacetExistsDocidsExtractor, FieldIdFacetIsEmptyDocidsExtractor,
     FieldIdFacetIsNullDocidsExtractor, FieldIdFacetNumberDocidsExtractor,
     FieldIdFacetStringDocidsExtractor,
 };
+pub use faceted::FacetedExtractor;
 pub use searchable::{
     ExactWordDocidsExtractor, SearchableExtractor, WordDocidsExtractor, WordFidDocidsExtractor,
     WordPositionDocidsExtractor,
