@@ -54,7 +54,7 @@ where
     PI: IntoParallelIterator<Item = Result<DocumentChange>> + Send,
     PI::Iter: Clone,
 {
-    let (merger_sender, writer_receiver) = merger_writer_channel(100);
+    let (merger_sender, writer_receiver) = merger_writer_channel(10_000);
     // This channel acts as a rendezvous point to ensure that we are one task ahead
     let (extractor_sender, merger_receiver) = extractors_merger_channels(0);
 
@@ -89,10 +89,16 @@ where
                         Ok(()) as Result<_>
                     })?;
 
+                    const TEN_GIB: usize = 10 * 1024 * 1024 * 1024;
+                    let max_memory = TEN_GIB / dbg!(rayon::current_num_threads());
+                    let grenad_parameters = GrenadParameters {
+                        max_memory: Some(max_memory),
+                        ..GrenadParameters::default()
+                    };
                     extract_and_send_docids::<WordDocidsExtractor, WordDocids>(
                         index,
                         &global_fields_ids_map,
-                        GrenadParameters::default(),
+                        grenad_parameters,
                         document_changes.clone(),
                         &extractor_sender,
                     )?;
@@ -100,7 +106,7 @@ where
                     extract_and_send_docids::<WordFidDocidsExtractor, WordFidDocids>(
                         index,
                         &global_fields_ids_map,
-                        GrenadParameters::default(),
+                        grenad_parameters,
                         document_changes.clone(),
                         &extractor_sender,
                     )?;
@@ -108,7 +114,7 @@ where
                     extract_and_send_docids::<ExactWordDocidsExtractor, ExactWordDocids>(
                         index,
                         &global_fields_ids_map,
-                        GrenadParameters::default(),
+                        grenad_parameters,
                         document_changes.clone(),
                         &extractor_sender,
                     )?;
@@ -116,7 +122,7 @@ where
                     extract_and_send_docids::<WordPositionDocidsExtractor, WordPositionDocids>(
                         index,
                         &global_fields_ids_map,
-                        GrenadParameters::default(),
+                        grenad_parameters,
                         document_changes.clone(),
                         &extractor_sender,
                     )?;
@@ -135,7 +141,7 @@ where
                     >(
                         index,
                         &global_fields_ids_map,
-                        GrenadParameters::default(),
+                        grenad_parameters,
                         document_changes.clone(),
                         &extractor_sender,
                     )?;

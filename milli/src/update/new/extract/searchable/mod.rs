@@ -66,7 +66,7 @@ pub trait SearchableExtractor {
                 fields_ids_map.clone(),
                 CboCachedSorter::new(
                     // TODO use a better value
-                    100.try_into().unwrap(),
+                    1_000_000.try_into().unwrap(),
                     create_sorter(
                         grenad::SortAlgorithm::Stable,
                         MergeDeladdCboRoaringBitmaps,
