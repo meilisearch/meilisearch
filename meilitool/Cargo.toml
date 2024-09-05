@@ -15,5 +15,6 @@ dump = { path = "../dump" }
 file-store = { path = "../file-store" }
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
+serde = { version = "1.0.209", features = ["derive"] }
 time = { version = "0.3.36", features = ["formatting"] }
 uuid = { version = "1.10.0", features = ["v4"], default-features = false }
