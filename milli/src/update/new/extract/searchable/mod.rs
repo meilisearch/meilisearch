@@ -1,13 +1,17 @@
+mod extract_fid_word_count_docids;
 mod extract_word_docids;
+mod extract_word_pair_proximity_docids;
 mod tokenize_document;
 
 use std::borrow::Cow;
 use std::fs::File;
 
+pub use extract_fid_word_count_docids::FidWordCountDocidsExtractor;
 pub use extract_word_docids::{
     ExactWordDocidsExtractor, WordDocidsExtractor, WordFidDocidsExtractor,
     WordPositionDocidsExtractor,
 };
+pub use extract_word_pair_proximity_docids::WordPairProximityDocidsExtractor;
 use grenad::Merger;
 use heed::RoTxn;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};

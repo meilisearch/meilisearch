@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use charabia::{SeparatorKind, Token, TokenKind, Tokenizer, TokenizerBuilder};
 use serde_json::Value;
 
+use crate::proximity::MAX_DISTANCE;
 use crate::update::new::extract::perm_json_p::{
     seek_leaf_values_in_array, seek_leaf_values_in_object, select_field,
 };
@@ -43,8 +44,10 @@ impl<'a> DocumentTokenizer<'a> {
                     return Err(UserError::AttributeLimitReached.into());
                 };
 
-                let position =
-                    field_position.entry(field_id).and_modify(|counter| *counter += 8).or_insert(0);
+                let position = field_position
+                    .entry(field_id)
+                    .and_modify(|counter| *counter += MAX_DISTANCE)
+                    .or_insert(0);
                 if *position as u32 >= self.max_positions_per_attributes {
                     return Ok(());
                 }
@@ -116,19 +119,19 @@ impl<'a> DocumentTokenizer<'a> {
 }
 
 /// take an iterator on tokens and compute their relative position depending on separator kinds
-/// if it's an `Hard` separator we add an additional relative proximity of 8 between words,
+/// if it's an `Hard` separator we add an additional relative proximity of MAX_DISTANCE between words,
 /// else we keep the standard proximity of 1 between words.
 fn process_tokens<'a>(
-    start_offset: usize,
+    start_offset: u32,
     tokens: impl Iterator<Item = Token<'a>>,
-) -> impl Iterator<Item = (usize, Token<'a>)> {
+) -> impl Iterator<Item = (u32, Token<'a>)> {
     tokens
         .skip_while(|token| token.is_separator())
         .scan((start_offset, None), |(offset, prev_kind), mut token| {
             match token.kind {
                 TokenKind::Word | TokenKind::StopWord if !token.lemma().is_empty() => {
                     *offset += match *prev_kind {
-                        Some(TokenKind::Separator(SeparatorKind::Hard)) => 8,
+                        Some(TokenKind::Separator(SeparatorKind::Hard)) => MAX_DISTANCE,
                         Some(_) => 1,
                         None => 0,
                     };
@@ -246,7 +249,7 @@ mod test {
             ]: "doggo",
             [
                 2,
-                8,
+                MAX_DISTANCE,
             ]: "doggo",
             [
                 2,
