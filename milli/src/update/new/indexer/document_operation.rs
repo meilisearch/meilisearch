@@ -339,121 +339,40 @@ fn merge_document_for_updates(
     }
 }
 
-/*
-
-
-use std::{
-    borrow::{Borrow, Cow},
-    collections::BTreeMap,
-    ops::Deref,
-};
+use std::borrow::Borrow;
 
 use serde::Deserialize;
-use serde_json::{value::RawValue, Value};
-/*
-#[repr(transparent)]
-pub struct my_str(str);
+use serde_json::from_str;
+use serde_json::value::RawValue;
 
-impl ToOwned for my_str {
-    type Owned = Box<str>;
-
-    fn to_owned(&self) -> Self::Owned {
-        self.0.to_string().into_boxed_str()
-    }
-}
-
-impl Borrow<my_str> for Box<str> {
-    fn borrow(&self) -> &my_str {
-        unsafe { std::mem::transmute(self.as_ref()) }
-    }
-}
-*/
+#[derive(Deserialize)]
+pub struct TopLevelMap<'p>(#[serde(borrow)] BTreeMap<CowStr<'p>, &'p RawValue>);
 
 #[derive(Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-pub struct CowKey<'doc>(#[serde(borrow)] Cow<'doc, str>);
+pub struct CowStr<'p>(#[serde(borrow)] Cow<'p, str>);
 
-impl<'doc> Borrow<str> for CowKey<'doc> {
+impl<'doc> Borrow<str> for CowStr<'doc> {
     fn borrow(&self) -> &str {
         self.0.borrow()
     }
 }
 
-#[derive(Deserialize)]
-pub struct TopLevelMap<'doc>(#[serde(borrow)] BTreeMap<CowKey<'doc>, &'doc RawValue>);
-
-#[derive(Deserialize)]
-pub struct FlatDocs<'doc>(#[serde(borrow)] Vec<&'doc RawValue>);
-
-fn read_docs<'doc>(
-    ndjson: &'doc str,
-) -> impl Iterator<Item = Result<TopLevelMap<'doc>, serde_json::Error>> {
-    serde_json::Deserializer::from_str(ndjson).into_iter::<TopLevelMap>()
-}
-
-fn main() {
-    let ndjson_data = r#"
-        {
-            "id": {
-                "nested": "kefir"
-            },
-            "name": "Alice",
-            "age": 30
-        }
-        {
-            "id": {
-                "nested": "intel"
-            },
-            "name\n": "Bob",
-            "age": 22
-        }
-    "#;
-
-    let primary_key: Vec<_> = "id.nested".split('.').collect(); // dynamic
-
-    for doc in read_docs(ndjson_data) {
-        let doc = doc.unwrap();
-        let docid = get_docid(&doc, &primary_key).unwrap().expect("missingno");
-        println!("docid={docid}");
-    }
-}
-
-pub struct Document<'payload> {
-    fields: TopLevelMap<'payload>,
-    docid: String,
-}
-
-/*impl<'payload> Document<'payload> {
-    pub fn get(name: &str) -> Option<&'payload RawValue> {}
-
-    pub fn get_nested(name: &[&str]) {}
-}*/
-
-fn get_docid<'payload>(
-    map: &TopLevelMap<'payload>,
+fn get_docid<'p>(
+    map: &TopLevelMap<'p>,
     primary_key: &[&str],
-) -> serde_json::Result<Option<CowKey<'payload>>> {
+) -> serde_json::Result<Option<CowStr<'p>>> {
     match primary_key {
-        [] => unreachable!("arrrgh"),
+        [] => unreachable!("arrrgh"), // would None be ok?
         [primary_key] => match map.0.get(*primary_key) {
-            Some(value) => {
-                let value = value.get();
-                let value_number: Result<u64, _> = serde_json::from_str(value);
-                Ok(Some(match value_number {
-                    Ok(value) => CowKey(Cow::Owned(value.to_string())),
-                    Err(_) => serde_json::from_str(value)?,
-                }))
-            }
+            Some(value) => match from_str::<u64>(value.get()) {
+                Ok(value) => Ok(Some(CowStr(Cow::Owned(value.to_string())))),
+                Err(_) => Ok(Some(from_str(value.get())?)),
+            },
             None => Ok(None),
         },
         [head, tail @ ..] => match map.0.get(*head) {
-            Some(value) => {
-                let map = serde_json::from_str(value.get())?;
-                get_docid(&map, tail)
-            }
+            Some(value) => get_docid(&from_str(value.get())?, tail),
             None => Ok(None),
         },
     }
 }
-
-
-*/

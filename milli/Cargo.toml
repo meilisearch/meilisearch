@@ -49,7 +49,7 @@ rayon = "1.10.0"
 roaring = { version = "0.10.6", features = ["serde"] }
 rstar = { version = "0.12.0", features = ["serde"] }
 serde = { version = "1.0.204", features = ["derive"] }
-serde_json = { version = "1.0.120", features = ["preserve_order"] }
+serde_json = { version = "1.0.120", features = ["preserve_order", "raw_value"] }
 slice-group-by = "0.3.1"
 smallstr = { version = "0.3.0", features = ["serde"] }
 smallvec = "1.13.2"
