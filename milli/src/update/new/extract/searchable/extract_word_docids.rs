@@ -20,7 +20,7 @@ impl SearchableExtractor for WordDocidsExtractor {
     }
 
     /// TODO write in an external Vec buffer
-    fn build_key<'a>(_field_id: FieldId, _position: u16, word: &'a str) -> Cow<'a, [u8]> {
+    fn build_key(_field_id: FieldId, _position: u16, word: &str) -> Cow<[u8]> {
         Cow::Borrowed(word.as_bytes())
     }
 }
@@ -49,7 +49,7 @@ impl SearchableExtractor for ExactWordDocidsExtractor {
         Ok(vec![])
     }
 
-    fn build_key<'a>(_field_id: FieldId, _position: u16, word: &'a str) -> Cow<'a, [u8]> {
+    fn build_key(_field_id: FieldId, _position: u16, word: &str) -> Cow<[u8]> {
         Cow::Borrowed(word.as_bytes())
     }
 }
@@ -67,7 +67,7 @@ impl SearchableExtractor for WordFidDocidsExtractor {
         Ok(vec![])
     }
 
-    fn build_key<'a>(field_id: FieldId, _position: u16, word: &'a str) -> Cow<'a, [u8]> {
+    fn build_key(field_id: FieldId, _position: u16, word: &str) -> Cow<[u8]> {
         let mut key = Vec::new();
         key.extend_from_slice(word.as_bytes());
         key.push(0);
@@ -89,7 +89,7 @@ impl SearchableExtractor for WordPositionDocidsExtractor {
         Ok(vec![])
     }
 
-    fn build_key<'a>(_field_id: FieldId, position: u16, word: &'a str) -> Cow<'a, [u8]> {
+    fn build_key(_field_id: FieldId, position: u16, word: &str) -> Cow<[u8]> {
         // position must be bucketed to reduce the number of keys in the DB.
         let position = bucketed_position(position);
         let mut key = Vec::new();

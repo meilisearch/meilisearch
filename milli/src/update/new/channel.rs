@@ -112,23 +112,27 @@ pub struct WriterOperation {
 }
 
 pub enum Database {
-    WordDocids,
-    ExactWordDocids,
-    WordFidDocids,
-    WordPositionDocids,
     Documents,
+    ExactWordDocids,
+    FidWordCountDocids,
     Main,
+    WordDocids,
+    WordFidDocids,
+    WordPairProximityDocids,
+    WordPositionDocids,
 }
 
 impl WriterOperation {
     pub fn database(&self, index: &Index) -> heed::Database<Bytes, Bytes> {
         match self.database {
-            Database::Main => index.main.remap_types(),
             Database::Documents => index.documents.remap_types(),
-            Database::WordDocids => index.word_docids.remap_types(),
             Database::ExactWordDocids => index.exact_word_docids.remap_types(),
+            Database::Main => index.main.remap_types(),
+            Database::WordDocids => index.word_docids.remap_types(),
             Database::WordFidDocids => index.word_fid_docids.remap_types(),
             Database::WordPositionDocids => index.word_position_docids.remap_types(),
+            Database::FidWordCountDocids => index.field_id_word_count_docids.remap_types(),
+            Database::WordPairProximityDocids => index.word_pair_proximity_docids.remap_types(),
         }
     }
 
@@ -198,23 +202,17 @@ impl MainSender<'_> {
     }
 }
 
-pub enum WordDocids {}
 pub enum ExactWordDocids {}
+pub enum FidWordCountDocids {}
+pub enum WordDocids {}
 pub enum WordFidDocids {}
+pub enum WordPairProximityDocids {}
 pub enum WordPositionDocids {}
 
 pub trait DatabaseType {
     const DATABASE: Database;
 
     fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation;
-}
-
-impl DatabaseType for WordDocids {
-    const DATABASE: Database = Database::WordDocids;
-
-    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
-        MergerOperation::WordDocidsMerger(merger)
-    }
 }
 
 impl DatabaseType for ExactWordDocids {
@@ -225,11 +223,35 @@ impl DatabaseType for ExactWordDocids {
     }
 }
 
+impl DatabaseType for FidWordCountDocids {
+    const DATABASE: Database = Database::FidWordCountDocids;
+
+    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
+        MergerOperation::FidWordCountDocidsMerger(merger)
+    }
+}
+
+impl DatabaseType for WordDocids {
+    const DATABASE: Database = Database::WordDocids;
+
+    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
+        MergerOperation::WordDocidsMerger(merger)
+    }
+}
+
 impl DatabaseType for WordFidDocids {
     const DATABASE: Database = Database::WordFidDocids;
 
     fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
         MergerOperation::WordFidDocidsMerger(merger)
+    }
+}
+
+impl DatabaseType for WordPairProximityDocids {
+    const DATABASE: Database = Database::WordPairProximityDocids;
+
+    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
+        MergerOperation::WordPairProximityDocidsMerger(merger)
     }
 }
 
@@ -293,12 +315,14 @@ impl DocumentsSender<'_> {
 }
 
 pub enum MergerOperation {
-    WordDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
     ExactWordDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
+    FidWordCountDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
+    WordDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
     WordFidDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
+    WordPairProximityDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
     WordPositionDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
-    InsertDocument { docid: DocumentId, document: Box<KvReaderFieldId> },
     DeleteDocument { docid: DocumentId },
+    InsertDocument { docid: DocumentId, document: Box<KvReaderFieldId> },
 }
 
 pub struct MergerReceiver(Receiver<MergerOperation>);

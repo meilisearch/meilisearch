@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::fs::File;
 
+pub use extract_facets::*;
 use grenad::{MergeFunction, Merger};
 use heed::RoTxn;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};

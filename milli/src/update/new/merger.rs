@@ -8,10 +8,7 @@ use memmap2::Mmap;
 use roaring::RoaringBitmap;
 use tempfile::tempfile;
 
-use super::channel::{
-    DatabaseType, DocidsSender, ExactWordDocids, MergerReceiver, MergerSender, WordDocids,
-    WordFidDocids, WordPositionDocids,
-};
+use super::channel::*;
 use super::KvReaderDelAdd;
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::MergerOperation;
@@ -30,6 +27,29 @@ pub fn merge_grenad_entries(
 
     for merger_operation in receiver {
         match merger_operation {
+            MergerOperation::ExactWordDocidsMerger(merger) => {
+                merge_and_send_docids(
+                    merger,
+                    /// TODO do a MergerOperation::database(&Index) -> Database<Bytes, Bytes>.
+                    index.exact_word_docids.remap_types(),
+                    rtxn,
+                    &mut buffer,
+                    sender.docids::<ExactWordDocids>(),
+                    |_key| Ok(()),
+                    |_key| Ok(()),
+                )?;
+            }
+            MergerOperation::FidWordCountDocidsMerger(merger) => {
+                merge_and_send_docids(
+                    merger,
+                    index.field_id_word_count_docids.remap_types(),
+                    rtxn,
+                    &mut buffer,
+                    sender.docids::<FidWordCountDocids>(),
+                    |_key| Ok(()),
+                    |_key| Ok(()),
+                )?;
+            }
             MergerOperation::WordDocidsMerger(merger) => {
                 let mut add_words_fst = SetBuilder::new(tempfile()?)?;
                 let mut del_words_fst = SetBuilder::new(tempfile()?)?;
@@ -49,17 +69,6 @@ pub fn merge_grenad_entries(
                 let mmap = compute_new_words_fst(add_words_fst, del_words_fst, words_fst)?;
                 sender.main().write_words_fst(mmap).unwrap();
             }
-            MergerOperation::ExactWordDocidsMerger(merger) => {
-                merge_and_send_docids(
-                    merger,
-                    index.exact_word_docids.remap_types(),
-                    rtxn,
-                    &mut buffer,
-                    sender.docids::<ExactWordDocids>(),
-                    |_key| Ok(()),
-                    |_key| Ok(()),
-                )?;
-            }
             MergerOperation::WordFidDocidsMerger(merger) => {
                 merge_and_send_docids(
                     merger,
@@ -67,6 +76,17 @@ pub fn merge_grenad_entries(
                     rtxn,
                     &mut buffer,
                     sender.docids::<WordFidDocids>(),
+                    |_key| Ok(()),
+                    |_key| Ok(()),
+                )?;
+            }
+            MergerOperation::WordPairProximityDocidsMerger(merger) => {
+                merge_and_send_docids(
+                    merger,
+                    index.word_pair_proximity_docids.remap_types(),
+                    rtxn,
+                    &mut buffer,
+                    sender.docids::<WordPairProximityDocids>(),
                     |_key| Ok(()),
                     |_key| Ok(()),
                 )?;

@@ -2,16 +2,8 @@ mod cache;
 mod faceted;
 mod searchable;
 
-pub use faceted::modname::{
-    FieldIdFacetExistsDocidsExtractor, FieldIdFacetIsEmptyDocidsExtractor,
-    FieldIdFacetIsNullDocidsExtractor, FieldIdFacetNumberDocidsExtractor,
-    FieldIdFacetStringDocidsExtractor,
-};
-pub use faceted::FacetedExtractor;
-pub use searchable::{
-    ExactWordDocidsExtractor, SearchableExtractor, WordDocidsExtractor, WordFidDocidsExtractor,
-    WordPositionDocidsExtractor,
-};
+pub use faceted::*;
+pub use searchable::*;
 
 /// TODO move in permissive json pointer
 pub mod perm_json_p {

@@ -11,15 +11,9 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rayon::ThreadPool;
 pub use update_by_function::UpdateByFunction;
 
-use super::channel::{
-    extractors_merger_channels, merger_writer_channel, EntryOperation, ExactWordDocids, WordDocids,
-    WordFidDocids, WordPositionDocids,
-};
+use super::channel::*;
 use super::document_change::DocumentChange;
-use super::extract::{
-    ExactWordDocidsExtractor, SearchableExtractor, WordDocidsExtractor, WordFidDocidsExtractor,
-    WordPositionDocidsExtractor,
-};
+use super::extract::*;
 use super::merger::merge_grenad_entries;
 use super::StdResult;
 use crate::documents::{
@@ -71,79 +65,98 @@ where
         // TODO manage the errors correctly
         let handle = Builder::new().name(S("indexer-extractors")).spawn_scoped(s, move || {
             pool.in_place_scope(|_s| {
-                let document_changes = document_changes.into_par_iter();
+                    let document_changes = document_changes.into_par_iter();
 
-                // document but we need to create a function that collects and compresses documents.
-                document_changes.clone().into_par_iter().try_for_each(|result| {
-                    match result? {
-                        DocumentChange::Deletion(deletion) => {
-                            let docid = deletion.docid();
-                            extractor_sender.document_delete(docid).unwrap();
+                    // document but we need to create a function that collects and compresses documents.
+                    document_changes.clone().into_par_iter().try_for_each(|result| {
+                        match result? {
+                            DocumentChange::Deletion(deletion) => {
+                                let docid = deletion.docid();
+                                extractor_sender.document_delete(docid).unwrap();
+                            }
+                            DocumentChange::Update(update) => {
+                                let docid = update.docid();
+                                let content = update.new();
+                                extractor_sender.document_insert(docid, content.boxed()).unwrap();
+                            }
+                            DocumentChange::Insertion(insertion) => {
+                                let docid = insertion.docid();
+                                let content = insertion.new();
+                                extractor_sender.document_insert(docid, content.boxed()).unwrap();
+                                // extracted_dictionary_sender.send(self, dictionary: &[u8]);
+                            }
                         }
-                        DocumentChange::Update(update) => {
-                            let docid = update.docid();
-                            let content = update.new();
-                            extractor_sender.document_insert(docid, content.boxed()).unwrap();
-                        }
-                        DocumentChange::Insertion(insertion) => {
-                            let docid = insertion.docid();
-                            let content = insertion.new();
-                            extractor_sender.document_insert(docid, content.boxed()).unwrap();
-                            // extracted_dictionary_sender.send(self, dictionary: &[u8]);
-                        }
-                    }
+                        Ok(()) as Result<_>
+                    })?;
+
+                    extract_and_send_docids::<WordDocidsExtractor, WordDocids>(
+                        index,
+                        &global_fields_ids_map,
+                        GrenadParameters::default(),
+                        document_changes.clone(),
+                        &extractor_sender,
+                    )?;
+
+                    extract_and_send_docids::<WordFidDocidsExtractor, WordFidDocids>(
+                        index,
+                        &global_fields_ids_map,
+                        GrenadParameters::default(),
+                        document_changes.clone(),
+                        &extractor_sender,
+                    )?;
+
+                    extract_and_send_docids::<ExactWordDocidsExtractor, ExactWordDocids>(
+                        index,
+                        &global_fields_ids_map,
+                        GrenadParameters::default(),
+                        document_changes.clone(),
+                        &extractor_sender,
+                    )?;
+
+                    extract_and_send_docids::<WordPositionDocidsExtractor, WordPositionDocids>(
+                        index,
+                        &global_fields_ids_map,
+                        GrenadParameters::default(),
+                        document_changes.clone(),
+                        &extractor_sender,
+                    )?;
+
+                    extract_and_send_docids::<FidWordCountDocidsExtractor, FidWordCountDocids>(
+                        index,
+                        &global_fields_ids_map,
+                        GrenadParameters::default(),
+                        document_changes.clone(),
+                        &extractor_sender,
+                    )?;
+
+                    extract_and_send_docids::<
+                        WordPairProximityDocidsExtractor,
+                        WordPairProximityDocids,
+                    >(
+                        index,
+                        &global_fields_ids_map,
+                        GrenadParameters::default(),
+                        document_changes.clone(),
+                        &extractor_sender,
+                    )?;
+
+                    // TODO THIS IS TOO MUCH
+                    // Extract fieldid docid facet number
+                    // Extract fieldid docid facet string
+                    // Extract facetid string fst
+                    // Extract facetid normalized string strings
+
+                    // TODO Inverted Indexes again
+                    // Extract fieldid facet isempty docids
+                    // Extract fieldid facet isnull docids
+                    // Extract fieldid facet exists docids
+
+                    // TODO This is the normal system
+                    // Extract fieldid facet number docids
+                    // Extract fieldid facet string docids
+
                     Ok(()) as Result<_>
-                })?;
-
-                extract_and_send_docids::<WordDocidsExtractor, WordDocids>(
-                    index,
-                    &global_fields_ids_map,
-                    GrenadParameters::default(),
-                    document_changes.clone(),
-                    &extractor_sender,
-                )?;
-
-                extract_and_send_docids::<WordFidDocidsExtractor, WordFidDocids>(
-                    index,
-                    &global_fields_ids_map,
-                    GrenadParameters::default(),
-                    document_changes.clone(),
-                    &extractor_sender,
-                )?;
-
-                extract_and_send_docids::<ExactWordDocidsExtractor, ExactWordDocids>(
-                    index,
-                    &global_fields_ids_map,
-                    GrenadParameters::default(),
-                    document_changes.clone(),
-                    &extractor_sender,
-                )?;
-
-                extract_and_send_docids::<WordPositionDocidsExtractor, WordPositionDocids>(
-                    index,
-                    &global_fields_ids_map,
-                    GrenadParameters::default(),
-                    document_changes.clone(),
-                    &extractor_sender,
-                )?;
-
-                // TODO THIS IS TOO MUCH
-                // Extract fieldid docid facet number
-                // Extract fieldid docid facet string
-                // Extract facetid string fst
-                // Extract facetid normalized string strings
-
-                // TODO Inverted Indexes again
-                // Extract fieldid facet isempty docids
-                // Extract fieldid facet isnull docids
-                // Extract fieldid facet exists docids
-
-                // TODO This is the normal system
-                // Extract fieldid facet number docids
-                // Extract fieldid facet string docids
-
-                Ok(()) as Result<_>
-            })
+                })
         })?;
 
         // TODO manage the errors correctly

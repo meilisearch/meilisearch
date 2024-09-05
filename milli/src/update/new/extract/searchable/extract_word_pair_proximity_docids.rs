@@ -1,21 +1,17 @@
-use std::{
-    borrow::Cow,
-    collections::{BTreeMap, VecDeque},
-};
+use std::borrow::Cow;
+use std::collections::{BTreeMap, VecDeque};
 
 use heed::RoTxn;
 use itertools::merge_join_by;
 use obkv::KvReader;
 
-use super::{tokenize_document::DocumentTokenizer, SearchableExtractor};
-use crate::{
-    proximity::{index_proximity, MAX_DISTANCE},
-    update::{
-        new::{extract::cache::CboCachedSorter, DocumentChange},
-        MergeDeladdCboRoaringBitmaps,
-    },
-    FieldId, GlobalFieldsIdsMap, Index, Result,
-};
+use super::tokenize_document::DocumentTokenizer;
+use super::SearchableExtractor;
+use crate::proximity::{index_proximity, MAX_DISTANCE};
+use crate::update::new::extract::cache::CboCachedSorter;
+use crate::update::new::DocumentChange;
+use crate::update::MergeDeladdCboRoaringBitmaps;
+use crate::{FieldId, GlobalFieldsIdsMap, Index, Result};
 
 pub struct WordPairProximityDocidsExtractor;
 impl SearchableExtractor for WordPairProximityDocidsExtractor {
@@ -26,12 +22,13 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
         index.user_defined_searchable_fields(rtxn).map_err(Into::into)
     }
 
-    fn attributes_to_skip<'a>(rtxn: &'a RoTxn, index: &'a Index) -> Result<Vec<&'a str>> {
+    fn attributes_to_skip<'a>(_rtxn: &'a RoTxn, _index: &'a Index) -> Result<Vec<&'a str>> {
         Ok(vec![])
     }
 
     /// This case is unreachable because extract_document_change has been reimplemented to not call this function.
-    fn build_key<'a>(_field_id: FieldId, _position: u16, _word: &'a str) -> Cow<'a, [u8]> {
+    fn build_key(_field_id: FieldId, _position: u16, _word: &str) -> Cow<[u8]> {
+        /// TODO remove this
         unreachable!()
     }
 
@@ -159,7 +156,7 @@ fn process_document_tokens(
     word_positions: &mut VecDeque<(String, u16)>,
     word_pair_proximity: &mut BTreeMap<(String, String), u8>,
 ) -> Result<()> {
-    let mut token_fn = |fid: FieldId, pos: u16, word: &str| {
+    let mut token_fn = |_fid: FieldId, pos: u16, word: &str| {
         // drain the proximity window until the head word is considered close to the word we are inserting.
         while word_positions
             .front()
