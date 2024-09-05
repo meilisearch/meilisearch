@@ -2570,6 +2570,7 @@ dependencies = [
  "meili-snap",
  "meilisearch-auth",
  "meilisearch-types",
+ "memmap2",
  "page_size",
  "rayon",
  "roaring",

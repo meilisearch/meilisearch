@@ -459,12 +459,13 @@ async fn document_addition(
         return Err(MeilisearchHttpError::Payload(ReceivePayload(Box::new(e))));
     }
 
-    let read_file = buffer.into_inner().into_std().await;
+    let mut read_file = buffer.into_inner().into_std().await;
     let documents_count = tokio::task::spawn_blocking(move || {
         let documents_count = match format {
             PayloadType::Json => read_json(&read_file, &mut update_file)?,
             PayloadType::Csv { delimiter } => read_csv(&read_file, &mut update_file, delimiter)?,
-            PayloadType::Ndjson => read_ndjson(&read_file, &mut update_file)?,
+            /// TODO do not copy all the content
+            PayloadType::Ndjson => std::io::copy(&mut read_file, &mut update_file).unwrap(),
         };
         // we NEED to persist the file here because we moved the `udpate_file` in another task.
         update_file.persist()?;

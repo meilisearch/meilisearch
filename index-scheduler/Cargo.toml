@@ -29,6 +29,7 @@ serde_json = { version = "1.0.120", features = ["preserve_order"] }
 synchronoise = "1.0.1"
 tempfile = "3.10.1"
 thiserror = "1.0.61"
+memmap2 = "0.9.4"
 time = { version = "0.3.36", features = [
     "serde-well-known",
     "formatting",

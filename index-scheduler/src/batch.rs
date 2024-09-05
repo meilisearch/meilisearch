@@ -18,6 +18,7 @@ one indexing operation.
 */
 
 use std::collections::{BTreeSet, HashSet};
+use std::env::VarError;
 use std::ffi::OsStr;
 use std::fmt;
 use std::fs::{self, File};
@@ -26,7 +27,7 @@ use std::io::BufWriter;
 use dump::IndexMetadata;
 use meilisearch_types::error::Code;
 use meilisearch_types::heed::{RoTxn, RwTxn};
-use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
+use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader, PrimaryKey};
 use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::update::new::indexer::{self, guess_primary_key, DocumentChanges};
 use meilisearch_types::milli::update::{
@@ -1294,19 +1295,30 @@ impl IndexScheduler {
                         _ => None,
                     })
                     .unwrap();
-                let content_file = self.file_store.get_update(*first_addition_uuid)?;
-                let reader =
-                    DocumentsBatchReader::from_reader(content_file).map_err(milli::Error::from)?;
-                let (cursor, documents_batch_index) = reader.into_cursor_and_fields_index();
-                let primary_key =
-                    guess_primary_key(&rtxn, index, cursor, &documents_batch_index)?.unwrap();
 
+                // let content_file = self.file_store.get_update(*first_addition_uuid)?;
+                // let reader =
+                //     DocumentsBatchReader::from_reader(content_file).map_err(milli::Error::from)?;
+                // let (cursor, documents_batch_index) = reader.into_cursor_and_fields_index();
+                // let primary_key =
+                //     guess_primary_key(&rtxn, index, cursor, &documents_batch_index)?.unwrap();
+
+                let mut content_files = Vec::new();
+                for operation in &operations {
+                    if let DocumentOperation::Add(content_uuid) = operation {
+                        let content_file = self.file_store.get_update(*content_uuid)?;
+                        let mmap = unsafe { memmap2::Mmap::map(&content_file)? };
+                        content_files.push(mmap);
+                    }
+                }
+
+                let mut content_files_iter = content_files.iter();
                 let mut indexer = indexer::DocumentOperation::new(method);
                 for (operation, task) in operations.into_iter().zip(tasks.iter_mut()) {
                     match operation {
-                        DocumentOperation::Add(content_uuid) => {
-                            let content_file = self.file_store.get_update(content_uuid)?;
-                            let stats = indexer.add_documents(content_file)?;
+                        DocumentOperation::Add(_content_uuid) => {
+                            let mmap = content_files_iter.next().unwrap();
+                            let stats = indexer.add_documents(&mmap)?;
                             // builder = builder.with_embedders(embedders.clone());
 
                             let received_documents =
@@ -1357,6 +1369,17 @@ impl IndexScheduler {
                     // let pool = indexer_config.thread_pool.unwrap();
                     let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
                     // let fields_ids_map = RwLock::new(fields_ids_map);
+
+                    /// TODO correctly guess the primary key in a NDJSON
+                    let pk = match std::env::var("MEILI_PRIMARY_KEY") {
+                        Ok(pk) => pk,
+                        Err(VarError::NotPresent) => "id".to_string(),
+                        Err(e) => panic!("primary key error: {e}"),
+                    };
+
+                    fields_ids_map.insert(&pk);
+                    let primary_key = PrimaryKey::new(&pk, &fields_ids_map).unwrap();
+
                     let param = (index, &rtxn, &primary_key);
                     let document_changes = indexer.document_changes(&mut fields_ids_map, param)?;
                     /// TODO pass/write the FieldsIdsMap
