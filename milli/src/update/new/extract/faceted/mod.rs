@@ -17,6 +17,7 @@ mod extract_facets;
 mod facet_document;
 
 pub trait FacetedExtractor {
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::extract::faceted")]
     fn run_extraction(
         index: &Index,
         fields_ids_map: &GlobalFieldsIdsMap,

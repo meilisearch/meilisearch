@@ -63,8 +63,11 @@ where
 
     thread::scope(|s| {
         // TODO manage the errors correctly
+        let current_span = tracing::Span::current();
         let handle = Builder::new().name(S("indexer-extractors")).spawn_scoped(s, move || {
             pool.in_place_scope(|_s| {
+                    let span = tracing::trace_span!(target: "indexing::documents", parent: &current_span, "extract");
+                    let _entered = span.enter();
                     let document_changes = document_changes.into_par_iter();
 
                     // document but we need to create a function that collects and compresses documents.
@@ -95,56 +98,85 @@ where
                         max_memory: Some(max_memory),
                         ..GrenadParameters::default()
                     };
-                    extract_and_send_docids::<WordDocidsExtractor, WordDocids>(
-                        index,
-                        &global_fields_ids_map,
-                        grenad_parameters,
-                        document_changes.clone(),
-                        &extractor_sender,
-                    )?;
+                    {
+                        let span = tracing::trace_span!(target: "indexing::documents::extract", "word_docids");
+                        let _entered = span.enter();
+                        extract_and_send_docids::<WordDocidsExtractor, WordDocids>(
+                            index,
+                            &global_fields_ids_map,
+                            grenad_parameters,
+                            document_changes.clone(),
+                            &extractor_sender,
+                        )?;
+                    }
 
-                    extract_and_send_docids::<WordFidDocidsExtractor, WordFidDocids>(
-                        index,
-                        &global_fields_ids_map,
-                        grenad_parameters,
-                        document_changes.clone(),
-                        &extractor_sender,
-                    )?;
+                    {
+                        let span = tracing::trace_span!(target: "indexing::documents::extract", "word_fid_docids");
+                        let _entered = span.enter();
+                        extract_and_send_docids::<WordFidDocidsExtractor, WordFidDocids>(
+                            index,
+                            &global_fields_ids_map,
+                            grenad_parameters,
+                            document_changes.clone(),
+                            &extractor_sender,
+                        )?;
+                    }
+                    
+                    {
+                        let span = tracing::trace_span!(target: "indexing::documents::extract", "exact_word_docids");
+                        let _entered = span.enter();
+                        extract_and_send_docids::<ExactWordDocidsExtractor, ExactWordDocids>(
+                            index,
+                            &global_fields_ids_map,
+                            grenad_parameters,
+                            document_changes.clone(),
+                            &extractor_sender,
+                        )?;
+                    }
 
-                    extract_and_send_docids::<ExactWordDocidsExtractor, ExactWordDocids>(
-                        index,
-                        &global_fields_ids_map,
-                        grenad_parameters,
-                        document_changes.clone(),
-                        &extractor_sender,
-                    )?;
+                    {
+                        let span = tracing::trace_span!(target: "indexing::documents::extract", "word_position_docids");
+                        let _entered = span.enter();
+                        extract_and_send_docids::<WordPositionDocidsExtractor, WordPositionDocids>(
+                            index,
+                            &global_fields_ids_map,
+                            grenad_parameters,
+                            document_changes.clone(),
+                            &extractor_sender,
+                        )?;
+                    }
 
-                    extract_and_send_docids::<WordPositionDocidsExtractor, WordPositionDocids>(
-                        index,
-                        &global_fields_ids_map,
-                        grenad_parameters,
-                        document_changes.clone(),
-                        &extractor_sender,
-                    )?;
+                    {
+                        let span = tracing::trace_span!(target: "indexing::documents::extract", "fid_word_count_docids");
+                        let _entered = span.enter();
+                        extract_and_send_docids::<FidWordCountDocidsExtractor, FidWordCountDocids>(
+                            index,
+                            &global_fields_ids_map,
+                            GrenadParameters::default(),
+                            document_changes.clone(),
+                            &extractor_sender,
+                        )?;
+                    }
 
-                    extract_and_send_docids::<FidWordCountDocidsExtractor, FidWordCountDocids>(
-                        index,
-                        &global_fields_ids_map,
-                        GrenadParameters::default(),
-                        document_changes.clone(),
-                        &extractor_sender,
-                    )?;
+                    {
+                        let span = tracing::trace_span!(target: "indexing::documents::extract", "word_pair_proximity_docids");
+                        let _entered = span.enter();
+                        extract_and_send_docids::<
+                            WordPairProximityDocidsExtractor,
+                            WordPairProximityDocids,
+                        >(
+                            index,
+                            &global_fields_ids_map,
+                            grenad_parameters,
+                            document_changes.clone(),
+                            &extractor_sender,
+                        )?;
+                    }
 
-                    extract_and_send_docids::<
-                        WordPairProximityDocidsExtractor,
-                        WordPairProximityDocids,
-                    >(
-                        index,
-                        &global_fields_ids_map,
-                        grenad_parameters,
-                        document_changes.clone(),
-                        &extractor_sender,
-                    )?;
+                    {
+                        let span = tracing::trace_span!(target: "indexing::documents::extract", "FINISH");
+                        let _entered = span.enter();
+                    }
 
                     // TODO THIS IS TOO MUCH
                     // Extract fieldid docid facet number
@@ -166,7 +198,11 @@ where
         })?;
 
         // TODO manage the errors correctly
+        let current_span = tracing::Span::current();
         let handle2 = Builder::new().name(S("indexer-merger")).spawn_scoped(s, move || {
+            let span =
+                tracing::trace_span!(target: "indexing::documents", parent: &current_span, "merge");
+            let _entered = span.enter();
             let rtxn = index.read_txn().unwrap();
             merge_grenad_entries(merger_receiver, merger_sender, &rtxn, index)
         })?;

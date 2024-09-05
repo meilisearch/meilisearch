@@ -16,6 +16,7 @@ use crate::update::MergeDeladdCboRoaringBitmaps;
 use crate::{CboRoaringBitmapCodec, Index, Result};
 
 /// TODO We must return some infos/stats
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::documents", name = "merge")]
 pub fn merge_grenad_entries(
     receiver: MergerReceiver,
     sender: MergerSender,
@@ -28,6 +29,9 @@ pub fn merge_grenad_entries(
     for merger_operation in receiver {
         match merger_operation {
             MergerOperation::ExactWordDocidsMerger(merger) => {
+                let span =
+                    tracing::trace_span!(target: "indexing::documents::merge", "exact_word_docids");
+                let _entered = span.enter();
                 merge_and_send_docids(
                     merger,
                     /// TODO do a MergerOperation::database(&Index) -> Database<Bytes, Bytes>.
@@ -40,6 +44,8 @@ pub fn merge_grenad_entries(
                 )?;
             }
             MergerOperation::FidWordCountDocidsMerger(merger) => {
+                let span = tracing::trace_span!(target: "indexing::documents::merge", "fid_word_count_docids");
+                let _entered = span.enter();
                 merge_and_send_docids(
                     merger,
                     index.field_id_word_count_docids.remap_types(),
@@ -51,6 +57,9 @@ pub fn merge_grenad_entries(
                 )?;
             }
             MergerOperation::WordDocidsMerger(merger) => {
+                let span =
+                    tracing::trace_span!(target: "indexing::documents::merge", "word_docids");
+                let _entered = span.enter();
                 let mut add_words_fst = SetBuilder::new(tempfile()?)?;
                 let mut del_words_fst = SetBuilder::new(tempfile()?)?;
 
@@ -70,6 +79,9 @@ pub fn merge_grenad_entries(
                 sender.main().write_words_fst(mmap).unwrap();
             }
             MergerOperation::WordFidDocidsMerger(merger) => {
+                let span =
+                    tracing::trace_span!(target: "indexing::documents::merge", "word_fid_docids");
+                let _entered = span.enter();
                 merge_and_send_docids(
                     merger,
                     index.word_fid_docids.remap_types(),
@@ -81,6 +93,8 @@ pub fn merge_grenad_entries(
                 )?;
             }
             MergerOperation::WordPairProximityDocidsMerger(merger) => {
+                let span = tracing::trace_span!(target: "indexing::documents::merge", "word_pair_proximity_docids");
+                let _entered = span.enter();
                 merge_and_send_docids(
                     merger,
                     index.word_pair_proximity_docids.remap_types(),
@@ -92,6 +106,8 @@ pub fn merge_grenad_entries(
                 )?;
             }
             MergerOperation::WordPositionDocidsMerger(merger) => {
+                let span = tracing::trace_span!(target: "indexing::documents::merge", "word_position_docids");
+                let _entered = span.enter();
                 merge_and_send_docids(
                     merger,
                     index.word_position_docids.remap_types(),
@@ -103,10 +119,16 @@ pub fn merge_grenad_entries(
                 )?;
             }
             MergerOperation::InsertDocument { docid, document } => {
+                let span =
+                    tracing::trace_span!(target: "indexing::documents::merge", "insert_document");
+                let _entered = span.enter();
                 documents_ids.insert(docid);
                 sender.documents().uncompressed(docid, &document).unwrap();
             }
             MergerOperation::DeleteDocument { docid } => {
+                let span =
+                    tracing::trace_span!(target: "indexing::documents::merge", "delete_document");
+                let _entered = span.enter();
                 if !documents_ids.remove(docid) {
                     unreachable!("Tried deleting a document that we do not know about");
                 }
@@ -115,10 +137,15 @@ pub fn merge_grenad_entries(
         }
     }
 
-    // Send the documents ids unionized with the current one
-    /// TODO return the slice of bytes directly
-    serialize_bitmap_into_vec(&documents_ids, &mut buffer);
-    sender.send_documents_ids(&buffer).unwrap();
+    {
+        let span = tracing::trace_span!(target: "indexing::documents::merge", "documents_ids");
+        let _entered = span.enter();
+
+        // Send the documents ids unionized with the current one
+        /// TODO return the slice of bytes directly
+        serialize_bitmap_into_vec(&documents_ids, &mut buffer);
+        sender.send_documents_ids(&buffer).unwrap();
+    }
 
     // ...
 
@@ -149,6 +176,7 @@ fn compute_new_words_fst(
     Ok(words_fst_mmap)
 }
 
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
 fn merge_and_send_docids<D: DatabaseType>(
     merger: Merger<File, MergeDeladdCboRoaringBitmaps>,
     database: Database<Bytes, Bytes>,
