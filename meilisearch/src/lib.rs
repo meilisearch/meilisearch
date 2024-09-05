@@ -37,7 +37,7 @@ use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchR
 use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod};
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::KindWithContent;
-use meilisearch_types::versioning::{check_version_file, create_version_file};
+use meilisearch_types::versioning::{check_version_file, create_current_version_file};
 use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
 pub use option::Opt;
 use option::ScheduleSnapshot;
@@ -318,7 +318,7 @@ fn open_or_create_database_unchecked(
     match (
         index_scheduler_builder(),
         auth_controller.map_err(anyhow::Error::from),
-        create_version_file(&opt.db_path).map_err(anyhow::Error::from),
+        create_current_version_file(&opt.db_path).map_err(anyhow::Error::from),
     ) {
         (Ok(i), Ok(a), Ok(())) => Ok((i, a)),
         (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => {
