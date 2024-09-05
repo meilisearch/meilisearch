@@ -1318,7 +1318,7 @@ impl IndexScheduler {
                     match operation {
                         DocumentOperation::Add(_content_uuid) => {
                             let mmap = content_files_iter.next().unwrap();
-                            let stats = indexer.add_documents(&mmap)?;
+                            let stats = indexer.add_documents(mmap)?;
                             // builder = builder.with_embedders(embedders.clone());
 
                             let received_documents =
