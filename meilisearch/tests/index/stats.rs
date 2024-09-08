@@ -6,7 +6,7 @@ use crate::json;
 
 #[actix_rt::test]
 async fn stats() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.unique_index();
     let (task, code) = index.create(Some("id")).await;
 
