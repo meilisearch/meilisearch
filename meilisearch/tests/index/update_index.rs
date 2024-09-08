@@ -9,7 +9,7 @@ use crate::json;
 
 #[actix_rt::test]
 async fn update_primary_key() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.unique_index();
     let (task, code) = index.create(None).await;
 
@@ -41,7 +41,7 @@ async fn update_primary_key() {
 
 #[actix_rt::test]
 async fn create_and_update_with_different_encoding() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.index_with_encoder("test", Encoder::Gzip);
     let (task, code) = index.create(None).await;
 
@@ -57,7 +57,7 @@ async fn create_and_update_with_different_encoding() {
 
 #[actix_rt::test]
 async fn update_nothing() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.unique_index();
     let (task, code) = index.create(None).await;
 
@@ -76,7 +76,7 @@ async fn update_nothing() {
 
 #[actix_rt::test]
 async fn error_update_existing_primary_key() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = server.unique_index();
     let (task, code) = index.create(Some("id")).await;
 
@@ -108,7 +108,7 @@ async fn error_update_existing_primary_key() {
 
 #[actix_rt::test]
 async fn error_update_unexisting_index() {
-    let server = Server::new_shared().await;
+    let server = Server::new_shared();
     let index = shared_does_not_exists_index();
     let (task, code) = index.update(None).await;
 
