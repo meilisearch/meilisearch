@@ -151,6 +151,7 @@ fn starts_with(selector: &str, key: &str) -> bool {
 
 fn validate_document_id(document_id: &str) -> Option<&str> {
     if !document_id.is_empty()
+        && document_id.len() <= 512
         && document_id.chars().all(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_'))
     {
         Some(document_id)
@@ -166,6 +167,7 @@ pub fn validate_document_id_value(document_id: Value) -> StdResult<String, UserE
             Some(s) => Ok(s.to_string()),
             None => Err(UserError::InvalidDocumentId { document_id: Value::String(string) }),
         },
+        // a `u64` or `i64` cannot be more than 512 bytes once converted to a string
         Value::Number(number) if !number.is_f64() => Ok(number.to_string()),
         content => Err(UserError::InvalidDocumentId { document_id: content }),
     }
