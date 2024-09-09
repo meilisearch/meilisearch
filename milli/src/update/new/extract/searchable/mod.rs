@@ -3,7 +3,6 @@ mod extract_word_docids;
 mod extract_word_pair_proximity_docids;
 mod tokenize_document;
 
-use std::borrow::Cow;
 use std::fs::File;
 
 pub use extract_fid_word_count_docids::FidWordCountDocidsExtractor;
@@ -20,7 +19,7 @@ use tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use super::cache::CboCachedSorter;
 use crate::update::new::{DocumentChange, ItemsPool};
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
-use crate::{FieldId, GlobalFieldsIdsMap, Index, Result, MAX_POSITION_PER_ATTRIBUTE};
+use crate::{GlobalFieldsIdsMap, Index, Result, MAX_POSITION_PER_ATTRIBUTE};
 
 pub trait SearchableExtractor {
     fn run_extraction(
@@ -109,60 +108,10 @@ pub trait SearchableExtractor {
         fields_ids_map: &mut GlobalFieldsIdsMap,
         cached_sorter: &mut CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
         document_change: DocumentChange,
-    ) -> Result<()> {
-        match document_change {
-            DocumentChange::Deletion(inner) => {
-                let mut token_fn = |fid, pos: u16, word: &str| {
-                    let key = Self::build_key(fid, pos, word);
-                    /// TODO manage the error
-                    cached_sorter.insert_del_u32(&key, inner.docid()).unwrap();
-                    Ok(())
-                };
-                document_tokenizer.tokenize_document(
-                    inner.current(rtxn, index)?.unwrap(),
-                    fields_ids_map,
-                    &mut token_fn,
-                )?;
-            }
-            DocumentChange::Update(inner) => {
-                let mut token_fn = |fid, pos, word: &str| {
-                    let key = Self::build_key(fid, pos, word);
-                    /// TODO manage the error
-                    cached_sorter.insert_del_u32(&key, inner.docid()).unwrap();
-                    Ok(())
-                };
-                document_tokenizer.tokenize_document(
-                    inner.current(rtxn, index)?.unwrap(),
-                    fields_ids_map,
-                    &mut token_fn,
-                )?;
-
-                let mut token_fn = |fid, pos, word: &str| {
-                    let key = Self::build_key(fid, pos, word);
-                    /// TODO manage the error
-                    cached_sorter.insert_add_u32(&key, inner.docid()).unwrap();
-                    Ok(())
-                };
-                document_tokenizer.tokenize_document(inner.new(), fields_ids_map, &mut token_fn)?;
-            }
-            DocumentChange::Insertion(inner) => {
-                let mut token_fn = |fid, pos, word: &str| {
-                    let key = Self::build_key(fid, pos, word);
-                    /// TODO manage the error
-                    cached_sorter.insert_add_u32(&key, inner.docid()).unwrap();
-                    Ok(())
-                };
-                document_tokenizer.tokenize_document(inner.new(), fields_ids_map, &mut token_fn)?;
-            }
-        }
-
-        Ok(())
-    }
+    ) -> Result<()>;
 
     fn attributes_to_extract<'a>(rtxn: &'a RoTxn, index: &'a Index)
         -> Result<Option<Vec<&'a str>>>;
 
     fn attributes_to_skip<'a>(rtxn: &'a RoTxn, index: &'a Index) -> Result<Vec<&'a str>>;
-
-    fn build_key(field_id: FieldId, position: u16, word: &str) -> Cow<'_, [u8]>;
 }

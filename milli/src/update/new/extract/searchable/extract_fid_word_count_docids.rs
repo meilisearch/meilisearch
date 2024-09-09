@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
 
 use heed::RoTxn;
@@ -23,12 +22,6 @@ impl SearchableExtractor for FidWordCountDocidsExtractor {
 
     fn attributes_to_skip<'a>(_rtxn: &'a RoTxn, _index: &'a Index) -> Result<Vec<&'a str>> {
         Ok(vec![])
-    }
-
-    /// This case is unreachable because extract_document_change has been reimplemented to not call this function.
-    fn build_key(_field_id: FieldId, _position: u16, _word: &str) -> Cow<[u8]> {
-        /// TODO remove this
-        unreachable!()
     }
 
     // This method is reimplemented to count the number of words in the document in each field
@@ -59,8 +52,7 @@ impl SearchableExtractor for FidWordCountDocidsExtractor {
                 for (fid, count) in fid_word_count.iter() {
                     if *count <= MAX_COUNTED_WORDS {
                         let key = build_key(*fid, *count as u8, &mut key_buffer);
-                        /// TODO manage the error
-                        cached_sorter.insert_del_u32(key, inner.docid()).unwrap();
+                        cached_sorter.insert_del_u32(key, inner.docid())?;
                     }
                 }
             }
@@ -93,13 +85,11 @@ impl SearchableExtractor for FidWordCountDocidsExtractor {
                     if *current_count != *new_count {
                         if *current_count <= MAX_COUNTED_WORDS {
                             let key = build_key(*fid, *current_count as u8, &mut key_buffer);
-                            /// TODO manage the error
-                            cached_sorter.insert_del_u32(key, inner.docid()).unwrap();
+                            cached_sorter.insert_del_u32(key, inner.docid())?;
                         }
                         if *new_count <= MAX_COUNTED_WORDS {
                             let key = build_key(*fid, *new_count as u8, &mut key_buffer);
-                            /// TODO manage the error
-                            cached_sorter.insert_add_u32(key, inner.docid()).unwrap();
+                            cached_sorter.insert_add_u32(key, inner.docid())?;
                         }
                     }
                 }
@@ -116,8 +106,7 @@ impl SearchableExtractor for FidWordCountDocidsExtractor {
                 for (fid, count) in fid_word_count.iter() {
                     if *count <= MAX_COUNTED_WORDS {
                         let key = build_key(*fid, *count as u8, &mut key_buffer);
-                        /// TODO manage the error
-                        cached_sorter.insert_add_u32(key, inner.docid()).unwrap();
+                        cached_sorter.insert_add_u32(key, inner.docid())?;
                     }
                 }
             }

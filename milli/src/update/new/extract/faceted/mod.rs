@@ -87,11 +87,11 @@ pub trait FacetedExtractor {
     where
         MF: MergeFunction,
         MF::Error: Debug,
+        grenad::Error<MF::Error>: Into<crate::Error>,
     {
         buffer.clear();
         match Self::build_key(fid, value, buffer) {
-            // TODO manage errors
-            Some(key) => Ok(cache_fn(cached_sorter, &key, docid).unwrap()),
+            Some(key) => cache_fn(cached_sorter, &key, docid).map_err(Into::into),
             None => Ok(()),
         }
     }

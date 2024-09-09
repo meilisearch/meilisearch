@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::{BTreeMap, VecDeque};
 
 use heed::RoTxn;
@@ -24,12 +23,6 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
 
     fn attributes_to_skip<'a>(_rtxn: &'a RoTxn, _index: &'a Index) -> Result<Vec<&'a str>> {
         Ok(vec![])
-    }
-
-    /// This case is unreachable because extract_document_change has been reimplemented to not call this function.
-    fn build_key(_field_id: FieldId, _position: u16, _word: &str) -> Cow<[u8]> {
-        /// TODO remove this
-        unreachable!()
     }
 
     // This method is reimplemented to count the number of words in the document in each field
@@ -100,18 +93,18 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
             match eob {
                 Left(((w1, w2), prox)) => {
                     let key = build_key(*prox, w1, w2, &mut key_buffer);
-                    cached_sorter.insert_del_u32(key, docid).unwrap();
+                    cached_sorter.insert_del_u32(key, docid)?;
                 }
                 Right(((w1, w2), prox)) => {
                     let key = build_key(*prox, w1, w2, &mut key_buffer);
-                    cached_sorter.insert_add_u32(key, docid).unwrap();
+                    cached_sorter.insert_add_u32(key, docid)?;
                 }
                 Both(((w1, w2), del_prox), (_, add_prox)) => {
                     if del_prox != add_prox {
                         let key = build_key(*del_prox, w1, w2, &mut key_buffer);
-                        cached_sorter.insert_del_u32(key, docid).unwrap();
+                        cached_sorter.insert_del_u32(key, docid)?;
                         let key = build_key(*add_prox, w1, w2, &mut key_buffer);
-                        cached_sorter.insert_add_u32(key, docid).unwrap();
+                        cached_sorter.insert_add_u32(key, docid)?;
                     }
                 }
             };
