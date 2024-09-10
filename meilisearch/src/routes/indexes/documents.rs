@@ -1,4 +1,4 @@
-use std::io::ErrorKind;
+use std::io::{BufReader, ErrorKind};
 
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
@@ -423,7 +423,7 @@ async fn document_addition(
         }
     };
 
-    let (uuid, mut update_file) = index_scheduler.create_update_file(dry_run)?;
+    let (uuid, update_file) = index_scheduler.create_update_file(dry_run)?;
 
     let temp_file = match tempfile() {
         Ok(file) => file,
@@ -459,15 +459,20 @@ async fn document_addition(
         return Err(MeilisearchHttpError::Payload(ReceivePayload(Box::new(e))));
     }
 
-    let mut read_file = buffer.into_inner().into_std().await;
+    let read_file = BufReader::new(buffer.into_inner().into_std().await);
     let documents_count = tokio::task::spawn_blocking(move || {
+        let mut update_file = std::io::BufWriter::new(update_file);
         let documents_count = match format {
-            PayloadType::Json => read_json(&read_file, &mut update_file)?,
-            PayloadType::Csv { delimiter } => read_csv(&read_file, &mut update_file, delimiter)?,
-            /// TODO do not copy all the content
-            PayloadType::Ndjson => std::io::copy(&mut read_file, &mut update_file).unwrap(),
+            PayloadType::Json => read_json(read_file, &mut update_file)?,
+            PayloadType::Csv { delimiter } => read_csv(read_file, &mut update_file, delimiter)?,
+            PayloadType::Ndjson => read_ndjson(read_file, &mut update_file)?,
         };
         // we NEED to persist the file here because we moved the `udpate_file` in another task.
+        // TODO better support of errors
+        let update_file = match update_file.into_inner() {
+            Ok(update_file) => update_file,
+            Err(_) => todo!("handle errors"),
+        };
         update_file.persist()?;
         Ok(documents_count)
     })
