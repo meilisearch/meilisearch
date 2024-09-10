@@ -1,4 +1,5 @@
 pub use document_change::{Deletion, DocumentChange, Insertion, Update};
+pub use indexer::{CowStr, TopLevelMap};
 pub use items_pool::ItemsPool;
 
 use super::del_add::DelAdd;

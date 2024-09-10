@@ -9,6 +9,7 @@ use heed::{RoTxn, RwTxn};
 pub use partial_dump::PartialDump;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rayon::ThreadPool;
+pub use top_level_map::{CowStr, TopLevelMap};
 pub use update_by_function::UpdateByFunction;
 
 use super::channel::*;
