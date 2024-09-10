@@ -1,16 +1,19 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
+use std::fmt;
 use std::sync::Arc;
 
 use heed::types::Bytes;
 use heed::RoTxn;
 use memmap2::Mmap;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use serde_json::from_str;
 use IndexDocumentsMethod as Idm;
 
 use super::super::document_change::DocumentChange;
 use super::super::items_pool::ItemsPool;
-use super::DocumentChanges;
+use super::top_level_map::{CowStr, TopLevelMap};
+use super::{top_level_map, DocumentChanges};
 use crate::documents::PrimaryKey;
 use crate::update::new::{Deletion, Insertion, KvReaderFieldId, KvWriterFieldId, Update};
 use crate::update::{AvailableIds, IndexDocumentsMethod};
@@ -395,36 +398,8 @@ impl MergeChanges for MergeDocumentForUpdates {
     }
 }
 
-use std::borrow::Borrow;
-
-use serde::Deserialize;
-use serde_json::from_str;
-use serde_json::value::RawValue;
-
-#[derive(Deserialize)]
-pub struct TopLevelMap<'p>(#[serde(borrow)] BTreeMap<CowStr<'p>, &'p RawValue>);
-
-#[derive(Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
-pub struct CowStr<'p>(#[serde(borrow)] Cow<'p, str>);
-
-impl CowStr<'_> {
-    fn to_string(&self) -> String {
-        self.0.to_string()
-    }
-}
-
-impl AsRef<str> for CowStr<'_> {
-    fn as_ref(&self) -> &str {
-        self.0.as_ref()
-    }
-}
-
-impl<'doc> Borrow<str> for CowStr<'doc> {
-    fn borrow(&self) -> &str {
-        self.0.borrow()
-    }
-}
-
+/// Returns the document ID based on the primary and
+/// search for it recursively in zero-copy-deserialized documents.
 fn get_docid<'p>(
     map: &TopLevelMap<'p>,
     primary_key: &[&str],

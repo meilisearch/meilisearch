@@ -26,6 +26,7 @@ use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
 mod document_deletion;
 mod document_operation;
 mod partial_dump;
+mod top_level_map;
 mod update_by_function;
 
 pub trait DocumentChanges<'p> {
@@ -121,7 +122,7 @@ where
                             &extractor_sender,
                         )?;
                     }
-                    
+
                     {
                         let span = tracing::trace_span!(target: "indexing::documents::extract", "exact_word_docids");
                         let _entered = span.enter();
