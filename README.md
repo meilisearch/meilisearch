@@ -77,6 +77,14 @@ Take a look at the complete [Meilisearch integration list](https://www.meilisear
 
 [![Logos belonging to different languages and frameworks supported by Meilisearch, including React, Ruby on Rails, Go, Rust, and PHP](assets/integrations.png)](https://www.meilisearch.com/docs/learn/what_is_meilisearch/sdks?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=sdks-logos)
 
+## Self-Hosting Options
+
+### Elestio
+
+You can deploy Meilisearch on Elestio using one-click deployment.
+
+[![Deploy on Elestio](https://elest.io/images/logos/deploy-to-elestio-btn.png)](https://elest.io/open-source/meilisearch)
+
 ## ⚙️ Advanced usage
 
 Experienced users will want to keep our [API Reference](https://www.meilisearch.com/docs/reference/api/overview?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=advanced) close at hand.
