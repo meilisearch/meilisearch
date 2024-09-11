@@ -244,10 +244,11 @@ pub fn read_json(input: &File, output: impl io::Write) -> Result<u64> {
 }
 
 /// Reads NDJSON from file and write it in NDJSON in a file checking it along the way.
-pub fn read_ndjson(input: &File, mut output: impl io::Write) -> Result<u64> {
+pub fn read_ndjson(input: &File, output: impl io::Write) -> Result<u64> {
     // We memory map to be able to deserailize into a TopLevelMap<'pl> that
     // does not allocate when possible and only materialize the first/top level.
     let input = unsafe { Mmap::map(input).map_err(DocumentFormatError::Io)? };
+    let mut output = BufWriter::new(output);
 
     let mut count = 0;
     for result in serde_json::Deserializer::from_slice(&input).into_iter() {
