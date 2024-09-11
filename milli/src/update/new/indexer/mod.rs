@@ -22,7 +22,7 @@ use crate::documents::{
 };
 use crate::update::new::channel::{DatabaseType, ExtractorSender};
 use crate::update::GrenadParameters;
-use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
+use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, UserError};
 
 mod document_deletion;
 mod document_operation;
@@ -242,53 +242,46 @@ fn extract_and_send_docids<E: SearchableExtractor, D: DatabaseType>(
     Ok(sender.send_searchable::<D>(merger).unwrap())
 }
 
+/// Returns the primary key *field id* that has already been set for this index or the
+/// one we will guess by searching for the first key that contains "id" as a substring.
 /// TODO move this elsewhere
-pub fn guess_primary_key<'a>(
+pub fn retrieve_or_guess_primary_key<'a>(
     rtxn: &'a RoTxn<'a>,
     index: &Index,
-    mut cursor: DocumentsBatchCursor<File>,
-    documents_batch_index: &'a DocumentsBatchIndex,
+    fields_ids_map: &mut FieldsIdsMap,
+    first_document: Option<&'a TopLevelMap<'_>>,
 ) -> Result<StdResult<PrimaryKey<'a>, UserError>> {
-    // The primary key *field id* that has already been set for this index or the one
-    // we will guess by searching for the first key that contains "id" as a substring.
     match index.primary_key(rtxn)? {
-        Some(primary_key) => match PrimaryKey::new(primary_key, documents_batch_index) {
+        Some(primary_key) => match PrimaryKey::new(primary_key, fields_ids_map) {
             Some(primary_key) => Ok(Ok(primary_key)),
-            None => match cursor.next_document()? {
-                Some(first_document) => Ok(Err(UserError::MissingDocumentId {
-                    primary_key: primary_key.to_string(),
-                    document: obkv_to_object(first_document, documents_batch_index)?,
-                })),
-                None => unreachable!("Called with reader.is_empty()"),
-            },
+            None => unreachable!("Why is the primary key not in the fidmap?"),
         },
         None => {
-            let mut guesses: Vec<(u16, &str)> = documents_batch_index
-                .iter()
-                .filter(|(_, name)| name.to_lowercase().ends_with(DEFAULT_PRIMARY_KEY))
-                .map(|(field_id, name)| (*field_id, name.as_str()))
+            let first_document = match first_document {
+                Some(document) => document,
+                None => return Ok(Err(UserError::NoPrimaryKeyCandidateFound)),
+            };
+
+            let mut guesses: Vec<&str> = first_document
+                .keys()
+                .map(AsRef::as_ref)
+                .filter(|name| name.to_lowercase().ends_with(DEFAULT_PRIMARY_KEY))
                 .collect();
 
-            // sort the keys in a deterministic, obvious way, so that fields are always in the same order.
-            guesses.sort_by(|(_, left_name), (_, right_name)| {
-                // shortest name first
-                left_name.len().cmp(&right_name.len()).then_with(
-                    // then alphabetical order
-                    || left_name.cmp(right_name),
-                )
-            });
+            // sort the keys in lexicographical order, so that fields are always in the same order.
+            guesses.sort_unstable();
 
             match guesses.as_slice() {
                 [] => Ok(Err(UserError::NoPrimaryKeyCandidateFound)),
-                [(field_id, name)] => {
+                [name] => {
                     tracing::info!("Primary key was not specified in index. Inferred to '{name}'");
-                    Ok(Ok(PrimaryKey::Flat { name, field_id: *field_id }))
+                    match fields_ids_map.insert(name) {
+                        Some(field_id) => Ok(Ok(PrimaryKey::Flat { name, field_id })),
+                        None => Ok(Err(UserError::AttributeLimitReached)),
+                    }
                 }
                 multiple => Ok(Err(UserError::MultiplePrimaryKeyCandidatesFound {
-                    candidates: multiple
-                        .iter()
-                        .map(|(_, candidate)| candidate.to_string())
-                        .collect(),
+                    candidates: multiple.iter().map(|candidate| candidate.to_string()).collect(),
                 })),
             }
         }

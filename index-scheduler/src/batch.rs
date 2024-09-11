@@ -29,14 +29,17 @@ use meilisearch_types::error::Code;
 use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader, PrimaryKey};
 use meilisearch_types::milli::heed::CompactionOption;
-use meilisearch_types::milli::update::new::indexer::{self, guess_primary_key, DocumentChanges};
+use meilisearch_types::milli::update::new::indexer::{
+    self, retrieve_or_guess_primary_key, DocumentChanges,
+};
+use meilisearch_types::milli::update::new::TopLevelMap;
 use meilisearch_types::milli::update::{
     IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings as MilliSettings,
 };
 use meilisearch_types::milli::vector::parsed_vectors::{
     ExplicitVectors, VectorOrArrayOfVectors, RESERVED_VECTORS_FIELD_NAME,
 };
-use meilisearch_types::milli::{self, Filter, Object};
+use meilisearch_types::milli::{self, Filter, InternalError, Object};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::{compression, Index, VERSION_FILE_NAME};
@@ -1296,21 +1299,33 @@ impl IndexScheduler {
                     })
                     .unwrap();
 
-                // let content_file = self.file_store.get_update(*first_addition_uuid)?;
-                // let reader =
-                //     DocumentsBatchReader::from_reader(content_file).map_err(milli::Error::from)?;
-                // let (cursor, documents_batch_index) = reader.into_cursor_and_fields_index();
-                // let primary_key =
-                //     guess_primary_key(&rtxn, index, cursor, &documents_batch_index)?.unwrap();
-
                 let mut content_files = Vec::new();
                 for operation in &operations {
                     if let DocumentOperation::Add(content_uuid) = operation {
                         let content_file = self.file_store.get_update(*content_uuid)?;
                         let mmap = unsafe { memmap2::Mmap::map(&content_file)? };
-                        content_files.push(mmap);
+                        if !mmap.is_empty() {
+                            content_files.push(mmap);
+                        }
                     }
                 }
+
+                let mut fields_ids_map = index.fields_ids_map(&rtxn)?;
+                let first_document = match content_files.first() {
+                    Some(mmap) => {
+                        let mut iter = serde_json::Deserializer::from_slice(mmap).into_iter();
+                        iter.next().transpose().map_err(|e| e.into()).map_err(Error::IoError)?
+                    }
+                    None => None,
+                };
+
+                let primary_key = retrieve_or_guess_primary_key(
+                    &rtxn,
+                    index,
+                    &mut fields_ids_map,
+                    first_document.as_ref(),
+                )?
+                .unwrap();
 
                 let mut content_files_iter = content_files.iter();
                 let mut indexer = indexer::DocumentOperation::new(method);
@@ -1364,21 +1379,9 @@ impl IndexScheduler {
                 }
 
                 if !tasks.iter().all(|res| res.error.is_some()) {
-                    let mut fields_ids_map = index.fields_ids_map(&rtxn)?;
                     /// TODO create a pool if needed
                     // let pool = indexer_config.thread_pool.unwrap();
                     let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
-                    // let fields_ids_map = RwLock::new(fields_ids_map);
-
-                    /// TODO correctly guess the primary key in a NDJSON
-                    let pk = match std::env::var("MEILI_PRIMARY_KEY") {
-                        Ok(pk) => pk,
-                        Err(VarError::NotPresent) => "id".to_string(),
-                        Err(e) => panic!("primary key error: {e}"),
-                    };
-
-                    fields_ids_map.insert(&pk);
-                    let primary_key = PrimaryKey::new(&pk, &fields_ids_map).unwrap();
 
                     let param = (index, &rtxn, &primary_key);
                     let document_changes = indexer.document_changes(&mut fields_ids_map, param)?;
