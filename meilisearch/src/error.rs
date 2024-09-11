@@ -27,9 +27,9 @@ pub enum MeilisearchHttpError {
     EmptyFilter,
     #[error("Invalid syntax for the filter parameter: `expected {}, found: {1}`.", .0.join(", "))]
     InvalidExpression(&'static [&'static str], Value),
-    #[error("Using `federationOptions` is not allowed in a non-federated search.\n Hint: remove `federationOptions` from query #{0} or add `federation: {{}}` to the request.")]
+    #[error("Using `federationOptions` is not allowed in a non-federated search.\n - Hint: remove `federationOptions` from query #{0} or add `federation` to the request.")]
     FederationOptionsInNonFederatedRequest(usize),
-    #[error("Inside `.queries[{0}]`: Using pagination options is not allowed in federated queries.\n Hint: remove `{1}` from query #{0} or remove `federation: {{}}` from the request")]
+    #[error("Inside `.queries[{0}]`: Using pagination options is not allowed in federated queries.\n - Hint: remove `{1}` from query #{0} or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search")]
     PaginationInFederatedQuery(usize, &'static str),
     #[error("A {0} payload is missing.")]
     MissingPayload(PayloadType),
