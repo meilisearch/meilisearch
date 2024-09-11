@@ -58,7 +58,7 @@ where
 {
     let (merger_sender, writer_receiver) = merger_writer_channel(10_000);
     // This channel acts as a rendezvous point to ensure that we are one task ahead
-    let (extractor_sender, merger_receiver) = extractors_merger_channels(0);
+    let (extractor_sender, merger_receiver) = extractors_merger_channels(4);
 
     let fields_ids_map_lock = RwLock::new(fields_ids_map);
     let global_fields_ids_map = GlobalFieldsIdsMap::new(&fields_ids_map_lock);
@@ -103,62 +103,56 @@ where
                     {
                         let span = tracing::trace_span!(target: "indexing::documents::extract", "word_docids");
                         let _entered = span.enter();
-                        extract_and_send_docids::<WordDocidsExtractor, WordDocids>(
-                            index,
-                            &global_fields_ids_map,
-                            grenad_parameters,
-                            document_changes.clone(),
-                            &extractor_sender,
-                        )?;
+
+                        let WordDocidsMergers {
+                            word_fid_docids,
+                            word_docids,
+                            exact_word_docids,
+                            word_position_docids,
+                            fid_word_count_docids,
+                        } = WordDocidsExtractors::run_extraction(index, &global_fields_ids_map, grenad_parameters, document_changes.clone())?;
+                        extractor_sender.send_searchable::<WordDocids>(word_docids).unwrap();
+                        extractor_sender.send_searchable::<WordFidDocids>(word_fid_docids).unwrap();
+                        extractor_sender.send_searchable::<ExactWordDocids>(exact_word_docids).unwrap();
+                        extractor_sender.send_searchable::<WordPositionDocids>(word_position_docids).unwrap();
+                        extractor_sender.send_searchable::<FidWordCountDocids>(fid_word_count_docids).unwrap();
                     }
 
-                    {
-                        let span = tracing::trace_span!(target: "indexing::documents::extract", "word_fid_docids");
-                        let _entered = span.enter();
-                        extract_and_send_docids::<WordFidDocidsExtractor, WordFidDocids>(
-                            index,
-                            &global_fields_ids_map,
-                            grenad_parameters,
-                            document_changes.clone(),
-                            &extractor_sender,
-                        )?;
-                    }
+                    // {
+                    //     let span = tracing::trace_span!(target: "indexing::documents::extract", "exact_word_docids");
+                    //     let _entered = span.enter();
+                    //     extract_and_send_docids::<ExactWordDocidsExtractor, ExactWordDocids>(
+                    //         index,
+                    //         &global_fields_ids_map,
+                    //         grenad_parameters,
+                    //         document_changes.clone(),
+                    //         &extractor_sender,
+                    //     )?;
+                    // }
 
-                    {
-                        let span = tracing::trace_span!(target: "indexing::documents::extract", "exact_word_docids");
-                        let _entered = span.enter();
-                        extract_and_send_docids::<ExactWordDocidsExtractor, ExactWordDocids>(
-                            index,
-                            &global_fields_ids_map,
-                            grenad_parameters,
-                            document_changes.clone(),
-                            &extractor_sender,
-                        )?;
-                    }
+                    // {
+                    //     let span = tracing::trace_span!(target: "indexing::documents::extract", "word_position_docids");
+                    //     let _entered = span.enter();
+                    //     extract_and_send_docids::<WordPositionDocidsExtractor, WordPositionDocids>(
+                    //         index,
+                    //         &global_fields_ids_map,
+                    //         grenad_parameters,
+                    //         document_changes.clone(),
+                    //         &extractor_sender,
+                    //     )?;
+                    // }
 
-                    {
-                        let span = tracing::trace_span!(target: "indexing::documents::extract", "word_position_docids");
-                        let _entered = span.enter();
-                        extract_and_send_docids::<WordPositionDocidsExtractor, WordPositionDocids>(
-                            index,
-                            &global_fields_ids_map,
-                            grenad_parameters,
-                            document_changes.clone(),
-                            &extractor_sender,
-                        )?;
-                    }
-
-                    {
-                        let span = tracing::trace_span!(target: "indexing::documents::extract", "fid_word_count_docids");
-                        let _entered = span.enter();
-                        extract_and_send_docids::<FidWordCountDocidsExtractor, FidWordCountDocids>(
-                            index,
-                            &global_fields_ids_map,
-                            GrenadParameters::default(),
-                            document_changes.clone(),
-                            &extractor_sender,
-                        )?;
-                    }
+                    // {
+                    //     let span = tracing::trace_span!(target: "indexing::documents::extract", "fid_word_count_docids");
+                    //     let _entered = span.enter();
+                    //     extract_and_send_docids::<FidWordCountDocidsExtractor, FidWordCountDocids>(
+                    //         index,
+                    //         &global_fields_ids_map,
+                    //         GrenadParameters::default(),
+                    //         document_changes.clone(),
+                    //         &extractor_sender,
+                    //     )?;
+                    // }
 
                     {
                         let span = tracing::trace_span!(target: "indexing::documents::extract", "word_pair_proximity_docids");

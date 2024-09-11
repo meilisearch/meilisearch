@@ -149,7 +149,7 @@ fn process_document_tokens(
     word_positions: &mut VecDeque<(String, u16)>,
     word_pair_proximity: &mut BTreeMap<(String, String), u8>,
 ) -> Result<()> {
-    let mut token_fn = |_fid: FieldId, pos: u16, word: &str| {
+    let mut token_fn = |_fname: &str, _fid: FieldId, pos: u16, word: &str| {
         // drain the proximity window until the head word is considered close to the word we are inserting.
         while word_positions
             .front()

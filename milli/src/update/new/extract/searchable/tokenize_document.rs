@@ -26,7 +26,7 @@ impl<'a> DocumentTokenizer<'a> {
         &self,
         obkv: &KvReaderFieldId,
         field_id_map: &mut GlobalFieldsIdsMap,
-        token_fn: &mut impl FnMut(FieldId, u16, &str) -> Result<()>,
+        token_fn: &mut impl FnMut(&str, FieldId, u16, &str) -> Result<()>,
     ) -> Result<()> {
         let mut field_position = HashMap::new();
         let mut field_name = String::new();
@@ -56,7 +56,7 @@ impl<'a> DocumentTokenizer<'a> {
                     Value::Number(n) => {
                         let token = n.to_string();
                         if let Ok(position) = (*position).try_into() {
-                            token_fn(field_id, position, token.as_str())?;
+                            token_fn(name, field_id, position, token.as_str())?;
                         }
 
                         Ok(())
@@ -80,7 +80,7 @@ impl<'a> DocumentTokenizer<'a> {
                             if !token.is_empty() && token.len() <= MAX_WORD_LENGTH {
                                 *position = index;
                                 if let Ok(position) = (*position).try_into() {
-                                    token_fn(field_id, position, token)?;
+                                    token_fn(name, field_id, position, token)?;
                                 }
                             }
                         }
@@ -235,7 +235,7 @@ mod test {
 
         let mut words = std::collections::BTreeMap::new();
         document_tokenizer
-            .tokenize_document(obkv, &mut global_fields_ids_map, &mut |fid, pos, word| {
+            .tokenize_document(obkv, &mut global_fields_ids_map, &mut |_fname, fid, pos, word| {
                 words.insert([fid, pos], word.to_string());
                 Ok(())
             })

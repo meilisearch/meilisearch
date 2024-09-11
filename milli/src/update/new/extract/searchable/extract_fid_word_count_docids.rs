@@ -38,7 +38,7 @@ impl SearchableExtractor for FidWordCountDocidsExtractor {
         match document_change {
             DocumentChange::Deletion(inner) => {
                 let mut fid_word_count = HashMap::new();
-                let mut token_fn = |fid: FieldId, _pos: u16, _word: &str| {
+                let mut token_fn = |_fname: &str, fid: FieldId, _pos: u16, _word: &str| {
                     fid_word_count.entry(fid).and_modify(|count| *count += 1).or_insert(1);
                     Ok(())
                 };
@@ -58,7 +58,7 @@ impl SearchableExtractor for FidWordCountDocidsExtractor {
             }
             DocumentChange::Update(inner) => {
                 let mut fid_word_count = HashMap::new();
-                let mut token_fn = |fid: FieldId, _pos: u16, _word: &str| {
+                let mut token_fn = |_fname: &str, fid: FieldId, _pos: u16, _word: &str| {
                     fid_word_count
                         .entry(fid)
                         .and_modify(|(current_count, _new_count)| *current_count += 1)
@@ -71,7 +71,7 @@ impl SearchableExtractor for FidWordCountDocidsExtractor {
                     &mut token_fn,
                 )?;
 
-                let mut token_fn = |fid: FieldId, _pos: u16, _word: &str| {
+                let mut token_fn = |_fname: &str, fid: FieldId, _pos: u16, _word: &str| {
                     fid_word_count
                         .entry(fid)
                         .and_modify(|(_current_count, new_count)| *new_count += 1)
@@ -96,7 +96,7 @@ impl SearchableExtractor for FidWordCountDocidsExtractor {
             }
             DocumentChange::Insertion(inner) => {
                 let mut fid_word_count = HashMap::new();
-                let mut token_fn = |fid: FieldId, _pos: u16, _word: &str| {
+                let mut token_fn = |_fname: &str, fid: FieldId, _pos: u16, _word: &str| {
                     fid_word_count.entry(fid).and_modify(|count| *count += 1).or_insert(1);
                     Ok(())
                 };
