@@ -10,7 +10,7 @@ use milli::Object;
 use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_json::error::Category;
-use serde_json::{Map, Value};
+use serde_json::{to_writer, Map, Value};
 
 use crate::error::{Code, ErrorCode};
 
@@ -147,7 +147,7 @@ fn parse_csv_header(header: &str) -> (&str, AllowedType) {
     }
 }
 
-/// Reads CSV from input and write an obkv batch to writer.
+/// Reads CSV from file and write it in NDJSON in a file checking it along the way.
 pub fn read_csv(input: &File, output: impl io::Write, delimiter: u8) -> Result<u64> {
     let ptype = PayloadType::Csv { delimiter };
     let mut output = BufWriter::new(output);
@@ -201,32 +201,24 @@ pub fn read_csv(input: &File, output: impl io::Write, delimiter: u8) -> Result<u
             *object.get_mut(*name).expect("encountered an unknown field") = value;
         }
 
-        serde_json::to_writer(&mut output, &object)
-            .map_err(|e| DocumentFormatError::from((ptype, e)))?;
+        to_writer(&mut output, &object).map_err(|e| DocumentFormatError::from((ptype, e)))?;
     }
 
     Ok(line as u64)
 }
 
-/// Reads JSON from temporary file and write an obkv batch to writer.
+/// Reads JSON from file and write it in NDJSON in a file checking it along the way.
 pub fn read_json(input: &File, output: impl io::Write) -> Result<u64> {
     // We memory map to be able to deserailize into a TopLevelMap<'pl> that
     // does not allocate when possible and only materialize the first/top level.
     let input = unsafe { Mmap::map(input).map_err(DocumentFormatError::Io)? };
 
+    let mut out = BufWriter::new(output);
     let mut deserializer = serde_json::Deserializer::from_slice(&input);
-    let mut output = BufWriter::new(output);
-    let mut count = 0;
-
-    let count_and_write = |obj: TopLevelMap| {
-        count += 1;
-        serde_json::to_writer(&mut output, &obj)
-    };
-
-    match array_each(&mut deserializer, count_and_write) {
+    let count = match array_each(&mut deserializer, |obj: TopLevelMap| to_writer(&mut out, &obj)) {
         // The json data has been deserialized and does not need to be processed again.
         // The data has been transferred to the writer during the deserialization process.
-        Ok(Ok(_)) => (),
+        Ok(Ok(count)) => count,
         Ok(Err(e)) => return Err(DocumentFormatError::from((PayloadType::Json, e))),
         Err(e) => {
             // Attempt to deserialize a single json string when the cause of the exception is not Category.data
@@ -238,17 +230,19 @@ pub fn read_json(input: &File, output: impl io::Write) -> Result<u64> {
             let content: Object = serde_json::from_slice(&input)
                 .map_err(Error::Json)
                 .map_err(|e| (PayloadType::Json, e))?;
-            serde_json::to_writer(&mut output, &content).unwrap()
+            to_writer(&mut out, &content)
+                .map(|_| 1)
+                .map_err(|e| DocumentFormatError::from((PayloadType::Json, e)))?
         }
-    }
+    };
 
-    match output.into_inner() {
+    match out.into_inner() {
         Ok(_) => Ok(count),
         Err(ie) => Err(DocumentFormatError::Io(ie.into_error())),
     }
 }
 
-/// Reads JSON from temporary file and write it into the writer.
+/// Reads NDJSON from file and write it in NDJSON in a file checking it along the way.
 pub fn read_ndjson(input: &File, mut output: impl io::Write) -> Result<u64> {
     // We memory map to be able to deserailize into a TopLevelMap<'pl> that
     // does not allocate when possible and only materialize the first/top level.
@@ -258,7 +252,7 @@ pub fn read_ndjson(input: &File, mut output: impl io::Write) -> Result<u64> {
     for result in serde_json::Deserializer::from_slice(&input).into_iter() {
         count += 1;
         result
-            .and_then(|map: TopLevelMap| serde_json::to_writer(&mut output, &map))
+            .and_then(|map: TopLevelMap| to_writer(&mut output, &map))
             .map_err(|e| DocumentFormatError::from((PayloadType::Ndjson, e)))?;
     }
 
@@ -305,7 +299,7 @@ where
                 match self.0(value) {
                     Ok(()) => max += 1,
                     Err(e) => return Ok(Err(e)),
-                };
+                }
             }
             Ok(Ok(max))
         }
