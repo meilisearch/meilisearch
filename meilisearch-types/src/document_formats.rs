@@ -155,7 +155,8 @@ pub fn read_csv(input: &File, output: impl io::Write, delimiter: u8) -> Result<u
 
     let headers = reader.headers().map_err(|e| DocumentFormatError::from((ptype, e)))?.clone();
     let typed_fields: Vec<_> = headers.iter().map(parse_csv_header).collect();
-    let mut object: Map<_, _> = headers.iter().map(|k| (k.to_string(), Value::Null)).collect();
+    let mut object: Map<_, _> =
+        typed_fields.iter().map(|(k, _)| (k.to_string(), Value::Null)).collect();
 
     let mut line = 0;
     let mut record = csv::StringRecord::new();
