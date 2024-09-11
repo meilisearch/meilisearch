@@ -107,7 +107,7 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
                         cached_sorter.insert_add_u32(key, docid)?;
                     }
                 }
-            };
+            }
         }
 
         Ok(())

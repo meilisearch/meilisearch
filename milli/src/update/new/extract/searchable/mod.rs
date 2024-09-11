@@ -13,7 +13,7 @@ pub use extract_word_docids::{
 pub use extract_word_pair_proximity_docids::WordPairProximityDocidsExtractor;
 use grenad::Merger;
 use heed::RoTxn;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
 use tokenize_document::{tokenizer_builder, DocumentTokenizer};
 
 use super::cache::CboCachedSorter;
@@ -78,27 +78,42 @@ pub trait SearchableExtractor {
             ))
         });
 
-        document_changes.into_par_iter().try_for_each(|document_change| {
-            context_pool.with(|(rtxn, document_tokenizer, fields_ids_map, cached_sorter)| {
-                Self::extract_document_change(
-                    &*rtxn,
-                    index,
-                    document_tokenizer,
-                    fields_ids_map,
-                    cached_sorter,
-                    document_change?,
-                )
-            })
-        })?;
-
-        let mut builder = grenad::MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
-        for (_rtxn, _tokenizer, _fields_ids_map, cache) in context_pool.into_items() {
-            let sorter = cache.into_sorter()?;
-            let readers = sorter.into_reader_cursors()?;
-            builder.extend(readers);
+        {
+            let span =
+                tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
+            let _entered = span.enter();
+            document_changes.into_par_iter().try_for_each(|document_change| {
+                context_pool.with(|(rtxn, document_tokenizer, fields_ids_map, cached_sorter)| {
+                    Self::extract_document_change(
+                        &*rtxn,
+                        index,
+                        document_tokenizer,
+                        fields_ids_map,
+                        cached_sorter,
+                        document_change?,
+                    )
+                })
+            })?;
         }
+        {
+            let mut builder = grenad::MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
+            let span =
+                tracing::trace_span!(target: "indexing::documents::extract", "merger_building");
+            let _entered = span.enter();
 
-        Ok(builder.build())
+            let readers: Vec<_> = context_pool
+                .into_items()
+                .par_bridge()
+                .map(|(_rtxn, _tokenizer, _fields_ids_map, cached_sorter)| {
+                    let sorter = cached_sorter.into_sorter()?;
+                    sorter.into_reader_cursors()
+                })
+                .collect();
+            for reader in readers {
+                builder.extend(reader?);
+            }
+            Ok(builder.build())
+        }
     }
 
     fn extract_document_change(

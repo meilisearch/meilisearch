@@ -426,21 +426,38 @@ impl WordDocidsMergerBuilders {
             current_docid: _,
         } = other;
 
-        let sorter = word_fid_docids.into_sorter()?;
-        let readers = sorter.into_reader_cursors()?;
-        self.word_fid_docids.extend(readers);
-        let sorter = word_docids.into_sorter()?;
-        let readers = sorter.into_reader_cursors()?;
-        self.word_docids.extend(readers);
-        let sorter = exact_word_docids.into_sorter()?;
-        let readers = sorter.into_reader_cursors()?;
-        self.exact_word_docids.extend(readers);
-        let sorter = word_position_docids.into_sorter()?;
-        let readers = sorter.into_reader_cursors()?;
-        self.word_position_docids.extend(readers);
-        let sorter = fid_word_count_docids.into_sorter()?;
-        let readers = sorter.into_reader_cursors()?;
-        self.fid_word_count_docids.extend(readers);
+        let mut word_fid_docids_readers = Ok(vec![]);
+        let mut word_docids_readers = Ok(vec![]);
+        let mut exact_word_docids_readers = Ok(vec![]);
+        let mut word_position_docids_readers = Ok(vec![]);
+        let mut fid_word_count_docids_readers = Ok(vec![]);
+        rayon::scope(|s| {
+            s.spawn(|_| {
+                word_fid_docids_readers =
+                    word_fid_docids.into_sorter().and_then(|s| s.into_reader_cursors());
+            });
+            s.spawn(|_| {
+                word_docids_readers =
+                    word_docids.into_sorter().and_then(|s| s.into_reader_cursors());
+            });
+            s.spawn(|_| {
+                exact_word_docids_readers =
+                    exact_word_docids.into_sorter().and_then(|s| s.into_reader_cursors());
+            });
+            s.spawn(|_| {
+                word_position_docids_readers =
+                    word_position_docids.into_sorter().and_then(|s| s.into_reader_cursors());
+            });
+            s.spawn(|_| {
+                fid_word_count_docids_readers =
+                    fid_word_count_docids.into_sorter().and_then(|s| s.into_reader_cursors());
+            });
+        });
+        self.word_fid_docids.extend(word_fid_docids_readers?);
+        self.word_docids.extend(word_docids_readers?);
+        self.exact_word_docids.extend(exact_word_docids_readers?);
+        self.word_position_docids.extend(word_position_docids_readers?);
+        self.fid_word_count_docids.extend(fid_word_count_docids_readers?);
 
         Ok(())
     }
@@ -509,25 +526,35 @@ impl WordDocidsExtractors {
             ))
         });
 
-        document_changes.into_par_iter().try_for_each(|document_change| {
-            context_pool.with(|(rtxn, document_tokenizer, fields_ids_map, cached_sorter)| {
-                Self::extract_document_change(
-                    &*rtxn,
-                    index,
-                    document_tokenizer,
-                    fields_ids_map,
-                    cached_sorter,
-                    document_change?,
-                )
-            })
-        })?;
-
-        let mut builder = WordDocidsMergerBuilders::new();
-        for (_rtxn, _tokenizer, _fields_ids_map, cache) in context_pool.into_items() {
-            builder.add_sorters(cache)?;
+        {
+            let span =
+                tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
+            let _entered = span.enter();
+            document_changes.into_par_iter().try_for_each(|document_change| {
+                context_pool.with(|(rtxn, document_tokenizer, fields_ids_map, cached_sorter)| {
+                    Self::extract_document_change(
+                        &*rtxn,
+                        index,
+                        document_tokenizer,
+                        fields_ids_map,
+                        cached_sorter,
+                        document_change?,
+                    )
+                })
+            })?;
         }
 
-        Ok(builder.build())
+        {
+            let span =
+                tracing::trace_span!(target: "indexing::documents::extract", "merger_building");
+            let _entered = span.enter();
+            let mut builder = WordDocidsMergerBuilders::new();
+            for (_rtxn, _tokenizer, _fields_ids_map, cache) in context_pool.into_items() {
+                builder.add_sorters(cache)?;
+            }
+
+            Ok(builder.build())
+        }
     }
 
     fn extract_document_change(
