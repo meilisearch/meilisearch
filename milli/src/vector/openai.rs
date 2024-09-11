@@ -66,11 +66,11 @@ pub enum EmbeddingModel {
     // # WARNING
     //
     // If ever adding a model, make sure to add it to the list of supported models below.
-    #[default]
     #[serde(rename = "text-embedding-ada-002")]
     #[deserr(rename = "text-embedding-ada-002")]
     TextEmbeddingAda002,
 
+    #[default]
     #[serde(rename = "text-embedding-3-small")]
     #[deserr(rename = "text-embedding-3-small")]
     TextEmbedding3Small,
