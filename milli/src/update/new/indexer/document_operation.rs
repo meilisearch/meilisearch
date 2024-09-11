@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
-use std::fmt;
 use std::sync::Arc;
 
 use heed::types::Bytes;
@@ -13,7 +12,7 @@ use IndexDocumentsMethod as Idm;
 use super::super::document_change::DocumentChange;
 use super::super::items_pool::ItemsPool;
 use super::top_level_map::{CowStr, TopLevelMap};
-use super::{top_level_map, DocumentChanges};
+use super::DocumentChanges;
 use crate::documents::PrimaryKey;
 use crate::update::new::{Deletion, Insertion, KvReaderFieldId, KvWriterFieldId, Update};
 use crate::update::{AvailableIds, IndexDocumentsMethod};
@@ -57,7 +56,8 @@ impl<'pl> DocumentOperation<'pl> {
     /// The payload is expected to be in the grenad format
     pub fn add_documents(&mut self, payload: &'pl Mmap) -> Result<PayloadStats> {
         payload.advise(memmap2::Advice::Sequential)?;
-        let document_count = memchr::Memchr::new(b'\n', &payload[..]).count();
+        let document_count =
+            memchr::memmem::find_iter(&payload[..], "}{").count().saturating_add(1);
         self.operations.push(Payload::Addition(&payload[..]));
         Ok(PayloadStats { bytes: payload.len() as u64, document_count })
     }
