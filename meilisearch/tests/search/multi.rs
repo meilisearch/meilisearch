@@ -3856,6 +3856,214 @@ async fn federation_federated_contains_pagination() {
 }
 
 #[actix_rt::test]
+async fn federation_federated_contains_facets() {
+    let server = Server::new().await;
+
+    let index = server.index("fruits");
+
+    let (value, _) = index
+        .update_settings(
+            json!({"searchableAttributes": ["name"], "filterableAttributes": ["BOOST"]}),
+        )
+        .await;
+
+    index.wait_task(value.uid()).await;
+
+    let documents = FRUITS_DOCUMENTS.clone();
+    let (value, _) = index.add_documents(documents, None).await;
+    index.wait_task(value.uid()).await;
+
+    // empty facets are actually OK
+    let (response, code) = server
+        .multi_search(json!({"federation": {}, "queries": [
+        {"indexUid" : "fruits", "q": "apple red"},
+        {"indexUid": "fruits", "q": "apple red", "facets": []},
+        ]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
+    {
+      "hits": [
+        {
+          "name": "Red apple gala",
+          "id": "red-apple-gala",
+          "_federation": {
+            "indexUid": "fruits",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.953042328042328
+          }
+        },
+        {
+          "name": "Exclusive sale: Red delicious apple",
+          "id": "red-delicious-boosted",
+          "BOOST": true,
+          "_federation": {
+            "indexUid": "fruits",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.9093915343915344
+          }
+        },
+        {
+          "name": "Exclusive sale: green apple",
+          "id": "green-apple-boosted",
+          "BOOST": true,
+          "_federation": {
+            "indexUid": "fruits",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.4393939393939394
+          }
+        }
+      ],
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 3
+    }
+    "###);
+
+    // fails
+    let (response, code) = server
+        .multi_search(json!({"federation": {}, "queries": [
+        {"indexUid" : "fruits", "q": "apple red"},
+        {"indexUid": "fruits", "q": "apple red", "facets": ["BOOSTED"]},
+        ]}))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
+    {
+      "message": "Inside `.queries[1]`: Using facet options is not allowed in federated queries.\n Hint: remove `facets` from query #1 or remove `federation` from the request",
+      "code": "invalid_multi_search_query_facets",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_facets"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn federation_non_faceted_for_an_index() {
+    let server = Server::new().await;
+
+    let index = server.index("fruits");
+
+    let (value, _) = index
+        .update_settings(
+            json!({"searchableAttributes": ["name"], "filterableAttributes": ["BOOST", "id", "name"]}),
+        )
+        .await;
+
+    index.wait_task(value.uid()).await;
+
+    let index = server.index("fruits-no-name");
+
+    let (value, _) = index
+        .update_settings(
+            json!({"searchableAttributes": ["name"], "filterableAttributes": ["BOOST", "id"]}),
+        )
+        .await;
+
+    index.wait_task(value.uid()).await;
+
+    let index = server.index("fruits-no-facets");
+
+    let (value, _) = index.update_settings(json!({"searchableAttributes": ["name"]})).await;
+
+    index.wait_task(value.uid()).await;
+
+    let documents = FRUITS_DOCUMENTS.clone();
+    let (value, _) = index.add_documents(documents, None).await;
+    index.wait_task(value.uid()).await;
+
+    // fails
+    let (response, code) = server
+        .multi_search(json!({"federation": {
+          "facetsByIndex": {
+            "fruits": ["BOOST", "id", "name"],
+            "fruits-no-name": ["BOOST", "id", "name"],
+          }
+        }, "queries": [
+        {"indexUid" : "fruits", "q": "apple red"},
+        {"indexUid": "fruits-no-name", "q": "apple red"},
+        ]}))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
+    {
+      "message": "Inside `.federation.facetsByIndex.fruits-no-name`: Invalid facet distribution, attribute `name` is not filterable. The available filterable attributes are `BOOST, id`.\n Note: index `fruits-no-name` used in `.queries[1]`",
+      "code": "invalid_search_facets",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+    }
+    "###);
+
+    // still fails
+    let (response, code) = server
+        .multi_search(json!({"federation": {
+          "facetsByIndex": {
+            "fruits": ["BOOST", "id", "name"],
+            "fruits-no-name": ["BOOST", "id", "name"],
+          }
+        }, "queries": [
+        {"indexUid" : "fruits", "q": "apple red"},
+        {"indexUid": "fruits", "q": "apple red"},
+        ]}))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
+    {
+      "message": "Inside `.federation.facetsByIndex.fruits-no-name`: Invalid facet distribution, attribute `name` is not filterable. The available filterable attributes are `BOOST, id`.\n Note: index `fruits-no-name` is not used in queries",
+      "code": "invalid_search_facets",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+    }
+    "###);
+
+    // fails
+    let (response, code) = server
+        .multi_search(json!({"federation": {
+          "facetsByIndex": {
+            "fruits": ["BOOST", "id", "name"],
+            "fruits-no-name": ["BOOST", "id"],
+            "fruits-no-facets": ["BOOST", "id"],
+          }
+        }, "queries": [
+        {"indexUid" : "fruits", "q": "apple red"},
+        {"indexUid": "fruits", "q": "apple red"},
+        ]}))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
+    {
+      "message": "Inside `.federation.facetsByIndex.fruits-no-facets`: Invalid facet distribution, this index does not have configured filterable attributes.\n Note: index `fruits-no-facets` is not used in queries",
+      "code": "invalid_search_facets",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+    }
+    "###);
+
+    // also fails
+    let (response, code) = server
+        .multi_search(json!({"federation": {
+          "facetsByIndex": {
+            "zorglub": ["BOOST", "id", "name"],
+            "fruits": ["BOOST", "id", "name"],
+          }
+        }, "queries": [
+        {"indexUid" : "fruits", "q": "apple red"},
+        {"indexUid": "fruits", "q": "apple red"},
+        ]}))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
+    {
+      "message": "Inside `.federation.facetsByIndex.zorglub`: Index `zorglub` not found.\n Note: index `zorglub` is not used in queries",
+      "code": "index_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#index_not_found"
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn federation_non_federated_contains_federation_option() {
     let server = Server::new().await;
 
@@ -4430,6 +4638,1835 @@ async fn federation_vector_two_indexes() {
       "offset": 0,
       "estimatedTotalHits": 8,
       "semanticHitCount": 8
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn federation_facets_different_indexes_same_facet() {
+    let server = Server::new().await;
+
+    let index = server.index("movies");
+
+    let documents = DOCUMENTS.clone();
+    let (value, _) = index.add_documents(documents, None).await;
+    index.wait_task(value.uid()).await;
+
+    let (value, _) = index
+        .update_settings(json!({
+          "sortableAttributes": ["title"],
+          "filterableAttributes": ["title", "color"],
+          "rankingRules": [
+            "sort",
+            "words",
+            "typo",
+            "proximity",
+            "attribute",
+            "exactness"
+          ]
+        }))
+        .await;
+    index.wait_task(value.uid()).await;
+
+    let index = server.index("batman");
+
+    let documents = SCORE_DOCUMENTS.clone();
+    let (value, _) = index.add_documents(documents, None).await;
+    index.wait_task(value.uid()).await;
+
+    let (value, _) = index
+        .update_settings(json!({
+          "sortableAttributes": ["title"],
+          "filterableAttributes": ["title"],
+          "rankingRules": [
+            "sort",
+            "words",
+            "typo",
+            "proximity",
+            "attribute",
+            "exactness"
+          ]
+        }))
+        .await;
+    index.wait_task(value.uid()).await;
+
+    let index = server.index("batman-2");
+
+    let documents = SCORE_DOCUMENTS.clone();
+    let (value, _) = index.add_documents(documents, None).await;
+    index.wait_task(value.uid()).await;
+
+    let (value, _) = index
+        .update_settings(json!({
+          "sortableAttributes": ["title"],
+          "filterableAttributes": ["title"],
+          "rankingRules": [
+            "sort",
+            "words",
+            "typo",
+            "proximity",
+            "attribute",
+            "exactness"
+          ]
+        }))
+        .await;
+    index.wait_task(value.uid()).await;
+
+    // return titles ordered accross indexes
+    let (response, code) = server
+        .multi_search(json!({"federation": {
+          "facetsByIndex": {
+            "movies": ["title", "color"],
+            "batman": ["title"],
+            "batman-2": ["title"],
+          }
+        }, "queries": [
+          {"indexUid" : "movies", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+          {"indexUid" : "batman", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+          {"indexUid" : "batman-2", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+        ]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
+    {
+      "hits": [
+        {
+          "title": "Badman",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Badman",
+          "_federation": {
+            "indexUid": "batman-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman",
+          "_federation": {
+            "indexUid": "batman-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman Returns",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman Returns",
+          "_federation": {
+            "indexUid": "batman-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 1",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 1",
+          "_federation": {
+            "indexUid": "batman-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 2",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 2",
+          "_federation": {
+            "indexUid": "batman-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Captain Marvel",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Escape Room",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Gläss",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "How to Train Your Dragon: The Hidden World",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Shazam!",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        }
+      ],
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 15,
+      "facetsByIndex": {
+        "batman": {
+          "distribution": {
+            "title": {
+              "Badman": 1,
+              "Batman": 1,
+              "Batman Returns": 1,
+              "Batman the dark knight returns: Part 1": 1,
+              "Batman the dark knight returns: Part 2": 1
+            }
+          },
+          "stats": {}
+        },
+        "batman-2": {
+          "distribution": {
+            "title": {
+              "Badman": 1,
+              "Batman": 1,
+              "Batman Returns": 1,
+              "Batman the dark knight returns: Part 1": 1,
+              "Batman the dark knight returns: Part 2": 1
+            }
+          },
+          "stats": {}
+        },
+        "movies": {
+          "distribution": {
+            "color": {
+              "blue": 3,
+              "green": 2,
+              "red": 3,
+              "yellow": 2
+            },
+            "title": {
+              "Captain Marvel": 1,
+              "Escape Room": 1,
+              "Gläss": 1,
+              "How to Train Your Dragon: The Hidden World": 1,
+              "Shazam!": 1
+            }
+          },
+          "stats": {}
+        }
+      }
+    }
+    "###);
+
+    let (response, code) = server
+    .multi_search(json!({"federation": {
+      "facetsByIndex": {
+        "movies": ["title"],
+        "batman": ["title"],
+        "batman-2": ["title"]
+      },
+      "mergeFacets": {}
+    }, "queries": [
+      {"indexUid" : "movies", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+      {"indexUid" : "batman", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+      {"indexUid" : "batman-2", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+    ]}))
+    .await;
+    snapshot!(code, @"200 OK");
+    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
+    {
+      "hits": [
+        {
+          "title": "Badman",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Badman",
+          "_federation": {
+            "indexUid": "batman-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman",
+          "_federation": {
+            "indexUid": "batman-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman Returns",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman Returns",
+          "_federation": {
+            "indexUid": "batman-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 1",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 1",
+          "_federation": {
+            "indexUid": "batman-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 2",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 2",
+          "_federation": {
+            "indexUid": "batman-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Captain Marvel",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Escape Room",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Gläss",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "How to Train Your Dragon: The Hidden World",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Shazam!",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        }
+      ],
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 15,
+      "facetDistribution": {
+        "title": {
+          "Badman": 2,
+          "Batman": 2,
+          "Batman Returns": 2,
+          "Batman the dark knight returns: Part 1": 2,
+          "Batman the dark knight returns: Part 2": 2,
+          "Captain Marvel": 1,
+          "Escape Room": 1,
+          "Gläss": 1,
+          "How to Train Your Dragon: The Hidden World": 1,
+          "Shazam!": 1
+        }
+      },
+      "facetStats": {}
+    }
+    "###);
+
+    // mix and match query: will be sorted across indexes
+    let (response, code) = server
+        .multi_search(json!({"federation": {
+          "facetsByIndex": {
+            "movies": [],
+            "batman": ["title"],
+            "batman-2": ["title"]
+          }
+        }, "queries": [
+          {"indexUid" : "batman", "q": "badman returns", "sort": ["title:desc"], "attributesToRetrieve": ["title"] },
+          {"indexUid" : "batman-2", "q": "badman returns", "sort": ["title:desc"], "attributesToRetrieve": ["title"] },
+          {"indexUid" : "movies", "q": "captain", "sort": ["title:desc"], "attributesToRetrieve": ["title"] },
+          {"indexUid" : "batman", "q": "the bat", "sort": ["title:desc"], "attributesToRetrieve": ["title"] },
+        ]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
+    {
+      "hits": [
+        {
+          "title": "Captain Marvel",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 2,
+            "weightedRankingScore": 0.9848484848484848
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 2",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 3,
+            "weightedRankingScore": 0.9528218694885362
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 2",
+          "_federation": {
+            "indexUid": "batman-2",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.7028218694885362
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 1",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 3,
+            "weightedRankingScore": 0.9528218694885362
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 1",
+          "_federation": {
+            "indexUid": "batman-2",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.7028218694885362
+          }
+        },
+        {
+          "title": "Batman Returns",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.8317901234567902
+          }
+        },
+        {
+          "title": "Batman Returns",
+          "_federation": {
+            "indexUid": "batman-2",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.8317901234567902
+          }
+        },
+        {
+          "title": "Batman",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.23106060606060605
+          }
+        },
+        {
+          "title": "Batman",
+          "_federation": {
+            "indexUid": "batman-2",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.23106060606060605
+          }
+        },
+        {
+          "title": "Badman",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.5
+          }
+        },
+        {
+          "title": "Badman",
+          "_federation": {
+            "indexUid": "batman-2",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.5
+          }
+        }
+      ],
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 11,
+      "facetsByIndex": {
+        "batman": {
+          "distribution": {
+            "title": {
+              "Badman": 1,
+              "Batman": 1,
+              "Batman Returns": 1,
+              "Batman the dark knight returns: Part 1": 1,
+              "Batman the dark knight returns: Part 2": 1
+            }
+          },
+          "stats": {}
+        },
+        "batman-2": {
+          "distribution": {
+            "title": {
+              "Badman": 1,
+              "Batman": 1,
+              "Batman Returns": 1,
+              "Batman the dark knight returns: Part 1": 1,
+              "Batman the dark knight returns: Part 2": 1
+            }
+          },
+          "stats": {}
+        },
+        "movies": {
+          "distribution": {},
+          "stats": {}
+        }
+      }
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn federation_facets_same_indexes() {
+    let server = Server::new().await;
+
+    let index = server.index("doggos");
+
+    let documents = NESTED_DOCUMENTS.clone();
+    let (value, _) = index.add_documents(documents, None).await;
+    index.wait_task(value.uid()).await;
+
+    let (value, _) = index
+        .update_settings(json!({
+          "filterableAttributes": ["father", "mother", "doggos.age"],
+          "rankingRules": [
+            "sort",
+            "words",
+            "typo",
+            "proximity",
+            "attribute",
+            "exactness"
+          ]
+        }))
+        .await;
+    index.wait_task(value.uid()).await;
+
+    let index = server.index("doggos-2");
+
+    let documents = NESTED_DOCUMENTS.clone();
+    let (value, _) = index.add_documents(documents, None).await;
+    index.wait_task(value.uid()).await;
+
+    let (value, _) = index
+        .update_settings(json!({
+          "filterableAttributes": ["father", "mother", "doggos.age"],
+          "rankingRules": [
+            "sort",
+            "words",
+            "typo",
+            "proximity",
+            "attribute",
+            "exactness"
+          ]
+        }))
+        .await;
+    index.wait_task(value.uid()).await;
+
+    let (response, code) = server
+        .multi_search(json!({"federation": {
+          "facetsByIndex": {
+            "doggos": ["father", "mother", "doggos.age"]
+          }
+        }, "queries": [
+          {"indexUid" : "doggos", "q": "je", "attributesToRetrieve": ["id"] },
+          {"indexUid" : "doggos", "q": "michel", "attributesToRetrieve": ["id"] },
+        ]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
+    {
+      "hits": [
+        {
+          "id": 852,
+          "_federation": {
+            "indexUid": "doggos",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.9621212121212122
+          }
+        },
+        {
+          "id": 951,
+          "_federation": {
+            "indexUid": "doggos",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.9621212121212122
+          }
+        },
+        {
+          "id": 750,
+          "_federation": {
+            "indexUid": "doggos",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.9621212121212122
+          }
+        }
+      ],
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 3,
+      "facetsByIndex": {
+        "doggos": {
+          "distribution": {
+            "doggos.age": {
+              "2": 1,
+              "4": 1,
+              "5": 1,
+              "6": 1
+            },
+            "father": {
+              "jean": 1,
+              "jean-baptiste": 1,
+              "romain": 1
+            },
+            "mother": {
+              "michelle": 2,
+              "sophie": 1
+            }
+          },
+          "stats": {
+            "doggos.age": {
+              "min": 2.0,
+              "max": 6.0
+            }
+          }
+        }
+      }
+    }
+    "###);
+
+    let (response, code) = server
+        .multi_search(json!({"federation": {
+          "facetsByIndex": {
+            "doggos": ["father", "mother", "doggos.age"],
+            "doggos-2": ["father", "mother", "doggos.age"]
+          }
+        }, "queries": [
+          {"indexUid" : "doggos", "q": "je", "attributesToRetrieve": ["id"] },
+          {"indexUid" : "doggos-2", "q": "michel", "attributesToRetrieve": ["id"] },
+        ]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
+    {
+      "hits": [
+        {
+          "id": 852,
+          "_federation": {
+            "indexUid": "doggos",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.9621212121212122
+          }
+        },
+        {
+          "id": 951,
+          "_federation": {
+            "indexUid": "doggos",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.9621212121212122
+          }
+        },
+        {
+          "id": 852,
+          "_federation": {
+            "indexUid": "doggos-2",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.9621212121212122
+          }
+        },
+        {
+          "id": 750,
+          "_federation": {
+            "indexUid": "doggos-2",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.9621212121212122
+          }
+        }
+      ],
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 4,
+      "facetsByIndex": {
+        "doggos": {
+          "distribution": {
+            "doggos.age": {
+              "2": 1,
+              "4": 1,
+              "5": 1,
+              "6": 1
+            },
+            "father": {
+              "jean": 1,
+              "jean-baptiste": 1
+            },
+            "mother": {
+              "michelle": 1,
+              "sophie": 1
+            }
+          },
+          "stats": {
+            "doggos.age": {
+              "min": 2.0,
+              "max": 6.0
+            }
+          }
+        },
+        "doggos-2": {
+          "distribution": {
+            "doggos.age": {
+              "2": 1,
+              "4": 1
+            },
+            "father": {
+              "jean": 1,
+              "romain": 1
+            },
+            "mother": {
+              "michelle": 2
+            }
+          },
+          "stats": {
+            "doggos.age": {
+              "min": 2.0,
+              "max": 4.0
+            }
+          }
+        }
+      }
+    }
+    "###);
+
+    let (response, code) = server
+        .multi_search(json!({"federation": {
+          "facetsByIndex": {
+            "doggos": ["father", "mother", "doggos.age"],
+            "doggos-2": ["father", "mother", "doggos.age"]
+          },
+          "mergeFacets": {},
+        }, "queries": [
+          {"indexUid" : "doggos", "q": "je", "attributesToRetrieve": ["id"] },
+          {"indexUid" : "doggos-2", "q": "michel", "attributesToRetrieve": ["id"] },
+        ]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
+    {
+      "hits": [
+        {
+          "id": 852,
+          "_federation": {
+            "indexUid": "doggos",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.9621212121212122
+          }
+        },
+        {
+          "id": 951,
+          "_federation": {
+            "indexUid": "doggos",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.9621212121212122
+          }
+        },
+        {
+          "id": 852,
+          "_federation": {
+            "indexUid": "doggos-2",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.9621212121212122
+          }
+        },
+        {
+          "id": 750,
+          "_federation": {
+            "indexUid": "doggos-2",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.9621212121212122
+          }
+        }
+      ],
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 4,
+      "facetDistribution": {
+        "doggos.age": {
+          "2": 2,
+          "4": 2,
+          "5": 1,
+          "6": 1
+        },
+        "father": {
+          "jean": 2,
+          "jean-baptiste": 1,
+          "romain": 1
+        },
+        "mother": {
+          "michelle": 3,
+          "sophie": 1
+        }
+      },
+      "facetStats": {
+        "doggos.age": {
+          "min": 2.0,
+          "max": 6.0
+        }
+      }
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn federation_inconsistent_merge_order() {
+    let server = Server::new().await;
+
+    let index = server.index("movies");
+
+    let documents = DOCUMENTS.clone();
+    let (value, _) = index.add_documents(documents, None).await;
+    index.wait_task(value.uid()).await;
+
+    let (value, _) = index
+        .update_settings(json!({
+          "sortableAttributes": ["title"],
+          "filterableAttributes": ["title", "color"],
+          "rankingRules": [
+            "sort",
+            "words",
+            "typo",
+            "proximity",
+            "attribute",
+            "exactness"
+          ]
+        }))
+        .await;
+    index.wait_task(value.uid()).await;
+
+    let index = server.index("movies-2");
+
+    let documents = DOCUMENTS.clone();
+    let (value, _) = index.add_documents(documents, None).await;
+    index.wait_task(value.uid()).await;
+
+    let (value, _) = index
+        .update_settings(json!({
+          "sortableAttributes": ["title"],
+          "filterableAttributes": ["title", "color"],
+          "rankingRules": [
+            "sort",
+            "words",
+            "typo",
+            "proximity",
+            "attribute",
+            "exactness"
+          ],
+          "faceting": {
+            "sortFacetValuesBy": { "color": "count" }
+          }
+        }))
+        .await;
+    index.wait_task(value.uid()).await;
+
+    let index = server.index("batman");
+
+    let documents = SCORE_DOCUMENTS.clone();
+    let (value, _) = index.add_documents(documents, None).await;
+    index.wait_task(value.uid()).await;
+
+    let (value, _) = index
+        .update_settings(json!({
+          "sortableAttributes": ["title"],
+          "filterableAttributes": ["title"],
+          "rankingRules": [
+            "sort",
+            "words",
+            "typo",
+            "proximity",
+            "attribute",
+            "exactness"
+          ]
+        }))
+        .await;
+    index.wait_task(value.uid()).await;
+
+    // without merging, it works
+    let (response, code) = server
+      .multi_search(json!({"federation": {
+        "facetsByIndex": {
+          "movies": ["title", "color"],
+          "batman": ["title"],
+          "movies-2": ["title", "color"],
+        }
+      }, "queries": [
+        {"indexUid" : "movies", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+        {"indexUid" : "batman", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+        {"indexUid" : "movies-2", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+      ]}))
+      .await;
+    snapshot!(code, @"200 OK");
+    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
+    {
+      "hits": [
+        {
+          "title": "Badman",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman Returns",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 1",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 2",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Captain Marvel",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Captain Marvel",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Escape Room",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Escape Room",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Gläss",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Gläss",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "How to Train Your Dragon: The Hidden World",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "How to Train Your Dragon: The Hidden World",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Shazam!",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Shazam!",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        }
+      ],
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 15,
+      "facetsByIndex": {
+        "batman": {
+          "distribution": {
+            "title": {
+              "Badman": 1,
+              "Batman": 1,
+              "Batman Returns": 1,
+              "Batman the dark knight returns: Part 1": 1,
+              "Batman the dark knight returns: Part 2": 1
+            }
+          },
+          "stats": {}
+        },
+        "movies": {
+          "distribution": {
+            "color": {
+              "blue": 3,
+              "green": 2,
+              "red": 3,
+              "yellow": 2
+            },
+            "title": {
+              "Captain Marvel": 1,
+              "Escape Room": 1,
+              "Gläss": 1,
+              "How to Train Your Dragon: The Hidden World": 1,
+              "Shazam!": 1
+            }
+          },
+          "stats": {}
+        },
+        "movies-2": {
+          "distribution": {
+            "color": {
+              "red": 3,
+              "blue": 3,
+              "yellow": 2,
+              "green": 2
+            },
+            "title": {
+              "Captain Marvel": 1,
+              "Escape Room": 1,
+              "Gläss": 1,
+              "How to Train Your Dragon: The Hidden World": 1,
+              "Shazam!": 1
+            }
+          },
+          "stats": {}
+        }
+      }
+    }
+    "###);
+
+    // fails with merging
+    let (response, code) = server
+  .multi_search(json!({"federation": {
+    "facetsByIndex": {
+      "movies": ["title", "color"],
+      "batman": ["title"],
+      "movies-2": ["title", "color"],
+    },
+    "mergeFacets": {}
+  }, "queries": [
+    {"indexUid" : "movies", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+    {"indexUid" : "batman", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+    {"indexUid" : "movies-2", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+  ]}))
+  .await;
+    snapshot!(code, @"400 Bad Request");
+    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
+    {
+      "message": "Inside `.federation.facetsByIndex.movies-2`: Inconsistent order for values in facet `color`: index `movies` orders alphabetically, but index `movies-2` orders by count.\n Hint: Remove `federation.mergeFacets` or set `federation.mergeFacets.sortFacetValuesBy` to the desired order.\n Note: index `movies-2` used in `.queries[2]`",
+      "code": "invalid_multi_search_facet_order",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facet_order"
+    }
+    "###);
+
+    // works again with merging and forcing an order
+    let (response, code) = server
+.multi_search(json!({"federation": {
+  "facetsByIndex": {
+    "movies": ["title", "color"],
+    "batman": ["title"],
+    "movies-2": ["title", "color"],
+  },
+  "mergeFacets": {
+    "sortFacetValuesBy": "count"
+  }
+}, "queries": [
+  {"indexUid" : "movies", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+  {"indexUid" : "batman", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+  {"indexUid" : "movies-2", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+]}))
+.await;
+    snapshot!(code, @"200 OK");
+    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
+    {
+      "hits": [
+        {
+          "title": "Badman",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman Returns",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 1",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 2",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Captain Marvel",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Captain Marvel",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Escape Room",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Escape Room",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Gläss",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Gläss",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "How to Train Your Dragon: The Hidden World",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "How to Train Your Dragon: The Hidden World",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Shazam!",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Shazam!",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        }
+      ],
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 15,
+      "facetDistribution": {
+        "color": {
+          "red": 6,
+          "blue": 6,
+          "yellow": 4,
+          "green": 4
+        },
+        "title": {
+          "Shazam!": 2,
+          "How to Train Your Dragon: The Hidden World": 2,
+          "Gläss": 2,
+          "Escape Room": 2,
+          "Captain Marvel": 2,
+          "Batman the dark knight returns: Part 2": 1,
+          "Batman the dark knight returns: Part 1": 1,
+          "Batman Returns": 1,
+          "Batman": 1,
+          "Badman": 1
+        }
+      },
+      "facetStats": {}
+    }
+    "###);
+
+    // works also with the other order
+    let (response, code) = server
+ .multi_search(json!({"federation": {
+   "facetsByIndex": {
+     "movies": ["title", "color"],
+     "batman": ["title"],
+     "movies-2": ["title", "color"],
+   },
+   "mergeFacets": {
+     "sortFacetValuesBy": "alpha"
+   }
+ }, "queries": [
+   {"indexUid" : "movies", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+   {"indexUid" : "batman", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+   {"indexUid" : "movies-2", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+ ]}))
+ .await;
+    snapshot!(code, @"200 OK");
+    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
+    {
+      "hits": [
+        {
+          "title": "Badman",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman Returns",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 1",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 2",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Captain Marvel",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Captain Marvel",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Escape Room",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Escape Room",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Gläss",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Gläss",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "How to Train Your Dragon: The Hidden World",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "How to Train Your Dragon: The Hidden World",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Shazam!",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Shazam!",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        }
+      ],
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 15,
+      "facetDistribution": {
+        "color": {
+          "blue": 6,
+          "green": 4,
+          "red": 6,
+          "yellow": 4
+        },
+        "title": {
+          "Badman": 1,
+          "Batman": 1,
+          "Batman Returns": 1,
+          "Batman the dark knight returns: Part 1": 1,
+          "Batman the dark knight returns: Part 2": 1,
+          "Captain Marvel": 2,
+          "Escape Room": 2,
+          "Gläss": 2,
+          "How to Train Your Dragon: The Hidden World": 2,
+          "Shazam!": 2
+        }
+      },
+      "facetStats": {}
+    }
+    "###);
+
+    // can limit the number of values
+    let (response, code) = server
+ .multi_search(json!({"federation": {
+   "facetsByIndex": {
+     "movies": ["title", "color"],
+     "batman": ["title"],
+     "movies-2": ["title", "color"],
+   },
+   "mergeFacets": {
+     "sortFacetValuesBy": "count",
+     "maxValuesPerFacet": 3,
+   }
+ }, "queries": [
+   {"indexUid" : "movies", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+   {"indexUid" : "batman", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+   {"indexUid" : "movies-2", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+ ]}))
+ .await;
+    snapshot!(code, @"200 OK");
+    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
+    {
+      "hits": [
+        {
+          "title": "Badman",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman Returns",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 1",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 2",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Captain Marvel",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Captain Marvel",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Escape Room",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Escape Room",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Gläss",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Gläss",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "How to Train Your Dragon: The Hidden World",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "How to Train Your Dragon: The Hidden World",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Shazam!",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Shazam!",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        }
+      ],
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 15,
+      "facetDistribution": {
+        "color": {
+          "red": 6,
+          "blue": 6,
+          "yellow": 4
+        },
+        "title": {
+          "Shazam!": 2,
+          "How to Train Your Dragon: The Hidden World": 2,
+          "Gläss": 2
+        }
+      },
+      "facetStats": {}
+    }
+    "###);
+
+    // can limit the number of values by alpha
+    let (response, code) = server
+ .multi_search(json!({"federation": {
+   "facetsByIndex": {
+     "movies": ["title", "color"],
+     "batman": ["title"],
+     "movies-2": ["title", "color"],
+   },
+   "mergeFacets": {
+     "sortFacetValuesBy": "alpha",
+     "maxValuesPerFacet": 3,
+   }
+ }, "queries": [
+   {"indexUid" : "movies", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+   {"indexUid" : "batman", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+   {"indexUid" : "movies-2", "q": "", "sort": ["title:asc"], "attributesToRetrieve": ["title"] },
+ ]}))
+ .await;
+    snapshot!(code, @"200 OK");
+    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
+    {
+      "hits": [
+        {
+          "title": "Badman",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman Returns",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 1",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 2",
+          "_federation": {
+            "indexUid": "batman",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Captain Marvel",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Captain Marvel",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Escape Room",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Escape Room",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Gläss",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Gläss",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "How to Train Your Dragon: The Hidden World",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "How to Train Your Dragon: The Hidden World",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Shazam!",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Shazam!",
+          "_federation": {
+            "indexUid": "movies-2",
+            "queriesPosition": 2,
+            "weightedRankingScore": 1.0
+          }
+        }
+      ],
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 15,
+      "facetDistribution": {
+        "color": {
+          "blue": 6,
+          "green": 4,
+          "red": 6
+        },
+        "title": {
+          "Badman": 1,
+          "Batman": 1,
+          "Batman Returns": 1
+        }
+      },
+      "facetStats": {}
     }
     "###);
 }
