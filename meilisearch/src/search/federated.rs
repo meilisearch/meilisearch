@@ -342,6 +342,10 @@ pub fn perform_federated_search(
             .into());
         }
 
+        if federated_query.has_facets() {
+            return Err(MeilisearchHttpError::FacetsInFederatedQuery(query_index).into());
+        }
+
         let (index_uid, query, federation_options) = federated_query.into_index_query_federation();
 
         queries_by_index.entry(index_uid.into_inner()).or_default().push(QueryByIndex {
