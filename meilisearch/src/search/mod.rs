@@ -441,9 +441,6 @@ pub struct SearchQueryWithIndex {
 }
 
 impl SearchQueryWithIndex {
-    pub fn has_federation_options(&self) -> bool {
-        self.federation_options.is_some()
-    }
     pub fn has_pagination(&self) -> Option<&'static str> {
         if self.offset.is_some() {
             Some("offset")
@@ -456,6 +453,11 @@ impl SearchQueryWithIndex {
         } else {
             None
         }
+    }
+
+    pub fn has_facets(&self) -> bool {
+        let Some(facets) = &self.facets else { return false };
+        !facets.is_empty()
     }
 
     pub fn into_index_query_federation(self) -> (IndexUid, SearchQuery, Option<FederationOptions>) {
