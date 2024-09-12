@@ -989,39 +989,13 @@ pub fn perform_search(
         HitsInfo::OffsetLimit { limit, offset, estimated_total_hits: number_of_hits }
     };
 
-    let (facet_distribution, facet_stats) = match facets {
-        Some(ref fields) => {
-            let mut facet_distribution = index.facets_distribution(&rtxn);
-
-            let max_values_by_facet = index
-                .max_values_per_facet(&rtxn)
-                .map_err(milli::Error::from)?
-                .map(|x| x as usize)
-                .unwrap_or(DEFAULT_VALUES_PER_FACET);
-            facet_distribution.max_values_per_facet(max_values_by_facet);
-
-            let sort_facet_values_by =
-                index.sort_facet_values_by(&rtxn).map_err(milli::Error::from)?;
-
-            if fields.iter().all(|f| f != "*") {
-                let fields: Vec<_> =
-                    fields.iter().map(|n| (n, sort_facet_values_by.get(n))).collect();
-                facet_distribution.facets(fields);
-            }
-
-            let distribution = facet_distribution
-                .candidates(candidates)
-                .default_order_by(sort_facet_values_by.get("*"))
-                .execute()?;
-            let stats = facet_distribution.compute_stats()?;
-            (Some(distribution), Some(stats))
-        }
-        None => (None, None),
-    };
-
-    let facet_stats = facet_stats.map(|stats| {
-        stats.into_iter().map(|(k, (min, max))| (k, FacetStats { min, max })).collect()
-    });
+    let (facet_distribution, facet_stats) = facets
+        .map(move |facets| {
+            compute_facet_distribution_stats(&facets, index, &rtxn, candidates, None, None)
+        })
+        .transpose()?
+        .map(|ComputedFacets { distribution, stats }| (distribution, stats))
+        .unzip();
 
     let result = SearchResult {
         hits: documents,
@@ -1035,6 +1009,55 @@ pub fn perform_search(
         semantic_hit_count,
     };
     Ok(result)
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ComputedFacets {
+    pub distribution: BTreeMap<String, IndexMap<String, u64>>,
+    pub stats: BTreeMap<String, FacetStats>,
+}
+
+fn compute_facet_distribution_stats<S: AsRef<str>>(
+    facets: &[S],
+    index: &Index,
+    rtxn: &RoTxn,
+    candidates: roaring::RoaringBitmap,
+    override_max_values_per_facet: Option<usize>,
+    override_sort_facet_values_by: Option<OrderBy>,
+) -> Result<ComputedFacets, ResponseError> {
+    let mut facet_distribution = index.facets_distribution(rtxn);
+
+    let max_values_by_facet = match override_max_values_per_facet {
+        Some(max_values_by_facet) => max_values_by_facet,
+        None => index
+            .max_values_per_facet(rtxn)
+            .map_err(milli::Error::from)?
+            .map(|x| x as usize)
+            .unwrap_or(DEFAULT_VALUES_PER_FACET),
+    };
+
+    facet_distribution.max_values_per_facet(max_values_by_facet);
+
+    let sort_facet_values_by = index.sort_facet_values_by(rtxn).map_err(milli::Error::from)?;
+
+    let sort_facet_values_by = |n: &str| match override_sort_facet_values_by {
+        Some(order_by) => order_by,
+        None => sort_facet_values_by.get(n),
+    };
+
+    // add specific facet if there is no placeholder
+    if facets.iter().all(|f| f.as_ref() != "*") {
+        let fields: Vec<_> = facets.iter().map(|n| (n, sort_facet_values_by(n.as_ref()))).collect();
+        facet_distribution.facets(fields);
+    }
+
+    let distribution = facet_distribution
+        .candidates(candidates)
+        .default_order_by(sort_facet_values_by("*"))
+        .execute()?;
+    let stats = facet_distribution.compute_stats()?;
+    let stats = stats.into_iter().map(|(k, (min, max))| (k, FacetStats { min, max })).collect();
+    Ok(ComputedFacets { distribution, stats })
 }
 
 pub fn search_from_kind(
