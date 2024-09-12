@@ -13,7 +13,7 @@ use super::super::document_change::DocumentChange;
 use super::super::items_pool::ItemsPool;
 use super::top_level_map::{CowStr, TopLevelMap};
 use super::DocumentChanges;
-use crate::documents::PrimaryKey;
+use crate::documents::{DocumentIdExtractionError, PrimaryKey};
 use crate::update::new::{Deletion, Insertion, KvReaderFieldId, KvWriterFieldId, Update};
 use crate::update::{AvailableIds, IndexDocumentsMethod};
 use crate::{DocumentId, Error, FieldsIdsMap, Index, Result, UserError};
@@ -98,37 +98,22 @@ impl<'p, 'pl: 'p> DocumentChanges<'p> for DocumentOperation<'pl> {
                         // TODO we must manage the TooManyDocumentIds,InvalidDocumentId
                         //      we must manage the unwrap
                         let external_document_id =
-                            match get_docid(&document, &[primary_key.name()]).unwrap() {
-                                Some(document_id) => document_id,
-                                None => {
-                                    return Err(UserError::MissingDocumentId {
+                            match primary_key.document_id_from_top_level_map(&document)? {
+                                Ok(document_id) => Ok(document_id),
+                                Err(DocumentIdExtractionError::InvalidDocumentId(e)) => Err(e),
+                                Err(DocumentIdExtractionError::MissingDocumentId) => {
+                                    Err(UserError::MissingDocumentId {
                                         primary_key: primary_key.name().to_string(),
-                                        document: todo!(),
-                                        // document: obkv_to_object(document, &batch_index)?,
-                                    }
-                                    .into());
+                                        document: document.try_into().unwrap(),
+                                    })
                                 }
-                            };
-
-                        // let external_document_id =
-                        //     match primary_key.document_id(document, &batch_index)? {
-                        //         Ok(document_id) => Ok(document_id),
-                        //         Err(DocumentIdExtractionError::InvalidDocumentId(user_error)) => {
-                        //             Err(user_error)
-                        //         }
-                        //         Err(DocumentIdExtractionError::MissingDocumentId) => {
-                        //             Err(UserError::MissingDocumentId {
-                        //                 primary_key: primary_key.name().to_string(),
-                        //                 document: obkv_to_object(document, &batch_index)?,
-                        //             })
-                        //         }
-                        //         Err(DocumentIdExtractionError::TooManyDocumentIds(_)) => {
-                        //             Err(UserError::TooManyDocumentIds {
-                        //                 primary_key: primary_key.name().to_string(),
-                        //                 document: obkv_to_object(document, &batch_index)?,
-                        //             })
-                        //         }
-                        //     }?;
+                                Err(DocumentIdExtractionError::TooManyDocumentIds(_)) => {
+                                    Err(UserError::TooManyDocumentIds {
+                                        primary_key: primary_key.name().to_string(),
+                                        document: document.try_into().unwrap(),
+                                    })
+                                }
+                            }?;
 
                         let current_offset = iter.byte_offset();
                         let document_operation = InnerDocOp::Addition(DocumentOffset {
@@ -395,27 +380,5 @@ impl MergeChanges for MergeDocumentForUpdates {
                 Ok(Some(DocumentChange::Insertion(insertion)))
             }
         }
-    }
-}
-
-/// Returns the document ID based on the primary and
-/// search for it recursively in zero-copy-deserialized documents.
-fn get_docid<'p>(
-    map: &TopLevelMap<'p>,
-    primary_key: &[&str],
-) -> serde_json::Result<Option<CowStr<'p>>> {
-    match primary_key {
-        [] => unreachable!("arrrgh"), // would None be ok?
-        [primary_key] => match map.0.get(*primary_key) {
-            Some(value) => match from_str::<u64>(value.get()) {
-                Ok(value) => Ok(Some(CowStr(Cow::Owned(value.to_string())))),
-                Err(_) => Ok(Some(from_str(value.get())?)),
-            },
-            None => Ok(None),
-        },
-        [head, tail @ ..] => match map.0.get(*head) {
-            Some(value) => get_docid(&from_str(value.get())?, tail),
-            None => Ok(None),
-        },
     }
 }

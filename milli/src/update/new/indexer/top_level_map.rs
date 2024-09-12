@@ -22,6 +22,14 @@ impl TryFrom<&'_ TopLevelMap<'_>> for Map<String, Value> {
     }
 }
 
+impl TryFrom<TopLevelMap<'_>> for Map<String, Value> {
+    type Error = serde_json::Error;
+
+    fn try_from(tlmap: TopLevelMap<'_>) -> Result<Self, Self::Error> {
+        TryFrom::try_from(&tlmap)
+    }
+}
+
 impl<'p> ops::Deref for TopLevelMap<'p> {
     type Target = BTreeMap<CowStr<'p>, &'p RawValue>;
 
