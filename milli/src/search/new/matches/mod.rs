@@ -132,37 +132,21 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
             mut partial: PartialMatch<'a>,
             token_position: usize,
             word_position: usize,
+            first_word_char_start: &usize,
             words_positions: &mut impl Iterator<Item = (usize, usize, &'a Token<'a>)>,
             matches: &mut Vec<Match>,
         ) -> bool {
-            let mut potential_matches = vec![(token_position, word_position, partial.char_len())];
-
-            for (token_position, word_position, word) in words_positions {
+            for (_, _, word) in words_positions {
                 partial = match partial.match_token(word) {
                     // token matches the partial match, but the match is not full,
                     // we temporarily save the current token then we try to match the next one.
-                    Some(MatchType::Partial(partial)) => {
-                        potential_matches.push((token_position, word_position, partial.char_len()));
-                        partial
-                    }
+                    Some(MatchType::Partial(partial)) => partial,
                     // partial match is now full, we keep this matches and we advance positions
-                    Some(MatchType::Full { char_len, ids }) => {
-                        let ids: Vec<_> = ids.clone().collect();
-                        // save previously matched tokens as matches.
-                        let iter = potential_matches.into_iter().map(
-                            |(token_position, word_position, match_len)| Match {
-                                match_len,
-                                ids: ids.clone(),
-                                word_position,
-                                token_position,
-                            },
-                        );
-                        matches.extend(iter);
-
+                    Some(MatchType::Full { ids, .. }) => {
                         // save the token that closes the partial match as a match.
                         matches.push(Match {
-                            match_len: char_len,
-                            ids,
+                            match_len: word.char_end - first_word_char_start,
+                            ids: ids.clone().collect(),
                             word_position,
                             token_position,
                         });
@@ -221,6 +205,7 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                             partial,
                             token_position,
                             word_position,
+                            &word.char_start,
                             &mut wp,
                             &mut matches,
                         ) {
@@ -472,15 +457,17 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                                 .enumerate()
                                 .find(|(i, _)| *i == m.match_len)
                                 .map_or(token.byte_end, |(_, (i, _))| i + token.byte_start);
+
                             formatted.push(self.highlight_prefix);
                             formatted.push(&self.text[token.byte_start..highlight_byte_index]);
                             formatted.push(self.highlight_suffix);
+
                             // if it's a prefix highlight, we put the end of the word after the highlight marker.
                             if highlight_byte_index < token.byte_end {
                                 formatted.push(&self.text[highlight_byte_index..token.byte_end]);
                             }
 
-                            byte_index = token.byte_end;
+                            byte_index = token.byte_start + m.match_len;
                         }
                     }
 
@@ -821,22 +808,24 @@ mod tests {
     fn format_highlight_crop_phrase_query() {
         //! testing: https://github.com/meilisearch/meilisearch/issues/3975
         let temp_index = TempIndex::new();
+
+        let text = "The groundbreaking invention had the power to split the world between those who embraced progress and those who resisted change!";
         temp_index
             .add_documents(documents!([
-                { "id": 1, "text": "The groundbreaking invention had the power to split the world between those who embraced progress and those who resisted change!" }
+                { "id": 1, "text": text }
             ]))
             .unwrap();
+
         let rtxn = temp_index.read_txn().unwrap();
 
         let format_options = FormatOptions { highlight: true, crop: Some(10) };
-        let text = "The groundbreaking invention had the power to split the world between those who embraced progress and those who resisted change!";
 
         let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "\"the world\"");
         let mut matcher = builder.build(text, None);
         // should return 10 words with a marker at the start as well the end, and the highlighted matches.
         insta::assert_snapshot!(
             matcher.format(format_options),
-            @"…had the power to split <em>the</em> <em>world</em> between those who…"
+            @"…had the power to split <em>the world</em> between those who…"
         );
 
         let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "those \"and those\"");
@@ -844,7 +833,7 @@ mod tests {
         // should highlight "those" and the phrase "and those".
         insta::assert_snapshot!(
             matcher.format(format_options),
-            @"…world between <em>those</em> who embraced progress <em>and</em> <em>those</em> who resisted…"
+            @"…world between <em>those</em> who embraced progress <em>and those</em> who resisted…"
         );
     }
 
@@ -900,7 +889,7 @@ mod tests {
         let mut matcher = builder.build(text, None);
         insta::assert_snapshot!(
             matcher.format(format_options),
-            @"_the_ _do_ _or_ die can't be he do and or isn'_t_ _he_"
+            @"_the_ _do or_ die can't be he do and or isn'_t he_"
         );
     }
 }
