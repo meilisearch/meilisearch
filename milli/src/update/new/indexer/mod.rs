@@ -1,4 +1,3 @@
-use std::fs::File;
 use std::sync::RwLock;
 use std::thread::{self, Builder};
 
@@ -17,12 +16,10 @@ use super::document_change::DocumentChange;
 use super::extract::*;
 use super::merger::merge_grenad_entries;
 use super::StdResult;
-use crate::documents::{
-    obkv_to_object, DocumentsBatchCursor, DocumentsBatchIndex, PrimaryKey, DEFAULT_PRIMARY_KEY,
-};
+use crate::documents::{PrimaryKey, DEFAULT_PRIMARY_KEY};
 use crate::update::new::channel::{DatabaseType, ExtractorSender};
 use crate::update::GrenadParameters;
-use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, UserError};
+use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
 
 mod document_deletion;
 mod document_operation;
