@@ -1,20 +1,23 @@
 use std::fs::File;
+use std::io::{self, BufWriter};
 
+use bincode::ErrorKind;
 use fst::{Set, SetBuilder};
 use grenad::Merger;
 use heed::types::Bytes;
-use heed::{Database, RoTxn};
+use heed::{BoxedError, Database, RoTxn};
 use memmap2::Mmap;
 use roaring::RoaringBitmap;
-use std::io::BufWriter;
 use tempfile::tempfile;
 
 use super::channel::*;
-use super::KvReaderDelAdd;
+use super::{Deletion, DocumentChange, Insertion, KvReaderDelAdd, KvReaderFieldId, Update};
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::MergerOperation;
 use crate::update::MergeDeladdCboRoaringBitmaps;
-use crate::{CboRoaringBitmapCodec, Index, Result};
+use crate::{
+    CboRoaringBitmapCodec, Error, GeoPoint, GlobalFieldsIdsMap, Index, InternalError, Result,
+};
 
 /// TODO We must return some infos/stats
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents", name = "merge")]
@@ -23,9 +26,11 @@ pub fn merge_grenad_entries(
     sender: MergerSender,
     rtxn: &RoTxn,
     index: &Index,
+    mut global_fields_ids_map: GlobalFieldsIdsMap<'_>,
 ) -> Result<()> {
     let mut buffer = Vec::new();
     let mut documents_ids = index.documents_ids(rtxn)?;
+    let mut geo_extractor = GeoExtractor::new(rtxn, index)?;
 
     for merger_operation in receiver {
         match merger_operation {
@@ -125,6 +130,18 @@ pub fn merge_grenad_entries(
                 let _entered = span.enter();
                 documents_ids.insert(docid);
                 sender.documents().uncompressed(docid, &document).unwrap();
+
+                if let Some(geo_extractor) = geo_extractor.as_mut() {
+                    let current = index.documents.remap_data_type::<Bytes>().get(rtxn, &docid)?;
+                    let current: Option<&KvReaderFieldId> = current.map(Into::into);
+                    let change = match current {
+                        Some(current) => {
+                            DocumentChange::Update(Update::create(docid, current.boxed(), document))
+                        }
+                        None => DocumentChange::Insertion(Insertion::create(docid, document)),
+                    };
+                    geo_extractor.manage_change(&mut global_fields_ids_map, &change)?;
+                }
             }
             MergerOperation::DeleteDocument { docid } => {
                 let span =
@@ -134,6 +151,15 @@ pub fn merge_grenad_entries(
                     unreachable!("Tried deleting a document that we do not know about");
                 }
                 sender.documents().delete(docid).unwrap();
+
+                if let Some(geo_extractor) = geo_extractor.as_mut() {
+                    let current = index.document(rtxn, docid)?;
+                    let change = DocumentChange::Deletion(Deletion::create(docid, current.boxed()));
+                    geo_extractor.manage_change(&mut global_fields_ids_map, &change)?;
+                }
+            }
+            MergerOperation::FinishedDocument => {
+                // send the rtree
             }
         }
     }
@@ -151,6 +177,54 @@ pub fn merge_grenad_entries(
     // ...
 
     Ok(())
+}
+
+pub struct GeoExtractor {
+    rtree: Option<rstar::RTree<GeoPoint>>,
+}
+
+impl GeoExtractor {
+    pub fn new(rtxn: &RoTxn, index: &Index) -> Result<Option<Self>> {
+        let is_sortable = index.sortable_fields(rtxn)?.contains("_geo");
+        let is_filterable = index.filterable_fields(rtxn)?.contains("_geo");
+        if is_sortable || is_filterable {
+            Ok(Some(GeoExtractor { rtree: index.geo_rtree(rtxn)? }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn manage_change(
+        &mut self,
+        fidmap: &mut GlobalFieldsIdsMap,
+        change: &DocumentChange,
+    ) -> Result<()> {
+        match change {
+            DocumentChange::Deletion(_) => todo!(),
+            DocumentChange::Update(_) => todo!(),
+            DocumentChange::Insertion(_) => todo!(),
+        }
+    }
+
+    pub fn serialize_rtree<W: io::Write>(self, writer: &mut W) -> Result<bool> {
+        match self.rtree {
+            Some(rtree) => {
+                // TODO What should I do?
+                bincode::serialize_into(writer, &rtree).map(|_| true).map_err(|e| match *e {
+                    ErrorKind::Io(e) => Error::IoError(e),
+                    ErrorKind::InvalidUtf8Encoding(_) => todo!(),
+                    ErrorKind::InvalidBoolEncoding(_) => todo!(),
+                    ErrorKind::InvalidCharEncoding => todo!(),
+                    ErrorKind::InvalidTagEncoding(_) => todo!(),
+                    ErrorKind::DeserializeAnyNotSupported => todo!(),
+                    ErrorKind::SizeLimit => todo!(),
+                    ErrorKind::SequenceMustHaveLength => todo!(),
+                    ErrorKind::Custom(_) => todo!(),
+                })
+            }
+            None => Ok(false),
+        }
+    }
 }
 
 fn compute_new_words_fst(

@@ -12,20 +12,17 @@ pub enum DocumentChange {
 
 pub struct Deletion {
     docid: DocumentId,
-    external_docid: String,        // ?
-    current: Box<KvReaderFieldId>, // ?
+    current: Box<KvReaderFieldId>,
 }
 
 pub struct Update {
     docid: DocumentId,
-    external_docid: String,        // ?
-    current: Box<KvReaderFieldId>, // ?
+    current: Box<KvReaderFieldId>,
     new: Box<KvReaderFieldId>,
 }
 
 pub struct Insertion {
     docid: DocumentId,
-    external_docid: String, // ?
     new: Box<KvReaderFieldId>,
 }
 
@@ -40,12 +37,8 @@ impl DocumentChange {
 }
 
 impl Deletion {
-    pub fn create(
-        docid: DocumentId,
-        external_docid: String,
-        current: Box<KvReaderFieldId>,
-    ) -> Self {
-        Self { docid, external_docid, current }
+    pub fn create(docid: DocumentId, current: Box<KvReaderFieldId>) -> Self {
+        Self { docid, current }
     }
 
     pub fn docid(&self) -> DocumentId {
@@ -63,8 +56,8 @@ impl Deletion {
 }
 
 impl Insertion {
-    pub fn create(docid: DocumentId, external_docid: String, new: Box<KvReaderFieldId>) -> Self {
-        Insertion { docid, external_docid, new }
+    pub fn create(docid: DocumentId, new: Box<KvReaderFieldId>) -> Self {
+        Insertion { docid, new }
     }
 
     pub fn docid(&self) -> DocumentId {
@@ -79,11 +72,10 @@ impl Insertion {
 impl Update {
     pub fn create(
         docid: DocumentId,
-        external_docid: String,
         current: Box<KvReaderFieldId>,
         new: Box<KvReaderFieldId>,
     ) -> Self {
-        Update { docid, external_docid, current, new }
+        Update { docid, current, new }
     }
 
     pub fn docid(&self) -> DocumentId {

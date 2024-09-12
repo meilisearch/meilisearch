@@ -323,6 +323,7 @@ pub enum MergerOperation {
     WordPositionDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
     DeleteDocument { docid: DocumentId },
     InsertDocument { docid: DocumentId, document: Box<KvReaderFieldId> },
+    FinishedDocument,
 }
 
 pub struct MergerReceiver(Receiver<MergerOperation>);
@@ -339,22 +340,8 @@ impl IntoIterator for MergerReceiver {
 pub struct ExtractorSender(Sender<MergerOperation>);
 
 impl ExtractorSender {
-    pub fn document_insert(
-        &self,
-        docid: DocumentId,
-        document: Box<KvReaderFieldId>,
-    ) -> StdResult<(), SendError<()>> {
-        match self.0.send(MergerOperation::InsertDocument { docid, document }) {
-            Ok(()) => Ok(()),
-            Err(SendError(_)) => Err(SendError(())),
-        }
-    }
-
-    pub fn document_delete(&self, docid: DocumentId) -> StdResult<(), SendError<()>> {
-        match self.0.send(MergerOperation::DeleteDocument { docid }) {
-            Ok(()) => Ok(()),
-            Err(SendError(_)) => Err(SendError(())),
-        }
+    pub fn document_sender(&self) -> DocumentSender<'_> {
+        DocumentSender(&self.0)
     }
 
     pub fn send_searchable<D: DatabaseType>(
@@ -365,5 +352,40 @@ impl ExtractorSender {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
+    }
+}
+
+pub struct DocumentSender<'a>(&'a Sender<MergerOperation>);
+
+impl DocumentSender<'_> {
+    pub fn insert(
+        &self,
+        docid: DocumentId,
+        document: Box<KvReaderFieldId>,
+    ) -> StdResult<(), SendError<()>> {
+        match self.0.send(MergerOperation::InsertDocument { docid, document }) {
+            Ok(()) => Ok(()),
+            Err(SendError(_)) => Err(SendError(())),
+        }
+    }
+
+    pub fn delete(&self, docid: DocumentId) -> StdResult<(), SendError<()>> {
+        match self.0.send(MergerOperation::DeleteDocument { docid }) {
+            Ok(()) => Ok(()),
+            Err(SendError(_)) => Err(SendError(())),
+        }
+    }
+
+    pub fn finish(self) -> StdResult<(), SendError<()>> {
+        match self.0.send(MergerOperation::FinishedDocument) {
+            Ok(()) => Ok(()),
+            Err(SendError(_)) => Err(SendError(())),
+        }
+    }
+}
+
+impl Drop for DocumentSender<'_> {
+    fn drop(&mut self) {
+        self.0.send(MergerOperation::FinishedDocument);
     }
 }

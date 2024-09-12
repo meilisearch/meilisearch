@@ -6,7 +6,6 @@ use heed::types::Bytes;
 use heed::RoTxn;
 use memmap2::Mmap;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use serde_json::from_str;
 use IndexDocumentsMethod as Idm;
 
 use super::super::document_change::DocumentChange;
@@ -289,20 +288,17 @@ impl MergeChanges for MergeDocumentForReplacement {
                 let new = writer.into_boxed();
 
                 match current {
-                    Some(current) => {
-                        let update = Update::create(docid, external_docid, current.boxed(), new);
-                        Ok(Some(DocumentChange::Update(update)))
-                    }
-                    None => {
-                        let insertion = Insertion::create(docid, external_docid, new);
-                        Ok(Some(DocumentChange::Insertion(insertion)))
-                    }
+                    Some(current) => Ok(Some(DocumentChange::Update(Update::create(
+                        docid,
+                        current.boxed(),
+                        new,
+                    )))),
+                    None => Ok(Some(DocumentChange::Insertion(Insertion::create(docid, new)))),
                 }
             }
             Some(InnerDocOp::Deletion) => match current {
                 Some(current) => {
-                    let deletion = Deletion::create(docid, external_docid, current.boxed());
-                    Ok(Some(DocumentChange::Deletion(deletion)))
+                    Ok(Some(DocumentChange::Deletion(Deletion::create(docid, current.boxed()))))
                 }
                 None => Ok(None),
             },
@@ -361,7 +357,7 @@ impl MergeChanges for MergeDocumentForUpdates {
         if operations.is_empty() {
             match current {
                 Some(current) => {
-                    let deletion = Deletion::create(docid, external_docid, current.boxed());
+                    let deletion = Deletion::create(docid, current.boxed());
                     return Ok(Some(DocumentChange::Deletion(deletion)));
                 }
                 None => return Ok(None),
@@ -389,11 +385,11 @@ impl MergeChanges for MergeDocumentForUpdates {
 
         match current {
             Some(current) => {
-                let update = Update::create(docid, external_docid, current.boxed(), new);
+                let update = Update::create(docid, current.boxed(), new);
                 Ok(Some(DocumentChange::Update(update)))
             }
             None => {
-                let insertion = Insertion::create(docid, external_docid, new);
+                let insertion = Insertion::create(docid, new);
                 Ok(Some(DocumentChange::Insertion(insertion)))
             }
         }

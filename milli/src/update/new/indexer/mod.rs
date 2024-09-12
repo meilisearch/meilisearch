@@ -59,6 +59,7 @@ where
 
     let fields_ids_map_lock = RwLock::new(fields_ids_map);
     let global_fields_ids_map = GlobalFieldsIdsMap::new(&fields_ids_map_lock);
+    let global_fields_ids_map_clone = global_fields_ids_map.clone();
 
     thread::scope(|s| {
         // TODO manage the errors correctly
@@ -70,26 +71,29 @@ where
                     let document_changes = document_changes.into_par_iter();
 
                     // document but we need to create a function that collects and compresses documents.
+                    let document_sender = extractor_sender.document_sender();
                     document_changes.clone().into_par_iter().try_for_each(|result| {
                         match result? {
                             DocumentChange::Deletion(deletion) => {
                                 let docid = deletion.docid();
-                                extractor_sender.document_delete(docid).unwrap();
+                                document_sender.delete(docid).unwrap();
                             }
                             DocumentChange::Update(update) => {
                                 let docid = update.docid();
                                 let content = update.new();
-                                extractor_sender.document_insert(docid, content.boxed()).unwrap();
+                                document_sender.insert(docid, content.boxed()).unwrap();
                             }
                             DocumentChange::Insertion(insertion) => {
                                 let docid = insertion.docid();
                                 let content = insertion.new();
-                                extractor_sender.document_insert(docid, content.boxed()).unwrap();
+                                document_sender.insert(docid, content.boxed()).unwrap();
                                 // extracted_dictionary_sender.send(self, dictionary: &[u8]);
                             }
                         }
                         Ok(()) as Result<_>
                     })?;
+
+                    document_sender.finish().unwrap();
 
                     const TEN_GIB: usize = 10 * 1024 * 1024 * 1024;
                     let max_memory = TEN_GIB / dbg!(rayon::current_num_threads());
@@ -197,7 +201,13 @@ where
                 tracing::trace_span!(target: "indexing::documents", parent: &current_span, "merge");
             let _entered = span.enter();
             let rtxn = index.read_txn().unwrap();
-            merge_grenad_entries(merger_receiver, merger_sender, &rtxn, index)
+            merge_grenad_entries(
+                merger_receiver,
+                merger_sender,
+                &rtxn,
+                index,
+                global_fields_ids_map_clone,
+            )
         })?;
 
         for operation in writer_receiver {
