@@ -302,7 +302,7 @@ impl WordDocidsCachedSorters {
         buffer.extend_from_slice(word.as_bytes());
         buffer.push(0);
         buffer.extend_from_slice(&position.to_be_bytes());
-        self.word_fid_docids.insert_add_u32(key, docid)?;
+        self.word_fid_docids.insert_add_u32(buffer, docid)?;
 
         buffer.clear();
         buffer.extend_from_slice(word.as_bytes());
@@ -343,7 +343,7 @@ impl WordDocidsCachedSorters {
         buffer.extend_from_slice(word.as_bytes());
         buffer.push(0);
         buffer.extend_from_slice(&position.to_be_bytes());
-        self.word_fid_docids.insert_del_u32(key, docid)?;
+        self.word_fid_docids.insert_del_u32(buffer, docid)?;
 
         buffer.clear();
         buffer.extend_from_slice(word.as_bytes());
