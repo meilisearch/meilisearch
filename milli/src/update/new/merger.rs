@@ -6,6 +6,7 @@ use heed::types::Bytes;
 use heed::{Database, RoTxn};
 use memmap2::Mmap;
 use roaring::RoaringBitmap;
+use std::io::BufWriter;
 use tempfile::tempfile;
 
 use super::channel::*;
@@ -60,8 +61,8 @@ pub fn merge_grenad_entries(
                 let span =
                     tracing::trace_span!(target: "indexing::documents::merge", "word_docids");
                 let _entered = span.enter();
-                let mut add_words_fst = SetBuilder::new(tempfile()?)?;
-                let mut del_words_fst = SetBuilder::new(tempfile()?)?;
+                let mut add_words_fst = SetBuilder::new(BufWriter::new(tempfile()?))?;
+                let mut del_words_fst = SetBuilder::new(BufWriter::new(tempfile()?))?;
 
                 merge_and_send_docids(
                     merger,
@@ -153,16 +154,16 @@ pub fn merge_grenad_entries(
 }
 
 fn compute_new_words_fst(
-    add_words_fst: SetBuilder<File>,
-    del_words_fst: SetBuilder<File>,
+    add_words_fst: SetBuilder<BufWriter<File>>,
+    del_words_fst: SetBuilder<BufWriter<File>>,
     words_fst: Set<std::borrow::Cow<'_, [u8]>>,
 ) -> Result<Mmap> {
     let add_words_fst_file = add_words_fst.into_inner()?;
-    let add_words_fst_mmap = unsafe { Mmap::map(&add_words_fst_file)? };
+    let add_words_fst_mmap = unsafe { Mmap::map(&add_words_fst_file.into_inner().unwrap())? };
     let add_words_fst = Set::new(&add_words_fst_mmap)?;
 
     let del_words_fst_file = del_words_fst.into_inner()?;
-    let del_words_fst_mmap = unsafe { Mmap::map(&del_words_fst_file)? };
+    let del_words_fst_mmap = unsafe { Mmap::map(&del_words_fst_file.into_inner().unwrap())? };
     let del_words_fst = Set::new(&del_words_fst_mmap)?;
 
     let diff = words_fst.op().add(&del_words_fst).difference();
