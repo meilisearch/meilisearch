@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fmt::Display;
 use std::ops::ControlFlow;
 use std::{fmt, mem};
 
@@ -35,6 +36,15 @@ pub enum OrderBy {
     Lexicographic,
     /// Or by number of docids in common?
     Count,
+}
+
+impl Display for OrderBy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OrderBy::Lexicographic => f.write_str("alphabetically"),
+            OrderBy::Count => f.write_str("by count"),
+        }
+    }
 }
 
 pub struct FacetDistribution<'a> {
