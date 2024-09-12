@@ -3799,7 +3799,7 @@ async fn federation_federated_contains_pagination() {
     snapshot!(code, @"400 Bad Request");
     insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
     {
-      "message": "Inside `.queries[1]`: Using pagination options is not allowed in federated queries.\n Hint: remove `limit` from query #1 or remove `federation: {}` from the request",
+      "message": "Inside `.queries[1]`: Using pagination options is not allowed in federated queries.\n - Hint: remove `limit` from query #1 or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search",
       "code": "invalid_multi_search_query_pagination",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_pagination"
@@ -3815,7 +3815,7 @@ async fn federation_federated_contains_pagination() {
     snapshot!(code, @"400 Bad Request");
     insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
     {
-      "message": "Inside `.queries[1]`: Using pagination options is not allowed in federated queries.\n Hint: remove `offset` from query #1 or remove `federation: {}` from the request",
+      "message": "Inside `.queries[1]`: Using pagination options is not allowed in federated queries.\n - Hint: remove `offset` from query #1 or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search",
       "code": "invalid_multi_search_query_pagination",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_pagination"
@@ -3831,7 +3831,7 @@ async fn federation_federated_contains_pagination() {
     snapshot!(code, @"400 Bad Request");
     insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
     {
-      "message": "Inside `.queries[1]`: Using pagination options is not allowed in federated queries.\n Hint: remove `page` from query #1 or remove `federation: {}` from the request",
+      "message": "Inside `.queries[1]`: Using pagination options is not allowed in federated queries.\n - Hint: remove `page` from query #1 or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search",
       "code": "invalid_multi_search_query_pagination",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_pagination"
@@ -3847,7 +3847,7 @@ async fn federation_federated_contains_pagination() {
     snapshot!(code, @"400 Bad Request");
     insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
     {
-      "message": "Inside `.queries[1]`: Using pagination options is not allowed in federated queries.\n Hint: remove `hitsPerPage` from query #1 or remove `federation: {}` from the request",
+      "message": "Inside `.queries[1]`: Using pagination options is not allowed in federated queries.\n - Hint: remove `hitsPerPage` from query #1 or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search",
       "code": "invalid_multi_search_query_pagination",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_pagination"
@@ -3875,7 +3875,7 @@ async fn federation_non_federated_contains_federation_option() {
     snapshot!(code, @"400 Bad Request");
     insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
     {
-      "message": "Inside `.queries[1]`: Using `federationOptions` is not allowed in a non-federated search.\n Hint: remove `federationOptions` from query #1 or add `federation: {}` to the request.",
+      "message": "Inside `.queries[1]`: Using `federationOptions` is not allowed in a non-federated search.\n - Hint: remove `federationOptions` from query #1 or add `federation` to the request.",
       "code": "invalid_multi_search_federation_options",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_federation_options"
