@@ -93,16 +93,6 @@ impl FormatOptions {
     }
 }
 
-enum FL {
-    First,
-    Last,
-}
-
-enum WT {
-    Word,
-    Token,
-}
-
 #[derive(Clone, Debug)]
 pub enum MatchPosition {
     Word {
@@ -125,6 +115,36 @@ pub struct Match {
     // ids of the query words that matches.
     ids: Vec<WordId>,
     position: MatchPosition,
+}
+
+impl MatchPosition {
+    fn get_first_word(m: &Match) -> usize {
+        match m.position {
+            MatchPosition::Word { word_position, .. } => word_position,
+            MatchPosition::Phrase { word_positions: (fwp, _), .. } => fwp,
+        }
+    }
+
+    fn get_last_word(m: &Match) -> usize {
+        match m.position {
+            MatchPosition::Word { word_position, .. } => word_position,
+            MatchPosition::Phrase { word_positions: (_, lwp), .. } => lwp,
+        }
+    }
+
+    fn get_first_token(m: &Match) -> usize {
+        match m.position {
+            MatchPosition::Word { token_position, .. } => token_position,
+            MatchPosition::Phrase { token_positions: (ftp, _), .. } => ftp,
+        }
+    }
+
+    fn get_last_token(m: &Match) -> usize {
+        match m.position {
+            MatchPosition::Word { token_position, .. } => token_position,
+            MatchPosition::Phrase { token_positions: (_, ltp), .. } => ltp,
+        }
+    }
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]
@@ -245,27 +265,6 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
         self
     }
 
-    fn get_match_pos(&self, m: &Match, wt: WT, fl: FL) -> usize {
-        match m.position {
-            MatchPosition::Word { word_position, token_position } => match wt {
-                WT::Word => word_position,
-                WT::Token => token_position,
-            },
-            MatchPosition::Phrase { word_positions: (fwp, lwp), token_positions: (ftp, ltp) } => {
-                match wt {
-                    WT::Word => match fl {
-                        FL::First => fwp,
-                        FL::Last => lwp,
-                    },
-                    WT::Token => match fl {
-                        FL::First => ftp,
-                        FL::Last => ltp,
-                    },
-                }
-            }
-        }
-    }
-
     /// Returns boundaries of the words that match the query.
     pub fn matches(&mut self) -> Vec<MatchBounds> {
         match &self.matches {
@@ -273,7 +272,7 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
             Some((tokens, matches)) => matches
                 .iter()
                 .map(|m| MatchBounds {
-                    start: tokens[self.get_match_pos(m, WT::Token, FL::First)].byte_start,
+                    start: tokens[MatchPosition::get_first_token(m)].byte_start,
                     length: m.match_len,
                 })
                 .collect(),
@@ -289,13 +288,13 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
     ) -> (usize, usize) {
         // if there is no match, we start from the beginning of the string by default.
         let first_match_word_position =
-            matches.first().map(|m| self.get_match_pos(m, WT::Word, FL::First)).unwrap_or(0);
+            matches.first().map(|m| MatchPosition::get_first_word(m)).unwrap_or(0);
         let first_match_token_position =
-            matches.first().map(|m| self.get_match_pos(m, WT::Token, FL::First)).unwrap_or(0);
+            matches.first().map(|m| MatchPosition::get_first_token(m)).unwrap_or(0);
         let last_match_word_position =
-            matches.last().map(|m| self.get_match_pos(m, WT::Word, FL::Last)).unwrap_or(0);
+            matches.last().map(|m| MatchPosition::get_last_word(m)).unwrap_or(0);
         let last_match_token_position =
-            matches.last().map(|m| self.get_match_pos(m, WT::Token, FL::Last)).unwrap_or(0);
+            matches.last().map(|m| MatchPosition::get_last_token(m)).unwrap_or(0);
 
         // matches needs to be counted in the crop len.
         let mut remaining_words = crop_size + first_match_word_position - last_match_word_position;
@@ -398,8 +397,8 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                     order_score += 1;
                 }
 
-                let next_match_first_word_pos = self.get_match_pos(next_match, WT::Word, FL::First);
-                let current_match_first_word_pos = self.get_match_pos(m, WT::Word, FL::First);
+                let next_match_first_word_pos = MatchPosition::get_first_word(next_match);
+                let current_match_first_word_pos = MatchPosition::get_first_word(m);
 
                 // compute distance between matches
                 distance_score -=
@@ -431,9 +430,9 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                 // if next match would make interval gross more than crop_size,
                 // we compare the current interval with the best one,
                 // then we increase `interval_first` until next match can be added.
-                let next_match_word_pos = self.get_match_pos(next_match, WT::Word, FL::First);
+                let next_match_word_pos = MatchPosition::get_first_word(next_match);
                 let mut interval_first_match_word_pos =
-                    self.get_match_pos(&matches[interval_first], WT::Word, FL::Last);
+                    MatchPosition::get_last_word(&matches[interval_first]);
 
                 if next_match_word_pos - interval_first_match_word_pos >= crop_size {
                     let interval_score =
@@ -449,7 +448,7 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                     loop {
                         interval_first += 1;
                         interval_first_match_word_pos =
-                            self.get_match_pos(&matches[interval_first], WT::Word, FL::Last);
+                            MatchPosition::get_last_word(&matches[interval_first]);
 
                         if next_match_word_pos - interval_first_match_word_pos < crop_size {
                             break;
