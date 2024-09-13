@@ -117,30 +117,30 @@ pub struct Match {
     position: MatchPosition,
 }
 
-impl MatchPosition {
-    fn get_first_word(m: &Match) -> usize {
-        match m.position {
+impl Match {
+    fn get_first_word_pos(&self) -> usize {
+        match self.position {
             MatchPosition::Word { word_position, .. } => word_position,
             MatchPosition::Phrase { word_positions: (fwp, _), .. } => fwp,
         }
     }
 
-    fn get_last_word(m: &Match) -> usize {
-        match m.position {
+    fn get_last_word_pos(&self) -> usize {
+        match self.position {
             MatchPosition::Word { word_position, .. } => word_position,
             MatchPosition::Phrase { word_positions: (_, lwp), .. } => lwp,
         }
     }
 
-    fn get_first_token(m: &Match) -> usize {
-        match m.position {
+    fn get_first_token_pos(&self) -> usize {
+        match self.position {
             MatchPosition::Word { token_position, .. } => token_position,
             MatchPosition::Phrase { token_positions: (ftp, _), .. } => ftp,
         }
     }
 
-    fn get_last_token(m: &Match) -> usize {
-        match m.position {
+    fn get_last_token_pos(&self) -> usize {
+        match self.position {
             MatchPosition::Word { token_position, .. } => token_position,
             MatchPosition::Phrase { token_positions: (_, ltp), .. } => ltp,
         }
@@ -272,7 +272,7 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
             Some((tokens, matches)) => matches
                 .iter()
                 .map(|m| MatchBounds {
-                    start: tokens[MatchPosition::get_first_token(m)].byte_start,
+                    start: tokens[m.get_first_token_pos()].byte_start,
                     length: m.match_len,
                 })
                 .collect(),
@@ -288,13 +288,11 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
     ) -> (usize, usize) {
         // if there is no match, we start from the beginning of the string by default.
         let first_match_word_position =
-            matches.first().map(|m| MatchPosition::get_first_word(m)).unwrap_or(0);
+            matches.first().map(|m| m.get_first_word_pos()).unwrap_or(0);
         let first_match_token_position =
-            matches.first().map(|m| MatchPosition::get_first_token(m)).unwrap_or(0);
-        let last_match_word_position =
-            matches.last().map(|m| MatchPosition::get_last_word(m)).unwrap_or(0);
-        let last_match_token_position =
-            matches.last().map(|m| MatchPosition::get_last_token(m)).unwrap_or(0);
+            matches.first().map(|m| m.get_first_token_pos()).unwrap_or(0);
+        let last_match_word_position = matches.last().map(|m| m.get_last_word_pos()).unwrap_or(0);
+        let last_match_token_position = matches.last().map(|m| m.get_last_token_pos()).unwrap_or(0);
 
         // matches needs to be counted in the crop len.
         let mut remaining_words = crop_size + first_match_word_position - last_match_word_position;
@@ -389,6 +387,16 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
         let mut order_score = 0;
         let mut distance_score = 0;
 
+        // Count score for phrases
+        let tally_phrase_scores =
+            |fwp: &usize, lwp: &usize, order_score: &mut i16, distance_score: &mut i16| {
+                let words_in_phrase_minus_one = (lwp - fwp) as i16;
+                // will always be ordered, so +1 for each space between words
+                *order_score += words_in_phrase_minus_one;
+                // distance will always be 1, so -1 for each space between words
+                *distance_score -= words_in_phrase_minus_one;
+            };
+
         let mut iter = matches.iter().peekable();
         while let Some(m) = iter.next() {
             if let Some(next_match) = iter.peek() {
@@ -397,12 +405,24 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                     order_score += 1;
                 }
 
-                let next_match_first_word_pos = MatchPosition::get_first_word(next_match);
-                let current_match_first_word_pos = MatchPosition::get_first_word(m);
+                let m_last_word_pos = match m.position {
+                    MatchPosition::Word { word_position, .. } => word_position,
+                    MatchPosition::Phrase { word_positions: (fwp, lwp), .. } => {
+                        tally_phrase_scores(&fwp, &lwp, &mut order_score, &mut distance_score);
+                        lwp
+                    }
+                };
+
+                let next_match_first_word_pos = match next_match.position {
+                    MatchPosition::Word { word_position, .. } => word_position,
+                    MatchPosition::Phrase { word_positions: (fwp, _), .. } => fwp,
+                };
 
                 // compute distance between matches
-                distance_score -=
-                    (next_match_first_word_pos - current_match_first_word_pos).min(7) as i16;
+                distance_score -= (next_match_first_word_pos - m_last_word_pos).min(7) as i16;
+            } else if let MatchPosition::Phrase { word_positions: (fwp, lwp), .. } = m.position {
+                // in case last match is a phrase, count score for its words
+                tally_phrase_scores(&fwp, &lwp, &mut order_score, &mut distance_score);
             }
 
             ids.extend(m.ids.iter());
@@ -430,9 +450,9 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                 // if next match would make interval gross more than crop_size,
                 // we compare the current interval with the best one,
                 // then we increase `interval_first` until next match can be added.
-                let next_match_word_pos = MatchPosition::get_first_word(next_match);
+                let next_match_word_pos = next_match.get_last_word_pos();
                 let mut interval_first_match_word_pos =
-                    MatchPosition::get_last_word(&matches[interval_first]);
+                    matches[interval_first].get_first_word_pos();
 
                 if next_match_word_pos - interval_first_match_word_pos >= crop_size {
                     let interval_score =
@@ -448,7 +468,7 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                     loop {
                         interval_first += 1;
                         interval_first_match_word_pos =
-                            MatchPosition::get_last_word(&matches[interval_first]);
+                            matches[interval_first].get_first_word_pos();
 
                         if next_match_word_pos - interval_first_match_word_pos < crop_size {
                             break;
