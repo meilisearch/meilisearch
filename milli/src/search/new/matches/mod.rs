@@ -245,27 +245,6 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
         self
     }
 
-    /// Returns boundaries of the words that match the query.
-    pub fn matches(&mut self) -> Vec<MatchBounds> {
-        match &self.matches {
-            None => self.compute_matches().matches(),
-            Some((tokens, matches)) => matches
-                .iter()
-                .map(|m| MatchBounds {
-                    start: tokens[match m.position {
-                        MatchPosition::Word { token_position, .. } => token_position,
-                        MatchPosition::Phrase {
-                            token_positions: (first_token_position, _),
-                            ..
-                        } => first_token_position,
-                    }]
-                    .byte_start,
-                    length: m.match_len,
-                })
-                .collect(),
-        }
-    }
-
     fn get_match_pos(&self, m: &Match, wt: WT, fl: FL) -> usize {
         match m.position {
             MatchPosition::Word { word_position, token_position } => match wt {
@@ -284,6 +263,20 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                     },
                 }
             }
+        }
+    }
+
+    /// Returns boundaries of the words that match the query.
+    pub fn matches(&mut self) -> Vec<MatchBounds> {
+        match &self.matches {
+            None => self.compute_matches().matches(),
+            Some((tokens, matches)) => matches
+                .iter()
+                .map(|m| MatchBounds {
+                    start: tokens[self.get_match_pos(m, WT::Token, FL::First)].byte_start,
+                    length: m.match_len,
+                })
+                .collect(),
         }
     }
 
