@@ -387,7 +387,7 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
         let mut order_score = 0;
         let mut distance_score = 0;
 
-        // Count score for phrases
+        // count score for phrases
         let tally_phrase_scores =
             |fwp: &usize, lwp: &usize, order_score: &mut i16, distance_score: &mut i16| {
                 let words_in_phrase_minus_one = (lwp - fwp) as i16;
@@ -450,11 +450,11 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                 // if next match would make interval gross more than crop_size,
                 // we compare the current interval with the best one,
                 // then we increase `interval_first` until next match can be added.
-                let next_match_word_pos = next_match.get_last_word_pos();
-                let mut interval_first_match_word_pos =
+                let next_match_last_word_pos = next_match.get_last_word_pos();
+                let mut interval_first_match_first_word_pos =
                     matches[interval_first].get_first_word_pos();
 
-                if next_match_word_pos - interval_first_match_word_pos >= crop_size {
+                if next_match_last_word_pos - interval_first_match_first_word_pos >= crop_size {
                     let interval_score =
                         self.match_interval_score(&matches[interval_first..=interval_last]);
 
@@ -467,10 +467,12 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                     // advance start of the interval while interval is longer than crop_size.
                     loop {
                         interval_first += 1;
-                        interval_first_match_word_pos =
+                        interval_first_match_first_word_pos =
                             matches[interval_first].get_first_word_pos();
 
-                        if next_match_word_pos - interval_first_match_word_pos < crop_size {
+                        if next_match_last_word_pos - interval_first_match_first_word_pos
+                            < crop_size
+                        {
                             break;
                         }
                     }
