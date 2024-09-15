@@ -388,14 +388,18 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
         let mut distance_score = 0;
 
         // count score for phrases
-        let tally_phrase_scores =
-            |fwp: &usize, lwp: &usize, order_score: &mut i16, distance_score: &mut i16| {
-                let words_in_phrase_minus_one = (lwp - fwp) as i16;
-                // will always be ordered, so +1 for each space between words
-                *order_score += words_in_phrase_minus_one;
-                // distance will always be 1, so -1 for each space between words
-                *distance_score -= words_in_phrase_minus_one;
-            };
+        fn tally_phrase_scores(
+            fwp: &usize,
+            lwp: &usize,
+            order_score: &mut i16,
+            distance_score: &mut i16,
+        ) {
+            let words_in_phrase_minus_one = (lwp - fwp) as i16;
+            // will always be ordered, so +1 for each space between words
+            *order_score += words_in_phrase_minus_one;
+            // distance will always be 1, so -1 for each space between words
+            *distance_score -= words_in_phrase_minus_one;
+        }
 
         let mut iter = matches.iter().peekable();
         while let Some(m) = iter.next() {
