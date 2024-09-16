@@ -781,6 +781,7 @@ pub fn perform_federated_search(
                     candidates,
                     override_max_values_per_facet,
                     override_sort_facet_values_by,
+                    super::Route::MultiSearch,
                 )
             })
             .transpose()
@@ -844,6 +845,7 @@ pub fn perform_federated_search(
                 Default::default(),
                 override_max_values_per_facet,
                 override_sort_facet_values_by,
+                super::Route::MultiSearch,
             ) {
                 error.message =
                     format!("Inside `.federation.facetsByIndex.{index_uid}`: {}\n Note: index `{index_uid}` is not used in queries", error.message);
