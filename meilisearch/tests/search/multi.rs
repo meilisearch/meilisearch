@@ -3989,9 +3989,9 @@ async fn federation_non_faceted_for_an_index() {
     insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
     {
       "message": "Inside `.federation.facetsByIndex.fruits-no-name`: Invalid facet distribution, attribute `name` is not filterable. The available filterable attributes are `BOOST, id`.\n Note: index `fruits-no-name` used in `.queries[1]`",
-      "code": "invalid_search_facets",
+      "code": "invalid_multi_search_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facets"
     }
     "###);
 
@@ -4011,9 +4011,9 @@ async fn federation_non_faceted_for_an_index() {
     insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
     {
       "message": "Inside `.federation.facetsByIndex.fruits-no-name`: Invalid facet distribution, attribute `name` is not filterable. The available filterable attributes are `BOOST, id`.\n Note: index `fruits-no-name` is not used in queries",
-      "code": "invalid_search_facets",
+      "code": "invalid_multi_search_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facets"
     }
     "###);
 
@@ -4034,9 +4034,9 @@ async fn federation_non_faceted_for_an_index() {
     insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
     {
       "message": "Inside `.federation.facetsByIndex.fruits-no-facets`: Invalid facet distribution, this index does not have configured filterable attributes.\n Note: index `fruits-no-facets` is not used in queries",
-      "code": "invalid_search_facets",
+      "code": "invalid_multi_search_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facets"
     }
     "###);
 
