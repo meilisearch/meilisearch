@@ -17,6 +17,7 @@ use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
 use tokenize_document::{tokenizer_builder, DocumentTokenizer};
 
 use super::cache::CboCachedSorter;
+use super::DocidsExtractor;
 use crate::update::new::{DocumentChange, ItemsPool};
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
 use crate::{GlobalFieldsIdsMap, Index, Result, MAX_POSITION_PER_ATTRIBUTE};
@@ -129,4 +130,15 @@ pub trait SearchableExtractor {
         -> Result<Option<Vec<&'a str>>>;
 
     fn attributes_to_skip<'a>(rtxn: &'a RoTxn, index: &'a Index) -> Result<Vec<&'a str>>;
+}
+
+impl<T: SearchableExtractor> DocidsExtractor for T {
+    fn run_extraction(
+        index: &Index,
+        fields_ids_map: &GlobalFieldsIdsMap,
+        indexer: GrenadParameters,
+        document_changes: impl IntoParallelIterator<Item = Result<DocumentChange>>,
+    ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>> {
+        Self::run_extraction(index, fields_ids_map, indexer, document_changes)
+    }
 }

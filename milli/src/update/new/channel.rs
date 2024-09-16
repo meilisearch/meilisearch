@@ -6,6 +6,7 @@ use grenad::Merger;
 use heed::types::Bytes;
 use memmap2::Mmap;
 
+use super::extract::FacetKind;
 use super::StdResult;
 use crate::index::main_key::{DOCUMENTS_IDS_KEY, WORDS_FST_KEY};
 use crate::update::new::KvReaderFieldId;
@@ -120,11 +121,16 @@ pub enum Database {
     WordFidDocids,
     WordPairProximityDocids,
     WordPositionDocids,
+    FacetIdIsNullDocids,
+    FacetIdIsEmptyDocids,
+    FacetIdExistsDocids,
+    FacetIdF64NumberDocids,
+    FacetIdStringDocids,
 }
 
-impl WriterOperation {
+impl Database {
     pub fn database(&self, index: &Index) -> heed::Database<Bytes, Bytes> {
-        match self.database {
+        match self {
             Database::Documents => index.documents.remap_types(),
             Database::ExactWordDocids => index.exact_word_docids.remap_types(),
             Database::Main => index.main.remap_types(),
@@ -133,7 +139,18 @@ impl WriterOperation {
             Database::WordPositionDocids => index.word_position_docids.remap_types(),
             Database::FidWordCountDocids => index.field_id_word_count_docids.remap_types(),
             Database::WordPairProximityDocids => index.word_pair_proximity_docids.remap_types(),
+            Database::FacetIdIsNullDocids => index.facet_id_is_null_docids.remap_types(),
+            Database::FacetIdIsEmptyDocids => index.facet_id_is_empty_docids.remap_types(),
+            Database::FacetIdExistsDocids => index.facet_id_exists_docids.remap_types(),
+            Database::FacetIdF64NumberDocids => index.facet_id_f64_docids.remap_types(),
+            Database::FacetIdStringDocids => index.facet_id_string_docids.remap_types(),
         }
+    }
+}
+
+impl WriterOperation {
+    pub fn database(&self, index: &Index) -> heed::Database<Bytes, Bytes> {
+        self.database.database(index)
     }
 
     pub fn entry(self) -> EntryOperation {
@@ -159,8 +176,12 @@ impl MergerSender {
         MainSender(&self.0)
     }
 
-    pub fn docids<D: DatabaseType>(&self) -> DocidsSender<'_, D> {
-        DocidsSender { sender: &self.0, _marker: PhantomData }
+    pub fn docids<D: DatabaseType>(&self) -> WordDocidsSender<'_, D> {
+        WordDocidsSender { sender: &self.0, _marker: PhantomData }
+    }
+
+    pub fn facet_docids(&self) -> FacetDocidsSender<'_> {
+        FacetDocidsSender { sender: &self.0 }
     }
 
     pub fn documents(&self) -> DocumentsSender<'_> {
@@ -208,16 +229,21 @@ pub enum WordDocids {}
 pub enum WordFidDocids {}
 pub enum WordPairProximityDocids {}
 pub enum WordPositionDocids {}
+pub enum FacetDocids {}
 
 pub trait DatabaseType {
     const DATABASE: Database;
+}
 
+pub trait MergerOperationType {
     fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation;
 }
 
 impl DatabaseType for ExactWordDocids {
     const DATABASE: Database = Database::ExactWordDocids;
+}
 
+impl MergerOperationType for ExactWordDocids {
     fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
         MergerOperation::ExactWordDocidsMerger(merger)
     }
@@ -225,7 +251,9 @@ impl DatabaseType for ExactWordDocids {
 
 impl DatabaseType for FidWordCountDocids {
     const DATABASE: Database = Database::FidWordCountDocids;
+}
 
+impl MergerOperationType for FidWordCountDocids {
     fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
         MergerOperation::FidWordCountDocidsMerger(merger)
     }
@@ -233,7 +261,9 @@ impl DatabaseType for FidWordCountDocids {
 
 impl DatabaseType for WordDocids {
     const DATABASE: Database = Database::WordDocids;
+}
 
+impl MergerOperationType for WordDocids {
     fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
         MergerOperation::WordDocidsMerger(merger)
     }
@@ -241,7 +271,9 @@ impl DatabaseType for WordDocids {
 
 impl DatabaseType for WordFidDocids {
     const DATABASE: Database = Database::WordFidDocids;
+}
 
+impl MergerOperationType for WordFidDocids {
     fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
         MergerOperation::WordFidDocidsMerger(merger)
     }
@@ -249,7 +281,9 @@ impl DatabaseType for WordFidDocids {
 
 impl DatabaseType for WordPairProximityDocids {
     const DATABASE: Database = Database::WordPairProximityDocids;
+}
 
+impl MergerOperationType for WordPairProximityDocids {
     fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
         MergerOperation::WordPairProximityDocidsMerger(merger)
     }
@@ -257,19 +291,32 @@ impl DatabaseType for WordPairProximityDocids {
 
 impl DatabaseType for WordPositionDocids {
     const DATABASE: Database = Database::WordPositionDocids;
+}
 
+impl MergerOperationType for WordPositionDocids {
     fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
         MergerOperation::WordPositionDocidsMerger(merger)
     }
 }
 
-pub struct DocidsSender<'a, D> {
+impl MergerOperationType for FacetDocids {
+    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
+        MergerOperation::FacetDocidsMerger(merger)
+    }
+}
+
+pub trait DocidsSender {
+    fn write(&self, key: &[u8], value: &[u8]) -> StdResult<(), SendError<()>>;
+    fn delete(&self, key: &[u8]) -> StdResult<(), SendError<()>>;
+}
+
+pub struct WordDocidsSender<'a, D> {
     sender: &'a Sender<WriterOperation>,
     _marker: PhantomData<D>,
 }
 
-impl<D: DatabaseType> DocidsSender<'_, D> {
-    pub fn write(&self, key: &[u8], value: &[u8]) -> StdResult<(), SendError<()>> {
+impl<D: DatabaseType> DocidsSender for WordDocidsSender<'_, D> {
+    fn write(&self, key: &[u8], value: &[u8]) -> StdResult<(), SendError<()>> {
         let entry = EntryOperation::Write(KeyValueEntry::from_small_key_value(key, value));
         match self.sender.send(WriterOperation { database: D::DATABASE, entry }) {
             Ok(()) => Ok(()),
@@ -277,12 +324,49 @@ impl<D: DatabaseType> DocidsSender<'_, D> {
         }
     }
 
-    pub fn delete(&self, key: &[u8]) -> StdResult<(), SendError<()>> {
+    fn delete(&self, key: &[u8]) -> StdResult<(), SendError<()>> {
         let entry = EntryOperation::Delete(KeyEntry::from_key(key));
         match self.sender.send(WriterOperation { database: D::DATABASE, entry }) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
+    }
+}
+
+pub struct FacetDocidsSender<'a> {
+    sender: &'a Sender<WriterOperation>,
+}
+
+impl DocidsSender for FacetDocidsSender<'_> {
+    fn write(&self, key: &[u8], value: &[u8]) -> StdResult<(), SendError<()>> {
+        let (database, key) = self.extract_database(key);
+        let entry = EntryOperation::Write(KeyValueEntry::from_small_key_value(key, value));
+        match self.sender.send(WriterOperation { database, entry }) {
+            Ok(()) => Ok(()),
+            Err(SendError(_)) => Err(SendError(())),
+        }
+    }
+
+    fn delete(&self, key: &[u8]) -> StdResult<(), SendError<()>> {
+        let (database, key) = self.extract_database(key);
+        let entry = EntryOperation::Delete(KeyEntry::from_key(key));
+        match self.sender.send(WriterOperation { database, entry }) {
+            Ok(()) => Ok(()),
+            Err(SendError(_)) => Err(SendError(())),
+        }
+    }
+}
+
+impl FacetDocidsSender<'_> {
+    fn extract_database<'a>(&self, key: &'a [u8]) -> (Database, &'a [u8]) {
+        let database = match FacetKind::from(key[0]) {
+            FacetKind::Number => Database::FacetIdF64NumberDocids,
+            FacetKind::String => Database::FacetIdStringDocids,
+            FacetKind::Null => Database::FacetIdIsNullDocids,
+            FacetKind::Empty => Database::FacetIdIsEmptyDocids,
+            FacetKind::Exists => Database::FacetIdExistsDocids,
+        };
+        (database, &key[1..])
     }
 }
 
@@ -321,6 +405,7 @@ pub enum MergerOperation {
     WordFidDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
     WordPairProximityDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
     WordPositionDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
+    FacetDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
     DeleteDocument { docid: DocumentId },
     InsertDocument { docid: DocumentId, document: Box<KvReaderFieldId> },
     FinishedDocument,
@@ -344,7 +429,7 @@ impl ExtractorSender {
         DocumentSender(&self.0)
     }
 
-    pub fn send_searchable<D: DatabaseType>(
+    pub fn send_searchable<D: MergerOperationType>(
         &self,
         merger: Merger<File, MergeDeladdCboRoaringBitmaps>,
     ) -> StdResult<(), SendError<()>> {

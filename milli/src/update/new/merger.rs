@@ -12,6 +12,7 @@ use tempfile::tempfile;
 
 use super::channel::*;
 use super::{Deletion, DocumentChange, Insertion, KvReaderDelAdd, KvReaderFieldId, Update};
+use super::extract::FacetKind;
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::MergerOperation;
 use crate::update::MergeDeladdCboRoaringBitmaps;
@@ -63,26 +64,33 @@ pub fn merge_grenad_entries(
                 )?;
             }
             MergerOperation::WordDocidsMerger(merger) => {
-                let span =
-                    tracing::trace_span!(target: "indexing::documents::merge", "word_docids");
-                let _entered = span.enter();
                 let mut add_words_fst = SetBuilder::new(BufWriter::new(tempfile()?))?;
                 let mut del_words_fst = SetBuilder::new(BufWriter::new(tempfile()?))?;
+                {
+                    let span =
+                        tracing::trace_span!(target: "indexing::documents::merge", "word_docids");
+                    let _entered = span.enter();
 
-                merge_and_send_docids(
-                    merger,
-                    index.word_docids.remap_types(),
-                    rtxn,
-                    &mut buffer,
-                    sender.docids::<WordDocids>(),
-                    |key| add_words_fst.insert(key),
-                    |key| del_words_fst.insert(key),
-                )?;
+                    merge_and_send_docids(
+                        merger,
+                        index.word_docids.remap_types(),
+                        rtxn,
+                        &mut buffer,
+                        sender.docids::<WordDocids>(),
+                        |key| add_words_fst.insert(key),
+                        |key| del_words_fst.insert(key),
+                    )?;
+                }
 
-                // Move that into a dedicated function
-                let words_fst = index.words_fst(rtxn)?;
-                let mmap = compute_new_words_fst(add_words_fst, del_words_fst, words_fst)?;
-                sender.main().write_words_fst(mmap).unwrap();
+                {
+                    let span =
+                        tracing::trace_span!(target: "indexing::documents::merge", "words_fst");
+                    let _entered = span.enter();
+                    // Move that into a dedicated function
+                    let words_fst = index.words_fst(rtxn)?;
+                    let mmap = compute_new_words_fst(add_words_fst, del_words_fst, words_fst)?;
+                    sender.main().write_words_fst(mmap).unwrap();
+                }
             }
             MergerOperation::WordFidDocidsMerger(merger) => {
                 let span =
@@ -160,6 +168,18 @@ pub fn merge_grenad_entries(
             }
             MergerOperation::FinishedDocument => {
                 // send the rtree
+            }
+            MergerOperation::FacetDocidsMerger(merger) => {
+                let span =
+                    tracing::trace_span!(target: "indexing::documents::merge", "facet_docids");
+                let _entered = span.enter();
+                merge_and_send_facet_docids(
+                    merger,
+                    FacetDatabases::new(index),
+                    rtxn,
+                    &mut buffer,
+                    sender.facet_docids(),
+                )?;
             }
         }
     }
@@ -252,12 +272,12 @@ fn compute_new_words_fst(
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
-fn merge_and_send_docids<D: DatabaseType>(
+fn merge_and_send_docids(
     merger: Merger<File, MergeDeladdCboRoaringBitmaps>,
     database: Database<Bytes, Bytes>,
     rtxn: &RoTxn<'_>,
     buffer: &mut Vec<u8>,
-    word_docids_sender: DocidsSender<'_, D>,
+    docids_sender: impl DocidsSender,
     mut add_key: impl FnMut(&[u8]) -> fst::Result<()>,
     mut del_key: impl FnMut(&[u8]) -> fst::Result<()>,
 ) -> Result<()> {
@@ -271,11 +291,11 @@ fn merge_and_send_docids<D: DatabaseType>(
         match merge_cbo_bitmaps(current, del, add)? {
             Operation::Write(bitmap) => {
                 let value = cbo_bitmap_serialize_into_vec(&bitmap, buffer);
-                word_docids_sender.write(key, value).unwrap();
+                docids_sender.write(key, value).unwrap();
                 add_key(key)?;
             }
             Operation::Delete => {
-                word_docids_sender.delete(key).unwrap();
+                docids_sender.delete(key).unwrap();
                 del_key(key)?;
             }
             Operation::Ignore => (),
@@ -283,6 +303,76 @@ fn merge_and_send_docids<D: DatabaseType>(
     }
 
     Ok(())
+}
+
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
+fn merge_and_send_facet_docids(
+    merger: Merger<File, MergeDeladdCboRoaringBitmaps>,
+    database: FacetDatabases,
+    rtxn: &RoTxn<'_>,
+    buffer: &mut Vec<u8>,
+    docids_sender: impl DocidsSender,
+) -> Result<()> {
+    let mut merger_iter = merger.into_stream_merger_iter().unwrap();
+    while let Some((key, deladd)) = merger_iter.next().unwrap() {
+        let current = database.get(rtxn, key)?;
+        let deladd: &KvReaderDelAdd = deladd.into();
+        let del = deladd.get(DelAdd::Deletion);
+        let add = deladd.get(DelAdd::Addition);
+
+        match merge_cbo_bitmaps(current, del, add)? {
+            Operation::Write(bitmap) => {
+                let value = cbo_bitmap_serialize_into_vec(&bitmap, buffer);
+                docids_sender.write(key, value).unwrap();
+            }
+            Operation::Delete => {
+                docids_sender.delete(key).unwrap();
+            }
+            Operation::Ignore => (),
+        }
+    }
+
+    Ok(())
+}
+
+struct FacetDatabases {
+    /// Maps the facet field id and the docids for which this field exists
+    facet_id_exists_docids: Database<Bytes, Bytes>,
+    /// Maps the facet field id and the docids for which this field is set as null
+    facet_id_is_null_docids: Database<Bytes, Bytes>,
+    /// Maps the facet field id and the docids for which this field is considered empty
+    facet_id_is_empty_docids: Database<Bytes, Bytes>,
+    /// Maps the facet field id and ranges of numbers with the docids that corresponds to them.
+    facet_id_f64_docids: Database<Bytes, Bytes>,
+    /// Maps the facet field id and ranges of strings with the docids that corresponds to them.
+    facet_id_string_docids: Database<Bytes, Bytes>,
+}
+
+impl FacetDatabases {
+    fn new(index: &Index) -> Self {
+        Self {
+            facet_id_exists_docids: index.facet_id_exists_docids.remap_types(),
+            facet_id_is_null_docids: index.facet_id_is_null_docids.remap_types(),
+            facet_id_is_empty_docids: index.facet_id_is_empty_docids.remap_types(),
+            facet_id_f64_docids: index.facet_id_f64_docids.remap_types(),
+            facet_id_string_docids: index.facet_id_string_docids.remap_types(),
+        }
+    }
+
+    fn get<'a>(&self, rtxn: &'a RoTxn<'_>, key: &[u8]) -> heed::Result<Option<&'a [u8]>> {
+        let (facet_kind, key) = self.extract_facet_kind(key);
+        match facet_kind {
+            FacetKind::Exists => self.facet_id_exists_docids.get(rtxn, key),
+            FacetKind::Null => self.facet_id_is_null_docids.get(rtxn, key),
+            FacetKind::Empty => self.facet_id_is_empty_docids.get(rtxn, key),
+            FacetKind::Number => self.facet_id_f64_docids.get(rtxn, key),
+            FacetKind::String => self.facet_id_string_docids.get(rtxn, key),
+        }
+    }
+
+    fn extract_facet_kind<'a>(&self, key: &'a [u8]) -> (FacetKind, &'a [u8]) {
+        (FacetKind::from(key[0]), &key[1..])
+    }
 }
 
 enum Operation {

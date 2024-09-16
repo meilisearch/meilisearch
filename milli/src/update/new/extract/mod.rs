@@ -2,8 +2,28 @@ mod cache;
 mod faceted;
 mod searchable;
 
+use std::fs::File;
+
 pub use faceted::*;
+use grenad::Merger;
+use rayon::iter::IntoParallelIterator;
 pub use searchable::*;
+
+use crate::{
+    update::{GrenadParameters, MergeDeladdCboRoaringBitmaps},
+    GlobalFieldsIdsMap, Index, Result,
+};
+
+use super::DocumentChange;
+
+pub trait DocidsExtractor {
+    fn run_extraction(
+        index: &Index,
+        fields_ids_map: &GlobalFieldsIdsMap,
+        indexer: GrenadParameters,
+        document_changes: impl IntoParallelIterator<Item = Result<DocumentChange>>,
+    ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>>;
+}
 
 /// TODO move in permissive json pointer
 pub mod perm_json_p {
@@ -39,6 +59,10 @@ pub mod perm_json_p {
         base_key: &str,
         seeker: &mut impl FnMut(&str, &Value) -> Result<()>,
     ) -> Result<()> {
+        if value.is_empty() {
+            seeker(&base_key, &Value::Object(Map::with_capacity(0)))?;
+        }
+
         for (key, value) in value.iter() {
             let base_key = if base_key.is_empty() {
                 key.to_string()
@@ -80,6 +104,10 @@ pub mod perm_json_p {
         base_key: &str,
         seeker: &mut impl FnMut(&str, &Value) -> Result<()>,
     ) -> Result<()> {
+        if values.is_empty() {
+            seeker(&base_key, &Value::Array(vec![]))?;
+        }
+
         for value in values {
             match value {
                 Value::Object(object) => {

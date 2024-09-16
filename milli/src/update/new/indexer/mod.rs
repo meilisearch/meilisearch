@@ -101,6 +101,22 @@ where
                         max_memory: Some(max_memory),
                         ..GrenadParameters::default()
                     };
+
+                    {
+                        let span = tracing::trace_span!(target: "indexing::documents::extract", "faceted");
+                        let _entered = span.enter();
+                        extract_and_send_docids::<
+                            FacetedDocidsExtractor,
+                            FacetDocids,
+                        >(
+                            index,
+                            &global_fields_ids_map,
+                            grenad_parameters,
+                            document_changes.clone(),
+                            &extractor_sender,
+                        )?;
+                    }
+
                     {
                         let span = tracing::trace_span!(target: "indexing::documents::extract", "word_docids");
                         let _entered = span.enter();
@@ -176,19 +192,19 @@ where
                     }
 
                     // TODO THIS IS TOO MUCH
-                    // Extract fieldid docid facet number
-                    // Extract fieldid docid facet string
-                    // Extract facetid string fst
-                    // Extract facetid normalized string strings
+                    // - [ ] Extract fieldid docid facet number
+                    // - [ ] Extract fieldid docid facet string
+                    // - [ ] Extract facetid string fst
+                    // - [ ] Extract facetid normalized string strings
 
                     // TODO Inverted Indexes again
-                    // Extract fieldid facet isempty docids
-                    // Extract fieldid facet isnull docids
-                    // Extract fieldid facet exists docids
+                    // - [x] Extract fieldid facet isempty docids
+                    // - [x] Extract fieldid facet isnull docids
+                    // - [x] Extract fieldid facet exists docids
 
                     // TODO This is the normal system
-                    // Extract fieldid facet number docids
-                    // Extract fieldid facet string docids
+                    // - [x] Extract fieldid facet number docids
+                    // - [x] Extract fieldid facet string docids
 
                     Ok(()) as Result<_>
                 })
@@ -238,7 +254,7 @@ where
 /// TODO: GrenadParameters::default() should be removed in favor a passed parameter
 /// TODO: manage the errors correctly
 /// TODO: we must have a single trait that also gives the extractor type
-fn extract_and_send_docids<E: SearchableExtractor, D: DatabaseType>(
+fn extract_and_send_docids<E: DocidsExtractor, D: MergerOperationType>(
     index: &Index,
     fields_ids_map: &GlobalFieldsIdsMap,
     indexer: GrenadParameters,
