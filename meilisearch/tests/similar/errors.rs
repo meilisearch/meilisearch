@@ -79,7 +79,7 @@ async fn similar_bad_id() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid value at `.id`: the value of `id` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_).",
+      "message": "Invalid value at `.id`: the value of `id` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 512 bytes.",
       "code": "invalid_similar_id",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_similar_id"
@@ -172,7 +172,7 @@ async fn similar_invalid_id() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid value at `.id`: the value of `id` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_).",
+      "message": "Invalid value at `.id`: the value of `id` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 512 bytes.",
       "code": "invalid_similar_id",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_similar_id"
