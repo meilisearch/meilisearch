@@ -1,4 +1,5 @@
 use std::collections::{HashMap, VecDeque};
+use std::rc::Rc;
 
 use heed::RoTxn;
 use itertools::merge_join_by;
@@ -38,7 +39,7 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
         let mut key_buffer = Vec::new();
         let mut del_word_pair_proximity = Vec::new();
         let mut add_word_pair_proximity = Vec::new();
-        let mut word_positions: VecDeque<(String, u16)> =
+        let mut word_positions: VecDeque<(Rc<str>, u16)> =
             VecDeque::with_capacity(MAX_DISTANCE as usize);
 
         let docid = document_change.docid();
@@ -118,8 +119,8 @@ fn build_key<'a>(prox: u8, w1: &str, w2: &str, key_buffer: &'a mut Vec<u8>) -> &
 }
 
 fn word_positions_into_word_pair_proximity(
-    word_positions: &mut VecDeque<(String, u16)>,
-    word_pair_proximity: &mut impl FnMut((String, String), u8),
+    word_positions: &mut VecDeque<(Rc<str>, u16)>,
+    word_pair_proximity: &mut impl FnMut((Rc<str>, Rc<str>), u8),
 ) -> Result<()> {
     let (head_word, head_position) = word_positions.pop_front().unwrap();
     for (word, position) in word_positions.iter() {
@@ -135,8 +136,8 @@ fn process_document_tokens(
     document: &KvReader<FieldId>,
     document_tokenizer: &DocumentTokenizer,
     fields_ids_map: &mut GlobalFieldsIdsMap,
-    word_positions: &mut VecDeque<(String, u16)>,
-    word_pair_proximity: &mut impl FnMut((String, String), u8),
+    word_positions: &mut VecDeque<(Rc<str>, u16)>,
+    word_pair_proximity: &mut impl FnMut((Rc<str>, Rc<str>), u8),
 ) -> Result<()> {
     let mut token_fn = |_fname: &str, _fid: FieldId, pos: u16, word: &str| {
         // drain the proximity window until the head word is considered close to the word we are inserting.
@@ -148,7 +149,7 @@ fn process_document_tokens(
         }
 
         // insert the new word.
-        word_positions.push_back((word.to_string(), pos));
+        word_positions.push_back((Rc::from(word), pos));
         Ok(())
     };
     document_tokenizer.tokenize_document(document, fields_ids_map, &mut token_fn)?;
