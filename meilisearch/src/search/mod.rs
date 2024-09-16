@@ -991,7 +991,15 @@ pub fn perform_search(
 
     let (facet_distribution, facet_stats) = facets
         .map(move |facets| {
-            compute_facet_distribution_stats(&facets, index, &rtxn, candidates, None, None)
+            compute_facet_distribution_stats(
+                &facets,
+                index,
+                &rtxn,
+                candidates,
+                None,
+                None,
+                Route::Search,
+            )
         })
         .transpose()?
         .map(|ComputedFacets { distribution, stats }| (distribution, stats))
@@ -1017,6 +1025,11 @@ pub struct ComputedFacets {
     pub stats: BTreeMap<String, FacetStats>,
 }
 
+enum Route {
+    Search,
+    MultiSearch,
+}
+
 fn compute_facet_distribution_stats<S: AsRef<str>>(
     facets: &[S],
     index: &Index,
@@ -1024,6 +1037,7 @@ fn compute_facet_distribution_stats<S: AsRef<str>>(
     candidates: roaring::RoaringBitmap,
     override_max_values_per_facet: Option<usize>,
     override_sort_facet_values_by: Option<OrderBy>,
+    route: Route,
 ) -> Result<ComputedFacets, ResponseError> {
     let mut facet_distribution = index.facets_distribution(rtxn);
 
@@ -1054,7 +1068,16 @@ fn compute_facet_distribution_stats<S: AsRef<str>>(
     let distribution = facet_distribution
         .candidates(candidates)
         .default_order_by(sort_facet_values_by("*"))
-        .execute()?;
+        .execute()
+        .map_err(|error| match (error, route) {
+            (
+                error @ milli::Error::UserError(milli::UserError::InvalidFacetsDistribution {
+                    ..
+                }),
+                Route::MultiSearch,
+            ) => ResponseError::from_msg(error.to_string(), Code::InvalidMultiSearchFacets),
+            (error, _) => error.into(),
+        })?;
     let stats = facet_distribution.compute_stats()?;
     let stats = stats.into_iter().map(|(k, (min, max))| (k, FacetStats { min, max })).collect();
     Ok(ComputedFacets { distribution, stats })
