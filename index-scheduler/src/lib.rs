@@ -276,6 +276,8 @@ pub struct IndexSchedulerOptions {
     pub max_number_of_batched_tasks: usize,
     /// The experimental features enabled for this instance.
     pub instance_features: InstanceTogglableFeatures,
+    /// An experimental option to control the generation of prefix databases.
+    pub compute_prefix_databases: bool,
 }
 
 /// Structure which holds meilisearch's indexes and schedules the tasks
@@ -283,19 +285,13 @@ pub struct IndexSchedulerOptions {
 pub struct IndexScheduler {
     /// The LMDB environment which the DBs are associated with.
     pub(crate) env: Env,
-
     /// A boolean that can be set to true to stop the currently processing tasks.
     pub(crate) must_stop_processing: MustStopProcessing,
-
     /// The list of tasks currently processing
     pub(crate) processing_tasks: Arc<RwLock<ProcessingTasks>>,
-
     /// The list of files referenced by the tasks
-    pub(crate) file_store: FileStore,
-
-    // The main database, it contains all the tasks accessible by their Id.
+    pub(crate) file_store: FileStore, // The main database, it contains all the tasks accessible by their Id.
     pub(crate) all_tasks: Database<BEU32, SerdeJson<Task>>,
-
     /// All the tasks ids grouped by their status.
     // TODO we should not be able to serialize a `Status::Processing` in this database.
     pub(crate) status: Database<SerdeBincode<Status>, RoaringBitmapCodec>,
@@ -303,58 +299,43 @@ pub struct IndexScheduler {
     pub(crate) kind: Database<SerdeBincode<Kind>, RoaringBitmapCodec>,
     /// Store the tasks associated to an index.
     pub(crate) index_tasks: Database<Str, RoaringBitmapCodec>,
-
     /// Store the tasks that were canceled by a task uid
     pub(crate) canceled_by: Database<BEU32, RoaringBitmapCodec>,
-
     /// Store the task ids of tasks which were enqueued at a specific date
     pub(crate) enqueued_at: Database<BEI128, CboRoaringBitmapCodec>,
-
     /// Store the task ids of finished tasks which started being processed at a specific date
     pub(crate) started_at: Database<BEI128, CboRoaringBitmapCodec>,
-
     /// Store the task ids of tasks which finished at a specific date
     pub(crate) finished_at: Database<BEI128, CboRoaringBitmapCodec>,
-
     /// In charge of creating, opening, storing and returning indexes.
     pub(crate) index_mapper: IndexMapper,
-
     /// In charge of fetching and setting the status of experimental features.
     features: features::FeatureData,
-
     /// Get a signal when a batch needs to be processed.
     pub(crate) wake_up: Arc<SignalEvent>,
-
     /// Whether auto-batching is enabled or not.
     pub(crate) autobatching_enabled: bool,
-
     /// Whether we should automatically cleanup the task queue or not.
     pub(crate) cleanup_enabled: bool,
-
     /// The max number of tasks allowed before the scheduler starts to delete
     /// the finished tasks automatically.
     pub(crate) max_number_of_tasks: usize,
-
     /// The maximum number of tasks that will be batched together.
     pub(crate) max_number_of_batched_tasks: usize,
-
+    /// Control wether we must generate the prefix databases or not.
+    pub(crate) compute_prefix_databases: bool,
     /// The webhook url we should send tasks to after processing every batches.
     pub(crate) webhook_url: Option<String>,
     /// The Authorization header to send to the webhook URL.
     pub(crate) webhook_authorization_header: Option<String>,
-
     /// The path used to create the dumps.
     pub(crate) dumps_path: PathBuf,
-
     /// The path used to create the snapshots.
     pub(crate) snapshots_path: PathBuf,
-
     /// The path to the folder containing the auth LMDB env.
     pub(crate) auth_path: PathBuf,
-
     /// The path to the version file of Meilisearch.
     pub(crate) version_file_path: PathBuf,
-
     embedders: Arc<RwLock<HashMap<EmbedderOptions, Arc<Embedder>>>>,
 
     // ================= test
@@ -364,13 +345,11 @@ pub struct IndexScheduler {
     /// See [self.breakpoint()](`IndexScheduler::breakpoint`) for an explanation.
     #[cfg(test)]
     test_breakpoint_sdr: crossbeam::channel::Sender<(Breakpoint, bool)>,
-
     /// A list of planned failures within the [`tick`](IndexScheduler::tick) method of the index scheduler.
     ///
     /// The first field is the iteration index and the second field identifies a location in the code.
     #[cfg(test)]
     planned_failures: Vec<(usize, tests::FailureLocation)>,
-
     /// A counter that is incremented before every call to [`tick`](IndexScheduler::tick)
     #[cfg(test)]
     run_loop_iteration: Arc<RwLock<usize>>,
@@ -397,6 +376,7 @@ impl IndexScheduler {
             cleanup_enabled: self.cleanup_enabled,
             max_number_of_tasks: self.max_number_of_tasks,
             max_number_of_batched_tasks: self.max_number_of_batched_tasks,
+            compute_prefix_databases: self.compute_prefix_databases,
             snapshots_path: self.snapshots_path.clone(),
             dumps_path: self.dumps_path.clone(),
             auth_path: self.auth_path.clone(),
@@ -499,6 +479,7 @@ impl IndexScheduler {
             cleanup_enabled: options.cleanup_enabled,
             max_number_of_tasks: options.max_number_of_tasks,
             max_number_of_batched_tasks: options.max_number_of_batched_tasks,
+            compute_prefix_databases: options.compute_prefix_databases,
             dumps_path: options.dumps_path,
             snapshots_path: options.snapshots_path,
             auth_path: options.auth_path,
@@ -1819,6 +1800,7 @@ mod tests {
                 max_number_of_tasks: 1_000_000,
                 max_number_of_batched_tasks: usize::MAX,
                 instance_features: Default::default(),
+                compute_prefix_databases: true,
             };
             configuration(&mut options);
 

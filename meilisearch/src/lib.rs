@@ -311,6 +311,7 @@ fn open_or_create_database_unchecked(
             index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().get_bytes() as usize,
             index_count: DEFAULT_INDEX_COUNT,
             instance_features,
+            compute_prefix_databases: !opt.experimental_disable_prefix_db,
         })?)
     };
 

@@ -32,6 +32,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         features: _,
         max_number_of_tasks: _,
         max_number_of_batched_tasks: _,
+        compute_prefix_databases: _,
         wake_up: _,
         dumps_path: _,
         snapshots_path: _,

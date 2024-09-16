@@ -1230,6 +1230,11 @@ impl Index {
         )
     }
 
+    /// Deletes the FST which is the words prefixes dictionary of the engine.
+    pub fn delete_words_prefixes_fst(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::WORDS_PREFIXES_FST_KEY)
+    }
+
     /// Returns the FST which is the words prefixes dictionary of the engine.
     pub fn words_prefixes_fst<'t>(&self, rtxn: &'t RoTxn) -> Result<fst::Set<Cow<'t, [u8]>>> {
         match self.main.remap_types::<Str, Bytes>().get(rtxn, main_key::WORDS_PREFIXES_FST_KEY)? {

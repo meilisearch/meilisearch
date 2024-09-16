@@ -85,7 +85,7 @@ pub struct IndexDocuments<'t, 'i, 'a, FP, FA> {
     embedders: EmbeddingConfigs,
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct IndexDocumentsConfig {
     pub words_prefix_threshold: Option<u32>,
     pub max_prefix_length: Option<usize>,
@@ -93,6 +93,21 @@ pub struct IndexDocumentsConfig {
     pub words_positions_min_level_size: Option<NonZeroU32>,
     pub update_method: IndexDocumentsMethod,
     pub autogenerate_docids: bool,
+    pub compute_prefix_databases: bool,
+}
+
+impl Default for IndexDocumentsConfig {
+    fn default() -> Self {
+        Self {
+            words_prefix_threshold: Default::default(),
+            max_prefix_length: Default::default(),
+            words_positions_level_group_size: Default::default(),
+            words_positions_min_level_size: Default::default(),
+            update_method: Default::default(),
+            autogenerate_docids: Default::default(),
+            compute_prefix_databases: true,
+        }
+    }
 }
 
 impl<'t, 'i, 'a, FP, FA> IndexDocuments<'t, 'i, 'a, FP, FA>
@@ -558,12 +573,20 @@ where
             .map_err(InternalError::from)??;
         }
 
-        self.execute_prefix_databases(
-            word_docids.map(MergerBuilder::build),
-            exact_word_docids.map(MergerBuilder::build),
-            word_position_docids.map(MergerBuilder::build),
-            word_fid_docids.map(MergerBuilder::build),
-        )?;
+        if self.config.compute_prefix_databases {
+            self.execute_prefix_databases(
+                word_docids.map(MergerBuilder::build),
+                exact_word_docids.map(MergerBuilder::build),
+                word_position_docids.map(MergerBuilder::build),
+                word_fid_docids.map(MergerBuilder::build),
+            )?;
+        } else {
+            self.index.words_prefixes_fst(self.wtxn)?;
+            self.index.word_prefix_docids.clear(self.wtxn)?;
+            self.index.exact_word_prefix_docids.clear(self.wtxn)?;
+            self.index.word_prefix_position_docids.clear(self.wtxn)?;
+            self.index.word_prefix_fid_docids.clear(self.wtxn)?;
+        }
 
         Ok(number_of_documents)
     }

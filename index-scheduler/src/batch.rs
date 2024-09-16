@@ -1288,7 +1288,11 @@ impl IndexScheduler {
                     }
                 }
 
-                let config = IndexDocumentsConfig { update_method: method, ..Default::default() };
+                let config = IndexDocumentsConfig {
+                    update_method: method,
+                    compute_prefix_databases: self.compute_prefix_databases,
+                    ..Default::default()
+                };
 
                 let embedder_configs = index.embedding_configs(index_wtxn)?;
                 // TODO: consider Arc'ing the map too (we only need read access + we'll be cloning it multiple times, so really makes sense)
@@ -1398,6 +1402,7 @@ impl IndexScheduler {
                 let deleted_documents = delete_document_by_filter(
                     index_wtxn,
                     filter,
+                    self.compute_prefix_databases,
                     self.index_mapper.indexer_config(),
                     self.must_stop_processing.clone(),
                     index,
@@ -1638,6 +1643,7 @@ impl IndexScheduler {
 fn delete_document_by_filter<'a>(
     wtxn: &mut RwTxn<'a>,
     filter: &serde_json::Value,
+    compute_prefix_databases: bool,
     indexer_config: &IndexerConfig,
     must_stop_processing: MustStopProcessing,
     index: &'a Index,
@@ -1653,6 +1659,7 @@ fn delete_document_by_filter<'a>(
 
         let config = IndexDocumentsConfig {
             update_method: IndexDocumentsMethod::ReplaceDocuments,
+            compute_prefix_databases,
             ..Default::default()
         };
 

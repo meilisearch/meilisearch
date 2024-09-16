@@ -60,6 +60,7 @@ const MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE: &str =
     "MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE";
 const MEILI_EXPERIMENTAL_MAX_NUMBER_OF_BATCHED_TASKS: &str =
     "MEILI_EXPERIMENTAL_MAX_NUMBER_OF_BATCHED_TASKS";
+const MEILI_EXPERIMENTAL_DISABLE_PREFIX_DB: &str = "MEILI_EXPERIMENTAL_DISABLE_PREFIXDB";
 
 const DEFAULT_CONFIG_FILE_PATH: &str = "./config.toml";
 const DEFAULT_DB_PATH: &str = "./data.ms";
@@ -389,6 +390,11 @@ pub struct Opt {
     #[serde(default = "default_limit_batched_tasks")]
     pub experimental_max_number_of_batched_tasks: usize,
 
+    /// Experimentally disable the prefix database, see: <https://github.com/orgs/meilisearch/discussions>
+    #[clap(long, env = MEILI_EXPERIMENTAL_DISABLE_PREFIX_DB)]
+    #[serde(default)]
+    pub experimental_disable_prefix_db: bool,
+
     #[serde(flatten)]
     #[clap(flatten)]
     pub indexer_options: IndexerOpts,
@@ -489,6 +495,7 @@ impl Opt {
             experimental_enable_logs_route,
             experimental_replication_parameters,
             experimental_reduce_indexing_memory_usage,
+            experimental_disable_prefix_db,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
         export_to_env_if_not_present(MEILI_HTTP_ADDR, http_addr);
@@ -517,6 +524,10 @@ impl Opt {
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_MAX_NUMBER_OF_BATCHED_TASKS,
             experimental_max_number_of_batched_tasks.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_DISABLE_PREFIX_DB,
+            experimental_disable_prefix_db.to_string(),
         );
         if let Some(ssl_cert_path) = ssl_cert_path {
             export_to_env_if_not_present(MEILI_SSL_CERT_PATH, ssl_cert_path);
