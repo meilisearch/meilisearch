@@ -238,6 +238,7 @@ InvalidIndexLimit                     , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexOffset                    , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexPrimaryKey                , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexUid                       , InvalidRequest       , BAD_REQUEST ;
+InvalidMultiSearchFacets              , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchFacetsByIndex       , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchFacetOrder          , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchFederated           , InvalidRequest       , BAD_REQUEST ;
