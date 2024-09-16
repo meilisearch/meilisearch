@@ -150,13 +150,13 @@ fn starts_with(selector: &str, key: &str) -> bool {
 // FIXME: move to a DocumentId struct
 
 fn validate_document_id(document_id: &str) -> Option<&str> {
-    if !document_id.is_empty()
-        && document_id.len() <= 512
-        && document_id.chars().all(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_'))
+    if document_id.is_empty()
+        || document_id.len() > 512
+        || !document_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
     {
-        Some(document_id)
-    } else {
         None
+    } else {
+        Some(document_id)
     }
 }
 
