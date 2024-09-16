@@ -125,14 +125,25 @@ async fn create_index_with_primary_key() {
 
 #[actix_rt::test]
 async fn create_index_with_invalid_primary_key() {
-    let document = json!([ { "id": 2, "title": "Pride and Prejudice" } ]);
+    let documents = json!([ { "id": 2, "title": "Pride and Prejudice" } ]);
 
     let server = Server::new().await;
     let index = server.index("movies");
-    let (_response, code) = index.add_documents(document, Some("title")).await;
+    let (_response, code) = index.add_documents(documents, Some("title")).await;
     assert_eq!(code, 202);
 
     index.wait_task(0).await;
+
+    let (response, code) = index.get().await;
+    assert_eq!(code, 200);
+    assert_eq!(response["primaryKey"], json!(null));
+
+    let documents = json!([ { "id": "e".repeat(513) } ]);
+
+    let (_response, code) = index.add_documents(documents, Some("id")).await;
+    assert_eq!(code, 202);
+
+    index.wait_task(1).await;
 
     let (response, code) = index.get().await;
     assert_eq!(code, 200);
