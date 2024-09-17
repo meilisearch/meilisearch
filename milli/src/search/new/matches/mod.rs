@@ -919,7 +919,7 @@ mod tests {
         // should return 10 words with a marker at the start as well the end, and the highlighted matches.
         insta::assert_snapshot!(
             matcher.format(format_options),
-            @"…had the power to split <em>the world</em> between those who…"
+            @"…the power to split <em>the world</em> between those who embraced…"
         );
 
         let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "those \"and those\"");

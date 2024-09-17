@@ -400,9 +400,9 @@ async fn force_locales() {
                         ]
                       },
                       "_formatted": {
-                        "name_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                        "name_zh": "<em>进击的巨人</em>",
                         "author_zh": "諫山創",
-                        "description_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                        "description_zh": "<em>进击的巨人</em>是日本的漫画系列，由諫山 創作画。",
                         "id": "853",
                         "_vectors": {
                           "manual": [
@@ -447,9 +447,9 @@ async fn force_locales() {
                         ]
                       },
                       "_formatted": {
-                        "name_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                        "name_zh": "<em>进击的巨人</em>",
                         "author_zh": "諫山創",
-                        "description_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                        "description_zh": "<em>进击的巨人</em>是日本的漫画系列，由諫山 創作画。",
                         "id": "853",
                         "_vectors": {
                           "manual": [
@@ -524,9 +524,9 @@ async fn force_locales_with_pattern() {
                         ]
                       },
                       "_formatted": {
-                        "name_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                        "name_zh": "<em>进击的巨人</em>",
                         "author_zh": "諫山創",
-                        "description_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                        "description_zh": "<em>进击的巨人</em>是日本的漫画系列，由諫山 創作画。",
                         "id": "853",
                         "_vectors": {
                           "manual": [
@@ -571,9 +571,9 @@ async fn force_locales_with_pattern() {
                         ]
                       },
                       "_formatted": {
-                        "name_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                        "name_zh": "<em>进击的巨人</em>",
                         "author_zh": "諫山創",
-                        "description_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                        "description_zh": "<em>进击的巨人</em>是日本的漫画系列，由諫山 創作画。",
                         "id": "853",
                         "_vectors": {
                           "manual": [
@@ -689,8 +689,8 @@ async fn force_locales_with_pattern_nested() {
                           "author": "諫山 創"
                         },
                         "document_zh": {
-                          "name": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
-                          "description": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                          "name": "<em>进击的巨人</em>",
+                          "description": "<em>进击的巨人</em>是日本的漫画系列，由諫山 創作画。",
                           "author": "諫山創"
                         },
                         "id": "852",
@@ -788,9 +788,9 @@ async fn force_different_locales_with_pattern() {
                         ]
                       },
                       "_formatted": {
-                        "name_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                        "name_zh": "<em>进击的巨人</em>",
                         "author_zh": "諫山創",
-                        "description_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                        "description_zh": "<em>进击的巨人</em>是日本的漫画系列，由諫山 創作画。",
                         "id": "853",
                         "_vectors": {
                           "manual": [
@@ -889,9 +889,9 @@ async fn auto_infer_locales_at_search_with_attributes_to_search_on() {
                             ]
                           },
                           "_formatted": {
-                            "name_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                            "name_zh": "<em>进击的巨人</em>",
                             "author_zh": "諫山創",
-                            "description_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                            "description_zh": "<em>进击的巨人</em>是日本的漫画系列，由諫山 創作画。",
                             "id": "853",
                             "_vectors": {
                               "manual": [
@@ -965,9 +965,9 @@ async fn auto_infer_locales_at_search() {
                         ]
                       },
                       "_formatted": {
-                        "name_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                        "name_zh": "<em>进击的巨人</em>",
                         "author_zh": "諫山創",
-                        "description_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                        "description_zh": "<em>进击的巨人</em>是日本的漫画系列，由諫山 創作画。",
                         "id": "853",
                         "_vectors": {
                           "manual": [
@@ -1011,9 +1011,9 @@ async fn auto_infer_locales_at_search() {
                             ]
                           },
                           "_formatted": {
-                            "name_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                            "name_zh": "<em>进击的巨人</em>",
                             "author_zh": "諫山創",
-                            "description_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                            "description_zh": "<em>进击的巨人</em>是日本的漫画系列，由諫山 創作画。",
                             "id": "853",
                             "_vectors": {
                               "manual": [
@@ -1057,9 +1057,9 @@ async fn auto_infer_locales_at_search() {
                         ]
                       },
                       "_formatted": {
-                        "name_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                        "name_zh": "<em>进击的巨人</em>",
                         "author_zh": "諫山創",
-                        "description_zh": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                        "description_zh": "<em>进击的巨人</em>是日本的漫画系列，由諫山 創作画。",
                         "id": "853",
                         "_vectors": {
                           "manual": [
@@ -1177,8 +1177,8 @@ async fn force_different_locales_with_pattern_nested() {
                           "author": "諫山 創"
                         },
                         "document_zh": {
-                          "name": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
-                          "description": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                          "name": "<em>进击的巨人</em>",
+                          "description": "<em>进击的巨人</em>是日本的漫画系列，由諫山 創作画。",
                           "author": "諫山創"
                         },
                         "id": "852",
