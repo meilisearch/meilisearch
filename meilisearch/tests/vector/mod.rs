@@ -624,7 +624,8 @@ async fn clear_documents() {
     "###);
 
     // Make sure the arroy DB has been cleared
-    let (documents, _code) = index.search_post(json!({ "vector": [1, 1, 1] })).await;
+    let (documents, _code) =
+        index.search_post(json!({ "vector": [1, 1, 1], "hybrid": {"embedder": "manual"} })).await;
     snapshot!(documents, @r###"
     {
       "hits": [],
@@ -685,7 +686,11 @@ async fn add_remove_one_vector_4588() {
     let task = index.wait_task(value.uid()).await;
     snapshot!(task, name: "document-deleted");
 
-    let (documents, _code) = index.search_post(json!({"vector": [1, 1, 1] })).await;
+    let (documents, _code) = index
+        .search_post(
+            json!({"vector": [1, 1, 1], "hybrid": {"semanticRatio": 1.0, "embedder": "manual"} }),
+        )
+        .await;
     snapshot!(documents, @r###"
     {
       "hits": [
