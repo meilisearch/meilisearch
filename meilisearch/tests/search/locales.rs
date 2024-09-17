@@ -628,10 +628,10 @@ async fn auto_infer_locales_at_search() {
         .await;
 
     index
-            .search(
-                json!({"q": "\"进击的巨人\"", "attributesToRetrieve": ["id"]}),
-                |response, code| {
-                    snapshot!(response, @r###"
+        .search(
+            json!({"q": "\"进击的巨人\"", "attributesToRetrieve": ["id"]}),
+            |response, code| {
+                snapshot!(response, @r###"
                     {
                       "hits": [
                         {
@@ -645,10 +645,10 @@ async fn auto_infer_locales_at_search() {
                       "estimatedTotalHits": 1
                     }
                     "###);
-                    snapshot!(code, @"200 OK");
-                },
-            )
-            .await;
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
 
     index
         .search(
@@ -725,10 +725,10 @@ async fn force_different_locales_with_pattern_nested() {
 
     // force japanese
     index
-            .search(
-                json!({"q": "\"进击的巨人\"", "locales": ["jpn"], "attributesToRetrieve": ["id"]}),
-                |response, code| {
-                    snapshot!(response, @r###"
+        .search(
+            json!({"q": "\"进击的巨人\"", "locales": ["jpn"], "attributesToRetrieve": ["id"]}),
+            |response, code| {
+                snapshot!(response, @r###"
                     {
                       "hits": [
                         {
@@ -742,10 +742,10 @@ async fn force_different_locales_with_pattern_nested() {
                       "estimatedTotalHits": 1
                     }
                     "###);
-                    snapshot!(code, @"200 OK");
-                },
-            )
-            .await;
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
 
     // force japanese
     index
@@ -766,10 +766,10 @@ async fn force_different_locales_with_pattern_nested() {
                   "estimatedTotalHits": 1
                 }
                 "###);
-                        snapshot!(code, @"200 OK");
-                    },
-                )
-                .await;
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
 }
 
 #[actix_rt::test]
