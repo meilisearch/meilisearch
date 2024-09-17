@@ -5797,7 +5797,7 @@ async fn federation_inconsistent_merge_order() {
     snapshot!(code, @"400 Bad Request");
     insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
     {
-      "message": "Inside `.federation.facetsByIndex.movies-2`: Inconsistent order for values in facet `color`: index `movies` orders alphabetically, but index `movies-2` orders by count.\n - Hint: Remove `federation.mergeFacets` or set `federation.mergeFacets.sortFacetValuesBy` to the desired order.\n Note: index `movies-2` used in `.queries[2]`",
+      "message": "Inside `.federation.facetsByIndex.movies-2`: Inconsistent order for values in facet `color`: index `movies` orders alphabetically, but index `movies-2` orders by count.\n - Hint: Remove `federation.mergeFacets` or change `faceting.sortFacetValuesBy` to be consistent in settings.\n Note: index `movies-2` used in `.queries[2]`",
       "code": "invalid_multi_search_facet_order",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facet_order"
