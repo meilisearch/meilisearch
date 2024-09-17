@@ -558,7 +558,7 @@ pub fn perform_federated_search(
             error.message = format!(
                 "Inside `.federation.facetsByIndex.{index_uid}`: {error}{}",
                 if let Some(query_index) = first_query_index {
-                    format!("\n Note: index `{index_uid}` used in `.queries[{query_index}]`")
+                    format!("\n - Note: index `{index_uid}` used in `.queries[{query_index}]`")
                 } else {
                     Default::default()
                 }
@@ -755,7 +755,7 @@ pub fn perform_federated_search(
                     "Inside `.federation.facetsByIndex.{index_uid}`: {}{}",
                     error.message,
                     if let Some(query_index) = first_query_index {
-                        format!("\n Note: index `{index_uid}` used in `.queries[{query_index}]`")
+                        format!("\n - Note: index `{index_uid}` used in `.queries[{query_index}]`")
                     } else {
                         Default::default()
                     }
@@ -783,7 +783,7 @@ pub fn perform_federated_search(
                 // here the resource not found is not part of the URL.
                 err.code = StatusCode::BAD_REQUEST;
                 err.message = format!(
-                    "Inside `.federation.facetsByIndex.{index_uid}`: {}\n Note: index `{index_uid}` is not used in queries",
+                    "Inside `.federation.facetsByIndex.{index_uid}`: {}\n - Note: index `{index_uid}` is not used in queries",
                     err.message
                 );
                 return Err(err);
@@ -797,7 +797,7 @@ pub fn perform_federated_search(
             check_facet_order(&mut facet_order, &index_uid, &facets, &index, &rtxn)
         {
             error.message = format!(
-                "Inside `.federation.facetsByIndex.{index_uid}`: {error}\n Note: index `{index_uid}` is not used in queries",
+                "Inside `.federation.facetsByIndex.{index_uid}`: {error}\n - Note: index `{index_uid}` is not used in queries",
             );
             return Err(error);
         }
@@ -813,7 +813,7 @@ pub fn perform_federated_search(
                 super::Route::MultiSearch,
             ) {
                 error.message =
-                    format!("Inside `.federation.facetsByIndex.{index_uid}`: {}\n Note: index `{index_uid}` is not used in queries", error.message);
+                    format!("Inside `.federation.facetsByIndex.{index_uid}`: {}\n - Note: index `{index_uid}` is not used in queries", error.message);
                 return Err(error);
             }
         }
