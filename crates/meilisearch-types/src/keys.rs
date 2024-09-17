@@ -222,7 +222,8 @@ bitflags! {
 }
 
 impl Action {
-    const SERIALIZATION_MAP: [(&'static str, Self); 34] = [
+    // @TODO: Consider using https://github.com/rust-phf/rust-phf
+    const SERDE_MAP_ARR: [(&'static str, Self); 34] = [
         ("*", Self::All),
         ("search", Self::Search),
         ("documents.*", Self::DocumentsAll),
@@ -311,7 +312,7 @@ impl<E: DeserializeError> Deserr<E> for Action {
     ) -> Result<Self, E> {
         match value {
             deserr::Value::String(s) => {
-                match Self::SERIALIZATION_MAP.iter().find(|(serialized, _)| s == *serialized) {
+                match Self::SERDE_MAP_ARR.iter().find(|(serialized, _)| s == *serialized) {
                     Some((_, action)) => Ok(*action),
                     None => Err(deserr::take_cf_content(E::error::<std::convert::Infallible>(
                         None,
@@ -332,6 +333,20 @@ impl<E: DeserializeError> Deserr<E> for Action {
     }
 }
 
+impl Serialize for Action {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        Self::SERDE_MAP_ARR
+            .iter()
+            .find(|(_, action)| self == action)
+            .map(|(serialized, _)| serializer.serialize_str(serialized))
+            // should always be found, so unwrap is safe to use
+            .unwrap()
+    }
+}
+
 impl<'de> Deserialize<'de> for Action {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -349,9 +364,8 @@ impl<'de> Deserialize<'de> for Action {
             where
                 E: serde::de::Error,
             {
-                // @TODO: Make a to_serialized and to_desiralized on Action
-                match Self::Value::SERIALIZATION_MAP.iter().find(|(serialized, _)| s == *serialized)
-                {
+                // @TODO: Make a to_serialized and to_desiralized on Action perhaps
+                match Self::Value::SERDE_MAP_ARR.iter().find(|(serialized, _)| s == *serialized) {
                     Some((_, action)) => Ok(*action),
                     None => Err(E::invalid_value(serde::de::Unexpected::Str(s), &"a valid action")),
                 }
@@ -362,17 +376,32 @@ impl<'de> Deserialize<'de> for Action {
     }
 }
 
-impl Serialize for Action {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        Self::SERIALIZATION_MAP
-            .iter()
-            .find(|(_, action)| self == action)
-            .map(|(serialized, _)| serializer.serialize_str(serialized))
-            // should always be found, so unwrap is safe to use
-            .unwrap()
+impl Sequence for Action {
+    const CARDINALITY: usize = Self::SERDE_MAP_ARR.len();
+
+    fn next(&self) -> Option<Self> {
+        let next_index = self.bits() as usize + 1;
+        if next_index == Self::CARDINALITY {
+            None
+        } else {
+            Some(Self::SERDE_MAP_ARR[next_index].1)
+        }
+    }
+
+    fn previous(&self) -> Option<Self> {
+        if self.bits() == 0 {
+            None
+        } else {
+            Some(Self::SERDE_MAP_ARR[self.bits() as usize - 1].1)
+        }
+    }
+
+    fn first() -> Option<Self> {
+        Some(Self::SERDE_MAP_ARR[0].1)
+    }
+
+    fn last() -> Option<Self> {
+        Some(Self::SERDE_MAP_ARR[Self::CARDINALITY - 1].1)
     }
 }
 
