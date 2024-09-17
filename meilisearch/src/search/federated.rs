@@ -13,8 +13,8 @@ use indexmap::IndexMap;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::{
     InvalidMultiSearchFacetsByIndex, InvalidMultiSearchMaxValuesPerFacet,
-    InvalidMultiSearchMergeFacets, InvalidMultiSearchSortFacetValuesBy, InvalidMultiSearchWeight,
-    InvalidSearchLimit, InvalidSearchOffset,
+    InvalidMultiSearchMergeFacets, InvalidMultiSearchWeight, InvalidSearchLimit,
+    InvalidSearchOffset,
 };
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
@@ -86,42 +86,8 @@ pub struct Federation {
 #[derive(Copy, Clone, Debug, deserr::Deserr, Default)]
 #[deserr(error = DeserrJsonError<InvalidMultiSearchMergeFacets>, rename_all = camelCase, deny_unknown_fields)]
 pub struct MergeFacets {
-    #[deserr(default, error = DeserrJsonError<InvalidMultiSearchSortFacetValuesBy>)]
-    pub sort_facet_values_by: SortFacetValuesBy,
     #[deserr(default, error = DeserrJsonError<InvalidMultiSearchMaxValuesPerFacet>)]
     pub max_values_per_facet: Option<usize>,
-}
-
-impl MergeFacets {
-    pub fn to_components(this: Option<Self>) -> (Option<OrderBy>, Option<usize>) {
-        match this {
-            Some(MergeFacets { sort_facet_values_by, max_values_per_facet }) => {
-                (sort_facet_values_by.into(), max_values_per_facet)
-            }
-            None => (None, None),
-        }
-    }
-}
-
-#[derive(Debug, deserr::Deserr, Default, Clone, Copy)]
-#[deserr(rename_all = camelCase, deny_unknown_fields)]
-pub enum SortFacetValuesBy {
-    #[default]
-    IndexSettings,
-    /// By lexicographic order...
-    Alpha,
-    /// Or by number of docids in common?
-    Count,
-}
-
-impl From<SortFacetValuesBy> for Option<OrderBy> {
-    fn from(value: SortFacetValuesBy) -> Self {
-        match value {
-            SortFacetValuesBy::Alpha => Some(OrderBy::Lexicographic),
-            SortFacetValuesBy::Count => Some(OrderBy::Count),
-            SortFacetValuesBy::IndexSettings => None,
-        }
-    }
 }
 
 #[derive(Debug, deserr::Deserr, Default)]
@@ -413,8 +379,8 @@ impl FederatedFacets {
 
     pub fn merge(
         self,
-        MergeFacets { sort_facet_values_by, max_values_per_facet }: MergeFacets,
-        facet_order: Option<BTreeMap<String, (String, OrderBy)>>,
+        MergeFacets { max_values_per_facet }: MergeFacets,
+        facet_order: BTreeMap<String, (String, OrderBy)>,
     ) -> Option<ComputedFacets> {
         if self.is_empty() {
             return None;
@@ -461,12 +427,7 @@ impl FederatedFacets {
 
         // fixup order
         for (facet, values) in &mut distribution {
-            let order_by = Option::<OrderBy>::from(sort_facet_values_by)
-                .or_else(|| match &facet_order {
-                    Some(facet_order) => facet_order.get(facet).map(|(_, order)| *order),
-                    None => None,
-                })
-                .unwrap_or_default();
+            let order_by = facet_order.get(facet).map(|(_, order)| *order).unwrap_or_default();
 
             match order_by {
                 OrderBy::Lexicographic => {
@@ -535,8 +496,8 @@ pub fn perform_federated_search(
     // 2. perform queries, merge and make hits index by index
     let required_hit_count = federation.limit + federation.offset;
 
-    let (override_sort_facet_values_by, override_max_values_per_facet) =
-        MergeFacets::to_components(federation.merge_facets);
+    let override_max_values_per_facet =
+        federation.merge_facets.and_then(|merge_facets| merge_facets.max_values_per_facet);
 
     // In step (2), semantic_hit_count will be set to Some(0) if any search kind uses semantic
     // Then in step (3), we'll update its value if there is any semantic search
@@ -548,9 +509,7 @@ pub fn perform_federated_search(
     // to detect if the order is inconsistent for a facet.
     let mut facet_order: Option<BTreeMap<String, (String, OrderBy)>> = match federation.merge_facets
     {
-        Some(MergeFacets { sort_facet_values_by: SortFacetValuesBy::IndexSettings, .. }) => {
-            Some(Default::default())
-        }
+        Some(MergeFacets { .. }) => Some(Default::default()),
         _ => None,
     };
 
@@ -786,7 +745,7 @@ pub fn perform_federated_search(
                     &rtxn,
                     candidates,
                     override_max_values_per_facet,
-                    override_sort_facet_values_by,
+                    None,
                     super::Route::MultiSearch,
                 )
             })
@@ -850,7 +809,7 @@ pub fn perform_federated_search(
                 &rtxn,
                 Default::default(),
                 override_max_values_per_facet,
-                override_sort_facet_values_by,
+                None,
                 super::Route::MultiSearch,
             ) {
                 error.message =
@@ -905,17 +864,19 @@ pub fn perform_federated_search(
         .map(|hit| hit.hit)
         .collect();
 
-    let (facet_distribution, facet_stats, facets_by_index) = match federation.merge_facets {
-        Some(merge_facets) => {
-            let facets = facets.merge(merge_facets, facet_order);
+    let (facet_distribution, facet_stats, facets_by_index) =
+        match federation.merge_facets.zip(facet_order) {
+            Some((merge_facets, facet_order)) => {
+                let facets = facets.merge(merge_facets, facet_order);
 
-            let (facet_distribution, facet_stats) =
-                facets.map(|ComputedFacets { distribution, stats }| (distribution, stats)).unzip();
+                let (facet_distribution, facet_stats) = facets
+                    .map(|ComputedFacets { distribution, stats }| (distribution, stats))
+                    .unzip();
 
-            (facet_distribution, facet_stats, FederatedFacets::default())
-        }
-        None => (None, None, facets),
-    };
+                (facet_distribution, facet_stats, FederatedFacets::default())
+            }
+            None => (None, None, facets),
+        };
 
     let search_result = FederatedSearchResult {
         hits: merged_hits,

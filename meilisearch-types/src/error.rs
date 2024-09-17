@@ -248,7 +248,6 @@ InvalidMultiSearchMergeFacets         , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryFacets         , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryPagination     , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryRankingRules   , InvalidRequest       , BAD_REQUEST ;
-InvalidMultiSearchSortFacetValuesBy   , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchWeight              , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToSearchOn     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToCrop         , InvalidRequest       , BAD_REQUEST ;
