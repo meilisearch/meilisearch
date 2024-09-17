@@ -3931,7 +3931,7 @@ async fn federation_federated_contains_facets() {
     snapshot!(code, @"400 Bad Request");
     insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
     {
-      "message": "Inside `.queries[1]`: Using facet options is not allowed in federated queries.\n Hint: remove `facets` from query #1 or remove `federation` from the request",
+      "message": "Inside `.queries[1]`: Using facet options is not allowed in federated queries.\n - Hint: remove `facets` from query #1 or remove `federation` from the request\n - Hint: pass `federation.facetsByIndex.fruits: [\"BOOSTED\"]` for facets in federated search",
       "code": "invalid_multi_search_query_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_facets"
@@ -5797,7 +5797,7 @@ async fn federation_inconsistent_merge_order() {
     snapshot!(code, @"400 Bad Request");
     insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
     {
-      "message": "Inside `.federation.facetsByIndex.movies-2`: Inconsistent order for values in facet `color`: index `movies` orders alphabetically, but index `movies-2` orders by count.\n Hint: Remove `federation.mergeFacets` or set `federation.mergeFacets.sortFacetValuesBy` to the desired order.\n Note: index `movies-2` used in `.queries[2]`",
+      "message": "Inside `.federation.facetsByIndex.movies-2`: Inconsistent order for values in facet `color`: index `movies` orders alphabetically, but index `movies-2` orders by count.\n - Hint: Remove `federation.mergeFacets` or set `federation.mergeFacets.sortFacetValuesBy` to the desired order.\n Note: index `movies-2` used in `.queries[2]`",
       "code": "invalid_multi_search_facet_order",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facet_order"
