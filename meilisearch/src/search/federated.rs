@@ -513,8 +513,14 @@ pub fn perform_federated_search(
             .into());
         }
 
-        if federated_query.has_facets() {
-            return Err(MeilisearchHttpError::FacetsInFederatedQuery(query_index).into());
+        if let Some(facets) = federated_query.has_facets() {
+            let facets = facets.to_owned();
+            return Err(MeilisearchHttpError::FacetsInFederatedQuery(
+                query_index,
+                federated_query.index_uid.into_inner(),
+                facets,
+            )
+            .into());
         }
 
         let (index_uid, query, federation_options) = federated_query.into_index_query_federation();

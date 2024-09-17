@@ -455,9 +455,8 @@ impl SearchQueryWithIndex {
         }
     }
 
-    pub fn has_facets(&self) -> bool {
-        let Some(facets) = &self.facets else { return false };
-        !facets.is_empty()
+    pub fn has_facets(&self) -> Option<&[String]> {
+        self.facets.as_deref().filter(|v| !v.is_empty())
     }
 
     pub fn into_index_query_federation(self) -> (IndexUid, SearchQuery, Option<FederationOptions>) {
