@@ -49,7 +49,7 @@ use std::fmt::Debug;
 pub use condition::{parse_condition, parse_to, Condition};
 use condition::{
     parse_contains, parse_exists, parse_is_empty, parse_is_not_empty, parse_is_not_null,
-    parse_is_null, parse_not_contains, parse_not_exists,
+    parse_is_null, parse_not_contains, parse_not_exists, parse_not_starts_with, parse_starts_with,
 };
 use error::{cut_with_err, ExpectedValueKind, NomErrorExt};
 pub use error::{Error, ErrorKind};
@@ -166,7 +166,8 @@ impl<'a> FilterCondition<'a> {
                 | Condition::LowerThan(_)
                 | Condition::LowerThanOrEqual(_)
                 | Condition::Between { .. } => None,
-                Condition::Contains { keyword, word: _ } => Some(keyword),
+                Condition::Contains { keyword, word: _ }
+                | Condition::StartsWith { keyword, word: _ } => Some(keyword),
             },
             FilterCondition::Not(this) => this.use_contains_operator(),
             FilterCondition::Or(seq) | FilterCondition::And(seq) => {
@@ -484,6 +485,8 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
         parse_to,
         parse_contains,
         parse_not_contains,
+        parse_starts_with,
+        parse_not_starts_with,
         // the next lines are only for error handling and are written at the end to have the less possible performance impact
         parse_geo,
         parse_geo_distance,
@@ -567,6 +570,7 @@ impl<'a> std::fmt::Display for Condition<'a> {
             Condition::LowerThanOrEqual(token) => write!(f, "<= {token}"),
             Condition::Between { from, to } => write!(f, "{from} TO {to}"),
             Condition::Contains { word, keyword: _ } => write!(f, "CONTAINS {word}"),
+            Condition::StartsWith { word, keyword: _ } => write!(f, "STARTS WITH {word}"),
         }
     }
 }
@@ -679,6 +683,13 @@ pub mod tests {
         insta::assert_snapshot!(p("subscribers NOT CONTAINS hello"), @"NOT ({subscribers} CONTAINS {hello})");
         insta::assert_snapshot!(p("NOT subscribers NOT CONTAINS 'hello'"), @"{subscribers} CONTAINS {hello}");
         insta::assert_snapshot!(p("subscribers NOT   CONTAINS 'hello'"), @"NOT ({subscribers} CONTAINS {hello})");
+
+        // Test STARTS WITH + NOT STARTS WITH
+        insta::assert_snapshot!(p("subscribers STARTS WITH 'hel'"), @"{subscribers} STARTS WITH {hel}");
+        insta::assert_snapshot!(p("NOT subscribers STARTS WITH 'hel'"), @"NOT ({subscribers} STARTS WITH {hel})");
+        insta::assert_snapshot!(p("subscribers NOT STARTS WITH hel"), @"NOT ({subscribers} STARTS WITH {hel})");
+        insta::assert_snapshot!(p("NOT subscribers NOT STARTS WITH 'hel'"), @"{subscribers} STARTS WITH {hel}");
+        insta::assert_snapshot!(p("subscribers NOT   STARTS WITH 'hel'"), @"NOT ({subscribers} STARTS WITH {hel})");
 
         // Test nested NOT
         insta::assert_snapshot!(p("NOT NOT NOT NOT x = 5"), @"{x} = {5}");
@@ -851,12 +862,12 @@ pub mod tests {
         "###);
 
         insta::assert_snapshot!(p("colour NOT EXIST"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `_geoRadius`, or `_geoBoundingBox` at `colour NOT EXIST`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `colour NOT EXIST`.
         1:17 colour NOT EXIST
         "###);
 
         insta::assert_snapshot!(p("subscribers 100 TO1000"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `_geoRadius`, or `_geoBoundingBox` at `subscribers 100 TO1000`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `subscribers 100 TO1000`.
         1:23 subscribers 100 TO1000
         "###);
 
@@ -919,35 +930,35 @@ pub mod tests {
         "###);
 
         insta::assert_snapshot!(p(r#"value NULL"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `_geoRadius`, or `_geoBoundingBox` at `value NULL`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value NULL`.
         1:11 value NULL
         "###);
         insta::assert_snapshot!(p(r#"value NOT NULL"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `_geoRadius`, or `_geoBoundingBox` at `value NOT NULL`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value NOT NULL`.
         1:15 value NOT NULL
         "###);
         insta::assert_snapshot!(p(r#"value EMPTY"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `_geoRadius`, or `_geoBoundingBox` at `value EMPTY`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value EMPTY`.
         1:12 value EMPTY
         "###);
         insta::assert_snapshot!(p(r#"value NOT EMPTY"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `_geoRadius`, or `_geoBoundingBox` at `value NOT EMPTY`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value NOT EMPTY`.
         1:16 value NOT EMPTY
         "###);
         insta::assert_snapshot!(p(r#"value IS"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `_geoRadius`, or `_geoBoundingBox` at `value IS`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value IS`.
         1:9 value IS
         "###);
         insta::assert_snapshot!(p(r#"value IS NOT"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `_geoRadius`, or `_geoBoundingBox` at `value IS NOT`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value IS NOT`.
         1:13 value IS NOT
         "###);
         insta::assert_snapshot!(p(r#"value IS EXISTS"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `_geoRadius`, or `_geoBoundingBox` at `value IS EXISTS`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value IS EXISTS`.
         1:16 value IS EXISTS
         "###);
         insta::assert_snapshot!(p(r#"value IS NOT EXISTS"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `_geoRadius`, or `_geoBoundingBox` at `value IS NOT EXISTS`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value IS NOT EXISTS`.
         1:20 value IS NOT EXISTS
         "###);
     }
