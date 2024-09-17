@@ -1135,74 +1135,145 @@ async fn force_different_locales_with_pattern_nested() {
 
     // force japanese
     index
+            .search(
+                json!({"q": "\"进击的巨人\"", "locales": ["jpn"], "attributesToHighlight": ["*"]}),
+                |response, code| {
+                    snapshot!(response, @r###"
+                    {
+                      "hits": [
+                        {
+                          "document_en": {
+                            "name": "Attack on Titan",
+                            "description": "Attack on Titan is a Japanese manga series written and illustrated by Hajime Isayama",
+                            "author": "Hajime Isayama"
+                          },
+                          "document_ja": {
+                            "name": "進撃の巨人",
+                            "description": "進撃の巨人は、日本の漫画シリーズであり、諫山 創によって作画されている。",
+                            "author": "諫山 創"
+                          },
+                          "document_zh": {
+                            "name": "进击的巨人",
+                            "description": "进击的巨人是日本的漫画系列，由諫山 創作画。",
+                            "author": "諫山創"
+                          },
+                          "id": 852,
+                          "_vectors": {
+                            "manual": [
+                              1.0,
+                              2.0,
+                              3.0
+                            ]
+                          },
+                          "_formatted": {
+                            "document_en": {
+                              "name": "Attack on Titan",
+                              "description": "Attack on Titan is a Japanese manga series written and illustrated by Hajime Isayama",
+                              "author": "Hajime Isayama"
+                            },
+                            "document_ja": {
+                              "name": "進撃の巨人",
+                              "description": "進撃の巨人は、日本の漫画シリーズであり、諫山 創によって作画されている。",
+                              "author": "諫山 創"
+                            },
+                            "document_zh": {
+                              "name": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                              "description": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                              "author": "諫山創"
+                            },
+                            "id": "852",
+                            "_vectors": {
+                              "manual": [
+                                "1.0",
+                                "2.0",
+                                "3.0"
+                              ]
+                            }
+                          }
+                        }
+                      ],
+                      "query": "\"进击的巨人\"",
+                      "processingTimeMs": "[duration]",
+                      "limit": 20,
+                      "offset": 0,
+                      "estimatedTotalHits": 1
+                    }
+                    "###);
+                    snapshot!(code, @"200 OK");
+                },
+            )
+            .await;
+
+    // force japanese
+    index
         .search(
-            json!({"q": "\"进击的巨人\"", "locales": ["jpn"], "attributesToHighlight": ["*"]}),
+            json!({"q": "\"进击的巨人\"", "locales": ["ja"], "attributesToHighlight": ["*"]}),
             |response, code| {
                 snapshot!(response, @r###"
-                {
-                  "hits": [
-                    {
-                      "document_en": {
-                        "name": "Attack on Titan",
-                        "description": "Attack on Titan is a Japanese manga series written and illustrated by Hajime Isayama",
-                        "author": "Hajime Isayama"
-                      },
-                      "document_ja": {
-                        "name": "進撃の巨人",
-                        "description": "進撃の巨人は、日本の漫画シリーズであり、諫山 創によって作画されている。",
-                        "author": "諫山 創"
-                      },
-                      "document_zh": {
-                        "name": "进击的巨人",
-                        "description": "进击的巨人是日本的漫画系列，由諫山 創作画。",
-                        "author": "諫山創"
-                      },
-                      "id": 852,
-                      "_vectors": {
-                        "manual": [
-                          1.0,
-                          2.0,
-                          3.0
-                        ]
-                      },
-                      "_formatted": {
-                        "document_en": {
-                          "name": "Attack on Titan",
-                          "description": "Attack on Titan is a Japanese manga series written and illustrated by Hajime Isayama",
-                          "author": "Hajime Isayama"
-                        },
-                        "document_ja": {
-                          "name": "進撃の巨人",
-                          "description": "進撃の巨人は、日本の漫画シリーズであり、諫山 創によって作画されている。",
-                          "author": "諫山 創"
-                        },
-                        "document_zh": {
-                          "name": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
-                          "description": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
-                          "author": "諫山創"
-                        },
-                        "id": "852",
-                        "_vectors": {
-                          "manual": [
-                            "1.0",
-                            "2.0",
-                            "3.0"
-                          ]
+                        {
+                          "hits": [
+                            {
+                              "document_en": {
+                                "name": "Attack on Titan",
+                                "description": "Attack on Titan is a Japanese manga series written and illustrated by Hajime Isayama",
+                                "author": "Hajime Isayama"
+                              },
+                              "document_ja": {
+                                "name": "進撃の巨人",
+                                "description": "進撃の巨人は、日本の漫画シリーズであり、諫山 創によって作画されている。",
+                                "author": "諫山 創"
+                              },
+                              "document_zh": {
+                                "name": "进击的巨人",
+                                "description": "进击的巨人是日本的漫画系列，由諫山 創作画。",
+                                "author": "諫山創"
+                              },
+                              "id": 852,
+                              "_vectors": {
+                                "manual": [
+                                  1.0,
+                                  2.0,
+                                  3.0
+                                ]
+                              },
+                              "_formatted": {
+                                "document_en": {
+                                  "name": "Attack on Titan",
+                                  "description": "Attack on Titan is a Japanese manga series written and illustrated by Hajime Isayama",
+                                  "author": "Hajime Isayama"
+                                },
+                                "document_ja": {
+                                  "name": "進撃の巨人",
+                                  "description": "進撃の巨人は、日本の漫画シリーズであり、諫山 創によって作画されている。",
+                                  "author": "諫山 創"
+                                },
+                                "document_zh": {
+                                  "name": "<em>进</em><em>击</em><em>的</em><em>巨人</em>",
+                                  "description": "<em>进</em><em>击</em><em>的</em><em>巨人</em>是日本的漫画系列，由諫山 創作画。",
+                                  "author": "諫山創"
+                                },
+                                "id": "852",
+                                "_vectors": {
+                                  "manual": [
+                                    "1.0",
+                                    "2.0",
+                                    "3.0"
+                                  ]
+                                }
+                              }
+                            }
+                          ],
+                          "query": "\"进击的巨人\"",
+                          "processingTimeMs": "[duration]",
+                          "limit": 20,
+                          "offset": 0,
+                          "estimatedTotalHits": 1
                         }
-                      }
-                    }
-                  ],
-                  "query": "\"进击的巨人\"",
-                  "processingTimeMs": "[duration]",
-                  "limit": 20,
-                  "offset": 0,
-                  "estimatedTotalHits": 1
-                }
-                "###);
-                snapshot!(code, @"200 OK");
-            },
-        )
-        .await;
+                        "###);
+                        snapshot!(code, @"200 OK");
+                    },
+                )
+                .await;
 }
 
 #[actix_rt::test]
@@ -1355,7 +1426,7 @@ async fn invalid_locales() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Unknown value `invalid` at `.locales[0]`: expected one of `epo`, `eng`, `rus`, `cmn`, `spa`, `por`, `ita`, `ben`, `fra`, `deu`, `ukr`, `kat`, `ara`, `hin`, `jpn`, `heb`, `yid`, `pol`, `amh`, `jav`, `kor`, `nob`, `dan`, `swe`, `fin`, `tur`, `nld`, `hun`, `ces`, `ell`, `bul`, `bel`, `mar`, `kan`, `ron`, `slv`, `hrv`, `srp`, `mkd`, `lit`, `lav`, `est`, `tam`, `vie`, `urd`, `tha`, `guj`, `uzb`, `pan`, `aze`, `ind`, `tel`, `pes`, `mal`, `ori`, `mya`, `nep`, `sin`, `khm`, `tuk`, `aka`, `zul`, `sna`, `afr`, `lat`, `slk`, `cat`, `tgl`, `hye`",
+      "message": "Unknown value `invalid` at `.locales[0]`: expected one of `afr`, `aka`, `amh`, `ara`, `aze`, `bel`, `ben`, `bul`, `cat`, `ces`, `cmn`, `dan`, `deu`, `ell`, `eng`, `epo`, `est`, `fas`, `fin`, `fra`, `guj`, `heb`, `hin`, `hrv`, `hun`, `hye`, `ind`, `ita`, `jav`, `jpn`, `kan`, `kat`, `khm`, `kor`, `lat`, `lav`, `lit`, `mal`, `mar`, `mkd`, `mya`, `nep`, `nld`, `nob`, `ori`, `pan`, `pes`, `pol`, `por`, `ron`, `rus`, `sin`, `slk`, `slv`, `sna`, `spa`, `srp`, `swe`, `tam`, `tel`, `tgl`, `tha`, `tuk`, `tur`, `ukr`, `urd`, `uzb`, `vie`, `yid`, `zho`, `zul`, `af`, `ak`, `am`, `ar`, `az`, `be`, `bn`, `bg`, `ca`, `cs`, `zh`, `da`, `de`, `el`, `en`, `eo`, `et`, `fi`, `fr`, `gu`, `he`, `hi`, `hr`, `hu`, `hy`, `id`, `it`, `jv`, `ja`, `kn`, `ka`, `km`, `ko`, `la`, `lv`, `lt`, `ml`, `mr`, `mk`, `my`, `ne`, `nl`, `nb`, `or`, `pa`, `fa`, `pl`, `pt`, `ro`, `ru`, `si`, `sk`, `sl`, `sn`, `es`, `sr`, `sv`, `ta`, `te`, `tl`, `th`, `tk`, `tr`, `uk`, `ur`, `uz`, `vi`, `yi`, `zu`",
       "code": "invalid_search_locales",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_locales"
@@ -1368,7 +1439,7 @@ async fn invalid_locales() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid value in parameter `locales`: Unsupported locale `invalid`, expected one of `epo`, `eng`, `rus`, `cmn`, `spa`, `por`, `ita`, `ben`, `fra`, `deu`, `ukr`, `kat`, `ara`, `hin`, `jpn`, `heb`, `yid`, `pol`, `amh`, `jav`, `kor`, `nob`, `dan`, `swe`, `fin`, `tur`, `nld`, `hun`, `ces`, `ell`, `bul`, `bel`, `mar`, `kan`, `ron`, `slv`, `hrv`, `srp`, `mkd`, `lit`, `lav`, `est`, `tam`, `vie`, `urd`, `tha`, `guj`, `uzb`, `pan`, `aze`, `ind`, `tel`, `pes`, `mal`, `ori`, `mya`, `nep`, `sin`, `khm`, `tuk`, `aka`, `zul`, `sna`, `afr`, `lat`, `slk`, `cat`, `tgl`, `hye`",
+      "message": "Invalid value in parameter `locales`: Unsupported locale `invalid`, expected one of `afr`, `aka`, `amh`, `ara`, `aze`, `bel`, `ben`, `bul`, `cat`, `ces`, `cmn`, `dan`, `deu`, `ell`, `eng`, `epo`, `est`, `fas`, `fin`, `fra`, `guj`, `heb`, `hin`, `hrv`, `hun`, `hye`, `ind`, `ita`, `jav`, `jpn`, `kan`, `kat`, `khm`, `kor`, `lat`, `lav`, `lit`, `mal`, `mar`, `mkd`, `mya`, `nep`, `nld`, `nob`, `ori`, `pan`, `pes`, `pol`, `por`, `ron`, `rus`, `sin`, `slk`, `slv`, `sna`, `spa`, `srp`, `swe`, `tam`, `tel`, `tgl`, `tha`, `tuk`, `tur`, `ukr`, `urd`, `uzb`, `vie`, `yid`, `zho`, `zul`, `af`, `ak`, `am`, `ar`, `az`, `be`, `bn`, `bg`, `ca`, `cs`, `zh`, `da`, `de`, `el`, `en`, `eo`, `et`, `fi`, `fr`, `gu`, `he`, `hi`, `hr`, `hu`, `hy`, `id`, `it`, `jv`, `ja`, `kn`, `ka`, `km`, `ko`, `la`, `lv`, `lt`, `ml`, `mr`, `mk`, `my`, `ne`, `nl`, `nb`, `or`, `pa`, `fa`, `pl`, `pt`, `ro`, `ru`, `si`, `sk`, `sl`, `sn`, `es`, `sr`, `sv`, `ta`, `te`, `tl`, `th`, `tk`, `tr`, `uk`, `ur`, `uz`, `vi`, `yi`, `zu`",
       "code": "invalid_search_locales",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_locales"
@@ -1390,7 +1461,7 @@ async fn invalid_localized_attributes_rules() {
         .await;
     snapshot!(response, @r###"
     {
-      "message": "Unknown value `japan` at `.localizedAttributes[0].locales[0]`: expected one of `epo`, `eng`, `rus`, `cmn`, `spa`, `por`, `ita`, `ben`, `fra`, `deu`, `ukr`, `kat`, `ara`, `hin`, `jpn`, `heb`, `yid`, `pol`, `amh`, `jav`, `kor`, `nob`, `dan`, `swe`, `fin`, `tur`, `nld`, `hun`, `ces`, `ell`, `bul`, `bel`, `mar`, `kan`, `ron`, `slv`, `hrv`, `srp`, `mkd`, `lit`, `lav`, `est`, `tam`, `vie`, `urd`, `tha`, `guj`, `uzb`, `pan`, `aze`, `ind`, `tel`, `pes`, `mal`, `ori`, `mya`, `nep`, `sin`, `khm`, `tuk`, `aka`, `zul`, `sna`, `afr`, `lat`, `slk`, `cat`, `tgl`, `hye`",
+      "message": "Unknown value `japan` at `.localizedAttributes[0].locales[0]`: expected one of `afr`, `aka`, `amh`, `ara`, `aze`, `bel`, `ben`, `bul`, `cat`, `ces`, `cmn`, `dan`, `deu`, `ell`, `eng`, `epo`, `est`, `fas`, `fin`, `fra`, `guj`, `heb`, `hin`, `hrv`, `hun`, `hye`, `ind`, `ita`, `jav`, `jpn`, `kan`, `kat`, `khm`, `kor`, `lat`, `lav`, `lit`, `mal`, `mar`, `mkd`, `mya`, `nep`, `nld`, `nob`, `ori`, `pan`, `pes`, `pol`, `por`, `ron`, `rus`, `sin`, `slk`, `slv`, `sna`, `spa`, `srp`, `swe`, `tam`, `tel`, `tgl`, `tha`, `tuk`, `tur`, `ukr`, `urd`, `uzb`, `vie`, `yid`, `zho`, `zul`, `af`, `ak`, `am`, `ar`, `az`, `be`, `bn`, `bg`, `ca`, `cs`, `zh`, `da`, `de`, `el`, `en`, `eo`, `et`, `fi`, `fr`, `gu`, `he`, `hi`, `hr`, `hu`, `hy`, `id`, `it`, `jv`, `ja`, `kn`, `ka`, `km`, `ko`, `la`, `lv`, `lt`, `ml`, `mr`, `mk`, `my`, `ne`, `nl`, `nb`, `or`, `pa`, `fa`, `pl`, `pt`, `ro`, `ru`, `si`, `sk`, `sl`, `sn`, `es`, `sr`, `sv`, `ta`, `te`, `tl`, `th`, `tk`, `tr`, `uk`, `ur`, `uz`, `vi`, `yi`, `zu`",
       "code": "invalid_settings_localized_attributes",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_settings_localized_attributes"

@@ -3502,6 +3502,7 @@ dependencies = [
  "serde",
  "serde-cs",
  "serde_json",
+ "strum",
  "tar",
  "tempfile",
  "thiserror",
