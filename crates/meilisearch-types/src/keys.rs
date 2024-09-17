@@ -4,8 +4,9 @@ use std::str::FromStr;
 
 use bitflags::bitflags;
 use deserr::{take_cf_content, DeserializeError, Deserr, MergeWithError, ValuePointerRef};
+use enum_iterator::Sequence;
 use milli::update::Setting;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use time::format_description::well_known::Rfc3339;
 use time::macros::{format_description, time};
 use time::{Date, OffsetDateTime, PrimitiveDateTime};
@@ -180,7 +181,7 @@ fn parse_expiration_date(
 }
 
 bitflags! {
-    #[derive(Copy, Clone, Serialize, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
+    #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
     #[repr(transparent)]
     pub struct Action: u8 {
     const All = 0;
@@ -358,6 +359,20 @@ impl<'de> Deserialize<'de> for Action {
         }
 
         deserializer.deserialize_str(Visitor)
+    }
+}
+
+impl Serialize for Action {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        Self::SERIALIZATION_MAP
+            .iter()
+            .find(|(_, action)| self == action)
+            .map(|(serialized, _)| serializer.serialize_str(serialized))
+            // should always be found, so unwrap is safe to use
+            .unwrap()
     }
 }
 
