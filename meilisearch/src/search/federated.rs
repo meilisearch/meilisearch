@@ -496,9 +496,6 @@ pub fn perform_federated_search(
     // 2. perform queries, merge and make hits index by index
     let required_hit_count = federation.limit + federation.offset;
 
-    let override_max_values_per_facet =
-        federation.merge_facets.and_then(|merge_facets| merge_facets.max_values_per_facet);
-
     // In step (2), semantic_hit_count will be set to Some(0) if any search kind uses semantic
     // Then in step (3), we'll update its value if there is any semantic search
     let mut semantic_hit_count = None;
@@ -744,8 +741,6 @@ pub fn perform_federated_search(
                     &index,
                     &rtxn,
                     candidates,
-                    override_max_values_per_facet,
-                    None,
                     super::Route::MultiSearch,
                 )
             })
@@ -808,8 +803,6 @@ pub fn perform_federated_search(
                 &index,
                 &rtxn,
                 Default::default(),
-                override_max_values_per_facet,
-                None,
                 super::Route::MultiSearch,
             ) {
                 error.message =

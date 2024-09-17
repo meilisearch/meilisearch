@@ -990,15 +990,7 @@ pub fn perform_search(
 
     let (facet_distribution, facet_stats) = facets
         .map(move |facets| {
-            compute_facet_distribution_stats(
-                &facets,
-                index,
-                &rtxn,
-                candidates,
-                None,
-                None,
-                Route::Search,
-            )
+            compute_facet_distribution_stats(&facets, index, &rtxn, candidates, Route::Search)
         })
         .transpose()?
         .map(|ComputedFacets { distribution, stats }| (distribution, stats))
@@ -1034,39 +1026,30 @@ fn compute_facet_distribution_stats<S: AsRef<str>>(
     index: &Index,
     rtxn: &RoTxn,
     candidates: roaring::RoaringBitmap,
-    override_max_values_per_facet: Option<usize>,
-    override_sort_facet_values_by: Option<OrderBy>,
     route: Route,
 ) -> Result<ComputedFacets, ResponseError> {
     let mut facet_distribution = index.facets_distribution(rtxn);
 
-    let max_values_by_facet = match override_max_values_per_facet {
-        Some(max_values_by_facet) => max_values_by_facet,
-        None => index
-            .max_values_per_facet(rtxn)
-            .map_err(milli::Error::from)?
-            .map(|x| x as usize)
-            .unwrap_or(DEFAULT_VALUES_PER_FACET),
-    };
+    let max_values_by_facet = index
+        .max_values_per_facet(rtxn)
+        .map_err(milli::Error::from)?
+        .map(|x| x as usize)
+        .unwrap_or(DEFAULT_VALUES_PER_FACET);
 
     facet_distribution.max_values_per_facet(max_values_by_facet);
 
     let sort_facet_values_by = index.sort_facet_values_by(rtxn).map_err(milli::Error::from)?;
 
-    let sort_facet_values_by = |n: &str| match override_sort_facet_values_by {
-        Some(order_by) => order_by,
-        None => sort_facet_values_by.get(n),
-    };
-
     // add specific facet if there is no placeholder
     if facets.iter().all(|f| f.as_ref() != "*") {
-        let fields: Vec<_> = facets.iter().map(|n| (n, sort_facet_values_by(n.as_ref()))).collect();
+        let fields: Vec<_> =
+            facets.iter().map(|n| (n, sort_facet_values_by.get(n.as_ref()))).collect();
         facet_distribution.facets(fields);
     }
 
     let distribution = facet_distribution
         .candidates(candidates)
-        .default_order_by(sort_facet_values_by("*"))
+        .default_order_by(sort_facet_values_by.get("*"))
         .execute()
         .map_err(|error| match (error, route) {
             (
