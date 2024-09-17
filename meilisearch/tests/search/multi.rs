@@ -3988,7 +3988,7 @@ async fn federation_non_faceted_for_an_index() {
     snapshot!(code, @"400 Bad Request");
     insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
     {
-      "message": "Inside `.federation.facetsByIndex.fruits-no-name`: Invalid facet distribution, attribute `name` is not filterable. The available filterable attributes are `BOOST, id`.\n Note: index `fruits-no-name` used in `.queries[1]`",
+      "message": "Inside `.federation.facetsByIndex.fruits-no-name`: Invalid facet distribution, attribute `name` is not filterable. The available filterable attributes are `BOOST, id`.\n - Note: index `fruits-no-name` used in `.queries[1]`",
       "code": "invalid_multi_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facets"
@@ -4010,7 +4010,7 @@ async fn federation_non_faceted_for_an_index() {
     snapshot!(code, @"400 Bad Request");
     insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
     {
-      "message": "Inside `.federation.facetsByIndex.fruits-no-name`: Invalid facet distribution, attribute `name` is not filterable. The available filterable attributes are `BOOST, id`.\n Note: index `fruits-no-name` is not used in queries",
+      "message": "Inside `.federation.facetsByIndex.fruits-no-name`: Invalid facet distribution, attribute `name` is not filterable. The available filterable attributes are `BOOST, id`.\n - Note: index `fruits-no-name` is not used in queries",
       "code": "invalid_multi_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facets"
@@ -4033,7 +4033,7 @@ async fn federation_non_faceted_for_an_index() {
     snapshot!(code, @"400 Bad Request");
     insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
     {
-      "message": "Inside `.federation.facetsByIndex.fruits-no-facets`: Invalid facet distribution, this index does not have configured filterable attributes.\n Note: index `fruits-no-facets` is not used in queries",
+      "message": "Inside `.federation.facetsByIndex.fruits-no-facets`: Invalid facet distribution, this index does not have configured filterable attributes.\n - Note: index `fruits-no-facets` is not used in queries",
       "code": "invalid_multi_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facets"
@@ -4055,7 +4055,7 @@ async fn federation_non_faceted_for_an_index() {
     snapshot!(code, @"400 Bad Request");
     insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
     {
-      "message": "Inside `.federation.facetsByIndex.zorglub`: Index `zorglub` not found.\n Note: index `zorglub` is not used in queries",
+      "message": "Inside `.federation.facetsByIndex.zorglub`: Index `zorglub` not found.\n - Note: index `zorglub` is not used in queries",
       "code": "index_not_found",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#index_not_found"
@@ -5797,7 +5797,7 @@ async fn federation_inconsistent_merge_order() {
     snapshot!(code, @"400 Bad Request");
     insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
     {
-      "message": "Inside `.federation.facetsByIndex.movies-2`: Inconsistent order for values in facet `color`: index `movies` orders alphabetically, but index `movies-2` orders by count.\n - Hint: Remove `federation.mergeFacets` or change `faceting.sortFacetValuesBy` to be consistent in settings.\n Note: index `movies-2` used in `.queries[2]`",
+      "message": "Inside `.federation.facetsByIndex.movies-2`: Inconsistent order for values in facet `color`: index `movies` orders alphabetically, but index `movies-2` orders by count.\n - Hint: Remove `federation.mergeFacets` or change `faceting.sortFacetValuesBy` to be consistent in settings.\n - Note: index `movies-2` used in `.queries[2]`",
       "code": "invalid_multi_search_facet_order",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facet_order"
