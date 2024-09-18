@@ -1163,7 +1163,7 @@ async fn search_with_contains_without_enabling_the_feature() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(json_string!(response), @r###"
             {
-              "message": "Using `CONTAINS` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7:15 doggo CONTAINS kefir",
+              "message": "Using `CONTAINS` or `STARTS WITH` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7:15 doggo CONTAINS kefir",
               "code": "feature_not_enabled",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
@@ -1176,7 +1176,7 @@ async fn search_with_contains_without_enabling_the_feature() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(json_string!(response), @r###"
             {
-              "message": "Using `CONTAINS` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n25:33 doggo != echo AND doggo CONTAINS kefir",
+              "message": "Using `CONTAINS` or `STARTS WITH` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n25:33 doggo != echo AND doggo CONTAINS kefir",
               "code": "feature_not_enabled",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
@@ -1192,7 +1192,7 @@ async fn search_with_contains_without_enabling_the_feature() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Using `CONTAINS` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7:15 doggo CONTAINS kefir",
+      "message": "Using `CONTAINS` or `STARTS WITH` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7:15 doggo CONTAINS kefir",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
@@ -1204,7 +1204,7 @@ async fn search_with_contains_without_enabling_the_feature() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Using `CONTAINS` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7:15 doggo CONTAINS kefir",
+      "message": "Using `CONTAINS` or `STARTS WITH` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7:15 doggo CONTAINS kefir",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
