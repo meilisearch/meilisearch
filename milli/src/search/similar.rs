@@ -18,6 +18,7 @@ pub struct Similar<'a> {
     embedder_name: String,
     embedder: Arc<Embedder>,
     ranking_score_threshold: Option<f64>,
+    quantized: bool,
 }
 
 impl<'a> Similar<'a> {
@@ -29,6 +30,7 @@ impl<'a> Similar<'a> {
         rtxn: &'a heed::RoTxn<'a>,
         embedder_name: String,
         embedder: Arc<Embedder>,
+        quantized: bool,
     ) -> Self {
         Self {
             id,
@@ -40,6 +42,7 @@ impl<'a> Similar<'a> {
             embedder_name,
             embedder,
             ranking_score_threshold: None,
+            quantized,
         }
     }
 
@@ -67,10 +70,7 @@ impl<'a> Similar<'a> {
                 .get(self.rtxn, &self.embedder_name)?
                 .ok_or_else(|| crate::UserError::InvalidEmbedder(self.embedder_name.to_owned()))?;
 
-        let readers: std::result::Result<Vec<_>, _> =
-            self.index.arroy_readers(self.rtxn, embedder_index).collect();
-
-        let readers = readers?;
+        let readers: Vec<_> = self.index.arroy_readers(embedder_index, self.quantized).collect();
 
         let mut results = Vec::new();
 
@@ -79,7 +79,6 @@ impl<'a> Similar<'a> {
                 self.rtxn,
                 self.id,
                 self.limit + self.offset + 1,
-                None,
                 Some(&universe),
             )?;
             if let Some(mut nns_by_item) = nns_by_item {

@@ -20,7 +20,7 @@ use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::vector::error::{EmbedErrorKind, PossibleEmbeddingMistakes, UnusedVectorsDistribution};
 use crate::vector::parsed_vectors::{ParsedVectorsDiff, VectorState, RESERVED_VECTORS_FIELD_NAME};
-use crate::vector::settings::{EmbedderAction, ReindexAction};
+use crate::vector::settings::ReindexAction;
 use crate::vector::{Embedder, Embeddings};
 use crate::{try_split_array_at, DocumentId, FieldId, Result, ThreadPoolNoAbort};
 
@@ -208,65 +208,65 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
 
     if reindex_vectors {
         for (name, action) in settings_diff.embedding_config_updates.iter() {
-            match action {
-                EmbedderAction::WriteBackToDocuments(_) => continue, // already deleted
-                EmbedderAction::Reindex(action) => {
-                    let Some((embedder_name, (embedder, prompt))) = configs.remove_entry(name)
-                    else {
-                        tracing::error!(embedder = name, "Requested embedder config not found");
-                        continue;
-                    };
+            if let Some(action) = action.reindex() {
+                let Some((embedder_name, (embedder, prompt, _quantized))) =
+                    configs.remove_entry(name)
+                else {
+                    tracing::error!(embedder = name, "Requested embedder config not found");
+                    continue;
+                };
 
-                    // (docid, _index) -> KvWriterDelAdd -> Vector
-                    let manual_vectors_writer = create_writer(
-                        indexer.chunk_compression_type,
-                        indexer.chunk_compression_level,
-                        tempfile::tempfile()?,
-                    );
+                // (docid, _index) -> KvWriterDelAdd -> Vector
+                let manual_vectors_writer = create_writer(
+                    indexer.chunk_compression_type,
+                    indexer.chunk_compression_level,
+                    tempfile::tempfile()?,
+                );
 
-                    // (docid) -> (prompt)
-                    let prompts_writer = create_writer(
-                        indexer.chunk_compression_type,
-                        indexer.chunk_compression_level,
-                        tempfile::tempfile()?,
-                    );
+                // (docid) -> (prompt)
+                let prompts_writer = create_writer(
+                    indexer.chunk_compression_type,
+                    indexer.chunk_compression_level,
+                    tempfile::tempfile()?,
+                );
 
-                    // (docid) -> ()
-                    let remove_vectors_writer = create_writer(
-                        indexer.chunk_compression_type,
-                        indexer.chunk_compression_level,
-                        tempfile::tempfile()?,
-                    );
+                // (docid) -> ()
+                let remove_vectors_writer = create_writer(
+                    indexer.chunk_compression_type,
+                    indexer.chunk_compression_level,
+                    tempfile::tempfile()?,
+                );
 
-                    let action = match action {
-                        ReindexAction::FullReindex => ExtractionAction::SettingsFullReindex,
-                        ReindexAction::RegeneratePrompts => {
-                            let Some((_, old_prompt)) = old_configs.get(name) else {
-                                tracing::error!(embedder = name, "Old embedder config not found");
-                                continue;
-                            };
+                let action = match action {
+                    ReindexAction::FullReindex => ExtractionAction::SettingsFullReindex,
+                    ReindexAction::RegeneratePrompts => {
+                        let Some((_, old_prompt, _quantized)) = old_configs.get(name) else {
+                            tracing::error!(embedder = name, "Old embedder config not found");
+                            continue;
+                        };
 
-                            ExtractionAction::SettingsRegeneratePrompts { old_prompt }
-                        }
-                    };
+                        ExtractionAction::SettingsRegeneratePrompts { old_prompt }
+                    }
+                };
 
-                    extractors.push(EmbedderVectorExtractor {
-                        embedder_name,
-                        embedder,
-                        prompt,
-                        prompts_writer,
-                        remove_vectors_writer,
-                        manual_vectors_writer,
-                        add_to_user_provided: RoaringBitmap::new(),
-                        action,
-                    });
-                }
+                extractors.push(EmbedderVectorExtractor {
+                    embedder_name,
+                    embedder,
+                    prompt,
+                    prompts_writer,
+                    remove_vectors_writer,
+                    manual_vectors_writer,
+                    add_to_user_provided: RoaringBitmap::new(),
+                    action,
+                });
+            } else {
+                continue;
             }
         }
     } else {
         // document operation
 
-        for (embedder_name, (embedder, prompt)) in configs.into_iter() {
+        for (embedder_name, (embedder, prompt, _quantized)) in configs.into_iter() {
             // (docid, _index) -> KvWriterDelAdd -> Vector
             let manual_vectors_writer = create_writer(
                 indexer.chunk_compression_type,

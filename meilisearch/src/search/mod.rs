@@ -274,8 +274,8 @@ pub struct HybridQuery {
 #[derive(Clone)]
 pub enum SearchKind {
     KeywordOnly,
-    SemanticOnly { embedder_name: String, embedder: Arc<Embedder> },
-    Hybrid { embedder_name: String, embedder: Arc<Embedder>, semantic_ratio: f32 },
+    SemanticOnly { embedder_name: String, embedder: Arc<Embedder>, quantized: bool },
+    Hybrid { embedder_name: String, embedder: Arc<Embedder>, quantized: bool, semantic_ratio: f32 },
 }
 
 impl SearchKind {
@@ -285,9 +285,9 @@ impl SearchKind {
         embedder_name: &str,
         vector_len: Option<usize>,
     ) -> Result<Self, ResponseError> {
-        let (embedder_name, embedder) =
+        let (embedder_name, embedder, quantized) =
             Self::embedder(index_scheduler, index, embedder_name, vector_len)?;
-        Ok(Self::SemanticOnly { embedder_name, embedder })
+        Ok(Self::SemanticOnly { embedder_name, embedder, quantized })
     }
 
     pub(crate) fn hybrid(
@@ -297,9 +297,9 @@ impl SearchKind {
         semantic_ratio: f32,
         vector_len: Option<usize>,
     ) -> Result<Self, ResponseError> {
-        let (embedder_name, embedder) =
+        let (embedder_name, embedder, quantized) =
             Self::embedder(index_scheduler, index, embedder_name, vector_len)?;
-        Ok(Self::Hybrid { embedder_name, embedder, semantic_ratio })
+        Ok(Self::Hybrid { embedder_name, embedder, quantized, semantic_ratio })
     }
 
     pub(crate) fn embedder(
@@ -307,16 +307,14 @@ impl SearchKind {
         index: &Index,
         embedder_name: &str,
         vector_len: Option<usize>,
-    ) -> Result<(String, Arc<Embedder>), ResponseError> {
+    ) -> Result<(String, Arc<Embedder>, bool), ResponseError> {
         let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
         let embedders = index_scheduler.embedders(embedder_configs)?;
 
-        let embedder = embedders.get(embedder_name);
-
-        let embedder = embedder
+        let (embedder, _, quantized) = embedders
+            .get(embedder_name)
             .ok_or(milli::UserError::InvalidEmbedder(embedder_name.to_owned()))
-            .map_err(milli::Error::from)?
-            .0;
+            .map_err(milli::Error::from)?;
 
         if let Some(vector_len) = vector_len {
             if vector_len != embedder.dimensions() {
@@ -330,7 +328,7 @@ impl SearchKind {
             }
         }
 
-        Ok((embedder_name.to_owned(), embedder))
+        Ok((embedder_name.to_owned(), embedder, quantized))
     }
 }
 
@@ -791,7 +789,7 @@ fn prepare_search<'t>(
                 search.query(q);
             }
         }
-        SearchKind::SemanticOnly { embedder_name, embedder } => {
+        SearchKind::SemanticOnly { embedder_name, embedder, quantized } => {
             let vector = match query.vector.clone() {
                 Some(vector) => vector,
                 None => {
@@ -805,14 +803,19 @@ fn prepare_search<'t>(
                 }
             };
 
-            search.semantic(embedder_name.clone(), embedder.clone(), Some(vector));
+            search.semantic(embedder_name.clone(), embedder.clone(), *quantized, Some(vector));
         }
-        SearchKind::Hybrid { embedder_name, embedder, semantic_ratio: _ } => {
+        SearchKind::Hybrid { embedder_name, embedder, quantized, semantic_ratio: _ } => {
             if let Some(q) = &query.q {
                 search.query(q);
             }
             // will be embedded in hybrid search if necessary
-            search.semantic(embedder_name.clone(), embedder.clone(), query.vector.clone());
+            search.semantic(
+                embedder_name.clone(),
+                embedder.clone(),
+                *quantized,
+                query.vector.clone(),
+            );
         }
     }
 
@@ -1441,6 +1444,7 @@ pub fn perform_similar(
     query: SimilarQuery,
     embedder_name: String,
     embedder: Arc<Embedder>,
+    quantized: bool,
     retrieve_vectors: RetrieveVectors,
     features: RoFeatures,
 ) -> Result<SimilarResult, ResponseError> {
@@ -1469,8 +1473,16 @@ pub fn perform_similar(
         ));
     };
 
-    let mut similar =
-        milli::Similar::new(internal_id, offset, limit, index, &rtxn, embedder_name, embedder);
+    let mut similar = milli::Similar::new(
+        internal_id,
+        offset,
+        limit,
+        index,
+        &rtxn,
+        embedder_name,
+        embedder,
+        quantized,
+    );
 
     if let Some(ref filter) = query.filter {
         if let Some(facets) = parse_filter(filter, Code::InvalidSimilarFilter, features)? {

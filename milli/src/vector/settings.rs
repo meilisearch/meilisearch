@@ -32,6 +32,9 @@ pub struct EmbeddingSettings {
     pub dimensions: Setting<usize>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    pub binary_quantized: Setting<bool>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
     pub document_template: Setting<String>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
@@ -85,23 +88,62 @@ pub enum ReindexAction {
 
 pub enum SettingsDiff {
     Remove,
-    Reindex { action: ReindexAction, updated_settings: EmbeddingSettings },
-    UpdateWithoutReindex { updated_settings: EmbeddingSettings },
+    Reindex { action: ReindexAction, updated_settings: EmbeddingSettings, quantize: bool },
+    UpdateWithoutReindex { updated_settings: EmbeddingSettings, quantize: bool },
 }
 
-pub enum EmbedderAction {
-    WriteBackToDocuments(WriteBackToDocuments),
-    Reindex(ReindexAction),
+#[derive(Default, Debug)]
+pub struct EmbedderAction {
+    pub was_quantized: bool,
+    pub is_being_quantized: bool,
+    pub write_back: Option<WriteBackToDocuments>,
+    pub reindex: Option<ReindexAction>,
 }
 
+impl EmbedderAction {
+    pub fn is_being_quantized(&self) -> bool {
+        self.is_being_quantized
+    }
+
+    pub fn write_back(&self) -> Option<&WriteBackToDocuments> {
+        self.write_back.as_ref()
+    }
+
+    pub fn reindex(&self) -> Option<&ReindexAction> {
+        self.reindex.as_ref()
+    }
+
+    pub fn with_is_being_quantized(mut self, quantize: bool) -> Self {
+        self.is_being_quantized = quantize;
+        self
+    }
+
+    pub fn with_write_back(write_back: WriteBackToDocuments, was_quantized: bool) -> Self {
+        Self {
+            was_quantized,
+            is_being_quantized: false,
+            write_back: Some(write_back),
+            reindex: None,
+        }
+    }
+
+    pub fn with_reindex(reindex: ReindexAction, was_quantized: bool) -> Self {
+        Self { was_quantized, is_being_quantized: false, write_back: None, reindex: Some(reindex) }
+    }
+}
+
+#[derive(Debug)]
 pub struct WriteBackToDocuments {
     pub embedder_id: u8,
     pub user_provided: RoaringBitmap,
 }
 
 impl SettingsDiff {
-    pub fn from_settings(old: EmbeddingSettings, new: Setting<EmbeddingSettings>) -> Self {
-        match new {
+    pub fn from_settings(
+        old: EmbeddingSettings,
+        new: Setting<EmbeddingSettings>,
+    ) -> Result<Self, UserError> {
+        let ret = match new {
             Setting::Set(new) => {
                 let EmbeddingSettings {
                     mut source,
@@ -116,6 +158,7 @@ impl SettingsDiff {
                     mut distribution,
                     mut headers,
                     mut document_template_max_bytes,
+                    binary_quantized: mut binary_quantize,
                 } = old;
 
                 let EmbeddingSettings {
@@ -131,7 +174,16 @@ impl SettingsDiff {
                     distribution: new_distribution,
                     headers: new_headers,
                     document_template_max_bytes: new_document_template_max_bytes,
+                    binary_quantized: new_binary_quantize,
                 } = new;
+
+                if matches!(binary_quantize, Setting::Set(true))
+                    && matches!(new_binary_quantize, Setting::Set(false))
+                {
+                    return Err(UserError::InvalidDisableBinaryQuantization {
+                        embedder_name: String::from("todo"),
+                    });
+                }
 
                 let mut reindex_action = None;
 
@@ -172,6 +224,7 @@ impl SettingsDiff {
                         _ => {}
                     }
                 }
+                let binary_quantize_changed = binary_quantize.apply(new_binary_quantize);
                 if url.apply(new_url) {
                     match source {
                         // do not regenerate on an url change in OpenAI
@@ -231,16 +284,27 @@ impl SettingsDiff {
                     distribution,
                     headers,
                     document_template_max_bytes,
+                    binary_quantized: binary_quantize,
                 };
 
                 match reindex_action {
-                    Some(action) => Self::Reindex { action, updated_settings },
-                    None => Self::UpdateWithoutReindex { updated_settings },
+                    Some(action) => Self::Reindex {
+                        action,
+                        updated_settings,
+                        quantize: binary_quantize_changed,
+                    },
+                    None => Self::UpdateWithoutReindex {
+                        updated_settings,
+                        quantize: binary_quantize_changed,
+                    },
                 }
             }
             Setting::Reset => Self::Remove,
-            Setting::NotSet => Self::UpdateWithoutReindex { updated_settings: old },
-        }
+            Setting::NotSet => {
+                Self::UpdateWithoutReindex { updated_settings: old, quantize: false }
+            }
+        };
+        Ok(ret)
     }
 }
 
@@ -486,7 +550,7 @@ impl std::fmt::Display for EmbedderSource {
 
 impl From<EmbeddingConfig> for EmbeddingSettings {
     fn from(value: EmbeddingConfig) -> Self {
-        let EmbeddingConfig { embedder_options, prompt } = value;
+        let EmbeddingConfig { embedder_options, prompt, quantized } = value;
         let document_template_max_bytes =
             Setting::Set(prompt.max_bytes.unwrap_or(default_max_bytes()).get());
         match embedder_options {
@@ -507,6 +571,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 response: Setting::NotSet,
                 headers: Setting::NotSet,
                 distribution: Setting::some_or_not_set(distribution),
+                binary_quantized: Setting::some_or_not_set(quantized),
             },
             super::EmbedderOptions::OpenAi(super::openai::EmbedderOptions {
                 url,
@@ -527,6 +592,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 response: Setting::NotSet,
                 headers: Setting::NotSet,
                 distribution: Setting::some_or_not_set(distribution),
+                binary_quantized: Setting::some_or_not_set(quantized),
             },
             super::EmbedderOptions::Ollama(super::ollama::EmbedderOptions {
                 embedding_model,
@@ -547,6 +613,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 response: Setting::NotSet,
                 headers: Setting::NotSet,
                 distribution: Setting::some_or_not_set(distribution),
+                binary_quantized: Setting::some_or_not_set(quantized),
             },
             super::EmbedderOptions::UserProvided(super::manual::EmbedderOptions {
                 dimensions,
@@ -564,6 +631,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 response: Setting::NotSet,
                 headers: Setting::NotSet,
                 distribution: Setting::some_or_not_set(distribution),
+                binary_quantized: Setting::some_or_not_set(quantized),
             },
             super::EmbedderOptions::Rest(super::rest::EmbedderOptions {
                 api_key,
@@ -586,6 +654,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 response: Setting::Set(response),
                 distribution: Setting::some_or_not_set(distribution),
                 headers: Setting::Set(headers),
+                binary_quantized: Setting::some_or_not_set(quantized),
             },
         }
     }
@@ -607,7 +676,10 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
             response,
             distribution,
             headers,
+            binary_quantized,
         } = value;
+
+        this.quantized = binary_quantized.set();
 
         if let Some(source) = source.set() {
             match source {

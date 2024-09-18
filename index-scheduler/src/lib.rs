@@ -1477,7 +1477,7 @@ impl IndexScheduler {
             .map(
                 |IndexEmbeddingConfig {
                      name,
-                     config: milli::vector::EmbeddingConfig { embedder_options, prompt },
+                     config: milli::vector::EmbeddingConfig { embedder_options, prompt, quantized },
                      ..
                  }| {
                     let prompt =
@@ -1486,7 +1486,10 @@ impl IndexScheduler {
                     {
                         let embedders = self.embedders.read().unwrap();
                         if let Some(embedder) = embedders.get(&embedder_options) {
-                            return Ok((name, (embedder.clone(), prompt)));
+                            return Ok((
+                                name,
+                                (embedder.clone(), prompt, quantized.unwrap_or_default()),
+                            ));
                         }
                     }
 
@@ -1500,7 +1503,7 @@ impl IndexScheduler {
                         let mut embedders = self.embedders.write().unwrap();
                         embedders.insert(embedder_options, embedder.clone());
                     }
-                    Ok((name, (embedder, prompt)))
+                    Ok((name, (embedder, prompt, quantized.unwrap_or_default())))
                 },
             )
             .collect();
@@ -5197,7 +5200,7 @@ mod tests {
             let simple_hf_name = name.clone();
 
             let configs = index_scheduler.embedders(configs).unwrap();
-            let (hf_embedder, _) = configs.get(&simple_hf_name).unwrap();
+            let (hf_embedder, _, _) = configs.get(&simple_hf_name).unwrap();
             let beagle_embed = hf_embedder.embed_one(S("Intel the beagle best doggo")).unwrap();
             let lab_embed = hf_embedder.embed_one(S("Max the lab best doggo")).unwrap();
             let patou_embed = hf_embedder.embed_one(S("kefir the patou best doggo")).unwrap();
