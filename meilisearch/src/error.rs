@@ -4,6 +4,7 @@ use byte_unit::{Byte, UnitType};
 use meilisearch_types::document_formats::{DocumentFormatError, PayloadType};
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::index_uid::{IndexUid, IndexUidFormatError};
+use meilisearch_types::milli::OrderBy;
 use serde_json::Value;
 use tokio::task::JoinError;
 
@@ -27,10 +28,20 @@ pub enum MeilisearchHttpError {
     EmptyFilter,
     #[error("Invalid syntax for the filter parameter: `expected {}, found: {1}`.", .0.join(", "))]
     InvalidExpression(&'static [&'static str], Value),
-    #[error("Using `federationOptions` is not allowed in a non-federated search.\n Hint: remove `federationOptions` from query #{0} or add `federation: {{}}` to the request.")]
+    #[error("Using `federationOptions` is not allowed in a non-federated search.\n - Hint: remove `federationOptions` from query #{0} or add `federation` to the request.")]
     FederationOptionsInNonFederatedRequest(usize),
-    #[error("Inside `.queries[{0}]`: Using pagination options is not allowed in federated queries.\n Hint: remove `{1}` from query #{0} or remove `federation: {{}}` from the request")]
+    #[error("Inside `.queries[{0}]`: Using pagination options is not allowed in federated queries.\n - Hint: remove `{1}` from query #{0} or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search")]
     PaginationInFederatedQuery(usize, &'static str),
+    #[error("Inside `.queries[{0}]`: Using facet options is not allowed in federated queries.\n - Hint: remove `facets` from query #{0} or remove `federation` from the request\n - Hint: pass `federation.facetsByIndex.{1}: {2:?}` for facets in federated search")]
+    FacetsInFederatedQuery(usize, String, Vec<String>),
+    #[error("Inconsistent order for values in facet `{facet}`: index `{previous_uid}` orders {previous_facet_order}, but index `{current_uid}` orders {index_facet_order}.\n - Hint: Remove `federation.mergeFacets` or change `faceting.sortFacetValuesBy` to be consistent in settings.")]
+    InconsistentFacetOrder {
+        facet: String,
+        previous_facet_order: OrderBy,
+        previous_uid: String,
+        index_facet_order: OrderBy,
+        current_uid: String,
+    },
     #[error("A {0} payload is missing.")]
     MissingPayload(PayloadType),
     #[error("Too many search requests running at the same time: {0}. Retry after 10s.")]
@@ -95,6 +106,10 @@ impl ErrorCode for MeilisearchHttpError {
             }
             MeilisearchHttpError::PaginationInFederatedQuery(_, _) => {
                 Code::InvalidMultiSearchQueryPagination
+            }
+            MeilisearchHttpError::FacetsInFederatedQuery(..) => Code::InvalidMultiSearchQueryFacets,
+            MeilisearchHttpError::InconsistentFacetOrder { .. } => {
+                Code::InvalidMultiSearchFacetOrder
             }
         }
     }

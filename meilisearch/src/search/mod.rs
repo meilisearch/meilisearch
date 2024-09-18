@@ -441,9 +441,6 @@ pub struct SearchQueryWithIndex {
 }
 
 impl SearchQueryWithIndex {
-    pub fn has_federation_options(&self) -> bool {
-        self.federation_options.is_some()
-    }
     pub fn has_pagination(&self) -> Option<&'static str> {
         if self.offset.is_some() {
             Some("offset")
@@ -456,6 +453,10 @@ impl SearchQueryWithIndex {
         } else {
             None
         }
+    }
+
+    pub fn has_facets(&self) -> Option<&[String]> {
+        self.facets.as_deref().filter(|v| !v.is_empty())
     }
 
     pub fn into_index_query_federation(self) -> (IndexUid, SearchQuery, Option<FederationOptions>) {
@@ -987,39 +988,13 @@ pub fn perform_search(
         HitsInfo::OffsetLimit { limit, offset, estimated_total_hits: number_of_hits }
     };
 
-    let (facet_distribution, facet_stats) = match facets {
-        Some(ref fields) => {
-            let mut facet_distribution = index.facets_distribution(&rtxn);
-
-            let max_values_by_facet = index
-                .max_values_per_facet(&rtxn)
-                .map_err(milli::Error::from)?
-                .map(|x| x as usize)
-                .unwrap_or(DEFAULT_VALUES_PER_FACET);
-            facet_distribution.max_values_per_facet(max_values_by_facet);
-
-            let sort_facet_values_by =
-                index.sort_facet_values_by(&rtxn).map_err(milli::Error::from)?;
-
-            if fields.iter().all(|f| f != "*") {
-                let fields: Vec<_> =
-                    fields.iter().map(|n| (n, sort_facet_values_by.get(n))).collect();
-                facet_distribution.facets(fields);
-            }
-
-            let distribution = facet_distribution
-                .candidates(candidates)
-                .default_order_by(sort_facet_values_by.get("*"))
-                .execute()?;
-            let stats = facet_distribution.compute_stats()?;
-            (Some(distribution), Some(stats))
-        }
-        None => (None, None),
-    };
-
-    let facet_stats = facet_stats.map(|stats| {
-        stats.into_iter().map(|(k, (min, max))| (k, FacetStats { min, max })).collect()
-    });
+    let (facet_distribution, facet_stats) = facets
+        .map(move |facets| {
+            compute_facet_distribution_stats(&facets, index, &rtxn, candidates, Route::Search)
+        })
+        .transpose()?
+        .map(|ComputedFacets { distribution, stats }| (distribution, stats))
+        .unzip();
 
     let result = SearchResult {
         hits: documents,
@@ -1033,6 +1008,61 @@ pub fn perform_search(
         semantic_hit_count,
     };
     Ok(result)
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ComputedFacets {
+    pub distribution: BTreeMap<String, IndexMap<String, u64>>,
+    pub stats: BTreeMap<String, FacetStats>,
+}
+
+enum Route {
+    Search,
+    MultiSearch,
+}
+
+fn compute_facet_distribution_stats<S: AsRef<str>>(
+    facets: &[S],
+    index: &Index,
+    rtxn: &RoTxn,
+    candidates: roaring::RoaringBitmap,
+    route: Route,
+) -> Result<ComputedFacets, ResponseError> {
+    let mut facet_distribution = index.facets_distribution(rtxn);
+
+    let max_values_by_facet = index
+        .max_values_per_facet(rtxn)
+        .map_err(milli::Error::from)?
+        .map(|x| x as usize)
+        .unwrap_or(DEFAULT_VALUES_PER_FACET);
+
+    facet_distribution.max_values_per_facet(max_values_by_facet);
+
+    let sort_facet_values_by = index.sort_facet_values_by(rtxn).map_err(milli::Error::from)?;
+
+    // add specific facet if there is no placeholder
+    if facets.iter().all(|f| f.as_ref() != "*") {
+        let fields: Vec<_> =
+            facets.iter().map(|n| (n, sort_facet_values_by.get(n.as_ref()))).collect();
+        facet_distribution.facets(fields);
+    }
+
+    let distribution = facet_distribution
+        .candidates(candidates)
+        .default_order_by(sort_facet_values_by.get("*"))
+        .execute()
+        .map_err(|error| match (error, route) {
+            (
+                error @ milli::Error::UserError(milli::UserError::InvalidFacetsDistribution {
+                    ..
+                }),
+                Route::MultiSearch,
+            ) => ResponseError::from_msg(error.to_string(), Code::InvalidMultiSearchFacets),
+            (error, _) => error.into(),
+        })?;
+    let stats = facet_distribution.compute_stats()?;
+    let stats = stats.into_iter().map(|(k, (min, max))| (k, FacetStats { min, max })).collect();
+    Ok(ComputedFacets { distribution, stats })
 }
 
 pub fn search_from_kind(
