@@ -352,7 +352,7 @@ where
                 None,
                 deserr::ErrorKind::Unexpected {
                     msg: format!(
-                        "the distribution sigma must be in the range [0, 1], got {}",
+                        "the distribution sigma must be in the range ]0, 1], got {}",
                         value.sigma
                     ),
                 },
