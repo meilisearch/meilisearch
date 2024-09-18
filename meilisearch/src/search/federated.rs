@@ -408,10 +408,8 @@ impl FederatedFacets {
                     std::collections::btree_map::Entry::Occupied(mut entry) => {
                         let stats = entry.get_mut();
 
-                        stats.min =
-                            if stats.min <= index_stats.min { stats.min } else { index_stats.min };
-                        stats.max =
-                            if stats.max >= index_stats.max { stats.max } else { index_stats.max };
+                        stats.min = f64::min(stats.min, index_stats.min);
+                        stats.max = f64::max(stats.max, index_stats.max);
                     }
                 }
             }
