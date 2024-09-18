@@ -364,7 +364,7 @@ async fn filter_invalid_syntax_object() {
         .similar(json!({"id": 287947, "filter": "title & Glass"}), |response, code| {
             snapshot!(response, @r###"
             {
-              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `_geoRadius`, or `_geoBoundingBox` at `title & Glass`.\n1:14 title & Glass",
+              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `title & Glass`.\n1:14 title & Glass",
               "code": "invalid_similar_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
@@ -403,7 +403,7 @@ async fn filter_invalid_syntax_array() {
         .similar(json!({"id": 287947, "filter": ["title & Glass"]}), |response, code| {
             snapshot!(response, @r###"
             {
-              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `_geoRadius`, or `_geoBoundingBox` at `title & Glass`.\n1:14 title & Glass",
+              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `title & Glass`.\n1:14 title & Glass",
               "code": "invalid_similar_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"

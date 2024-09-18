@@ -27,6 +27,7 @@ pub enum Condition<'a> {
     LowerThanOrEqual(Token<'a>),
     Between { from: Token<'a>, to: Token<'a> },
     Contains { keyword: Token<'a>, word: Token<'a> },
+    StartsWith { keyword: Token<'a>, word: Token<'a> },
 }
 
 /// condition      = value ("==" | ">" ...) value
@@ -117,6 +118,34 @@ pub fn parse_not_contains(input: Span) -> IResult<FilterCondition> {
         FilterCondition::Not(Box::new(FilterCondition::Condition {
             fid,
             op: Contains { keyword: Token { span: contains, value: None }, word: value },
+        })),
+    ))
+}
+
+/// starts with        = value "CONTAINS" value
+pub fn parse_starts_with(input: Span) -> IResult<FilterCondition> {
+    let (input, (fid, starts_with, value)) =
+        tuple((parse_value, tag("STARTS WITH"), cut(parse_value)))(input)?;
+    Ok((
+        input,
+        FilterCondition::Condition {
+            fid,
+            op: StartsWith { keyword: Token { span: starts_with, value: None }, word: value },
+        },
+    ))
+}
+
+/// starts with        = value "NOT" WS+ "CONTAINS" value
+pub fn parse_not_starts_with(input: Span) -> IResult<FilterCondition> {
+    let keyword = tuple((tag("NOT"), multispace1, tag("STARTS WITH")));
+    let (input, (fid, (_not, _spaces, starts_with), value)) =
+        tuple((parse_value, keyword, cut(parse_value)))(input)?;
+
+    Ok((
+        input,
+        FilterCondition::Not(Box::new(FilterCondition::Condition {
+            fid,
+            op: StartsWith { keyword: Token { span: starts_with, value: None }, word: value },
         })),
     ))
 }
