@@ -260,6 +260,21 @@ impl Action {
         ("experimental.update", Self::ExperimentalFeaturesUpdate),
     ];
 
+    fn ser_action_to_action(v: &str) -> Option<Action> {
+        Self::SERDE_MAP_ARR
+            .iter()
+            .find(|(ser_action, _)| &v == ser_action)
+            .map(|(_, action)| *action)
+    }
+
+    fn action_to_ser_action(v: &Action) -> &'static str {
+        Self::SERDE_MAP_ARR
+            .iter()
+            .find(|(_, ref action)| v == action)
+            .map(|(ser_action, _)| ser_action)
+            .expect("`action_wanted` should always have a matching serialized value")
+    }
+
     pub const fn from_repr(repr: u8) -> Option<Self> {
         use actions::*;
         match repr {
@@ -311,16 +326,16 @@ impl<E: DeserializeError> Deserr<E> for Action {
         location: deserr::ValuePointerRef<'_>,
     ) -> Result<Self, E> {
         match value {
-            deserr::Value::String(s) => {
-                match Self::SERDE_MAP_ARR.iter().find(|(serialized, _)| s == *serialized) {
-                    Some((_, action)) => Ok(*action),
-                    None => Err(deserr::take_cf_content(E::error::<std::convert::Infallible>(
-                        None,
-                        deserr::ErrorKind::Unexpected { msg: format!("TODO {}", s) },
-                        location,
-                    ))),
-                }
-            }
+            deserr::Value::String(s) => match Self::ser_action_to_action(&s) {
+                Some(action) => Ok(action),
+                None => Err(deserr::take_cf_content(E::error::<std::convert::Infallible>(
+                    None,
+                    deserr::ErrorKind::Unexpected {
+                        msg: format!("string must be a valid action, got {}", s),
+                    },
+                    location,
+                ))),
+            },
             _ => Err(take_cf_content(E::error(
                 None,
                 deserr::ErrorKind::IncorrectValueKind {
@@ -338,12 +353,7 @@ impl Serialize for Action {
     where
         S: Serializer,
     {
-        Self::SERDE_MAP_ARR
-            .iter()
-            .find(|(_, action)| self == action)
-            .map(|(serialized, _)| serializer.serialize_str(serialized))
-            // should always be found, so unwrap is safe to use
-            .unwrap()
+        serializer.serialize_str(Self::action_to_ser_action(self))
     }
 }
 
@@ -364,9 +374,8 @@ impl<'de> Deserialize<'de> for Action {
             where
                 E: serde::de::Error,
             {
-                // @TODO: Make a to_serialized and to_desiralized on Action perhaps
-                match Self::Value::SERDE_MAP_ARR.iter().find(|(serialized, _)| s == *serialized) {
-                    Some((_, action)) => Ok(*action),
+                match Self::Value::ser_action_to_action(s) {
+                    Some(action) => Ok(action),
                     None => Err(E::invalid_value(serde::de::Unexpected::Str(s), &"a valid action")),
                 }
             }
