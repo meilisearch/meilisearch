@@ -330,8 +330,9 @@ impl<E: DeserializeError> Deserr<E> for Action {
                 Some(action) => Ok(action),
                 None => Err(deserr::take_cf_content(E::error::<std::convert::Infallible>(
                     None,
-                    deserr::ErrorKind::Unexpected {
-                        msg: format!("string must be a valid action, got {}", s),
+                    deserr::ErrorKind::UnknownValue {
+                        value: &s,
+                        accepted: &Self::SERDE_MAP_ARR.map(|(ser_action, _)| ser_action),
                     },
                     location,
                 ))),
