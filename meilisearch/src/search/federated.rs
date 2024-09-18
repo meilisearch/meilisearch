@@ -90,14 +90,6 @@ pub struct MergeFacets {
     pub max_values_per_facet: Option<usize>,
 }
 
-#[derive(Debug, deserr::Deserr, Default)]
-#[deserr(rename_all = camelCase, deny_unknown_fields)]
-pub enum GroupFacetsBy {
-    Facet,
-    #[default]
-    Index,
-}
-
 #[derive(Debug, deserr::Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct FederatedSearch {
