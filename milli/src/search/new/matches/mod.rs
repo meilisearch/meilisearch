@@ -929,6 +929,42 @@ mod tests {
             matcher.format(format_options),
             @"…world between <em>those</em> who embraced progress <em>and those</em> who resisted…"
         );
+
+        let builder = MatcherBuilder::new_test(
+            &rtxn,
+            &temp_index,
+            "\"The groundbreaking invention had the power to split the world\"",
+        );
+        let mut matcher = builder.build(text, None);
+        // should highlight "those" and the phrase "and those".
+        insta::assert_snapshot!(
+            matcher.format(format_options),
+            @"<em>The groundbreaking invention had the power to split the world</em>…"
+        );
+
+        let builder = MatcherBuilder::new_test(
+            &rtxn,
+            &temp_index,
+            "\"The groundbreaking invention had the power to split the world between\"",
+        );
+        let mut matcher = builder.build(text, None);
+        // should highlight "those" and the phrase "and those".
+        insta::assert_snapshot!(
+            matcher.format(format_options),
+            @"The groundbreaking invention had the power to split the world …"
+        );
+
+        let builder = MatcherBuilder::new_test(
+            &rtxn,
+            &temp_index,
+            "\"The groundbreaking invention\" \"embraced progress and those who resisted change\"",
+        );
+        let mut matcher = builder.build(text, None);
+        // should highlight "those" and the phrase "and those".
+        insta::assert_snapshot!(
+            matcher.format(format_options),
+            @"…between those who <em>embraced progress and those who resisted change</em>…"
+        );
     }
 
     #[test]
