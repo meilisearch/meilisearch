@@ -222,7 +222,6 @@ bitflags! {
 }
 
 impl Action {
-    // @TODO: Consider using https://github.com/rust-phf/rust-phf
     const SERDE_MAP_ARR: [(&'static str, Self); 34] = [
         ("*", Self::All),
         ("search", Self::Search),
@@ -272,7 +271,8 @@ impl Action {
             .iter()
             .find(|(_, ref action)| v == action)
             .map(|(ser_action, _)| ser_action)
-            .expect("`action_wanted` should always have a matching serialized value")
+            // actions should always have matching serialized values
+            .unwrap()
     }
 
     pub const fn from_repr(repr: u8) -> Option<Self> {
@@ -399,10 +399,11 @@ impl Sequence for Action {
     }
 
     fn previous(&self) -> Option<Self> {
-        if self.bits() == 0 {
+        let current_index = self.bits() as usize;
+        if current_index == 0 {
             None
         } else {
-            Some(Self::SERDE_MAP_ARR[self.bits() as usize - 1].1)
+            Some(Self::SERDE_MAP_ARR[current_index - 1].1)
         }
     }
 
