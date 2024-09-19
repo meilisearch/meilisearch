@@ -997,9 +997,14 @@ impl<'a, 'i> Transform<'a, 'i> {
                 if let Some(WriteBackToDocuments { embedder_id, user_provided }) =
                     action.write_back()
                 {
-                    let readers: Vec<_> =
-                        self.index.arroy_readers(*embedder_id, action.was_quantized).collect();
-                    Some(Ok((name.as_str(), (readers, user_provided))))
+                    let readers: Result<Vec<_>> = self
+                        .index
+                        .arroy_readers(wtxn, *embedder_id, action.was_quantized)
+                        .collect();
+                    match readers {
+                        Ok(readers) => Some(Ok((name.as_str(), (readers, user_provided)))),
+                        Err(error) => Some(Err(error)),
+                    }
                 } else {
                     None
                 }

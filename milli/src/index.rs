@@ -1612,11 +1612,20 @@ impl Index {
 
     pub fn arroy_readers<'a>(
         &'a self,
+        rtxn: &'a RoTxn<'a>,
         embedder_id: u8,
         quantized: bool,
-    ) -> impl Iterator<Item = ArroyReader> + 'a {
-        crate::vector::arroy_db_range_for_embedder(embedder_id)
-            .map_while(move |k| Some(ArroyReader::new(self.vector_arroy, k, quantized)))
+    ) -> impl Iterator<Item = Result<ArroyReader>> + 'a {
+        crate::vector::arroy_db_range_for_embedder(embedder_id).map_while(move |k| {
+            let reader = ArroyReader::new(self.vector_arroy, k, quantized);
+            // Here we don't care about the dimensions, but we want to know if we can read
+            // in the database or if its medata are missing.
+            match reader.dimensions(rtxn) {
+                Ok(_) => Some(Ok(reader)),
+                Err(arroy::Error::MissingMetadata(_)) => None,
+                Err(e) => Some(Err(e.into())),
+            }
+        })
     }
 
     pub(crate) fn put_search_cutoff(&self, wtxn: &mut RwTxn<'_>, cutoff: u64) -> heed::Result<()> {

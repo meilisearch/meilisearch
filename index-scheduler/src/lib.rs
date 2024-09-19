@@ -5522,6 +5522,7 @@ mod tests {
                             400,
                         ),
                     },
+                    quantized: None,
                 },
                 user_provided: RoaringBitmap<[1, 2]>,
             },
@@ -5534,28 +5535,8 @@ mod tests {
 
         // the document with the id 3 should keep its original embedding
         let docid = index.external_documents_ids.get(&rtxn, "3").unwrap().unwrap();
-        let mut embeddings = Vec::new();
-
-        'vectors: for i in 0..=u8::MAX {
-            let reader = arroy::Reader::open(&rtxn, i as u16, index.vector_arroy)
-                .map(Some)
-                .or_else(|e| match e {
-                    arroy::Error::MissingMetadata(_) => Ok(None),
-                    e => Err(e),
-                })
-                .transpose();
-
-            let Some(reader) = reader else {
-                break 'vectors;
-            };
-
-            let embedding = reader.unwrap().item_vector(&rtxn, docid).unwrap();
-            if let Some(embedding) = embedding {
-                embeddings.push(embedding)
-            } else {
-                break 'vectors;
-            }
-        }
+        let embeddings = index.embeddings(&rtxn, docid).unwrap();
+        let embeddings = &embeddings["my_doggo_embedder"];
 
         snapshot!(embeddings.len(), @"1");
         assert!(embeddings[0].iter().all(|i| *i == 3.0), "{:?}", embeddings[0]);
@@ -5740,6 +5721,7 @@ mod tests {
                             400,
                         ),
                     },
+                    quantized: None,
                 },
                 user_provided: RoaringBitmap<[0]>,
             },
@@ -5783,6 +5765,7 @@ mod tests {
                             400,
                         ),
                     },
+                    quantized: None,
                 },
                 user_provided: RoaringBitmap<[]>,
             },

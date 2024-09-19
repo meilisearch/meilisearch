@@ -70,7 +70,9 @@ impl<'a> Similar<'a> {
                 .get(self.rtxn, &self.embedder_name)?
                 .ok_or_else(|| crate::UserError::InvalidEmbedder(self.embedder_name.to_owned()))?;
 
-        let readers: Vec<_> = self.index.arroy_readers(embedder_index, self.quantized).collect();
+        let readers: Result<Vec<_>> =
+            self.index.arroy_readers(self.rtxn, embedder_index, self.quantized).collect();
+        let readers = readers?;
 
         let mut results = Vec::new();
 

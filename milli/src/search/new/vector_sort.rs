@@ -52,13 +52,13 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         ctx: &mut SearchContext<'_>,
         vector_candidates: &RoaringBitmap,
     ) -> Result<()> {
-        let readers: Vec<_> =
-            ctx.index.arroy_readers(self.embedder_index, self.quantized).collect();
+        let readers: Result<Vec<_>> =
+            ctx.index.arroy_readers(ctx.txn, self.embedder_index, self.quantized).collect();
 
         let target = &self.target;
         let mut results = Vec::new();
 
-        for reader in readers.iter() {
+        for reader in readers?.iter() {
             let nns_by_vector =
                 reader.nns_by_vector(ctx.txn, target, self.limit, Some(vector_candidates))?;
             results.extend(nns_by_vector.into_iter());
