@@ -70,14 +70,10 @@ impl<'a> Similar<'a> {
                 .get(self.rtxn, &self.embedder_name)?
                 .ok_or_else(|| crate::UserError::InvalidEmbedder(self.embedder_name.to_owned()))?;
 
-        let readers: Result<Vec<_>> =
-            self.index.arroy_readers(self.rtxn, embedder_index, self.quantized).collect();
-        let readers = readers?;
-
         let mut results = Vec::new();
 
-        for reader in readers.iter() {
-            let nns_by_item = reader.nns_by_item(
+        for reader in self.index.arroy_readers(self.rtxn, embedder_index, self.quantized) {
+            let nns_by_item = reader?.nns_by_item(
                 self.rtxn,
                 self.id,
                 self.limit + self.offset + 1,
