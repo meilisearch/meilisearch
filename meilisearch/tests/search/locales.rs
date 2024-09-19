@@ -1143,3 +1143,125 @@ async fn facet_search_with_localized_attributes() {
     }
     "###);
 }
+#[actix_rt::test]
+async fn swedish_search() {
+    let server = Server::new().await;
+
+    let index = server.index("test");
+    let documents = json!([
+      {"id": "tra1-1", "product": "trä"},
+      {"id": "tra2-1", "product": "traktor"},
+      {"id": "tra1-2", "product": "träbjälke"},
+      {"id": "tra2-2", "product": "trafiksignal"},
+    ]);
+    index.add_documents(documents, None).await;
+    let (_response, _) = index
+        .update_settings(json!({
+            "searchableAttributes": ["product"],
+            "localizedAttributes": [
+                // force swedish
+                {"attributePatterns": ["product"], "locales": ["swe"]}
+            ]
+        }))
+        .await;
+    index.wait_task(1).await;
+
+    // infer swedish
+    index
+        .search(json!({"q": "trä", "attributesToRetrieve": ["product"]}), |response, code| {
+            snapshot!(response, @r###"
+            {
+              "hits": [
+                {
+                  "product": "trä"
+                },
+                {
+                  "product": "träbjälke"
+                }
+              ],
+              "query": "trä",
+              "processingTimeMs": "[duration]",
+              "limit": 20,
+              "offset": 0,
+              "estimatedTotalHits": 2
+            }
+            "###);
+            snapshot!(code, @"200 OK");
+        })
+        .await;
+
+    index
+        .search(json!({"q": "tra", "attributesToRetrieve": ["product"]}), |response, code| {
+            snapshot!(response, @r###"
+            {
+              "hits": [
+                {
+                  "product": "traktor"
+                },
+                {
+                  "product": "trafiksignal"
+                }
+              ],
+              "query": "tra",
+              "processingTimeMs": "[duration]",
+              "limit": 20,
+              "offset": 0,
+              "estimatedTotalHits": 2
+            }
+            "###);
+            snapshot!(code, @"200 OK");
+        })
+        .await;
+
+    // force swedish
+    index
+        .search(
+            json!({"q": "trä", "locales": ["swe"], "attributesToRetrieve": ["product"]}),
+            |response, code| {
+                snapshot!(response, @r###"
+                {
+                  "hits": [
+                    {
+                      "product": "trä"
+                    },
+                    {
+                      "product": "träbjälke"
+                    }
+                  ],
+                  "query": "trä",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 2
+                }
+                "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
+    index
+        .search(
+            json!({"q": "tra", "locales": ["swe"], "attributesToRetrieve": ["product"]}),
+            |response, code| {
+                snapshot!(response, @r###"
+                {
+                  "hits": [
+                    {
+                      "product": "traktor"
+                    },
+                    {
+                      "product": "trafiksignal"
+                    }
+                  ],
+                  "query": "tra",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 2
+                }
+                "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
+}
