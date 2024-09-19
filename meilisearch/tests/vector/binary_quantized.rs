@@ -364,7 +364,8 @@ async fn binary_quantize_clear_documents() {
     "###);
 
     // Make sure the arroy DB has been cleared
-    let (documents, _code) = index.search_post(json!({ "vector": [1, 1, 1] })).await;
+    let (documents, _code) =
+        index.search_post(json!({ "hybrid": { "embedder": "manual" }, "vector": [1, 1, 1] })).await;
     snapshot!(documents, @r###"
     {
       "hits": [],
