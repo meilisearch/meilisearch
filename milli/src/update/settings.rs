@@ -1095,6 +1095,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         let mut find_free_index =
             move || free_indices.find(|(_, free)| **free).map(|(index, _)| index as u8);
         for (name, action) in embedder_actions.iter() {
+            // ignore actions that are not possible for a new embedder
             if matches!(action.reindex(), Some(ReindexAction::FullReindex))
                 && self.index.embedder_category_id.get(self.wtxn, name)?.is_none()
             {
