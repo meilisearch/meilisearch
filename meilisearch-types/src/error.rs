@@ -395,7 +395,10 @@ impl ErrorCode for milli::Error {
                     | UserError::InvalidSettingsDimensions { .. }
                     | UserError::InvalidUrl { .. }
                     | UserError::InvalidSettingsDocumentTemplateMaxBytes { .. }
-                    | UserError::InvalidPrompt(_) => Code::InvalidSettingsEmbedders,
+                    | UserError::InvalidPrompt(_)
+                    | UserError::InvalidDisableBinaryQuantization { .. } => {
+                        Code::InvalidSettingsEmbedders
+                    }
                     UserError::TooManyEmbedders(_) => Code::InvalidSettingsEmbedders,
                     UserError::InvalidPromptForEmbeddings(..) => Code::InvalidSettingsEmbedders,
                     UserError::NoPrimaryKeyCandidateFound => Code::IndexPrimaryKeyNoCandidateFound,

@@ -954,7 +954,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 let old_configs = self.index.embedding_configs(self.wtxn)?;
                 let remove_all: Result<BTreeMap<String, EmbedderAction>> = old_configs
                     .into_iter()
-                    .map(|IndexEmbeddingConfig { name, config: _, user_provided }| -> Result<_> {
+                    .map(|IndexEmbeddingConfig { name, config, user_provided }| -> Result<_> {
                         let embedder_id =
                             self.index.embedder_category_id.get(self.wtxn, &name)?.ok_or(
                                 crate::InternalError::DatabaseMissingEntry {
@@ -964,10 +964,10 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                             )?;
                         Ok((
                             name,
-                            EmbedderAction::WriteBackToDocuments(WriteBackToDocuments {
-                                embedder_id,
-                                user_provided,
-                            }),
+                            EmbedderAction::with_write_back(
+                                WriteBackToDocuments { embedder_id, user_provided },
+                                config.quantized(),
+                            ),
                         ))
                     })
                     .collect();
@@ -1004,7 +1004,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             match joined {
                 // updated config
                 EitherOrBoth::Both((name, (old, user_provided)), (_, new)) => {
-                    let settings_diff = SettingsDiff::from_settings(old, new);
+                    let was_quantized = old.binary_quantized.set().unwrap_or_default();
+                    let settings_diff = SettingsDiff::from_settings(&name, old, new)?;
                     match settings_diff {
                         SettingsDiff::Remove => {
                             tracing::debug!(
@@ -1023,25 +1024,29 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                             self.index.embedder_category_id.delete(self.wtxn, &name)?;
                             embedder_actions.insert(
                                 name,
-                                EmbedderAction::WriteBackToDocuments(WriteBackToDocuments {
-                                    embedder_id,
-                                    user_provided,
-                                }),
+                                EmbedderAction::with_write_back(
+                                    WriteBackToDocuments { embedder_id, user_provided },
+                                    was_quantized,
+                                ),
                             );
                         }
-                        SettingsDiff::Reindex { action, updated_settings } => {
+                        SettingsDiff::Reindex { action, updated_settings, quantize } => {
                             tracing::debug!(
                                 embedder = name,
                                 user_provided = user_provided.len(),
                                 ?action,
                                 "reindex embedder"
                             );
-                            embedder_actions.insert(name.clone(), EmbedderAction::Reindex(action));
+                            embedder_actions.insert(
+                                name.clone(),
+                                EmbedderAction::with_reindex(action, was_quantized)
+                                    .with_is_being_quantized(quantize),
+                            );
                             let new =
                                 validate_embedding_settings(Setting::Set(updated_settings), &name)?;
                             updated_configs.insert(name, (new, user_provided));
                         }
-                        SettingsDiff::UpdateWithoutReindex { updated_settings } => {
+                        SettingsDiff::UpdateWithoutReindex { updated_settings, quantize } => {
                             tracing::debug!(
                                 embedder = name,
                                 user_provided = user_provided.len(),
@@ -1049,6 +1054,12 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                             );
                             let new =
                                 validate_embedding_settings(Setting::Set(updated_settings), &name)?;
+                            if quantize {
+                                embedder_actions.insert(
+                                    name.clone(),
+                                    EmbedderAction::default().with_is_being_quantized(true),
+                                );
+                            }
                             updated_configs.insert(name, (new, user_provided));
                         }
                     }
@@ -1067,8 +1078,10 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                         &mut setting,
                     );
                     let setting = validate_embedding_settings(setting, &name)?;
-                    embedder_actions
-                        .insert(name.clone(), EmbedderAction::Reindex(ReindexAction::FullReindex));
+                    embedder_actions.insert(
+                        name.clone(),
+                        EmbedderAction::with_reindex(ReindexAction::FullReindex, false),
+                    );
                     updated_configs.insert(name, (setting, RoaringBitmap::new()));
                 }
             }
@@ -1082,19 +1095,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         let mut find_free_index =
             move || free_indices.find(|(_, free)| **free).map(|(index, _)| index as u8);
         for (name, action) in embedder_actions.iter() {
-            match action {
-                EmbedderAction::Reindex(ReindexAction::RegeneratePrompts) => {
-                    /* cannot be a new embedder, so has to have an id already */
-                }
-                EmbedderAction::Reindex(ReindexAction::FullReindex) => {
-                    if self.index.embedder_category_id.get(self.wtxn, name)?.is_none() {
-                        let id = find_free_index()
-                            .ok_or(UserError::TooManyEmbedders(updated_configs.len()))?;
-                        tracing::debug!(embedder = name, id, "assigning free id to new embedder");
-                        self.index.embedder_category_id.put(self.wtxn, name, &id)?;
-                    }
-                }
-                EmbedderAction::WriteBackToDocuments(_) => { /* already removed */ }
+            // ignore actions that are not possible for a new embedder
+            if matches!(action.reindex(), Some(ReindexAction::FullReindex))
+                && self.index.embedder_category_id.get(self.wtxn, name)?.is_none()
+            {
+                let id =
+                    find_free_index().ok_or(UserError::TooManyEmbedders(updated_configs.len()))?;
+                tracing::debug!(embedder = name, id, "assigning free id to new embedder");
+                self.index.embedder_category_id.put(self.wtxn, name, &id)?;
             }
         }
         let updated_configs: Vec<IndexEmbeddingConfig> = updated_configs
@@ -1277,7 +1285,11 @@ impl InnerIndexSettingsDiff {
 
         // if the user-defined searchables changed, then we need to reindex prompts.
         if cache_user_defined_searchables {
-            for (embedder_name, (config, _)) in new_settings.embedding_configs.inner_as_ref() {
+            for (embedder_name, (config, _, _quantized)) in
+                new_settings.embedding_configs.inner_as_ref()
+            {
+                let was_quantized =
+                    old_settings.embedding_configs.get(embedder_name).map_or(false, |conf| conf.2);
                 // skip embedders that don't use document templates
                 if !config.uses_document_template() {
                     continue;
@@ -1287,16 +1299,19 @@ impl InnerIndexSettingsDiff {
                 // this always makes the code clearer by explicitly handling the cases
                 match embedding_config_updates.entry(embedder_name.clone()) {
                     std::collections::btree_map::Entry::Vacant(entry) => {
-                        entry.insert(EmbedderAction::Reindex(ReindexAction::RegeneratePrompts));
+                        entry.insert(EmbedderAction::with_reindex(
+                            ReindexAction::RegeneratePrompts,
+                            was_quantized,
+                        ));
                     }
-                    std::collections::btree_map::Entry::Occupied(entry) => match entry.get() {
-                        EmbedderAction::WriteBackToDocuments(_) => { /* we are deleting this embedder, so no point in regeneration */
-                        }
-                        EmbedderAction::Reindex(ReindexAction::FullReindex) => { /* we are already fully reindexing */
-                        }
-                        EmbedderAction::Reindex(ReindexAction::RegeneratePrompts) => { /* we are already regenerating prompts */
-                        }
-                    },
+                    std::collections::btree_map::Entry::Occupied(entry) => {
+                        let EmbedderAction {
+                            was_quantized: _,
+                            is_being_quantized: _,
+                            write_back: _, // We are deleting this embedder, so no point in regeneration
+                            reindex: _,    // We are already fully reindexing
+                        } = entry.get();
+                    }
                 };
             }
         }
@@ -1546,7 +1561,7 @@ fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<EmbeddingCo
         .map(
             |IndexEmbeddingConfig {
                  name,
-                 config: EmbeddingConfig { embedder_options, prompt },
+                 config: EmbeddingConfig { embedder_options, prompt, quantized },
                  ..
              }| {
                 let prompt = Arc::new(prompt.try_into().map_err(crate::Error::from)?);
@@ -1556,7 +1571,7 @@ fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<EmbeddingCo
                         .map_err(crate::vector::Error::from)
                         .map_err(crate::Error::from)?,
                 );
-                Ok((name, (embedder, prompt)))
+                Ok((name, (embedder, prompt, quantized.unwrap_or_default())))
             },
         )
         .collect();
@@ -1581,6 +1596,7 @@ fn validate_prompt(
             response,
             distribution,
             headers,
+            binary_quantized: binary_quantize,
         }) => {
             let max_bytes = match document_template_max_bytes.set() {
                 Some(max_bytes) => NonZeroUsize::new(max_bytes).ok_or_else(|| {
@@ -1613,6 +1629,7 @@ fn validate_prompt(
                 response,
                 distribution,
                 headers,
+                binary_quantized: binary_quantize,
             }))
         }
         new => Ok(new),
@@ -1638,6 +1655,7 @@ pub fn validate_embedding_settings(
         response,
         distribution,
         headers,
+        binary_quantized: binary_quantize,
     } = settings;
 
     if let Some(0) = dimensions.set() {
@@ -1678,6 +1696,7 @@ pub fn validate_embedding_settings(
             response,
             distribution,
             headers,
+            binary_quantized: binary_quantize,
         }));
     };
     match inferred_source {
@@ -1779,6 +1798,7 @@ pub fn validate_embedding_settings(
         response,
         distribution,
         headers,
+        binary_quantized: binary_quantize,
     }))
 }
 
