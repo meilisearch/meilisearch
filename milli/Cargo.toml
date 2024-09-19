@@ -107,6 +107,7 @@ all-tokenizations = [
     "charabia/khmer",
     "charabia/vietnamese",
     "charabia/swedish-recomposition",
+    "charabia/german-segmentation",
 ]
 
 # Use POSIX semaphores instead of SysV semaphores in LMDB
@@ -138,6 +139,9 @@ khmer = ["charabia/khmer"]
 
 # allow vietnamese specialized tokenization
 vietnamese = ["charabia/vietnamese"]
+
+# allow german specialized tokenization
+german = ["charabia/german-segmentation"]
 
 # force swedish character recomposition
 swedish-recomposition = ["charabia/swedish-recomposition"]
