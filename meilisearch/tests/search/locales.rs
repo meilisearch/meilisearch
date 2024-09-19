@@ -922,7 +922,7 @@ async fn invalid_locales() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Unknown value `invalid` at `.locales[0]`: expected one of `af`, `ak`, `am`, `ar`, `az`, `be`, `bn`, `bg`, `ca`, `cs`, `zh`, `da`, `de`, `el`, `en`, `eo`, `et`, `fi`, `fr`, `gu`, `he`, `hi`, `hr`, `hu`, `hy`, `id`, `it`, `jv`, `ja`, `kn`, `ka`, `km`, `ko`, `la`, `lv`, `lt`, `ml`, `mr`, `mk`, `my`, `ne`, `nl`, `nb`, `or`, `pa`, `fa`, `pl`, `pt`, `ro`, `ru`, `si`, `sk`, `sl`, `sn`, `es`, `sr`, `sv`, `ta`, `te`, `tl`, `th`, `tk`, `tr`, `uk`, `ur`, `uz`, `vi`, `yi`, `zu`, `afr`, `aka`, `amh`, `ara`, `aze`, `bel`, `ben`, `bul`, `cat`, `ces`, `cmn`, `dan`, `deu`, `ell`, `eng`, `epo`, `est`, `fin`, `fra`, `guj`, `heb`, `hin`, `hrv`, `hun`, `hye`, `ind`, `ita`, `jav`, `jpn`, `kan`, `kat`, `khm`, `kor`, `lat`, `lav`, `lit`, `mal`, `mar`, `mkd`, `mya`, `nep`, `nld`, `nob`, `ori`, `pan`, `pes`, `pol`, `por`, `ron`, `rus`, `sin`, `slk`, `slv`, `sna`, `spa`, `srp`, `swe`, `tam`, `tel`, `tgl`, `tha`, `tuk`, `tur`, `ukr`, `urd`, `uzb`, `vie`, `yid`, `zul`",
+      "message": "Unknown value `invalid` at `.locales[0]`: expected one of `af`, `ak`, `am`, `ar`, `az`, `be`, `bn`, `bg`, `ca`, `cs`, `da`, `de`, `el`, `en`, `eo`, `et`, `fi`, `fr`, `gu`, `he`, `hi`, `hr`, `hu`, `hy`, `id`, `it`, `jv`, `ja`, `kn`, `ka`, `km`, `ko`, `la`, `lv`, `lt`, `ml`, `mr`, `mk`, `my`, `ne`, `nl`, `nb`, `or`, `pa`, `fa`, `pl`, `pt`, `ro`, `ru`, `si`, `sk`, `sl`, `sn`, `es`, `sr`, `sv`, `ta`, `te`, `tl`, `th`, `tk`, `tr`, `uk`, `ur`, `uz`, `vi`, `yi`, `zh`, `zu`, `afr`, `aka`, `amh`, `ara`, `aze`, `bel`, `ben`, `bul`, `cat`, `ces`, `dan`, `deu`, `ell`, `eng`, `epo`, `est`, `fin`, `fra`, `guj`, `heb`, `hin`, `hrv`, `hun`, `hye`, `ind`, `ita`, `jav`, `jpn`, `kan`, `kat`, `khm`, `kor`, `lat`, `lav`, `lit`, `mal`, `mar`, `mkd`, `mya`, `nep`, `nld`, `nob`, `ori`, `pan`, `pes`, `pol`, `por`, `ron`, `rus`, `sin`, `slk`, `slv`, `sna`, `spa`, `srp`, `swe`, `tam`, `tel`, `tgl`, `tha`, `tuk`, `tur`, `ukr`, `urd`, `uzb`, `vie`, `yid`, `zho`, `zul`, `cmn`",
       "code": "invalid_search_locales",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_locales"
@@ -935,7 +935,7 @@ async fn invalid_locales() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid value in parameter `locales`: Unsupported locale `invalid`, expected one of af, ak, am, ar, az, be, bn, bg, ca, cs, zh, da, de, el, en, eo, et, fi, fr, gu, he, hi, hr, hu, hy, id, it, jv, ja, kn, ka, km, ko, la, lv, lt, ml, mr, mk, my, ne, nl, nb, or, pa, fa, pl, pt, ro, ru, si, sk, sl, sn, es, sr, sv, ta, te, tl, th, tk, tr, uk, ur, uz, vi, yi, zu, afr, aka, amh, ara, aze, bel, ben, bul, cat, ces, cmn, dan, deu, ell, eng, epo, est, fin, fra, guj, heb, hin, hrv, hun, hye, ind, ita, jav, jpn, kan, kat, khm, kor, lat, lav, lit, mal, mar, mkd, mya, nep, nld, nob, ori, pan, pes, pol, por, ron, rus, sin, slk, slv, sna, spa, srp, swe, tam, tel, tgl, tha, tuk, tur, ukr, urd, uzb, vie, yid, zul",
+      "message": "Invalid value in parameter `locales`: Unsupported locale `invalid`, expected one of af, ak, am, ar, az, be, bg, bn, ca, cs, da, de, el, en, eo, es, et, fa, fi, fr, gu, he, hi, hr, hu, hy, id, it, ja, jv, ka, km, kn, ko, la, lt, lv, mk, ml, mr, my, nb, ne, nl, or, pa, pl, pt, ro, ru, si, sk, sl, sn, sr, sv, ta, te, th, tk, tl, tr, uk, ur, uz, vi, yi, zh, zu, afr, aka, amh, ara, aze, bel, ben, bul, cat, ces, cmn, dan, deu, ell, eng, epo, est, fin, fra, guj, heb, hin, hrv, hun, hye, ind, ita, jav, jpn, kan, kat, khm, kor, lat, lav, lit, mal, mar, mkd, mya, nep, nld, nob, ori, pan, pes, pol, por, ron, rus, sin, slk, slv, sna, spa, srp, swe, tam, tel, tgl, tha, tuk, tur, ukr, urd, uzb, vie, yid, zho, zul",
       "code": "invalid_search_locales",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_locales"
@@ -957,7 +957,7 @@ async fn invalid_localized_attributes_rules() {
         .await;
     snapshot!(response, @r###"
     {
-      "message": "Unknown value `japan` at `.localizedAttributes[0].locales[0]`: expected one of `af`, `ak`, `am`, `ar`, `az`, `be`, `bn`, `bg`, `ca`, `cs`, `zh`, `da`, `de`, `el`, `en`, `eo`, `et`, `fi`, `fr`, `gu`, `he`, `hi`, `hr`, `hu`, `hy`, `id`, `it`, `jv`, `ja`, `kn`, `ka`, `km`, `ko`, `la`, `lv`, `lt`, `ml`, `mr`, `mk`, `my`, `ne`, `nl`, `nb`, `or`, `pa`, `fa`, `pl`, `pt`, `ro`, `ru`, `si`, `sk`, `sl`, `sn`, `es`, `sr`, `sv`, `ta`, `te`, `tl`, `th`, `tk`, `tr`, `uk`, `ur`, `uz`, `vi`, `yi`, `zu`, `afr`, `aka`, `amh`, `ara`, `aze`, `bel`, `ben`, `bul`, `cat`, `ces`, `cmn`, `dan`, `deu`, `ell`, `eng`, `epo`, `est`, `fin`, `fra`, `guj`, `heb`, `hin`, `hrv`, `hun`, `hye`, `ind`, `ita`, `jav`, `jpn`, `kan`, `kat`, `khm`, `kor`, `lat`, `lav`, `lit`, `mal`, `mar`, `mkd`, `mya`, `nep`, `nld`, `nob`, `ori`, `pan`, `pes`, `pol`, `por`, `ron`, `rus`, `sin`, `slk`, `slv`, `sna`, `spa`, `srp`, `swe`, `tam`, `tel`, `tgl`, `tha`, `tuk`, `tur`, `ukr`, `urd`, `uzb`, `vie`, `yid`, `zul`",
+      "message": "Unknown value `japan` at `.localizedAttributes[0].locales[0]`: expected one of `af`, `ak`, `am`, `ar`, `az`, `be`, `bn`, `bg`, `ca`, `cs`, `da`, `de`, `el`, `en`, `eo`, `et`, `fi`, `fr`, `gu`, `he`, `hi`, `hr`, `hu`, `hy`, `id`, `it`, `jv`, `ja`, `kn`, `ka`, `km`, `ko`, `la`, `lv`, `lt`, `ml`, `mr`, `mk`, `my`, `ne`, `nl`, `nb`, `or`, `pa`, `fa`, `pl`, `pt`, `ro`, `ru`, `si`, `sk`, `sl`, `sn`, `es`, `sr`, `sv`, `ta`, `te`, `tl`, `th`, `tk`, `tr`, `uk`, `ur`, `uz`, `vi`, `yi`, `zh`, `zu`, `afr`, `aka`, `amh`, `ara`, `aze`, `bel`, `ben`, `bul`, `cat`, `ces`, `dan`, `deu`, `ell`, `eng`, `epo`, `est`, `fin`, `fra`, `guj`, `heb`, `hin`, `hrv`, `hun`, `hye`, `ind`, `ita`, `jav`, `jpn`, `kan`, `kat`, `khm`, `kor`, `lat`, `lav`, `lit`, `mal`, `mar`, `mkd`, `mya`, `nep`, `nld`, `nob`, `ori`, `pan`, `pes`, `pol`, `por`, `ron`, `rus`, `sin`, `slk`, `slv`, `sna`, `spa`, `srp`, `swe`, `tam`, `tel`, `tgl`, `tha`, `tuk`, `tur`, `ukr`, `urd`, `uzb`, `vie`, `yid`, `zho`, `zul`, `cmn`",
       "code": "invalid_settings_localized_attributes",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_settings_localized_attributes"
@@ -1142,4 +1142,196 @@ async fn facet_search_with_localized_attributes() {
       "processingTimeMs": "[duration]"
     }
     "###);
+}
+
+#[actix_rt::test]
+async fn swedish_search() {
+    let server = Server::new().await;
+
+    let index = server.index("test");
+    let documents = json!([
+      {"id": "tra1-1", "product": "trä"},
+      {"id": "tra2-1", "product": "traktor"},
+      {"id": "tra1-2", "product": "träbjälke"},
+      {"id": "tra2-2", "product": "trafiksignal"},
+    ]);
+    index.add_documents(documents, None).await;
+    let (_response, _) = index
+        .update_settings(json!({
+            "searchableAttributes": ["product"],
+            "localizedAttributes": [
+                // force swedish
+                {"attributePatterns": ["product"], "locales": ["swe"]}
+            ]
+        }))
+        .await;
+    index.wait_task(1).await;
+
+    // infer swedish
+    index
+        .search(json!({"q": "trä", "attributesToRetrieve": ["product"]}), |response, code| {
+            snapshot!(response, @r###"
+            {
+              "hits": [
+                {
+                  "product": "trä"
+                },
+                {
+                  "product": "träbjälke"
+                }
+              ],
+              "query": "trä",
+              "processingTimeMs": "[duration]",
+              "limit": 20,
+              "offset": 0,
+              "estimatedTotalHits": 2
+            }
+            "###);
+            snapshot!(code, @"200 OK");
+        })
+        .await;
+
+    index
+        .search(json!({"q": "tra", "attributesToRetrieve": ["product"]}), |response, code| {
+            snapshot!(response, @r###"
+            {
+              "hits": [
+                {
+                  "product": "traktor"
+                },
+                {
+                  "product": "trafiksignal"
+                }
+              ],
+              "query": "tra",
+              "processingTimeMs": "[duration]",
+              "limit": 20,
+              "offset": 0,
+              "estimatedTotalHits": 2
+            }
+            "###);
+            snapshot!(code, @"200 OK");
+        })
+        .await;
+
+    // force swedish
+    index
+        .search(
+            json!({"q": "trä", "locales": ["swe"], "attributesToRetrieve": ["product"]}),
+            |response, code| {
+                snapshot!(response, @r###"
+                {
+                  "hits": [
+                    {
+                      "product": "trä"
+                    },
+                    {
+                      "product": "träbjälke"
+                    }
+                  ],
+                  "query": "trä",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 2
+                }
+                "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
+    index
+        .search(
+            json!({"q": "tra", "locales": ["swe"], "attributesToRetrieve": ["product"]}),
+            |response, code| {
+                snapshot!(response, @r###"
+                {
+                  "hits": [
+                    {
+                      "product": "traktor"
+                    },
+                    {
+                      "product": "trafiksignal"
+                    }
+                  ],
+                  "query": "tra",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 2
+                }
+                "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
+async fn german_search() {
+    let server = Server::new().await;
+
+    let index = server.index("test");
+    let documents = json!([
+      {"id": 1, "product": "Interkulturalität"},
+      {"id": 2, "product": "Wissensorganisation"},
+    ]);
+    index.add_documents(documents, None).await;
+    let (_response, _) = index
+        .update_settings(json!({
+            "searchableAttributes": ["product"],
+            "localizedAttributes": [
+                // force swedish
+                {"attributePatterns": ["product"], "locales": ["deu"]}
+            ]
+        }))
+        .await;
+    index.wait_task(1).await;
+
+    // infer swedish
+    index
+        .search(
+            json!({"q": "kulturalität", "attributesToRetrieve": ["product"]}),
+            |response, code| {
+                snapshot!(response, @r###"
+            {
+              "hits": [
+                {
+                  "product": "Interkulturalität"
+                }
+              ],
+              "query": "kulturalität",
+              "processingTimeMs": "[duration]",
+              "limit": 20,
+              "offset": 0,
+              "estimatedTotalHits": 1
+            }
+            "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
+
+    index
+        .search(
+            json!({"q": "organisation", "attributesToRetrieve": ["product"]}),
+            |response, code| {
+                snapshot!(response, @r###"
+            {
+              "hits": [
+                {
+                  "product": "Wissensorganisation"
+                }
+              ],
+              "query": "organisation",
+              "processingTimeMs": "[duration]",
+              "limit": 20,
+              "offset": 0,
+              "estimatedTotalHits": 1
+            }
+            "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
 }
