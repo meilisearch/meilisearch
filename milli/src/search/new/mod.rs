@@ -312,6 +312,7 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
     Ok(ranking_rules)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn get_ranking_rules_for_vector<'ctx>(
     ctx: &SearchContext<'ctx>,
     sort_criteria: &Option<Vec<AscDesc>>,

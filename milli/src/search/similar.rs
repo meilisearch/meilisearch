@@ -22,6 +22,7 @@ pub struct Similar<'a> {
 }
 
 impl<'a> Similar<'a> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: DocumentId,
         offset: usize,
