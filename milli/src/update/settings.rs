@@ -1289,7 +1289,7 @@ impl InnerIndexSettingsDiff {
                 new_settings.embedding_configs.inner_as_ref()
             {
                 let was_quantized =
-                    old_settings.embedding_configs.get(&embedder_name).map_or(false, |conf| conf.2);
+                    old_settings.embedding_configs.get(embedder_name).map_or(false, |conf| conf.2);
                 // skip embedders that don't use document templates
                 if !config.uses_document_template() {
                     continue;
@@ -1307,9 +1307,9 @@ impl InnerIndexSettingsDiff {
                     std::collections::btree_map::Entry::Occupied(entry) => {
                         let EmbedderAction {
                             was_quantized: _,
-                            is_being_quantized: _, // We are deleting this embedder, so no point in regeneration
-                            write_back: _,         // We are already fully reindexing
-                            reindex: _,            // We are already regenerating prompts
+                            is_being_quantized: _,
+                            write_back: _, // We are deleting this embedder, so no point in regeneration
+                            reindex: _,    // We are already fully reindexing
                         } = entry.get();
                     }
                 };
