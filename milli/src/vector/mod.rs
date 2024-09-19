@@ -32,60 +32,69 @@ pub const REQUEST_PARALLELISM: usize = 40;
 
 pub struct ArroyWrapper {
     quantized: bool,
-    index: u16,
+    index: u8,
     database: arroy::Database<Unspecified>,
 }
 
 impl ArroyWrapper {
-    pub fn new(database: arroy::Database<Unspecified>, index: u16, quantized: bool) -> Self {
+    pub fn new(database: arroy::Database<Unspecified>, index: u8, quantized: bool) -> Self {
         Self { database, index, quantized }
     }
 
-    pub fn index(&self) -> u16 {
+    pub fn index(&self) -> u8 {
         self.index
     }
 
     pub fn dimensions(&self, rtxn: &RoTxn) -> Result<usize, arroy::Error> {
+        let first_id = arroy_db_range_for_embedder(self.index).next().unwrap();
         if self.quantized {
-            Ok(arroy::Reader::open(rtxn, self.index, self.quantized_db())?.dimensions())
+            Ok(arroy::Reader::open(rtxn, first_id, self.quantized_db())?.dimensions())
         } else {
-            Ok(arroy::Reader::open(rtxn, self.index, self.angular_db())?.dimensions())
+            Ok(arroy::Reader::open(rtxn, first_id, self.angular_db())?.dimensions())
         }
     }
 
-    pub fn quantize(
-        &mut self,
-        wtxn: &mut RwTxn,
-        index: u16,
-        dimension: usize,
-    ) -> Result<(), arroy::Error> {
+    pub fn quantize(&mut self, wtxn: &mut RwTxn, dimension: usize) -> Result<(), arroy::Error> {
         if !self.quantized {
-            let writer = arroy::Writer::new(self.angular_db(), index, dimension);
-            writer.prepare_changing_distance::<BinaryQuantizedAngular>(wtxn)?;
+            for index in arroy_db_range_for_embedder(self.index) {
+                let writer = arroy::Writer::new(self.angular_db(), index, dimension);
+                writer.prepare_changing_distance::<BinaryQuantizedAngular>(wtxn)?;
+            }
             self.quantized = true;
         }
         Ok(())
     }
 
+    // TODO: We can stop early when we find an empty DB
     pub fn need_build(&self, rtxn: &RoTxn, dimension: usize) -> Result<bool, arroy::Error> {
-        if self.quantized {
-            arroy::Writer::new(self.quantized_db(), self.index, dimension).need_build(rtxn)
-        } else {
-            arroy::Writer::new(self.angular_db(), self.index, dimension).need_build(rtxn)
+        for index in arroy_db_range_for_embedder(self.index) {
+            let need_build = if self.quantized {
+                arroy::Writer::new(self.quantized_db(), index, dimension).need_build(rtxn)
+            } else {
+                arroy::Writer::new(self.angular_db(), index, dimension).need_build(rtxn)
+            };
+            if need_build? {
+                return Ok(true);
+            }
         }
+        Ok(false)
     }
 
+    /// TODO: We should early exit when it doesn't need to be built
     pub fn build<R: rand::Rng + rand::SeedableRng>(
         &self,
         wtxn: &mut RwTxn,
         rng: &mut R,
         dimension: usize,
     ) -> Result<(), arroy::Error> {
-        if self.quantized {
-            arroy::Writer::new(self.quantized_db(), self.index, dimension).build(wtxn, rng, None)
-        } else {
-            arroy::Writer::new(self.angular_db(), self.index, dimension).build(wtxn, rng, None)
+        for index in arroy_db_range_for_embedder(self.index) {
+            if self.quantized {
+                arroy::Writer::new(self.quantized_db(), index, dimension).build(wtxn, rng, None)?
+            } else {
+                arroy::Writer::new(self.angular_db(), index, dimension).build(wtxn, rng, None)?
+            }
         }
+        Ok(())
     }
 
     pub fn add_item(

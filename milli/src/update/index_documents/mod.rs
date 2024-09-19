@@ -689,9 +689,8 @@ where
                         key: None,
                     },
                 )?;
-                let first_id = crate::vector::arroy_db_range_for_embedder(index).next().unwrap();
                 let reader =
-                    ArroyWrapper::new(self.index.vector_arroy, first_id, action.was_quantized);
+                    ArroyWrapper::new(self.index.vector_arroy, index, action.was_quantized);
                 let dim = reader.dimensions(self.wtxn)?;
                 dimension.insert(name.to_string(), dim);
             }
@@ -713,17 +712,11 @@ where
             let is_quantizing = embedder_config.map_or(false, |action| action.is_being_quantized);
 
             pool.install(|| {
-                for k in crate::vector::arroy_db_range_for_embedder(embedder_index) {
-                    let mut writer = ArroyWrapper::new(vector_arroy, k, was_quantized);
-                    if is_quantizing {
-                        writer.quantize(wtxn, k, dimension)?;
-                    }
-                    if writer.need_build(wtxn, dimension)? {
-                        writer.build(wtxn, &mut rng, dimension)?;
-                    } else if writer.is_empty(wtxn, dimension)? {
-                        break;
-                    }
+                let mut writer = ArroyWrapper::new(vector_arroy, embedder_index, was_quantized);
+                if is_quantizing {
+                    writer.quantize(wtxn, dimension)?;
                 }
+                writer.build(wtxn, &mut rng, dimension)?;
                 Result::Ok(())
             })
             .map_err(InternalError::from)??;

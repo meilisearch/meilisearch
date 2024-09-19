@@ -673,22 +673,14 @@ pub(crate) fn write_typed_chunk_into_index(
                 .get(&embedder_name)
                 .map_or(false, |conf| conf.2);
             // FIXME: allow customizing distance
-            let writers: Vec<_> = crate::vector::arroy_db_range_for_embedder(embedder_index)
-                .map(|k| ArroyWrapper::new(index.vector_arroy, k, binary_quantized))
-                .collect();
+            let writer = ArroyWrapper::new(index.vector_arroy, embedder_index, binary_quantized);
 
             // remove vectors for docids we want them removed
             let merger = remove_vectors_builder.build();
             let mut iter = merger.into_stream_merger_iter()?;
             while let Some((key, _)) = iter.next()? {
                 let docid = key.try_into().map(DocumentId::from_be_bytes).unwrap();
-
-                for writer in &writers {
-                    // Uses invariant: vectors are packed in the first writers.
-                    if !writer.del_item(wtxn, expected_dimension, docid)? {
-                        break;
-                    }
-                }
+                writer.del_item(wtxn, expected_dimension, docid)?;
             }
 
             // add generated embeddings
@@ -716,9 +708,7 @@ pub(crate) fn write_typed_chunk_into_index(
                         embeddings.embedding_count(),
                     )));
                 }
-                for (embedding, writer) in embeddings.iter().zip(&writers) {
-                    writer.add_item(wtxn, expected_dimension, docid, embedding)?;
-                }
+                writer.add_items(wtxn, expected_dimension, docid, embeddings)?;
             }
 
             // perform the manual diff
