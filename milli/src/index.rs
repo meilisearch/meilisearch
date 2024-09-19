@@ -1648,25 +1648,15 @@ impl Index {
         let mut res = BTreeMap::new();
         let embedding_configs = self.embedding_configs(rtxn)?;
         for config in embedding_configs {
-            // TODO: return internal error instead
             let embedder_id = self.embedder_category_id.get(rtxn, &config.name)?.unwrap();
-            let embedder_id = (embedder_id as u16) << 8;
-
-            let mut embeddings = Vec::new();
-            'vectors: for i in 0..=u8::MAX {
-                let reader = ArroyWrapper::new(
-                    self.vector_arroy,
-                    embedder_id | (i as u16),
-                    config.config.quantized(),
-                );
-                match reader.item_vector(rtxn, docid) {
-                    Err(arroy::Error::MissingMetadata(_)) => break 'vectors,
-                    Err(err) => return Err(err.into()),
-                    Ok(None) => break 'vectors,
-                    Ok(Some(embedding)) => embeddings.push(embedding),
-                };
-            }
-
+            let embeddings = self
+                .arroy_readers(rtxn, embedder_id, config.config.quantized())
+                .map_while(|reader| {
+                    reader
+                        .and_then(|r| r.item_vector(rtxn, docid).map_err(|e| e.into()))
+                        .transpose()
+                })
+                .collect::<Result<Vec<_>>>()?;
             res.insert(config.name.to_owned(), embeddings);
         }
         Ok(res)
