@@ -1619,7 +1619,7 @@ impl Index {
         crate::vector::arroy_db_range_for_embedder(embedder_id).map_while(move |k| {
             let reader = ArroyWrapper::new(self.vector_arroy, k, quantized);
             // Here we don't care about the dimensions, but we want to know if we can read
-            // in the database or if its medata are missing.
+            // in the database or if its metadata are missing because there is no document with that many vectors.
             match reader.dimensions(rtxn) {
                 Ok(_) => Some(Ok(reader)),
                 Err(arroy::Error::MissingMetadata(_)) => None,
