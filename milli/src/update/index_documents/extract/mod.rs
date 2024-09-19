@@ -34,7 +34,7 @@ use crate::index::IndexEmbeddingConfig;
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::vector::error::PossibleEmbeddingMistakes;
 use crate::{FieldId, Result, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
-
+/// Hello!
 /// Extract data for each databases from obkv documents in parallel.
 /// Send data in grenad file over provided Sender.
 #[allow(clippy::too_many_arguments)]
