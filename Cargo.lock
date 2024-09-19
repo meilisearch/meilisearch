@@ -387,6 +387,7 @@ checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
 [[package]]
 name = "arroy"
 version = "0.4.0"
+source = "git+https://github.com/meilisearch/arroy/?rev=2386594dfb009ce08821a925ccc89fb8e30bf73d#2386594dfb009ce08821a925ccc89fb8e30bf73d"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -394,25 +395,6 @@ dependencies = [
  "log",
  "memmap2",
  "nohash",
- "ordered-float",
- "rand",
- "rayon",
- "roaring",
- "tempfile",
- "thiserror",
-]
-
-[[package]]
-name = "arroy"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ece9e5347e7fdaaea3181dec7f916677ad5f3fcbac183648ce1924eb4aeef9a"
-dependencies = [
- "bytemuck",
- "byteorder",
- "heed",
- "log",
- "memmap2",
  "ordered-float",
  "rand",
  "rayon",
@@ -2573,7 +2555,7 @@ name = "index-scheduler"
 version = "1.11.0"
 dependencies = [
  "anyhow",
- "arroy 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "arroy",
  "big_s",
  "bincode",
  "crossbeam",
@@ -3563,7 +3545,7 @@ dependencies = [
 name = "milli"
 version = "1.11.0"
 dependencies = [
- "arroy 0.4.0",
+ "arroy",
  "big_s",
  "bimap",
  "bincode",
