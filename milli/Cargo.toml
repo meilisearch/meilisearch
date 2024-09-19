@@ -106,6 +106,7 @@ all-tokenizations = [
     "charabia/greek",
     "charabia/khmer",
     "charabia/vietnamese",
+    "charabia/swedish-recomposition",
 ]
 
 # Use POSIX semaphores instead of SysV semaphores in LMDB
