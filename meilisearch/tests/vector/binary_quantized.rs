@@ -225,7 +225,7 @@ async fn try_to_disable_binary_quantization() {
         }
       },
       "error": {
-        "message": "`.embedders.todo.binaryQuantized`: Cannot disable the binary quantization",
+        "message": "`.embedders.manual.binaryQuantized`: Cannot disable the binary quantization",
         "code": "invalid_settings_embedders",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"

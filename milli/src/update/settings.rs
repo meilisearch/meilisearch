@@ -1007,7 +1007,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 // updated config
                 EitherOrBoth::Both((name, (old, user_provided)), (_, new)) => {
                     let was_quantized = old.binary_quantized.set().unwrap_or_default();
-                    let settings_diff = SettingsDiff::from_settings(old, new)?;
+                    let settings_diff = SettingsDiff::from_settings(&name, old, new)?;
                     match settings_diff {
                         SettingsDiff::Remove => {
                             tracing::debug!(

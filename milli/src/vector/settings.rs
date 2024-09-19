@@ -140,6 +140,7 @@ pub struct WriteBackToDocuments {
 
 impl SettingsDiff {
     pub fn from_settings(
+        embedder_name: &str,
         old: EmbeddingSettings,
         new: Setting<EmbeddingSettings>,
     ) -> Result<Self, UserError> {
@@ -181,7 +182,7 @@ impl SettingsDiff {
                     && matches!(new_binary_quantize, Setting::Set(false))
                 {
                     return Err(UserError::InvalidDisableBinaryQuantization {
-                        embedder_name: String::from("todo"),
+                        embedder_name: embedder_name.to_string(),
                     });
                 }
 
