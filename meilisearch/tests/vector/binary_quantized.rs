@@ -112,27 +112,49 @@ async fn binary_quantize_before_sending_documents() {
     snapshot!(code, @"202 Accepted");
     index.wait_task(value.uid()).await.succeeded();
 
-    // Make sure the documents DB has been cleared
+    // Make sure the documents are binary quantized
     let (documents, _code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
         .await;
     snapshot!(json_string!(documents), @r###"
     {
-      "message": "internal: Invalid distance provided. Got binary quantized angular but expected angular.",
-      "code": "internal",
-      "type": "internal",
-      "link": "https://docs.meilisearch.com/errors#internal"
-    }
-    "###);
-
-    // Make sure the arroy DB has been cleared
-    let (documents, _code) = index.search_post(json!({ "vector": [1, 1, 1] })).await;
-    snapshot!(documents, @r###"
-    {
-      "message": "internal: Invalid distance provided. Got binary quantized angular but expected angular.",
-      "code": "internal",
-      "type": "internal",
-      "link": "https://docs.meilisearch.com/errors#internal"
+      "results": [
+        {
+          "id": 0,
+          "name": "kefir",
+          "_vectors": {
+            "manual": {
+              "embeddings": [
+                [
+                  -1.0,
+                  -1.0,
+                  1.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
+        },
+        {
+          "id": 1,
+          "name": "echo",
+          "_vectors": {
+            "manual": {
+              "embeddings": [
+                [
+                  1.0,
+                  1.0,
+                  -1.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
     }
     "###);
 }

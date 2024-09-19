@@ -705,7 +705,11 @@ where
                 InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },
             )?;
             let embedder_config = settings_diff.embedding_config_updates.get(&embedder_name);
-            let was_quantized = embedder_config.map_or(false, |action| action.was_quantized);
+            let was_quantized = settings_diff
+                .old
+                .embedding_configs
+                .get(&embedder_name)
+                .map_or(false, |conf| conf.2);
             let is_quantizing = embedder_config.map_or(false, |action| action.is_being_quantized);
 
             pool.install(|| {

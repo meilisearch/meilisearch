@@ -668,9 +668,10 @@ pub(crate) fn write_typed_chunk_into_index(
                 InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },
             )?;
             let binary_quantized = settings_diff
-                .embedding_config_updates
+                .old
+                .embedding_configs
                 .get(&embedder_name)
-                .map_or(false, |conf| conf.was_quantized);
+                .map_or(false, |conf| conf.2);
             // FIXME: allow customizing distance
             let writers: Vec<_> = crate::vector::arroy_db_range_for_embedder(embedder_index)
                 .map(|k| ArroyWrapper::new(index.vector_arroy, k, binary_quantized))
