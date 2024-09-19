@@ -27,7 +27,7 @@ use crate::update::index_documents::helpers::{
     as_cloneable_grenad, keep_latest_obkv, try_split_array_at,
 };
 use crate::update::settings::InnerIndexSettingsDiff;
-use crate::vector::ArroyReader;
+use crate::vector::ArroyWrapper;
 use crate::{
     lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, FieldId, GeoPoint, Index, InternalError,
     Result, SerializationError, U8StrStrCodec,
@@ -673,7 +673,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 .map_or(false, |conf| conf.was_quantized);
             // FIXME: allow customizing distance
             let writers: Vec<_> = crate::vector::arroy_db_range_for_embedder(embedder_index)
-                .map(|k| ArroyReader::new(index.vector_arroy, k, binary_quantized))
+                .map(|k| ArroyWrapper::new(index.vector_arroy, k, binary_quantized))
                 .collect();
 
             // remove vectors for docids we want them removed

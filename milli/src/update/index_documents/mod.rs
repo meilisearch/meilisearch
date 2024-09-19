@@ -43,7 +43,7 @@ use crate::update::index_documents::parallel::ImmutableObkvs;
 use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
-use crate::vector::{ArroyReader, EmbeddingConfigs};
+use crate::vector::{ArroyWrapper, EmbeddingConfigs};
 use crate::{CboRoaringBitmapCodec, Index, Object, Result};
 
 static MERGED_DATABASE_COUNT: usize = 7;
@@ -691,7 +691,7 @@ where
                 )?;
                 let first_id = crate::vector::arroy_db_range_for_embedder(index).next().unwrap();
                 let reader =
-                    ArroyReader::new(self.index.vector_arroy, first_id, action.was_quantized);
+                    ArroyWrapper::new(self.index.vector_arroy, first_id, action.was_quantized);
                 let dim = reader.dimensions(self.wtxn)?;
                 dimension.insert(name.to_string(), dim);
             }
@@ -710,7 +710,7 @@ where
 
             pool.install(|| {
                 for k in crate::vector::arroy_db_range_for_embedder(embedder_index) {
-                    let mut writer = ArroyReader::new(vector_arroy, k, was_quantized);
+                    let mut writer = ArroyWrapper::new(vector_arroy, k, was_quantized);
                     if is_quantizing {
                         writer.quantize(wtxn, k, dimension)?;
                     }

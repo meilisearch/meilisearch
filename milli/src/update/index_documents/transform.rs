@@ -29,7 +29,7 @@ use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
 use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
 use crate::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use crate::vector::settings::WriteBackToDocuments;
-use crate::vector::ArroyReader;
+use crate::vector::ArroyWrapper;
 use crate::{
     is_faceted_by, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldsIdsMap, Index, Result,
 };
@@ -990,7 +990,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             None
         };
 
-        let readers: Result<BTreeMap<&str, (Vec<ArroyReader>, &RoaringBitmap)>> = settings_diff
+        let readers: Result<BTreeMap<&str, (Vec<ArroyWrapper>, &RoaringBitmap)>> = settings_diff
             .embedding_config_updates
             .iter()
             .filter_map(|(name, action)| {

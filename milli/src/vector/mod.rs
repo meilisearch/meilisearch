@@ -30,13 +30,13 @@ pub type Embedding = Vec<f32>;
 
 pub const REQUEST_PARALLELISM: usize = 40;
 
-pub struct ArroyReader {
+pub struct ArroyWrapper {
     quantized: bool,
     index: u16,
     database: arroy::Database<Unspecified>,
 }
 
-impl ArroyReader {
+impl ArroyWrapper {
     pub fn new(database: arroy::Database<Unspecified>, index: u16, quantized: bool) -> Self {
         Self { database, index, quantized }
     }

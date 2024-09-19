@@ -21,7 +21,7 @@ use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec};
 use crate::order_by_map::OrderByMap;
 use crate::proximity::ProximityPrecision;
 use crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME;
-use crate::vector::{ArroyReader, Embedding, EmbeddingConfig};
+use crate::vector::{ArroyWrapper, Embedding, EmbeddingConfig};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
@@ -1615,9 +1615,9 @@ impl Index {
         rtxn: &'a RoTxn<'a>,
         embedder_id: u8,
         quantized: bool,
-    ) -> impl Iterator<Item = Result<ArroyReader>> + 'a {
+    ) -> impl Iterator<Item = Result<ArroyWrapper>> + 'a {
         crate::vector::arroy_db_range_for_embedder(embedder_id).map_while(move |k| {
-            let reader = ArroyReader::new(self.vector_arroy, k, quantized);
+            let reader = ArroyWrapper::new(self.vector_arroy, k, quantized);
             // Here we don't care about the dimensions, but we want to know if we can read
             // in the database or if its medata are missing.
             match reader.dimensions(rtxn) {
@@ -1654,7 +1654,7 @@ impl Index {
 
             let mut embeddings = Vec::new();
             'vectors: for i in 0..=u8::MAX {
-                let reader = ArroyReader::new(
+                let reader = ArroyWrapper::new(
                     self.vector_arroy,
                     embedder_id | (i as u16),
                     config.config.quantized(),
