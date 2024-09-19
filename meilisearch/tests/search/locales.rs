@@ -1143,6 +1143,7 @@ async fn facet_search_with_localized_attributes() {
     }
     "###);
 }
+
 #[actix_rt::test]
 async fn swedish_search() {
     let server = Server::new().await;
@@ -1260,6 +1261,75 @@ async fn swedish_search() {
                   "estimatedTotalHits": 2
                 }
                 "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
+async fn german_search() {
+    let server = Server::new().await;
+
+    let index = server.index("test");
+    let documents = json!([
+      {"id": 1, "product": "Interkulturalität"},
+      {"id": 2, "product": "Wissensorganisation"},
+    ]);
+    index.add_documents(documents, None).await;
+    let (_response, _) = index
+        .update_settings(json!({
+            "searchableAttributes": ["product"],
+            "localizedAttributes": [
+                // force swedish
+                {"attributePatterns": ["product"], "locales": ["deu"]}
+            ]
+        }))
+        .await;
+    index.wait_task(1).await;
+
+    // infer swedish
+    index
+        .search(
+            json!({"q": "kulturalität", "attributesToRetrieve": ["product"]}),
+            |response, code| {
+                snapshot!(response, @r###"
+            {
+              "hits": [
+                {
+                  "product": "Interkulturalität"
+                }
+              ],
+              "query": "kulturalität",
+              "processingTimeMs": "[duration]",
+              "limit": 20,
+              "offset": 0,
+              "estimatedTotalHits": 1
+            }
+            "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
+
+    index
+        .search(
+            json!({"q": "organisation", "attributesToRetrieve": ["product"]}),
+            |response, code| {
+                snapshot!(response, @r###"
+            {
+              "hits": [
+                {
+                  "product": "Wissensorganisation"
+                }
+              ],
+              "query": "organisation",
+              "processingTimeMs": "[duration]",
+              "limit": 20,
+              "offset": 0,
+              "estimatedTotalHits": 1
+            }
+            "###);
                 snapshot!(code, @"200 OK");
             },
         )
