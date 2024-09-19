@@ -72,7 +72,7 @@ pub enum MeilisearchHttpError {
     DocumentFormat(#[from] DocumentFormatError),
     #[error(transparent)]
     Join(#[from] JoinError),
-    #[error("Invalid request: missing `hybrid` parameter when both `q` and `vector` are present.")]
+    #[error("Invalid request: missing `hybrid` parameter when `vector` is present.")]
     MissingSearchHybrid,
 }
 

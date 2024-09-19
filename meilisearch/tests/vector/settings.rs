@@ -218,7 +218,8 @@ async fn reset_embedder_documents() {
     "###);
 
     // Make sure the arroy DB has been cleared
-    let (documents, _code) = index.search_post(json!({ "vector": [1, 1, 1] })).await;
+    let (documents, _code) =
+        index.search_post(json!({ "vector": [1, 1, 1], "hybrid": {"embedder": "default"} })).await;
     snapshot!(json_string!(documents), @r###"
     {
       "message": "Cannot find embedder with name `default`.",

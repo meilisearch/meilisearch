@@ -267,8 +267,8 @@ impl fmt::Debug for SearchQuery {
 pub struct HybridQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSearchSemanticRatio>, default)]
     pub semantic_ratio: SemanticRatio,
-    #[deserr(default, error = DeserrJsonError<InvalidEmbedder>, default)]
-    pub embedder: Option<String>,
+    #[deserr(error = DeserrJsonError<InvalidEmbedder>)]
+    pub embedder: String,
 }
 
 #[derive(Clone)]
@@ -282,7 +282,7 @@ impl SearchKind {
     pub(crate) fn semantic(
         index_scheduler: &index_scheduler::IndexScheduler,
         index: &Index,
-        embedder_name: Option<&str>,
+        embedder_name: &str,
         vector_len: Option<usize>,
     ) -> Result<Self, ResponseError> {
         let (embedder_name, embedder) =
@@ -293,7 +293,7 @@ impl SearchKind {
     pub(crate) fn hybrid(
         index_scheduler: &index_scheduler::IndexScheduler,
         index: &Index,
-        embedder_name: Option<&str>,
+        embedder_name: &str,
         semantic_ratio: f32,
         vector_len: Option<usize>,
     ) -> Result<Self, ResponseError> {
@@ -305,13 +305,11 @@ impl SearchKind {
     pub(crate) fn embedder(
         index_scheduler: &index_scheduler::IndexScheduler,
         index: &Index,
-        embedder_name: Option<&str>,
+        embedder_name: &str,
         vector_len: Option<usize>,
     ) -> Result<(String, Arc<Embedder>), ResponseError> {
         let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
         let embedders = index_scheduler.embedders(embedder_configs)?;
-
-        let embedder_name = embedder_name.unwrap_or_else(|| embedders.get_default_embedder_name());
 
         let embedder = embedders.get(embedder_name);
 
@@ -538,8 +536,8 @@ pub struct SimilarQuery {
     pub limit: usize,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarFilter>)]
     pub filter: Option<Value>,
-    #[deserr(default, error = DeserrJsonError<InvalidEmbedder>, default)]
-    pub embedder: Option<String>,
+    #[deserr(error = DeserrJsonError<InvalidEmbedder>)]
+    pub embedder: String,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarRetrieveVectors>)]
