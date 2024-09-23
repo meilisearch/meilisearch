@@ -4,7 +4,7 @@ use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 
 use crate::score_details::{self, ScoreDetails};
-use crate::vector::Embedder;
+use crate::vector::{ArroyWrapper, Embedder};
 use crate::{filtered_universe, DocumentId, Filter, Index, Result, SearchResult};
 
 pub struct Similar<'a> {
@@ -71,23 +71,13 @@ impl<'a> Similar<'a> {
                 .get(self.rtxn, &self.embedder_name)?
                 .ok_or_else(|| crate::UserError::InvalidEmbedder(self.embedder_name.to_owned()))?;
 
-        let mut results = Vec::new();
-
-        for reader in self.index.arroy_readers(self.rtxn, embedder_index, self.quantized) {
-            let nns_by_item = reader?.nns_by_item(
-                self.rtxn,
-                self.id,
-                self.limit + self.offset + 1,
-                Some(&universe),
-            )?;
-            if let Some(mut nns_by_item) = nns_by_item {
-                results.append(&mut nns_by_item);
-            } else {
-                break;
-            }
-        }
-
-        results.sort_unstable_by_key(|(_, distance)| OrderedFloat(*distance));
+        let reader = ArroyWrapper::new(self.index.vector_arroy, embedder_index, self.quantized);
+        let results = reader.nns_by_item(
+            self.rtxn,
+            self.id,
+            self.limit + self.offset + 1,
+            Some(&universe),
+        )?;
 
         let mut documents_ids = Vec::with_capacity(self.limit);
         let mut document_scores = Vec::with_capacity(self.limit);

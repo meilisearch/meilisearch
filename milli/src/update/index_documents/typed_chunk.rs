@@ -680,7 +680,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let mut iter = merger.into_stream_merger_iter()?;
             while let Some((key, _)) = iter.next()? {
                 let docid = key.try_into().map(DocumentId::from_be_bytes).unwrap();
-                writer.del_item(wtxn, expected_dimension, docid)?;
+                writer.del_item_raw(wtxn, expected_dimension, docid)?;
             }
 
             // add generated embeddings
@@ -708,7 +708,7 @@ pub(crate) fn write_typed_chunk_into_index(
                         embeddings.embedding_count(),
                     )));
                 }
-                writer.add_items(wtxn, expected_dimension, docid, embeddings)?;
+                writer.add_items(wtxn, docid, &embeddings)?;
             }
 
             // perform the manual diff
@@ -723,51 +723,14 @@ pub(crate) fn write_typed_chunk_into_index(
                 if let Some(value) = vector_deladd_obkv.get(DelAdd::Deletion) {
                     let vector: Vec<f32> = pod_collect_to_vec(value);
 
-                    let mut deleted_index = None;
-                    for (index, writer) in writers.iter().enumerate() {
-                        let Some(candidate) = writer.item_vector(wtxn, docid)? else {
-                            // uses invariant: vectors are packed in the first writers.
-                            break;
-                        };
-                        if candidate == vector {
-                            writer.del_item(wtxn, expected_dimension, docid)?;
-                            deleted_index = Some(index);
-                        }
-                    }
-
-                    // 🥲 enforce invariant: vectors are packed in the first writers.
-                    if let Some(deleted_index) = deleted_index {
-                        let mut last_index_with_a_vector = None;
-                        for (index, writer) in writers.iter().enumerate().skip(deleted_index) {
-                            let Some(candidate) = writer.item_vector(wtxn, docid)? else {
-                                break;
-                            };
-                            last_index_with_a_vector = Some((index, candidate));
-                        }
-                        if let Some((last_index, vector)) = last_index_with_a_vector {
-                            // unwrap: computed the index from the list of writers
-                            let writer = writers.get(last_index).unwrap();
-                            writer.del_item(wtxn, expected_dimension, docid)?;
-                            writers.get(deleted_index).unwrap().add_item(
-                                wtxn,
-                                expected_dimension,
-                                docid,
-                                &vector,
-                            )?;
-                        }
-                    }
+                    writer.del_item(wtxn, docid, &vector)?;
                 }
 
                 if let Some(value) = vector_deladd_obkv.get(DelAdd::Addition) {
                     let vector = pod_collect_to_vec(value);
 
                     // overflow was detected during vector extraction.
-                    for writer in &writers {
-                        if !writer.contains_item(wtxn, expected_dimension, docid)? {
-                            writer.add_item(wtxn, expected_dimension, docid, &vector)?;
-                            break;
-                        }
-                    }
+                    writer.add_item(wtxn, docid, &vector)?;
                 }
             }
 
