@@ -17,7 +17,7 @@ use super::extract::*;
 use super::merger::merge_grenad_entries;
 use super::StdResult;
 use crate::documents::{PrimaryKey, DEFAULT_PRIMARY_KEY};
-use crate::update::new::channel::{DatabaseType, ExtractorSender};
+use crate::update::new::channel::ExtractorSender;
 use crate::update::GrenadParameters;
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
 
