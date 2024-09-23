@@ -45,6 +45,20 @@ impl ArroyWrapper {
         self.index
     }
 
+    fn readers<'a, D: arroy::Distance>(
+        &'a self,
+        rtxn: &'a RoTxn<'a>,
+        db: arroy::Database<D>,
+    ) -> impl Iterator<Item = Result<arroy::Reader<D>, arroy::Error>> + 'a {
+        arroy_db_range_for_embedder(self.index).map_while(move |index| {
+            match arroy::Reader::open(rtxn, index, db) {
+                Ok(reader) => Some(Ok(reader)),
+                Err(arroy::Error::MissingMetadata(_)) => None,
+                Err(e) => Some(Err(e)),
+            }
+        })
+    }
+
     pub fn dimensions(&self, rtxn: &RoTxn) -> Result<usize, arroy::Error> {
         let first_id = arroy_db_range_for_embedder(self.index).next().unwrap();
         if self.quantized {
@@ -97,6 +111,7 @@ impl ArroyWrapper {
         Ok(())
     }
 
+    /// Overwrite all the embeddings associated to the index and item id.
     pub fn add_items(
         &self,
         wtxn: &mut RwTxn,
@@ -116,30 +131,41 @@ impl ArroyWrapper {
         Ok(())
     }
 
+    /// Add one document int for this index where we can find an empty spot.
     pub fn add_item(
         &self,
         wtxn: &mut RwTxn,
         item_id: arroy::ItemId,
         vector: &[f32],
     ) -> Result<(), arroy::Error> {
+        if self.quantized {
+            self._add_item(wtxn, self.quantized_db(), item_id, vector)
+        } else {
+            self._add_item(wtxn, self.angular_db(), item_id, vector)
+        }
+    }
+
+    fn _add_item<D: arroy::Distance>(
+        &self,
+        wtxn: &mut RwTxn,
+        db: arroy::Database<D>,
+        item_id: arroy::ItemId,
+        vector: &[f32],
+    ) -> Result<(), arroy::Error> {
         let dimension = vector.len();
 
         for index in arroy_db_range_for_embedder(self.index) {
-            if self.quantized {
-                let writer = arroy::Writer::new(self.quantized_db(), index, dimension);
-                if !writer.contains_item(wtxn, item_id)? {
-                    writer.add_item(wtxn, item_id, &vector)?;
-                    break;
-                }
-            } else {
-                arroy::Writer::new(self.angular_db(), index, dimension)
-                    .add_item(wtxn, item_id, vector)?
+            let writer = arroy::Writer::new(db, index, dimension);
+            if !writer.contains_item(wtxn, item_id)? {
+                writer.add_item(wtxn, item_id, vector)?;
+                break;
             }
         }
-
         Ok(())
     }
 
+    /// Delete an item from the index. It **does not** take care of fixing the hole
+    /// made after deleting the item.
     pub fn del_item_raw(
         &self,
         wtxn: &mut RwTxn,
@@ -163,36 +189,39 @@ impl ArroyWrapper {
         Ok(false)
     }
 
+    /// Delete one item.
     pub fn del_item(
         &self,
         wtxn: &mut RwTxn,
-        itemid: arroy::ItemId,
+        item_id: arroy::ItemId,
+        vector: &[f32],
+    ) -> Result<bool, arroy::Error> {
+        if self.quantized {
+            self._del_item(wtxn, self.quantized_db(), item_id, vector)
+        } else {
+            self._del_item(wtxn, self.angular_db(), item_id, vector)
+        }
+    }
+
+    fn _del_item<D: arroy::Distance>(
+        &self,
+        wtxn: &mut RwTxn,
+        db: arroy::Database<D>,
+        item_id: arroy::ItemId,
         vector: &[f32],
     ) -> Result<bool, arroy::Error> {
         let dimension = vector.len();
         let mut deleted_index = None;
 
         for index in arroy_db_range_for_embedder(self.index) {
-            if self.quantized {
-                let writer = arroy::Writer::new(self.quantized_db(), index, dimension);
-                let Some(candidate) = writer.item_vector(wtxn, itemid)? else {
-                    // uses invariant: vectors are packed in the first writers.
-                    break;
-                };
-                if candidate == vector {
-                    writer.del_item(wtxn, itemid)?;
-                    deleted_index = Some(index);
-                }
-            } else {
-                let writer = arroy::Writer::new(self.angular_db(), index, dimension);
-                let Some(candidate) = writer.item_vector(wtxn, itemid)? else {
-                    // uses invariant: vectors are packed in the first writers.
-                    break;
-                };
-                if candidate == vector {
-                    writer.del_item(wtxn, itemid)?;
-                    deleted_index = Some(index);
-                }
+            let writer = arroy::Writer::new(db, index, dimension);
+            let Some(candidate) = writer.item_vector(wtxn, item_id)? else {
+                // uses invariant: vectors are packed in the first writers.
+                break;
+            };
+            if candidate == vector {
+                writer.del_item(wtxn, item_id)?;
+                deleted_index = Some(index);
             }
         }
 
@@ -200,34 +229,18 @@ impl ArroyWrapper {
         if let Some(deleted_index) = deleted_index {
             let mut last_index_with_a_vector = None;
             for index in arroy_db_range_for_embedder(self.index).skip(deleted_index as usize) {
-                if self.quantized {
-                    let writer = arroy::Writer::new(self.quantized_db(), index, dimension);
-                    let Some(candidate) = writer.item_vector(wtxn, itemid)? else {
-                        break;
-                    };
-                    last_index_with_a_vector = Some((index, candidate));
-                } else {
-                    let writer = arroy::Writer::new(self.angular_db(), index, dimension);
-                    let Some(candidate) = writer.item_vector(wtxn, itemid)? else {
-                        break;
-                    };
-                    last_index_with_a_vector = Some((index, candidate));
-                }
+                let writer = arroy::Writer::new(db, index, dimension);
+                let Some(candidate) = writer.item_vector(wtxn, item_id)? else {
+                    break;
+                };
+                last_index_with_a_vector = Some((index, candidate));
             }
             if let Some((last_index, vector)) = last_index_with_a_vector {
-                if self.quantized {
-                    // unwrap: computed the index from the list of writers
-                    let writer = arroy::Writer::new(self.quantized_db(), last_index, dimension);
-                    writer.del_item(wtxn, itemid)?;
-                    let writer = arroy::Writer::new(self.quantized_db(), deleted_index, dimension);
-                    writer.add_item(wtxn, itemid, &vector)?;
-                } else {
-                    // unwrap: computed the index from the list of writers
-                    let writer = arroy::Writer::new(self.angular_db(), last_index, dimension);
-                    writer.del_item(wtxn, itemid)?;
-                    let writer = arroy::Writer::new(self.angular_db(), deleted_index, dimension);
-                    writer.add_item(wtxn, itemid, &vector)?;
-                }
+                // unwrap: computed the index from the list of writers
+                let writer = arroy::Writer::new(db, last_index, dimension);
+                writer.del_item(wtxn, item_id)?;
+                let writer = arroy::Writer::new(db, deleted_index, dimension);
+                writer.add_item(wtxn, item_id, &vector)?;
             }
         }
         Ok(deleted_index.is_some())
@@ -285,16 +298,25 @@ impl ArroyWrapper {
         limit: usize,
         filter: Option<&RoaringBitmap>,
     ) -> Result<Vec<(ItemId, f32)>, arroy::Error> {
+        if self.quantized {
+            self._nns_by_item(rtxn, self.quantized_db(), item, limit, filter)
+        } else {
+            self._nns_by_item(rtxn, self.angular_db(), item, limit, filter)
+        }
+    }
+
+    fn _nns_by_item<D: arroy::Distance>(
+        &self,
+        rtxn: &RoTxn,
+        db: arroy::Database<D>,
+        item: ItemId,
+        limit: usize,
+        filter: Option<&RoaringBitmap>,
+    ) -> Result<Vec<(ItemId, f32)>, arroy::Error> {
         let mut results = Vec::new();
 
-        for index in arroy_db_range_for_embedder(self.index) {
-            let ret = if self.quantized {
-                arroy::Reader::open(rtxn, index, self.quantized_db())?
-                    .nns_by_item(rtxn, item, limit, None, None, filter)?
-            } else {
-                arroy::Reader::open(rtxn, index, self.angular_db())?
-                    .nns_by_item(rtxn, item, limit, None, None, filter)?
-            };
+        for reader in self.readers(rtxn, db) {
+            let ret = reader?.nns_by_item(rtxn, item, limit, None, None, filter)?;
             if let Some(mut ret) = ret {
                 results.append(&mut ret);
             } else {
@@ -302,27 +324,35 @@ impl ArroyWrapper {
             }
         }
         results.sort_unstable_by_key(|(_, distance)| OrderedFloat(*distance));
-
         Ok(results)
     }
 
     pub fn nns_by_vector(
         &self,
-        txn: &RoTxn,
-        item: &[f32],
+        rtxn: &RoTxn,
+        vector: &[f32],
+        limit: usize,
+        filter: Option<&RoaringBitmap>,
+    ) -> Result<Vec<(ItemId, f32)>, arroy::Error> {
+        if self.quantized {
+            self._nns_by_vector(rtxn, self.quantized_db(), vector, limit, filter)
+        } else {
+            self._nns_by_vector(rtxn, self.angular_db(), vector, limit, filter)
+        }
+    }
+
+    fn _nns_by_vector<D: arroy::Distance>(
+        &self,
+        rtxn: &RoTxn,
+        db: arroy::Database<D>,
+        vector: &[f32],
         limit: usize,
         filter: Option<&RoaringBitmap>,
     ) -> Result<Vec<(ItemId, f32)>, arroy::Error> {
         let mut results = Vec::new();
 
-        for index in arroy_db_range_for_embedder(self.index) {
-            let mut ret = if self.quantized {
-                arroy::Reader::open(txn, index, self.quantized_db())?
-                    .nns_by_vector(txn, item, limit, None, None, filter)?
-            } else {
-                arroy::Reader::open(txn, index, self.angular_db())?
-                    .nns_by_vector(txn, item, limit, None, None, filter)?
-            };
+        for reader in self.readers(rtxn, db) {
+            let mut ret = reader?.nns_by_vector(rtxn, vector, limit, None, None, filter)?;
             results.append(&mut ret);
         }
 
@@ -331,18 +361,27 @@ impl ArroyWrapper {
         Ok(results)
     }
 
-    pub fn item_vector(&self, rtxn: &RoTxn, docid: u32) -> Result<Option<Vec<f32>>, arroy::Error> {
-        for index in arroy_db_range_for_embedder(self.index) {
-            let ret = if self.quantized {
-                arroy::Reader::open(rtxn, index, self.quantized_db())?.item_vector(rtxn, docid)?
-            } else {
-                arroy::Reader::open(rtxn, index, self.angular_db())?.item_vector(rtxn, docid)?
-            };
-            if ret.is_some() {
-                return Ok(ret);
+    pub fn item_vectors(&self, rtxn: &RoTxn, item_id: u32) -> Result<Vec<Vec<f32>>, arroy::Error> {
+        let mut vectors = Vec::new();
+
+        if self.quantized {
+            for reader in self.readers(rtxn, self.quantized_db()) {
+                if let Some(vec) = reader?.item_vector(rtxn, item_id)? {
+                    vectors.push(vec);
+                } else {
+                    break;
+                }
+            }
+        } else {
+            for reader in self.readers(rtxn, self.angular_db()) {
+                if let Some(vec) = reader?.item_vector(rtxn, item_id)? {
+                    vectors.push(vec);
+                } else {
+                    break;
+                }
             }
         }
-        Ok(None)
+        Ok(vectors)
     }
 
     fn angular_db(&self) -> arroy::Database<Angular> {

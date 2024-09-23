@@ -1,11 +1,10 @@
 use std::iter::FromIterator;
 
-use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 
 use super::ranking_rules::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait};
 use crate::score_details::{self, ScoreDetails};
-use crate::vector::{DistributionShift, Embedder};
+use crate::vector::{ArroyWrapper, DistributionShift, Embedder};
 use crate::{DocumentId, Result, SearchContext, SearchLogger};
 
 pub struct VectorSort<Q: RankingRuleQueryTrait> {
@@ -53,14 +52,9 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         vector_candidates: &RoaringBitmap,
     ) -> Result<()> {
         let target = &self.target;
-        let mut results = Vec::new();
 
-        for reader in ctx.index.arroy_readers(ctx.txn, self.embedder_index, self.quantized) {
-            let nns_by_vector =
-                reader?.nns_by_vector(ctx.txn, target, self.limit, Some(vector_candidates))?;
-            results.extend(nns_by_vector.into_iter());
-        }
-        results.sort_unstable_by_key(|(_, distance)| OrderedFloat(*distance));
+        let reader = ArroyWrapper::new(ctx.index.vector_arroy, self.embedder_index, self.quantized);
+        let results = reader.nns_by_vector(ctx.txn, target, self.limit, Some(vector_candidates))?;
         self.cached_sorted_docids = results.into_iter();
 
         Ok(())

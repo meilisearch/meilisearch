@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 
 use crate::score_details::{self, ScoreDetails};
