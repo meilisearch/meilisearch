@@ -20,7 +20,8 @@ pub fn merger_writer_channel(cap: usize) -> (MergerSender, WriterReceiver) {
         MergerSender {
             sender,
             send_count: Default::default(),
-            contentious_count: Default::default(),
+            writer_contentious_count: Default::default(),
+            merger_contentious_count: Default::default(),
         },
         WriterReceiver(receiver),
     )
@@ -181,16 +182,20 @@ pub struct MergerSender {
     /// The number of message we send in total in the channel.
     send_count: std::cell::Cell<usize>,
     /// The number of times we sent something in a channel that was full.
-    contentious_count: std::cell::Cell<usize>,
+    writer_contentious_count: std::cell::Cell<usize>,
+    /// The number of times we sent something in a channel that was empty.
+    merger_contentious_count: std::cell::Cell<usize>,
 }
 
 impl Drop for MergerSender {
     fn drop(&mut self) {
         tracing::info!(
-            "Merger channel stats: {} sends, {} were contentious (ratio {})",
+            "Merger channel stats: {} sends, {} writer contentions ({}%), {} merger contentions ({}%)",
             self.send_count.get(),
-            self.contentious_count.get(),
-            self.contentious_count.get() as f64 / self.send_count.get() as f64
+            self.writer_contentious_count.get(),
+            (self.writer_contentious_count.get() as f32 / self.send_count.get() as f32) * 100.0,
+            self.merger_contentious_count.get(),
+            (self.merger_contentious_count.get() as f32 / self.send_count.get() as f32) * 100.0
         )
     }
 }
@@ -225,7 +230,10 @@ impl MergerSender {
 
     fn send(&self, op: WriterOperation) -> StdResult<(), SendError<()>> {
         if self.sender.is_full() {
-            self.contentious_count.set(self.contentious_count.get() + 1);
+            self.writer_contentious_count.set(self.writer_contentious_count.get() + 1);
+        }
+        if self.sender.is_empty() {
+            self.merger_contentious_count.set(self.merger_contentious_count.get() + 1);
         }
         self.send_count.set(self.send_count.get() + 1);
         match self.sender.send(op) {
