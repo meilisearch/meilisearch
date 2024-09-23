@@ -115,7 +115,8 @@ make_locale! {
     Slk,
     Cat,
     Tgl,
-    Hye
+    Hye,
+    Zho
 }
 
 impl std::error::Error for LocaleFormatError {}
