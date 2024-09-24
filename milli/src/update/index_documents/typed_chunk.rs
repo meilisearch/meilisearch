@@ -680,7 +680,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let mut iter = merger.into_stream_merger_iter()?;
             while let Some((key, _)) = iter.next()? {
                 let docid = key.try_into().map(DocumentId::from_be_bytes).unwrap();
-                writer.del_item_raw(wtxn, expected_dimension, docid)?;
+                writer.del_items(wtxn, expected_dimension, docid)?;
             }
 
             // add generated embeddings

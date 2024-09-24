@@ -170,29 +170,28 @@ impl ArroyWrapper {
         Ok(())
     }
 
-    /// Delete an item from the index. It **does not** take care of fixing the hole
-    /// made after deleting the item.
-    pub fn del_item_raw(
+    /// Delete all embeddings from a specific `item_id`
+    pub fn del_items(
         &self,
         wtxn: &mut RwTxn,
         dimension: usize,
         item_id: arroy::ItemId,
-    ) -> Result<bool, arroy::Error> {
+    ) -> Result<(), arroy::Error> {
         for index in arroy_db_range_for_embedder(self.embedder_index) {
             if self.quantized {
                 let writer = arroy::Writer::new(self.quantized_db(), index, dimension);
-                if writer.del_item(wtxn, item_id)? {
-                    return Ok(true);
+                if !writer.del_item(wtxn, item_id)? {
+                    break;
                 }
             } else {
                 let writer = arroy::Writer::new(self.angular_db(), index, dimension);
-                if writer.del_item(wtxn, item_id)? {
-                    return Ok(true);
+                if !writer.del_item(wtxn, item_id)? {
+                    break;
                 }
             }
         }
 
-        Ok(false)
+        Ok(())
     }
 
     /// Delete one item.
