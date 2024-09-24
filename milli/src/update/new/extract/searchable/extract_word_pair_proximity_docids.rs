@@ -59,7 +59,7 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
             DocumentChange::Update(inner) => {
                 let document = inner.current(rtxn, index)?.unwrap();
                 process_document_tokens(
-                    &document,
+                    document,
                     document_tokenizer,
                     fields_ids_map,
                     &mut word_positions,

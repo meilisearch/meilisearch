@@ -1,26 +1,21 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
-use std::{borrow::Cow, fs::File, num::NonZero};
+use std::fs::File;
+use std::num::NonZero;
 
-use grenad::Merger;
-use grenad::MergerBuilder;
+use grenad::{Merger, MergerBuilder};
 use heed::RoTxn;
-use rayon::iter::IntoParallelIterator;
-use rayon::iter::ParallelIterator;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use super::{
-    tokenize_document::{tokenizer_builder, DocumentTokenizer},
-    SearchableExtractor,
-};
+use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
+use super::SearchableExtractor;
+use crate::update::new::extract::cache::CboCachedSorter;
 use crate::update::new::extract::perm_json_p::contained_in;
-use crate::DocumentId;
+use crate::update::new::{DocumentChange, ItemsPool};
+use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
 use crate::{
-    bucketed_position,
-    update::{
-        create_sorter,
-        new::{extract::cache::CboCachedSorter, DocumentChange, ItemsPool},
-        GrenadParameters, MergeDeladdCboRoaringBitmaps,
-    },
-    FieldId, GlobalFieldsIdsMap, Index, Result, MAX_POSITION_PER_ATTRIBUTE,
+    bucketed_position, DocumentId, FieldId, GlobalFieldsIdsMap, Index, Result,
+    MAX_POSITION_PER_ATTRIBUTE,
 };
 
 const MAX_COUNTED_WORDS: usize = 30;
@@ -565,7 +560,7 @@ impl WordDocidsExtractors {
         cached_sorter: &mut WordDocidsCachedSorters,
         document_change: DocumentChange,
     ) -> Result<()> {
-        let exact_attributes = index.exact_attributes(&rtxn)?;
+        let exact_attributes = index.exact_attributes(rtxn)?;
         let is_exact_attribute =
             |fname: &str| exact_attributes.iter().any(|attr| contained_in(fname, attr));
         let mut buffer = Vec::new();

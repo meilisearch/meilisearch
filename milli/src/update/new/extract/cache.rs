@@ -15,6 +15,8 @@ pub struct CboCachedSorter<MF> {
     sorter: Sorter<MF>,
     deladd_buffer: Vec<u8>,
     cbo_buffer: Vec<u8>,
+    total_insertions: usize,
+    fitted_in_key: usize,
 }
 
 impl<MF> CboCachedSorter<MF> {
@@ -24,6 +26,8 @@ impl<MF> CboCachedSorter<MF> {
             sorter,
             deladd_buffer: Vec::new(),
             cbo_buffer: Vec::new(),
+            total_insertions: 0,
+            fitted_in_key: 0,
         }
     }
 }
@@ -35,6 +39,8 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
                 del.get_or_insert_with(PushOptimizedBitmap::default).insert(n);
             }
             None => {
+                self.total_insertions += 1;
+                self.fitted_in_key += (key.len() <= 20) as usize;
                 let value = DelAddRoaringBitmap::new_del_u32(n);
                 if let Some((key, deladd)) = self.cache.push(key.into(), value) {
                     self.write_entry(key, deladd)?;
@@ -55,6 +61,8 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
                 del.get_or_insert_with(PushOptimizedBitmap::default).union_with_bitmap(bitmap);
             }
             None => {
+                self.total_insertions += 1;
+                self.fitted_in_key += (key.len() <= 20) as usize;
                 let value = DelAddRoaringBitmap::new_del(bitmap);
                 if let Some((key, deladd)) = self.cache.push(key.into(), value) {
                     self.write_entry(key, deladd)?;
@@ -71,6 +79,8 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
                 add.get_or_insert_with(PushOptimizedBitmap::default).insert(n);
             }
             None => {
+                self.total_insertions += 1;
+                self.fitted_in_key += (key.len() <= 20) as usize;
                 let value = DelAddRoaringBitmap::new_add_u32(n);
                 if let Some((key, deladd)) = self.cache.push(key.into(), value) {
                     self.write_entry(key, deladd)?;
@@ -91,6 +101,8 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
                 add.get_or_insert_with(PushOptimizedBitmap::default).union_with_bitmap(bitmap);
             }
             None => {
+                self.total_insertions += 1;
+                self.fitted_in_key += (key.len() <= 20) as usize;
                 let value = DelAddRoaringBitmap::new_add(bitmap);
                 if let Some((key, deladd)) = self.cache.push(key.into(), value) {
                     self.write_entry(key, deladd)?;
@@ -108,6 +120,8 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
                 add.get_or_insert_with(PushOptimizedBitmap::default).insert(n);
             }
             None => {
+                self.total_insertions += 1;
+                self.fitted_in_key += (key.len() <= 20) as usize;
                 let value = DelAddRoaringBitmap::new_del_add_u32(n);
                 if let Some((key, deladd)) = self.cache.push(key.into(), value) {
                     self.write_entry(key, deladd)?;
@@ -161,14 +175,22 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
         for (key, deladd) in mem::replace(&mut self.cache, default_arc) {
             self.write_entry(key, deladd)?;
         }
+
+        tracing::info!(
+            "LruCache stats: {} <= 20 bytes ({}%) on a total of {} insertions",
+            self.fitted_in_key,
+            (self.fitted_in_key as f32 / self.total_insertions as f32) * 100.0,
+            self.total_insertions,
+        );
+
         Ok(self.sorter)
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct DelAddRoaringBitmap {
-    pub del: Option<PushOptimizedBitmap>,
-    pub add: Option<PushOptimizedBitmap>,
+    pub(crate) del: Option<PushOptimizedBitmap>,
+    pub(crate) add: Option<PushOptimizedBitmap>,
 }
 
 impl DelAddRoaringBitmap {

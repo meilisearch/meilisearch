@@ -92,24 +92,24 @@ impl<'a> DocumentTokenizer<'a> {
             };
 
             // if the current field is searchable or contains a searchable attribute
-            if select_field(&field_name, self.attribute_to_extract, self.attribute_to_skip) {
+            if select_field(field_name, self.attribute_to_extract, self.attribute_to_skip) {
                 // parse json.
                 match serde_json::from_slice(field_bytes).map_err(InternalError::SerdeJson)? {
                     Value::Object(object) => seek_leaf_values_in_object(
                         &object,
                         self.attribute_to_extract,
                         self.attribute_to_skip,
-                        &field_name,
+                        field_name,
                         &mut tokenize_field,
                     )?,
                     Value::Array(array) => seek_leaf_values_in_array(
                         &array,
                         self.attribute_to_extract,
                         self.attribute_to_skip,
-                        &field_name,
+                        field_name,
                         &mut tokenize_field,
                     )?,
-                    value => tokenize_field(&field_name, &value)?,
+                    value => tokenize_field(field_name, &value)?,
                 }
             }
         }
