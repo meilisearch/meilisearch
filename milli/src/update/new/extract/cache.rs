@@ -176,7 +176,7 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
             self.write_entry(key, deladd)?;
         }
 
-        tracing::info!(
+        eprintln!(
             "LruCache stats: {} <= 20 bytes ({}%) on a total of {} insertions",
             self.fitted_in_key,
             (self.fitted_in_key as f32 / self.total_insertions as f32) * 100.0,
