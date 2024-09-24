@@ -18,7 +18,6 @@ one indexing operation.
 */
 
 use std::collections::{BTreeSet, HashSet};
-use std::env::VarError;
 use std::ffi::OsStr;
 use std::fmt;
 use std::fs::{self, File};
@@ -27,19 +26,18 @@ use std::io::BufWriter;
 use dump::IndexMetadata;
 use meilisearch_types::error::Code;
 use meilisearch_types::heed::{RoTxn, RwTxn};
-use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader, PrimaryKey};
+use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
 use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::update::new::indexer::{
     self, retrieve_or_guess_primary_key, DocumentChanges,
 };
-use meilisearch_types::milli::update::new::TopLevelMap;
 use meilisearch_types::milli::update::{
     IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings as MilliSettings,
 };
 use meilisearch_types::milli::vector::parsed_vectors::{
     ExplicitVectors, VectorOrArrayOfVectors, RESERVED_VECTORS_FIELD_NAME,
 };
-use meilisearch_types::milli::{self, Filter, InternalError, Object};
+use meilisearch_types::milli::{self, Filter, Object};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::{compression, Index, VERSION_FILE_NAME};

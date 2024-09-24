@@ -289,7 +289,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                         .insert(&document_sorter_key_buffer, &document_sorter_value_buffer)?;
                     let base_obkv = KvReader::from_slice(base_obkv);
                     if let Some(flattened_obkv) =
-                        Self::flatten_from_fields_ids_map(&base_obkv, &mut self.fields_ids_map)?
+                        Self::flatten_from_fields_ids_map(base_obkv, &mut self.fields_ids_map)?
                     {
                         // we recreate our buffer with the flattened documents
                         document_sorter_value_buffer.clear();
@@ -324,7 +324,7 @@ impl<'a, 'i> Transform<'a, 'i> {
 
                 let flattened_obkv = KvReader::from_slice(&obkv_buffer);
                 if let Some(obkv) =
-                    Self::flatten_from_fields_ids_map(&flattened_obkv, &mut self.fields_ids_map)?
+                    Self::flatten_from_fields_ids_map(flattened_obkv, &mut self.fields_ids_map)?
                 {
                     document_sorter_value_buffer.clear();
                     document_sorter_value_buffer.push(Operation::Addition as u8);
@@ -531,7 +531,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         // flatten it and push it as to delete in the flattened_sorter
         let flattened_obkv = KvReader::from_slice(base_obkv);
         if let Some(obkv) =
-            Self::flatten_from_fields_ids_map(&flattened_obkv, &mut self.fields_ids_map)?
+            Self::flatten_from_fields_ids_map(flattened_obkv, &mut self.fields_ids_map)?
         {
             // we recreate our buffer with the flattened documents
             document_sorter_value_buffer.clear();
@@ -938,7 +938,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         if let Some(flattened_obkv_buffer) = flattened_obkv_buffer {
             // take the non-flattened version if flatten_from_fields_ids_map returns None.
             let mut fields_ids_map = settings_diff.new.fields_ids_map.clone();
-            let flattened = Self::flatten_from_fields_ids_map(&obkv, &mut fields_ids_map)?;
+            let flattened = Self::flatten_from_fields_ids_map(obkv, &mut fields_ids_map)?;
             let flattened = flattened.as_deref().map_or(obkv, KvReader::from_slice);
 
             flattened_obkv_buffer.clear();

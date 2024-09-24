@@ -1,4 +1,4 @@
-use rayon::iter::{ParallelBridge, ParallelIterator};
+use rayon::iter::{IndexedParallelIterator, ParallelBridge, ParallelIterator};
 
 use super::DocumentChanges;
 use crate::documents::{DocumentIdExtractionError, PrimaryKey};
@@ -18,9 +18,7 @@ impl<I> PartialDump<I> {
 
 impl<'p, I> DocumentChanges<'p> for PartialDump<I>
 where
-    I: IntoIterator<Item = Object>,
-    I::IntoIter: Send + Clone + 'p,
-    I::Item: Send,
+    I: IndexedParallelIterator<Item = Object> + Clone + 'p,
 {
     type Parameter = (&'p FieldsIdsMap, &'p ConcurrentAvailableIds, &'p PrimaryKey<'p>);
 
@@ -32,10 +30,10 @@ where
         self,
         _fields_ids_map: &mut FieldsIdsMap,
         param: Self::Parameter,
-    ) -> Result<impl ParallelIterator<Item = Result<DocumentChange>> + Clone + 'p> {
+    ) -> Result<impl IndexedParallelIterator<Item = Result<DocumentChange>> + Clone + 'p> {
         let (fields_ids_map, concurrent_available_ids, primary_key) = param;
 
-        Ok(self.iter.into_iter().par_bridge().map(|object| {
+        Ok(self.iter.map(|object| {
             let docid = match concurrent_available_ids.next() {
                 Some(id) => id,
                 None => return Err(Error::UserError(UserError::DocumentLimitReached)),

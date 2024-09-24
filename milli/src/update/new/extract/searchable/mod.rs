@@ -5,11 +5,7 @@ mod tokenize_document;
 
 use std::fs::File;
 
-pub use extract_fid_word_count_docids::FidWordCountDocidsExtractor;
-pub use extract_word_docids::{
-    ExactWordDocidsExtractor, WordDocidsExtractor, WordDocidsExtractors, WordDocidsMergers,
-    WordFidDocidsExtractor, WordPositionDocidsExtractor,
-};
+pub use extract_word_docids::{WordDocidsExtractors, WordDocidsMergers};
 pub use extract_word_pair_proximity_docids::WordPairProximityDocidsExtractor;
 use grenad::Merger;
 use heed::RoTxn;

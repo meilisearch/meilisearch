@@ -1247,7 +1247,7 @@ impl<'a> HitMaker<'a> {
             self.index.iter_documents(self.rtxn, std::iter::once(id))?.next().unwrap()?;
 
         // First generate a document with all the displayed fields
-        let displayed_document = make_document(&self.displayed_ids, &self.fields_ids_map, &obkv)?;
+        let displayed_document = make_document(&self.displayed_ids, &self.fields_ids_map, obkv)?;
 
         let add_vectors_fid =
             self.vectors_fid.filter(|_fid| self.retrieve_vectors == RetrieveVectors::Retrieve);

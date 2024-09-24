@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rayon::iter::{ParallelBridge, ParallelIterator};
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use roaring::RoaringBitmap;
 
 use super::DocumentChanges;
@@ -28,10 +28,11 @@ impl<'p> DocumentChanges<'p> for DocumentDeletion {
         self,
         _fields_ids_map: &mut FieldsIdsMap,
         param: Self::Parameter,
-    ) -> Result<impl ParallelIterator<Item = Result<DocumentChange>> + Clone + 'p> {
+    ) -> Result<impl IndexedParallelIterator<Item = Result<DocumentChange>> + Clone + 'p> {
         let index = param;
         let items = Arc::new(ItemsPool::new(|| index.read_txn().map_err(crate::Error::from)));
-        Ok(self.to_delete.into_iter().par_bridge().map_with(items, |items, docid| {
+        let to_delete: Vec<_> = self.to_delete.into_iter().collect();
+        Ok(to_delete.into_par_iter().map_with(items, |items, docid| {
             items.with(|rtxn| {
                 let current = index.document(rtxn, docid)?;
                 Ok(DocumentChange::Deletion(Deletion::create(docid, current.boxed())))

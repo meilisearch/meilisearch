@@ -5,7 +5,7 @@ use bincode::ErrorKind;
 use fst::{Set, SetBuilder, Streamer};
 use grenad::Merger;
 use heed::types::Bytes;
-use heed::{BoxedError, Database, RoTxn};
+use heed::{Database, RoTxn};
 use memmap2::Mmap;
 use roaring::RoaringBitmap;
 use tempfile::tempfile;
@@ -16,9 +16,7 @@ use super::{Deletion, DocumentChange, Insertion, KvReaderDelAdd, KvReaderFieldId
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::MergerOperation;
 use crate::update::MergeDeladdCboRoaringBitmaps;
-use crate::{
-    CboRoaringBitmapCodec, Error, GeoPoint, GlobalFieldsIdsMap, Index, InternalError, Result,
-};
+use crate::{CboRoaringBitmapCodec, Error, GeoPoint, GlobalFieldsIdsMap, Index, Result};
 
 /// TODO We must return some infos/stats
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents", name = "merge")]

@@ -1,4 +1,4 @@
-use std::io::{BufReader, ErrorKind};
+use std::io::ErrorKind;
 
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;

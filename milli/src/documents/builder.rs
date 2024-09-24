@@ -292,7 +292,7 @@ mod test {
             .unwrap()
             .into_cursor_and_fields_index();
         let doc = cursor.next_document().unwrap().unwrap();
-        let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
+        let val = obkv_to_object(doc, &index).map(Value::from).unwrap();
 
         assert_eq!(
             val,
@@ -321,7 +321,7 @@ mod test {
             .into_cursor_and_fields_index();
 
         let doc = cursor.next_document().unwrap().unwrap();
-        let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
+        let val = obkv_to_object(doc, &index).map(Value::from).unwrap();
 
         assert_eq!(
             val,
@@ -348,7 +348,7 @@ mod test {
             .into_cursor_and_fields_index();
 
         let doc = cursor.next_document().unwrap().unwrap();
-        let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
+        let val = obkv_to_object(doc, &index).map(Value::from).unwrap();
 
         assert_eq!(
             val,
@@ -375,7 +375,7 @@ mod test {
             .into_cursor_and_fields_index();
 
         let doc = cursor.next_document().unwrap().unwrap();
-        let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
+        let val = obkv_to_object(doc, &index).map(Value::from).unwrap();
 
         assert_eq!(
             val,
@@ -402,7 +402,7 @@ mod test {
             .into_cursor_and_fields_index();
 
         let doc = cursor.next_document().unwrap().unwrap();
-        let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
+        let val = obkv_to_object(doc, &index).map(Value::from).unwrap();
 
         assert_eq!(
             val,
@@ -429,7 +429,7 @@ mod test {
             .into_cursor_and_fields_index();
 
         let doc = cursor.next_document().unwrap().unwrap();
-        let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
+        let val = obkv_to_object(doc, &index).map(Value::from).unwrap();
 
         assert_eq!(
             val,
@@ -456,7 +456,7 @@ mod test {
             .into_cursor_and_fields_index();
 
         let doc = cursor.next_document().unwrap().unwrap();
-        let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
+        let val = obkv_to_object(doc, &index).map(Value::from).unwrap();
 
         assert_eq!(
             val,
@@ -483,7 +483,7 @@ mod test {
             .into_cursor_and_fields_index();
 
         let doc = cursor.next_document().unwrap().unwrap();
-        let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
+        let val = obkv_to_object(doc, &index).map(Value::from).unwrap();
 
         assert_eq!(
             val,
@@ -510,7 +510,7 @@ mod test {
             .into_cursor_and_fields_index();
 
         let doc = cursor.next_document().unwrap().unwrap();
-        let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
+        let val = obkv_to_object(doc, &index).map(Value::from).unwrap();
 
         assert_eq!(
             val,
@@ -555,7 +555,7 @@ mod test {
             .into_cursor_and_fields_index();
 
         let doc = cursor.next_document().unwrap().unwrap();
-        let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
+        let val = obkv_to_object(doc, &index).map(Value::from).unwrap();
 
         assert_eq!(
             val,

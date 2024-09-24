@@ -1,6 +1,6 @@
 pub use document_change::{Deletion, DocumentChange, Insertion, Update};
-pub use indexer::{CowStr, TopLevelMap};
 pub use items_pool::ItemsPool;
+pub use top_level_map::{CowStr, TopLevelMap};
 
 use super::del_add::DelAdd;
 use crate::FieldId;
@@ -11,6 +11,7 @@ mod extract;
 pub mod indexer;
 mod items_pool;
 mod merger;
+mod top_level_map;
 
 /// TODO move them elsewhere
 pub type StdResult<T, E> = std::result::Result<T, E>;

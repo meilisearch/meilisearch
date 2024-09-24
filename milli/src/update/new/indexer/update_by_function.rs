@@ -1,4 +1,4 @@
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
 use super::DocumentChanges;
 use crate::update::new::DocumentChange;
@@ -13,7 +13,7 @@ impl<'p> DocumentChanges<'p> for UpdateByFunction {
         self,
         _fields_ids_map: &mut FieldsIdsMap,
         _param: Self::Parameter,
-    ) -> Result<impl ParallelIterator<Item = Result<DocumentChange>> + Clone + 'p> {
+    ) -> Result<impl IndexedParallelIterator<Item = Result<DocumentChange>> + Clone + 'p> {
         Ok((0..100).into_par_iter().map(|_| todo!()))
     }
 }

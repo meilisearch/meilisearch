@@ -6,16 +6,15 @@ pub use document_deletion::DocumentDeletion;
 pub use document_operation::DocumentOperation;
 use heed::{RoTxn, RwTxn};
 pub use partial_dump::PartialDump;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use rayon::ThreadPool;
-pub use top_level_map::{CowStr, TopLevelMap};
 pub use update_by_function::UpdateByFunction;
 
 use super::channel::*;
 use super::document_change::DocumentChange;
 use super::extract::*;
 use super::merger::merge_grenad_entries;
-use super::StdResult;
+use super::{StdResult, TopLevelMap};
 use crate::documents::{PrimaryKey, DEFAULT_PRIMARY_KEY};
 use crate::update::new::channel::ExtractorSender;
 use crate::update::GrenadParameters;
@@ -24,7 +23,6 @@ use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
 mod document_deletion;
 mod document_operation;
 mod partial_dump;
-mod top_level_map;
 mod update_by_function;
 
 pub trait DocumentChanges<'p> {
@@ -34,7 +32,7 @@ pub trait DocumentChanges<'p> {
         self,
         fields_ids_map: &mut FieldsIdsMap,
         param: Self::Parameter,
-    ) -> Result<impl ParallelIterator<Item = Result<DocumentChange>> + Clone + 'p>;
+    ) -> Result<impl IndexedParallelIterator<Item = Result<DocumentChange>> + Clone + 'p>;
 }
 
 /// This is the main function of this crate.
@@ -50,8 +48,7 @@ pub fn index<PI>(
     document_changes: PI,
 ) -> Result<()>
 where
-    PI: IntoParallelIterator<Item = Result<DocumentChange>> + Send,
-    PI::Iter: Clone,
+    PI: IndexedParallelIterator<Item = Result<DocumentChange>> + Send + Clone,
 {
     let (merger_sender, writer_receiver) = merger_writer_channel(10_000);
     // This channel acts as a rendezvous point to ensure that we are one task ahead
