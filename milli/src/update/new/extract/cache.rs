@@ -198,30 +198,29 @@ impl DelAddRoaringBitmap {
 
 #[derive(Debug, Clone, Default)]
 struct PushOptimizedBitmap {
-    max: Option<u32>,
     bitmap: RoaringBitmap,
 }
 
 impl PushOptimizedBitmap {
+    #[inline]
     fn from_bitmap(bitmap: RoaringBitmap) -> PushOptimizedBitmap {
-        PushOptimizedBitmap { max: bitmap.max(), bitmap }
+        PushOptimizedBitmap { bitmap }
     }
 
+    #[inline]
     fn from_single(single: u32) -> PushOptimizedBitmap {
-        PushOptimizedBitmap { max: Some(single), bitmap: RoaringBitmap::from([single]) }
+        PushOptimizedBitmap { bitmap: RoaringBitmap::from([single]) }
     }
 
+    #[inline]
     fn insert(&mut self, n: u32) {
-        if self.max.map_or(true, |max| n > max) {
-            self.max = Some(n);
-            self.bitmap.push(n);
-        } else {
+        if !self.bitmap.push(n) {
             self.bitmap.insert(n);
         }
     }
 
+    #[inline]
     fn union_with_bitmap(&mut self, bitmap: RoaringBitmap) {
         self.bitmap |= bitmap;
-        self.max = self.bitmap.max();
     }
 }
