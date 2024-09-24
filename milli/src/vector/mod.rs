@@ -72,32 +72,6 @@ impl ArroyWrapper {
         }
     }
 
-    pub fn quantize(&mut self, wtxn: &mut RwTxn, dimension: usize) -> Result<(), arroy::Error> {
-        if !self.quantized {
-            for index in arroy_db_range_for_embedder(self.embedder_index) {
-                let writer = arroy::Writer::new(self.angular_db(), index, dimension);
-                writer.prepare_changing_distance::<BinaryQuantizedAngular>(wtxn)?;
-            }
-            self.quantized = true;
-        }
-        Ok(())
-    }
-
-    // TODO: We can stop early when we find an empty DB
-    pub fn need_build(&self, rtxn: &RoTxn, dimension: usize) -> Result<bool, arroy::Error> {
-        for index in arroy_db_range_for_embedder(self.embedder_index) {
-            let need_build = if self.quantized {
-                arroy::Writer::new(self.quantized_db(), index, dimension).need_build(rtxn)
-            } else {
-                arroy::Writer::new(self.angular_db(), index, dimension).need_build(rtxn)
-            };
-            if need_build? {
-                return Ok(true);
-            }
-        }
-        Ok(false)
-    }
-
     pub fn build_and_quantize<R: rand::Rng + rand::SeedableRng>(
         &mut self,
         wtxn: &mut RwTxn,
