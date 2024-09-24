@@ -115,7 +115,10 @@ impl ArroyWrapper {
         Ok(())
     }
 
-    /// Overwrite all the embeddings associated to the index and item id.
+    /// Overwrite all the embeddings associated with the index and item ID.
+    /// /!\ It won't remove embeddings after the last passed embedding, which can leave stale embeddings.
+    ///     You should call `del_items` on the `item_id` before calling this method.
+    /// /!\ Cannot insert more than u8::MAX embeddings; after inserting u8::MAX embeddings, all the remaining ones will be silently ignored.
     pub fn add_items(
         &self,
         wtxn: &mut RwTxn,
@@ -243,7 +246,6 @@ impl ArroyWrapper {
                 last_index_with_a_vector = Some((index, candidate));
             }
             if let Some((last_index, vector)) = last_index_with_a_vector {
-                // unwrap: computed the index from the list of writers
                 let writer = arroy::Writer::new(db, last_index, dimension);
                 writer.del_item(wtxn, item_id)?;
                 let writer = arroy::Writer::new(db, deleted_index, dimension);
