@@ -45,7 +45,7 @@ impl ArroyWrapper {
         Self { database, embedder_index, quantized }
     }
 
-    pub fn index(&self) -> u8 {
+    pub fn embedder_index(&self) -> u8 {
         self.embedder_index
     }
 
