@@ -251,9 +251,17 @@ impl ArroyWrapper {
     pub fn clear(&self, wtxn: &mut RwTxn, dimension: usize) -> Result<(), arroy::Error> {
         for index in arroy_db_range_for_embedder(self.embedder_index) {
             if self.quantized {
-                arroy::Writer::new(self.quantized_db(), index, dimension).clear(wtxn)?;
+                let writer = arroy::Writer::new(self.quantized_db(), index, dimension);
+                if writer.is_empty(wtxn)? {
+                    break;
+                }
+                writer.clear(wtxn)?;
             } else {
-                arroy::Writer::new(self.angular_db(), index, dimension).clear(wtxn)?;
+                let writer = arroy::Writer::new(self.angular_db(), index, dimension);
+                if writer.is_empty(wtxn)? {
+                    break;
+                }
+                writer.clear(wtxn)?;
             }
         }
         Ok(())
@@ -267,10 +275,17 @@ impl ArroyWrapper {
     ) -> Result<bool, arroy::Error> {
         for index in arroy_db_range_for_embedder(self.embedder_index) {
             let contains = if self.quantized {
-                arroy::Writer::new(self.quantized_db(), index, dimension)
-                    .contains_item(rtxn, item)?
+                let writer = arroy::Writer::new(self.quantized_db(), index, dimension);
+                if writer.is_empty(rtxn)? {
+                    break;
+                }
+                writer.contains_item(rtxn, item)?
             } else {
-                arroy::Writer::new(self.angular_db(), index, dimension).contains_item(rtxn, item)?
+                let writer = arroy::Writer::new(self.angular_db(), index, dimension);
+                if writer.is_empty(rtxn)? {
+                    break;
+                }
+                writer.contains_item(rtxn, item)?
             };
             if contains {
                 return Ok(contains);
