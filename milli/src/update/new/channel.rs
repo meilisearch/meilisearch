@@ -189,7 +189,7 @@ pub struct MergerSender {
 
 impl Drop for MergerSender {
     fn drop(&mut self) {
-        tracing::info!(
+        eprintln!(
             "Merger channel stats: {} sends, {} writer contentions ({}%), {} merger contentions ({}%)",
             self.send_count.get(),
             self.writer_contentious_count.get(),
