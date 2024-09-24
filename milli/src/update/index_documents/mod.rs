@@ -713,10 +713,7 @@ where
 
             pool.install(|| {
                 let mut writer = ArroyWrapper::new(vector_arroy, embedder_index, was_quantized);
-                if is_quantizing {
-                    writer.quantize(wtxn, dimension)?;
-                }
-                writer.build(wtxn, &mut rng, dimension)?;
+                writer.build_and_quantize(wtxn, &mut rng, dimension, is_quantizing)?;
                 Result::Ok(())
             })
             .map_err(InternalError::from)??;

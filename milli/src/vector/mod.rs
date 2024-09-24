@@ -98,18 +98,37 @@ impl ArroyWrapper {
         Ok(false)
     }
 
-    /// TODO: We should early exit when it doesn't need to be built
-    pub fn build<R: rand::Rng + rand::SeedableRng>(
-        &self,
+    pub fn build_and_quantize<R: rand::Rng + rand::SeedableRng>(
+        &mut self,
         wtxn: &mut RwTxn,
         rng: &mut R,
         dimension: usize,
+        quantizing: bool,
     ) -> Result<(), arroy::Error> {
         for index in arroy_db_range_for_embedder(self.embedder_index) {
             if self.quantized {
-                arroy::Writer::new(self.quantized_db(), index, dimension).build(wtxn, rng, None)?
+                let writer = arroy::Writer::new(self.quantized_db(), index, dimension);
+                if writer.need_build(wtxn)? {
+                    writer.build(wtxn, rng, None)?
+                } else if writer.is_empty(wtxn)? {
+                    break;
+                }
             } else {
-                arroy::Writer::new(self.angular_db(), index, dimension).build(wtxn, rng, None)?
+                let writer = arroy::Writer::new(self.angular_db(), index, dimension);
+                // If we are quantizing the databases, we can't know from meilisearch
+                // if the db was empty but still contained the wrong metadata, thus we need
+                // to quantize everything and can't stop early. Since this operation can
+                // only happens once in the life of an embedder, it's not very performances
+                // sensitive.
+                if quantizing && !self.quantized {
+                    let writer =
+                        writer.prepare_changing_distance::<BinaryQuantizedAngular>(wtxn)?;
+                    writer.build(wtxn, rng, None)?
+                } else if writer.need_build(wtxn)? {
+                    writer.build(wtxn, rng, None)?
+                } else if writer.is_empty(wtxn)? {
+                    break;
+                }
             }
         }
         Ok(())
@@ -264,20 +283,6 @@ impl ArroyWrapper {
             }
         }
         Ok(())
-    }
-
-    pub fn is_empty(&self, rtxn: &RoTxn, dimension: usize) -> Result<bool, arroy::Error> {
-        for index in arroy_db_range_for_embedder(self.embedder_index) {
-            let empty = if self.quantized {
-                arroy::Writer::new(self.quantized_db(), index, dimension).is_empty(rtxn)?
-            } else {
-                arroy::Writer::new(self.angular_db(), index, dimension).is_empty(rtxn)?
-            };
-            if !empty {
-                return Ok(false);
-            }
-        }
-        Ok(true)
     }
 
     pub fn contains_item(
