@@ -934,7 +934,7 @@ dependencies = [
 [[package]]
 name = "charabia"
 version = "0.9.1"
-source = "git+https://github.com/meilisearch/charabia?branch=mutualize-char-normalizer#9eea14faf27ad46bd5eed49d2654cbdc4a1068dd"
+source = "git+https://github.com/meilisearch/charabia?branch=mutualize-char-normalizer#f8d8308cdb8db80819be7eeed5652cc4a995cc71"
 dependencies = [
  "aho-corasick",
  "csv",
@@ -2650,7 +2650,7 @@ checksum = "28b29a3cd74f0f4598934efe3aeba42bae0eb4680554128851ebbecb02af14e6"
 [[package]]
 name = "irg-kvariants"
 version = "0.1.1"
-source = "git+https://github.com/meilisearch/charabia?branch=mutualize-char-normalizer#9eea14faf27ad46bd5eed49d2654cbdc4a1068dd"
+source = "git+https://github.com/meilisearch/charabia?branch=mutualize-char-normalizer#f8d8308cdb8db80819be7eeed5652cc4a995cc71"
 dependencies = [
  "csv",
  "once_cell",
@@ -2837,7 +2837,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e310b3a6b5907f99202fcdb4960ff45b93735d7c7d96b760fcff8db2dc0e103d"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.1",
+ "windows-targets 0.52.4",
 ]
 
 [[package]]
