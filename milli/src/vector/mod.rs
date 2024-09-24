@@ -56,7 +56,11 @@ impl ArroyWrapper {
     ) -> impl Iterator<Item = Result<arroy::Reader<D>, arroy::Error>> + 'a {
         arroy_db_range_for_embedder(self.embedder_index).map_while(move |index| {
             match arroy::Reader::open(rtxn, index, db) {
-                Ok(reader) => Some(Ok(reader)),
+                Ok(reader) => match reader.is_empty(rtxn) {
+                    Ok(false) => Some(Ok(reader)),
+                    Ok(true) => None,
+                    Err(e) => Some(Err(e)),
+                },
                 Err(arroy::Error::MissingMetadata(_)) => None,
                 Err(e) => Some(Err(e)),
             }
