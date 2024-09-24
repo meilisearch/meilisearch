@@ -32,17 +32,21 @@ pub const REQUEST_PARALLELISM: usize = 40;
 
 pub struct ArroyWrapper {
     quantized: bool,
-    index: u8,
+    embedder_index: u8,
     database: arroy::Database<Unspecified>,
 }
 
 impl ArroyWrapper {
-    pub fn new(database: arroy::Database<Unspecified>, index: u8, quantized: bool) -> Self {
-        Self { database, index, quantized }
+    pub fn new(
+        database: arroy::Database<Unspecified>,
+        embedder_index: u8,
+        quantized: bool,
+    ) -> Self {
+        Self { database, embedder_index, quantized }
     }
 
     pub fn index(&self) -> u8 {
-        self.index
+        self.embedder_index
     }
 
     fn readers<'a, D: arroy::Distance>(
@@ -50,7 +54,7 @@ impl ArroyWrapper {
         rtxn: &'a RoTxn<'a>,
         db: arroy::Database<D>,
     ) -> impl Iterator<Item = Result<arroy::Reader<D>, arroy::Error>> + 'a {
-        arroy_db_range_for_embedder(self.index).map_while(move |index| {
+        arroy_db_range_for_embedder(self.embedder_index).map_while(move |index| {
             match arroy::Reader::open(rtxn, index, db) {
                 Ok(reader) => Some(Ok(reader)),
                 Err(arroy::Error::MissingMetadata(_)) => None,
@@ -60,7 +64,7 @@ impl ArroyWrapper {
     }
 
     pub fn dimensions(&self, rtxn: &RoTxn) -> Result<usize, arroy::Error> {
-        let first_id = arroy_db_range_for_embedder(self.index).next().unwrap();
+        let first_id = arroy_db_range_for_embedder(self.embedder_index).next().unwrap();
         if self.quantized {
             Ok(arroy::Reader::open(rtxn, first_id, self.quantized_db())?.dimensions())
         } else {
@@ -70,7 +74,7 @@ impl ArroyWrapper {
 
     pub fn quantize(&mut self, wtxn: &mut RwTxn, dimension: usize) -> Result<(), arroy::Error> {
         if !self.quantized {
-            for index in arroy_db_range_for_embedder(self.index) {
+            for index in arroy_db_range_for_embedder(self.embedder_index) {
                 let writer = arroy::Writer::new(self.angular_db(), index, dimension);
                 writer.prepare_changing_distance::<BinaryQuantizedAngular>(wtxn)?;
             }
@@ -81,7 +85,7 @@ impl ArroyWrapper {
 
     // TODO: We can stop early when we find an empty DB
     pub fn need_build(&self, rtxn: &RoTxn, dimension: usize) -> Result<bool, arroy::Error> {
-        for index in arroy_db_range_for_embedder(self.index) {
+        for index in arroy_db_range_for_embedder(self.embedder_index) {
             let need_build = if self.quantized {
                 arroy::Writer::new(self.quantized_db(), index, dimension).need_build(rtxn)
             } else {
@@ -101,7 +105,7 @@ impl ArroyWrapper {
         rng: &mut R,
         dimension: usize,
     ) -> Result<(), arroy::Error> {
-        for index in arroy_db_range_for_embedder(self.index) {
+        for index in arroy_db_range_for_embedder(self.embedder_index) {
             if self.quantized {
                 arroy::Writer::new(self.quantized_db(), index, dimension).build(wtxn, rng, None)?
             } else {
@@ -119,7 +123,9 @@ impl ArroyWrapper {
         embeddings: &Embeddings<f32>,
     ) -> Result<(), arroy::Error> {
         let dimension = embeddings.dimension();
-        for (index, vector) in arroy_db_range_for_embedder(self.index).zip(embeddings.iter()) {
+        for (index, vector) in
+            arroy_db_range_for_embedder(self.embedder_index).zip(embeddings.iter())
+        {
             if self.quantized {
                 arroy::Writer::new(self.quantized_db(), index, dimension)
                     .add_item(wtxn, item_id, vector)?
@@ -154,7 +160,7 @@ impl ArroyWrapper {
     ) -> Result<(), arroy::Error> {
         let dimension = vector.len();
 
-        for index in arroy_db_range_for_embedder(self.index) {
+        for index in arroy_db_range_for_embedder(self.embedder_index) {
             let writer = arroy::Writer::new(db, index, dimension);
             if !writer.contains_item(wtxn, item_id)? {
                 writer.add_item(wtxn, item_id, vector)?;
@@ -172,7 +178,7 @@ impl ArroyWrapper {
         dimension: usize,
         item_id: arroy::ItemId,
     ) -> Result<bool, arroy::Error> {
-        for index in arroy_db_range_for_embedder(self.index) {
+        for index in arroy_db_range_for_embedder(self.embedder_index) {
             if self.quantized {
                 let writer = arroy::Writer::new(self.quantized_db(), index, dimension);
                 if writer.del_item(wtxn, item_id)? {
@@ -213,7 +219,7 @@ impl ArroyWrapper {
         let dimension = vector.len();
         let mut deleted_index = None;
 
-        for index in arroy_db_range_for_embedder(self.index) {
+        for index in arroy_db_range_for_embedder(self.embedder_index) {
             let writer = arroy::Writer::new(db, index, dimension);
             let Some(candidate) = writer.item_vector(wtxn, item_id)? else {
                 // uses invariant: vectors are packed in the first writers.
@@ -228,7 +234,9 @@ impl ArroyWrapper {
         // 🥲 enforce invariant: vectors are packed in the first writers.
         if let Some(deleted_index) = deleted_index {
             let mut last_index_with_a_vector = None;
-            for index in arroy_db_range_for_embedder(self.index).skip(deleted_index as usize) {
+            for index in
+                arroy_db_range_for_embedder(self.embedder_index).skip(deleted_index as usize)
+            {
                 let writer = arroy::Writer::new(db, index, dimension);
                 let Some(candidate) = writer.item_vector(wtxn, item_id)? else {
                     break;
@@ -247,7 +255,7 @@ impl ArroyWrapper {
     }
 
     pub fn clear(&self, wtxn: &mut RwTxn, dimension: usize) -> Result<(), arroy::Error> {
-        for index in arroy_db_range_for_embedder(self.index) {
+        for index in arroy_db_range_for_embedder(self.embedder_index) {
             if self.quantized {
                 arroy::Writer::new(self.quantized_db(), index, dimension).clear(wtxn)?;
             } else {
@@ -258,7 +266,7 @@ impl ArroyWrapper {
     }
 
     pub fn is_empty(&self, rtxn: &RoTxn, dimension: usize) -> Result<bool, arroy::Error> {
-        for index in arroy_db_range_for_embedder(self.index) {
+        for index in arroy_db_range_for_embedder(self.embedder_index) {
             let empty = if self.quantized {
                 arroy::Writer::new(self.quantized_db(), index, dimension).is_empty(rtxn)?
             } else {
@@ -277,7 +285,7 @@ impl ArroyWrapper {
         dimension: usize,
         item: arroy::ItemId,
     ) -> Result<bool, arroy::Error> {
-        for index in arroy_db_range_for_embedder(self.index) {
+        for index in arroy_db_range_for_embedder(self.embedder_index) {
             let contains = if self.quantized {
                 arroy::Writer::new(self.quantized_db(), index, dimension)
                     .contains_item(rtxn, item)?
