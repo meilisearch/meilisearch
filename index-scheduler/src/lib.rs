@@ -1263,7 +1263,7 @@ impl IndexScheduler {
                     #[cfg(test)]
                     self.maybe_fail(tests::FailureLocation::UpdatingTaskAfterProcessBatchFailure)?;
 
-                    tracing::info!("Batch failed {}", error);
+                    tracing::error!("Batch failed {}", error);
 
                     self.update_task(&mut wtxn, &task)
                         .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?;
