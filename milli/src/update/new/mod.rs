@@ -10,7 +10,6 @@ mod document_change;
 mod extract;
 pub mod indexer;
 mod items_pool;
-mod lru;
 mod merger;
 mod top_level_map;
 mod word_fst_builder;

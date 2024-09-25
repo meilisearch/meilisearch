@@ -3313,15 +3313,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90ed8c1e510134f979dbc4f070f87d4313098b704861a105fe34231c70a3901c"
 
 [[package]]
-name = "lru"
-version = "0.12.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37ee39891760e7d94734f6f63fedc29a2e4a152f836120753a72503f09fcf904"
-dependencies = [
- "hashbrown 0.14.5",
-]
-
-[[package]]
 name = "lzma-rs"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3584,7 +3575,6 @@ dependencies = [
  "json-depth-checker",
  "levenshtein_automata",
  "liquid",
- "lru",
  "maplit",
  "md5",
  "meili-snap",

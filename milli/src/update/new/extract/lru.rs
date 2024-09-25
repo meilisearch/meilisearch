@@ -7,6 +7,7 @@ use std::num::NonZeroUsize;
 use hashbrown::hash_map::{DefaultHashBuilder, Entry};
 use hashbrown::HashMap;
 
+#[derive(Debug)]
 pub struct Lru<K, V, S = DefaultHashBuilder> {
     lookup: HashMap<K, usize, S>,
     storage: FixedSizeList<LruNode<K, V>>,
@@ -104,17 +105,20 @@ impl<K, V> Iterator for IntoIter<K, V> {
     }
 }
 
+#[derive(Debug)]
 struct LruNode<K, V> {
     key: K,
     value: V,
 }
 
+#[derive(Debug)]
 struct FixedSizeListNode<T> {
     prev: usize,
     next: usize,
     data: T,
 }
 
+#[derive(Debug)]
 struct FixedSizeList<T> {
     nodes: Box<[Option<FixedSizeListNode<T>>]>,
     // An un-ordered set of indices that are not in use in `nodes`.

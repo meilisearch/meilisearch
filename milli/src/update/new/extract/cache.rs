@@ -2,16 +2,16 @@ use std::mem;
 use std::num::NonZeroUsize;
 
 use grenad::{MergeFunction, Sorter};
-use lru::LruCache;
 use roaring::RoaringBitmap;
 use smallvec::SmallVec;
 
+use super::lru::Lru;
 use crate::update::del_add::{DelAdd, KvWriterDelAdd};
 use crate::CboRoaringBitmapCodec;
 
 #[derive(Debug)]
 pub struct CboCachedSorter<MF> {
-    cache: lru::LruCache<SmallVec<[u8; 20]>, DelAddRoaringBitmap>,
+    cache: Lru<SmallVec<[u8; 20]>, DelAddRoaringBitmap>,
     sorter: Sorter<MF>,
     deladd_buffer: Vec<u8>,
     cbo_buffer: Vec<u8>,
@@ -22,7 +22,7 @@ pub struct CboCachedSorter<MF> {
 impl<MF> CboCachedSorter<MF> {
     pub fn new(cap: NonZeroUsize, sorter: Sorter<MF>) -> Self {
         CboCachedSorter {
-            cache: lru::LruCache::new(cap),
+            cache: Lru::new(cap),
             sorter,
             deladd_buffer: Vec::new(),
             cbo_buffer: Vec::new(),
@@ -171,7 +171,7 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
     }
 
     pub fn into_sorter(mut self) -> grenad::Result<Sorter<MF>, MF::Error> {
-        let default_arc = LruCache::new(NonZeroUsize::MIN);
+        let default_arc = Lru::new(NonZeroUsize::MIN);
         for (key, deladd) in mem::replace(&mut self.cache, default_arc) {
             self.write_entry(key, deladd)?;
         }

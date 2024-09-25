@@ -1,5 +1,6 @@
 mod cache;
 mod faceted;
+mod lru;
 mod searchable;
 
 use std::fs::File;
@@ -9,12 +10,9 @@ use grenad::Merger;
 use rayon::iter::IntoParallelIterator;
 pub use searchable::*;
 
-use crate::{
-    update::{GrenadParameters, MergeDeladdCboRoaringBitmaps},
-    GlobalFieldsIdsMap, Index, Result,
-};
-
 use super::DocumentChange;
+use crate::update::{GrenadParameters, MergeDeladdCboRoaringBitmaps};
+use crate::{GlobalFieldsIdsMap, Index, Result};
 
 pub trait DocidsExtractor {
     fn run_extraction(

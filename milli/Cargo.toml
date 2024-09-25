@@ -40,7 +40,6 @@ heed = { version = "0.20.3", default-features = false, features = [
 indexmap = { version = "2.2.6", features = ["serde"] }
 json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
-lru = "0.12.3"
 memchr = "2.5.0"
 memmap2 = "0.9.4"
 obkv = { git = "https://github.com/kerollmops/obkv", branch = "unsized-kvreader" }
