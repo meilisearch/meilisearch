@@ -15,14 +15,14 @@ use serde_json::Value;
 use super::helpers::{create_writer, writer_into_reader, GrenadParameters};
 use crate::error::FaultSource;
 use crate::index::IndexEmbeddingConfig;
-use crate::prompt::Prompt;
+use crate::prompt::{FieldsIdsMapWithMetadata, Prompt};
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::vector::error::{EmbedErrorKind, PossibleEmbeddingMistakes, UnusedVectorsDistribution};
 use crate::vector::parsed_vectors::{ParsedVectorsDiff, VectorState, RESERVED_VECTORS_FIELD_NAME};
-use crate::vector::settings::{EmbedderAction, ReindexAction};
+use crate::vector::settings::ReindexAction;
 use crate::vector::{Embedder, Embeddings};
-use crate::{try_split_array_at, DocumentId, FieldId, FieldsIdsMap, Result, ThreadPoolNoAbort};
+use crate::{try_split_array_at, DocumentId, FieldId, Result, ThreadPoolNoAbort};
 
 /// The length of the elements that are always in the buffer when inserting new values.
 const TRUNCATE_SIZE: usize = size_of::<DocumentId>();
@@ -189,7 +189,13 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
     let reindex_vectors = settings_diff.reindex_vectors();
 
     let old_fields_ids_map = &settings_diff.old.fields_ids_map;
+    let old_fields_ids_map =
+        FieldsIdsMapWithMetadata::new(old_fields_ids_map, &settings_diff.old.searchable_fields_ids);
+
     let new_fields_ids_map = &settings_diff.new.fields_ids_map;
+    let new_fields_ids_map =
+        FieldsIdsMapWithMetadata::new(new_fields_ids_map, &settings_diff.new.searchable_fields_ids);
+
     // the vector field id may have changed
     let old_vectors_fid = old_fields_ids_map.id(RESERVED_VECTORS_FIELD_NAME);
 
@@ -202,65 +208,65 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
 
     if reindex_vectors {
         for (name, action) in settings_diff.embedding_config_updates.iter() {
-            match action {
-                EmbedderAction::WriteBackToDocuments(_) => continue, // already deleted
-                EmbedderAction::Reindex(action) => {
-                    let Some((embedder_name, (embedder, prompt))) = configs.remove_entry(name)
-                    else {
-                        tracing::error!(embedder = name, "Requested embedder config not found");
-                        continue;
-                    };
+            if let Some(action) = action.reindex() {
+                let Some((embedder_name, (embedder, prompt, _quantized))) =
+                    configs.remove_entry(name)
+                else {
+                    tracing::error!(embedder = name, "Requested embedder config not found");
+                    continue;
+                };
 
-                    // (docid, _index) -> KvWriterDelAdd -> Vector
-                    let manual_vectors_writer = create_writer(
-                        indexer.chunk_compression_type,
-                        indexer.chunk_compression_level,
-                        tempfile::tempfile()?,
-                    );
+                // (docid, _index) -> KvWriterDelAdd -> Vector
+                let manual_vectors_writer = create_writer(
+                    indexer.chunk_compression_type,
+                    indexer.chunk_compression_level,
+                    tempfile::tempfile()?,
+                );
 
-                    // (docid) -> (prompt)
-                    let prompts_writer = create_writer(
-                        indexer.chunk_compression_type,
-                        indexer.chunk_compression_level,
-                        tempfile::tempfile()?,
-                    );
+                // (docid) -> (prompt)
+                let prompts_writer = create_writer(
+                    indexer.chunk_compression_type,
+                    indexer.chunk_compression_level,
+                    tempfile::tempfile()?,
+                );
 
-                    // (docid) -> ()
-                    let remove_vectors_writer = create_writer(
-                        indexer.chunk_compression_type,
-                        indexer.chunk_compression_level,
-                        tempfile::tempfile()?,
-                    );
+                // (docid) -> ()
+                let remove_vectors_writer = create_writer(
+                    indexer.chunk_compression_type,
+                    indexer.chunk_compression_level,
+                    tempfile::tempfile()?,
+                );
 
-                    let action = match action {
-                        ReindexAction::FullReindex => ExtractionAction::SettingsFullReindex,
-                        ReindexAction::RegeneratePrompts => {
-                            let Some((_, old_prompt)) = old_configs.get(name) else {
-                                tracing::error!(embedder = name, "Old embedder config not found");
-                                continue;
-                            };
+                let action = match action {
+                    ReindexAction::FullReindex => ExtractionAction::SettingsFullReindex,
+                    ReindexAction::RegeneratePrompts => {
+                        let Some((_, old_prompt, _quantized)) = old_configs.get(name) else {
+                            tracing::error!(embedder = name, "Old embedder config not found");
+                            continue;
+                        };
 
-                            ExtractionAction::SettingsRegeneratePrompts { old_prompt }
-                        }
-                    };
+                        ExtractionAction::SettingsRegeneratePrompts { old_prompt }
+                    }
+                };
 
-                    extractors.push(EmbedderVectorExtractor {
-                        embedder_name,
-                        embedder,
-                        prompt,
-                        prompts_writer,
-                        remove_vectors_writer,
-                        manual_vectors_writer,
-                        add_to_user_provided: RoaringBitmap::new(),
-                        action,
-                    });
-                }
+                extractors.push(EmbedderVectorExtractor {
+                    embedder_name,
+                    embedder,
+                    prompt,
+                    prompts_writer,
+                    remove_vectors_writer,
+                    manual_vectors_writer,
+                    add_to_user_provided: RoaringBitmap::new(),
+                    action,
+                });
+            } else {
+                continue;
             }
         }
     } else {
         // document operation
 
-        for (embedder_name, (embedder, prompt)) in configs.into_iter() {
+        for (embedder_name, (embedder, prompt, _quantized)) in configs.into_iter() {
             // (docid, _index) -> KvWriterDelAdd -> Vector
             let manual_vectors_writer = create_writer(
                 indexer.chunk_compression_type,
@@ -376,7 +382,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                             );
                             continue;
                         }
-                        regenerate_prompt(obkv, prompt, new_fields_ids_map)?
+                        regenerate_prompt(obkv, prompt, &new_fields_ids_map)?
                     }
                 },
                 // prompt regeneration is only triggered for existing embedders
@@ -393,7 +399,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                         regenerate_if_prompt_changed(
                             obkv,
                             (old_prompt, prompt),
-                            (old_fields_ids_map, new_fields_ids_map),
+                            (&old_fields_ids_map, &new_fields_ids_map),
                         )?
                     } else {
                         // we can simply ignore user provided vectors as they are not regenerated and are
@@ -409,7 +415,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                     prompt,
                     (add_to_user_provided, remove_from_user_provided),
                     (old, new),
-                    (old_fields_ids_map, new_fields_ids_map),
+                    (&old_fields_ids_map, &new_fields_ids_map),
                     document_id,
                     embedder_name,
                     embedder_is_manual,
@@ -479,7 +485,10 @@ fn extract_vector_document_diff(
     prompt: &Prompt,
     (add_to_user_provided, remove_from_user_provided): (&mut RoaringBitmap, &mut RoaringBitmap),
     (old, new): (VectorState, VectorState),
-    (old_fields_ids_map, new_fields_ids_map): (&FieldsIdsMap, &FieldsIdsMap),
+    (old_fields_ids_map, new_fields_ids_map): (
+        &FieldsIdsMapWithMetadata,
+        &FieldsIdsMapWithMetadata,
+    ),
     document_id: impl Fn() -> Value,
     embedder_name: &str,
     embedder_is_manual: bool,
@@ -599,7 +608,10 @@ fn extract_vector_document_diff(
 fn regenerate_if_prompt_changed(
     obkv: &obkv::KvReader<FieldId>,
     (old_prompt, new_prompt): (&Prompt, &Prompt),
-    (old_fields_ids_map, new_fields_ids_map): (&FieldsIdsMap, &FieldsIdsMap),
+    (old_fields_ids_map, new_fields_ids_map): (
+        &FieldsIdsMapWithMetadata,
+        &FieldsIdsMapWithMetadata,
+    ),
 ) -> Result<VectorStateDelta> {
     let old_prompt =
         old_prompt.render(obkv, DelAdd::Deletion, old_fields_ids_map).unwrap_or(Default::default());
@@ -614,7 +626,7 @@ fn regenerate_if_prompt_changed(
 fn regenerate_prompt(
     obkv: &obkv::KvReader<FieldId>,
     prompt: &Prompt,
-    new_fields_ids_map: &FieldsIdsMap,
+    new_fields_ids_map: &FieldsIdsMapWithMetadata,
 ) -> Result<VectorStateDelta> {
     let prompt = prompt.render(obkv, DelAdd::Addition, new_fields_ids_map)?;
 

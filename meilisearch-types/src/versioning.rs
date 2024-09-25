@@ -10,36 +10,50 @@ static VERSION_MINOR: &str = env!("CARGO_PKG_VERSION_MINOR");
 static VERSION_PATCH: &str = env!("CARGO_PKG_VERSION_PATCH");
 
 /// Persists the version of the current Meilisearch binary to a VERSION file
-pub fn create_version_file(db_path: &Path) -> io::Result<()> {
+pub fn create_current_version_file(db_path: &Path) -> io::Result<()> {
+    create_version_file(db_path, VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH)
+}
+
+pub fn create_version_file(
+    db_path: &Path,
+    major: &str,
+    minor: &str,
+    patch: &str,
+) -> io::Result<()> {
     let version_path = db_path.join(VERSION_FILE_NAME);
-    fs::write(version_path, format!("{}.{}.{}", VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH))
+    fs::write(version_path, format!("{}.{}.{}", major, minor, patch))
 }
 
 /// Ensures Meilisearch version is compatible with the database, returns an error versions mismatch.
 pub fn check_version_file(db_path: &Path) -> anyhow::Result<()> {
-    let version_path = db_path.join(VERSION_FILE_NAME);
+    let (major, minor, patch) = get_version(db_path)?;
 
-    match fs::read_to_string(version_path) {
-        Ok(version) => {
-            let version_components = version.split('.').collect::<Vec<_>>();
-            let (major, minor, patch) = match &version_components[..] {
-                [major, minor, patch] => (major.to_string(), minor.to_string(), patch.to_string()),
-                _ => return Err(VersionFileError::MalformedVersionFile.into()),
-            };
-
-            if major != VERSION_MAJOR || minor != VERSION_MINOR {
-                return Err(VersionFileError::VersionMismatch { major, minor, patch }.into());
-            }
-        }
-        Err(error) => {
-            return match error.kind() {
-                ErrorKind::NotFound => Err(VersionFileError::MissingVersionFile.into()),
-                _ => Err(error.into()),
-            }
-        }
+    if major != VERSION_MAJOR || minor != VERSION_MINOR {
+        return Err(VersionFileError::VersionMismatch { major, minor, patch }.into());
     }
 
     Ok(())
+}
+
+pub fn get_version(db_path: &Path) -> Result<(String, String, String), VersionFileError> {
+    let version_path = db_path.join(VERSION_FILE_NAME);
+
+    match fs::read_to_string(version_path) {
+        Ok(version) => parse_version(&version),
+        Err(error) => match error.kind() {
+            ErrorKind::NotFound => Err(VersionFileError::MissingVersionFile),
+            _ => Err(error.into()),
+        },
+    }
+}
+
+pub fn parse_version(version: &str) -> Result<(String, String, String), VersionFileError> {
+    let version_components = version.split('.').collect::<Vec<_>>();
+    let (major, minor, patch) = match &version_components[..] {
+        [major, minor, patch] => (major.to_string(), minor.to_string(), patch.to_string()),
+        _ => return Err(VersionFileError::MalformedVersionFile),
+    };
+    Ok((major, minor, patch))
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -58,4 +72,7 @@ pub enum VersionFileError {
         env!("CARGO_PKG_VERSION").to_string()
     )]
     VersionMismatch { major: String, minor: String, patch: String },
+
+    #[error(transparent)]
+    IoError(#[from] std::io::Error),
 }

@@ -83,7 +83,7 @@ hf-hub = { git = "https://github.com/dureuill/hf-hub.git", branch = "rust_tls", 
 tiktoken-rs = "0.5.9"
 liquid = "0.26.6"
 rhai = { version = "1.19.0", features = ["serde", "no_module", "no_custom_syntax", "no_time", "sync"] }
-arroy = "0.4.0"
+arroy = { git = "https://github.com/meilisearch/arroy/", rev = "2386594dfb009ce08821a925ccc89fb8e30bf73d" }
 rand = "0.8.5"
 tracing = "0.1.40"
 ureq = { version = "2.10.0", features = ["json"] }
@@ -108,6 +108,8 @@ all-tokenizations = [
     "charabia/greek",
     "charabia/khmer",
     "charabia/vietnamese",
+    "charabia/swedish-recomposition",
+    "charabia/german-segmentation",
 ]
 
 # Use POSIX semaphores instead of SysV semaphores in LMDB
@@ -139,6 +141,9 @@ khmer = ["charabia/khmer"]
 
 # allow vietnamese specialized tokenization
 vietnamese = ["charabia/vietnamese"]
+
+# allow german specialized tokenization
+german = ["charabia/german-segmentation"]
 
 # force swedish character recomposition
 swedish-recomposition = ["charabia/swedish-recomposition"]

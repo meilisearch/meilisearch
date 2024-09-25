@@ -302,7 +302,8 @@ async fn create_mock_with_template(
         "source": "openAi",
         "url": url,
         "apiKey": API_KEY,
-        "documentTemplate": document_template
+        "documentTemplate": document_template,
+        "documentTemplateMaxBytes": 8000000,
     });
 
     model_dimensions.add_to_settings(&mut embedder_settings);
@@ -448,7 +449,7 @@ async fn it_works() {
     let (response, code) = index
         .search_post(json!({
             "q": "chien de chasse",
-            "hybrid": {"semanticRatio": 1.0}
+            "hybrid": {"semanticRatio": 1.0, "embedder": "default"},
         }))
         .await;
     snapshot!(code, @"200 OK");
@@ -488,7 +489,7 @@ async fn it_works() {
     let (response, code) = index
         .search_post(json!({
             "q": "petit chien",
-            "hybrid": {"semanticRatio": 1.0}
+            "hybrid": {"semanticRatio": 1.0, "embedder": "default"}
         }))
         .await;
     snapshot!(code, @"200 OK");
@@ -528,7 +529,7 @@ async fn it_works() {
     let (response, code) = index
         .search_post(json!({
             "q": "grand chien de berger des montagnes",
-            "hybrid": {"semanticRatio": 1.0}
+            "hybrid": {"semanticRatio": 1.0, "embedder": "default"}
         }))
         .await;
     snapshot!(code, @"200 OK");
@@ -615,7 +616,7 @@ async fn tokenize_long_text() {
             "q": "grand chien de berger des montagnes",
             "showRankingScore": true,
             "attributesToRetrieve": ["id"],
-            "hybrid": {"semanticRatio": 1.0}
+            "hybrid": {"semanticRatio": 1.0, "embedder": "default"}
         }))
         .await;
     snapshot!(code, @"200 OK");
@@ -693,6 +694,7 @@ async fn bad_api_key() {
             "model": "text-embedding-3-large",
             "apiKey": "XXX...",
             "documentTemplate": "{%- if doc.gender == \"F\" -%}Une chienne nommée {{doc.name}}, née en {{doc.birthyear}}\n        {%- else -%}\n        Un chien nommé {{doc.name}}, né en {{doc.birthyear}}\n        {%- endif %}, de race {{doc.breed}}.",
+            "documentTemplateMaxBytes": 8000000,
             "url": "[url]"
           }
         }
@@ -735,6 +737,7 @@ async fn bad_api_key() {
             "source": "openAi",
             "model": "text-embedding-3-large",
             "documentTemplate": "{%- if doc.gender == \"F\" -%}Une chienne nommée {{doc.name}}, née en {{doc.birthyear}}\n        {%- else -%}\n        Un chien nommé {{doc.name}}, né en {{doc.birthyear}}\n        {%- endif %}, de race {{doc.breed}}.",
+            "documentTemplateMaxBytes": 8000000,
             "url": "[url]"
           }
         }
@@ -1061,7 +1064,7 @@ async fn smaller_dimensions() {
     let (response, code) = index
         .search_post(json!({
             "q": "chien de chasse",
-            "hybrid": {"semanticRatio": 1.0}
+            "hybrid": {"semanticRatio": 1.0, "embedder": "default"}
         }))
         .await;
     snapshot!(code, @"200 OK");
@@ -1101,7 +1104,7 @@ async fn smaller_dimensions() {
     let (response, code) = index
         .search_post(json!({
             "q": "petit chien",
-            "hybrid": {"semanticRatio": 1.0}
+            "hybrid": {"semanticRatio": 1.0, "embedder": "default"}
         }))
         .await;
     snapshot!(code, @"200 OK");
@@ -1141,7 +1144,7 @@ async fn smaller_dimensions() {
     let (response, code) = index
         .search_post(json!({
             "q": "grand chien de berger des montagnes",
-            "hybrid": {"semanticRatio": 1.0}
+            "hybrid": {"semanticRatio": 1.0, "embedder": "default"}
         }))
         .await;
     snapshot!(code, @"200 OK");
@@ -1292,7 +1295,7 @@ async fn small_embedding_model() {
     let (response, code) = index
         .search_post(json!({
             "q": "chien de chasse",
-            "hybrid": {"semanticRatio": 1.0}
+            "hybrid": {"semanticRatio": 1.0, "embedder": "default"}
         }))
         .await;
     snapshot!(code, @"200 OK");
@@ -1332,7 +1335,7 @@ async fn small_embedding_model() {
     let (response, code) = index
         .search_post(json!({
             "q": "petit chien",
-            "hybrid": {"semanticRatio": 1.0}
+            "hybrid": {"semanticRatio": 1.0, "embedder": "default"}
         }))
         .await;
     snapshot!(code, @"200 OK");
@@ -1372,7 +1375,7 @@ async fn small_embedding_model() {
     let (response, code) = index
         .search_post(json!({
             "q": "grand chien de berger des montagnes",
-            "hybrid": {"semanticRatio": 1.0}
+            "hybrid": {"semanticRatio": 1.0, "embedder": "default"}
         }))
         .await;
     snapshot!(code, @"200 OK");
@@ -1522,7 +1525,7 @@ async fn legacy_embedding_model() {
     let (response, code) = index
         .search_post(json!({
             "q": "chien de chasse",
-            "hybrid": {"semanticRatio": 1.0}
+            "hybrid": {"semanticRatio": 1.0, "embedder": "default"}
         }))
         .await;
     snapshot!(code, @"200 OK");
@@ -1562,7 +1565,7 @@ async fn legacy_embedding_model() {
     let (response, code) = index
         .search_post(json!({
             "q": "petit chien",
-            "hybrid": {"semanticRatio": 1.0}
+            "hybrid": {"semanticRatio": 1.0, "embedder": "default"}
         }))
         .await;
     snapshot!(code, @"200 OK");
@@ -1602,7 +1605,7 @@ async fn legacy_embedding_model() {
     let (response, code) = index
         .search_post(json!({
             "q": "grand chien de berger des montagnes",
-            "hybrid": {"semanticRatio": 1.0}
+            "hybrid": {"semanticRatio": 1.0, "embedder": "default"}
         }))
         .await;
     snapshot!(code, @"200 OK");
@@ -1753,7 +1756,7 @@ async fn it_still_works() {
     let (response, code) = index
         .search_post(json!({
             "q": "chien de chasse",
-            "hybrid": {"semanticRatio": 1.0}
+            "hybrid": {"semanticRatio": 1.0, "embedder": "default"}
         }))
         .await;
     snapshot!(code, @"200 OK");
@@ -1793,7 +1796,7 @@ async fn it_still_works() {
     let (response, code) = index
         .search_post(json!({
             "q": "petit chien",
-            "hybrid": {"semanticRatio": 1.0}
+            "hybrid": {"semanticRatio": 1.0, "embedder": "default"}
         }))
         .await;
     snapshot!(code, @"200 OK");
@@ -1833,7 +1836,7 @@ async fn it_still_works() {
     let (response, code) = index
         .search_post(json!({
             "q": "grand chien de berger des montagnes",
-            "hybrid": {"semanticRatio": 1.0}
+            "hybrid": {"semanticRatio": 1.0, "embedder": "default"}
         }))
         .await;
     snapshot!(code, @"200 OK");

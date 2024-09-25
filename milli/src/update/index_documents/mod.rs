@@ -37,7 +37,7 @@ use crate::update::index_documents::parallel::ImmutableObkvs;
 use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
-use crate::vector::EmbeddingConfigs;
+use crate::vector::{ArroyWrapper, EmbeddingConfigs};
 use crate::{CboRoaringBitmapCodec, Index, Object, Result};
 
 static MERGED_DATABASE_COUNT: usize = 7;
@@ -673,6 +673,24 @@ where
         let number_of_documents = self.index.number_of_documents(self.wtxn)?;
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
 
+        // If an embedder wasn't used in the typedchunk but must be binary quantized
+        // we should insert it in `dimension`
+        for (name, action) in settings_diff.embedding_config_updates.iter() {
+            if action.is_being_quantized && !dimension.contains_key(name.as_str()) {
+                let index = self.index.embedder_category_id.get(self.wtxn, name)?.ok_or(
+                    InternalError::DatabaseMissingEntry {
+                        db_name: "embedder_category_id",
+                        key: None,
+                    },
+                )?;
+                let first_id = crate::vector::arroy_db_range_for_embedder(index).next().unwrap();
+                let reader =
+                    ArroyWrapper::new(self.index.vector_arroy, first_id, action.was_quantized);
+                let dim = reader.dimensions(self.wtxn)?;
+                dimension.insert(name.to_string(), dim);
+            }
+        }
+
         for (embedder_name, dimension) in dimension {
             let wtxn = &mut *self.wtxn;
             let vector_arroy = self.index.vector_arroy;
@@ -680,13 +698,23 @@ where
             let embedder_index = self.index.embedder_category_id.get(wtxn, &embedder_name)?.ok_or(
                 InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },
             )?;
+            let embedder_config = settings_diff.embedding_config_updates.get(&embedder_name);
+            let was_quantized = settings_diff
+                .old
+                .embedding_configs
+                .get(&embedder_name)
+                .map_or(false, |conf| conf.2);
+            let is_quantizing = embedder_config.map_or(false, |action| action.is_being_quantized);
 
             pool.install(|| {
                 for k in crate::vector::arroy_db_range_for_embedder(embedder_index) {
-                    let writer = arroy::Writer::new(vector_arroy, k, dimension);
-                    if writer.need_build(wtxn)? {
-                        writer.build(wtxn, &mut rng, None)?;
-                    } else if writer.is_empty(wtxn)? {
+                    let mut writer = ArroyWrapper::new(vector_arroy, k, was_quantized);
+                    if is_quantizing {
+                        writer.quantize(wtxn, k, dimension)?;
+                    }
+                    if writer.need_build(wtxn, dimension)? {
+                        writer.build(wtxn, &mut rng, dimension)?;
+                    } else if writer.is_empty(wtxn, dimension)? {
                         break;
                     }
                 }
@@ -2734,11 +2762,13 @@ mod tests {
                         api_key: Setting::NotSet,
                         dimensions: Setting::Set(3),
                         document_template: Setting::NotSet,
+                        document_template_max_bytes: Setting::NotSet,
                         url: Setting::NotSet,
                         request: Setting::NotSet,
                         response: Setting::NotSet,
                         distribution: Setting::NotSet,
                         headers: Setting::NotSet,
+                        binary_quantized: Setting::NotSet,
                     }),
                 );
                 settings.set_embedder_settings(embedders);
@@ -2767,7 +2797,7 @@ mod tests {
             std::sync::Arc::new(crate::vector::Embedder::new(embedder.embedder_options).unwrap());
         let res = index
             .search(&rtxn)
-            .semantic(embedder_name, embedder, Some([0.0, 1.0, 2.0].to_vec()))
+            .semantic(embedder_name, embedder, false, Some([0.0, 1.0, 2.0].to_vec()))
             .execute()
             .unwrap();
         assert_eq!(res.documents_ids.len(), 3);

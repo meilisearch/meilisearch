@@ -1,10 +1,13 @@
 mod error;
 
+use std::num::NonZeroUsize;
 use std::rc::Rc;
 use std::str::FromStr;
 
 use actix_web::http::header::ContentType;
+use actix_web::web::Data;
 use meili_snap::snapshot;
+use meilisearch::search_queue::SearchQueue;
 use meilisearch::{analytics, create_app, Opt, SubscriberForSecondLayer};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
@@ -40,10 +43,15 @@ async fn basic_test_log_stream_route() {
             .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
             .with_filter(tracing_subscriber::filter::LevelFilter::from_str("OFF").unwrap()),
     );
+    let search_queue = SearchQueue::new(
+        server.service.options.experimental_search_queue_size,
+        NonZeroUsize::new(1).unwrap(),
+    );
 
     let app = actix_web::test::init_service(create_app(
         server.service.index_scheduler.clone().into(),
         server.service.auth.clone().into(),
+        Data::new(search_queue),
         server.service.options.clone(),
         (route_layer_handle, stderr_layer_handle),
         analytics::MockAnalytics::new(&server.service.options),

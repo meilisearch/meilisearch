@@ -238,8 +238,14 @@ InvalidIndexLimit                     , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexOffset                    , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexPrimaryKey                , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexUid                       , InvalidRequest       , BAD_REQUEST ;
+InvalidMultiSearchFacets              , InvalidRequest       , BAD_REQUEST ;
+InvalidMultiSearchFacetsByIndex       , InvalidRequest       , BAD_REQUEST ;
+InvalidMultiSearchFacetOrder          , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchFederated           , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchFederationOptions   , InvalidRequest       , BAD_REQUEST ;
+InvalidMultiSearchMaxValuesPerFacet   , InvalidRequest       , BAD_REQUEST ;
+InvalidMultiSearchMergeFacets         , InvalidRequest       , BAD_REQUEST ;
+InvalidMultiSearchQueryFacets         , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryPagination     , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryRankingRules   , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchWeight              , InvalidRequest       , BAD_REQUEST ;
@@ -388,7 +394,11 @@ impl ErrorCode for milli::Error {
                     | UserError::InvalidOpenAiModelDimensionsMax { .. }
                     | UserError::InvalidSettingsDimensions { .. }
                     | UserError::InvalidUrl { .. }
-                    | UserError::InvalidPrompt(_) => Code::InvalidSettingsEmbedders,
+                    | UserError::InvalidSettingsDocumentTemplateMaxBytes { .. }
+                    | UserError::InvalidPrompt(_)
+                    | UserError::InvalidDisableBinaryQuantization { .. } => {
+                        Code::InvalidSettingsEmbedders
+                    }
                     UserError::TooManyEmbedders(_) => Code::InvalidSettingsEmbedders,
                     UserError::InvalidPromptForEmbeddings(..) => Code::InvalidSettingsEmbedders,
                     UserError::NoPrimaryKeyCandidateFound => Code::IndexPrimaryKeyNoCandidateFound,

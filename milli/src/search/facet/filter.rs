@@ -12,7 +12,7 @@ use serde_json::Value;
 use super::facet_range_search;
 use crate::error::{Error, UserError};
 use crate::heed_codec::facet::{
-    FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec, OrderedF64Codec,
+    FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec, OrderedF64Codec,
 };
 use crate::index::db_name::FACET_ID_STRING_DOCIDS;
 use crate::{
@@ -330,6 +330,24 @@ impl<'a> Filter<'a> {
                                 })
                                 .into()))
                             }
+                        }
+                    })
+                    .union()?;
+
+                return Ok(docids);
+            }
+            Condition::StartsWith { keyword: _, word } => {
+                let value = crate::normalize_facet(word.value());
+                let base = FacetGroupKey { field_id, level: 0, left_bound: value.as_str() };
+                let docids = strings_db
+                    .prefix_iter(rtxn, &base)?
+                    .map(|result| -> Result<RoaringBitmap> {
+                        match result {
+                            Ok((_facet_group_key, FacetGroupValue { bitmap, .. })) => Ok(bitmap),
+                            Err(_e) => Err(InternalError::from(SerializationError::Decoding {
+                                db_name: Some(FACET_ID_STRING_DOCIDS),
+                            })
+                            .into()),
                         }
                     })
                     .union()?;

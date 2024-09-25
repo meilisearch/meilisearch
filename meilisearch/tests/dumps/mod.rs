@@ -2097,7 +2097,8 @@ async fn generate_and_import_dump_containing_vectors() {
           "source": "huggingFace",
           "model": "sentence-transformers/all-MiniLM-L6-v2",
           "revision": "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
-          "documentTemplate": "{{doc.doggo}}"
+          "documentTemplate": "{{doc.doggo}}",
+          "documentTemplateMaxBytes": 400
         }
       },
       "searchCutoffMs": null,

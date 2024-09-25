@@ -21,7 +21,7 @@ use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec};
 use crate::order_by_map::OrderByMap;
 use crate::proximity::ProximityPrecision;
 use crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME;
-use crate::vector::{Embedding, EmbeddingConfig};
+use crate::vector::{ArroyWrapper, Embedding, EmbeddingConfig};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
@@ -162,7 +162,7 @@ pub struct Index {
     /// Maps an embedder name to its id in the arroy store.
     pub embedder_category_id: Database<Str, U8>,
     /// Vector store based on arroy™.
-    pub vector_arroy: arroy::Database<arroy::distances::Angular>,
+    pub vector_arroy: arroy::Database<Unspecified>,
 
     /// Maps the document id to the document as an obkv store.
     pub(crate) documents: Database<BEU32, ObkvCodec>,
@@ -1622,15 +1622,17 @@ impl Index {
         &'a self,
         rtxn: &'a RoTxn<'a>,
         embedder_id: u8,
-    ) -> impl Iterator<Item = Result<arroy::Reader<'a, arroy::distances::Angular>>> + 'a {
+        quantized: bool,
+    ) -> impl Iterator<Item = Result<ArroyWrapper>> + 'a {
         crate::vector::arroy_db_range_for_embedder(embedder_id).map_while(move |k| {
-            arroy::Reader::open(rtxn, k, self.vector_arroy)
-                .map(Some)
-                .or_else(|e| match e {
-                    arroy::Error::MissingMetadata(_) => Ok(None),
-                    e => Err(e.into()),
-                })
-                .transpose()
+            let reader = ArroyWrapper::new(self.vector_arroy, k, quantized);
+            // Here we don't care about the dimensions, but we want to know if we can read
+            // in the database or if its metadata are missing because there is no document with that many vectors.
+            match reader.dimensions(rtxn) {
+                Ok(_) => Some(Ok(reader)),
+                Err(arroy::Error::MissingMetadata(_)) => None,
+                Err(e) => Some(Err(e.into())),
+            }
         })
     }
 
@@ -1652,32 +1654,18 @@ impl Index {
         docid: DocumentId,
     ) -> Result<BTreeMap<String, Vec<Embedding>>> {
         let mut res = BTreeMap::new();
-        for row in self.embedder_category_id.iter(rtxn)? {
-            let (embedder_name, embedder_id) = row?;
-            let embedder_id = (embedder_id as u16) << 8;
-            let mut embeddings = Vec::new();
-            'vectors: for i in 0..=u8::MAX {
-                let reader = arroy::Reader::open(rtxn, embedder_id | (i as u16), self.vector_arroy)
-                    .map(Some)
-                    .or_else(|e| match e {
-                        arroy::Error::MissingMetadata(_) => Ok(None),
-                        e => Err(e),
-                    })
-                    .transpose();
-
-                let Some(reader) = reader else {
-                    break 'vectors;
-                };
-
-                let embedding = reader?.item_vector(rtxn, docid)?;
-                if let Some(embedding) = embedding {
-                    embeddings.push(embedding)
-                } else {
-                    break 'vectors;
-                }
-            }
-
-            res.insert(embedder_name.to_owned(), embeddings);
+        let embedding_configs = self.embedding_configs(rtxn)?;
+        for config in embedding_configs {
+            let embedder_id = self.embedder_category_id.get(rtxn, &config.name)?.unwrap();
+            let embeddings = self
+                .arroy_readers(rtxn, embedder_id, config.config.quantized())
+                .map_while(|reader| {
+                    reader
+                        .and_then(|r| r.item_vector(rtxn, docid).map_err(|e| e.into()))
+                        .transpose()
+                })
+                .collect::<Result<Vec<_>>>()?;
+            res.insert(config.name.to_owned(), embeddings);
         }
         Ok(res)
     }

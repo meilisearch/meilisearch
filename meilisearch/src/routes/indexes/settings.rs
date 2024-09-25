@@ -636,11 +636,26 @@ fn embedder_analytics(
             .any(|config| config.document_template.set().is_some())
     });
 
+    let document_template_max_bytes = setting.as_ref().and_then(|map| {
+        map.values()
+            .filter_map(|config| config.clone().set())
+            .filter_map(|config| config.document_template_max_bytes.set())
+            .max()
+    });
+
+    let binary_quantization_used = setting.as_ref().map(|map| {
+        map.values()
+            .filter_map(|config| config.clone().set())
+            .any(|config| config.binary_quantized.set().is_some())
+    });
+
     json!(
         {
             "total": setting.as_ref().map(|s| s.len()),
             "sources": sources,
             "document_template_used": document_template_used,
+            "document_template_max_bytes": document_template_max_bytes,
+            "binary_quantization_used": binary_quantization_used,
         }
     )
 }

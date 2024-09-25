@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use meili_snap::{json_string, snapshot};
@@ -19,6 +20,46 @@ async fn create_mock() -> (MockServer, Value) {
         .respond_with(move |_req: &Request| {
             let counter = counter.fetch_add(1, Ordering::Relaxed);
             ResponseTemplate::new(200).set_body_json(json!({ "data": vec![counter; 3] }))
+        })
+        .mount(&mock_server)
+        .await;
+    let url = mock_server.uri();
+
+    let embedder_settings = json!({
+        "source": "rest",
+        "url": url,
+        "dimensions": 3,
+        "request": "{{text}}",
+        "response": {
+          "data": "{{embedding}}"
+        }
+    });
+
+    (mock_server, embedder_settings)
+}
+
+async fn create_mock_map() -> (MockServer, Value) {
+    let mock_server = MockServer::start().await;
+
+    let text_to_embedding: BTreeMap<_, _> = vec![
+        // text -> embedding
+        ("name: kefir\n", [0.0, 0.1, 0.2]),
+    ]
+    // turn into btree
+    .into_iter()
+    .collect();
+
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .respond_with(move |req: &Request| {
+            let text: String = req.body_json().unwrap();
+            match text_to_embedding.get(text.as_str()) {
+                Some(embedding) => {
+                    ResponseTemplate::new(200).set_body_json(json!({ "data": embedding }))
+                }
+                None => ResponseTemplate::new(404)
+                    .set_body_json(json!({"error": "text not found", "text": text})),
+            }
         })
         .mount(&mock_server)
         .await;
@@ -1100,6 +1141,7 @@ async fn server_returns_bad_request() {
 
     let (response, code) = index
         .update_settings(json!({
+          "searchableAttributes": ["name", "missing_field"],
           "embedders": {
               "rest": json!({ "source": "rest", "url": mock.uri(), "request": "{{text}}", "response": "{{embedding}}", "dimensions": 3 }),
           },
@@ -1115,6 +1157,10 @@ async fn server_returns_bad_request() {
       "type": "settingsUpdate",
       "canceledBy": null,
       "details": {
+        "searchableAttributes": [
+          "name",
+          "missing_field"
+        ],
         "embedders": {
           "rest": {
             "source": "rest",
@@ -1148,7 +1194,7 @@ async fn server_returns_bad_request() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "While embedding documents for embedder `rest`: user error: sent a bad request to embedding server\n  - Hint: check that the `request` in the embedder configuration matches the remote server's API\n  - server replied with `{\"error\":\"Invalid request: invalid type: string \\\" id: 1\\\\n name: kefir\\\\n\\\", expected struct MultipleRequest at line 1 column 24\"}`",
+        "message": "While embedding documents for embedder `rest`: user error: sent a bad request to embedding server\n  - Hint: check that the `request` in the embedder configuration matches the remote server's API\n  - server replied with `{\"error\":\"Invalid request: invalid type: string \\\"name: kefir\\\\n\\\", expected struct MultipleRequest at line 1 column 15\"}`",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -1884,6 +1930,112 @@ async fn server_custom_header() {
         }
       },
       "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn searchable_reindex() {
+    let (_mock, setting) = create_mock_map().await;
+    let server = get_server_vector().await;
+    let index = server.index("doggo");
+
+    let (response, code) = index
+        .update_settings(json!({
+          "searchableAttributes": ["name", "missing_field"],
+          "embedders": {
+              "rest": setting,
+          },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "searchableAttributes": [
+          "name",
+          "missing_field"
+        ],
+        "embedders": {
+          "rest": {
+            "source": "rest",
+            "dimensions": 3,
+            "url": "[url]",
+            "request": "{{text}}",
+            "response": {
+              "data": "{{embedding}}"
+            }
+          }
+        }
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let (response, code) =
+        index.add_documents(json!( { "id": 1, "name": "kefir", "breed": "patou" }), None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // triggers reindexing with the new searchable attribute.
+    // as the mock intentionally doesn't know of this text, the task will fail, outputting the putative rendered text.
+    let (response, code) = index
+        .update_settings(json!({
+          "searchableAttributes": ["breed"],
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "searchableAttributes": [
+          "breed"
+        ]
+      },
+      "error": {
+        "message": "While embedding documents for embedder `rest`: error: received unexpected HTTP 404 from embedding server\n  - server replied with `{\"error\":\"text not found\",\"text\":\"breed: patou\\n\"}`",
+        "code": "vector_embedding_error",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",

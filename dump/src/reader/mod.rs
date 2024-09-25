@@ -255,6 +255,8 @@ pub(crate) mod test {
         }
         "###);
 
+        insta::assert_json_snapshot!(vector_index.settings().unwrap());
+
         {
             let documents: Result<Vec<_>> = vector_index.documents().unwrap().collect();
             let mut documents = documents.unwrap();

@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
@@ -8,7 +9,7 @@ use crate::error::{Code, ErrorCode};
 
 /// An index uid is composed of only ascii alphanumeric characters, - and _, between 1 and 400
 /// bytes long
-#[derive(Debug, Clone, PartialEq, Eq, Deserr)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserr, PartialOrd, Ord)]
 #[deserr(try_from(String) = IndexUid::try_from -> IndexUidFormatError)]
 pub struct IndexUid(String);
 
@@ -67,6 +68,12 @@ impl FromStr for IndexUid {
 impl From<IndexUid> for String {
     fn from(uid: IndexUid) -> Self {
         uid.into_inner()
+    }
+}
+
+impl Borrow<String> for IndexUid {
+    fn borrow(&self) -> &String {
+        &self.0
     }
 }
 

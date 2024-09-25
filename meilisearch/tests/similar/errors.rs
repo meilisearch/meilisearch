@@ -18,7 +18,7 @@ async fn similar_unexisting_index() {
     });
 
     index
-        .similar(json!({"id": 287947}), |response, code| {
+        .similar(json!({"id": 287947, "embedder": "manual"}), |response, code| {
             assert_eq!(code, 404);
             assert_eq!(response, expected_response);
         })
@@ -44,7 +44,7 @@ async fn similar_feature_not_enabled() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let (response, code) = index.similar_post(json!({"id": 287947})).await;
+    let (response, code) = index.similar_post(json!({"id": 287947, "embedder": "manual"})).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -199,7 +199,8 @@ async fn similar_not_found_id() {
     snapshot!(code, @"202 Accepted");
     server.wait_task(response.uid()).await;
 
-    let (response, code) = index.similar_post(json!({"id": "definitely-doesnt-exist"})).await;
+    let (response, code) =
+        index.similar_post(json!({"id": "definitely-doesnt-exist", "embedder": "manual"})).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -230,7 +231,8 @@ async fn similar_bad_offset() {
     snapshot!(code, @"202 Accepted");
     server.wait_task(response.uid()).await;
 
-    let (response, code) = index.similar_post(json!({"id": 287947, "offset": "doggo"})).await;
+    let (response, code) =
+        index.similar_post(json!({"id": 287947, "offset": "doggo", "embedder": "manual"})).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -241,7 +243,7 @@ async fn similar_bad_offset() {
     }
     "###);
 
-    let (response, code) = index.similar_get("?id=287947&offset=doggo").await;
+    let (response, code) = index.similar_get("?id=287947&offset=doggo&embedder=manual").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -272,7 +274,8 @@ async fn similar_bad_limit() {
     snapshot!(code, @"202 Accepted");
     server.wait_task(response.uid()).await;
 
-    let (response, code) = index.similar_post(json!({"id": 287947, "limit": "doggo"})).await;
+    let (response, code) =
+        index.similar_post(json!({"id": 287947, "limit": "doggo", "embedder": "manual"})).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -283,7 +286,7 @@ async fn similar_bad_limit() {
     }
     "###);
 
-    let (response, code) = index.similar_get("?id=287946&limit=doggo").await;
+    let (response, code) = index.similar_get("?id=287946&limit=doggo&embedder=manual").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -323,7 +326,8 @@ async fn similar_bad_filter() {
     snapshot!(code, @"202 Accepted");
     index.wait_task(value.uid()).await;
 
-    let (response, code) = index.similar_post(json!({ "id": 287947, "filter": true })).await;
+    let (response, code) =
+        index.similar_post(json!({ "id": 287947, "filter": true, "embedder": "manual" })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -361,10 +365,10 @@ async fn filter_invalid_syntax_object() {
     index.wait_task(value.uid()).await;
 
     index
-        .similar(json!({"id": 287947, "filter": "title & Glass"}), |response, code| {
+        .similar(json!({"id": 287947, "filter": "title & Glass", "embedder": "manual"}), |response, code| {
             snapshot!(response, @r###"
             {
-              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `_geoRadius`, or `_geoBoundingBox` at `title & Glass`.\n1:14 title & Glass",
+              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `title & Glass`.\n1:14 title & Glass",
               "code": "invalid_similar_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
@@ -400,10 +404,10 @@ async fn filter_invalid_syntax_array() {
     index.wait_task(value.uid()).await;
 
     index
-        .similar(json!({"id": 287947, "filter": ["title & Glass"]}), |response, code| {
+        .similar(json!({"id": 287947, "filter": ["title & Glass"], "embedder": "manual"}), |response, code| {
             snapshot!(response, @r###"
             {
-              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `_geoRadius`, or `_geoBoundingBox` at `title & Glass`.\n1:14 title & Glass",
+              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `title & Glass`.\n1:14 title & Glass",
               "code": "invalid_similar_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
@@ -446,7 +450,7 @@ async fn filter_invalid_syntax_string() {
     });
     index
         .similar(
-            json!({"id": 287947, "filter": "title = Glass XOR title = Glass"}),
+            json!({"id": 287947, "filter": "title = Glass XOR title = Glass", "embedder": "manual"}),
             |response, code| {
                 assert_eq!(response, expected_response);
                 assert_eq!(code, 400);
@@ -486,10 +490,13 @@ async fn filter_invalid_attribute_array() {
         "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
     });
     index
-        .similar(json!({"id": 287947, "filter": ["many = Glass"]}), |response, code| {
-            assert_eq!(response, expected_response);
-            assert_eq!(code, 400);
-        })
+        .similar(
+            json!({"id": 287947, "filter": ["many = Glass"], "embedder": "manual"}),
+            |response, code| {
+                assert_eq!(response, expected_response);
+                assert_eq!(code, 400);
+            },
+        )
         .await;
 }
 
@@ -524,10 +531,13 @@ async fn filter_invalid_attribute_string() {
         "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
     });
     index
-        .similar(json!({"id": 287947, "filter": "many = Glass"}), |response, code| {
-            assert_eq!(response, expected_response);
-            assert_eq!(code, 400);
-        })
+        .similar(
+            json!({"id": 287947, "filter": "many = Glass", "embedder": "manual"}),
+            |response, code| {
+                assert_eq!(response, expected_response);
+                assert_eq!(code, 400);
+            },
+        )
         .await;
 }
 
@@ -562,10 +572,13 @@ async fn filter_reserved_geo_attribute_array() {
         "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
     });
     index
-        .similar(json!({"id": 287947, "filter": ["_geo = Glass"]}), |response, code| {
-            assert_eq!(response, expected_response);
-            assert_eq!(code, 400);
-        })
+        .similar(
+            json!({"id": 287947, "filter": ["_geo = Glass"], "embedder": "manual"}),
+            |response, code| {
+                assert_eq!(response, expected_response);
+                assert_eq!(code, 400);
+            },
+        )
         .await;
 }
 
@@ -600,10 +613,13 @@ async fn filter_reserved_geo_attribute_string() {
         "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
     });
     index
-        .similar(json!({"id": 287947, "filter": "_geo = Glass"}), |response, code| {
-            assert_eq!(response, expected_response);
-            assert_eq!(code, 400);
-        })
+        .similar(
+            json!({"id": 287947, "filter": "_geo = Glass", "embedder": "manual"}),
+            |response, code| {
+                assert_eq!(response, expected_response);
+                assert_eq!(code, 400);
+            },
+        )
         .await;
 }
 
@@ -638,10 +654,13 @@ async fn filter_reserved_attribute_array() {
         "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
     });
     index
-        .similar(json!({"id": 287947, "filter": ["_geoDistance = Glass"]}), |response, code| {
-            assert_eq!(response, expected_response);
-            assert_eq!(code, 400);
-        })
+        .similar(
+            json!({"id": 287947, "filter": ["_geoDistance = Glass"], "embedder": "manual"}),
+            |response, code| {
+                assert_eq!(response, expected_response);
+                assert_eq!(code, 400);
+            },
+        )
         .await;
 }
 
@@ -676,10 +695,13 @@ async fn filter_reserved_attribute_string() {
         "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
     });
     index
-        .similar(json!({"id": 287947, "filter": "_geoDistance = Glass"}), |response, code| {
-            assert_eq!(response, expected_response);
-            assert_eq!(code, 400);
-        })
+        .similar(
+            json!({"id": 287947, "filter": "_geoDistance = Glass", "embedder": "manual"}),
+            |response, code| {
+                assert_eq!(response, expected_response);
+                assert_eq!(code, 400);
+            },
+        )
         .await;
 }
 
@@ -714,10 +736,13 @@ async fn filter_reserved_geo_point_array() {
         "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
     });
     index
-        .similar(json!({"id": 287947, "filter": ["_geoPoint = Glass"]}), |response, code| {
-            assert_eq!(response, expected_response);
-            assert_eq!(code, 400);
-        })
+        .similar(
+            json!({"id": 287947, "filter": ["_geoPoint = Glass"], "embedder": "manual"}),
+            |response, code| {
+                assert_eq!(response, expected_response);
+                assert_eq!(code, 400);
+            },
+        )
         .await;
 }
 
@@ -752,10 +777,13 @@ async fn filter_reserved_geo_point_string() {
         "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
     });
     index
-        .similar(json!({"id": 287947, "filter": "_geoPoint = Glass"}), |response, code| {
-            assert_eq!(response, expected_response);
-            assert_eq!(code, 400);
-        })
+        .similar(
+            json!({"id": 287947, "filter": "_geoPoint = Glass", "embedder": "manual"}),
+            |response, code| {
+                assert_eq!(response, expected_response);
+                assert_eq!(code, 400);
+            },
+        )
         .await;
 }
 
@@ -765,7 +793,8 @@ async fn similar_bad_retrieve_vectors() {
     server.set_features(json!({"vectorStore": true})).await;
     let index = server.index("test");
 
-    let (response, code) = index.similar_post(json!({"retrieveVectors": "doggo"})).await;
+    let (response, code) =
+        index.similar_post(json!({"retrieveVectors": "doggo", "embedder": "manual"})).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -776,7 +805,8 @@ async fn similar_bad_retrieve_vectors() {
     }
     "###);
 
-    let (response, code) = index.similar_post(json!({"retrieveVectors": [true]})).await;
+    let (response, code) =
+        index.similar_post(json!({"retrieveVectors": [true], "embedder": "manual"})).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
