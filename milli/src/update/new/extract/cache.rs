@@ -11,7 +11,7 @@ use crate::CboRoaringBitmapCodec;
 
 #[derive(Debug)]
 pub struct CboCachedSorter<MF> {
-    cache: Lru<SmallVec<[u8; 20]>, DelAddRoaringBitmap>,
+    cache: Lru<SmallVec<[u8; 8]>, DelAddRoaringBitmap>,
     sorter: Sorter<MF>,
     deladd_buffer: Vec<u8>,
     cbo_buffer: Vec<u8>,

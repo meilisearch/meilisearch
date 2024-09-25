@@ -59,10 +59,10 @@ impl<K: Clone + Eq + Hash, V, S: BuildHasher> Lru<K, V, S> {
             Entry::Vacant(vac) => {
                 let key = vac.key().clone();
                 if self.storage.is_full() {
-                    let idx = self.storage.back_idx();
                     // It's fine to unwrap here because:
                     // * the cache capacity is non zero
                     // * the cache is full
+                    let idx = self.storage.back_idx();
                     let node = self.storage.move_front(idx).unwrap();
                     let LruNode { key, value } = mem::replace(node, LruNode { key, value });
                     vac.insert(idx);
@@ -128,8 +128,8 @@ struct FixedSizeList<T> {
     // to find a free place.
     // TODO remove the free list as it is always growing:
     //      we cannot remove entries from the map.
-    //      Also, we probably do not need one of the front and back cursors.
     free: Vec<usize>,
+    // TODO Also, we probably do not need one of the front and back cursors.
     front: usize,
     back: usize,
 }
