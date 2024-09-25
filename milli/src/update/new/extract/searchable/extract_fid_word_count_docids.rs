@@ -31,7 +31,7 @@ impl SearchableExtractor for FidWordCountDocidsExtractor {
         index: &Index,
         document_tokenizer: &DocumentTokenizer,
         fields_ids_map: &mut GlobalFieldsIdsMap,
-        cached_sorter: &mut CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
+        cached_sorter: &mut CboCachedSorter,
         document_change: DocumentChange,
     ) -> Result<()> {
         let mut key_buffer = Vec::new();
@@ -52,7 +52,7 @@ impl SearchableExtractor for FidWordCountDocidsExtractor {
                 for (fid, count) in fid_word_count.iter() {
                     if *count <= MAX_COUNTED_WORDS {
                         let key = build_key(*fid, *count as u8, &mut key_buffer);
-                        cached_sorter.insert_del_u32(key, inner.docid())?;
+                        cached_sorter.insert_del_u32(key, inner.docid());
                     }
                 }
             }
@@ -85,11 +85,11 @@ impl SearchableExtractor for FidWordCountDocidsExtractor {
                     if *current_count != *new_count {
                         if *current_count <= MAX_COUNTED_WORDS {
                             let key = build_key(*fid, *current_count as u8, &mut key_buffer);
-                            cached_sorter.insert_del_u32(key, inner.docid())?;
+                            cached_sorter.insert_del_u32(key, inner.docid());
                         }
                         if *new_count <= MAX_COUNTED_WORDS {
                             let key = build_key(*fid, *new_count as u8, &mut key_buffer);
-                            cached_sorter.insert_add_u32(key, inner.docid())?;
+                            cached_sorter.insert_add_u32(key, inner.docid());
                         }
                     }
                 }
@@ -106,7 +106,7 @@ impl SearchableExtractor for FidWordCountDocidsExtractor {
                 for (fid, count) in fid_word_count.iter() {
                     if *count <= MAX_COUNTED_WORDS {
                         let key = build_key(*fid, *count as u8, &mut key_buffer);
-                        cached_sorter.insert_add_u32(key, inner.docid())?;
+                        cached_sorter.insert_add_u32(key, inner.docid());
                     }
                 }
             }

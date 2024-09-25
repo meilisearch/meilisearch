@@ -13,9 +13,9 @@ use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
 use tokenize_document::{tokenizer_builder, DocumentTokenizer};
 
 use super::cache::CboCachedSorter;
-use super::DocidsExtractor;
+use super::{DocidsExtractor, HashMapMerger};
 use crate::update::new::{DocumentChange, ItemsPool};
-use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
+use crate::update::{GrenadParameters, MergeDeladdCboRoaringBitmaps};
 use crate::{GlobalFieldsIdsMap, Index, Result, MAX_POSITION_PER_ATTRIBUTE};
 
 pub trait SearchableExtractor {
@@ -24,7 +24,7 @@ pub trait SearchableExtractor {
         fields_ids_map: &GlobalFieldsIdsMap,
         indexer: GrenadParameters,
         document_changes: impl IntoParallelIterator<Item = Result<DocumentChange>>,
-    ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>> {
+    ) -> Result<HashMapMerger> {
         let max_memory = indexer.max_memory_by_thread();
 
         let rtxn = index.read_txn()?;
@@ -60,18 +60,7 @@ pub trait SearchableExtractor {
                 index.read_txn()?,
                 &document_tokenizer,
                 fields_ids_map.clone(),
-                CboCachedSorter::new(
-                    // TODO use a better value
-                    1_000_000.try_into().unwrap(),
-                    create_sorter(
-                        grenad::SortAlgorithm::Stable,
-                        MergeDeladdCboRoaringBitmaps,
-                        indexer.chunk_compression_type,
-                        indexer.chunk_compression_level,
-                        indexer.max_nb_chunks,
-                        max_memory,
-                    ),
-                ),
+                CboCachedSorter::new(),
             ))
         });
 
@@ -93,7 +82,7 @@ pub trait SearchableExtractor {
             })?;
         }
         {
-            let mut builder = grenad::MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
+            let mut builder = HashMapMerger::new();
             let span =
                 tracing::trace_span!(target: "indexing::documents::extract", "merger_building");
             let _entered = span.enter();
@@ -102,14 +91,11 @@ pub trait SearchableExtractor {
                 .into_items()
                 .par_bridge()
                 .map(|(_rtxn, _tokenizer, _fields_ids_map, cached_sorter)| {
-                    let sorter = cached_sorter.into_sorter()?;
-                    sorter.into_reader_cursors()
+                    cached_sorter.into_sorter()
                 })
                 .collect();
-            for reader in readers {
-                builder.extend(reader?);
-            }
-            Ok(builder.build())
+            builder.extend(readers);
+            Ok(builder)
         }
     }
 
@@ -118,7 +104,7 @@ pub trait SearchableExtractor {
         index: &Index,
         document_tokenizer: &DocumentTokenizer,
         fields_ids_map: &mut GlobalFieldsIdsMap,
-        cached_sorter: &mut CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
+        cached_sorter: &mut CboCachedSorter,
         document_change: DocumentChange,
     ) -> Result<()>;
 
@@ -134,7 +120,7 @@ impl<T: SearchableExtractor> DocidsExtractor for T {
         fields_ids_map: &GlobalFieldsIdsMap,
         indexer: GrenadParameters,
         document_changes: impl IntoParallelIterator<Item = Result<DocumentChange>>,
-    ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>> {
+    ) -> Result<HashMapMerger> {
         Self::run_extraction(index, fields_ids_map, indexer, document_changes)
     }
 }

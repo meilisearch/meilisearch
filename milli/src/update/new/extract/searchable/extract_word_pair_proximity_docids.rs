@@ -2,7 +2,6 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 
 use heed::RoTxn;
-use itertools::merge_join_by;
 use obkv::KvReader;
 
 use super::tokenize_document::DocumentTokenizer;
@@ -10,7 +9,6 @@ use super::SearchableExtractor;
 use crate::proximity::{index_proximity, MAX_DISTANCE};
 use crate::update::new::extract::cache::CboCachedSorter;
 use crate::update::new::DocumentChange;
-use crate::update::MergeDeladdCboRoaringBitmaps;
 use crate::{FieldId, GlobalFieldsIdsMap, Index, Result};
 
 pub struct WordPairProximityDocidsExtractor;
@@ -33,7 +31,7 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
         index: &Index,
         document_tokenizer: &DocumentTokenizer,
         fields_ids_map: &mut GlobalFieldsIdsMap,
-        cached_sorter: &mut CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
+        cached_sorter: &mut CboCachedSorter,
         document_change: DocumentChange,
     ) -> Result<()> {
         let mut key_buffer = Vec::new();
@@ -96,14 +94,14 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
         del_word_pair_proximity.dedup_by(|(k1, _), (k2, _)| k1 == k2);
         for ((w1, w2), prox) in del_word_pair_proximity.iter() {
             let key = build_key(*prox, w1, w2, &mut key_buffer);
-            cached_sorter.insert_del_u32(key, docid)?;
+            cached_sorter.insert_del_u32(key, docid);
         }
 
         add_word_pair_proximity.sort_unstable();
         add_word_pair_proximity.dedup_by(|(k1, _), (k2, _)| k1 == k2);
         for ((w1, w2), prox) in add_word_pair_proximity.iter() {
             let key = build_key(*prox, w1, w2, &mut key_buffer);
-            cached_sorter.insert_add_u32(key, docid)?;
+            cached_sorter.insert_add_u32(key, docid);
         }
         Ok(())
     }

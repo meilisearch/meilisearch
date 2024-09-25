@@ -1,8 +1,5 @@
 use std::collections::HashSet;
-use std::fmt::Debug;
-use std::fs::File;
 
-use grenad::{MergeFunction, Merger};
 use heed::RoTxn;
 use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
 use serde_json::Value;
@@ -11,9 +8,9 @@ use super::super::cache::CboCachedSorter;
 use super::facet_document::extract_document_facets;
 use super::FacetKind;
 use crate::facet::value_encoding::f64_into_bytes;
-use crate::update::new::extract::DocidsExtractor;
+use crate::update::new::extract::{DocidsExtractor, HashMapMerger};
 use crate::update::new::{DocumentChange, ItemsPool};
-use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
+use crate::update::GrenadParameters;
 use crate::{DocumentId, FieldId, GlobalFieldsIdsMap, Index, Result, MAX_FACET_VALUE_LENGTH};
 pub struct FacetedDocidsExtractor;
 
@@ -24,7 +21,7 @@ impl FacetedDocidsExtractor {
         buffer: &mut Vec<u8>,
         fields_ids_map: &mut GlobalFieldsIdsMap,
         attributes_to_extract: &[&str],
-        cached_sorter: &mut CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
+        cached_sorter: &mut CboCachedSorter,
         document_change: DocumentChange,
     ) -> Result<()> {
         match document_change {
@@ -94,25 +91,20 @@ impl FacetedDocidsExtractor {
         }
     }
 
-    fn facet_fn_with_options<MF>(
+    fn facet_fn_with_options(
         buffer: &mut Vec<u8>,
-        cached_sorter: &mut CboCachedSorter<MF>,
-        cache_fn: impl Fn(&mut CboCachedSorter<MF>, &[u8], u32) -> grenad::Result<(), MF::Error>,
+        cached_sorter: &mut CboCachedSorter,
+        cache_fn: impl Fn(&mut CboCachedSorter, &[u8], u32),
         docid: DocumentId,
         fid: FieldId,
         value: &Value,
-    ) -> Result<()>
-    where
-        MF: MergeFunction,
-        MF::Error: Debug,
-        grenad::Error<MF::Error>: Into<crate::Error>,
-    {
+    ) -> Result<()> {
         // Exists
         // key: fid
         buffer.clear();
         buffer.push(FacetKind::Exists as u8);
         buffer.extend_from_slice(&fid.to_be_bytes());
-        cache_fn(cached_sorter, &*buffer, docid).map_err(Into::into)?;
+        cache_fn(cached_sorter, &*buffer, docid);
 
         match value {
             // Number
@@ -128,7 +120,7 @@ impl FacetedDocidsExtractor {
                     buffer.extend_from_slice(&ordered);
                     buffer.extend_from_slice(&n.to_be_bytes());
 
-                    cache_fn(cached_sorter, &*buffer, docid).map_err(Into::into)
+                    Ok(cache_fn(cached_sorter, &*buffer, docid))
                 } else {
                     Ok(())
                 }
@@ -142,7 +134,7 @@ impl FacetedDocidsExtractor {
                 buffer.extend_from_slice(&fid.to_be_bytes());
                 buffer.push(1); // level 0
                 buffer.extend_from_slice(truncated.as_bytes());
-                cache_fn(cached_sorter, &*buffer, docid).map_err(Into::into)
+                Ok(cache_fn(cached_sorter, &*buffer, docid))
             }
             // Null
             // key: fid
@@ -150,7 +142,7 @@ impl FacetedDocidsExtractor {
                 buffer.clear();
                 buffer.push(FacetKind::Null as u8);
                 buffer.extend_from_slice(&fid.to_be_bytes());
-                cache_fn(cached_sorter, &*buffer, docid).map_err(Into::into)
+                Ok(cache_fn(cached_sorter, &*buffer, docid))
             }
             // Empty
             // key: fid
@@ -158,13 +150,13 @@ impl FacetedDocidsExtractor {
                 buffer.clear();
                 buffer.push(FacetKind::Empty as u8);
                 buffer.extend_from_slice(&fid.to_be_bytes());
-                cache_fn(cached_sorter, &*buffer, docid).map_err(Into::into)
+                Ok(cache_fn(cached_sorter, &*buffer, docid))
             }
             Value::Object(o) if o.is_empty() => {
                 buffer.clear();
                 buffer.push(FacetKind::Empty as u8);
                 buffer.extend_from_slice(&fid.to_be_bytes());
-                cache_fn(cached_sorter, &*buffer, docid).map_err(Into::into)
+                Ok(cache_fn(cached_sorter, &*buffer, docid))
             }
             // Otherwise, do nothing
             /// TODO: What about Value::Bool?
@@ -196,7 +188,7 @@ impl DocidsExtractor for FacetedDocidsExtractor {
         fields_ids_map: &GlobalFieldsIdsMap,
         indexer: GrenadParameters,
         document_changes: impl IntoParallelIterator<Item = Result<DocumentChange>>,
-    ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>> {
+    ) -> Result<HashMapMerger> {
         let max_memory = indexer.max_memory_by_thread();
 
         let rtxn = index.read_txn()?;
@@ -205,23 +197,7 @@ impl DocidsExtractor for FacetedDocidsExtractor {
             attributes_to_extract.iter().map(|s| s.as_ref()).collect();
 
         let context_pool = ItemsPool::new(|| {
-            Ok((
-                index.read_txn()?,
-                fields_ids_map.clone(),
-                Vec::new(),
-                CboCachedSorter::new(
-                    // TODO use a better value
-                    100.try_into().unwrap(),
-                    create_sorter(
-                        grenad::SortAlgorithm::Stable,
-                        MergeDeladdCboRoaringBitmaps,
-                        indexer.chunk_compression_type,
-                        indexer.chunk_compression_level,
-                        indexer.max_nb_chunks,
-                        max_memory,
-                    ),
-                ),
-            ))
+            Ok((index.read_txn()?, fields_ids_map.clone(), Vec::new(), CboCachedSorter::new()))
         });
 
         {
@@ -243,7 +219,7 @@ impl DocidsExtractor for FacetedDocidsExtractor {
             })?;
         }
         {
-            let mut builder = grenad::MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
+            let mut builder = HashMapMerger::new();
             let span =
                 tracing::trace_span!(target: "indexing::documents::extract", "merger_building");
             let _entered = span.enter();
@@ -252,14 +228,13 @@ impl DocidsExtractor for FacetedDocidsExtractor {
                 .into_items()
                 .par_bridge()
                 .map(|(_rtxn, _tokenizer, _fields_ids_map, cached_sorter)| {
-                    let sorter = cached_sorter.into_sorter()?;
-                    sorter.into_reader_cursors()
+                    cached_sorter.into_sorter()
                 })
                 .collect();
-            for reader in readers {
-                builder.extend(reader?);
-            }
-            Ok(builder.build())
+
+            builder.extend(readers);
+
+            Ok(builder)
         }
     }
 }

@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-use heed::types::{Bytes, DecodeIgnore};
+use heed::types::Bytes;
 use heed::RoTxn;
 use memmap2::Mmap;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};

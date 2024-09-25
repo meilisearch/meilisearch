@@ -3,12 +3,15 @@ mod faceted;
 mod lru;
 mod searchable;
 
-use std::fs::File;
+use std::collections::HashMap;
+use std::mem;
 
 pub use faceted::*;
-use grenad::Merger;
+use grenad::MergeFunction;
 use rayon::iter::IntoParallelIterator;
+use rayon::slice::ParallelSliceMut as _;
 pub use searchable::*;
+use smallvec::SmallVec;
 
 use super::DocumentChange;
 use crate::update::{GrenadParameters, MergeDeladdCboRoaringBitmaps};
@@ -20,7 +23,67 @@ pub trait DocidsExtractor {
         fields_ids_map: &GlobalFieldsIdsMap,
         indexer: GrenadParameters,
         document_changes: impl IntoParallelIterator<Item = Result<DocumentChange>>,
-    ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>>;
+    ) -> Result<HashMapMerger>;
+}
+
+pub struct HashMapMerger {
+    maps: Vec<HashMap<SmallVec<[u8; cache::KEY_SIZE]>, cache::DelAddRoaringBitmap>>,
+}
+
+impl HashMapMerger {
+    pub fn new() -> HashMapMerger {
+        HashMapMerger { maps: Vec::new() }
+    }
+
+    pub fn extend<I>(&mut self, iter: I)
+    where
+        I: IntoIterator<
+            Item = HashMap<SmallVec<[u8; cache::KEY_SIZE]>, cache::DelAddRoaringBitmap>,
+        >,
+    {
+        self.maps.extend(iter);
+    }
+
+    pub fn iter<'h>(&'h self) -> Iter<'h> {
+        let mut entries: Vec<_> =
+            self.maps.iter().map(|m| m.iter()).flatten().map(|(k, v)| (k.as_slice(), v)).collect();
+        entries.par_sort_unstable_by_key(|(key, _)| *key);
+        Iter {
+            sorted_entries: entries.into_iter(),
+            current_key: None,
+            current_deladd: cache::DelAddRoaringBitmap::default(),
+        }
+    }
+}
+
+pub struct Iter<'h> {
+    sorted_entries: std::vec::IntoIter<(&'h [u8], &'h cache::DelAddRoaringBitmap)>,
+    current_key: Option<&'h [u8]>,
+    current_deladd: cache::DelAddRoaringBitmap,
+}
+
+impl<'h> Iterator for Iter<'h> {
+    type Item = (&'h [u8], cache::DelAddRoaringBitmap);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.sorted_entries.next() {
+                Some((k, other)) => {
+                    if self.current_key == Some(k) {
+                        self.current_deladd.merge_with(other);
+                    } else {
+                        let previous_key = self.current_key.replace(k);
+                        let previous_deladd = mem::replace(&mut self.current_deladd, other.clone());
+                        return previous_key.map(|ck| (ck, previous_deladd));
+                    }
+                }
+                None => {
+                    let current_deladd = mem::take(&mut self.current_deladd);
+                    return self.current_key.map(|ck| (ck, current_deladd));
+                }
+            }
+        }
+    }
 }
 
 /// TODO move in permissive json pointer

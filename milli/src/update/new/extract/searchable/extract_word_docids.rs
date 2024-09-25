@@ -11,6 +11,7 @@ use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use super::SearchableExtractor;
 use crate::update::new::extract::cache::CboCachedSorter;
 use crate::update::new::extract::perm_json_p::contained_in;
+use crate::update::new::extract::HashMapMerger;
 use crate::update::new::{DocumentChange, ItemsPool};
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
 use crate::{
@@ -39,14 +40,14 @@ where
         index: &Index,
         document_tokenizer: &DocumentTokenizer,
         fields_ids_map: &mut GlobalFieldsIdsMap,
-        cached_sorter: &mut CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
+        cached_sorter: &mut CboCachedSorter,
         document_change: DocumentChange,
     ) -> Result<()> {
         match document_change {
             DocumentChange::Deletion(inner) => {
                 let mut token_fn = |_fname: &str, fid, pos, word: &str| {
                     let key = Self::build_key(fid, pos, word);
-                    cached_sorter.insert_del_u32(&key, inner.docid()).map_err(crate::Error::from)
+                    Ok(cached_sorter.insert_del_u32(&key, inner.docid()))
                 };
                 document_tokenizer.tokenize_document(
                     inner.current(rtxn, index)?.unwrap(),
@@ -57,7 +58,7 @@ where
             DocumentChange::Update(inner) => {
                 let mut token_fn = |_fname: &str, fid, pos, word: &str| {
                     let key = Self::build_key(fid, pos, word);
-                    cached_sorter.insert_del_u32(&key, inner.docid()).map_err(crate::Error::from)
+                    Ok(cached_sorter.insert_del_u32(&key, inner.docid()))
                 };
                 document_tokenizer.tokenize_document(
                     inner.current(rtxn, index)?.unwrap(),
@@ -67,14 +68,14 @@ where
 
                 let mut token_fn = |_fname: &str, fid, pos, word: &str| {
                     let key = Self::build_key(fid, pos, word);
-                    cached_sorter.insert_add_u32(&key, inner.docid()).map_err(crate::Error::from)
+                    Ok(cached_sorter.insert_add_u32(&key, inner.docid()))
                 };
                 document_tokenizer.tokenize_document(inner.new(), fields_ids_map, &mut token_fn)?;
             }
             DocumentChange::Insertion(inner) => {
                 let mut token_fn = |_fname: &str, fid, pos, word: &str| {
                     let key = Self::build_key(fid, pos, word);
-                    cached_sorter.insert_add_u32(&key, inner.docid()).map_err(crate::Error::from)
+                    Ok(cached_sorter.insert_add_u32(&key, inner.docid()))
                 };
                 document_tokenizer.tokenize_document(inner.new(), fields_ids_map, &mut token_fn)?;
             }
@@ -193,11 +194,11 @@ impl ProtoWordDocidsExtractor for WordPositionDocidsExtractor {
 // V2
 
 struct WordDocidsCachedSorters {
-    word_fid_docids: CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
-    word_docids: CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
-    exact_word_docids: CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
-    word_position_docids: CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
-    fid_word_count_docids: CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
+    word_fid_docids: CboCachedSorter,
+    word_docids: CboCachedSorter,
+    exact_word_docids: CboCachedSorter,
+    word_position_docids: CboCachedSorter,
+    fid_word_count_docids: CboCachedSorter,
     fid_word_count: HashMap<FieldId, (usize, usize)>,
     current_docid: Option<DocumentId>,
 }
@@ -210,61 +211,11 @@ impl WordDocidsCachedSorters {
     ) -> Self {
         let max_memory = max_memory.map(|max_memory| max_memory / 4);
 
-        let word_fid_docids = CboCachedSorter::new(
-            capacity,
-            create_sorter(
-                grenad::SortAlgorithm::Stable,
-                MergeDeladdCboRoaringBitmaps,
-                indexer.chunk_compression_type,
-                indexer.chunk_compression_level,
-                indexer.max_nb_chunks,
-                max_memory,
-            ),
-        );
-        let word_docids = CboCachedSorter::new(
-            capacity,
-            create_sorter(
-                grenad::SortAlgorithm::Stable,
-                MergeDeladdCboRoaringBitmaps,
-                indexer.chunk_compression_type,
-                indexer.chunk_compression_level,
-                indexer.max_nb_chunks,
-                max_memory,
-            ),
-        );
-        let exact_word_docids = CboCachedSorter::new(
-            capacity,
-            create_sorter(
-                grenad::SortAlgorithm::Stable,
-                MergeDeladdCboRoaringBitmaps,
-                indexer.chunk_compression_type,
-                indexer.chunk_compression_level,
-                indexer.max_nb_chunks,
-                max_memory,
-            ),
-        );
-        let word_position_docids = CboCachedSorter::new(
-            capacity,
-            create_sorter(
-                grenad::SortAlgorithm::Stable,
-                MergeDeladdCboRoaringBitmaps,
-                indexer.chunk_compression_type,
-                indexer.chunk_compression_level,
-                indexer.max_nb_chunks,
-                max_memory,
-            ),
-        );
-        let fid_word_count_docids = CboCachedSorter::new(
-            capacity,
-            create_sorter(
-                grenad::SortAlgorithm::Stable,
-                MergeDeladdCboRoaringBitmaps,
-                indexer.chunk_compression_type,
-                indexer.chunk_compression_level,
-                indexer.max_nb_chunks,
-                max_memory,
-            ),
-        );
+        let word_fid_docids = CboCachedSorter::new();
+        let word_docids = CboCachedSorter::new();
+        let exact_word_docids = CboCachedSorter::new();
+        let word_position_docids = CboCachedSorter::new();
+        let fid_word_count_docids = CboCachedSorter::new();
 
         Self {
             word_fid_docids,
@@ -288,22 +239,22 @@ impl WordDocidsCachedSorters {
     ) -> Result<()> {
         let key = word.as_bytes();
         if exact {
-            self.exact_word_docids.insert_add_u32(key, docid)?;
+            self.exact_word_docids.insert_add_u32(key, docid);
         } else {
-            self.word_docids.insert_add_u32(key, docid)?;
+            self.word_docids.insert_add_u32(key, docid);
         }
 
         buffer.clear();
         buffer.extend_from_slice(word.as_bytes());
         buffer.push(0);
         buffer.extend_from_slice(&position.to_be_bytes());
-        self.word_fid_docids.insert_add_u32(buffer, docid)?;
+        self.word_fid_docids.insert_add_u32(buffer, docid);
 
         buffer.clear();
         buffer.extend_from_slice(word.as_bytes());
         buffer.push(0);
         buffer.extend_from_slice(&field_id.to_be_bytes());
-        self.word_position_docids.insert_add_u32(buffer, docid)?;
+        self.word_position_docids.insert_add_u32(buffer, docid);
 
         if self.current_docid.map_or(false, |id| docid != id) {
             self.flush_fid_word_count(buffer)?;
@@ -329,22 +280,22 @@ impl WordDocidsCachedSorters {
     ) -> Result<()> {
         let key = word.as_bytes();
         if exact {
-            self.exact_word_docids.insert_del_u32(key, docid)?;
+            self.exact_word_docids.insert_del_u32(key, docid);
         } else {
-            self.word_docids.insert_del_u32(key, docid)?;
+            self.word_docids.insert_del_u32(key, docid);
         }
 
         buffer.clear();
         buffer.extend_from_slice(word.as_bytes());
         buffer.push(0);
         buffer.extend_from_slice(&position.to_be_bytes());
-        self.word_fid_docids.insert_del_u32(buffer, docid)?;
+        self.word_fid_docids.insert_del_u32(buffer, docid);
 
         buffer.clear();
         buffer.extend_from_slice(word.as_bytes());
         buffer.push(0);
         buffer.extend_from_slice(&field_id.to_be_bytes());
-        self.word_position_docids.insert_del_u32(buffer, docid)?;
+        self.word_position_docids.insert_del_u32(buffer, docid);
 
         if self.current_docid.map_or(false, |id| docid != id) {
             self.flush_fid_word_count(buffer)?;
@@ -366,15 +317,13 @@ impl WordDocidsCachedSorters {
                     buffer.clear();
                     buffer.extend_from_slice(&fid.to_be_bytes());
                     buffer.push(current_count as u8);
-                    self.fid_word_count_docids
-                        .insert_del_u32(buffer, self.current_docid.unwrap())?;
+                    self.fid_word_count_docids.insert_del_u32(buffer, self.current_docid.unwrap());
                 }
                 if new_count <= MAX_COUNTED_WORDS {
                     buffer.clear();
                     buffer.extend_from_slice(&fid.to_be_bytes());
                     buffer.push(new_count as u8);
-                    self.fid_word_count_docids
-                        .insert_add_u32(buffer, self.current_docid.unwrap())?;
+                    self.fid_word_count_docids.insert_add_u32(buffer, self.current_docid.unwrap());
                 }
             }
         }
@@ -384,29 +333,29 @@ impl WordDocidsCachedSorters {
 }
 
 struct WordDocidsMergerBuilders {
-    word_fid_docids: MergerBuilder<File, MergeDeladdCboRoaringBitmaps>,
-    word_docids: MergerBuilder<File, MergeDeladdCboRoaringBitmaps>,
-    exact_word_docids: MergerBuilder<File, MergeDeladdCboRoaringBitmaps>,
-    word_position_docids: MergerBuilder<File, MergeDeladdCboRoaringBitmaps>,
-    fid_word_count_docids: MergerBuilder<File, MergeDeladdCboRoaringBitmaps>,
+    word_fid_docids: HashMapMerger,
+    word_docids: HashMapMerger,
+    exact_word_docids: HashMapMerger,
+    word_position_docids: HashMapMerger,
+    fid_word_count_docids: HashMapMerger,
 }
 
 pub struct WordDocidsMergers {
-    pub word_fid_docids: Merger<File, MergeDeladdCboRoaringBitmaps>,
-    pub word_docids: Merger<File, MergeDeladdCboRoaringBitmaps>,
-    pub exact_word_docids: Merger<File, MergeDeladdCboRoaringBitmaps>,
-    pub word_position_docids: Merger<File, MergeDeladdCboRoaringBitmaps>,
-    pub fid_word_count_docids: Merger<File, MergeDeladdCboRoaringBitmaps>,
+    pub word_fid_docids: HashMapMerger,
+    pub word_docids: HashMapMerger,
+    pub exact_word_docids: HashMapMerger,
+    pub word_position_docids: HashMapMerger,
+    pub fid_word_count_docids: HashMapMerger,
 }
 
 impl WordDocidsMergerBuilders {
     fn new() -> Self {
         Self {
-            word_fid_docids: MergerBuilder::new(MergeDeladdCboRoaringBitmaps),
-            word_docids: MergerBuilder::new(MergeDeladdCboRoaringBitmaps),
-            exact_word_docids: MergerBuilder::new(MergeDeladdCboRoaringBitmaps),
-            word_position_docids: MergerBuilder::new(MergeDeladdCboRoaringBitmaps),
-            fid_word_count_docids: MergerBuilder::new(MergeDeladdCboRoaringBitmaps),
+            word_fid_docids: HashMapMerger::new(),
+            word_docids: HashMapMerger::new(),
+            exact_word_docids: HashMapMerger::new(),
+            word_position_docids: HashMapMerger::new(),
+            fid_word_count_docids: HashMapMerger::new(),
         }
     }
 
@@ -421,49 +370,44 @@ impl WordDocidsMergerBuilders {
             current_docid: _,
         } = other;
 
-        let mut word_fid_docids_readers = Ok(vec![]);
-        let mut word_docids_readers = Ok(vec![]);
-        let mut exact_word_docids_readers = Ok(vec![]);
-        let mut word_position_docids_readers = Ok(vec![]);
-        let mut fid_word_count_docids_readers = Ok(vec![]);
+        let mut word_fid_docids_readers = HashMap::new();
+        let mut word_docids_readers = HashMap::new();
+        let mut exact_word_docids_readers = HashMap::new();
+        let mut word_position_docids_readers = HashMap::new();
+        let mut fid_word_count_docids_readers = HashMap::new();
         rayon::scope(|s| {
             s.spawn(|_| {
-                word_fid_docids_readers =
-                    word_fid_docids.into_sorter().and_then(|s| s.into_reader_cursors());
+                word_fid_docids_readers = word_fid_docids.into_sorter();
             });
             s.spawn(|_| {
-                word_docids_readers =
-                    word_docids.into_sorter().and_then(|s| s.into_reader_cursors());
+                word_docids_readers = word_docids.into_sorter();
             });
             s.spawn(|_| {
-                exact_word_docids_readers =
-                    exact_word_docids.into_sorter().and_then(|s| s.into_reader_cursors());
+                exact_word_docids_readers = exact_word_docids.into_sorter();
             });
             s.spawn(|_| {
-                word_position_docids_readers =
-                    word_position_docids.into_sorter().and_then(|s| s.into_reader_cursors());
+                word_position_docids_readers = word_position_docids.into_sorter();
             });
             s.spawn(|_| {
-                fid_word_count_docids_readers =
-                    fid_word_count_docids.into_sorter().and_then(|s| s.into_reader_cursors());
+                fid_word_count_docids_readers = fid_word_count_docids.into_sorter();
             });
         });
-        self.word_fid_docids.extend(word_fid_docids_readers?);
-        self.word_docids.extend(word_docids_readers?);
-        self.exact_word_docids.extend(exact_word_docids_readers?);
-        self.word_position_docids.extend(word_position_docids_readers?);
-        self.fid_word_count_docids.extend(fid_word_count_docids_readers?);
+        self.word_fid_docids.extend([word_fid_docids_readers]);
+        self.word_docids.extend([word_docids_readers]);
+        self.exact_word_docids.extend([exact_word_docids_readers]);
+        self.word_position_docids.extend([word_position_docids_readers]);
+        self.fid_word_count_docids.extend([fid_word_count_docids_readers]);
 
         Ok(())
     }
 
     fn build(self) -> WordDocidsMergers {
         WordDocidsMergers {
-            word_fid_docids: self.word_fid_docids.build(),
-            word_docids: self.word_docids.build(),
-            exact_word_docids: self.exact_word_docids.build(),
-            word_position_docids: self.word_position_docids.build(),
-            fid_word_count_docids: self.fid_word_count_docids.build(),
+            word_fid_docids: self.word_fid_docids,
+            word_docids: self.word_docids,
+            exact_word_docids: self.exact_word_docids,
+            word_position_docids: self.word_position_docids,
+            fid_word_count_docids: self.fid_word_count_docids,
         }
     }
 }

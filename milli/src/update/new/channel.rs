@@ -1,16 +1,13 @@
-use std::fs::File;
 use std::marker::PhantomData;
 
 use crossbeam_channel::{IntoIter, Receiver, SendError, Sender};
-use grenad::Merger;
 use heed::types::Bytes;
 use memmap2::Mmap;
 
-use super::extract::FacetKind;
+use super::extract::{FacetKind, HashMapMerger};
 use super::StdResult;
 use crate::index::main_key::{DOCUMENTS_IDS_KEY, WORDS_FST_KEY};
 use crate::update::new::KvReaderFieldId;
-use crate::update::MergeDeladdCboRoaringBitmaps;
 use crate::{DocumentId, Index};
 
 /// The capacity of the channel is currently in number of messages.
@@ -279,7 +276,7 @@ pub trait DatabaseType {
 }
 
 pub trait MergerOperationType {
-    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation;
+    fn new_merger_operation(merger: HashMapMerger) -> MergerOperation;
 }
 
 impl DatabaseType for ExactWordDocids {
@@ -287,7 +284,7 @@ impl DatabaseType for ExactWordDocids {
 }
 
 impl MergerOperationType for ExactWordDocids {
-    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
+    fn new_merger_operation(merger: HashMapMerger) -> MergerOperation {
         MergerOperation::ExactWordDocidsMerger(merger)
     }
 }
@@ -297,7 +294,7 @@ impl DatabaseType for FidWordCountDocids {
 }
 
 impl MergerOperationType for FidWordCountDocids {
-    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
+    fn new_merger_operation(merger: HashMapMerger) -> MergerOperation {
         MergerOperation::FidWordCountDocidsMerger(merger)
     }
 }
@@ -307,7 +304,7 @@ impl DatabaseType for WordDocids {
 }
 
 impl MergerOperationType for WordDocids {
-    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
+    fn new_merger_operation(merger: HashMapMerger) -> MergerOperation {
         MergerOperation::WordDocidsMerger(merger)
     }
 }
@@ -317,7 +314,7 @@ impl DatabaseType for WordFidDocids {
 }
 
 impl MergerOperationType for WordFidDocids {
-    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
+    fn new_merger_operation(merger: HashMapMerger) -> MergerOperation {
         MergerOperation::WordFidDocidsMerger(merger)
     }
 }
@@ -327,7 +324,7 @@ impl DatabaseType for WordPairProximityDocids {
 }
 
 impl MergerOperationType for WordPairProximityDocids {
-    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
+    fn new_merger_operation(merger: HashMapMerger) -> MergerOperation {
         MergerOperation::WordPairProximityDocidsMerger(merger)
     }
 }
@@ -337,13 +334,13 @@ impl DatabaseType for WordPositionDocids {
 }
 
 impl MergerOperationType for WordPositionDocids {
-    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
+    fn new_merger_operation(merger: HashMapMerger) -> MergerOperation {
         MergerOperation::WordPositionDocidsMerger(merger)
     }
 }
 
 impl MergerOperationType for FacetDocids {
-    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
+    fn new_merger_operation(merger: HashMapMerger) -> MergerOperation {
         MergerOperation::FacetDocidsMerger(merger)
     }
 }
@@ -442,13 +439,13 @@ impl DocumentsSender<'_> {
 }
 
 pub enum MergerOperation {
-    ExactWordDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
-    FidWordCountDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
-    WordDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
-    WordFidDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
-    WordPairProximityDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
-    WordPositionDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
-    FacetDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
+    ExactWordDocidsMerger(HashMapMerger),
+    FidWordCountDocidsMerger(HashMapMerger),
+    WordDocidsMerger(HashMapMerger),
+    WordFidDocidsMerger(HashMapMerger),
+    WordPairProximityDocidsMerger(HashMapMerger),
+    WordPositionDocidsMerger(HashMapMerger),
+    FacetDocidsMerger(HashMapMerger),
     DeleteDocument { docid: DocumentId },
     InsertDocument { docid: DocumentId, document: Box<KvReaderFieldId> },
     FinishedDocument,
@@ -474,7 +471,7 @@ impl ExtractorSender {
 
     pub fn send_searchable<D: MergerOperationType>(
         &self,
-        merger: Merger<File, MergeDeladdCboRoaringBitmaps>,
+        merger: HashMapMerger,
     ) -> StdResult<(), SendError<()>> {
         match self.0.send(D::new_merger_operation(merger)) {
             Ok(()) => Ok(()),

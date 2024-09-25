@@ -8,7 +8,7 @@ use heed::{Database, RoTxn};
 use roaring::RoaringBitmap;
 
 use super::channel::*;
-use super::extract::FacetKind;
+use super::extract::{FacetKind, HashMapMerger};
 use super::{Deletion, DocumentChange, Insertion, KvReaderDelAdd, KvReaderFieldId, Update};
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::MergerOperation;
@@ -238,21 +238,16 @@ impl GeoExtractor {
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
 fn merge_and_send_docids(
-    merger: Merger<File, MergeDeladdCboRoaringBitmaps>,
+    merger: HashMapMerger,
     database: Database<Bytes, Bytes>,
     rtxn: &RoTxn<'_>,
     buffer: &mut Vec<u8>,
     docids_sender: impl DocidsSender,
     mut register_key: impl FnMut(DelAdd, &[u8]) -> Result<()>,
 ) -> Result<()> {
-    let mut merger_iter = merger.into_stream_merger_iter().unwrap();
-    while let Some((key, deladd)) = merger_iter.next().unwrap() {
+    for (key, deladd) in merger.iter() {
         let current = database.get(rtxn, key)?;
-        let deladd: &KvReaderDelAdd = deladd.into();
-        let del = deladd.get(DelAdd::Deletion);
-        let add = deladd.get(DelAdd::Addition);
-
-        match merge_cbo_bitmaps(current, del, add)? {
+        match merge_cbo_bitmaps(current, deladd.del, deladd.add)? {
             Operation::Write(bitmap) => {
                 let value = cbo_bitmap_serialize_into_vec(&bitmap, buffer);
                 docids_sender.write(key, value).unwrap();
@@ -271,20 +266,15 @@ fn merge_and_send_docids(
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
 fn merge_and_send_facet_docids(
-    merger: Merger<File, MergeDeladdCboRoaringBitmaps>,
+    merger: HashMapMerger,
     database: FacetDatabases,
     rtxn: &RoTxn<'_>,
     buffer: &mut Vec<u8>,
     docids_sender: impl DocidsSender,
 ) -> Result<()> {
-    let mut merger_iter = merger.into_stream_merger_iter().unwrap();
-    while let Some((key, deladd)) = merger_iter.next().unwrap() {
+    for (key, deladd) in merger.iter() {
         let current = database.get(rtxn, key)?;
-        let deladd: &KvReaderDelAdd = deladd.into();
-        let del = deladd.get(DelAdd::Deletion);
-        let add = deladd.get(DelAdd::Addition);
-
-        match merge_cbo_bitmaps(current, del, add)? {
+        match merge_cbo_bitmaps(current, deladd.del, deladd.add)? {
             Operation::Write(bitmap) => {
                 let value = cbo_bitmap_serialize_into_vec(&bitmap, buffer);
                 docids_sender.write(key, value).unwrap();
@@ -348,12 +338,12 @@ enum Operation {
 /// A function that merges the DelAdd CboRoaringBitmaps with the current bitmap.
 fn merge_cbo_bitmaps(
     current: Option<&[u8]>,
-    del: Option<&[u8]>,
-    add: Option<&[u8]>,
+    del: Option<RoaringBitmap>,
+    add: Option<RoaringBitmap>,
 ) -> Result<Operation> {
     let current = current.map(CboRoaringBitmapCodec::deserialize_from).transpose()?;
-    let del = del.map(CboRoaringBitmapCodec::deserialize_from).transpose()?;
-    let add = add.map(CboRoaringBitmapCodec::deserialize_from).transpose()?;
+    // let del = del.map(CboRoaringBitmapCodec::deserialize_from).transpose()?;
+    // let add = add.map(CboRoaringBitmapCodec::deserialize_from).transpose()?;
 
     match (current, del, add) {
         (None, None, None) => Ok(Operation::Ignore), // but it's strange
