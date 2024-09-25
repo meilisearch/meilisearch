@@ -132,17 +132,17 @@ impl DelAddRoaringBitmap {
         DelAddRoaringBitmap { del: None, add: Some(RoaringBitmap::from([n])) }
     }
 
-    pub fn merge_with(&mut self, other: &DelAddRoaringBitmap) {
-        self.del = match (&self.del, &other.del) {
+    pub fn merge_with(&mut self, other: DelAddRoaringBitmap) {
+        self.del = match (self.del.take(), other.del) {
             (None, None) => None,
-            (None, Some(other)) => Some(other.clone()),
-            (Some(this), None) => Some(this.clone()),
+            (None, Some(other)) => Some(other),
+            (Some(this), None) => Some(this),
             (Some(this), Some(other)) => Some(this | other),
         };
-        self.add = match (&self.add, &other.add) {
+        self.add = match (self.add.take(), other.add) {
             (None, None) => None,
-            (None, Some(other)) => Some(other.clone()),
-            (Some(this), None) => Some(this.clone()),
+            (None, Some(other)) => Some(other),
+            (Some(this), None) => Some(this),
             (Some(this), Some(other)) => Some(this | other),
         };
     }

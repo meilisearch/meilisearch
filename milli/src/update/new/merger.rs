@@ -245,17 +245,17 @@ fn merge_and_send_docids(
     docids_sender: impl DocidsSender,
     mut register_key: impl FnMut(DelAdd, &[u8]) -> Result<()>,
 ) -> Result<()> {
-    for (key, deladd) in merger.iter() {
-        let current = database.get(rtxn, key)?;
+    for (key, deladd) in merger.into_iter() {
+        let current = database.get(rtxn, &key)?;
         match merge_cbo_bitmaps(current, deladd.del, deladd.add)? {
             Operation::Write(bitmap) => {
                 let value = cbo_bitmap_serialize_into_vec(&bitmap, buffer);
-                docids_sender.write(key, value).unwrap();
-                register_key(DelAdd::Addition, key)?;
+                docids_sender.write(&key, value).unwrap();
+                register_key(DelAdd::Addition, &key)?;
             }
             Operation::Delete => {
-                docids_sender.delete(key).unwrap();
-                register_key(DelAdd::Deletion, key)?;
+                docids_sender.delete(&key).unwrap();
+                register_key(DelAdd::Deletion, &key)?;
             }
             Operation::Ignore => (),
         }
@@ -272,15 +272,15 @@ fn merge_and_send_facet_docids(
     buffer: &mut Vec<u8>,
     docids_sender: impl DocidsSender,
 ) -> Result<()> {
-    for (key, deladd) in merger.iter() {
-        let current = database.get(rtxn, key)?;
+    for (key, deladd) in merger.into_iter() {
+        let current = database.get(rtxn, &key)?;
         match merge_cbo_bitmaps(current, deladd.del, deladd.add)? {
             Operation::Write(bitmap) => {
                 let value = cbo_bitmap_serialize_into_vec(&bitmap, buffer);
-                docids_sender.write(key, value).unwrap();
+                docids_sender.write(&key, value).unwrap();
             }
             Operation::Delete => {
-                docids_sender.delete(key).unwrap();
+                docids_sender.delete(&key).unwrap();
             }
             Operation::Ignore => (),
         }

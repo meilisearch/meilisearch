@@ -43,12 +43,16 @@ impl HashMapMerger {
     {
         self.maps.extend(iter);
     }
+}
 
-    pub fn iter(&self) -> Iter<'_> {
-        let mut entries: Vec<_> =
-            self.maps.iter().flat_map(|m| m.iter()).map(|(k, v)| (k.as_slice(), v)).collect();
-        entries.par_sort_unstable_by_key(|(key, _)| *key);
-        Iter {
+impl IntoIterator for HashMapMerger {
+    type Item = (SmallVec<[u8; 12]>, cache::DelAddRoaringBitmap);
+    type IntoIter = IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let mut entries: Vec<_> = self.maps.into_iter().flat_map(|m| m.into_iter()).collect();
+        entries.par_sort_unstable_by(|(ka, _), (kb, _)| ka.cmp(kb));
+        IntoIter {
             sorted_entries: entries.into_iter(),
             current_key: None,
             current_deladd: cache::DelAddRoaringBitmap::default(),
@@ -56,24 +60,24 @@ impl HashMapMerger {
     }
 }
 
-pub struct Iter<'h> {
-    sorted_entries: std::vec::IntoIter<(&'h [u8], &'h cache::DelAddRoaringBitmap)>,
-    current_key: Option<&'h [u8]>,
+pub struct IntoIter {
+    sorted_entries: std::vec::IntoIter<(SmallVec<[u8; 12]>, cache::DelAddRoaringBitmap)>,
+    current_key: Option<SmallVec<[u8; 12]>>,
     current_deladd: cache::DelAddRoaringBitmap,
 }
 
-impl<'h> Iterator for Iter<'h> {
-    type Item = (&'h [u8], cache::DelAddRoaringBitmap);
+impl Iterator for IntoIter {
+    type Item = (SmallVec<[u8; 12]>, cache::DelAddRoaringBitmap);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.sorted_entries.next() {
-                Some((k, other)) => {
-                    if self.current_key == Some(k) {
-                        self.current_deladd.merge_with(other);
+                Some((k, deladd)) => {
+                    if self.current_key.as_deref() == Some(k.as_slice()) {
+                        self.current_deladd.merge_with(deladd);
                     } else {
                         let previous_key = self.current_key.replace(k);
-                        let previous_deladd = mem::replace(&mut self.current_deladd, other.clone());
+                        let previous_deladd = mem::replace(&mut self.current_deladd, deladd);
                         if let Some(previous_key) = previous_key {
                             return Some((previous_key, previous_deladd));
                         }
@@ -81,7 +85,7 @@ impl<'h> Iterator for Iter<'h> {
                 }
                 None => {
                     let current_deladd = mem::take(&mut self.current_deladd);
-                    return self.current_key.map(|ck| (ck, current_deladd));
+                    return self.current_key.take().map(|ck| (ck, current_deladd));
                 }
             }
         }
