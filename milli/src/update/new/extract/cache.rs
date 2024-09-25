@@ -9,9 +9,11 @@ use super::lru::Lru;
 use crate::update::del_add::{DelAdd, KvWriterDelAdd};
 use crate::CboRoaringBitmapCodec;
 
+const KEY_SIZE: usize = 8;
+
 #[derive(Debug)]
 pub struct CboCachedSorter<MF> {
-    cache: Lru<SmallVec<[u8; 8]>, DelAddRoaringBitmap>,
+    cache: Lru<SmallVec<[u8; KEY_SIZE]>, DelAddRoaringBitmap>,
     sorter: Sorter<MF>,
     deladd_buffer: Vec<u8>,
     cbo_buffer: Vec<u8>,
@@ -40,7 +42,7 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
             }
             None => {
                 self.total_insertions += 1;
-                self.fitted_in_key += (key.len() <= 20) as usize;
+                self.fitted_in_key += (key.len() <= KEY_SIZE) as usize;
                 let value = DelAddRoaringBitmap::new_del_u32(n);
                 if let Some((key, deladd)) = self.cache.push(key.into(), value) {
                     self.write_entry(key, deladd)?;
@@ -62,7 +64,7 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
             }
             None => {
                 self.total_insertions += 1;
-                self.fitted_in_key += (key.len() <= 20) as usize;
+                self.fitted_in_key += (key.len() <= KEY_SIZE) as usize;
                 let value = DelAddRoaringBitmap::new_del(bitmap);
                 if let Some((key, deladd)) = self.cache.push(key.into(), value) {
                     self.write_entry(key, deladd)?;
@@ -80,7 +82,7 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
             }
             None => {
                 self.total_insertions += 1;
-                self.fitted_in_key += (key.len() <= 20) as usize;
+                self.fitted_in_key += (key.len() <= KEY_SIZE) as usize;
                 let value = DelAddRoaringBitmap::new_add_u32(n);
                 if let Some((key, deladd)) = self.cache.push(key.into(), value) {
                     self.write_entry(key, deladd)?;
@@ -102,7 +104,7 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
             }
             None => {
                 self.total_insertions += 1;
-                self.fitted_in_key += (key.len() <= 20) as usize;
+                self.fitted_in_key += (key.len() <= KEY_SIZE) as usize;
                 let value = DelAddRoaringBitmap::new_add(bitmap);
                 if let Some((key, deladd)) = self.cache.push(key.into(), value) {
                     self.write_entry(key, deladd)?;
@@ -121,7 +123,7 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
             }
             None => {
                 self.total_insertions += 1;
-                self.fitted_in_key += (key.len() <= 20) as usize;
+                self.fitted_in_key += (key.len() <= KEY_SIZE) as usize;
                 let value = DelAddRoaringBitmap::new_del_add_u32(n);
                 if let Some((key, deladd)) = self.cache.push(key.into(), value) {
                     self.write_entry(key, deladd)?;
@@ -177,7 +179,7 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
         }
 
         eprintln!(
-            "LruCache stats: {} <= 20 bytes ({}%) on a total of {} insertions",
+            "LruCache stats: {} <= {KEY_SIZE} bytes ({}%) on a total of {} insertions",
             self.fitted_in_key,
             (self.fitted_in_key as f32 / self.total_insertions as f32) * 100.0,
             self.total_insertions,
