@@ -1,20 +1,18 @@
 use std::fs::File;
-use std::io::{self, BufWriter};
+use std::io::{self};
 
 use bincode::ErrorKind;
-use fst::{Set, SetBuilder, Streamer};
 use grenad::Merger;
 use heed::types::Bytes;
 use heed::{Database, RoTxn};
-use memmap2::Mmap;
 use roaring::RoaringBitmap;
-use tempfile::tempfile;
 
 use super::channel::*;
 use super::extract::FacetKind;
 use super::{Deletion, DocumentChange, Insertion, KvReaderDelAdd, KvReaderFieldId, Update};
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::MergerOperation;
+use crate::update::new::word_fst_builder::WordFstBuilder;
 use crate::update::MergeDeladdCboRoaringBitmaps;
 use crate::{CboRoaringBitmapCodec, Error, GeoPoint, GlobalFieldsIdsMap, Index, Result};
 
@@ -82,8 +80,8 @@ pub fn merge_grenad_entries(
                         tracing::trace_span!(target: "indexing::documents::merge", "words_fst");
                     let _entered = span.enter();
 
-                    let mmap = word_fst_builder.build()?;
-                    sender.main().write_words_fst(mmap).unwrap();
+                    let (word_fst_mmap, prefix_fst_mmap) = word_fst_builder.build()?;
+                    sender.main().write_words_fst(word_fst_mmap).unwrap();
                 }
             }
             MergerOperation::WordFidDocidsMerger(merger) => {
@@ -188,142 +186,6 @@ pub fn merge_grenad_entries(
     // ...
 
     Ok(())
-}
-
-struct WordFstBuilder<'a> {
-    stream: fst::set::Stream<'a>,
-    word_fst_builder: SetBuilder<BufWriter<File>>,
-    prefix_fst_builders: Vec<SetBuilder<BufWriter<File>>>,
-    max_prefix_length: usize,
-    last_word: Vec<u8>,
-}
-
-impl<'a> WordFstBuilder<'a> {
-    pub fn new(
-        words_fst: &'a Set<std::borrow::Cow<'a, [u8]>>,
-        max_prefix_length: usize,
-    ) -> Result<Self> {
-        let mut prefix_fst_builders = Vec::new();
-        for _ in 0..max_prefix_length {
-            prefix_fst_builders.push(SetBuilder::new(BufWriter::new(tempfile()?))?);
-        }
-
-        Ok(Self {
-            stream: words_fst.stream(),
-            word_fst_builder: SetBuilder::new(BufWriter::new(tempfile()?))?,
-            prefix_fst_builders,
-            max_prefix_length,
-            last_word: Vec::new(),
-        })
-    }
-
-    pub fn register_word(&mut self, deladd: DelAdd, key: &[u8]) -> Result<()> {
-        match deladd {
-            DelAdd::Addition => self.add_word(key),
-            DelAdd::Deletion => self.del_word(key),
-        }
-    }
-
-    pub fn add_word(&mut self, word: &[u8]) -> Result<()> {
-        if !self.last_word.is_empty() {
-            let next = self.last_word.as_slice();
-            match next.cmp(word) {
-                std::cmp::Ordering::Less => {
-                    // We need to insert the last word from the current fst
-                    self.word_fst_builder.insert(next)?;
-                    self.last_word.clear();
-                }
-                std::cmp::Ordering::Equal => {
-                    // We insert the word and drop the last word
-                    self.word_fst_builder.insert(next)?;
-                    self.last_word.clear();
-                    return Ok(());
-                }
-                std::cmp::Ordering::Greater => {
-                    // We insert the word and keep the last word
-                    self.word_fst_builder.insert(word)?;
-
-                    return Ok(());
-                }
-            }
-        }
-
-        while let Some(next) = self.stream.next() {
-            match next.cmp(word) {
-                std::cmp::Ordering::Less => {
-                    // We need to insert the last word from the current fst
-                    self.word_fst_builder.insert(next)?;
-                }
-                std::cmp::Ordering::Equal => {
-                    // We insert the word
-                    self.word_fst_builder.insert(next)?;
-
-                    return Ok(());
-                }
-                std::cmp::Ordering::Greater => {
-                    // We insert the word and keep the last word
-                    self.word_fst_builder.insert(word)?;
-                    self.last_word.clear();
-                    self.last_word.extend_from_slice(next);
-
-                    return Ok(());
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    pub fn del_word(&mut self, word: &[u8]) -> Result<()> {
-        if !self.last_word.is_empty() {
-            let next = self.last_word.as_slice();
-            match next.cmp(word) {
-                std::cmp::Ordering::Less => {
-                    // We insert the word from the current fst because the next word to delete is greater
-                    self.word_fst_builder.insert(next)?;
-                    self.last_word.clear();
-                }
-                std::cmp::Ordering::Equal => {
-                    // We delete the word by not inserting it in the new fst and drop the last word
-                    self.last_word.clear();
-                    return Ok(());
-                }
-                std::cmp::Ordering::Greater => {
-                    // keep the current word until the next word to delete is greater or equal
-                    return Ok(());
-                }
-            }
-        }
-
-        while let Some(next) = self.stream.next() {
-            match next.cmp(word) {
-                std::cmp::Ordering::Less => {
-                    // We insert the word from the current fst because the next word to delete is greater
-                    self.word_fst_builder.insert(next)?;
-                }
-                std::cmp::Ordering::Equal => {
-                    // We delete the word by not inserting it in the new fst and drop the last word
-                    return Ok(());
-                }
-                std::cmp::Ordering::Greater => {
-                    // keep the current word until the next word to delete is greater or equal
-                    self.last_word.clear();
-                    self.last_word.extend_from_slice(next);
-
-                    return Ok(());
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    pub fn build(mut self) -> Result<Mmap> {
-        let words_fst_file = self.word_fst_builder.into_inner()?.into_inner().unwrap();
-        let words_fst_mmap = unsafe { Mmap::map(&words_fst_file)? };
-
-        Ok(words_fst_mmap)
-    }
 }
 
 pub struct GeoExtractor {

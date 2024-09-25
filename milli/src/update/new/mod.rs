@@ -12,6 +12,7 @@ pub mod indexer;
 mod items_pool;
 mod merger;
 mod top_level_map;
+mod word_fst_builder;
 
 /// TODO move them elsewhere
 pub type StdResult<T, E> = std::result::Result<T, E>;
