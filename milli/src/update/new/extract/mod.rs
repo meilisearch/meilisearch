@@ -44,9 +44,9 @@ impl HashMapMerger {
         self.maps.extend(iter);
     }
 
-    pub fn iter<'h>(&'h self) -> Iter<'h> {
+    pub fn iter(&self) -> Iter<'_> {
         let mut entries: Vec<_> =
-            self.maps.iter().map(|m| m.iter()).flatten().map(|(k, v)| (k.as_slice(), v)).collect();
+            self.maps.iter().flat_map(|m| m.iter()).map(|(k, v)| (k.as_slice(), v)).collect();
         entries.par_sort_unstable_by_key(|(key, _)| *key);
         Iter {
             sorted_entries: entries.into_iter(),
@@ -74,7 +74,9 @@ impl<'h> Iterator for Iter<'h> {
                     } else {
                         let previous_key = self.current_key.replace(k);
                         let previous_deladd = mem::replace(&mut self.current_deladd, other.clone());
-                        return previous_key.map(|ck| (ck, previous_deladd));
+                        if let Some(previous_key) = previous_key {
+                            return Some((previous_key, previous_deladd));
+                        }
                     }
                 }
                 None => {
