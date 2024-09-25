@@ -121,7 +121,7 @@ struct FixedSizeListNode<T> {
 #[derive(Debug)]
 struct FixedSizeList<T> {
     nodes: Box<[Option<FixedSizeListNode<T>>]>,
-    /// The next None in the nodes.
+    /// The first `None` in the nodes.
     next_free: usize,
     // TODO Also, we probably do not need one of the front and back cursors.
     front: usize,
@@ -145,7 +145,7 @@ impl<T> FixedSizeList<T> {
 
     #[inline]
     fn len(&self) -> usize {
-        self.nodes.len() - self.next_free
+        self.next_free
     }
 
     #[inline]
@@ -168,8 +168,9 @@ impl<T> FixedSizeList<T> {
         if self.is_full() {
             None
         } else {
+            let current_free = self.next_free;
             self.next_free += 1;
-            Some(self.next_free)
+            Some(current_free)
         }
     }
 
