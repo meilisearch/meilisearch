@@ -121,14 +121,8 @@ struct FixedSizeListNode<T> {
 #[derive(Debug)]
 struct FixedSizeList<T> {
     nodes: Box<[Option<FixedSizeListNode<T>>]>,
-    // An un-ordered set of indices that are not in use in `nodes`.
-    // All `None` entries in `nodes` _must_ be listed in `free`.
-    // A `Vec<usize>` was choosen in order to have O(1) complexity
-    // for pop and avoid having to go through `nodes` in order to
-    // to find a free place.
-    // TODO remove the free list as it is always growing:
-    //      we cannot remove entries from the map.
-    free: Vec<usize>,
+    /// The next None in the nodes.
+    next_free: usize,
     // TODO Also, we probably do not need one of the front and back cursors.
     front: usize,
     back: usize,
@@ -138,7 +132,7 @@ impl<T> FixedSizeList<T> {
     fn new(capacity: usize) -> Self {
         Self {
             nodes: repeat_with(|| None).take(capacity).collect::<Vec<_>>().into_boxed_slice(),
-            free: (0..capacity).collect(),
+            next_free: 0,
             front: usize::MAX,
             back: usize::MAX,
         }
@@ -151,7 +145,7 @@ impl<T> FixedSizeList<T> {
 
     #[inline]
     fn len(&self) -> usize {
-        self.nodes.len() - self.free.len()
+        self.nodes.len() - self.next_free
     }
 
     #[inline]
@@ -171,7 +165,12 @@ impl<T> FixedSizeList<T> {
 
     #[inline]
     fn next(&mut self) -> Option<usize> {
-        self.free.pop()
+        if self.is_full() {
+            None
+        } else {
+            self.next_free += 1;
+            Some(self.next_free)
+        }
     }
 
     #[inline]
