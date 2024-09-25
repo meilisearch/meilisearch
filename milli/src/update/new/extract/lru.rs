@@ -121,8 +121,8 @@ struct FixedSizeListNode<T> {
 #[derive(Debug)]
 struct FixedSizeList<T> {
     nodes: Box<[Option<FixedSizeListNode<T>>]>,
-    /// The first `None` in the nodes.
-    next_free: usize,
+    /// Also corresponds to the first `None` in the nodes.
+    length: usize,
     // TODO Also, we probably do not need one of the front and back cursors.
     front: usize,
     back: usize,
@@ -132,7 +132,7 @@ impl<T> FixedSizeList<T> {
     fn new(capacity: usize) -> Self {
         Self {
             nodes: repeat_with(|| None).take(capacity).collect::<Vec<_>>().into_boxed_slice(),
-            next_free: 0,
+            length: 0,
             front: usize::MAX,
             back: usize::MAX,
         }
@@ -145,7 +145,7 @@ impl<T> FixedSizeList<T> {
 
     #[inline]
     fn len(&self) -> usize {
-        self.next_free
+        self.length
     }
 
     #[inline]
@@ -168,8 +168,8 @@ impl<T> FixedSizeList<T> {
         if self.is_full() {
             None
         } else {
-            let current_free = self.next_free;
-            self.next_free += 1;
+            let current_free = self.length;
+            self.length += 1;
             Some(current_free)
         }
     }

@@ -9,7 +9,7 @@ use super::lru::Lru;
 use crate::update::del_add::{DelAdd, KvWriterDelAdd};
 use crate::CboRoaringBitmapCodec;
 
-const KEY_SIZE: usize = 8;
+const KEY_SIZE: usize = 12;
 
 #[derive(Debug)]
 pub struct CboCachedSorter<MF> {
