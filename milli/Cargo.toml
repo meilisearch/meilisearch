@@ -98,17 +98,7 @@ rand = { version = "0.8.5", features = ["small_rng"] }
 
 [features]
 all-tokenizations = [
-    "charabia/chinese",
-    "charabia/hebrew",
-    "charabia/japanese",
-    "charabia/thai",
-    "charabia/korean",
-    "charabia/greek",
-    "charabia/khmer",
-    "charabia/vietnamese",
-    "charabia/swedish-recomposition",
-    "charabia/german-segmentation",
-    "charabia/turkish",
+    "charabia/default",
 ]
 
 # Use POSIX semaphores instead of SysV semaphores in LMDB
