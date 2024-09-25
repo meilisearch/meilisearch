@@ -16,6 +16,9 @@ pub struct WordFstBuilder<'a> {
     current_prefix: Vec<SmallString32>,
     current_prefix_count: Vec<u64>,
     prefix_count_threshold: u64,
+    inserted_words: usize,
+    registered_words: usize,
+    base_set_length: usize,
 }
 
 impl<'a> WordFstBuilder<'a> {
@@ -37,10 +40,17 @@ impl<'a> WordFstBuilder<'a> {
             current_prefix: vec![SmallString32::new(); max_prefix_length],
             current_prefix_count: vec![0; max_prefix_length],
             prefix_count_threshold: 100,
+            inserted_words: 0,
+            registered_words: 0,
+            base_set_length: words_fst.len(),
         })
     }
 
     pub fn register_word(&mut self, deladd: DelAdd, right: &[u8]) -> Result<()> {
+        if deladd == DelAdd::Addition {
+            self.registered_words += 1;
+        }
+
         if let Some(left) = self.last_word.take() {
             let (left_inserted, right_inserted) =
                 self.compare_and_insert(deladd, left.as_slice(), right)?;
@@ -68,9 +78,14 @@ impl<'a> WordFstBuilder<'a> {
 
                 // right was inserted, so we can stop
                 if right_inserted {
-                    break;
+                    self.stream = Some(stream);
+                    return Ok(());
                 }
             }
+
+            // If we reach this point, it means that the stream is empty
+            // and we need to insert the incoming word
+            self.insert_word(right)?;
 
             self.stream = Some(stream);
         }
@@ -118,6 +133,7 @@ impl<'a> WordFstBuilder<'a> {
     }
 
     fn insert_word(&mut self, bytes: &[u8]) -> Result<()> {
+        self.inserted_words += 1;
         self.word_fst_builder.insert(bytes)?;
 
         for n in 0..self.max_prefix_length {
@@ -181,6 +197,13 @@ impl<'a> WordFstBuilder<'a> {
         /// TODO: ugly unwrap
         let prefix_fst_file = builder.into_inner()?.into_inner().unwrap();
         let prefix_fst_mmap = unsafe { Mmap::map(&prefix_fst_file)? };
+
+        eprintln!("================================================");
+        eprintln!(
+            "inserted words: {}, registered words: {}, base set len: {}",
+            self.inserted_words, self.registered_words, self.base_set_length
+        );
+        eprintln!("================================================");
 
         Ok((words_fst_mmap, prefix_fst_mmap))
     }
