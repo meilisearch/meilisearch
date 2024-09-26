@@ -224,6 +224,7 @@ where
             )
         })?;
 
+        let mut entries_count = 0;
         for operation in writer_receiver {
             let database = operation.database(index);
             match operation.entry() {
@@ -232,9 +233,14 @@ where
                         unreachable!("We tried to delete an unknown key")
                     }
                 }
-                EntryOperation::Write(e) => database.put(wtxn, e.key(), e.value())?,
+                EntryOperation::Write(e) => {
+                    entries_count += 1;
+                    database.put(wtxn, e.key(), e.value())?
+                }
             }
         }
+
+        eprintln!("We saw {entries_count}");
 
         /// TODO handle the panicking threads
         handle.join().unwrap()?;

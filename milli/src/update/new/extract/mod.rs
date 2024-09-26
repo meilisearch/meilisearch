@@ -51,6 +51,7 @@ impl IntoIterator for HashMapMerger {
 
     fn into_iter(self) -> Self::IntoIter {
         let mut entries: Vec<_> = self.maps.into_iter().flat_map(|m| m.into_iter()).collect();
+        eprintln!("There are {} entries in the HashMapMerger", entries.len());
         entries.par_sort_unstable_by(|(ka, _), (kb, _)| ka.cmp(kb));
         IntoIter {
             sorted_entries: entries.into_iter(),

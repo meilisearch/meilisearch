@@ -248,6 +248,7 @@ impl GeoExtractor {
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
+#[inline(never)]
 fn merge_and_send_docids<'t>(
     merger: HashMapMerger,
     database: Database<Bytes, Bytes>,
@@ -256,6 +257,7 @@ fn merge_and_send_docids<'t>(
     docids_sender: impl DocidsSender + Sync,
     // mut register_key: impl FnMut(DelAdd, &[u8]) -> Result<()> + Send + Sync,
 ) -> Result<()> {
+    let now = std::time::Instant::now();
     merger.into_iter().par_bridge().try_for_each(|(key, deladd)| {
         rtxn_pool.with(|rtxn| {
             let mut buffer = Vec::new();
@@ -274,10 +276,15 @@ fn merge_and_send_docids<'t>(
             }
             Ok(())
         })
-    })
+    })?;
+
+    eprintln!("I took to merger hashmaps {:.2?}", now.elapsed());
+
+    Ok(())
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
+#[inline(never)]
 fn merge_and_send_facet_docids<'t>(
     merger: HashMapMerger,
     database: FacetDatabases,
@@ -285,6 +292,7 @@ fn merge_and_send_facet_docids<'t>(
     buffer: &mut Vec<u8>,
     docids_sender: impl DocidsSender + Sync,
 ) -> Result<()> {
+    let now = std::time::Instant::now();
     merger.into_iter().par_bridge().try_for_each(|(key, deladd)| {
         rtxn_pool.with(|rtxn| {
             let mut buffer = Vec::new();
@@ -301,7 +309,9 @@ fn merge_and_send_facet_docids<'t>(
             }
             Ok(())
         })
-    })
+    })?;
+    eprintln!("I took to merger hashmaps {:.2?}", now.elapsed());
+    Ok(())
 }
 
 struct FacetDatabases {
