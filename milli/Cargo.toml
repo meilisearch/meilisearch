@@ -98,16 +98,7 @@ rand = { version = "0.8.5", features = ["small_rng"] }
 
 [features]
 all-tokenizations = [
-    "charabia/chinese",
-    "charabia/hebrew",
-    "charabia/japanese",
-    "charabia/thai",
-    "charabia/korean",
-    "charabia/greek",
-    "charabia/khmer",
-    "charabia/vietnamese",
-    "charabia/swedish-recomposition",
-    "charabia/german-segmentation",
+    "charabia/default",
 ]
 
 # Use POSIX semaphores instead of SysV semaphores in LMDB
@@ -145,6 +136,9 @@ german = ["charabia/german-segmentation"]
 
 # force swedish character recomposition
 swedish-recomposition = ["charabia/swedish-recomposition"]
+
+# allow turkish specialized tokenization
+turkish = ["charabia/turkish"]
 
 # allow CUDA support, see <https://github.com/meilisearch/meilisearch/issues/4306>
 cuda = ["candle-core/cuda"]
