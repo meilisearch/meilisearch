@@ -30,7 +30,11 @@ where
         self,
         _fields_ids_map: &mut FieldsIdsMap,
         param: Self::Parameter,
-    ) -> Result<impl IndexedParallelIterator<Item = Result<DocumentChange>> + Clone + 'p> {
+    ) -> Result<
+        impl IndexedParallelIterator<Item = std::result::Result<DocumentChange, Arc<Error>>>
+            + Clone
+            + 'p,
+    > {
         let (fields_ids_map, concurrent_available_ids, primary_key) = param;
 
         Ok(self.iter.map(|object| {

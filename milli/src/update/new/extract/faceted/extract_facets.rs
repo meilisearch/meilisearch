@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::fs::File;
+use std::sync::Arc;
 
 use grenad::{MergeFunction, Merger};
 use heed::RoTxn;
@@ -14,7 +15,9 @@ use crate::facet::value_encoding::f64_into_bytes;
 use crate::update::new::extract::DocidsExtractor;
 use crate::update::new::{DocumentChange, ItemsPool};
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
-use crate::{DocumentId, FieldId, GlobalFieldsIdsMap, Index, Result, MAX_FACET_VALUE_LENGTH};
+use crate::{
+    DocumentId, Error, FieldId, GlobalFieldsIdsMap, Index, Result, MAX_FACET_VALUE_LENGTH,
+};
 pub struct FacetedDocidsExtractor;
 
 impl FacetedDocidsExtractor {
@@ -195,7 +198,9 @@ impl DocidsExtractor for FacetedDocidsExtractor {
         index: &Index,
         fields_ids_map: &GlobalFieldsIdsMap,
         indexer: GrenadParameters,
-        document_changes: impl IntoParallelIterator<Item = Result<DocumentChange>>,
+        document_changes: impl IntoParallelIterator<
+            Item = std::result::Result<DocumentChange, Arc<Error>>,
+        >,
     ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>> {
         let max_memory = indexer.max_memory_by_thread();
 

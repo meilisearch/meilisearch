@@ -75,9 +75,8 @@ impl<'p, 'pl: 'p> DocumentChanges<'p> for DocumentOperation<'pl> {
         fields_ids_map: &mut FieldsIdsMap,
         param: Self::Parameter,
     ) -> Result<
-        impl IndexedParallelIterator<
-                Item = std::result::Result<DocumentChange, Option<crate::Error>>,
-            > + Clone
+        impl IndexedParallelIterator<Item = std::result::Result<DocumentChange, Arc<Error>>>
+            + Clone
             + 'p,
     > {
         let (index, rtxn, primary_key) = param;
@@ -206,7 +205,7 @@ impl<'p, 'pl: 'p> DocumentChanges<'p> for DocumentOperation<'pl> {
         docids_version_offsets.sort_unstable_by_key(|(_, (_, docops))| sort_function_key(docops));
 
         Ok(docids_version_offsets.into_par_iter().try_map_try_init(
-            || index.read_txn().map_err(crate::Error::from),
+            || index.read_txn().map_err(Error::from),
             move |rtxn, (external_docid, (internal_docid, operations))| {
                 let document_merge_function = match self.index_documents_method {
                     Idm::ReplaceDocuments => MergeDocumentForReplacement::merge,

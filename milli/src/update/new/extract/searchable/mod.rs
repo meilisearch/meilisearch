@@ -3,6 +3,7 @@ mod extract_word_pair_proximity_docids;
 mod tokenize_document;
 
 use std::fs::File;
+use std::sync::Arc;
 
 pub use extract_word_docids::{WordDocidsExtractors, WordDocidsMergers};
 pub use extract_word_pair_proximity_docids::WordPairProximityDocidsExtractor;
@@ -15,14 +16,16 @@ use super::cache::CboCachedSorter;
 use super::DocidsExtractor;
 use crate::update::new::{DocumentChange, ItemsPool};
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
-use crate::{GlobalFieldsIdsMap, Index, Result, MAX_POSITION_PER_ATTRIBUTE};
+use crate::{Error, GlobalFieldsIdsMap, Index, Result, MAX_POSITION_PER_ATTRIBUTE};
 
 pub trait SearchableExtractor {
     fn run_extraction(
         index: &Index,
         fields_ids_map: &GlobalFieldsIdsMap,
         indexer: GrenadParameters,
-        document_changes: impl IntoParallelIterator<Item = Result<DocumentChange>>,
+        document_changes: impl IntoParallelIterator<
+            Item = std::result::Result<DocumentChange, Arc<Error>>,
+        >,
     ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>> {
         let max_memory = indexer.max_memory_by_thread();
 
@@ -132,7 +135,9 @@ impl<T: SearchableExtractor> DocidsExtractor for T {
         index: &Index,
         fields_ids_map: &GlobalFieldsIdsMap,
         indexer: GrenadParameters,
-        document_changes: impl IntoParallelIterator<Item = Result<DocumentChange>>,
+        document_changes: impl IntoParallelIterator<
+            Item = std::result::Result<DocumentChange, Arc<Error>>,
+        >,
     ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>> {
         Self::run_extraction(index, fields_ids_map, indexer, document_changes)
     }

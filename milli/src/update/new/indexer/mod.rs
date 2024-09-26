@@ -1,4 +1,4 @@
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use std::thread::{self, Builder};
 
 use big_s::S;
@@ -38,9 +38,8 @@ pub trait DocumentChanges<'p> {
         fields_ids_map: &mut FieldsIdsMap,
         param: Self::Parameter,
     ) -> Result<
-        impl IndexedParallelIterator<
-                Item = std::result::Result<DocumentChange, Option<crate::Error>>,
-            > + Clone
+        impl IndexedParallelIterator<Item = std::result::Result<DocumentChange, Arc<Error>>>
+            + Clone
             + 'p,
     >;
 }
@@ -58,7 +57,7 @@ pub fn index<PI>(
     document_changes: PI,
 ) -> Result<()>
 where
-    PI: IndexedParallelIterator<Item = std::result::Result<DocumentChange, Option<Error>>>
+    PI: IndexedParallelIterator<Item = std::result::Result<DocumentChange, Arc<Error>>>
         + Send
         + Clone,
 {
@@ -249,7 +248,7 @@ fn extract_and_send_docids<E: DocidsExtractor, D: MergerOperationType>(
     index: &Index,
     fields_ids_map: &GlobalFieldsIdsMap,
     indexer: GrenadParameters,
-    document_changes: impl IntoParallelIterator<Item = Result<DocumentChange>>,
+    document_changes: impl IntoParallelIterator<Item = std::result::Result<DocumentChange, Arc<Error>>>,
     sender: &ExtractorSender,
 ) -> Result<()> {
     let merger = E::run_extraction(index, fields_ids_map, indexer, document_changes)?;

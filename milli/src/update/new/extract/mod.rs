@@ -4,6 +4,7 @@ mod lru;
 mod searchable;
 
 use std::fs::File;
+use std::sync::Arc;
 
 pub use faceted::*;
 use grenad::Merger;
@@ -12,14 +13,16 @@ pub use searchable::*;
 
 use super::DocumentChange;
 use crate::update::{GrenadParameters, MergeDeladdCboRoaringBitmaps};
-use crate::{GlobalFieldsIdsMap, Index, Result};
+use crate::{Error, GlobalFieldsIdsMap, Index, Result};
 
 pub trait DocidsExtractor {
     fn run_extraction(
         index: &Index,
         fields_ids_map: &GlobalFieldsIdsMap,
         indexer: GrenadParameters,
-        document_changes: impl IntoParallelIterator<Item = Result<DocumentChange>>,
+        document_changes: impl IntoParallelIterator<
+            Item = std::result::Result<DocumentChange, Arc<Error>>,
+        >,
     ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>>;
 }
 
