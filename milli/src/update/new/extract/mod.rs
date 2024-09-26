@@ -8,7 +8,7 @@ use std::mem;
 
 pub use faceted::*;
 use grenad::MergeFunction;
-use rayon::iter::IntoParallelIterator;
+use rayon::iter::{IntoParallelIterator, ParallelIterator as _};
 use rayon::slice::ParallelSliceMut as _;
 pub use searchable::*;
 use smallvec::SmallVec;
@@ -50,13 +50,24 @@ impl IntoIterator for HashMapMerger {
     type IntoIter = IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
-        let mut entries: Vec<_> = self.maps.into_iter().flat_map(|m| m.into_iter()).collect();
-        eprintln!("There are {} entries in the HashMapMerger", entries.len());
-        entries.par_sort_unstable_by(|(ka, _), (kb, _)| ka.cmp(kb));
-        IntoIter {
-            sorted_entries: entries.into_iter(),
-            current_key: None,
-            current_deladd: cache::DelAddRoaringBitmap::default(),
+        let mut entries = {
+            let span = tracing::trace_span!(target: "indexing::documents::merge", "into_par_iter");
+            let _entered = span.enter();
+            let entries: Vec<_> =
+                self.maps.into_par_iter().flat_map(|m| m.into_par_iter()).collect();
+            eprintln!("There are {} entries in the HashMapMerger", entries.len());
+            entries
+        };
+        {
+            let span =
+                tracing::trace_span!(target: "indexing::documents::merge", "par_sort_unstable_by");
+            let _entered = span.enter();
+            entries.par_sort_unstable_by(|(ka, _), (kb, _)| ka.cmp(kb));
+            IntoIter {
+                sorted_entries: entries.into_iter(),
+                current_key: None,
+                current_deladd: cache::DelAddRoaringBitmap::default(),
+            }
         }
     }
 }
