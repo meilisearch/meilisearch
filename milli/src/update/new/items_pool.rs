@@ -1,18 +1,21 @@
+use std::sync::Arc;
+
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use rayon::iter::{MapInit, ParallelIterator};
 
 pub trait ParallelIteratorExt: ParallelIterator {
+    /// A method on a parallel iterator to map
     fn try_map_try_init<F, INIT, T, E, R>(
         self,
         init: INIT,
         map_op: F,
     ) -> MapInit<
         Self,
-        impl Fn() -> Result<T, Option<E>> + Sync + Send + Clone,
-        impl Fn(&mut Result<T, Option<E>>, Self::Item) -> Result<R, Option<E>> + Sync + Send + Clone,
+        impl Fn() -> Result<T, Arc<E>> + Sync + Send + Clone,
+        impl Fn(&mut Result<T, Arc<E>>, Self::Item) -> Result<R, Arc<E>> + Sync + Send + Clone,
     >
     where
-        E: Send,
+        E: Send + Sync,
         F: Fn(&mut T, Self::Item) -> Result<R, E> + Sync + Send + Clone,
         INIT: Fn() -> Result<T, E> + Sync + Send + Clone,
         R: Send,
@@ -20,11 +23,11 @@ pub trait ParallelIteratorExt: ParallelIterator {
         self.map_init(
             move || match init() {
                 Ok(t) => Ok(t),
-                Err(err) => Err(Some(err)),
+                Err(err) => Err(Arc::new(err)),
             },
             move |maybe_t, item| match maybe_t {
-                Ok(t) => map_op(t, item).map_err(Some),
-                Err(maybe_err) => Err(maybe_err.take()),
+                Ok(t) => map_op(t, item).map_err(Arc::new),
+                Err(maybe_err) => Err(maybe_err.clone()),
             },
         )
     }
