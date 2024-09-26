@@ -14,7 +14,7 @@ use super::channel::*;
 use super::document_change::DocumentChange;
 use super::extract::*;
 use super::merger::merge_grenad_entries;
-use super::{StdResult, TopLevelMap};
+use super::{ItemsPool, StdResult, TopLevelMap};
 use crate::documents::{PrimaryKey, DEFAULT_PRIMARY_KEY};
 use crate::update::new::channel::ExtractorSender;
 use crate::update::GrenadParameters;
@@ -213,11 +213,12 @@ where
             let span =
                 tracing::trace_span!(target: "indexing::documents", parent: &current_span, "merge");
             let _entered = span.enter();
-            let rtxn = index.read_txn().unwrap();
+
+            let rtxn_pool = ItemsPool::new(|| index.read_txn().map_err(Into::into));
             merge_grenad_entries(
                 merger_receiver,
                 merger_sender,
-                &rtxn,
+                &rtxn_pool,
                 index,
                 global_fields_ids_map_clone,
             )

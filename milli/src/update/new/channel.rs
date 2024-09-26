@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::sync::atomic::Ordering;
 
 use crossbeam_channel::{IntoIter, Receiver, SendError, Sender};
 use heed::types::Bytes;
@@ -177,22 +178,22 @@ impl IntoIterator for WriterReceiver {
 pub struct MergerSender {
     sender: Sender<WriterOperation>,
     /// The number of message we send in total in the channel.
-    send_count: std::cell::Cell<usize>,
+    send_count: std::sync::atomic::AtomicUsize,
     /// The number of times we sent something in a channel that was full.
-    writer_contentious_count: std::cell::Cell<usize>,
+    writer_contentious_count: std::sync::atomic::AtomicUsize,
     /// The number of times we sent something in a channel that was empty.
-    merger_contentious_count: std::cell::Cell<usize>,
+    merger_contentious_count: std::sync::atomic::AtomicUsize,
 }
 
 impl Drop for MergerSender {
     fn drop(&mut self) {
         eprintln!(
             "Merger channel stats: {} sends, {} writer contentions ({}%), {} merger contentions ({}%)",
-            self.send_count.get(),
-            self.writer_contentious_count.get(),
-            (self.writer_contentious_count.get() as f32 / self.send_count.get() as f32) * 100.0,
-            self.merger_contentious_count.get(),
-            (self.merger_contentious_count.get() as f32 / self.send_count.get() as f32) * 100.0
+            self.send_count.load(Ordering::SeqCst),
+            self.writer_contentious_count.load(Ordering::SeqCst),
+            (self.writer_contentious_count.load(Ordering::SeqCst) as f32 / self.send_count.load(Ordering::SeqCst) as f32) * 100.0,
+            self.merger_contentious_count.load(Ordering::SeqCst),
+            (self.merger_contentious_count.load(Ordering::SeqCst) as f32 / self.send_count.load(Ordering::SeqCst) as f32) * 100.0
         )
     }
 }
@@ -227,12 +228,12 @@ impl MergerSender {
 
     fn send(&self, op: WriterOperation) -> StdResult<(), SendError<()>> {
         if self.sender.is_full() {
-            self.writer_contentious_count.set(self.writer_contentious_count.get() + 1);
+            self.writer_contentious_count.fetch_add(1, Ordering::SeqCst);
         }
         if self.sender.is_empty() {
-            self.merger_contentious_count.set(self.merger_contentious_count.get() + 1);
+            self.merger_contentious_count.fetch_add(1, Ordering::SeqCst);
         }
-        self.send_count.set(self.send_count.get() + 1);
+        self.send_count.fetch_add(1, Ordering::SeqCst);
         match self.sender.send(op) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
