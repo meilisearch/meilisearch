@@ -128,8 +128,10 @@ impl std::ops::Deref for SemanticRatioGet {
     }
 }
 
-impl From<SearchQueryGet> for SearchQuery {
-    fn from(other: SearchQueryGet) -> Self {
+impl TryFrom<SearchQueryGet> for SearchQuery {
+    type Error = ResponseError;
+
+    fn try_from(other: SearchQueryGet) -> Result<Self, Self::Error> {
         let filter = match other.filter {
             Some(f) => match serde_json::from_str(&f) {
                 Ok(v) => Some(v),
@@ -140,19 +142,28 @@ impl From<SearchQueryGet> for SearchQuery {
 
         let hybrid = match (other.hybrid_embedder, other.hybrid_semantic_ratio) {
             (None, None) => None,
-            (None, Some(semantic_ratio)) => {
-                Some(HybridQuery { semantic_ratio: *semantic_ratio, embedder: None })
+            (None, Some(_)) => {
+                return Err(ResponseError::from_msg(
+                    "`hybridEmbedder` is mandatory when `hybridSemanticRatio` is present".into(),
+                    meilisearch_types::error::Code::InvalidHybridQuery,
+                ));
             }
-            (Some(embedder), None) => Some(HybridQuery {
-                semantic_ratio: DEFAULT_SEMANTIC_RATIO(),
-                embedder: Some(embedder),
-            }),
+            (Some(embedder), None) => {
+                Some(HybridQuery { semantic_ratio: DEFAULT_SEMANTIC_RATIO(), embedder })
+            }
             (Some(embedder), Some(semantic_ratio)) => {
-                Some(HybridQuery { semantic_ratio: *semantic_ratio, embedder: Some(embedder) })
+                Some(HybridQuery { semantic_ratio: *semantic_ratio, embedder })
             }
         };
 
-        Self {
+        if other.vector.is_some() && hybrid.is_none() {
+            return Err(ResponseError::from_msg(
+                "`hybridEmbedder` is mandatory when `vector` is present".into(),
+                meilisearch_types::error::Code::MissingSearchHybrid,
+            ));
+        }
+
+        Ok(Self {
             q: other.q,
             vector: other.vector.map(CS::into_inner),
             offset: other.offset.0,
@@ -179,7 +190,7 @@ impl From<SearchQueryGet> for SearchQuery {
             hybrid,
             ranking_score_threshold: other.ranking_score_threshold.map(|o| o.0),
             locales: other.locales.map(|o| o.into_iter().collect()),
-        }
+        })
     }
 }
 
@@ -219,7 +230,7 @@ pub async fn search_with_url_query(
     debug!(parameters = ?params, "Search get");
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
-    let mut query: SearchQuery = params.into_inner().into();
+    let mut query: SearchQuery = params.into_inner().try_into()?;
 
     // Tenant token search_rules.
     if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
@@ -312,44 +323,36 @@ pub fn search_kind(
         features.check_vector("Passing `hybrid` as a parameter")?;
     }
 
-    // regardless of anything, always do a keyword search when we don't have a vector and the query is whitespace or missing
-    if query.vector.is_none() {
-        match &query.q {
-            Some(q) if q.trim().is_empty() => return Ok(SearchKind::KeywordOnly),
-            None => return Ok(SearchKind::KeywordOnly),
-            _ => {}
+    // handle with care, the order of cases matters, the semantics is subtle
+    match (query.q.as_deref(), &query.hybrid, query.vector.as_deref()) {
+        // empty query, no vector => placeholder search
+        (Some(q), _, None) if q.trim().is_empty() => Ok(SearchKind::KeywordOnly),
+        // no query, no vector => placeholder search
+        (None, _, None) => Ok(SearchKind::KeywordOnly),
+        // hybrid.semantic_ratio == 1.0 => vector
+        (_, Some(HybridQuery { semantic_ratio, embedder }), v) if **semantic_ratio == 1.0 => {
+            SearchKind::semantic(index_scheduler, index, embedder, v.map(|v| v.len()))
         }
-    }
-
-    match &query.hybrid {
-        Some(HybridQuery { semantic_ratio, embedder }) if **semantic_ratio == 1.0 => {
-            Ok(SearchKind::semantic(
-                index_scheduler,
-                index,
-                embedder.as_deref(),
-                query.vector.as_ref().map(Vec::len),
-            )?)
-        }
-        Some(HybridQuery { semantic_ratio, embedder: _ }) if **semantic_ratio == 0.0 => {
+        // hybrid.semantic_ratio == 0.0 => keyword
+        (_, Some(HybridQuery { semantic_ratio, embedder: _ }), _) if **semantic_ratio == 0.0 => {
             Ok(SearchKind::KeywordOnly)
         }
-        Some(HybridQuery { semantic_ratio, embedder }) => Ok(SearchKind::hybrid(
+        // no query, hybrid, vector => semantic
+        (None, Some(HybridQuery { semantic_ratio: _, embedder }), Some(v)) => {
+            SearchKind::semantic(index_scheduler, index, embedder, Some(v.len()))
+        }
+        // query, no hybrid, no vector => keyword
+        (Some(_), None, None) => Ok(SearchKind::KeywordOnly),
+        // query, hybrid, maybe vector => hybrid
+        (Some(_), Some(HybridQuery { semantic_ratio, embedder }), v) => SearchKind::hybrid(
             index_scheduler,
             index,
-            embedder.as_deref(),
+            embedder,
             **semantic_ratio,
-            query.vector.as_ref().map(Vec::len),
-        )?),
-        None => match (query.q.as_deref(), query.vector.as_deref()) {
-            (_query, None) => Ok(SearchKind::KeywordOnly),
-            (None, Some(_vector)) => Ok(SearchKind::semantic(
-                index_scheduler,
-                index,
-                None,
-                query.vector.as_ref().map(Vec::len),
-            )?),
-            (Some(_), Some(_)) => Err(MeilisearchHttpError::MissingSearchHybrid.into()),
-        },
+            v.map(|v| v.len()),
+        ),
+
+        (_, None, Some(_)) => Err(MeilisearchHttpError::MissingSearchHybrid.into()),
     }
 }
 

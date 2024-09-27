@@ -39,12 +39,14 @@ macro_rules! make_locale {
         pub enum Locale {
             $($iso_639_1,)+
             $($iso_639_3,)+
+            Cmn,
         }
 
         impl From<milli::tokenizer::Language> for Locale {
             fn from(other: milli::tokenizer::Language) -> Locale {
                 match other {
                     $(milli::tokenizer::Language::$iso_639_3 => Locale::$iso_639_3,)+
+                    milli::tokenizer::Language::Cmn => Locale::Cmn,
                 }
             }
         }
@@ -54,6 +56,7 @@ macro_rules! make_locale {
                 match other {
                     $(Locale::$iso_639_1 => milli::tokenizer::Language::$iso_639_3,)+
                     $(Locale::$iso_639_3 => milli::tokenizer::Language::$iso_639_3,)+
+                    Locale::Cmn => milli::tokenizer::Language::Cmn,
                 }
             }
         }
@@ -65,6 +68,7 @@ macro_rules! make_locale {
                 let locale = match s {
                     $($iso_639_1_str => Locale::$iso_639_1,)+
                     $($iso_639_3_str => Locale::$iso_639_3,)+
+                    "cmn" => Locale::Cmn,
                     _ => return Err(LocaleFormatError { invalid_locale: s.to_string() }),
                 };
 
@@ -79,8 +83,9 @@ macro_rules! make_locale {
 
         impl std::fmt::Display for LocaleFormatError {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                let valid_locales = [$($iso_639_1_str),+,$($iso_639_3_str),+].join(", ");
-                write!(f, "Unsupported locale `{}`, expected one of {}", self.invalid_locale, valid_locales)
+                let mut valid_locales = [$($iso_639_1_str),+,$($iso_639_3_str),+,"cmn"];
+                valid_locales.sort_by(|left, right| left.len().cmp(&right.len()).then(left.cmp(right)));
+                write!(f, "Unsupported locale `{}`, expected one of {}", self.invalid_locale, valid_locales.join(", "))
             }
         }
 
@@ -99,7 +104,6 @@ make_locale!(
     (Bg, "bg") => (Bul, "bul"),
     (Ca, "ca") => (Cat, "cat"),
     (Cs, "cs") => (Ces, "ces"),
-    (Zh, "zh") => (Cmn, "cmn"),
     (Da, "da") => (Dan, "dan"),
     (De, "de") => (Deu, "deu"),
     (El, "el") => (Ell, "ell"),
@@ -157,5 +161,6 @@ make_locale!(
     (Uz, "uz") => (Uzb, "uzb"),
     (Vi, "vi") => (Vie, "vie"),
     (Yi, "yi") => (Yid, "yid"),
+    (Zh, "zh") => (Zho, "zho"),
     (Zu, "zu") => (Zul, "zul"),
 );

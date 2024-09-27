@@ -1099,22 +1099,28 @@ async fn experimental_feature_vector_store() {
     index.add_documents(json!(documents), None).await;
     index.wait_task(0).await;
 
-    index
-        .search(json!({
+    let (response, code) = index
+        .search_post(json!({
             "vector": [1.0, 2.0, 3.0],
+            "hybrid": {
+              "embedder": "manual",
+            },
             "showRankingScore": true
-        }), |response, code|{
-            meili_snap::snapshot!(code, @"400 Bad Request");
-            meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-            {
-              "message": "Passing `vector` as a parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
-              "code": "feature_not_enabled",
-              "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
-            }
-            "###);
-        })
+        }))
         .await;
+
+    {
+        meili_snap::snapshot!(code, @"400 Bad Request");
+        meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+          {
+            "message": "Passing `vector` as a parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
+            "code": "feature_not_enabled",
+            "type": "invalid_request",
+            "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+          }
+          "###);
+    }
+
     index
         .search(json!({
             "retrieveVectors": true,
@@ -1162,6 +1168,9 @@ async fn experimental_feature_vector_store() {
     let (response, code) = index
         .search_post(json!({
             "vector": [1.0, 2.0, 3.0],
+            "hybrid": {
+              "embedder": "manual",
+            },
             "showRankingScore": true,
             "retrieveVectors": true,
         }))

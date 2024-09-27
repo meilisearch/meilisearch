@@ -80,9 +80,11 @@ async fn basic() {
     index.wait_task(value.uid()).await;
 
     index
-        .similar(json!({"id": 143, "retrieveVectors": true}), |response, code| {
-            snapshot!(code, @"200 OK");
-            snapshot!(json_string!(response["hits"]), @r###"
+        .similar(
+            json!({"id": 143, "retrieveVectors": true, "embedder": "manual"}),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response["hits"]), @r###"
             [
               {
                 "title": "Escape Room",
@@ -154,13 +156,16 @@ async fn basic() {
               }
             ]
             "###);
-        })
+            },
+        )
         .await;
 
     index
-        .similar(json!({"id": "299537", "retrieveVectors": true}), |response, code| {
-            snapshot!(code, @"200 OK");
-            snapshot!(json_string!(response["hits"]), @r###"
+        .similar(
+            json!({"id": "299537", "retrieveVectors": true, "embedder": "manual"}),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response["hits"]), @r###"
             [
               {
                 "title": "How to Train Your Dragon: The Hidden World",
@@ -232,7 +237,8 @@ async fn basic() {
               }
             ]
             "###);
-        })
+            },
+        )
         .await;
 }
 
@@ -272,7 +278,7 @@ async fn ranking_score_threshold() {
 
     index
         .similar(
-            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0, "retrieveVectors": true}),
+            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0, "retrieveVectors": true, "embedder": "manual"}),
             |response, code| {
                 snapshot!(code, @"200 OK");
                 meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @"4");
@@ -358,7 +364,7 @@ async fn ranking_score_threshold() {
 
     index
         .similar(
-            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0.2, "retrieveVectors": true}),
+            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0.2, "retrieveVectors": true, "embedder": "manual"}),
             |response, code| {
                 snapshot!(code, @"200 OK");
                 meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @"3");
@@ -426,7 +432,7 @@ async fn ranking_score_threshold() {
 
     index
         .similar(
-            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0.3, "retrieveVectors": true}),
+            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0.3, "retrieveVectors": true, "embedder": "manual"}),
             |response, code| {
                 snapshot!(code, @"200 OK");
                 meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @"2");
@@ -476,7 +482,7 @@ async fn ranking_score_threshold() {
 
     index
         .similar(
-            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0.6, "retrieveVectors": true}),
+            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0.6, "retrieveVectors": true, "embedder": "manual"}),
             |response, code| {
                 snapshot!(code, @"200 OK");
                 meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @"1");
@@ -508,7 +514,7 @@ async fn ranking_score_threshold() {
 
     index
         .similar(
-            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0.9, "retrieveVectors": true}),
+            json!({"id": 143, "showRankingScore": true, "rankingScoreThreshold": 0.9, "retrieveVectors": true, "embedder": "manual"}),
             |response, code| {
                 snapshot!(code, @"200 OK");
                 snapshot!(json_string!(response["hits"]), @"[]");
@@ -553,7 +559,7 @@ async fn filter() {
 
     index
         .similar(
-            json!({"id": 522681, "filter": "release_year = 2019", "retrieveVectors": true}),
+            json!({"id": 522681, "filter": "release_year = 2019", "retrieveVectors": true, "embedder": "manual"}),
             |response, code| {
                 snapshot!(code, @"200 OK");
                 snapshot!(json_string!(response["hits"]), @r###"
@@ -617,7 +623,7 @@ async fn filter() {
 
     index
         .similar(
-            json!({"id": 522681, "filter": "release_year < 2000", "retrieveVectors": true}),
+            json!({"id": 522681, "filter": "release_year < 2000", "retrieveVectors": true, "embedder": "manual"}),
             |response, code| {
                 snapshot!(code, @"200 OK");
                 snapshot!(json_string!(response["hits"]), @r###"
@@ -681,9 +687,11 @@ async fn limit_and_offset() {
     index.wait_task(value.uid()).await;
 
     index
-        .similar(json!({"id": 143, "limit": 1, "retrieveVectors": true}), |response, code| {
-            snapshot!(code, @"200 OK");
-            snapshot!(json_string!(response["hits"]), @r###"
+        .similar(
+            json!({"id": 143, "limit": 1, "retrieveVectors": true, "embedder": "manual"}),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response["hits"]), @r###"
             [
               {
                 "title": "Escape Room",
@@ -704,12 +712,13 @@ async fn limit_and_offset() {
               }
             ]
             "###);
-        })
+            },
+        )
         .await;
 
     index
         .similar(
-            json!({"id": 143, "limit": 1, "offset": 1, "retrieveVectors": true}),
+            json!({"id": 143, "limit": 1, "offset": 1, "retrieveVectors": true, "embedder": "manual"}),
             |response, code| {
                 snapshot!(code, @"200 OK");
                 snapshot!(json_string!(response["hits"]), @r###"

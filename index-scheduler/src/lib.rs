@@ -1477,7 +1477,7 @@ impl IndexScheduler {
             .map(
                 |IndexEmbeddingConfig {
                      name,
-                     config: milli::vector::EmbeddingConfig { embedder_options, prompt },
+                     config: milli::vector::EmbeddingConfig { embedder_options, prompt, quantized },
                      ..
                  }| {
                     let prompt =
@@ -1486,7 +1486,10 @@ impl IndexScheduler {
                     {
                         let embedders = self.embedders.read().unwrap();
                         if let Some(embedder) = embedders.get(&embedder_options) {
-                            return Ok((name, (embedder.clone(), prompt)));
+                            return Ok((
+                                name,
+                                (embedder.clone(), prompt, quantized.unwrap_or_default()),
+                            ));
                         }
                     }
 
@@ -1500,7 +1503,7 @@ impl IndexScheduler {
                         let mut embedders = self.embedders.write().unwrap();
                         embedders.insert(embedder_options, embedder.clone());
                     }
-                    Ok((name, (embedder, prompt)))
+                    Ok((name, (embedder, prompt, quantized.unwrap_or_default())))
                 },
             )
             .collect();
@@ -5197,7 +5200,7 @@ mod tests {
             let simple_hf_name = name.clone();
 
             let configs = index_scheduler.embedders(configs).unwrap();
-            let (hf_embedder, _) = configs.get(&simple_hf_name).unwrap();
+            let (hf_embedder, _, _) = configs.get(&simple_hf_name).unwrap();
             let beagle_embed = hf_embedder.embed_one(S("Intel the beagle best doggo")).unwrap();
             let lab_embed = hf_embedder.embed_one(S("Max the lab best doggo")).unwrap();
             let patou_embed = hf_embedder.embed_one(S("kefir the patou best doggo")).unwrap();
@@ -5519,6 +5522,7 @@ mod tests {
                             400,
                         ),
                     },
+                    quantized: None,
                 },
                 user_provided: RoaringBitmap<[1, 2]>,
             },
@@ -5531,28 +5535,8 @@ mod tests {
 
         // the document with the id 3 should keep its original embedding
         let docid = index.external_documents_ids.get(&rtxn, "3").unwrap().unwrap();
-        let mut embeddings = Vec::new();
-
-        'vectors: for i in 0..=u8::MAX {
-            let reader = arroy::Reader::open(&rtxn, i as u16, index.vector_arroy)
-                .map(Some)
-                .or_else(|e| match e {
-                    arroy::Error::MissingMetadata(_) => Ok(None),
-                    e => Err(e),
-                })
-                .transpose();
-
-            let Some(reader) = reader else {
-                break 'vectors;
-            };
-
-            let embedding = reader.unwrap().item_vector(&rtxn, docid).unwrap();
-            if let Some(embedding) = embedding {
-                embeddings.push(embedding)
-            } else {
-                break 'vectors;
-            }
-        }
+        let embeddings = index.embeddings(&rtxn, docid).unwrap();
+        let embeddings = &embeddings["my_doggo_embedder"];
 
         snapshot!(embeddings.len(), @"1");
         assert!(embeddings[0].iter().all(|i| *i == 3.0), "{:?}", embeddings[0]);
@@ -5737,6 +5721,7 @@ mod tests {
                             400,
                         ),
                     },
+                    quantized: None,
                 },
                 user_provided: RoaringBitmap<[0]>,
             },
@@ -5780,6 +5765,7 @@ mod tests {
                             400,
                         ),
                     },
+                    quantized: None,
                 },
                 user_provided: RoaringBitmap<[]>,
             },

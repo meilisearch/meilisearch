@@ -387,14 +387,14 @@ checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
 [[package]]
 name = "arroy"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ece9e5347e7fdaaea3181dec7f916677ad5f3fcbac183648ce1924eb4aeef9a"
+source = "git+https://github.com/meilisearch/arroy/?rev=2386594dfb009ce08821a925ccc89fb8e30bf73d#2386594dfb009ce08821a925ccc89fb8e30bf73d"
 dependencies = [
  "bytemuck",
  "byteorder",
  "heed",
  "log",
  "memmap2",
+ "nohash",
  "ordered-float",
  "rand",
  "rayon",
@@ -933,9 +933,9 @@ dependencies = [
 
 [[package]]
 name = "charabia"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03cd8f290cae94934cdd0103c14c2de9faf2d7d85be0d24d511af2bf1b14119d"
+checksum = "55ff52497324e7d168505a16949ae836c14595606fab94687238d2f6c8d4c798"
 dependencies = [
  "aho-corasick",
  "csv",
@@ -2838,7 +2838,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e310b3a6b5907f99202fcdb4960ff45b93735d7c7d96b760fcff8db2dc0e103d"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.1",
+ "windows-targets 0.52.4",
 ]
 
 [[package]]
@@ -3685,6 +3685,12 @@ name = "mutually_exclusive_features"
 version = "0.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d02c0b00610773bb7fc61d85e13d86c7858cbdf00e1a120bfc41bc055dbaa0e"
+
+[[package]]
+name = "nohash"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0f889fb66f7acdf83442c35775764b51fed3c606ab9cee51500dbde2cf528ca"
 
 [[package]]
 name = "nom"

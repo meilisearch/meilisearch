@@ -66,3 +66,5 @@ khmer = ["milli/khmer"]
 vietnamese = ["milli/vietnamese"]
 # force swedish character recomposition
 swedish-recomposition = ["milli/swedish-recomposition"]
+# force german character recomposition
+german = ["milli/german"]
