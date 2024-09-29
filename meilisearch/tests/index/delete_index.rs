@@ -5,19 +5,19 @@ use crate::json;
 async fn create_and_delete_index() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (_response, code) = index.create(None).await;
+    let (response, code) = index.create(None).await;
 
     assert_eq!(code, 202);
 
-    index.wait_task(0).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     assert_eq!(index.get().await.1, 200);
 
-    let (_response, code) = index.delete().await;
+    let (response, code) = index.delete().await;
 
     assert_eq!(code, 202);
 
-    index.wait_task(1).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     assert_eq!(index.get().await.1, 404);
 }
@@ -26,7 +26,7 @@ async fn create_and_delete_index() {
 async fn error_delete_unexisting_index() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (_, code) = index.delete().await;
+    let (task, code) = index.delete().await;
 
     assert_eq!(code, 202);
 
@@ -37,7 +37,7 @@ async fn error_delete_unexisting_index() {
         "link": "https://docs.meilisearch.com/errors#index_not_found"
     });
 
-    let response = index.wait_task(0).await;
+    let response = index.wait_task(task.uid()).await;
     assert_eq!(response["status"], "failed");
     assert_eq!(response["error"], expected_response);
 }
