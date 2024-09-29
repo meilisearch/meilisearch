@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::num::NonZero;
+use std::sync::Arc;
 
 use grenad::{Merger, MergerBuilder};
 use heed::RoTxn;
@@ -12,7 +13,7 @@ use crate::update::new::extract::perm_json_p::contained_in;
 use crate::update::new::{DocumentChange, ItemsPool};
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
 use crate::{
-    bucketed_position, DocumentId, FieldId, GlobalFieldsIdsMap, Index, Result,
+    bucketed_position, DocumentId, Error, FieldId, GlobalFieldsIdsMap, Index, Result,
     MAX_POSITION_PER_ATTRIBUTE,
 };
 
@@ -303,7 +304,9 @@ impl WordDocidsExtractors {
         index: &Index,
         fields_ids_map: &GlobalFieldsIdsMap,
         indexer: GrenadParameters,
-        document_changes: impl IntoParallelIterator<Item = Result<DocumentChange>>,
+        document_changes: impl IntoParallelIterator<
+            Item = std::result::Result<DocumentChange, Arc<Error>>,
+        >,
     ) -> Result<WordDocidsMergers> {
         let max_memory = indexer.max_memory_by_thread();
 

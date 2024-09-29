@@ -4,7 +4,9 @@ use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use rayon::iter::{MapInit, ParallelIterator};
 
 pub trait ParallelIteratorExt: ParallelIterator {
-    /// A method on a parallel iterator to map
+    /// Maps items based on the init function.
+    ///
+    /// The init function is ran only as necessary which is basically once by thread.
     fn try_map_try_init<F, INIT, T, E, R>(
         self,
         init: INIT,

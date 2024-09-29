@@ -1,8 +1,11 @@
-use rayon::iter::IndexedParallelIterator;
+use std::sync::Arc;
+
+use rayon::iter::{IndexedParallelIterator, ParallelBridge, ParallelIterator};
 
 use super::DocumentChanges;
 use crate::documents::{DocumentIdExtractionError, PrimaryKey};
 use crate::update::concurrent_available_ids::ConcurrentAvailableIds;
+use crate::update::new::items_pool::ParallelIteratorExt;
 use crate::update::new::{DocumentChange, Insertion, KvWriterFieldId};
 use crate::{all_obkv_to_json, Error, FieldsIdsMap, Object, Result, UserError};
 
@@ -37,41 +40,46 @@ where
     > {
         let (fields_ids_map, concurrent_available_ids, primary_key) = param;
 
-        Ok(self.iter.map(|object| {
-            let docid = match concurrent_available_ids.next() {
-                Some(id) => id,
-                None => return Err(Error::UserError(UserError::DocumentLimitReached)),
-            };
+        Ok(self.iter.try_map_try_init(
+            || Ok(()),
+            |_, object| {
+                let docid = match concurrent_available_ids.next() {
+                    Some(id) => id,
+                    None => return Err(Error::UserError(UserError::DocumentLimitReached)),
+                };
 
-            let mut writer = KvWriterFieldId::memory();
-            object.iter().for_each(|(key, value)| {
-                let key = fields_ids_map.id(key).unwrap();
-                /// TODO better error management
-                let value = serde_json::to_vec(&value).unwrap();
-                /// TODO it is not ordered
-                writer.insert(key, value).unwrap();
-            });
+                let mut writer = KvWriterFieldId::memory();
+                object.iter().for_each(|(key, value)| {
+                    let key = fields_ids_map.id(key).unwrap();
+                    /// TODO better error management
+                    let value = serde_json::to_vec(&value).unwrap();
+                    /// TODO it is not ordered
+                    writer.insert(key, value).unwrap();
+                });
 
-            let document = writer.into_boxed();
-            let external_docid = match primary_key.document_id(&document, fields_ids_map)? {
-                Ok(document_id) => Ok(document_id),
-                Err(DocumentIdExtractionError::InvalidDocumentId(user_error)) => Err(user_error),
-                Err(DocumentIdExtractionError::MissingDocumentId) => {
-                    Err(UserError::MissingDocumentId {
-                        primary_key: primary_key.name().to_string(),
-                        document: all_obkv_to_json(&document, fields_ids_map)?,
-                    })
-                }
-                Err(DocumentIdExtractionError::TooManyDocumentIds(_)) => {
-                    Err(UserError::TooManyDocumentIds {
-                        primary_key: primary_key.name().to_string(),
-                        document: all_obkv_to_json(&document, fields_ids_map)?,
-                    })
-                }
-            }?;
+                let document = writer.into_boxed();
+                let external_docid = match primary_key.document_id(&document, fields_ids_map)? {
+                    Ok(document_id) => Ok(document_id),
+                    Err(DocumentIdExtractionError::InvalidDocumentId(user_error)) => {
+                        Err(user_error)
+                    }
+                    Err(DocumentIdExtractionError::MissingDocumentId) => {
+                        Err(UserError::MissingDocumentId {
+                            primary_key: primary_key.name().to_string(),
+                            document: all_obkv_to_json(&document, fields_ids_map)?,
+                        })
+                    }
+                    Err(DocumentIdExtractionError::TooManyDocumentIds(_)) => {
+                        Err(UserError::TooManyDocumentIds {
+                            primary_key: primary_key.name().to_string(),
+                            document: all_obkv_to_json(&document, fields_ids_map)?,
+                        })
+                    }
+                }?;
 
-            let insertion = Insertion::create(docid, document);
-            Ok(DocumentChange::Insertion(insertion))
-        }))
+                let insertion = Insertion::create(docid, document);
+                Ok(DocumentChange::Insertion(insertion))
+            },
+        ))
     }
 }
