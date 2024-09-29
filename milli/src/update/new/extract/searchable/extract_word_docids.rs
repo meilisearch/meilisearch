@@ -10,6 +10,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use crate::update::new::extract::cache::CboCachedSorter;
 use crate::update::new::extract::perm_json_p::contained_in;
+use crate::update::new::items_pool::ParallelIteratorExt;
 use crate::update::new::{DocumentChange, ItemsPool};
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
 use crate::{
@@ -340,7 +341,7 @@ impl WordDocidsExtractors {
 
         let context_pool = ItemsPool::new(|| {
             Ok((
-                index.read_txn()?,
+                index.read_txn().map_err(Error::from).map_err(Arc::new)?,
                 &document_tokenizer,
                 fields_ids_map.clone(),
                 WordDocidsCachedSorters::new(
@@ -356,18 +357,24 @@ impl WordDocidsExtractors {
             let span =
                 tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
             let _entered = span.enter();
-            document_changes.into_par_iter().try_for_each(|document_change| {
-                context_pool.with(|(rtxn, document_tokenizer, fields_ids_map, cached_sorter)| {
-                    Self::extract_document_change(
-                        &*rtxn,
-                        index,
-                        document_tokenizer,
-                        fields_ids_map,
-                        cached_sorter,
-                        document_change?,
+            document_changes.into_par_iter().try_for_each_try_init(
+                || Ok(()),
+                |_, document_change| {
+                    context_pool.with(
+                        |(rtxn, document_tokenizer, fields_ids_map, cached_sorter)| {
+                            Self::extract_document_change(
+                                &*rtxn,
+                                index,
+                                document_tokenizer,
+                                fields_ids_map,
+                                cached_sorter,
+                                document_change?,
+                            )
+                            .map_err(Arc::new)
+                        },
                     )
-                })
-            })?;
+                },
+            )?;
         }
 
         {

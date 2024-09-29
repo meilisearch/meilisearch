@@ -1,3 +1,4 @@
+use std::convert::identity;
 use std::sync::Arc;
 
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
@@ -27,11 +28,37 @@ pub trait ParallelIteratorExt: ParallelIterator {
                 Ok(t) => Ok(t),
                 Err(err) => Err(Arc::new(err)),
             },
-            move |maybe_t, item| match maybe_t {
+            move |result, item| match result {
                 Ok(t) => map_op(t, item).map_err(Arc::new),
-                Err(maybe_err) => Err(maybe_err.clone()),
+                Err(err) => Err(err.clone()),
             },
         )
+    }
+
+    /// A method to run a closure of all the items and return an owned error.
+    ///
+    /// The init function is ran only as necessary which is basically once by thread.
+    fn try_for_each_try_init<F, INIT, T, E>(self, init: INIT, op: F) -> Result<(), E>
+    where
+        E: Send + Sync,
+        F: Fn(&mut T, Self::Item) -> Result<(), Arc<E>> + Sync + Send + Clone,
+        INIT: Fn() -> Result<T, E> + Sync + Send + Clone,
+    {
+        let result = self.try_for_each_init(
+            move || match init() {
+                Ok(t) => Ok(t),
+                Err(err) => Err(Arc::new(err)),
+            },
+            move |result, item| match result {
+                Ok(t) => op(t, item),
+                Err(err) => Err(err.clone()),
+            },
+        );
+
+        match result {
+            Ok(()) => Ok(()),
+            Err(err) => Err(Arc::into_inner(err).expect("the error must be only owned by us")),
+        }
     }
 }
 

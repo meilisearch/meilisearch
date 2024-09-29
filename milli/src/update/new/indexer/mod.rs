@@ -22,6 +22,7 @@ use super::{StdResult, TopLevelMap};
 use crate::documents::{PrimaryKey, DEFAULT_PRIMARY_KEY};
 use crate::update::new::channel::ExtractorSender;
 use crate::update::settings::InnerIndexSettings;
+use crate::update::new::items_pool::ParallelIteratorExt;
 use crate::update::GrenadParameters;
 use crate::{Error, FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
 
@@ -80,7 +81,7 @@ where
 
                     // document but we need to create a function that collects and compresses documents.
                     let document_sender = extractor_sender.document_sender();
-                    document_changes.clone().into_par_iter().try_for_each(|result| {
+                    document_changes.clone().into_par_iter().try_for_each_try_init(|| Ok(()) as Result<_>, |_, result| {
                         match result? {
                             DocumentChange::Deletion(deletion) => {
                                 let docid = deletion.docid();
@@ -98,7 +99,7 @@ where
                                 // extracted_dictionary_sender.send(self, dictionary: &[u8]);
                             }
                         }
-                        Ok(()) as Result<_>
+                        Ok(()) as std::result::Result<_, Arc<_>>
                     })?;
 
                     document_sender.finish().unwrap();

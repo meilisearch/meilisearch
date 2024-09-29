@@ -13,6 +13,7 @@ use super::facet_document::extract_document_facets;
 use super::FacetKind;
 use crate::facet::value_encoding::f64_into_bytes;
 use crate::update::new::extract::DocidsExtractor;
+use crate::update::new::items_pool::ParallelIteratorExt;
 use crate::update::new::{DocumentChange, ItemsPool};
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
 use crate::{
@@ -211,7 +212,7 @@ impl DocidsExtractor for FacetedDocidsExtractor {
 
         let context_pool = ItemsPool::new(|| {
             Ok((
-                index.read_txn()?,
+                index.read_txn().map_err(Error::from).map_err(Arc::new)?,
                 fields_ids_map.clone(),
                 Vec::new(),
                 CboCachedSorter::new(
@@ -233,19 +234,23 @@ impl DocidsExtractor for FacetedDocidsExtractor {
             let span =
                 tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
             let _entered = span.enter();
-            document_changes.into_par_iter().try_for_each(|document_change| {
-                context_pool.with(|(rtxn, fields_ids_map, buffer, cached_sorter)| {
-                    Self::extract_document_change(
-                        &*rtxn,
-                        index,
-                        buffer,
-                        fields_ids_map,
-                        &attributes_to_extract,
-                        cached_sorter,
-                        document_change?,
-                    )
-                })
-            })?;
+            document_changes.into_par_iter().try_for_each_try_init(
+                || Ok(()),
+                |_, document_change| {
+                    context_pool.with(|(rtxn, fields_ids_map, buffer, cached_sorter)| {
+                        Self::extract_document_change(
+                            &*rtxn,
+                            index,
+                            buffer,
+                            fields_ids_map,
+                            &attributes_to_extract,
+                            cached_sorter,
+                            document_change?,
+                        )
+                        .map_err(Arc::new)
+                    })
+                },
+            )?;
         }
         {
             let mut builder = grenad::MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
