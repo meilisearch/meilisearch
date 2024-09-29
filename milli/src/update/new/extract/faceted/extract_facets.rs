@@ -212,7 +212,6 @@ impl DocidsExtractor for FacetedDocidsExtractor {
 
         let context_pool = ItemsPool::new(|| {
             Ok((
-                index.read_txn().map_err(Error::from).map_err(Arc::new)?,
                 fields_ids_map.clone(),
                 Vec::new(),
                 CboCachedSorter::new(
@@ -234,12 +233,12 @@ impl DocidsExtractor for FacetedDocidsExtractor {
             let span =
                 tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
             let _entered = span.enter();
-            document_changes.into_par_iter().try_for_each_try_init(
-                || Ok(()),
-                |_, document_change| {
-                    context_pool.with(|(rtxn, fields_ids_map, buffer, cached_sorter)| {
+            document_changes.into_par_iter().try_arc_for_each_try_init(
+                || index.read_txn().map_err(Error::from),
+                |rtxn, document_change| {
+                    context_pool.with(|(fields_ids_map, buffer, cached_sorter)| {
                         Self::extract_document_change(
-                            &*rtxn,
+                            rtxn,
                             index,
                             buffer,
                             fields_ids_map,
@@ -261,7 +260,7 @@ impl DocidsExtractor for FacetedDocidsExtractor {
             let readers: Vec<_> = context_pool
                 .into_items()
                 .par_bridge()
-                .map(|(_rtxn, _tokenizer, _fields_ids_map, cached_sorter)| {
+                .map(|(_tokenizer, _fields_ids_map, cached_sorter)| {
                     let sorter = cached_sorter.into_sorter()?;
                     sorter.into_reader_cursors()
                 })

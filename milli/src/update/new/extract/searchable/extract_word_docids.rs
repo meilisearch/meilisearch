@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use grenad::{Merger, MergerBuilder};
 use heed::RoTxn;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::IntoParallelIterator;
 
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use crate::update::new::extract::cache::CboCachedSorter;
@@ -341,7 +341,6 @@ impl WordDocidsExtractors {
 
         let context_pool = ItemsPool::new(|| {
             Ok((
-                index.read_txn().map_err(Error::from).map_err(Arc::new)?,
                 &document_tokenizer,
                 fields_ids_map.clone(),
                 WordDocidsCachedSorters::new(
@@ -357,22 +356,20 @@ impl WordDocidsExtractors {
             let span =
                 tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
             let _entered = span.enter();
-            document_changes.into_par_iter().try_for_each_try_init(
-                || Ok(()),
-                |_, document_change| {
-                    context_pool.with(
-                        |(rtxn, document_tokenizer, fields_ids_map, cached_sorter)| {
-                            Self::extract_document_change(
-                                &*rtxn,
-                                index,
-                                document_tokenizer,
-                                fields_ids_map,
-                                cached_sorter,
-                                document_change?,
-                            )
-                            .map_err(Arc::new)
-                        },
-                    )
+            document_changes.into_par_iter().try_arc_for_each_try_init(
+                || index.read_txn().map_err(Error::from),
+                |rtxn, document_change| {
+                    context_pool.with(|(document_tokenizer, fields_ids_map, cached_sorter)| {
+                        Self::extract_document_change(
+                            rtxn,
+                            index,
+                            document_tokenizer,
+                            fields_ids_map,
+                            cached_sorter,
+                            document_change?,
+                        )
+                        .map_err(Arc::new)
+                    })
                 },
             )?;
         }
@@ -382,7 +379,7 @@ impl WordDocidsExtractors {
                 tracing::trace_span!(target: "indexing::documents::extract", "merger_building");
             let _entered = span.enter();
             let mut builder = WordDocidsMergerBuilders::new();
-            for (_rtxn, _tokenizer, _fields_ids_map, cache) in context_pool.into_items() {
+            for (_tokenizer, _fields_ids_map, cache) in context_pool.into_items() {
                 builder.add_sorters(cache)?;
             }
 

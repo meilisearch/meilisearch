@@ -60,7 +60,6 @@ pub trait SearchableExtractor {
 
         let context_pool = ItemsPool::new(|| {
             Ok((
-                index.read_txn().map_err(Error::from).map_err(Arc::new)?,
                 &document_tokenizer,
                 fields_ids_map.clone(),
                 CboCachedSorter::new(
@@ -82,22 +81,20 @@ pub trait SearchableExtractor {
             let span =
                 tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
             let _entered = span.enter();
-            document_changes.into_par_iter().try_for_each_try_init(
-                || Ok(()),
-                |_, document_change| {
-                    context_pool.with(
-                        |(rtxn, document_tokenizer, fields_ids_map, cached_sorter)| {
-                            Self::extract_document_change(
-                                &*rtxn,
-                                index,
-                                document_tokenizer,
-                                fields_ids_map,
-                                cached_sorter,
-                                document_change?,
-                            )
-                            .map_err(Arc::new)
-                        },
-                    )
+            document_changes.into_par_iter().try_arc_for_each_try_init(
+                || index.read_txn().map_err(Error::from),
+                |rtxn, document_change| {
+                    context_pool.with(|(document_tokenizer, fields_ids_map, cached_sorter)| {
+                        Self::extract_document_change(
+                            rtxn,
+                            index,
+                            document_tokenizer,
+                            fields_ids_map,
+                            cached_sorter,
+                            document_change?,
+                        )
+                        .map_err(Arc::new)
+                    })
                 },
             )?;
         }
@@ -110,7 +107,7 @@ pub trait SearchableExtractor {
             let readers: Vec<_> = context_pool
                 .into_items()
                 .par_bridge()
-                .map(|(_rtxn, _tokenizer, _fields_ids_map, cached_sorter)| {
+                .map(|(_tokenizer, _fields_ids_map, cached_sorter)| {
                     let sorter = cached_sorter.into_sorter()?;
                     sorter.into_reader_cursors()
                 })

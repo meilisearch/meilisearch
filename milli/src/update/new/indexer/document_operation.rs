@@ -5,11 +5,10 @@ use std::sync::Arc;
 use heed::types::Bytes;
 use heed::RoTxn;
 use memmap2::Mmap;
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator};
 use IndexDocumentsMethod as Idm;
 
 use super::super::document_change::DocumentChange;
-use super::super::items_pool::ItemsPool;
 use super::super::{CowStr, TopLevelMap};
 use super::DocumentChanges;
 use crate::documents::{DocumentIdExtractionError, PrimaryKey};

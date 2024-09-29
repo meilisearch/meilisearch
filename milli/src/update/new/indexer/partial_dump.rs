@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rayon::iter::{IndexedParallelIterator, ParallelBridge, ParallelIterator};
+use rayon::iter::IndexedParallelIterator;
 
 use super::DocumentChanges;
 use crate::documents::{DocumentIdExtractionError, PrimaryKey};
