@@ -58,7 +58,7 @@ pub mod perm_json_p {
         seeker: &mut impl FnMut(&str, &Value) -> Result<()>,
     ) -> Result<()> {
         if value.is_empty() {
-            seeker(&base_key, &Value::Object(Map::with_capacity(0)))?;
+            seeker(base_key, &Value::Object(Map::with_capacity(0)))?;
         }
 
         for (key, value) in value.iter() {
@@ -103,7 +103,7 @@ pub mod perm_json_p {
         seeker: &mut impl FnMut(&str, &Value) -> Result<()>,
     ) -> Result<()> {
         if values.is_empty() {
-            seeker(&base_key, &Value::Array(vec![]))?;
+            seeker(base_key, &Value::Array(vec![]))?;
         }
 
         for value in values {
@@ -128,10 +128,10 @@ pub mod perm_json_p {
     ) -> bool {
         selectors.map_or(true, |selectors| {
             selectors.iter().any(|selector| {
-                contained_in(selector, &field_name) || contained_in(&field_name, selector)
+                contained_in(selector, field_name) || contained_in(field_name, selector)
             })
         }) && !skip_selectors.iter().any(|skip_selector| {
-            contained_in(skip_selector, &field_name) || contained_in(&field_name, skip_selector)
+            contained_in(skip_selector, field_name) || contained_in(field_name, skip_selector)
         })
     }
 }

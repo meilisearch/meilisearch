@@ -122,7 +122,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         // We initialize the sorter with the user indexing settings.
         let original_sorter = create_sorter(
             grenad::SortAlgorithm::Stable,
-            merge_function.clone(),
+            merge_function,
             indexer_settings.chunk_compression_type,
             indexer_settings.chunk_compression_level,
             indexer_settings.max_nb_chunks,

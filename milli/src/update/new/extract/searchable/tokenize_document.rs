@@ -48,7 +48,7 @@ impl<'a> DocumentTokenizer<'a> {
                     .entry(field_id)
                     .and_modify(|counter| *counter += MAX_DISTANCE)
                     .or_insert(0);
-                if *position as u32 >= self.max_positions_per_attributes {
+                if *position >= self.max_positions_per_attributes {
                     return Ok(());
                 }
 
@@ -72,7 +72,7 @@ impl<'a> DocumentTokenizer<'a> {
                             *position,
                             self.tokenizer.tokenize_with_allow_list(text.as_str(), locales),
                         )
-                        .take_while(|(p, _)| (*p as u32) < self.max_positions_per_attributes);
+                        .take_while(|(p, _)| *p < self.max_positions_per_attributes);
 
                         for (index, token) in tokens {
                             // keep a word only if it is not empty and fit in a LMDB key.

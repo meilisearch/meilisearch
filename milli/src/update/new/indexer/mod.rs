@@ -6,7 +6,7 @@ pub use document_deletion::DocumentDeletion;
 pub use document_operation::DocumentOperation;
 use heed::{RoTxn, RwTxn};
 pub use partial_dump::PartialDump;
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator};
 use rayon::ThreadPool;
 pub use update_by_function::UpdateByFunction;
 
@@ -229,7 +229,8 @@ fn extract_and_send_docids<E: DocidsExtractor, D: MergerOperationType>(
     sender: &ExtractorSender,
 ) -> Result<()> {
     let merger = E::run_extraction(index, fields_ids_map, indexer, document_changes)?;
-    Ok(sender.send_searchable::<D>(merger).unwrap())
+    sender.send_searchable::<D>(merger).unwrap();
+    Ok(())
 }
 
 /// Returns the primary key *field id* that has already been set for this index or the

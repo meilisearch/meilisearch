@@ -518,7 +518,7 @@ impl DocumentSender<'_> {
 impl Drop for DocumentSender<'_> {
     fn drop(&mut self) {
         if let Some(sender) = self.0.take() {
-            sender.send(MergerOperation::FinishedDocument);
+            let _ = sender.send(MergerOperation::FinishedDocument);
         }
     }
 }
