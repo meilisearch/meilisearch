@@ -543,7 +543,8 @@ impl fmt::Display for deserr_codes::InvalidSimilarId {
             f,
             "the value of `id` is invalid. \
             A document identifier can be of type integer or string, \
-            only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."
+            only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), \
+            and can not be more than 512 bytes."
         )
     }
 }

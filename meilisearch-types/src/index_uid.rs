@@ -88,7 +88,8 @@ impl fmt::Display for IndexUidFormatError {
             f,
             "`{}` is not a valid index uid. Index uid can be an \
             integer or a string containing only alphanumeric \
-            characters, hyphens (-) and underscores (_).",
+            characters, hyphens (-) and underscores (_), \
+            and can not be more than 512 bytes.",
             self.invalid_uid,
         )
     }
