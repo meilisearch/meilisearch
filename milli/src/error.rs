@@ -297,6 +297,7 @@ impl From<arroy::Error> for Error {
             arroy::Error::InvalidVecDimension { expected, received } => {
                 Error::UserError(UserError::InvalidVectorDimensions { expected, found: received })
             }
+            arroy::Error::BuildCancelled => Error::InternalError(InternalError::AbortedIndexation),
             arroy::Error::DatabaseFull
             | arroy::Error::InvalidItemAppend
             | arroy::Error::UnmatchingDistance { .. }
