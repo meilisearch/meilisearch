@@ -181,7 +181,7 @@ impl<'a> PartialMatch<'a> {
         // return a new Partial match allowing the highlighter to continue.
         if is_matching && matching_words.len() > 1 {
             matching_words.remove(0);
-            Some(MatchType::Partial(PartialMatch { matching_words, ids, char_len }))
+            Some(MatchType::Partial(Self { matching_words, ids, char_len }))
         // if there is no remaining word to match in the phrase and the current token is matching,
         // return a Full match.
         } else if is_matching {
