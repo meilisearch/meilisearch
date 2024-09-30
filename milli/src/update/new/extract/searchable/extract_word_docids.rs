@@ -125,6 +125,7 @@ impl WordDocidsCachedSorters {
         buffer.extend_from_slice(&field_id.to_be_bytes());
         self.word_fid_docids.insert_add_u32(buffer, docid)?;
 
+        let position = bucketed_position(position);
         buffer.clear();
         buffer.extend_from_slice(word.as_bytes());
         buffer.push(0);
