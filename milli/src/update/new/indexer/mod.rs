@@ -133,42 +133,6 @@ where
                         extractor_sender.send_searchable::<FidWordCountDocids>(fid_word_count_docids).unwrap();
                     }
 
-                    // {
-                    //     let span = tracing::trace_span!(target: "indexing::documents::extract", "exact_word_docids");
-                    //     let _entered = span.enter();
-                    //     extract_and_send_docids::<ExactWordDocidsExtractor, ExactWordDocids>(
-                    //         index,
-                    //         &global_fields_ids_map,
-                    //         grenad_parameters,
-                    //         document_changes.clone(),
-                    //         &extractor_sender,
-                    //     )?;
-                    // }
-
-                    // {
-                    //     let span = tracing::trace_span!(target: "indexing::documents::extract", "word_position_docids");
-                    //     let _entered = span.enter();
-                    //     extract_and_send_docids::<WordPositionDocidsExtractor, WordPositionDocids>(
-                    //         index,
-                    //         &global_fields_ids_map,
-                    //         grenad_parameters,
-                    //         document_changes.clone(),
-                    //         &extractor_sender,
-                    //     )?;
-                    // }
-
-                    // {
-                    //     let span = tracing::trace_span!(target: "indexing::documents::extract", "fid_word_count_docids");
-                    //     let _entered = span.enter();
-                    //     extract_and_send_docids::<FidWordCountDocidsExtractor, FidWordCountDocids>(
-                    //         index,
-                    //         &global_fields_ids_map,
-                    //         GrenadParameters::default(),
-                    //         document_changes.clone(),
-                    //         &extractor_sender,
-                    //     )?;
-                    // }
-
                     {
                         let span = tracing::trace_span!(target: "indexing::documents::extract", "word_pair_proximity_docids");
                         let _entered = span.enter();

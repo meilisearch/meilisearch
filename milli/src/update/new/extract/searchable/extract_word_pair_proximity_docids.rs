@@ -2,7 +2,6 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 
 use heed::RoTxn;
-use itertools::merge_join_by;
 use obkv::KvReader;
 
 use super::tokenize_document::DocumentTokenizer;
