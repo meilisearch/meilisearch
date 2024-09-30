@@ -17,6 +17,7 @@ use super::merger::merge_grenad_entries;
 use super::{StdResult, TopLevelMap};
 use crate::documents::{PrimaryKey, DEFAULT_PRIMARY_KEY};
 use crate::update::new::channel::ExtractorSender;
+use crate::update::settings::InnerIndexSettings;
 use crate::update::GrenadParameters;
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
 
@@ -244,6 +245,11 @@ where
 
     let fields_ids_map = fields_ids_map_lock.into_inner().unwrap();
     index.put_fields_ids_map(wtxn, &fields_ids_map)?;
+
+    // used to update the localized and weighted maps while sharing the update code with the settings pipeline.
+    let mut inner_index_settings = InnerIndexSettings::from_index(index, wtxn)?;
+    inner_index_settings.recompute_facets(wtxn, index)?;
+    inner_index_settings.recompute_searchables(wtxn, index)?;
 
     Ok(())
 }
