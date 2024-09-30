@@ -296,13 +296,13 @@ impl WordDocidsCachedSorters {
         buffer.clear();
         buffer.extend_from_slice(word.as_bytes());
         buffer.push(0);
-        buffer.extend_from_slice(&position.to_be_bytes());
+        buffer.extend_from_slice(&field_id.to_be_bytes());
         self.word_fid_docids.insert_add_u32(buffer, docid)?;
 
         buffer.clear();
         buffer.extend_from_slice(word.as_bytes());
         buffer.push(0);
-        buffer.extend_from_slice(&field_id.to_be_bytes());
+        buffer.extend_from_slice(&position.to_be_bytes());
         self.word_position_docids.insert_add_u32(buffer, docid)?;
 
         if self.current_docid.map_or(false, |id| docid != id) {
@@ -337,13 +337,13 @@ impl WordDocidsCachedSorters {
         buffer.clear();
         buffer.extend_from_slice(word.as_bytes());
         buffer.push(0);
-        buffer.extend_from_slice(&position.to_be_bytes());
+        buffer.extend_from_slice(&field_id.to_be_bytes());
         self.word_fid_docids.insert_del_u32(buffer, docid)?;
 
         buffer.clear();
         buffer.extend_from_slice(word.as_bytes());
         buffer.push(0);
-        buffer.extend_from_slice(&field_id.to_be_bytes());
+        buffer.extend_from_slice(&position.to_be_bytes());
         self.word_position_docids.insert_del_u32(buffer, docid)?;
 
         if self.current_docid.map_or(false, |id| docid != id) {
