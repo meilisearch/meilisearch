@@ -245,8 +245,7 @@ struct MatchIntervalWithScore {
 impl MatchIntervalWithScore {
     /// Returns the matches interval where the score computed by match_interval_score is the best.
     fn find_best_match_interval(matches: &[Match], crop_size: usize) -> &[Match] {
-        let matches_len = matches.len();
-        if matches_len <= 1 {
+        if matches.len() <= 1 {
             return matches;
         }
 
@@ -303,7 +302,7 @@ impl MatchIntervalWithScore {
         }
 
         // compute the last interval score and compare it to the best one.
-        let interval_last = matches_len - 1;
+        let interval_last = matches.len() - 1;
         // if it's the last match with itself, we need to make sure it's
         // not a phrase longer than the crop window
         if interval_first != interval_last || matches[interval_first].get_word_count() < crop_size {
@@ -451,28 +450,39 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
         crop_size: usize,
     ) -> (usize, usize) {
         // if there is no match, we start from the beginning of the string by default.
-        let first_match_first_word_position =
-            matches.first().map(|m| m.get_first_word_pos()).unwrap_or(0);
-        let first_match_first_token_position =
-            matches.first().map(|m| m.get_first_token_pos()).unwrap_or(0);
-        let last_match_last_word_position =
-            matches.last().map(|m| m.get_last_word_pos()).unwrap_or(0);
-        let last_match_last_token_position =
-            matches.last().map(|m| m.get_last_token_pos()).unwrap_or(0);
+        let (matches_size, first_match_first_token_position, last_match_last_token_position) =
+            if !matches.is_empty() {
+                let matches_first = matches.first().unwrap();
+                let matches_last = matches.last().unwrap();
 
-        let matches_window_len =
-            last_match_last_word_position - first_match_first_word_position + 1;
+                (
+                    matches_last.get_last_word_pos() - matches_first.get_first_word_pos() + 1,
+                    matches_first.get_first_token_pos(),
+                    matches_last.get_last_token_pos(),
+                )
+            } else {
+                (0, 0, 0)
+            };
 
-        if crop_size >= matches_window_len {
+        if crop_size >= matches_size {
             // matches needs to be counted in the crop len.
-            let mut remaining_words = crop_size - matches_window_len;
+            let mut remaining_words = crop_size - matches_size;
+
+            let last_match_last_token_position_plus_one = last_match_last_token_position + 1;
+            let after_tokens_starting_index = if matches_size == 0 {
+                0
+            } else if last_match_last_token_position_plus_one < tokens.len() {
+                last_match_last_token_position_plus_one
+            } else {
+                tokens.len()
+            };
 
             // create the initial state of the crop window: 2 iterators starting from the matches positions,
             // a reverse iterator starting from the first match token position and going towards the beginning of the text,
             let mut before_tokens =
                 tokens[..first_match_first_token_position].iter().rev().peekable();
             // an iterator starting from the last match token position and going towards the end of the text.
-            let mut after_tokens = tokens[last_match_last_token_position + 1..].iter().peekable();
+            let mut after_tokens = tokens[after_tokens_starting_index..].iter().peekable();
 
             // grows the crop window peeking in both directions
             // until the window contains the good number of words:
@@ -553,7 +563,7 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
             (crop_byte_start, crop_byte_end)
         } else {
             // there's one match and it's longer than the crop window, so we have to advance inward
-            let mut remaining_extra_words = matches_window_len - crop_size;
+            let mut remaining_extra_words = matches_size - crop_size;
             let mut tokens_from_end =
                 tokens[..=last_match_last_token_position].iter().rev().peekable();
 
