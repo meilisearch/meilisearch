@@ -13,6 +13,7 @@ mod items_pool;
 mod merger;
 mod top_level_map;
 mod word_fst_builder;
+mod words_prefix_docids;
 
 /// TODO move them elsewhere
 pub type StdResult<T, E> = std::result::Result<T, E>;

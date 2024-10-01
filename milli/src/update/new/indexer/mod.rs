@@ -14,6 +14,10 @@ use super::channel::*;
 use super::document_change::DocumentChange;
 use super::extract::*;
 use super::merger::merge_grenad_entries;
+use super::word_fst_builder::PrefixDelta;
+use super::words_prefix_docids::{
+    compute_word_prefix_docids, compute_word_prefix_fid_docids, compute_word_prefix_position_docids,
+};
 use super::{StdResult, TopLevelMap};
 use crate::documents::{PrimaryKey, DEFAULT_PRIMARY_KEY};
 use crate::update::new::channel::ExtractorSender;
@@ -174,7 +178,7 @@ where
 
         // TODO manage the errors correctly
         let current_span = tracing::Span::current();
-        let handle2 = Builder::new().name(S("indexer-merger")).spawn_scoped(s, move || {
+        let merger_thread = Builder::new().name(S("indexer-merger")).spawn_scoped(s, move || {
             let span =
                 tracing::trace_span!(target: "indexing::documents", parent: &current_span, "merge");
             let _entered = span.enter();
@@ -202,7 +206,20 @@ where
 
         /// TODO handle the panicking threads
         handle.join().unwrap()?;
-        handle2.join().unwrap()?;
+        let merger_result = merger_thread.join().unwrap()?;
+
+        if let Some(prefix_delta) = merger_result.prefix_delta {
+            let span = tracing::trace_span!(target: "indexing", "prefix");
+            let _entered = span.enter();
+
+            let PrefixDelta { modified, deleted } = prefix_delta;
+            // Compute word prefix docids
+            compute_word_prefix_docids(wtxn, index, &modified, &deleted)?;
+            // Compute word prefix fid docids
+            compute_word_prefix_fid_docids(wtxn, index, &modified, &deleted)?;
+            // Compute word prefix position docids
+            compute_word_prefix_position_docids(wtxn, index, &modified, &deleted)?;
+        }
 
         Ok(()) as Result<_>
     })?;

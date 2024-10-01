@@ -88,6 +88,7 @@ pub type Object = serde_json::Map<String, serde_json::Value>;
 pub type Position = u32;
 pub type RelativePosition = u16;
 pub type SmallString32 = smallstr::SmallString<[u8; 32]>;
+pub type Prefix = smallstr::SmallString<[u8; 16]>;
 pub type SmallVec16<T> = smallvec::SmallVec<[T; 16]>;
 pub type SmallVec32<T> = smallvec::SmallVec<[T; 32]>;
 pub type SmallVec8<T> = smallvec::SmallVec<[T; 8]>;

@@ -8,7 +8,7 @@ use memmap2::Mmap;
 
 use super::extract::FacetKind;
 use super::StdResult;
-use crate::index::main_key::{DOCUMENTS_IDS_KEY, WORDS_FST_KEY};
+use crate::index::main_key::{DOCUMENTS_IDS_KEY, WORDS_FST_KEY, WORDS_PREFIXES_FST_KEY};
 use crate::update::new::KvReaderFieldId;
 use crate::update::MergeDeladdCboRoaringBitmaps;
 use crate::{DocumentId, Index};
@@ -249,6 +249,17 @@ impl MainSender<'_> {
     pub fn write_words_fst(&self, value: Mmap) -> StdResult<(), SendError<()>> {
         let entry = EntryOperation::Write(KeyValueEntry::from_large_key_value(
             WORDS_FST_KEY.as_bytes(),
+            value,
+        ));
+        match self.0.send(WriterOperation { database: Database::Main, entry }) {
+            Ok(()) => Ok(()),
+            Err(SendError(_)) => Err(SendError(())),
+        }
+    }
+
+    pub fn write_words_prefixes_fst(&self, value: Mmap) -> StdResult<(), SendError<()>> {
+        let entry = EntryOperation::Write(KeyValueEntry::from_large_key_value(
+            WORDS_PREFIXES_FST_KEY.as_bytes(),
             value,
         ));
         match self.0.send(WriterOperation { database: Database::Main, entry }) {

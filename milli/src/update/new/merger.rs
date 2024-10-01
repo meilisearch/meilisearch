@@ -6,15 +6,17 @@ use grenad::Merger;
 use heed::types::Bytes;
 use heed::{Database, RoTxn};
 use roaring::RoaringBitmap;
+use std::collections::HashSet;
 
 use super::channel::*;
 use super::extract::FacetKind;
+use super::word_fst_builder::{PrefixData, PrefixDelta, PrefixSettings};
 use super::{Deletion, DocumentChange, Insertion, KvReaderDelAdd, KvReaderFieldId, Update};
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::MergerOperation;
 use crate::update::new::word_fst_builder::WordFstBuilder;
 use crate::update::MergeDeladdCboRoaringBitmaps;
-use crate::{CboRoaringBitmapCodec, Error, GeoPoint, GlobalFieldsIdsMap, Index, Result};
+use crate::{CboRoaringBitmapCodec, Error, GeoPoint, GlobalFieldsIdsMap, Index, Prefix, Result};
 
 /// TODO We must return some infos/stats
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents", name = "merge")]
@@ -24,10 +26,11 @@ pub fn merge_grenad_entries(
     rtxn: &RoTxn,
     index: &Index,
     mut global_fields_ids_map: GlobalFieldsIdsMap<'_>,
-) -> Result<()> {
+) -> Result<MergerResult> {
     let mut buffer: Vec<u8> = Vec::new();
     let mut documents_ids = index.documents_ids(rtxn)?;
     let mut geo_extractor = GeoExtractor::new(rtxn, index)?;
+    let mut merger_result = MergerResult::default();
 
     for merger_operation in receiver {
         match merger_operation {
@@ -59,7 +62,15 @@ pub fn merge_grenad_entries(
             }
             MergerOperation::WordDocidsMerger(merger) => {
                 let words_fst = index.words_fst(rtxn)?;
-                let mut word_fst_builder = WordFstBuilder::new(&words_fst, 4)?;
+                let mut word_fst_builder = WordFstBuilder::new(&words_fst)?;
+                /// TODO make this configurable
+                let prefix_settings = PrefixSettings {
+                    compute_prefixes: true,
+                    max_prefix_length: 4,
+                    prefix_count_threshold: 100,
+                };
+                word_fst_builder.with_prefix_settings(prefix_settings);
+
                 {
                     let span =
                         tracing::trace_span!(target: "indexing::documents::merge", "word_docids");
@@ -80,8 +91,12 @@ pub fn merge_grenad_entries(
                         tracing::trace_span!(target: "indexing::documents::merge", "words_fst");
                     let _entered = span.enter();
 
-                    let (word_fst_mmap, prefix_fst_mmap) = word_fst_builder.build()?;
+                    let (word_fst_mmap, prefix_data) = word_fst_builder.build(index, rtxn)?;
                     sender.main().write_words_fst(word_fst_mmap).unwrap();
+                    if let Some(PrefixData { prefixes_fst_mmap, prefix_delta }) = prefix_data {
+                        sender.main().write_words_prefixes_fst(prefixes_fst_mmap).unwrap();
+                        merger_result.prefix_delta = Some(prefix_delta);
+                    }
                 }
             }
             MergerOperation::WordFidDocidsMerger(merger) => {
@@ -185,7 +200,13 @@ pub fn merge_grenad_entries(
 
     // ...
 
-    Ok(())
+    Ok(merger_result)
+}
+
+#[derive(Default, Debug)]
+pub struct MergerResult {
+    /// The delta of the prefixes
+    pub prefix_delta: Option<PrefixDelta>,
 }
 
 pub struct GeoExtractor {
