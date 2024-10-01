@@ -166,17 +166,10 @@ enum SimpleTokenKind {
 }
 
 impl SimpleTokenKind {
-    fn get(token: &&Token<'_>) -> Self {
+    fn new(token: &&Token<'_>) -> Self {
         match token.kind {
             TokenKind::Separator(separaor_kind) => Self::Separator(separaor_kind),
             _ => Self::NotSeparator,
-        }
-    }
-
-    fn is_not_separator(&self) -> bool {
-        match self {
-            SimpleTokenKind::NotSeparator => true,
-            SimpleTokenKind::Separator(_) => false,
         }
     }
 }
@@ -259,9 +252,12 @@ impl MatchIntervalWithScore {
 
         // positions of the first and the last match of the best matches interval in `matches`.
         let mut best_interval: Option<Self> = None;
-        let mut save_best_interval = |interval_first, interval_last, interval_score| {
+
+        let mut save_best_interval = |interval_first, interval_last| {
+            let interval_score = MatchIntervalScore::new(&matches[interval_first..=interval_last]);
             let is_interval_score_better =
                 &best_interval.as_ref().map_or(true, |Self { score, .. }| interval_score > *score);
+
             if *is_interval_score_better {
                 best_interval =
                     Some(Self { interval: (interval_first, interval_last), score: interval_score });
@@ -286,11 +282,8 @@ impl MatchIntervalWithScore {
                 // if index is 0 there is no last viable match
                 if index != 0 {
                     let interval_last = index - 1;
-                    let interval_score =
-                        MatchIntervalScore::new(&matches[interval_first..=interval_last]);
-
                     // keep interval if it's the best
-                    save_best_interval(interval_first, interval_last, interval_score);
+                    save_best_interval(interval_first, interval_last);
                 }
 
                 // advance start of the interval while interval is longer than crop_size.
@@ -314,8 +307,7 @@ impl MatchIntervalWithScore {
         // if it's the last match with itself, we need to make sure it's
         // not a phrase longer than the crop window
         if interval_first != interval_last || matches[interval_first].get_word_count() < crop_size {
-            let interval_score = MatchIntervalScore::new(&matches[interval_first..=interval_last]);
-            save_best_interval(interval_first, interval_last, interval_score);
+            save_best_interval(interval_first, interval_last);
         }
 
         // if none of the matches fit the criteria above, default to the first one
@@ -359,6 +351,7 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                     Some(MatchType::Full { ids, .. }) => {
                         // save the token that closes the partial match as a match.
                         matches.push(Match {
+                            // @TODO: Shouldn't this be +1?
                             match_len: word.char_end - *first_word_char_start,
                             ids: ids.clone().collect(),
                             position: MatchPosition::Phrase {
@@ -484,8 +477,8 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
             // grows the crop window peeking in both directions
             // until the window contains the good number of words:
             while remaining_words > 0 {
-                let before_token_kind = before_tokens.peek().map(SimpleTokenKind::get);
-                let after_token_kind = after_tokens.peek().map(SimpleTokenKind::get);
+                let before_token_kind = before_tokens.peek().map(SimpleTokenKind::new);
+                let after_token_kind = after_tokens.peek().map(SimpleTokenKind::new);
 
                 match (before_token_kind, after_token_kind) {
                     // we can expand both sides.
@@ -504,7 +497,8 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                                     if remaining_words > 1 {
                                         after_tokens.next();
                                     }
-                                } else if let SeparatorKind::Hard = before_token_separator_kind {
+                                } else if matches!(before_token_separator_kind, SeparatorKind::Hard)
+                                {
                                     after_tokens.next();
                                 } else {
                                     before_tokens.next();
@@ -536,14 +530,14 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                     // the end of the text is reached, advance left.
                     (Some(before_token_kind), None) => {
                         before_tokens.next();
-                        if let SimpleTokenKind::NotSeparator = before_token_kind {
+                        if matches!(before_token_kind, SimpleTokenKind::NotSeparator) {
                             remaining_words -= 1;
                         }
                     }
                     // the start of the text is reached, advance right.
                     (None, Some(after_token_kind)) => {
                         after_tokens.next();
-                        if let SimpleTokenKind::NotSeparator = after_token_kind {
+                        if matches!(after_token_kind, SimpleTokenKind::NotSeparator) {
                             remaining_words -= 1;
                         }
                     }
@@ -566,9 +560,9 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
             while remaining_extra_words > 0 {
                 let token_from_end_kind = tokens_from_end
                     .peek()
-                    .map(SimpleTokenKind::get)
+                    .map(SimpleTokenKind::new)
                     .expect("Expected iterator to not reach end");
-                if token_from_end_kind.is_not_separator() {
+                if matches!(token_from_end_kind, SimpleTokenKind::NotSeparator) {
                     remaining_extra_words -= 1;
                 }
 
