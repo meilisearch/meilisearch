@@ -181,6 +181,149 @@ impl SimpleTokenKind {
     }
 }
 
+#[derive(PartialEq, PartialOrd)]
+struct MatchIntervalScore(i16, i16, i16);
+
+impl MatchIntervalScore {
+    /// Compute the score of a match interval:
+    /// 1) count unique matches
+    /// 2) calculate distance between matches
+    /// 3) count ordered matches
+    fn new(matches: &[Match]) -> Self {
+        let mut ids: Vec<WordId> = Vec::with_capacity(matches.len());
+        let mut order_score = 0;
+        let mut distance_score = 0;
+
+        // count score for phrases
+        fn tally_phrase_scores(
+            fwp: &usize,
+            lwp: &usize,
+            order_score: &mut i16,
+            distance_score: &mut i16,
+        ) {
+            let words_in_phrase_minus_one = (lwp - fwp) as i16;
+            // will always be ordered, so +1 for each space between words
+            *order_score += words_in_phrase_minus_one;
+            // distance will always be 1, so -1 for each space between words
+            *distance_score -= words_in_phrase_minus_one;
+        }
+
+        let mut iter = matches.iter().peekable();
+        while let Some(m) = iter.next() {
+            if let Some(next_match) = iter.peek() {
+                // if matches are ordered
+                if next_match.ids.iter().min() > m.ids.iter().min() {
+                    order_score += 1;
+                }
+
+                let m_last_word_pos = match m.position {
+                    MatchPosition::Word { word_position, .. } => word_position,
+                    MatchPosition::Phrase { word_positions: (fwp, lwp), .. } => {
+                        tally_phrase_scores(&fwp, &lwp, &mut order_score, &mut distance_score);
+                        lwp
+                    }
+                };
+                let next_match_first_word_pos = next_match.get_first_word_pos();
+
+                // compute distance between matches
+                distance_score -= (next_match_first_word_pos - m_last_word_pos).min(7) as i16;
+            } else if let MatchPosition::Phrase { word_positions: (fwp, lwp), .. } = m.position {
+                // in case last match is a phrase, count score for its words
+                tally_phrase_scores(&fwp, &lwp, &mut order_score, &mut distance_score);
+            }
+
+            ids.extend(m.ids.iter());
+        }
+
+        ids.sort_unstable();
+        ids.dedup();
+        let uniq_score = ids.len() as i16;
+
+        // rank by unique match count, then by distance between matches, then by ordered match count.
+        Self(uniq_score, distance_score, order_score)
+    }
+}
+
+struct MatchIntervalWithScore {
+    interval: (usize, usize),
+    score: MatchIntervalScore,
+}
+
+impl MatchIntervalWithScore {
+    /// Returns the matches interval where the score computed by match_interval_score is the best.
+    fn find_best_match_interval(matches: &[Match], crop_size: usize) -> &[Match] {
+        let matches_len = matches.len();
+        if matches_len <= 1 {
+            return matches;
+        }
+
+        // positions of the first and the last match of the best matches interval in `matches`.
+        let mut best_interval: Option<Self> = None;
+        let mut save_best_interval = |interval_first, interval_last, interval_score| {
+            let is_interval_score_better =
+                &best_interval.as_ref().map_or(true, |Self { score, .. }| interval_score > *score);
+            if *is_interval_score_better {
+                best_interval =
+                    Some(Self { interval: (interval_first, interval_last), score: interval_score });
+            }
+        };
+
+        // we compute the matches interval if we have at least 2 matches.
+        // current interval positions.
+        let mut interval_first = 0;
+        let mut interval_first_match_first_word_pos = matches[interval_first].get_first_word_pos();
+
+        for (index, next_match) in matches.iter().enumerate() {
+            // if next match would make interval gross more than crop_size,
+            // we compare the current interval with the best one,
+            // then we increase `interval_first` until next match can be added.
+            let next_match_last_word_pos = next_match.get_last_word_pos();
+
+            // if the next match would mean that we pass the crop size window,
+            // we take the last valid match, that didn't pass this boundry, which is `index` - 1,
+            // and calculate a score for it, and check if it's better than our best so far
+            if next_match_last_word_pos - interval_first_match_first_word_pos >= crop_size {
+                // if index is 0 there is no last viable match
+                if index != 0 {
+                    let interval_last = index - 1;
+                    let interval_score =
+                        MatchIntervalScore::new(&matches[interval_first..=interval_last]);
+
+                    // keep interval if it's the best
+                    save_best_interval(interval_first, interval_last, interval_score);
+                }
+
+                // advance start of the interval while interval is longer than crop_size.
+                loop {
+                    interval_first += 1;
+                    interval_first_match_first_word_pos =
+                        matches[interval_first].get_first_word_pos();
+
+                    if interval_first_match_first_word_pos > next_match_last_word_pos
+                        || next_match_last_word_pos - interval_first_match_first_word_pos
+                            < crop_size
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+
+        // compute the last interval score and compare it to the best one.
+        let interval_last = matches_len - 1;
+        // if it's the last match with itself, we need to make sure it's
+        // not a phrase longer than the crop window
+        if interval_first != interval_last || matches[interval_first].get_word_count() < crop_size {
+            let interval_score = MatchIntervalScore::new(&matches[interval_first..=interval_last]);
+            save_best_interval(interval_first, interval_last, interval_score);
+        }
+
+        // if none of the matches fit the criteria above, default to the first one
+        let best_interval = best_interval.map_or((0, 0), |v| v.interval);
+        &matches[best_interval.0..=best_interval.1]
+    }
+}
+
 /// Structure used to analyze a string, compute words that match,
 /// and format the source string, returning a highlighted and cropped sub-string.
 pub struct Matcher<'t, 'tokenizer, 'b, 'lang> {
@@ -415,14 +558,16 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
 
             (crop_byte_start, crop_byte_end)
         } else {
-            // there's one match? and it's longer than the crop window, so we have to advance inward
+            // there's one match and it's longer than the crop window, so we have to advance inward
             let mut remaining_extra_words = matches_window_len - crop_size;
             let mut tokens_from_end =
                 tokens[..=last_match_last_token_position].iter().rev().peekable();
 
             while remaining_extra_words > 0 {
-                let token_from_end_kind =
-                    tokens_from_end.peek().map(SimpleTokenKind::get).expect("TODO");
+                let token_from_end_kind = tokens_from_end
+                    .peek()
+                    .map(SimpleTokenKind::get)
+                    .expect("Expected iterator to not reach end");
                 if token_from_end_kind.is_not_separator() {
                     remaining_extra_words -= 1;
                 }
@@ -435,163 +580,13 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
             } else {
                 &0
             };
-            let crop_byte_end = tokens_from_end.next().map(|t| t.byte_start).expect("TODO");
+            let crop_byte_end = tokens_from_end
+                .next()
+                .map(|t| t.byte_start)
+                .expect("Expected iterator to not reach end");
 
             (*crop_byte_start, crop_byte_end)
         }
-    }
-
-    /// Compute the score of a match interval:
-    /// 1) count unique matches
-    /// 2) calculate distance between matches
-    /// 3) count ordered matches
-    fn match_interval_score(&self, matches: &[Match]) -> (i16, i16, i16) {
-        let mut ids: Vec<WordId> = Vec::with_capacity(matches.len());
-        let mut order_score = 0;
-        let mut distance_score = 0;
-
-        // count score for phrases
-        fn tally_phrase_scores(
-            fwp: &usize,
-            lwp: &usize,
-            order_score: &mut i16,
-            distance_score: &mut i16,
-        ) {
-            let words_in_phrase_minus_one = (lwp - fwp) as i16;
-            // will always be ordered, so +1 for each space between words
-            *order_score += words_in_phrase_minus_one;
-            // distance will always be 1, so -1 for each space between words
-            *distance_score -= words_in_phrase_minus_one;
-        }
-
-        let mut iter = matches.iter().peekable();
-        while let Some(m) = iter.next() {
-            if let Some(next_match) = iter.peek() {
-                // if matches are ordered
-                if next_match.ids.iter().min() > m.ids.iter().min() {
-                    order_score += 1;
-                }
-
-                let m_last_word_pos = match m.position {
-                    MatchPosition::Word { word_position, .. } => word_position,
-                    MatchPosition::Phrase { word_positions: (fwp, lwp), .. } => {
-                        tally_phrase_scores(&fwp, &lwp, &mut order_score, &mut distance_score);
-                        lwp
-                    }
-                };
-                let next_match_first_word_pos = next_match.get_first_word_pos();
-
-                // compute distance between matches
-                distance_score -= (next_match_first_word_pos - m_last_word_pos).min(7) as i16;
-            } else if let MatchPosition::Phrase { word_positions: (fwp, lwp), .. } = m.position {
-                // in case last match is a phrase, count score for its words
-                tally_phrase_scores(&fwp, &lwp, &mut order_score, &mut distance_score);
-            }
-
-            ids.extend(m.ids.iter());
-        }
-
-        ids.sort_unstable();
-        ids.dedup();
-        let uniq_score = ids.len() as i16;
-
-        // rank by unique match count, then by distance between matches, then by ordered match count.
-        (uniq_score, distance_score, order_score)
-    }
-
-    /// Returns the matches interval where the score computed by match_interval_score is the best.
-    fn find_best_match_interval<'a>(&self, matches: &'a [Match], crop_size: usize) -> &'a [Match] {
-        let matches_len = matches.len();
-        if matches_len <= 1 {
-            return matches;
-        }
-
-        // positions of the first and the last match of the best matches interval in `matches`.
-        struct BestInterval {
-            interval: (usize, usize),
-            score: (i16, i16, i16),
-        }
-
-        fn save_best_interval(
-            best_interval: &mut Option<BestInterval>,
-            interval_first: usize,
-            interval_last: usize,
-            interval_score: (i16, i16, i16),
-        ) {
-            if let Some(best_interval) = best_interval {
-                if interval_score > best_interval.score {
-                    best_interval.interval = (interval_first, interval_last);
-                    best_interval.score = interval_score;
-                }
-            } else {
-                *best_interval = Some(BestInterval {
-                    interval: (interval_first, interval_last),
-                    score: interval_score,
-                });
-            }
-        }
-
-        let mut best_interval: Option<BestInterval> = None;
-
-        // we compute the matches interval if we have at least 2 matches.
-        // current interval positions.
-        let mut interval_first = 0;
-        let mut interval_first_match_first_word_pos = matches[interval_first].get_first_word_pos();
-
-        for (index, next_match) in matches.iter().enumerate() {
-            // if next match would make interval gross more than crop_size,
-            // we compare the current interval with the best one,
-            // then we increase `interval_first` until next match can be added.
-            let next_match_last_word_pos = next_match.get_last_word_pos();
-
-            // if the next match would mean that we pass the crop size window,
-            // we take the last valid match, that didn't pass this boundry, which is `index` - 1,
-            // and calculate a score for it, and check if it's better than our best so far
-            if next_match_last_word_pos - interval_first_match_first_word_pos >= crop_size {
-                // if index is 0 there is no last viable match
-                if index != 0 {
-                    let interval_last = index - 1;
-                    let interval_score =
-                        self.match_interval_score(&matches[interval_first..=interval_last]);
-
-                    // keep interval if it's the best
-                    save_best_interval(
-                        &mut best_interval,
-                        interval_first,
-                        interval_last,
-                        interval_score,
-                    );
-                }
-
-                // advance start of the interval while interval is longer than crop_size.
-                loop {
-                    interval_first += 1;
-                    interval_first_match_first_word_pos =
-                        matches[interval_first].get_first_word_pos();
-
-                    if interval_first_match_first_word_pos > next_match_last_word_pos
-                        || next_match_last_word_pos - interval_first_match_first_word_pos
-                            < crop_size
-                    {
-                        break;
-                    }
-                }
-            }
-        }
-
-        // compute the last interval score and compare it to the best one.
-        let interval_last = matches_len - 1;
-        // if it's the last match with itself, we need to make sure it's
-        // not a phrase longer than the crop window
-        if interval_first != interval_last || matches[interval_first].get_word_count() < crop_size {
-            let interval_score =
-                self.match_interval_score(&matches[interval_first..=interval_last]);
-            save_best_interval(&mut best_interval, interval_first, interval_last, interval_score);
-        }
-
-        // if none of the matches fit the criteria above, default to the first one
-        let best_interval = best_interval.map_or((0, 0), |v| v.interval);
-        &matches[best_interval.0..=best_interval.1]
     }
 
     // Returns the formatted version of the original text.
@@ -606,7 +601,9 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                     // crop around the best interval.
                     let (byte_start, byte_end) = match format_options.crop {
                         Some(crop_size) if crop_size > 0 => {
-                            let matches = self.find_best_match_interval(matches, crop_size);
+                            let matches = MatchIntervalWithScore::find_best_match_interval(
+                                matches, crop_size,
+                            );
                             self.crop_bounds(tokens, matches, crop_size)
                         }
                         _ => (0, self.text.len()),
@@ -1046,6 +1043,7 @@ mod tests {
         let mut matcher = builder.build(text, None);
         insta::assert_snapshot!(
             matcher.format(format_options),
+            // @TODO: Should probably highlight it all, even if it didn't fit the whole phrase
             @"The groundbreaking invention had the power to split the world…"
         );
 
@@ -1057,6 +1055,7 @@ mod tests {
         let mut matcher = builder.build(text, None);
         insta::assert_snapshot!(
             matcher.format(format_options),
+            // @TODO: Should probably include end of string in this case?
             @"…between those who <em>embraced progress and those who resisted change</em>…"
         );
 
@@ -1090,17 +1089,7 @@ mod tests {
         let mut matcher = builder.build(text, None);
         insta::assert_snapshot!(
             matcher.format(format_options),
-            @"…invention <em>had the power to split the world between those</em>…"
-        );
-
-        let builder = MatcherBuilder::new_test(
-            &rtxn,
-            &temp_index,
-            "\"The groundbreaking invention\" \"had the power to split the world between those\"",
-        );
-        let mut matcher = builder.build(text, None);
-        insta::assert_snapshot!(
-            matcher.format(format_options),
+            // @TODO: "invention" should be highlighted as well
             @"…invention <em>had the power to split the world between those</em>…"
         );
     }
