@@ -15,8 +15,8 @@ use tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use super::cache::CboCachedSorter;
 use super::DocidsExtractor;
 use crate::update::new::append_only_vec::AppendOnlyVec;
-use crate::update::new::items_pool::ParallelIteratorExt;
-use crate::update::new::{DocumentChange, ItemsPool};
+use crate::update::new::parallel_iterator_ext::ParallelIteratorExt;
+use crate::update::new::DocumentChange;
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
 use crate::{Error, GlobalFieldsIdsMap, Index, Result, MAX_POSITION_PER_ATTRIBUTE};
 

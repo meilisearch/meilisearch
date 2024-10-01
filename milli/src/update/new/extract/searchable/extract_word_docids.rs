@@ -12,8 +12,8 @@ use super::SearchableExtractor;
 use crate::update::new::append_only_vec::AppendOnlyVec;
 use crate::update::new::extract::cache::CboCachedSorter;
 use crate::update::new::extract::perm_json_p::contained_in;
-use crate::update::new::items_pool::ParallelIteratorExt;
-use crate::update::new::{DocumentChange, ItemsPool};
+use crate::update::new::parallel_iterator_ext::ParallelIteratorExt;
+use crate::update::new::DocumentChange;
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
 use crate::{
     bucketed_position, DocumentId, Error, FieldId, GlobalFieldsIdsMap, Index, Result,

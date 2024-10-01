@@ -14,8 +14,8 @@ use super::FacetKind;
 use crate::facet::value_encoding::f64_into_bytes;
 use crate::update::new::append_only_vec::AppendOnlyVec;
 use crate::update::new::extract::DocidsExtractor;
-use crate::update::new::items_pool::ParallelIteratorExt;
-use crate::update::new::{DocumentChange, ItemsPool};
+use crate::update::new::parallel_iterator_ext::ParallelIteratorExt;
+use crate::update::new::DocumentChange;
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
 use crate::{
     DocumentId, Error, FieldId, GlobalFieldsIdsMap, Index, Result, MAX_FACET_VALUE_LENGTH,

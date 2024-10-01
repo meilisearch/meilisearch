@@ -22,7 +22,7 @@ use super::{StdResult, TopLevelMap};
 use crate::documents::{PrimaryKey, DEFAULT_PRIMARY_KEY};
 use crate::update::new::channel::ExtractorSender;
 use crate::update::settings::InnerIndexSettings;
-use crate::update::new::items_pool::ParallelIteratorExt;
+use crate::update::new::parallel_iterator_ext::ParallelIteratorExt;
 use crate::update::GrenadParameters;
 use crate::{Error, FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
 

@@ -4,7 +4,7 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelIterator};
 use roaring::RoaringBitmap;
 
 use super::DocumentChanges;
-use crate::update::new::items_pool::ParallelIteratorExt as _;
+use crate::update::new::parallel_iterator_ext::ParallelIteratorExt as _;
 use crate::update::new::{Deletion, DocumentChange};
 use crate::{Error, FieldsIdsMap, Index, Result};
 

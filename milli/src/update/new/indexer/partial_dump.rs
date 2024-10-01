@@ -5,7 +5,7 @@ use rayon::iter::IndexedParallelIterator;
 use super::DocumentChanges;
 use crate::documents::{DocumentIdExtractionError, PrimaryKey};
 use crate::update::concurrent_available_ids::ConcurrentAvailableIds;
-use crate::update::new::items_pool::ParallelIteratorExt;
+use crate::update::new::parallel_iterator_ext::ParallelIteratorExt;
 use crate::update::new::{DocumentChange, Insertion, KvWriterFieldId};
 use crate::{all_obkv_to_json, Error, FieldsIdsMap, Object, Result, UserError};
 

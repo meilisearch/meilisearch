@@ -12,7 +12,7 @@ use super::super::document_change::DocumentChange;
 use super::super::{CowStr, TopLevelMap};
 use super::DocumentChanges;
 use crate::documents::{DocumentIdExtractionError, PrimaryKey};
-use crate::update::new::items_pool::ParallelIteratorExt as _;
+use crate::update::new::parallel_iterator_ext::ParallelIteratorExt as _;
 use crate::update::new::{Deletion, Insertion, KvReaderFieldId, KvWriterFieldId, Update};
 use crate::update::{AvailableIds, IndexDocumentsMethod};
 use crate::{DocumentId, Error, FieldsIdsMap, Index, Result, UserError};
