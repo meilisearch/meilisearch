@@ -3,8 +3,8 @@ use crate::json;
 
 #[actix_rt::test]
 async fn create_and_delete_index() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (response, code) = index.create(None).await;
 
     assert_eq!(code, 202);
@@ -24,14 +24,18 @@ async fn create_and_delete_index() {
 
 #[actix_rt::test]
 async fn error_delete_unexisting_index() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (task, code) = index.delete().await;
 
     assert_eq!(code, 202);
 
+    let msg = format!(
+        "Index `{}` not found.",
+        task["indexUid"].as_str().expect("indexUid should exist").trim_matches('"')
+    );
     let expected_response = json!({
-        "message": "Index `test` not found.",
+        "message": msg,
         "code": "index_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#index_not_found"
@@ -44,8 +48,8 @@ async fn error_delete_unexisting_index() {
 
 #[actix_rt::test]
 async fn loop_delete_add_documents() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let documents = json!([{"id": 1, "field1": "hello"}]);
     let mut tasks = Vec::new();
     for _ in 0..50 {
