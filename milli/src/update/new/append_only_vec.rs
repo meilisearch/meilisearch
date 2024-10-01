@@ -99,12 +99,6 @@ fn test_indices() {
     }
 }
 
-impl<T> Default for AppendOnlyVec<T> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl<T> AppendOnlyVec<T> {
     const EMPTY: UnsafeCell<*mut T> = UnsafeCell::new(ptr::null_mut());
 
@@ -217,6 +211,12 @@ impl<T> AppendOnlyVec<T> {
         self.count.store(0, Ordering::Relaxed);
 
         vec
+    }
+}
+
+impl<T> Default for AppendOnlyVec<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

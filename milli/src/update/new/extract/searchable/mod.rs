@@ -14,6 +14,7 @@ use tokenize_document::{tokenizer_builder, DocumentTokenizer};
 
 use super::cache::CboCachedSorter;
 use super::DocidsExtractor;
+use crate::update::new::append_only_vec::AppendOnlyVec;
 use crate::update::new::items_pool::ParallelIteratorExt;
 use crate::update::new::{DocumentChange, ItemsPool};
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
@@ -57,44 +58,39 @@ pub trait SearchableExtractor {
             localized_attributes_rules: &localized_attributes_rules,
             max_positions_per_attributes: MAX_POSITION_PER_ATTRIBUTE,
         };
-
-        let context_pool = ItemsPool::new(|| {
-            Ok((
-                &document_tokenizer,
-                fields_ids_map.clone(),
-                CboCachedSorter::new(
-                    // TODO use a better value
-                    1_000_000.try_into().unwrap(),
-                    create_sorter(
-                        grenad::SortAlgorithm::Stable,
-                        MergeDeladdCboRoaringBitmaps,
-                        indexer.chunk_compression_type,
-                        indexer.chunk_compression_level,
-                        indexer.max_nb_chunks,
-                        max_memory,
-                    ),
-                ),
-            ))
-        });
+        let caches = AppendOnlyVec::new();
 
         {
             let span =
                 tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
             let _entered = span.enter();
             document_changes.into_par_iter().try_arc_for_each_try_init(
-                || index.read_txn().map_err(Error::from),
-                |rtxn, document_change| {
-                    context_pool.with(|(document_tokenizer, fields_ids_map, cached_sorter)| {
-                        Self::extract_document_change(
-                            rtxn,
-                            index,
-                            document_tokenizer,
-                            fields_ids_map,
-                            cached_sorter,
-                            document_change?,
-                        )
-                        .map_err(Arc::new)
-                    })
+                || {
+                    let rtxn = index.read_txn().map_err(Error::from)?;
+                    let cache = caches.push(CboCachedSorter::new(
+                        // TODO use a better value
+                        1_000_000.try_into().unwrap(),
+                        create_sorter(
+                            grenad::SortAlgorithm::Stable,
+                            MergeDeladdCboRoaringBitmaps,
+                            indexer.chunk_compression_type,
+                            indexer.chunk_compression_level,
+                            indexer.max_nb_chunks,
+                            max_memory,
+                        ),
+                    ));
+                    Ok((rtxn, &document_tokenizer, fields_ids_map.clone(), cache))
+                },
+                |(rtxn, document_tokenizer, fields_ids_map, cached_sorter), document_change| {
+                    Self::extract_document_change(
+                        rtxn,
+                        index,
+                        document_tokenizer,
+                        fields_ids_map,
+                        cached_sorter,
+                        document_change?,
+                    )
+                    .map_err(Arc::new)
                 },
             )?;
         }
@@ -104,14 +100,15 @@ pub trait SearchableExtractor {
                 tracing::trace_span!(target: "indexing::documents::extract", "merger_building");
             let _entered = span.enter();
 
-            let readers: Vec<_> = context_pool
-                .into_items()
+            let readers: Vec<_> = caches
+                .into_iter()
                 .par_bridge()
-                .map(|(_tokenizer, _fields_ids_map, cached_sorter)| {
+                .map(|cached_sorter| {
                     let sorter = cached_sorter.into_sorter()?;
                     sorter.into_reader_cursors()
                 })
                 .collect();
+
             for reader in readers {
                 builder.extend(reader?);
             }

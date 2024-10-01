@@ -12,6 +12,7 @@ use super::super::cache::CboCachedSorter;
 use super::facet_document::extract_document_facets;
 use super::FacetKind;
 use crate::facet::value_encoding::f64_into_bytes;
+use crate::update::new::append_only_vec::AppendOnlyVec;
 use crate::update::new::extract::DocidsExtractor;
 use crate::update::new::items_pool::ParallelIteratorExt;
 use crate::update::new::{DocumentChange, ItemsPool};
@@ -209,45 +210,40 @@ impl DocidsExtractor for FacetedDocidsExtractor {
         let attributes_to_extract = Self::attributes_to_extract(&rtxn, index)?;
         let attributes_to_extract: Vec<_> =
             attributes_to_extract.iter().map(|s| s.as_ref()).collect();
-
-        let context_pool = ItemsPool::new(|| {
-            Ok((
-                fields_ids_map.clone(),
-                Vec::new(),
-                CboCachedSorter::new(
-                    // TODO use a better value
-                    100.try_into().unwrap(),
-                    create_sorter(
-                        grenad::SortAlgorithm::Stable,
-                        MergeDeladdCboRoaringBitmaps,
-                        indexer.chunk_compression_type,
-                        indexer.chunk_compression_level,
-                        indexer.max_nb_chunks,
-                        max_memory,
-                    ),
-                ),
-            ))
-        });
+        let caches = AppendOnlyVec::new();
 
         {
             let span =
                 tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
             let _entered = span.enter();
             document_changes.into_par_iter().try_arc_for_each_try_init(
-                || index.read_txn().map_err(Error::from),
-                |rtxn, document_change| {
-                    context_pool.with(|(fields_ids_map, buffer, cached_sorter)| {
-                        Self::extract_document_change(
-                            rtxn,
-                            index,
-                            buffer,
-                            fields_ids_map,
-                            &attributes_to_extract,
-                            cached_sorter,
-                            document_change?,
-                        )
-                        .map_err(Arc::new)
-                    })
+                || {
+                    let rtxn = index.read_txn().map_err(Error::from)?;
+                    let cache = caches.push(CboCachedSorter::new(
+                        // TODO use a better value
+                        100.try_into().unwrap(),
+                        create_sorter(
+                            grenad::SortAlgorithm::Stable,
+                            MergeDeladdCboRoaringBitmaps,
+                            indexer.chunk_compression_type,
+                            indexer.chunk_compression_level,
+                            indexer.max_nb_chunks,
+                            max_memory,
+                        ),
+                    ));
+                    Ok((rtxn, fields_ids_map.clone(), Vec::new(), cache))
+                },
+                |(rtxn, fields_ids_map, buffer, cached_sorter), document_change| {
+                    Self::extract_document_change(
+                        rtxn,
+                        index,
+                        buffer,
+                        fields_ids_map,
+                        &attributes_to_extract,
+                        cached_sorter,
+                        document_change?,
+                    )
+                    .map_err(Arc::new)
                 },
             )?;
         }
@@ -257,14 +253,15 @@ impl DocidsExtractor for FacetedDocidsExtractor {
                 tracing::trace_span!(target: "indexing::documents::extract", "merger_building");
             let _entered = span.enter();
 
-            let readers: Vec<_> = context_pool
-                .into_items()
+            let readers: Vec<_> = caches
+                .into_iter()
                 .par_bridge()
-                .map(|(_tokenizer, _fields_ids_map, cached_sorter)| {
+                .map(|cached_sorter| {
                     let sorter = cached_sorter.into_sorter()?;
                     sorter.into_reader_cursors()
                 })
                 .collect();
+
             for reader in readers {
                 builder.extend(reader?);
             }
