@@ -309,6 +309,11 @@ impl<State> Server<State> {
         }
     }
 
+    pub fn unique_index_with_encoder(&self, encoder: Encoder) -> Index<'_> {
+        let uuid = Uuid::new_v4();
+        Index { uid: uuid.to_string(), service: &self.service, encoder, marker: PhantomData }
+    }
+
     pub(super) async fn _create_index(&self, body: Value) -> (Value, StatusCode) {
         self.service.post("/indexes", body).await
     }

@@ -9,8 +9,8 @@ use crate::json;
 
 #[actix_rt::test]
 async fn create_index_no_primary_key() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (response, code) = index.create(None).await;
 
     assert_eq!(code, 202);
@@ -26,8 +26,8 @@ async fn create_index_no_primary_key() {
 
 #[actix_rt::test]
 async fn create_index_with_gzip_encoded_request() {
-    let server = Server::new().await;
-    let index = server.index_with_encoder("test", Encoder::Gzip);
+    let server = Server::new_shared();
+    let index = server.unique_index_with_encoder(Encoder::Gzip);
     let (response, code) = index.create(None).await;
 
     assert_eq!(code, 202);
@@ -43,7 +43,7 @@ async fn create_index_with_gzip_encoded_request() {
 
 #[actix_rt::test]
 async fn create_index_with_gzip_encoded_request_and_receiving_brotli_encoded_response() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     let body = serde_json::to_string(&json!({
@@ -68,14 +68,14 @@ async fn create_index_with_gzip_encoded_request_and_receiving_brotli_encoded_res
     let parsed_response =
         serde_json::from_slice::<Value>(decoded.into().as_ref()).expect("Expecting valid json");
 
-    assert_eq!(parsed_response["taskUid"], 0);
+    assert_eq!(parsed_response["taskUid"], 3);
     assert_eq!(parsed_response["indexUid"], "test");
 }
 
 #[actix_rt::test]
 async fn create_index_with_zlib_encoded_request() {
-    let server = Server::new().await;
-    let index = server.index_with_encoder("test", Encoder::Deflate);
+    let server = Server::new_shared();
+    let index = server.unique_index_with_encoder(Encoder::Deflate);
     let (response, code) = index.create(None).await;
 
     assert_eq!(code, 202);
@@ -91,8 +91,8 @@ async fn create_index_with_zlib_encoded_request() {
 
 #[actix_rt::test]
 async fn create_index_with_brotli_encoded_request() {
-    let server = Server::new().await;
-    let index = server.index_with_encoder("test", Encoder::Brotli);
+    let server = Server::new_shared();
+    let index = server.unique_index_with_encoder(Encoder::Brotli);
     let (response, code) = index.create(None).await;
 
     assert_eq!(code, 202);
@@ -108,8 +108,8 @@ async fn create_index_with_brotli_encoded_request() {
 
 #[actix_rt::test]
 async fn create_index_with_primary_key() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (response, code) = index.create(Some("primary")).await;
 
     assert_eq!(code, 202);
@@ -127,8 +127,8 @@ async fn create_index_with_primary_key() {
 async fn create_index_with_invalid_primary_key() {
     let document = json!([ { "id": 2, "title": "Pride and Prejudice" } ]);
 
-    let server = Server::new().await;
-    let index = server.index("movies");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (response, code) = index.add_documents(document, Some("title")).await;
     assert_eq!(code, 202);
 
@@ -142,10 +142,10 @@ async fn create_index_with_invalid_primary_key() {
 #[actix_rt::test]
 async fn test_create_multiple_indexes() {
     let server = Server::new().await;
-    let index1 = server.index("test1");
-    let index2 = server.index("test2");
-    let index3 = server.index("test3");
-    let index4 = server.index("test4");
+    let index1 = server.unique_index();
+    let index2 = server.unique_index();
+    let index3 = server.unique_index();
+    let index4 = server.unique_index();
 
     let (task1, _) = index1.create(None).await;
     let (task2, _) = index2.create(None).await;
@@ -164,7 +164,7 @@ async fn test_create_multiple_indexes() {
 #[actix_rt::test]
 async fn error_create_existing_index() {
     let server = Server::new().await;
-    let index = server.index("test");
+    let index = server.unique_index();
     let (_, code) = index.create(Some("primary")).await;
 
     assert_eq!(code, 202);
@@ -172,9 +172,13 @@ async fn error_create_existing_index() {
     let (task, _) = index.create(Some("primary")).await;
 
     let response = index.wait_task(task.uid()).await;
+    let msg = format!(
+        "Index `{}` already exists.",
+        task["indexUid"].as_str().expect("indexUid should exist").trim_matches('"')
+    );
 
     let expected_response = json!({
-        "message": "Index `test` already exists.",
+        "message": msg,
         "code": "index_already_exists",
         "type": "invalid_request",
         "link":"https://docs.meilisearch.com/errors#index_already_exists"
