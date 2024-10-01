@@ -16,7 +16,9 @@ use crate::update::del_add::DelAdd;
 use crate::update::new::channel::MergerOperation;
 use crate::update::new::word_fst_builder::WordFstBuilder;
 use crate::update::MergeDeladdCboRoaringBitmaps;
-use crate::{CboRoaringBitmapCodec, Error, GeoPoint, GlobalFieldsIdsMap, Index, Prefix, Result};
+use crate::{
+    CboRoaringBitmapCodec, Error, FieldId, GeoPoint, GlobalFieldsIdsMap, Index, Prefix, Result,
+};
 
 /// TODO We must return some infos/stats
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents", name = "merge")]
@@ -188,13 +190,17 @@ pub fn merge_grenad_entries(
                 let span =
                     tracing::trace_span!(target: "indexing::documents::merge", "facet_docids");
                 let _entered = span.enter();
+                let mut facet_field_ids_delta = FacetFieldIdsDelta::new();
                 merge_and_send_facet_docids(
                     merger,
                     FacetDatabases::new(index),
                     rtxn,
                     &mut buffer,
                     sender.facet_docids(),
+                    &mut facet_field_ids_delta,
                 )?;
+
+                merger_result.facet_field_ids_delta = Some(facet_field_ids_delta);
             }
         }
     }
@@ -218,6 +224,8 @@ pub fn merge_grenad_entries(
 pub struct MergerResult {
     /// The delta of the prefixes
     pub prefix_delta: Option<PrefixDelta>,
+    /// The field ids that have been modified
+    pub facet_field_ids_delta: Option<FacetFieldIdsDelta>,
 }
 
 pub struct GeoExtractor {
@@ -308,20 +316,23 @@ fn merge_and_send_facet_docids(
     rtxn: &RoTxn<'_>,
     buffer: &mut Vec<u8>,
     docids_sender: impl DocidsSender,
+    facet_field_ids_delta: &mut FacetFieldIdsDelta,
 ) -> Result<()> {
     let mut merger_iter = merger.into_stream_merger_iter().unwrap();
     while let Some((key, deladd)) = merger_iter.next().unwrap() {
-        let current = database.get(rtxn, key)?;
+        let current = database.get_cbo_roaring_bytes_value(rtxn, key)?;
         let deladd: &KvReaderDelAdd = deladd.into();
         let del = deladd.get(DelAdd::Deletion);
         let add = deladd.get(DelAdd::Addition);
 
         match merge_cbo_bitmaps(current, del, add)? {
             Operation::Write(bitmap) => {
+                facet_field_ids_delta.register_from_key(key);
                 let value = cbo_bitmap_serialize_into_vec(&bitmap, buffer);
                 docids_sender.write(key, value).unwrap();
             }
             Operation::Delete => {
+                facet_field_ids_delta.register_from_key(key);
                 docids_sender.delete(key).unwrap();
             }
             Operation::Ignore => (),
@@ -331,43 +342,84 @@ fn merge_and_send_facet_docids(
     Ok(())
 }
 
-struct FacetDatabases {
-    /// Maps the facet field id and the docids for which this field exists
-    facet_id_exists_docids: Database<Bytes, Bytes>,
-    /// Maps the facet field id and the docids for which this field is set as null
-    facet_id_is_null_docids: Database<Bytes, Bytes>,
-    /// Maps the facet field id and the docids for which this field is considered empty
-    facet_id_is_empty_docids: Database<Bytes, Bytes>,
-    /// Maps the facet field id and ranges of numbers with the docids that corresponds to them.
-    facet_id_f64_docids: Database<Bytes, Bytes>,
-    /// Maps the facet field id and ranges of strings with the docids that corresponds to them.
-    facet_id_string_docids: Database<Bytes, Bytes>,
+struct FacetDatabases<'a> {
+    index: &'a Index,
 }
 
-impl FacetDatabases {
-    fn new(index: &Index) -> Self {
-        Self {
-            facet_id_exists_docids: index.facet_id_exists_docids.remap_types(),
-            facet_id_is_null_docids: index.facet_id_is_null_docids.remap_types(),
-            facet_id_is_empty_docids: index.facet_id_is_empty_docids.remap_types(),
-            facet_id_f64_docids: index.facet_id_f64_docids.remap_types(),
-            facet_id_string_docids: index.facet_id_string_docids.remap_types(),
-        }
+impl<'a> FacetDatabases<'a> {
+    fn new(index: &'a Index) -> Self {
+        Self { index }
     }
 
-    fn get<'a>(&self, rtxn: &'a RoTxn<'_>, key: &[u8]) -> heed::Result<Option<&'a [u8]>> {
-        let (facet_kind, key) = self.extract_facet_kind(key);
+    fn get_cbo_roaring_bytes_value<'t>(
+        &self,
+        rtxn: &'t RoTxn<'_>,
+        key: &[u8],
+    ) -> heed::Result<Option<&'t [u8]>> {
+        let (facet_kind, key) = FacetKind::extract_from_key(key);
+
+        let value =
+            super::channel::Database::from(facet_kind).database(self.index).get(rtxn, key)?;
         match facet_kind {
-            FacetKind::Exists => self.facet_id_exists_docids.get(rtxn, key),
-            FacetKind::Null => self.facet_id_is_null_docids.get(rtxn, key),
-            FacetKind::Empty => self.facet_id_is_empty_docids.get(rtxn, key),
-            FacetKind::Number => self.facet_id_f64_docids.get(rtxn, key),
-            FacetKind::String => self.facet_id_string_docids.get(rtxn, key),
+            // skip level group size
+            FacetKind::String | FacetKind::Number => Ok(value.map(|v| &v[1..])),
+            _ => Ok(value),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct FacetFieldIdsDelta {
+    /// The field ids that have been modified
+    modified_facet_string_ids: HashSet<FieldId>,
+    modified_facet_number_ids: HashSet<FieldId>,
+}
+
+impl FacetFieldIdsDelta {
+    fn new() -> Self {
+        Self {
+            modified_facet_string_ids: HashSet::new(),
+            modified_facet_number_ids: HashSet::new(),
         }
     }
 
-    fn extract_facet_kind<'a>(&self, key: &'a [u8]) -> (FacetKind, &'a [u8]) {
-        (FacetKind::from(key[0]), &key[1..])
+    fn register_facet_string_id(&mut self, field_id: FieldId) {
+        self.modified_facet_string_ids.insert(field_id);
+    }
+
+    fn register_facet_number_id(&mut self, field_id: FieldId) {
+        self.modified_facet_number_ids.insert(field_id);
+    }
+
+    fn register_from_key(&mut self, key: &[u8]) {
+        let (facet_kind, field_id) = self.extract_key_data(key);
+        match facet_kind {
+            FacetKind::Number => self.register_facet_number_id(field_id),
+            FacetKind::String => self.register_facet_string_id(field_id),
+            _ => (),
+        }
+    }
+
+    fn extract_key_data<'a>(&self, key: &'a [u8]) -> (FacetKind, FieldId) {
+        let facet_kind = FacetKind::from(key[0]);
+        let field_id = FieldId::from_be_bytes([key[1], key[2]]);
+        (facet_kind, field_id)
+    }
+
+    pub fn modified_facet_string_ids(&self) -> Option<Vec<FieldId>> {
+        if self.modified_facet_string_ids.is_empty() {
+            None
+        } else {
+            Some(self.modified_facet_string_ids.iter().copied().collect())
+        }
+    }
+
+    pub fn modified_facet_number_ids(&self) -> Option<Vec<FieldId>> {
+        if self.modified_facet_number_ids.is_empty() {
+            None
+        } else {
+            Some(self.modified_facet_number_ids.iter().copied().collect())
+        }
     }
 }
 
@@ -396,11 +448,13 @@ fn merge_cbo_bitmaps(
         (Some(current), None, Some(add)) => Ok(Operation::Write(current | add)),
         (Some(current), Some(del), add) => {
             let output = match add {
-                Some(add) => (current - del) | add,
-                None => current - del,
+                Some(add) => (&current - del) | add,
+                None => &current - del,
             };
             if output.is_empty() {
                 Ok(Operation::Delete)
+            } else if current == output {
+                Ok(Operation::Ignore)
             } else {
                 Ok(Operation::Write(output))
             }

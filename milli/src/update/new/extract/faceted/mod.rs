@@ -4,6 +4,7 @@ mod facet_document;
 pub use extract_facets::FacetedDocidsExtractor;
 
 #[repr(u8)]
+#[derive(Debug, Clone, Copy)]
 pub enum FacetKind {
     Number = 0,
     String = 1,
@@ -22,5 +23,12 @@ impl From<u8> for FacetKind {
             4 => Self::Exists,
             _ => unreachable!(),
         }
+    }
+}
+
+impl FacetKind {
+    pub fn extract_from_key<'k>(key: &'k [u8]) -> (FacetKind, &'k [u8]) {
+        debug_assert!(key.len() > 3);
+        (FacetKind::from(key[0]), &key[1..])
     }
 }

@@ -120,6 +120,7 @@ pub struct WriterOperation {
     entry: EntryOperation,
 }
 
+#[derive(Debug)]
 pub enum Database {
     Documents,
     ExternalDocumentsIds,
@@ -154,6 +155,18 @@ impl Database {
             Database::FacetIdExistsDocids => index.facet_id_exists_docids.remap_types(),
             Database::FacetIdF64NumberDocids => index.facet_id_f64_docids.remap_types(),
             Database::FacetIdStringDocids => index.facet_id_string_docids.remap_types(),
+        }
+    }
+}
+
+impl From<FacetKind> for Database {
+    fn from(value: FacetKind) -> Self {
+        match value {
+            FacetKind::Number => Database::FacetIdF64NumberDocids,
+            FacetKind::String => Database::FacetIdStringDocids,
+            FacetKind::Null => Database::FacetIdIsNullDocids,
+            FacetKind::Empty => Database::FacetIdIsEmptyDocids,
+            FacetKind::Exists => Database::FacetIdExistsDocids,
         }
     }
 }
@@ -395,8 +408,18 @@ pub struct FacetDocidsSender<'a> {
 
 impl DocidsSender for FacetDocidsSender<'_> {
     fn write(&self, key: &[u8], value: &[u8]) -> StdResult<(), SendError<()>> {
-        let (database, key) = self.extract_database(key);
-        let entry = EntryOperation::Write(KeyValueEntry::from_small_key_value(key, value));
+        let (facet_kind, key) = FacetKind::extract_from_key(key);
+        let database = Database::from(facet_kind);
+        // let entry = EntryOperation::Write(KeyValueEntry::from_small_key_value(key, value));
+        let entry = match facet_kind {
+            // skip level group size
+            FacetKind::String | FacetKind::Number => {
+                // add facet group size
+                let value = [&[1], value].concat();
+                EntryOperation::Write(KeyValueEntry::from_small_key_value(key, &value))
+            }
+            _ => EntryOperation::Write(KeyValueEntry::from_small_key_value(key, value)),
+        };
         match self.sender.send(WriterOperation { database, entry }) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
@@ -404,25 +427,13 @@ impl DocidsSender for FacetDocidsSender<'_> {
     }
 
     fn delete(&self, key: &[u8]) -> StdResult<(), SendError<()>> {
-        let (database, key) = self.extract_database(key);
+        let (facet_kind, key) = FacetKind::extract_from_key(key);
+        let database = Database::from(facet_kind);
         let entry = EntryOperation::Delete(KeyEntry::from_key(key));
         match self.sender.send(WriterOperation { database, entry }) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
-    }
-}
-
-impl FacetDocidsSender<'_> {
-    fn extract_database<'a>(&self, key: &'a [u8]) -> (Database, &'a [u8]) {
-        let database = match FacetKind::from(key[0]) {
-            FacetKind::Number => Database::FacetIdF64NumberDocids,
-            FacetKind::String => Database::FacetIdStringDocids,
-            FacetKind::Null => Database::FacetIdIsNullDocids,
-            FacetKind::Empty => Database::FacetIdIsEmptyDocids,
-            FacetKind::Exists => Database::FacetIdExistsDocids,
-        };
-        (database, &key[1..])
     }
 }
 

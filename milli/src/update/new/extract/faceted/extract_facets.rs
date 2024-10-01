@@ -129,7 +129,7 @@ impl FacetedDocidsExtractor {
                     buffer.clear();
                     buffer.push(FacetKind::Number as u8);
                     buffer.extend_from_slice(&fid.to_be_bytes());
-                    buffer.push(1); // level 0
+                    buffer.push(0); // level 0
                     buffer.extend_from_slice(&ordered);
                     buffer.extend_from_slice(&n.to_be_bytes());
 
@@ -145,7 +145,7 @@ impl FacetedDocidsExtractor {
                 buffer.clear();
                 buffer.push(FacetKind::String as u8);
                 buffer.extend_from_slice(&fid.to_be_bytes());
-                buffer.push(1); // level 0
+                buffer.push(0); // level 0
                 buffer.extend_from_slice(truncated.as_bytes());
                 cache_fn(cached_sorter, &*buffer, docid).map_err(Into::into)
             }

@@ -13,18 +13,19 @@ pub use update_by_function::UpdateByFunction;
 use super::channel::*;
 use super::document_change::{Deletion, DocumentChange, Insertion, Update};
 use super::extract::*;
-use super::merger::merge_grenad_entries;
+use super::merger::{merge_grenad_entries, FacetFieldIdsDelta};
 use super::word_fst_builder::PrefixDelta;
 use super::words_prefix_docids::{
     compute_word_prefix_docids, compute_word_prefix_fid_docids, compute_word_prefix_position_docids,
 };
 use super::{StdResult, TopLevelMap};
 use crate::documents::{PrimaryKey, DEFAULT_PRIMARY_KEY};
+use crate::facet::FacetType;
 use crate::update::new::channel::ExtractorSender;
 use crate::update::settings::InnerIndexSettings;
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt;
-use crate::update::GrenadParameters;
 use crate::{Error, FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
+use crate::update::{FacetsUpdateBulk, GrenadParameters};
 
 mod document_deletion;
 mod document_operation;
@@ -71,11 +72,11 @@ where
     let global_fields_ids_map_clone = global_fields_ids_map.clone();
 
     thread::scope(|s| {
+        let indexer_span = tracing::Span::current();
         // TODO manage the errors correctly
-        let current_span = tracing::Span::current();
         let handle = Builder::new().name(S("indexer-extractors")).spawn_scoped(s, move || {
             pool.in_place_scope(|_s| {
-                    let span = tracing::trace_span!(target: "indexing::documents", parent: &current_span, "extract");
+                    let span = tracing::trace_span!(target: "indexing::documents", parent: &indexer_span, "extract");
                     let _entered = span.enter();
                     let document_changes = document_changes.into_par_iter();
 
@@ -179,11 +180,11 @@ where
                 })
         })?;
 
+        let indexer_span = tracing::Span::current();
         // TODO manage the errors correctly
-        let current_span = tracing::Span::current();
         let merger_thread = Builder::new().name(S("indexer-merger")).spawn_scoped(s, move || {
             let span =
-                tracing::trace_span!(target: "indexing::documents", parent: &current_span, "merge");
+                tracing::trace_span!(target: "indexing::documents", parent: &indexer_span, "merge");
             let _entered = span.enter();
             let rtxn = index.read_txn().unwrap();
             merge_grenad_entries(
@@ -211,17 +212,12 @@ where
         handle.join().unwrap()?;
         let merger_result = merger_thread.join().unwrap()?;
 
-        if let Some(prefix_delta) = merger_result.prefix_delta {
-            let span = tracing::trace_span!(target: "indexing", "prefix");
-            let _entered = span.enter();
+        if let Some(facet_field_ids_delta) = merger_result.facet_field_ids_delta {
+            compute_facet_level_database(index, wtxn, facet_field_ids_delta)?;
+        }
 
-            let PrefixDelta { modified, deleted } = prefix_delta;
-            // Compute word prefix docids
-            compute_word_prefix_docids(wtxn, index, &modified, &deleted)?;
-            // Compute word prefix fid docids
-            compute_word_prefix_fid_docids(wtxn, index, &modified, &deleted)?;
-            // Compute word prefix position docids
-            compute_word_prefix_position_docids(wtxn, index, &modified, &deleted)?;
+        if let Some(prefix_delta) = merger_result.prefix_delta {
+            compute_prefix_database(index, wtxn, prefix_delta)?;
         }
 
         Ok(()) as Result<_>
@@ -234,6 +230,51 @@ where
     let mut inner_index_settings = InnerIndexSettings::from_index(index, wtxn)?;
     inner_index_settings.recompute_facets(wtxn, index)?;
     inner_index_settings.recompute_searchables(wtxn, index)?;
+
+    Ok(())
+}
+
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
+fn compute_prefix_database(
+    index: &Index,
+    wtxn: &mut RwTxn,
+    prefix_delta: PrefixDelta,
+) -> Result<()> {
+    let PrefixDelta { modified, deleted } = prefix_delta;
+    // Compute word prefix docids
+    compute_word_prefix_docids(wtxn, index, &modified, &deleted)?;
+    // Compute word prefix fid docids
+    compute_word_prefix_fid_docids(wtxn, index, &modified, &deleted)?;
+    // Compute word prefix position docids
+    compute_word_prefix_position_docids(wtxn, index, &modified, &deleted)
+}
+
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::facet_field_ids")]
+fn compute_facet_level_database(
+    index: &Index,
+    wtxn: &mut RwTxn,
+    facet_field_ids_delta: FacetFieldIdsDelta,
+) -> Result<()> {
+    if let Some(modified_facet_string_ids) = facet_field_ids_delta.modified_facet_string_ids() {
+        let span = tracing::trace_span!(target: "indexing::facet_field_ids", "string");
+        let _entered = span.enter();
+        FacetsUpdateBulk::new_not_updating_level_0(
+            index,
+            modified_facet_string_ids,
+            FacetType::String,
+        )
+        .execute(wtxn)?;
+    }
+    if let Some(modified_facet_number_ids) = facet_field_ids_delta.modified_facet_number_ids() {
+        let span = tracing::trace_span!(target: "indexing::facet_field_ids", "number");
+        let _entered = span.enter();
+        FacetsUpdateBulk::new_not_updating_level_0(
+            index,
+            modified_facet_number_ids,
+            FacetType::Number,
+        )
+        .execute(wtxn)?;
+    }
 
     Ok(())
 }
