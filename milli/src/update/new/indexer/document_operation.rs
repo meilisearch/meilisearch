@@ -5,14 +5,14 @@ use std::sync::Arc;
 use heed::types::Bytes;
 use heed::RoTxn;
 use memmap2::Mmap;
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator};
 use IndexDocumentsMethod as Idm;
 
 use super::super::document_change::DocumentChange;
-use super::super::items_pool::ItemsPool;
 use super::super::{CowStr, TopLevelMap};
 use super::DocumentChanges;
 use crate::documents::{DocumentIdExtractionError, PrimaryKey};
+use crate::update::new::parallel_iterator_ext::ParallelIteratorExt as _;
 use crate::update::new::{Deletion, Insertion, KvReaderFieldId, KvWriterFieldId, Update};
 use crate::update::{AvailableIds, IndexDocumentsMethod};
 use crate::{DocumentId, Error, FieldsIdsMap, Index, Result, UserError};
@@ -73,7 +73,11 @@ impl<'p, 'pl: 'p> DocumentChanges<'p> for DocumentOperation<'pl> {
         self,
         fields_ids_map: &mut FieldsIdsMap,
         param: Self::Parameter,
-    ) -> Result<impl IndexedParallelIterator<Item = Result<DocumentChange>> + Clone + 'p> {
+    ) -> Result<
+        impl IndexedParallelIterator<Item = std::result::Result<DocumentChange, Arc<Error>>>
+            + Clone
+            + 'p,
+    > {
         let (index, rtxn, primary_key) = param;
 
         let documents_ids = index.documents_ids(rtxn)?;
@@ -199,24 +203,22 @@ impl<'p, 'pl: 'p> DocumentChanges<'p> for DocumentOperation<'pl> {
         // And finally sort them
         docids_version_offsets.sort_unstable_by_key(|(_, (_, docops))| sort_function_key(docops));
 
-        Ok(docids_version_offsets.into_par_iter().map_with(
-            Arc::new(ItemsPool::new(|| index.read_txn().map_err(crate::Error::from))),
-            move |context_pool, (external_docid, (internal_docid, operations))| {
-                context_pool.with(|rtxn| {
-                    let document_merge_function = match self.index_documents_method {
-                        Idm::ReplaceDocuments => MergeDocumentForReplacement::merge,
-                        Idm::UpdateDocuments => MergeDocumentForUpdates::merge,
-                    };
+        Ok(docids_version_offsets.into_par_iter().try_map_try_init(
+            || index.read_txn().map_err(Error::from),
+            move |rtxn, (external_docid, (internal_docid, operations))| {
+                let document_merge_function = match self.index_documents_method {
+                    Idm::ReplaceDocuments => MergeDocumentForReplacement::merge,
+                    Idm::UpdateDocuments => MergeDocumentForUpdates::merge,
+                };
 
-                    document_merge_function(
-                        rtxn,
-                        index,
-                        &fields_ids_map,
-                        internal_docid,
-                        external_docid.to_string(), // TODO do not clone
-                        &operations,
-                    )
-                })
+                document_merge_function(
+                    rtxn,
+                    index,
+                    &fields_ids_map,
+                    internal_docid,
+                    external_docid.to_string(), // TODO do not clone
+                    &operations,
+                )
             },
         ))
     }

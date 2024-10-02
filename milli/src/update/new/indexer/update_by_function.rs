@@ -1,8 +1,10 @@
+use std::sync::Arc;
+
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
 use super::DocumentChanges;
 use crate::update::new::DocumentChange;
-use crate::{FieldsIdsMap, Result};
+use crate::{Error, FieldsIdsMap, Result};
 
 pub struct UpdateByFunction;
 
@@ -13,7 +15,11 @@ impl<'p> DocumentChanges<'p> for UpdateByFunction {
         self,
         _fields_ids_map: &mut FieldsIdsMap,
         _param: Self::Parameter,
-    ) -> Result<impl IndexedParallelIterator<Item = Result<DocumentChange>> + Clone + 'p> {
+    ) -> Result<
+        impl IndexedParallelIterator<Item = std::result::Result<DocumentChange, Arc<Error>>>
+            + Clone
+            + 'p,
+    > {
         Ok((0..100).into_par_iter().map(|_| todo!()))
     }
 }

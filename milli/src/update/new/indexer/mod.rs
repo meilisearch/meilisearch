@@ -1,4 +1,4 @@
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use std::thread::{self, Builder};
 
 use big_s::S;
@@ -22,8 +22,9 @@ use super::{StdResult, TopLevelMap};
 use crate::documents::{PrimaryKey, DEFAULT_PRIMARY_KEY};
 use crate::update::new::channel::ExtractorSender;
 use crate::update::settings::InnerIndexSettings;
+use crate::update::new::parallel_iterator_ext::ParallelIteratorExt;
 use crate::update::GrenadParameters;
-use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
+use crate::{Error, FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
 
 mod document_deletion;
 mod document_operation;
@@ -37,7 +38,11 @@ pub trait DocumentChanges<'p> {
         self,
         fields_ids_map: &mut FieldsIdsMap,
         param: Self::Parameter,
-    ) -> Result<impl IndexedParallelIterator<Item = Result<DocumentChange>> + Clone + 'p>;
+    ) -> Result<
+        impl IndexedParallelIterator<Item = std::result::Result<DocumentChange, Arc<Error>>>
+            + Clone
+            + 'p,
+    >;
 }
 
 /// This is the main function of this crate.
@@ -53,7 +58,9 @@ pub fn index<PI>(
     document_changes: PI,
 ) -> Result<()>
 where
-    PI: IndexedParallelIterator<Item = Result<DocumentChange>> + Send + Clone,
+    PI: IndexedParallelIterator<Item = std::result::Result<DocumentChange, Arc<Error>>>
+        + Send
+        + Clone,
 {
     let (merger_sender, writer_receiver) = merger_writer_channel(10_000);
     // This channel acts as a rendezvous point to ensure that we are one task ahead
@@ -74,7 +81,8 @@ where
 
                     // document but we need to create a function that collects and compresses documents.
                     let document_sender = extractor_sender.document_sender();
-                    document_changes.clone().into_par_iter().try_for_each(|result| {
+                    document_changes.clone().into_par_iter().try_arc_for_each::<_, Error>(
+                        |result| {
                         match result? {
                             DocumentChange::Deletion(deletion) => {
                                 let docid = deletion.docid();
@@ -92,7 +100,7 @@ where
                                 // extracted_dictionary_sender.send(self, dictionary: &[u8]);
                             }
                         }
-                        Ok(()) as Result<_>
+                        Ok(())
                     })?;
 
                     document_sender.finish().unwrap();
@@ -242,7 +250,7 @@ fn extract_and_send_docids<E: DocidsExtractor, D: MergerOperationType>(
     index: &Index,
     fields_ids_map: &GlobalFieldsIdsMap,
     indexer: GrenadParameters,
-    document_changes: impl IntoParallelIterator<Item = Result<DocumentChange>>,
+    document_changes: impl IntoParallelIterator<Item = std::result::Result<DocumentChange, Arc<Error>>>,
     sender: &ExtractorSender,
 ) -> Result<()> {
     let merger = E::run_extraction(index, fields_ids_map, indexer, document_changes)?;

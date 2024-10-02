@@ -3,6 +3,7 @@ mod extract_word_pair_proximity_docids;
 mod tokenize_document;
 
 use std::fs::File;
+use std::sync::Arc;
 
 pub use extract_word_docids::{WordDocidsExtractors, WordDocidsMergers};
 pub use extract_word_pair_proximity_docids::WordPairProximityDocidsExtractor;
@@ -13,16 +14,20 @@ use tokenize_document::{tokenizer_builder, DocumentTokenizer};
 
 use super::cache::CboCachedSorter;
 use super::DocidsExtractor;
-use crate::update::new::{DocumentChange, ItemsPool};
+use crate::update::new::append_only_vec::AppendOnlyVec;
+use crate::update::new::parallel_iterator_ext::ParallelIteratorExt;
+use crate::update::new::DocumentChange;
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
-use crate::{GlobalFieldsIdsMap, Index, Result, MAX_POSITION_PER_ATTRIBUTE};
+use crate::{Error, GlobalFieldsIdsMap, Index, Result, MAX_POSITION_PER_ATTRIBUTE};
 
 pub trait SearchableExtractor {
     fn run_extraction(
         index: &Index,
         fields_ids_map: &GlobalFieldsIdsMap,
         indexer: GrenadParameters,
-        document_changes: impl IntoParallelIterator<Item = Result<DocumentChange>>,
+        document_changes: impl IntoParallelIterator<
+            Item = std::result::Result<DocumentChange, Arc<Error>>,
+        >,
     ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>> {
         let max_memory = indexer.max_memory_by_thread();
 
@@ -53,43 +58,41 @@ pub trait SearchableExtractor {
             localized_attributes_rules: &localized_attributes_rules,
             max_positions_per_attributes: MAX_POSITION_PER_ATTRIBUTE,
         };
-
-        let context_pool = ItemsPool::new(|| {
-            Ok((
-                index.read_txn()?,
-                &document_tokenizer,
-                fields_ids_map.clone(),
-                CboCachedSorter::new(
-                    // TODO use a better value
-                    1_000_000.try_into().unwrap(),
-                    create_sorter(
-                        grenad::SortAlgorithm::Stable,
-                        MergeDeladdCboRoaringBitmaps,
-                        indexer.chunk_compression_type,
-                        indexer.chunk_compression_level,
-                        indexer.max_nb_chunks,
-                        max_memory,
-                    ),
-                ),
-            ))
-        });
+        let caches = AppendOnlyVec::new();
 
         {
             let span =
                 tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
             let _entered = span.enter();
-            document_changes.into_par_iter().try_for_each(|document_change| {
-                context_pool.with(|(rtxn, document_tokenizer, fields_ids_map, cached_sorter)| {
+            document_changes.into_par_iter().try_arc_for_each_try_init(
+                || {
+                    let rtxn = index.read_txn().map_err(Error::from)?;
+                    let cache = caches.push(CboCachedSorter::new(
+                        // TODO use a better value
+                        1_000_000.try_into().unwrap(),
+                        create_sorter(
+                            grenad::SortAlgorithm::Stable,
+                            MergeDeladdCboRoaringBitmaps,
+                            indexer.chunk_compression_type,
+                            indexer.chunk_compression_level,
+                            indexer.max_nb_chunks,
+                            max_memory,
+                        ),
+                    ));
+                    Ok((rtxn, &document_tokenizer, fields_ids_map.clone(), cache))
+                },
+                |(rtxn, document_tokenizer, fields_ids_map, cached_sorter), document_change| {
                     Self::extract_document_change(
-                        &*rtxn,
+                        rtxn,
                         index,
                         document_tokenizer,
                         fields_ids_map,
                         cached_sorter,
                         document_change?,
                     )
-                })
-            })?;
+                    .map_err(Arc::new)
+                },
+            )?;
         }
         {
             let mut builder = grenad::MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
@@ -97,14 +100,15 @@ pub trait SearchableExtractor {
                 tracing::trace_span!(target: "indexing::documents::extract", "merger_building");
             let _entered = span.enter();
 
-            let readers: Vec<_> = context_pool
-                .into_items()
+            let readers: Vec<_> = caches
+                .into_iter()
                 .par_bridge()
-                .map(|(_rtxn, _tokenizer, _fields_ids_map, cached_sorter)| {
+                .map(|cached_sorter| {
                     let sorter = cached_sorter.into_sorter()?;
                     sorter.into_reader_cursors()
                 })
                 .collect();
+
             for reader in readers {
                 builder.extend(reader?);
             }
@@ -132,7 +136,9 @@ impl<T: SearchableExtractor> DocidsExtractor for T {
         index: &Index,
         fields_ids_map: &GlobalFieldsIdsMap,
         indexer: GrenadParameters,
-        document_changes: impl IntoParallelIterator<Item = Result<DocumentChange>>,
+        document_changes: impl IntoParallelIterator<
+            Item = std::result::Result<DocumentChange, Arc<Error>>,
+        >,
     ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>> {
         Self::run_extraction(index, fields_ids_map, indexer, document_changes)
     }
