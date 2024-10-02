@@ -417,6 +417,8 @@ impl EmbeddingSettings {
 
     pub const DISTRIBUTION: &'static str = "distribution";
 
+    pub const BINARY_QUANTIZED: &'static str = "binaryQuantized";
+
     pub fn allowed_sources_for_field(field: &'static str) -> &'static [EmbedderSource] {
         match field {
             Self::SOURCE => &[
@@ -456,6 +458,13 @@ impl EmbeddingSettings {
                 EmbedderSource::Rest,
                 EmbedderSource::UserProvided,
             ],
+            Self::BINARY_QUANTIZED => &[
+                EmbedderSource::HuggingFace,
+                EmbedderSource::Ollama,
+                EmbedderSource::OpenAi,
+                EmbedderSource::Rest,
+                EmbedderSource::UserProvided,
+            ],
             _other => unreachable!("unknown field"),
         }
     }
@@ -470,6 +479,7 @@ impl EmbeddingSettings {
                 Self::DIMENSIONS,
                 Self::DISTRIBUTION,
                 Self::URL,
+                Self::BINARY_QUANTIZED,
             ],
             EmbedderSource::HuggingFace => &[
                 Self::SOURCE,
@@ -477,6 +487,7 @@ impl EmbeddingSettings {
                 Self::REVISION,
                 Self::DOCUMENT_TEMPLATE,
                 Self::DISTRIBUTION,
+                Self::BINARY_QUANTIZED,
             ],
             EmbedderSource::Ollama => &[
                 Self::SOURCE,
@@ -486,8 +497,11 @@ impl EmbeddingSettings {
                 Self::API_KEY,
                 Self::DIMENSIONS,
                 Self::DISTRIBUTION,
+                Self::BINARY_QUANTIZED,
             ],
-            EmbedderSource::UserProvided => &[Self::SOURCE, Self::DIMENSIONS, Self::DISTRIBUTION],
+            EmbedderSource::UserProvided => {
+                &[Self::SOURCE, Self::DIMENSIONS, Self::DISTRIBUTION, Self::BINARY_QUANTIZED]
+            }
             EmbedderSource::Rest => &[
                 Self::SOURCE,
                 Self::API_KEY,
@@ -498,6 +512,7 @@ impl EmbeddingSettings {
                 Self::RESPONSE,
                 Self::HEADERS,
                 Self::DISTRIBUTION,
+                Self::BINARY_QUANTIZED,
             ],
         }
     }
