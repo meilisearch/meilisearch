@@ -5,6 +5,53 @@ use crate::json;
 use crate::vector::generate_default_user_provided_documents;
 
 #[actix_rt::test]
+async fn field_unavailable_for_source() {
+    let server = Server::new().await;
+    let index = server.index("doggo");
+    let (value, code) = server.set_features(json!({"vectorStore": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r###"
+    {
+      "vectorStore": true,
+      "metrics": false,
+      "logsRoute": false,
+      "editDocumentsByFunction": false,
+      "containsFilter": false
+    }
+    "###);
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": { "manual": {"source": "userProvided", "documentTemplate": "{{doc.documentTemplate}}"}},
+        }))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "`.embedders.manual`: Field `documentTemplate` unavailable for source `userProvided` (only available for sources: `huggingFace`, `openAi`, `ollama`, `rest`). Available fields: `source`, `dimensions`, `distribution`, `binaryQuantized`",
+      "code": "invalid_settings_embedders",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+    }
+    "###);
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": { "default": {"source": "openAi", "revision": "42"}},
+        }))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "`.embedders.default`: Field `revision` unavailable for source `openAi` (only available for sources: `huggingFace`). Available fields: `source`, `model`, `apiKey`, `documentTemplate`, `dimensions`, `distribution`, `url`, `binaryQuantized`",
+      "code": "invalid_settings_embedders",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn update_embedder() {
     let server = Server::new().await;
     let index = server.index("doggo");
