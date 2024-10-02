@@ -40,7 +40,7 @@ ureq = "2.10.0"
 uuid = { version = "1.10.0", features = ["serde", "v4"] }
 
 [dev-dependencies]
-arroy = { git = "https://github.com/meilisearch/arroy/", rev = "2386594dfb009ce08821a925ccc89fb8e30bf73d" }
+arroy = "0.5.0"
 big_s = "1.0.2"
 crossbeam = "0.8.4"
 insta = { version = "1.39.0", features = ["json", "redactions"] }

@@ -699,6 +699,7 @@ where
         for (embedder_name, dimension) in dimension {
             let wtxn = &mut *self.wtxn;
             let vector_arroy = self.index.vector_arroy;
+            let cancel = &self.should_abort;
 
             let embedder_index = self.index.embedder_category_id.get(wtxn, &embedder_name)?.ok_or(
                 InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },
@@ -713,7 +714,7 @@ where
 
             pool.install(|| {
                 let mut writer = ArroyWrapper::new(vector_arroy, embedder_index, was_quantized);
-                writer.build_and_quantize(wtxn, &mut rng, dimension, is_quantizing)?;
+                writer.build_and_quantize(wtxn, &mut rng, dimension, is_quantizing, cancel)?;
                 Result::Ok(())
             })
             .map_err(InternalError::from)??;

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use arroy::distances::{Angular, BinaryQuantizedAngular};
+use arroy::distances::{BinaryQuantizedCosine, Cosine};
 use arroy::ItemId;
 use deserr::{DeserializeError, Deserr};
 use heed::{RoTxn, RwTxn, Unspecified};
@@ -82,12 +82,13 @@ impl ArroyWrapper {
         rng: &mut R,
         dimension: usize,
         quantizing: bool,
+        cancel: &(impl Fn() -> bool + Sync + Send),
     ) -> Result<(), arroy::Error> {
         for index in arroy_db_range_for_embedder(self.embedder_index) {
             if self.quantized {
                 let writer = arroy::Writer::new(self.quantized_db(), index, dimension);
                 if writer.need_build(wtxn)? {
-                    writer.build(wtxn, rng, None)?
+                    writer.builder(rng).build(wtxn)?
                 } else if writer.is_empty(wtxn)? {
                     break;
                 }
@@ -99,11 +100,10 @@ impl ArroyWrapper {
                 // only happens once in the life of an embedder, it's not very performances
                 // sensitive.
                 if quantizing && !self.quantized {
-                    let writer =
-                        writer.prepare_changing_distance::<BinaryQuantizedAngular>(wtxn)?;
-                    writer.build(wtxn, rng, None)?
+                    let writer = writer.prepare_changing_distance::<BinaryQuantizedCosine>(wtxn)?;
+                    writer.builder(rng).cancel(cancel).build(wtxn)?;
                 } else if writer.need_build(wtxn)? {
-                    writer.build(wtxn, rng, None)?
+                    writer.builder(rng).cancel(cancel).build(wtxn)?;
                 } else if writer.is_empty(wtxn)? {
                     break;
                 }
@@ -323,8 +323,13 @@ impl ArroyWrapper {
         let mut results = Vec::new();
 
         for reader in self.readers(rtxn, db) {
-            let ret = reader?.nns_by_item(rtxn, item, limit, None, None, filter)?;
-            if let Some(mut ret) = ret {
+            let reader = reader?;
+            let mut searcher = reader.nns(limit);
+            if let Some(filter) = filter {
+                searcher.candidates(filter);
+            }
+
+            if let Some(mut ret) = searcher.by_item(rtxn, item)? {
                 results.append(&mut ret);
             } else {
                 break;
@@ -359,8 +364,13 @@ impl ArroyWrapper {
         let mut results = Vec::new();
 
         for reader in self.readers(rtxn, db) {
-            let mut ret = reader?.nns_by_vector(rtxn, vector, limit, None, None, filter)?;
-            results.append(&mut ret);
+            let reader = reader?;
+            let mut searcher = reader.nns(limit);
+            if let Some(filter) = filter {
+                searcher.candidates(filter);
+            }
+
+            results.append(&mut searcher.by_vector(rtxn, vector)?);
         }
 
         results.sort_unstable_by_key(|(_, distance)| OrderedFloat(*distance));
@@ -391,11 +401,11 @@ impl ArroyWrapper {
         Ok(vectors)
     }
 
-    fn angular_db(&self) -> arroy::Database<Angular> {
+    fn angular_db(&self) -> arroy::Database<Cosine> {
         self.database.remap_data_type()
     }
 
-    fn quantized_db(&self) -> arroy::Database<BinaryQuantizedAngular> {
+    fn quantized_db(&self) -> arroy::Database<BinaryQuantizedCosine> {
         self.database.remap_data_type()
     }
 }
