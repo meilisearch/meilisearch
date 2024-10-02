@@ -11,19 +11,22 @@ pub enum DocumentChange {
 }
 
 pub struct Deletion {
-    docid: DocumentId,
+    pub docid: DocumentId,
+    pub external_document_id: String,
     current: Box<KvReaderFieldId>,
 }
 
 pub struct Update {
-    docid: DocumentId,
+    pub docid: DocumentId,
+    pub external_document_id: String,
     current: Box<KvReaderFieldId>,
-    new: Box<KvReaderFieldId>,
+    pub new: Box<KvReaderFieldId>,
 }
 
 pub struct Insertion {
-    docid: DocumentId,
-    new: Box<KvReaderFieldId>,
+    pub docid: DocumentId,
+    pub external_document_id: String,
+    pub new: Box<KvReaderFieldId>,
 }
 
 impl DocumentChange {
@@ -37,12 +40,20 @@ impl DocumentChange {
 }
 
 impl Deletion {
-    pub fn create(docid: DocumentId, current: Box<KvReaderFieldId>) -> Self {
-        Self { docid, current }
+    pub fn create(
+        docid: DocumentId,
+        external_document_id: String,
+        current: Box<KvReaderFieldId>,
+    ) -> Self {
+        Self { docid, external_document_id, current }
     }
 
     pub fn docid(&self) -> DocumentId {
         self.docid
+    }
+
+    pub fn external_document_id(&self) -> &str {
+        &self.external_document_id
     }
 
     // TODO shouldn't we use the one in self?
@@ -56,12 +67,20 @@ impl Deletion {
 }
 
 impl Insertion {
-    pub fn create(docid: DocumentId, new: Box<KvReaderFieldId>) -> Self {
-        Insertion { docid, new }
+    pub fn create(
+        docid: DocumentId,
+        external_document_id: String,
+        new: Box<KvReaderFieldId>,
+    ) -> Self {
+        Insertion { docid, external_document_id, new }
     }
 
     pub fn docid(&self) -> DocumentId {
         self.docid
+    }
+
+    pub fn external_document_id(&self) -> &str {
+        &self.external_document_id
     }
 
     pub fn new(&self) -> &KvReader<FieldId> {
@@ -72,14 +91,19 @@ impl Insertion {
 impl Update {
     pub fn create(
         docid: DocumentId,
+        external_document_id: String,
         current: Box<KvReaderFieldId>,
         new: Box<KvReaderFieldId>,
     ) -> Self {
-        Update { docid, current, new }
+        Update { docid, external_document_id, current, new }
     }
 
     pub fn docid(&self) -> DocumentId {
         self.docid
+    }
+
+    pub fn external_document_id(&self) -> &str {
+        &self.external_document_id
     }
 
     pub fn current<'a>(

@@ -77,7 +77,7 @@ where
                     }
                 }?;
 
-                let insertion = Insertion::create(docid, document);
+                let insertion = Insertion::create(docid, external_docid, document);
                 Ok(DocumentChange::Insertion(insertion))
             },
         ))

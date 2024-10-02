@@ -288,15 +288,17 @@ impl MergeChanges for MergeDocumentForReplacement {
 
                 match current {
                     Some(current) => {
-                        let update = Update::create(docid, current.boxed(), new);
+                        let update = Update::create(docid, external_docid, current.boxed(), new);
                         Ok(DocumentChange::Update(update))
                     }
-                    None => Ok(DocumentChange::Insertion(Insertion::create(docid, new))),
+                    None => {
+                        Ok(DocumentChange::Insertion(Insertion::create(docid, external_docid, new)))
+                    }
                 }
             }
             Some(InnerDocOp::Deletion) => {
                 let deletion = match current {
-                    Some(current) => Deletion::create(docid, current.boxed()),
+                    Some(current) => Deletion::create(docid, external_docid, current.boxed()),
                     None => todo!("Do that with Louis"),
                 };
                 Ok(DocumentChange::Deletion(deletion))
@@ -355,7 +357,7 @@ impl MergeChanges for MergeDocumentForUpdates {
 
         if operations.is_empty() {
             let deletion = match current {
-                Some(current) => Deletion::create(docid, current.boxed()),
+                Some(current) => Deletion::create(docid, external_docid, current.boxed()),
                 None => todo!("Do that with Louis"),
             };
             return Ok(DocumentChange::Deletion(deletion));
@@ -382,11 +384,11 @@ impl MergeChanges for MergeDocumentForUpdates {
 
         match current {
             Some(current) => {
-                let update = Update::create(docid, current.boxed(), new);
+                let update = Update::create(docid, external_docid, current.boxed(), new);
                 Ok(DocumentChange::Update(update))
             }
             None => {
-                let insertion = Insertion::create(docid, new);
+                let insertion = Insertion::create(docid, external_docid, new);
                 Ok(DocumentChange::Insertion(insertion))
             }
         }

@@ -136,37 +136,48 @@ pub fn merge_grenad_entries(
                     |_, _key| Ok(()),
                 )?;
             }
-            MergerOperation::InsertDocument { docid, document } => {
+            MergerOperation::InsertDocument { docid, external_id, document } => {
                 let span =
                     tracing::trace_span!(target: "indexing::documents::merge", "insert_document");
                 let _entered = span.enter();
                 documents_ids.insert(docid);
-                sender.documents().uncompressed(docid, &document).unwrap();
+                sender.documents().uncompressed(docid, external_id.clone(), &document).unwrap();
 
                 if let Some(geo_extractor) = geo_extractor.as_mut() {
                     let current = index.documents.remap_data_type::<Bytes>().get(rtxn, &docid)?;
                     let current: Option<&KvReaderFieldId> = current.map(Into::into);
                     let change = match current {
-                        Some(current) => {
-                            DocumentChange::Update(Update::create(docid, current.boxed(), document))
-                        }
-                        None => DocumentChange::Insertion(Insertion::create(docid, document)),
+                        Some(current) => DocumentChange::Update(Update::create(
+                            docid,
+                            external_id,
+                            current.boxed(),
+                            document,
+                        )),
+                        None => DocumentChange::Insertion(Insertion::create(
+                            docid,
+                            external_id,
+                            document,
+                        )),
                     };
                     geo_extractor.manage_change(&mut global_fields_ids_map, &change)?;
                 }
             }
-            MergerOperation::DeleteDocument { docid } => {
+            MergerOperation::DeleteDocument { docid, external_id } => {
                 let span =
                     tracing::trace_span!(target: "indexing::documents::merge", "delete_document");
                 let _entered = span.enter();
                 if !documents_ids.remove(docid) {
                     unreachable!("Tried deleting a document that we do not know about");
                 }
-                sender.documents().delete(docid).unwrap();
+                sender.documents().delete(docid, external_id.clone()).unwrap();
 
                 if let Some(geo_extractor) = geo_extractor.as_mut() {
                     let current = index.document(rtxn, docid)?;
-                    let change = DocumentChange::Deletion(Deletion::create(docid, current.boxed()));
+                    let change = DocumentChange::Deletion(Deletion::create(
+                        docid,
+                        external_id,
+                        current.boxed(),
+                    ));
                     geo_extractor.manage_change(&mut global_fields_ids_map, &change)?;
                 }
             }

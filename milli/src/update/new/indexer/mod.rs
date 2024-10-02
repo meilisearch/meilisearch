@@ -11,7 +11,7 @@ use rayon::ThreadPool;
 pub use update_by_function::UpdateByFunction;
 
 use super::channel::*;
-use super::document_change::DocumentChange;
+use super::document_change::{Deletion, DocumentChange, Insertion, Update};
 use super::extract::*;
 use super::merger::merge_grenad_entries;
 use super::word_fst_builder::PrefixDelta;
@@ -84,19 +84,14 @@ where
                     document_changes.clone().into_par_iter().try_arc_for_each::<_, Error>(
                         |result| {
                         match result? {
-                            DocumentChange::Deletion(deletion) => {
-                                let docid = deletion.docid();
-                                document_sender.delete(docid).unwrap();
+                            DocumentChange::Deletion(Deletion { docid, external_document_id, ..}) => {
+                                document_sender.delete(docid, external_document_id).unwrap();
                             }
-                            DocumentChange::Update(update) => {
-                                let docid = update.docid();
-                                let content = update.new();
-                                document_sender.insert(docid, content.boxed()).unwrap();
+                            DocumentChange::Update(Update { docid, external_document_id, new, ..}) => {
+                                document_sender.insert(docid, external_document_id, new).unwrap();
                             }
-                            DocumentChange::Insertion(insertion) => {
-                                let docid = insertion.docid();
-                                let content = insertion.new();
-                                document_sender.insert(docid, content.boxed()).unwrap();
+                            DocumentChange::Insertion(Insertion { docid, external_document_id, new, ..}) => {
+                                document_sender.insert(docid, external_document_id, new).unwrap();
                                 // extracted_dictionary_sender.send(self, dictionary: &[u8]);
                             }
                         }

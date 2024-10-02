@@ -122,6 +122,7 @@ pub struct WriterOperation {
 
 pub enum Database {
     Documents,
+    ExternalDocumentsIds,
     ExactWordDocids,
     FidWordCountDocids,
     Main,
@@ -140,6 +141,7 @@ impl Database {
     pub fn database(&self, index: &Index) -> heed::Database<Bytes, Bytes> {
         match self {
             Database::Documents => index.documents.remap_types(),
+            Database::ExternalDocumentsIds => index.external_documents_ids.remap_types(),
             Database::ExactWordDocids => index.exact_word_docids.remap_types(),
             Database::Main => index.main.remap_types(),
             Database::WordDocids => index.word_docids.remap_types(),
@@ -431,6 +433,7 @@ impl DocumentsSender<'_> {
     pub fn uncompressed(
         &self,
         docid: DocumentId,
+        external_id: String,
         document: &KvReaderFieldId,
     ) -> StdResult<(), SendError<()>> {
         let entry = EntryOperation::Write(KeyValueEntry::from_small_key_value(
@@ -440,12 +443,27 @@ impl DocumentsSender<'_> {
         match self.0.send(WriterOperation { database: Database::Documents, entry }) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
+        }?;
+
+        let entry = EntryOperation::Write(KeyValueEntry::from_small_key_value(
+            external_id.as_bytes(),
+            &docid.to_be_bytes(),
+        ));
+        match self.0.send(WriterOperation { database: Database::ExternalDocumentsIds, entry }) {
+            Ok(()) => Ok(()),
+            Err(SendError(_)) => Err(SendError(())),
         }
     }
 
-    pub fn delete(&self, docid: DocumentId) -> StdResult<(), SendError<()>> {
+    pub fn delete(&self, docid: DocumentId, external_id: String) -> StdResult<(), SendError<()>> {
         let entry = EntryOperation::Delete(KeyEntry::from_key(&docid.to_be_bytes()));
         match self.0.send(WriterOperation { database: Database::Documents, entry }) {
+            Ok(()) => Ok(()),
+            Err(SendError(_)) => Err(SendError(())),
+        }?;
+
+        let entry = EntryOperation::Delete(KeyEntry::from_key(external_id.as_bytes()));
+        match self.0.send(WriterOperation { database: Database::ExternalDocumentsIds, entry }) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
@@ -460,8 +478,8 @@ pub enum MergerOperation {
     WordPairProximityDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
     WordPositionDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
     FacetDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
-    DeleteDocument { docid: DocumentId },
-    InsertDocument { docid: DocumentId, document: Box<KvReaderFieldId> },
+    DeleteDocument { docid: DocumentId, external_id: String },
+    InsertDocument { docid: DocumentId, external_id: String, document: Box<KvReaderFieldId> },
     FinishedDocument,
 }
 
@@ -500,18 +518,19 @@ impl DocumentSender<'_> {
     pub fn insert(
         &self,
         docid: DocumentId,
+        external_id: String,
         document: Box<KvReaderFieldId>,
     ) -> StdResult<(), SendError<()>> {
         let sender = self.0.unwrap();
-        match sender.send(MergerOperation::InsertDocument { docid, document }) {
+        match sender.send(MergerOperation::InsertDocument { docid, external_id, document }) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
     }
 
-    pub fn delete(&self, docid: DocumentId) -> StdResult<(), SendError<()>> {
+    pub fn delete(&self, docid: DocumentId, external_id: String) -> StdResult<(), SendError<()>> {
         let sender = self.0.unwrap();
-        match sender.send(MergerOperation::DeleteDocument { docid }) {
+        match sender.send(MergerOperation::DeleteDocument { docid, external_id }) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
