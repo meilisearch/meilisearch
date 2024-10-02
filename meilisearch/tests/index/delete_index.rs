@@ -1,4 +1,4 @@
-use crate::common::Server;
+use crate::common::{shared_does_not_exists_index, Server};
 use crate::json;
 
 #[actix_rt::test]
@@ -24,18 +24,13 @@ async fn create_and_delete_index() {
 
 #[actix_rt::test]
 async fn error_delete_unexisting_index() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-    let (task, code) = index.delete().await;
+    let index = shared_does_not_exists_index().await;
+    let (task, code) = index.delete_index_fail().await;
 
     assert_eq!(code, 202);
 
-    let msg = format!(
-        "Index `{}` not found.",
-        task["indexUid"].as_str().expect("indexUid should exist").trim_matches('"')
-    );
     let expected_response = json!({
-        "message": msg,
+        "message": "Index `DOES_NOT_EXISTS` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#index_not_found"
