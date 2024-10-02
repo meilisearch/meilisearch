@@ -234,10 +234,16 @@ impl PrefixFstBuilder {
                 *current_prefix_is_modified = false;
             }
 
-            *current_prefix_is_modified |= is_modified;
-
             if deladd == DelAdd::Addition {
                 *current_prefix_count += 1;
+            }
+
+            if is_modified && !*current_prefix_is_modified {
+                if *current_prefix_count > self.prefix_count_threshold {
+                    self.modified_prefixes.insert(current_prefix.clone());
+                }
+
+                *current_prefix_is_modified = true;
             }
 
             // There is enough words corresponding to this prefix to add it to the cache.
