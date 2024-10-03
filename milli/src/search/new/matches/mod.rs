@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use charabia::{Language, SeparatorKind, Token, TokenKind, Tokenizer};
+use either::Either;
 pub use matching_words::MatchingWords;
 use matching_words::{MatchType, PartialMatch, WordId};
 use serde::Serialize;
@@ -450,147 +451,141 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
         crop_size: usize,
     ) -> (usize, usize) {
         // if there is no match, we start from the beginning of the string by default.
-        let (matches_size, first_match_first_token_position, last_match_last_token_position) =
-            if !matches.is_empty() {
-                let matches_first = matches.first().unwrap();
-                let matches_last = matches.last().unwrap();
+        let (
+            mut remaining_words,
+            is_iterating_forward,
+            before_tokens_starting_index,
+            after_tokens_starting_index,
+        ) = if !matches.is_empty() {
+            let matches_first = matches.first().unwrap();
+            let matches_last = matches.last().unwrap();
 
-                (
-                    matches_last.get_last_word_pos() - matches_first.get_first_word_pos() + 1,
-                    matches_first.get_first_token_pos(),
-                    matches_last.get_last_token_pos(),
-                )
+            let matches_size =
+                matches_last.get_last_word_pos() - matches_first.get_first_word_pos() + 1;
+
+            let is_crop_size_gte_match_size = crop_size >= matches_size;
+            let is_iterating_forward = matches_size == 0 || is_crop_size_gte_match_size;
+
+            let remaining_words = if is_crop_size_gte_match_size {
+                crop_size - matches_size
             } else {
-                (0, 0, 0)
+                // in case matches size is greater than crop size, which implies there's only one match,
+                // we count words backwards, because we have to remove words, as they're extra words outside of
+                // crop window
+                matches_size - crop_size
             };
 
-        if crop_size >= matches_size {
-            // matches needs to be counted in the crop len.
-            let mut remaining_words = crop_size - matches_size;
-
-            let last_match_last_token_position_plus_one = last_match_last_token_position + 1;
             let after_tokens_starting_index = if matches_size == 0 {
                 0
-            } else if last_match_last_token_position_plus_one < tokens.len() {
-                last_match_last_token_position_plus_one
             } else {
-                tokens.len()
+                let last_match_last_token_position_plus_one = matches_last.get_last_token_pos() + 1;
+                if last_match_last_token_position_plus_one < tokens.len() {
+                    last_match_last_token_position_plus_one
+                } else {
+                    // we have matched the end of possible tokens, there's nothing to advance
+                    tokens.len() - 1
+                }
             };
 
-            // create the initial state of the crop window: 2 iterators starting from the matches positions,
-            // a reverse iterator starting from the first match token position and going towards the beginning of the text,
-            let mut before_tokens =
-                tokens[..first_match_first_token_position].iter().rev().peekable();
-            // an iterator starting from the last match token position and going towards the end of the text.
-            let mut after_tokens = tokens[after_tokens_starting_index..].iter().peekable();
+            (
+                remaining_words,
+                is_iterating_forward,
+                if is_iterating_forward { matches_first.get_first_token_pos() } else { 0 },
+                after_tokens_starting_index,
+            )
+        } else {
+            (crop_size, true, 0, 0)
+        };
 
-            // grows the crop window peeking in both directions
-            // until the window contains the good number of words:
-            while remaining_words > 0 {
-                let before_token_kind = before_tokens.peek().map(SimpleTokenKind::new);
-                let after_token_kind = after_tokens.peek().map(SimpleTokenKind::new);
+        // create the initial state of the crop window: 2 iterators starting from the matches positions,
+        // a reverse iterator starting from the first match token position and going towards the beginning of the text,
+        let mut before_tokens = tokens[..before_tokens_starting_index].iter().rev().peekable();
+        // an iterator ...
+        let mut after_tokens = if is_iterating_forward {
+            // ... starting from the last match token position and going towards the end of the text.
+            Either::Left(tokens[after_tokens_starting_index..].iter().peekable())
+        } else {
+            // ... starting from the last match token position and going towards the start of the text.
+            Either::Right(tokens[..=after_tokens_starting_index].iter().rev().peekable())
+        };
 
-                match (before_token_kind, after_token_kind) {
-                    // we can expand both sides.
-                    (Some(before_token_kind), Some(after_token_kind)) => {
-                        match (before_token_kind, after_token_kind) {
-                            // if they are both separators and are the same kind then advance both,
-                            // or expand in the soft separator separator side.
-                            (
-                                SimpleTokenKind::Separator(before_token_separator_kind),
-                                SimpleTokenKind::Separator(after_token_separator_kind),
-                            ) => {
-                                if before_token_separator_kind == after_token_separator_kind {
-                                    before_tokens.next();
+        // grows the crop window peeking in both directions
+        // until the window contains the good number of words:
+        while remaining_words > 0 {
+            let before_token_kind = before_tokens.peek().map(SimpleTokenKind::new);
+            let after_token_kind =
+                after_tokens.as_mut().either(|v| v.peek(), |v| v.peek()).map(SimpleTokenKind::new);
 
-                                    // this avoid having an ending separator before crop marker.
-                                    if remaining_words > 1 {
-                                        after_tokens.next();
-                                    }
-                                } else if matches!(before_token_separator_kind, SeparatorKind::Hard)
-                                {
-                                    after_tokens.next();
-                                } else {
-                                    before_tokens.next();
-                                }
-                            }
-                            // if one of the tokens is a word, we expend in the side of the word.
-                            // left is a word, advance left.
-                            (SimpleTokenKind::NotSeparator, SimpleTokenKind::Separator(_)) => {
+            match (before_token_kind, after_token_kind) {
+                // we can expand both sides.
+                (Some(before_token_kind), Some(after_token_kind)) => {
+                    match (before_token_kind, after_token_kind) {
+                        // if they are both separators and are the same kind then advance both,
+                        // or expand in the soft separator separator side.
+                        (
+                            SimpleTokenKind::Separator(before_token_separator_kind),
+                            SimpleTokenKind::Separator(after_token_separator_kind),
+                        ) => {
+                            if before_token_separator_kind == after_token_separator_kind {
                                 before_tokens.next();
-                                remaining_words -= 1;
+
+                                // this avoid having an ending separator before crop marker.
+                                if remaining_words > 1 {
+                                    after_tokens.next();
+                                }
+                            } else if matches!(before_token_separator_kind, SeparatorKind::Hard) {
+                                after_tokens.next();
+                            } else {
+                                before_tokens.next();
                             }
-                            // right is a word, advance right.
-                            (SimpleTokenKind::Separator(_), SimpleTokenKind::NotSeparator) => {
+                        }
+                        // if one of the tokens is a word, we expend in the side of the word.
+                        // left is a word, advance left.
+                        (SimpleTokenKind::NotSeparator, SimpleTokenKind::Separator(_)) => {
+                            before_tokens.next();
+                            remaining_words -= 1;
+                        }
+                        // right is a word, advance right.
+                        (SimpleTokenKind::Separator(_), SimpleTokenKind::NotSeparator) => {
+                            after_tokens.next();
+                            remaining_words -= 1;
+                        }
+                        // both are words, advance left then right if remaining_word > 0.
+                        (SimpleTokenKind::NotSeparator, SimpleTokenKind::NotSeparator) => {
+                            before_tokens.next();
+                            remaining_words -= 1;
+
+                            if remaining_words > 0 {
                                 after_tokens.next();
                                 remaining_words -= 1;
                             }
-                            // both are words, advance left then right if remaining_word > 0.
-                            (SimpleTokenKind::NotSeparator, SimpleTokenKind::NotSeparator) => {
-                                before_tokens.next();
-                                remaining_words -= 1;
-
-                                if remaining_words > 0 {
-                                    after_tokens.next();
-                                    remaining_words -= 1;
-                                }
-                            }
                         }
                     }
-                    // the end of the text is reached, advance left.
-                    (Some(before_token_kind), None) => {
-                        before_tokens.next();
-                        if matches!(before_token_kind, SimpleTokenKind::NotSeparator) {
-                            remaining_words -= 1;
-                        }
-                    }
-                    // the start of the text is reached, advance right.
-                    (None, Some(after_token_kind)) => {
-                        after_tokens.next();
-                        if matches!(after_token_kind, SimpleTokenKind::NotSeparator) {
-                            remaining_words -= 1;
-                        }
-                    }
-                    // no more token to add.
-                    (None, None) => break,
                 }
-            }
-
-            // finally, keep the byte index of each bound of the crop window.
-            let crop_byte_start = before_tokens.next().map_or(0, |t| t.byte_end);
-            let crop_byte_end = after_tokens.next().map_or(self.text.len(), |t| t.byte_start);
-
-            (crop_byte_start, crop_byte_end)
-        } else {
-            // there's one match and it's longer than the crop window, so we have to advance inward
-            let mut remaining_extra_words = matches_size - crop_size;
-            let mut tokens_from_end =
-                tokens[..=last_match_last_token_position].iter().rev().peekable();
-
-            while remaining_extra_words > 0 {
-                let token_from_end_kind = tokens_from_end
-                    .peek()
-                    .map(SimpleTokenKind::new)
-                    .expect("Expected iterator to not reach end");
-                if matches!(token_from_end_kind, SimpleTokenKind::NotSeparator) {
-                    remaining_extra_words -= 1;
+                // the end of the text is reached, advance left.
+                (Some(before_token_kind), None) => {
+                    before_tokens.next();
+                    if matches!(before_token_kind, SimpleTokenKind::NotSeparator) {
+                        remaining_words -= 1;
+                    }
                 }
-
-                tokens_from_end.next();
+                // the start of the text is reached, advance right.
+                (None, Some(after_token_kind)) => {
+                    after_tokens.next();
+                    if matches!(after_token_kind, SimpleTokenKind::NotSeparator) {
+                        remaining_words -= 1;
+                    }
+                }
+                // no more token to add.
+                (None, None) => break,
             }
-
-            let crop_byte_start = if first_match_first_token_position > 0 {
-                &tokens[first_match_first_token_position - 1].byte_end
-            } else {
-                &0
-            };
-            let crop_byte_end = tokens_from_end
-                .next()
-                .map(|t| t.byte_start)
-                .expect("Expected iterator to not reach end");
-
-            (*crop_byte_start, crop_byte_end)
         }
+
+        // finally, keep the byte index of each bound of the crop window.
+        let crop_byte_start = before_tokens.next().map_or(0, |t| t.byte_end);
+        let crop_byte_end = after_tokens.next().map_or(self.text.len(), |t| t.byte_start);
+
+        (crop_byte_start, crop_byte_end)
     }
 
     // Returns the formatted version of the original text.
