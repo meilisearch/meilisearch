@@ -9,7 +9,7 @@ use rayon::iter::IntoParallelIterator;
 
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use super::SearchableExtractor;
-use crate::update::new::append_only_vec::AppendOnlyVec;
+use crate::update::new::append_only_linked_list::AppendOnlyLinkedList;
 use crate::update::new::extract::cache::CboCachedSorter;
 use crate::update::new::extract::perm_json_p::contained_in;
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt;
@@ -341,7 +341,7 @@ impl WordDocidsExtractors {
             max_positions_per_attributes: MAX_POSITION_PER_ATTRIBUTE,
         };
 
-        let caches = AppendOnlyVec::new();
+        let caches = AppendOnlyLinkedList::new();
 
         {
             let span =

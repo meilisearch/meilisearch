@@ -4,7 +4,7 @@ pub use top_level_map::{CowStr, TopLevelMap};
 use super::del_add::DelAdd;
 use crate::FieldId;
 
-mod append_only_vec;
+mod append_only_linked_list;
 mod channel;
 mod document_change;
 mod extract;
