@@ -1,12 +1,16 @@
-use std::borrow::Cow;
+mod best_match_interval;
+mod r#match;
+mod matching_words;
+mod simple_token_kind;
 
-use charabia::{Language, SeparatorKind, Token, TokenKind, Tokenizer};
+use charabia::{Language, SeparatorKind, Token, Tokenizer};
 use either::Either;
 pub use matching_words::MatchingWords;
-use matching_words::{MatchType, PartialMatch, WordId};
+use matching_words::{MatchType, PartialMatch};
+use r#match::{Match, MatchPosition};
 use serde::Serialize;
-
-pub mod matching_words;
+use simple_token_kind::SimpleTokenKind;
+use std::borrow::Cow;
 
 const DEFAULT_CROP_MARKER: &str = "…";
 const DEFAULT_HIGHLIGHT_PREFIX: &str = "<em>";
@@ -94,226 +98,10 @@ impl FormatOptions {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum MatchPosition {
-    Word {
-        // position of the word in the whole text.
-        word_position: usize,
-        // position of the token in the whole text.
-        token_position: usize,
-    },
-    Phrase {
-        // position of the first and last word in the phrase in the whole text.
-        word_positions: (usize, usize),
-        // position of the first and last token in the phrase in the whole text.
-        token_positions: (usize, usize),
-    },
-}
-
-#[derive(Clone, Debug)]
-pub struct Match {
-    match_len: usize,
-    // ids of the query words that matches.
-    ids: Vec<WordId>,
-    position: MatchPosition,
-}
-
-impl Match {
-    fn get_first_word_pos(&self) -> usize {
-        match self.position {
-            MatchPosition::Word { word_position, .. } => word_position,
-            MatchPosition::Phrase { word_positions: (fwp, _), .. } => fwp,
-        }
-    }
-
-    fn get_last_word_pos(&self) -> usize {
-        match self.position {
-            MatchPosition::Word { word_position, .. } => word_position,
-            MatchPosition::Phrase { word_positions: (_, lwp), .. } => lwp,
-        }
-    }
-
-    fn get_first_token_pos(&self) -> usize {
-        match self.position {
-            MatchPosition::Word { token_position, .. } => token_position,
-            MatchPosition::Phrase { token_positions: (ftp, _), .. } => ftp,
-        }
-    }
-
-    fn get_last_token_pos(&self) -> usize {
-        match self.position {
-            MatchPosition::Word { token_position, .. } => token_position,
-            MatchPosition::Phrase { token_positions: (_, ltp), .. } => ltp,
-        }
-    }
-
-    fn get_word_count(&self) -> usize {
-        match self.position {
-            MatchPosition::Word { .. } => 1,
-            MatchPosition::Phrase { word_positions: (fwp, lwp), .. } => lwp - fwp + 1,
-        }
-    }
-}
-
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct MatchBounds {
     pub start: usize,
     pub length: usize,
-}
-
-enum SimpleTokenKind {
-    Separator(SeparatorKind),
-    NotSeparator,
-}
-
-impl SimpleTokenKind {
-    fn new(token: &&Token<'_>) -> Self {
-        match token.kind {
-            TokenKind::Separator(separaor_kind) => Self::Separator(separaor_kind),
-            _ => Self::NotSeparator,
-        }
-    }
-}
-
-#[derive(PartialEq, PartialOrd)]
-struct MatchIntervalScore(i16, i16, i16);
-
-impl MatchIntervalScore {
-    /// Compute the score of a match interval:
-    /// 1) count unique matches
-    /// 2) calculate distance between matches
-    /// 3) count ordered matches
-    fn new(matches: &[Match]) -> Self {
-        let mut ids: Vec<WordId> = Vec::with_capacity(matches.len());
-        let mut order_score = 0;
-        let mut distance_score = 0;
-
-        // count score for phrases
-        fn tally_phrase_scores(
-            fwp: &usize,
-            lwp: &usize,
-            order_score: &mut i16,
-            distance_score: &mut i16,
-        ) {
-            let words_in_phrase_minus_one = (lwp - fwp) as i16;
-            // will always be ordered, so +1 for each space between words
-            *order_score += words_in_phrase_minus_one;
-            // distance will always be 1, so -1 for each space between words
-            *distance_score -= words_in_phrase_minus_one;
-        }
-
-        let mut iter = matches.iter().peekable();
-        while let Some(m) = iter.next() {
-            if let Some(next_match) = iter.peek() {
-                // if matches are ordered
-                if next_match.ids.iter().min() > m.ids.iter().min() {
-                    order_score += 1;
-                }
-
-                let m_last_word_pos = match m.position {
-                    MatchPosition::Word { word_position, .. } => word_position,
-                    MatchPosition::Phrase { word_positions: (fwp, lwp), .. } => {
-                        tally_phrase_scores(&fwp, &lwp, &mut order_score, &mut distance_score);
-                        lwp
-                    }
-                };
-                let next_match_first_word_pos = next_match.get_first_word_pos();
-
-                // compute distance between matches
-                distance_score -= (next_match_first_word_pos - m_last_word_pos).min(7) as i16;
-            } else if let MatchPosition::Phrase { word_positions: (fwp, lwp), .. } = m.position {
-                // in case last match is a phrase, count score for its words
-                tally_phrase_scores(&fwp, &lwp, &mut order_score, &mut distance_score);
-            }
-
-            ids.extend(m.ids.iter());
-        }
-
-        ids.sort_unstable();
-        ids.dedup();
-        let uniq_score = ids.len() as i16;
-
-        // rank by unique match count, then by distance between matches, then by ordered match count.
-        Self(uniq_score, distance_score, order_score)
-    }
-}
-
-struct MatchIntervalWithScore {
-    interval: (usize, usize),
-    score: MatchIntervalScore,
-}
-
-impl MatchIntervalWithScore {
-    /// Returns the matches interval where the score computed by match_interval_score is the best.
-    fn find_best_match_interval(matches: &[Match], crop_size: usize) -> &[Match] {
-        if matches.len() <= 1 {
-            return matches;
-        }
-
-        // positions of the first and the last match of the best matches interval in `matches`.
-        let mut best_interval: Option<Self> = None;
-
-        let mut save_best_interval = |interval_first, interval_last| {
-            let interval_score = MatchIntervalScore::new(&matches[interval_first..=interval_last]);
-            let is_interval_score_better =
-                &best_interval.as_ref().map_or(true, |Self { score, .. }| interval_score > *score);
-
-            if *is_interval_score_better {
-                best_interval =
-                    Some(Self { interval: (interval_first, interval_last), score: interval_score });
-            }
-        };
-
-        // we compute the matches interval if we have at least 2 matches.
-        // current interval positions.
-        let mut interval_first = 0;
-        let mut interval_first_match_first_word_pos = matches[interval_first].get_first_word_pos();
-
-        for (index, next_match) in matches.iter().enumerate() {
-            // if next match would make interval gross more than crop_size,
-            // we compare the current interval with the best one,
-            // then we increase `interval_first` until next match can be added.
-            let next_match_last_word_pos = next_match.get_last_word_pos();
-
-            // if the next match would mean that we pass the crop size window,
-            // we take the last valid match, that didn't pass this boundry, which is `index` - 1,
-            // and calculate a score for it, and check if it's better than our best so far
-            if next_match_last_word_pos - interval_first_match_first_word_pos >= crop_size {
-                // if index is 0 there is no last viable match
-                if index != 0 {
-                    let interval_last = index - 1;
-                    // keep interval if it's the best
-                    save_best_interval(interval_first, interval_last);
-                }
-
-                // advance start of the interval while interval is longer than crop_size.
-                loop {
-                    interval_first += 1;
-                    interval_first_match_first_word_pos =
-                        matches[interval_first].get_first_word_pos();
-
-                    if interval_first_match_first_word_pos > next_match_last_word_pos
-                        || next_match_last_word_pos - interval_first_match_first_word_pos
-                            < crop_size
-                    {
-                        break;
-                    }
-                }
-            }
-        }
-
-        // compute the last interval score and compare it to the best one.
-        let interval_last = matches.len() - 1;
-        // if it's the last match with itself, we need to make sure it's
-        // not a phrase longer than the crop window
-        if interval_first != interval_last || matches[interval_first].get_word_count() < crop_size {
-            save_best_interval(interval_first, interval_last);
-        }
-
-        // if none of the matches fit the criteria above, default to the first one
-        let best_interval = best_interval.map_or((0, 0), |v| v.interval);
-        &matches[best_interval.0..=best_interval.1]
-    }
 }
 
 /// Structure used to analyze a string, compute words that match,
@@ -355,8 +143,8 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                             match_len: word.char_end - *first_word_char_start,
                             ids: ids.clone().collect(),
                             position: MatchPosition::Phrase {
-                                word_positions: (first_word_position, word_position),
-                                token_positions: (first_token_position, token_position),
+                                word_positions: [first_word_position, word_position],
+                                token_positions: [first_token_position, token_position],
                             },
                         });
 
@@ -450,15 +238,14 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
         matches: &[Match],
         crop_size: usize,
     ) -> (usize, usize) {
-        // if there is no match, we start from the beginning of the string by default.
         let (
             mut remaining_words,
             is_iterating_forward,
             before_tokens_starting_index,
             after_tokens_starting_index,
         ) = if !matches.is_empty() {
-            let matches_first = matches.first().unwrap();
-            let matches_last = matches.last().unwrap();
+            let [matches_first, matches_last] =
+                best_match_interval::find_best_match_interval(matches, crop_size);
 
             let matches_size =
                 matches_last.get_last_word_pos() - matches_first.get_first_word_pos() + 1;
@@ -600,9 +387,6 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                     // crop around the best interval.
                     let (byte_start, byte_end) = match format_options.crop {
                         Some(crop_size) if crop_size > 0 => {
-                            let matches = MatchIntervalWithScore::find_best_match_interval(
-                                matches, crop_size,
-                            );
                             self.crop_bounds(tokens, matches, crop_size)
                         }
                         _ => (0, self.text.len()),
@@ -625,7 +409,7 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                                     let token = &tokens[token_position];
                                     (&token.byte_start, &token.byte_end)
                                 }
-                                MatchPosition::Phrase { token_positions: (ftp, ltp), .. } => {
+                                MatchPosition::Phrase { token_positions: [ftp, ltp], .. } => {
                                     (&tokens[ftp].byte_start, &tokens[ltp].byte_end)
                                 }
                             };
