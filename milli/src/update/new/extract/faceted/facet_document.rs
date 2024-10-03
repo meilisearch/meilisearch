@@ -1,24 +1,17 @@
 use serde_json::Value;
 
+use crate::update::new::document::Document;
 use crate::update::new::extract::perm_json_p;
-use crate::update::new::KvReaderFieldId;
 use crate::{FieldId, GlobalFieldsIdsMap, InternalError, Result, UserError};
 
-pub fn extract_document_facets(
+pub fn extract_document_facets<'doc>(
     attributes_to_extract: &[&str],
-    obkv: &KvReaderFieldId,
+    document: impl Document<'doc>,
     field_id_map: &mut GlobalFieldsIdsMap,
     facet_fn: &mut impl FnMut(FieldId, &Value) -> Result<()>,
 ) -> Result<()> {
-    let mut field_name = String::new();
-    for (field_id, field_bytes) in obkv {
-        let Some(field_name) = field_id_map.name(field_id).map(|s| {
-            field_name.clear();
-            field_name.push_str(s);
-            &field_name
-        }) else {
-            unreachable!("field id not found in field id map");
-        };
+    for res in document.iter_top_level_fields() {
+        let (field_name, value) = res?;
 
         let mut tokenize_field = |name: &str, value: &Value| match field_id_map.id_or_insert(name) {
             Some(field_id) => facet_fn(field_id, value),
@@ -28,7 +21,7 @@ pub fn extract_document_facets(
         // if the current field is searchable or contains a searchable attribute
         if perm_json_p::select_field(field_name, Some(attributes_to_extract), &[]) {
             // parse json.
-            match serde_json::from_slice(field_bytes).map_err(InternalError::SerdeJson)? {
+            match serde_json::value::to_value(value).map_err(InternalError::SerdeJson)? {
                 Value::Object(object) => perm_json_p::seek_leaf_values_in_object(
                     &object,
                     Some(attributes_to_extract),

@@ -4,6 +4,7 @@ use charabia::{SeparatorKind, Token, TokenKind, Tokenizer, TokenizerBuilder};
 use serde_json::Value;
 
 use crate::proximity::MAX_DISTANCE;
+use crate::update::new::document::Document;
 use crate::update::new::extract::perm_json_p::{
     seek_leaf_values_in_array, seek_leaf_values_in_object, select_field,
 };
@@ -22,22 +23,16 @@ pub struct DocumentTokenizer<'a> {
 }
 
 impl<'a> DocumentTokenizer<'a> {
-    pub fn tokenize_document(
+    pub fn tokenize_document<'doc>(
         &self,
-        obkv: &KvReaderFieldId,
+        document: impl Document<'doc>,
         field_id_map: &mut GlobalFieldsIdsMap,
         token_fn: &mut impl FnMut(&str, FieldId, u16, &str) -> Result<()>,
     ) -> Result<()> {
         let mut field_position = HashMap::new();
-        let mut field_name = String::new();
-        for (field_id, field_bytes) in obkv {
-            let Some(field_name) = field_id_map.name(field_id).map(|s| {
-                field_name.clear();
-                field_name.push_str(s);
-                &field_name
-            }) else {
-                unreachable!("field id not found in field id map");
-            };
+
+        for entry in document.iter_top_level_fields() {
+            let (field_name, value) = entry?;
 
             let mut tokenize_field = |name: &str, value: &Value| {
                 let Some(field_id) = field_id_map.id_or_insert(name) else {
@@ -94,7 +89,7 @@ impl<'a> DocumentTokenizer<'a> {
             // if the current field is searchable or contains a searchable attribute
             if select_field(field_name, self.attribute_to_extract, self.attribute_to_skip) {
                 // parse json.
-                match serde_json::from_slice(field_bytes).map_err(InternalError::SerdeJson)? {
+                match serde_json::to_value(value).map_err(InternalError::SerdeJson)? {
                     Value::Object(object) => seek_leaf_values_in_object(
                         &object,
                         self.attribute_to_extract,
@@ -174,10 +169,13 @@ pub fn tokenizer_builder<'a>(
 
 #[cfg(test)]
 mod test {
+    use bumpalo::Bump;
     use charabia::TokenizerBuilder;
     use meili_snap::snapshot;
     use obkv::KvReader;
+    use raw_collections::RawMap;
     use serde_json::json;
+    use serde_json::value::RawValue;
 
     use super::*;
     use crate::FieldsIdsMap;
@@ -186,40 +184,25 @@ mod test {
     fn test_tokenize_document() {
         let mut fields_ids_map = FieldsIdsMap::new();
 
-        let field_1 = json!({
-                "name": "doggo",
-                "age": 10,
-        });
-
-        let field_2 = json!({
+        let document = json!({
+            "doggo": {                "name": "doggo",
+            "age": 10,},
+            "catto": {
                 "catto": {
                     "name": "pesti",
                     "age": 23,
                 }
+            },
+            "doggo.name": ["doggo", "catto"],
+            "not-me": "UNSEARCHABLE",
+            "me-nether": {"nope": "unsearchable"}
         });
 
-        let field_3 = json!(["doggo", "catto"]);
-        let field_4 = json!("UNSEARCHABLE");
-        let field_5 = json!({"nope": "unsearchable"});
-
-        let mut obkv = obkv::KvWriter::memory();
-        let field_1_id = fields_ids_map.insert("doggo").unwrap();
-        let field_1 = serde_json::to_string(&field_1).unwrap();
-        obkv.insert(field_1_id, field_1.as_bytes()).unwrap();
-        let field_2_id = fields_ids_map.insert("catto").unwrap();
-        let field_2 = serde_json::to_string(&field_2).unwrap();
-        obkv.insert(field_2_id, field_2.as_bytes()).unwrap();
-        let field_3_id = fields_ids_map.insert("doggo.name").unwrap();
-        let field_3 = serde_json::to_string(&field_3).unwrap();
-        obkv.insert(field_3_id, field_3.as_bytes()).unwrap();
-        let field_4_id = fields_ids_map.insert("not-me").unwrap();
-        let field_4 = serde_json::to_string(&field_4).unwrap();
-        obkv.insert(field_4_id, field_4.as_bytes()).unwrap();
-        let field_5_id = fields_ids_map.insert("me-nether").unwrap();
-        let field_5 = serde_json::to_string(&field_5).unwrap();
-        obkv.insert(field_5_id, field_5.as_bytes()).unwrap();
-        let value = obkv.into_inner().unwrap();
-        let obkv = KvReader::from_slice(value.as_slice());
+        let _field_1_id = fields_ids_map.insert("doggo").unwrap();
+        let _field_2_id = fields_ids_map.insert("catto").unwrap();
+        let _field_3_id = fields_ids_map.insert("doggo.name").unwrap();
+        let _field_4_id = fields_ids_map.insert("not-me").unwrap();
+        let _field_5_id = fields_ids_map.insert("me-nether").unwrap();
 
         let mut tb = TokenizerBuilder::default();
         let document_tokenizer = DocumentTokenizer {
@@ -234,11 +217,23 @@ mod test {
         let mut global_fields_ids_map = GlobalFieldsIdsMap::new(&fields_ids_map_lock);
 
         let mut words = std::collections::BTreeMap::new();
+
+        let document = document.to_string();
+
+        let bump = Bump::new();
+        let document: &RawValue = serde_json::from_str(&document).unwrap();
+        let document = RawMap::from_raw_value(document, &bump).unwrap();
+        let document = document.into_bump_slice();
+
         document_tokenizer
-            .tokenize_document(obkv, &mut global_fields_ids_map, &mut |_fname, fid, pos, word| {
-                words.insert([fid, pos], word.to_string());
-                Ok(())
-            })
+            .tokenize_document(
+                document,
+                &mut global_fields_ids_map,
+                &mut |_fname, fid, pos, word| {
+                    words.insert([fid, pos], word.to_string());
+                    Ok(())
+                },
+            )
             .unwrap();
 
         snapshot!(format!("{:#?}", words), @r###"

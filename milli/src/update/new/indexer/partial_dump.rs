@@ -1,13 +1,17 @@
-use std::sync::Arc;
+use std::ops::DerefMut;
 
 use rayon::iter::IndexedParallelIterator;
+use serde::Deserializer;
+use serde_json::value::RawValue;
 
-use super::DocumentChanges;
+use super::de::DocumentVisitor;
+use super::document_changes::{DocumentChangeContext, DocumentChanges, MostlySend};
 use crate::documents::{DocumentIdExtractionError, PrimaryKey};
 use crate::update::concurrent_available_ids::ConcurrentAvailableIds;
-use crate::update::new::parallel_iterator_ext::ParallelIteratorExt;
-use crate::update::new::{DocumentChange, Insertion, KvWriterFieldId};
-use crate::{all_obkv_to_json, Error, FieldsIdsMap, Object, Result, UserError};
+use crate::update::new::document::DocumentFromVersions;
+use crate::update::new::document_change::Versions;
+use crate::update::new::{DocumentChange, Insertion};
+use crate::{Error, InternalError, Result, UserError};
 
 pub struct PartialDump<I> {
     iter: I,
@@ -17,69 +21,81 @@ impl<I> PartialDump<I> {
     pub fn new_from_jsonlines(iter: I) -> Self {
         PartialDump { iter }
     }
+
+    pub fn into_changes<'index>(
+        self,
+        concurrent_available_ids: &'index ConcurrentAvailableIds,
+        primary_key: &'index PrimaryKey,
+    ) -> PartialDumpChanges<'index, I> {
+        /// Note for future self:
+        ///   - We recommend sending chunks of documents in this `PartialDumpIndexer` we therefore need to create a custom take_while_size method (that doesn't drop items).
+        PartialDumpChanges { iter: self.iter, concurrent_available_ids, primary_key }
+    }
 }
 
-impl<'p, I> DocumentChanges<'p> for PartialDump<I>
+pub struct PartialDumpChanges<'doc, I> {
+    iter: I,
+    concurrent_available_ids: &'doc ConcurrentAvailableIds,
+    primary_key: &'doc PrimaryKey<'doc>,
+}
+
+impl<'index, Iter> DocumentChanges<'index> for PartialDumpChanges<'index, Iter>
 where
-    I: IndexedParallelIterator<Item = Object> + Clone + 'p,
+    Iter: IndexedParallelIterator<Item = Box<RawValue>> + Clone + Sync + 'index,
 {
-    type Parameter = (&'p FieldsIdsMap, &'p ConcurrentAvailableIds, &'p PrimaryKey<'p>);
+    type Item = Box<RawValue>;
 
-    /// Note for future self:
-    ///   - the field ids map must already be valid so you must have to generate it beforehand.
-    ///   - We should probably expose another method that generates the fields ids map from an iterator of JSON objects.
-    ///   - We recommend sending chunks of documents in this `PartialDumpIndexer` we therefore need to create a custom take_while_size method (that doesn't drop items).
-    fn document_changes(
-        self,
-        _fields_ids_map: &mut FieldsIdsMap,
-        param: Self::Parameter,
-    ) -> Result<
-        impl IndexedParallelIterator<Item = std::result::Result<DocumentChange, Arc<Error>>>
-            + Clone
-            + 'p,
-    > {
-        let (fields_ids_map, concurrent_available_ids, primary_key) = param;
+    fn iter(&self) -> impl IndexedParallelIterator<Item = Self::Item> {
+        self.iter.clone()
+    }
 
-        Ok(self.iter.try_map_try_init(
-            || Ok(()),
-            |_, object| {
-                let docid = match concurrent_available_ids.next() {
-                    Some(id) => id,
-                    None => return Err(Error::UserError(UserError::DocumentLimitReached)),
-                };
+    fn item_to_document_change<'doc, T: MostlySend + 'doc>(
+        &'doc self,
+        context: &'doc DocumentChangeContext<T>,
+        document: Self::Item,
+    ) -> Result<DocumentChange<'doc>>
+    where
+        'index: 'doc,
+    {
+        let doc_alloc = &context.doc_alloc;
+        let docid = match self.concurrent_available_ids.next() {
+            Some(id) => id,
+            None => return Err(Error::UserError(UserError::DocumentLimitReached)),
+        };
 
-                let mut writer = KvWriterFieldId::memory();
-                object.iter().for_each(|(key, value)| {
-                    let key = fields_ids_map.id(key).unwrap();
-                    /// TODO better error management
-                    let value = serde_json::to_vec(&value).unwrap();
-                    /// TODO it is not ordered
-                    writer.insert(key, value).unwrap();
-                });
+        let mut fields_ids_map = context.new_fields_ids_map.borrow_mut();
+        let fields_ids_map = fields_ids_map.deref_mut();
 
-                let document = writer.into_boxed();
-                let external_docid = match primary_key.document_id(&document, fields_ids_map)? {
-                    Ok(document_id) => Ok(document_id),
-                    Err(DocumentIdExtractionError::InvalidDocumentId(user_error)) => {
-                        Err(user_error)
-                    }
-                    Err(DocumentIdExtractionError::MissingDocumentId) => {
-                        Err(UserError::MissingDocumentId {
-                            primary_key: primary_key.name().to_string(),
-                            document: all_obkv_to_json(&document, fields_ids_map)?,
-                        })
-                    }
-                    Err(DocumentIdExtractionError::TooManyDocumentIds(_)) => {
-                        Err(UserError::TooManyDocumentIds {
-                            primary_key: primary_key.name().to_string(),
-                            document: all_obkv_to_json(&document, fields_ids_map)?,
-                        })
-                    }
-                }?;
+        let res = document
+            .deserialize_map(DocumentVisitor::new(fields_ids_map, self.primary_key, &doc_alloc))
+            .map_err(UserError::SerdeJson)?;
 
-                let insertion = Insertion::create(docid, external_docid, document);
-                Ok(DocumentChange::Insertion(insertion))
-            },
-        ))
+        let external_document_id = match res {
+            Ok(document_id) => Ok(document_id),
+            Err(DocumentIdExtractionError::InvalidDocumentId(e)) => Err(e),
+            Err(DocumentIdExtractionError::MissingDocumentId) => {
+                Err(UserError::MissingDocumentId {
+                    primary_key: self.primary_key.name().to_string(),
+                    document: serde_json::from_str(document.get()).unwrap(),
+                })
+            }
+            Err(DocumentIdExtractionError::TooManyDocumentIds(_)) => {
+                Err(UserError::TooManyDocumentIds {
+                    primary_key: self.primary_key.name().to_string(),
+                    document: serde_json::from_str(document.get()).unwrap(),
+                })
+            }
+        }?;
+        let document = doc_alloc.alloc_str(document.get());
+        let document: &RawValue = unsafe { std::mem::transmute(document) };
+
+        let document = raw_collections::RawMap::from_raw_value(document, doc_alloc)
+            .map_err(InternalError::SerdeJson)?;
+
+        let document = document.into_bump_slice();
+        let document = DocumentFromVersions::new(Versions::Single(document));
+
+        let insertion = Insertion::create(docid, external_document_id.to_owned(), document);
+        Ok(DocumentChange::Insertion(insertion))
     }
 }

@@ -98,6 +98,20 @@ impl crate::documents::FieldIdMapper for FieldsIdsMap {
     fn id(&self, name: &str) -> Option<FieldId> {
         self.id(name)
     }
+
+    fn name(&self, id: FieldId) -> Option<&str> {
+        self.name(id)
+    }
+}
+
+pub trait MutFieldIdMapper {
+    fn insert(&mut self, name: &str) -> Option<FieldId>;
+}
+
+impl MutFieldIdMapper for FieldsIdsMap {
+    fn insert(&mut self, name: &str) -> Option<FieldId> {
+        self.insert(name)
+    }
 }
 
 #[cfg(test)]

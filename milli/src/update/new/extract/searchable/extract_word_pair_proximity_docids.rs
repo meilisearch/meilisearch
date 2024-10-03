@@ -1,13 +1,17 @@
+use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
+use bumpalo::Bump;
 use heed::RoTxn;
 use obkv::KvReader;
 
 use super::tokenize_document::DocumentTokenizer;
 use super::SearchableExtractor;
 use crate::proximity::{index_proximity, MAX_DISTANCE};
+use crate::update::new::document::Document;
 use crate::update::new::extract::cache::CboCachedSorter;
+use crate::update::new::indexer::document_changes::{DocumentChangeContext, FullySend};
 use crate::update::new::DocumentChange;
 use crate::update::MergeDeladdCboRoaringBitmaps;
 use crate::{FieldId, GlobalFieldsIdsMap, Index, Result};
@@ -28,27 +32,39 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
     // This method is reimplemented to count the number of words in the document in each field
     // and to store the docids of the documents that have a number of words in a given field equal to or under than MAX_COUNTED_WORDS.
     fn extract_document_change(
-        rtxn: &RoTxn,
-        index: &Index,
+        context: &DocumentChangeContext<
+            FullySend<RefCell<CboCachedSorter<MergeDeladdCboRoaringBitmaps>>>,
+        >,
         document_tokenizer: &DocumentTokenizer,
-        fields_ids_map: &mut GlobalFieldsIdsMap,
-        cached_sorter: &mut CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
         document_change: DocumentChange,
     ) -> Result<()> {
-        let mut key_buffer = Vec::new();
-        let mut del_word_pair_proximity = Vec::new();
-        let mut add_word_pair_proximity = Vec::new();
+        let doc_alloc = &context.doc_alloc;
+
+        let index = context.index;
+        let rtxn = &context.txn;
+
+        let mut key_buffer = bumpalo::collections::Vec::new_in(doc_alloc);
+        let mut del_word_pair_proximity = bumpalo::collections::Vec::new_in(doc_alloc);
+        let mut add_word_pair_proximity = bumpalo::collections::Vec::new_in(doc_alloc);
+
+        let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut();
+        let new_fields_ids_map = &mut *new_fields_ids_map;
+
+        let mut cached_sorter = context.data.0.borrow_mut();
+        let cached_sorter = &mut *cached_sorter;
+
+        // is a vecdequeue, and will be smol, so can stay on the heap for now
         let mut word_positions: VecDeque<(Rc<str>, u16)> =
             VecDeque::with_capacity(MAX_DISTANCE as usize);
 
         let docid = document_change.docid();
         match document_change {
             DocumentChange::Deletion(inner) => {
-                let document = inner.current(rtxn, index)?.unwrap();
+                let document = inner.current(rtxn, index, context.db_fields_ids_map)?;
                 process_document_tokens(
                     document,
                     document_tokenizer,
-                    fields_ids_map,
+                    new_fields_ids_map,
                     &mut word_positions,
                     &mut |(w1, w2), prox| {
                         del_word_pair_proximity.push(((w1, w2), prox));
@@ -56,21 +72,21 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
                 )?;
             }
             DocumentChange::Update(inner) => {
-                let document = inner.current(rtxn, index)?.unwrap();
+                let document = inner.current(rtxn, index, context.db_fields_ids_map)?;
                 process_document_tokens(
                     document,
                     document_tokenizer,
-                    fields_ids_map,
+                    new_fields_ids_map,
                     &mut word_positions,
                     &mut |(w1, w2), prox| {
                         del_word_pair_proximity.push(((w1, w2), prox));
                     },
                 )?;
-                let document = inner.new();
+                let document = inner.new(rtxn, index, context.db_fields_ids_map)?;
                 process_document_tokens(
                     document,
                     document_tokenizer,
-                    fields_ids_map,
+                    new_fields_ids_map,
                     &mut word_positions,
                     &mut |(w1, w2), prox| {
                         add_word_pair_proximity.push(((w1, w2), prox));
@@ -82,7 +98,7 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
                 process_document_tokens(
                     document,
                     document_tokenizer,
-                    fields_ids_map,
+                    new_fields_ids_map,
                     &mut word_positions,
                     &mut |(w1, w2), prox| {
                         add_word_pair_proximity.push(((w1, w2), prox));
@@ -108,7 +124,12 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
     }
 }
 
-fn build_key<'a>(prox: u8, w1: &str, w2: &str, key_buffer: &'a mut Vec<u8>) -> &'a [u8] {
+fn build_key<'a>(
+    prox: u8,
+    w1: &str,
+    w2: &str,
+    key_buffer: &'a mut bumpalo::collections::Vec<u8>,
+) -> &'a [u8] {
     key_buffer.clear();
     key_buffer.push(prox);
     key_buffer.extend_from_slice(w1.as_bytes());
@@ -131,8 +152,8 @@ fn word_positions_into_word_pair_proximity(
     Ok(())
 }
 
-fn process_document_tokens(
-    document: &KvReader<FieldId>,
+fn process_document_tokens<'doc>(
+    document: impl Document<'doc>,
     document_tokenizer: &DocumentTokenizer,
     fields_ids_map: &mut GlobalFieldsIdsMap,
     word_positions: &mut VecDeque<(Rc<str>, u16)>,

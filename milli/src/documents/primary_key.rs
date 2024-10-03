@@ -19,6 +19,21 @@ pub trait FieldIdMapper {
     ///
     /// `None` if the field with this name was not found.
     fn id(&self, name: &str) -> Option<FieldId>;
+
+    fn name(&self, id: FieldId) -> Option<&str>;
+}
+
+impl<T> FieldIdMapper for &T
+where
+    T: FieldIdMapper,
+{
+    fn id(&self, name: &str) -> Option<FieldId> {
+        T::id(self, name)
+    }
+
+    fn name(&self, id: FieldId) -> Option<&str> {
+        T::name(self, id)
+    }
 }
 
 /// A type that represent the type of primary key that has been set
@@ -190,7 +205,7 @@ fn starts_with(selector: &str, key: &str) -> bool {
 
 // FIXME: move to a DocumentId struct
 
-fn validate_document_id(document_id: &str) -> Option<&str> {
+pub fn validate_document_id_str(document_id: &str) -> Option<&str> {
     if !document_id.is_empty()
         && document_id.chars().all(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_'))
     {
@@ -202,7 +217,7 @@ fn validate_document_id(document_id: &str) -> Option<&str> {
 
 pub fn validate_document_id_value(document_id: Value) -> StdResult<String, UserError> {
     match document_id {
-        Value::String(string) => match validate_document_id(&string) {
+        Value::String(string) => match validate_document_id_str(&string) {
             Some(s) if s.len() == string.len() => Ok(string),
             Some(s) => Ok(s.to_string()),
             None => Err(UserError::InvalidDocumentId { document_id: Value::String(string) }),

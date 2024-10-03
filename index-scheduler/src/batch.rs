@@ -23,14 +23,15 @@ use std::fmt;
 use std::fs::{self, File};
 use std::io::BufWriter;
 
+use bumpalo::collections::CollectIn;
+use bumpalo::Bump;
 use dump::IndexMetadata;
 use meilisearch_types::error::Code;
 use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
 use meilisearch_types::milli::heed::CompactionOption;
-use meilisearch_types::milli::update::new::indexer::{
-    self, retrieve_or_guess_primary_key, DocumentChanges,
-};
+use meilisearch_types::milli::update::new::indexer::document_changes::DocumentChanges;
+use meilisearch_types::milli::update::new::indexer::{self, retrieve_or_guess_primary_key};
 use meilisearch_types::milli::update::{
     IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings as MilliSettings,
 };
@@ -1219,6 +1220,8 @@ impl IndexScheduler {
         index: &'i Index,
         operation: IndexOperation,
     ) -> Result<Vec<Task>> {
+        let indexer_alloc = Bump::new();
+
         match operation {
             IndexOperation::DocumentClear { mut tasks, .. } => {
                 let count = milli::update::ClearDocuments::new(index_wtxn, index).execute()?;
@@ -1252,6 +1255,9 @@ impl IndexScheduler {
                 let mut primary_key_has_been_set = false;
                 let must_stop_processing = self.must_stop_processing.clone();
                 let indexer_config = self.index_mapper.indexer_config();
+                // TODO: at some point, for better efficiency we might want to reuse the bumpalo for successive batches.
+                // this is made difficult by the fact we're doing private clones of the index scheduler and sending it
+                // to a fresh thread.
 
                 /// TODO manage errors correctly
                 let rtxn = index.read_txn()?;
@@ -1274,7 +1280,9 @@ impl IndexScheduler {
                     }
                 }
 
-                let mut fields_ids_map = index.fields_ids_map(&rtxn)?;
+                let db_fields_ids_map = index.fields_ids_map(&rtxn)?;
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
                 let first_document = match content_files.first() {
                     Some(mmap) => {
                         let mut iter = serde_json::Deserializer::from_slice(mmap).into_iter();
@@ -1286,7 +1294,7 @@ impl IndexScheduler {
                 let primary_key = retrieve_or_guess_primary_key(
                     &rtxn,
                     index,
-                    &mut fields_ids_map,
+                    &mut new_fields_ids_map,
                     first_document.as_ref(),
                 )?
                 .unwrap();
@@ -1320,7 +1328,11 @@ impl IndexScheduler {
                         }
                         DocumentOperation::Delete(document_ids) => {
                             let count = document_ids.len();
-                            indexer.delete_documents(document_ids);
+                            let document_ids: bumpalo::collections::vec::Vec<_> = document_ids
+                                .iter()
+                                .map(|s| &*indexer_alloc.alloc_str(s))
+                                .collect_in(&indexer_alloc);
+                            indexer.delete_documents(document_ids.into_bump_slice());
                             // Uses Invariant: remove documents actually always returns Ok for the inner result
                             // let count = user_result.unwrap();
                             let provided_ids =
@@ -1347,10 +1359,22 @@ impl IndexScheduler {
                     // let pool = indexer_config.thread_pool.unwrap();
                     let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
 
-                    let param = (index, &rtxn, &primary_key);
-                    let document_changes = indexer.document_changes(&mut fields_ids_map, param)?;
-                    /// TODO pass/write the FieldsIdsMap
-                    indexer::index(index_wtxn, index, fields_ids_map, &pool, document_changes)?;
+                    let document_changes = indexer.into_changes(
+                        &indexer_alloc,
+                        index,
+                        &rtxn,
+                        &primary_key,
+                        &mut new_fields_ids_map,
+                    )?;
+
+                    indexer::index(
+                        index_wtxn,
+                        index,
+                        &db_fields_ids_map,
+                        new_fields_ids_map,
+                        &pool,
+                        &document_changes,
+                    )?;
 
                     // tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
                 }
@@ -1501,10 +1525,11 @@ impl IndexScheduler {
                 }
 
                 let rtxn = index.read_txn()?;
-                let mut fields_ids_map = index.fields_ids_map(&rtxn)?;
+                let db_fields_ids_map = index.fields_ids_map(&rtxn)?;
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
 
                 let primary_key =
-                    retrieve_or_guess_primary_key(&rtxn, index, &mut fields_ids_map, None)?
+                    retrieve_or_guess_primary_key(&rtxn, index, &mut new_fields_ids_map, None)?
                         .unwrap();
 
                 if !tasks.iter().all(|res| res.error.is_some()) {
@@ -1512,19 +1537,17 @@ impl IndexScheduler {
                     // let pool = indexer_config.thread_pool.unwrap();
                     let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
 
-                    let param = (index, &fields_ids_map, &primary_key);
                     let mut indexer = indexer::DocumentDeletion::new();
                     indexer.delete_documents_by_docids(to_delete);
-                    /// TODO remove this fields-ids-map, it's useless for the deletion pipeline (the &mut cloned one).
-                    let document_changes =
-                        indexer.document_changes(&mut fields_ids_map.clone(), param)?;
-                    /// TODO pass/write the FieldsIdsMap
+                    let document_changes = indexer.into_changes(&indexer_alloc, primary_key);
+
                     indexer::index(
                         index_wtxn,
                         index,
-                        fields_ids_map.clone(),
+                        &db_fields_ids_map,
+                        new_fields_ids_map,
                         &pool,
-                        document_changes,
+                        &document_changes,
                     )?;
 
                     // tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");

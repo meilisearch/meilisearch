@@ -3,26 +3,24 @@ mod faceted;
 mod lru;
 mod searchable;
 
+use std::cell::RefCell;
 use std::fs::File;
-use std::sync::Arc;
 
+use bumpalo::Bump;
 pub use faceted::*;
 use grenad::Merger;
-use rayon::iter::IntoParallelIterator;
 pub use searchable::*;
 
-use super::DocumentChange;
+use super::indexer::document_changes::{DocumentChanges, FullySend, IndexingContext, ThreadLocal};
 use crate::update::{GrenadParameters, MergeDeladdCboRoaringBitmaps};
-use crate::{Error, GlobalFieldsIdsMap, Index, Result};
+use crate::Result;
 
 pub trait DocidsExtractor {
-    fn run_extraction(
-        index: &Index,
-        fields_ids_map: &GlobalFieldsIdsMap,
-        indexer: GrenadParameters,
-        document_changes: impl IntoParallelIterator<
-            Item = std::result::Result<DocumentChange, Arc<Error>>,
-        >,
+    fn run_extraction<'pl, 'fid, 'indexer, 'index, DC: DocumentChanges<'pl>>(
+        grenad_parameters: GrenadParameters,
+        document_changes: &DC,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index>,
+        extractor_allocs: &mut ThreadLocal<FullySend<RefCell<Bump>>>,
     ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>>;
 }
 

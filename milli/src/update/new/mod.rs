@@ -5,6 +5,7 @@ use super::del_add::DelAdd;
 use crate::FieldId;
 
 mod channel;
+pub mod document;
 mod document_change;
 mod extract;
 pub mod indexer;

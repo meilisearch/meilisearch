@@ -13,8 +13,8 @@ pub use builder::DocumentsBatchBuilder;
 pub use enriched::{EnrichedDocument, EnrichedDocumentsBatchCursor, EnrichedDocumentsBatchReader};
 use obkv::KvReader;
 pub use primary_key::{
-    validate_document_id_value, DocumentIdExtractionError, FieldIdMapper, PrimaryKey,
-    DEFAULT_PRIMARY_KEY,
+    validate_document_id_str, validate_document_id_value, DocumentIdExtractionError, FieldIdMapper,
+    PrimaryKey, DEFAULT_PRIMARY_KEY,
 };
 pub use reader::{DocumentsBatchCursor, DocumentsBatchCursorError, DocumentsBatchReader};
 use serde::{Deserialize, Serialize};
@@ -95,6 +95,10 @@ impl DocumentsBatchIndex {
 impl FieldIdMapper for DocumentsBatchIndex {
     fn id(&self, name: &str) -> Option<FieldId> {
         self.id(name)
+    }
+
+    fn name(&self, id: FieldId) -> Option<&str> {
+        self.name(id)
     }
 }
 

@@ -1,7 +1,12 @@
+use std::cell::RefCell;
 use std::sync::{Arc, RwLock};
 use std::thread::{self, Builder};
 
 use big_s::S;
+use bumpalo::Bump;
+use document_changes::{
+    for_each_document_change, DocumentChanges, Extractor, FullySend, IndexingContext, ThreadLocal,
+};
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::DocumentOperation;
 use heed::{RoTxn, RwTxn};
@@ -11,6 +16,7 @@ use rayon::ThreadPool;
 pub use update_by_function::UpdateByFunction;
 
 use super::channel::*;
+use super::document::write_to_obkv;
 use super::document_change::{Deletion, DocumentChange, Insertion, Update};
 use super::extract::*;
 use super::merger::{merge_grenad_entries, FacetFieldIdsDelta};
@@ -18,32 +24,75 @@ use super::word_fst_builder::PrefixDelta;
 use super::words_prefix_docids::{
     compute_word_prefix_docids, compute_word_prefix_fid_docids, compute_word_prefix_position_docids,
 };
-use super::{StdResult, TopLevelMap};
+use super::{extract, StdResult, TopLevelMap};
 use crate::documents::{PrimaryKey, DEFAULT_PRIMARY_KEY};
 use crate::facet::FacetType;
 use crate::update::new::channel::ExtractorSender;
-use crate::update::settings::InnerIndexSettings;
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt;
-use crate::{Error, FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
+use crate::update::settings::InnerIndexSettings;
 use crate::update::{FacetsUpdateBulk, GrenadParameters};
+use crate::{fields_ids_map, Error, FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
 
+mod de;
+pub mod document_changes;
 mod document_deletion;
 mod document_operation;
 mod partial_dump;
 mod update_by_function;
 
-pub trait DocumentChanges<'p> {
-    type Parameter: 'p;
+struct DocumentExtractor<'a> {
+    document_sender: &'a DocumentSender<'a>,
+}
 
-    fn document_changes(
-        self,
-        fields_ids_map: &mut FieldsIdsMap,
-        param: Self::Parameter,
-    ) -> Result<
-        impl IndexedParallelIterator<Item = std::result::Result<DocumentChange, Arc<Error>>>
-            + Clone
-            + 'p,
-    >;
+impl<'a, 'extractor> Extractor<'extractor> for DocumentExtractor<'a> {
+    type Data = FullySend<()>;
+
+    fn init_data(
+        &self,
+        extractor_alloc: raw_collections::alloc::RefBump<'extractor>,
+    ) -> Result<Self::Data> {
+        Ok(FullySend(()))
+    }
+
+    fn process(
+        &self,
+        change: DocumentChange,
+        context: &document_changes::DocumentChangeContext<Self::Data>,
+    ) -> Result<()> {
+        let mut document_buffer = Vec::new();
+
+        let new_fields_ids_map = context.new_fields_ids_map.borrow();
+        let new_fields_ids_map = &*new_fields_ids_map;
+        let new_fields_ids_map = new_fields_ids_map.local_map();
+
+        let external_docid = change.external_docid().to_owned();
+
+        // document but we need to create a function that collects and compresses documents.
+        match change {
+            DocumentChange::Deletion(deletion) => {
+                let docid = deletion.docid();
+                self.document_sender.delete(docid, external_docid).unwrap();
+            }
+            /// TODO: change NONE by SOME(vector) when implemented
+            DocumentChange::Update(update) => {
+                let docid = update.docid();
+                let content =
+                    update.new(&context.txn, context.index, &context.db_fields_ids_map)?;
+                let content =
+                    write_to_obkv(&content, None, new_fields_ids_map, &mut document_buffer)?;
+                self.document_sender.insert(docid, external_docid, content.boxed()).unwrap();
+            }
+            DocumentChange::Insertion(insertion) => {
+                let docid = insertion.docid();
+                let content = insertion.new();
+                let content =
+                    write_to_obkv(&content, None, new_fields_ids_map, &mut document_buffer)?;
+                self.document_sender.insert(docid, external_docid, content.boxed()).unwrap();
+                // extracted_dictionary_sender.send(self, dictionary: &[u8]);
+            }
+        }
+        Ok(())
+    }
 }
 
 /// This is the main function of this crate.
@@ -51,25 +100,34 @@ pub trait DocumentChanges<'p> {
 /// Give it the output of the [`Indexer::document_changes`] method and it will execute it in the [`rayon::ThreadPool`].
 ///
 /// TODO return stats
-pub fn index<PI>(
+pub fn index<'pl, 'indexer, 'index, DC>(
     wtxn: &mut RwTxn,
-    index: &Index,
-    fields_ids_map: FieldsIdsMap,
+    index: &'index Index,
+    db_fields_ids_map: &'indexer FieldsIdsMap,
+    new_fields_ids_map: FieldsIdsMap,
     pool: &ThreadPool,
-    document_changes: PI,
+    document_changes: &DC,
 ) -> Result<()>
 where
-    PI: IndexedParallelIterator<Item = std::result::Result<DocumentChange, Arc<Error>>>
-        + Send
-        + Clone,
+    DC: DocumentChanges<'pl>,
 {
     let (merger_sender, writer_receiver) = merger_writer_channel(10_000);
     // This channel acts as a rendezvous point to ensure that we are one task ahead
     let (extractor_sender, merger_receiver) = extractors_merger_channels(4);
 
-    let fields_ids_map_lock = RwLock::new(fields_ids_map);
-    let global_fields_ids_map = GlobalFieldsIdsMap::new(&fields_ids_map_lock);
-    let global_fields_ids_map_clone = global_fields_ids_map.clone();
+    let new_fields_ids_map = RwLock::new(new_fields_ids_map);
+
+    let fields_ids_map_store = ThreadLocal::with_capacity(pool.current_num_threads());
+    let mut extractor_allocs = ThreadLocal::with_capacity(pool.current_num_threads());
+    let doc_allocs = ThreadLocal::with_capacity(pool.current_num_threads());
+
+    let indexing_context = IndexingContext {
+        index,
+        db_fields_ids_map,
+        new_fields_ids_map: &new_fields_ids_map,
+        doc_allocs: &doc_allocs,
+        fields_ids_map_store: &fields_ids_map_store,
+    };
 
     thread::scope(|s| {
         let indexer_span = tracing::Span::current();
@@ -78,26 +136,12 @@ where
             pool.in_place_scope(|_s| {
                     let span = tracing::trace_span!(target: "indexing::documents", parent: &indexer_span, "extract");
                     let _entered = span.enter();
-                    let document_changes = document_changes.into_par_iter();
 
                     // document but we need to create a function that collects and compresses documents.
                     let document_sender = extractor_sender.document_sender();
-                    document_changes.clone().into_par_iter().try_arc_for_each::<_, Error>(
-                        |result| {
-                        match result? {
-                            DocumentChange::Deletion(Deletion { docid, external_document_id, ..}) => {
-                                document_sender.delete(docid, external_document_id).unwrap();
-                            }
-                            DocumentChange::Update(Update { docid, external_document_id, new, ..}) => {
-                                document_sender.insert(docid, external_document_id, new).unwrap();
-                            }
-                            DocumentChange::Insertion(Insertion { docid, external_document_id, new, ..}) => {
-                                document_sender.insert(docid, external_document_id, new).unwrap();
-                                // extracted_dictionary_sender.send(self, dictionary: &[u8]);
-                            }
-                        }
-                        Ok(())
-                    })?;
+                    let document_extractor = DocumentExtractor { document_sender: &document_sender};
+                    let datastore = ThreadLocal::with_capacity(pool.current_num_threads());
+                    for_each_document_change(document_changes, &document_extractor, indexing_context, &mut extractor_allocs, &datastore)?;
 
                     document_sender.finish().unwrap();
 
@@ -112,13 +156,14 @@ where
                         let span = tracing::trace_span!(target: "indexing::documents::extract", "faceted");
                         let _entered = span.enter();
                         extract_and_send_docids::<
+                            _,
                             FacetedDocidsExtractor,
                             FacetDocids,
                         >(
-                            index,
-                            &global_fields_ids_map,
                             grenad_parameters,
-                            document_changes.clone(),
+                            document_changes,
+                            indexing_context,
+                            &mut extractor_allocs,
                             &extractor_sender,
                         )?;
                     }
@@ -133,7 +178,7 @@ where
                             exact_word_docids,
                             word_position_docids,
                             fid_word_count_docids,
-                        } = WordDocidsExtractors::run_extraction(index, &global_fields_ids_map, grenad_parameters, document_changes.clone())?;
+                        } = WordDocidsExtractors::run_extraction(grenad_parameters, document_changes, indexing_context, &mut extractor_allocs)?;
                         extractor_sender.send_searchable::<WordDocids>(word_docids).unwrap();
                         extractor_sender.send_searchable::<WordFidDocids>(word_fid_docids).unwrap();
                         extractor_sender.send_searchable::<ExactWordDocids>(exact_word_docids).unwrap();
@@ -145,13 +190,14 @@ where
                         let span = tracing::trace_span!(target: "indexing::documents::extract", "word_pair_proximity_docids");
                         let _entered = span.enter();
                         extract_and_send_docids::<
+                            _,
                             WordPairProximityDocidsExtractor,
                             WordPairProximityDocids,
                         >(
-                            index,
-                            &global_fields_ids_map,
                             grenad_parameters,
-                            document_changes.clone(),
+                            document_changes,
+                            indexing_context,
+                      &mut extractor_allocs,
                             &extractor_sender,
                         )?;
                     }
@@ -180,6 +226,8 @@ where
                 })
         })?;
 
+        let global_fields_ids_map = GlobalFieldsIdsMap::new(&new_fields_ids_map);
+
         let indexer_span = tracing::Span::current();
         // TODO manage the errors correctly
         let merger_thread = Builder::new().name(S("indexer-merger")).spawn_scoped(s, move || {
@@ -192,7 +240,7 @@ where
                 merger_sender,
                 &rtxn,
                 index,
-                global_fields_ids_map_clone,
+                global_fields_ids_map,
             )
         })?;
 
@@ -223,7 +271,10 @@ where
         Ok(()) as Result<_>
     })?;
 
-    let fields_ids_map = fields_ids_map_lock.into_inner().unwrap();
+    drop(indexing_context);
+    drop(fields_ids_map_store);
+
+    let fields_ids_map = new_fields_ids_map.into_inner().unwrap();
     index.put_fields_ids_map(wtxn, &fields_ids_map)?;
 
     // used to update the localized and weighted maps while sharing the update code with the settings pipeline.
@@ -284,14 +335,23 @@ fn compute_facet_level_database(
 /// TODO: GrenadParameters::default() should be removed in favor a passed parameter
 /// TODO: manage the errors correctly
 /// TODO: we must have a single trait that also gives the extractor type
-fn extract_and_send_docids<E: DocidsExtractor, D: MergerOperationType>(
-    index: &Index,
-    fields_ids_map: &GlobalFieldsIdsMap,
-    indexer: GrenadParameters,
-    document_changes: impl IntoParallelIterator<Item = std::result::Result<DocumentChange, Arc<Error>>>,
+fn extract_and_send_docids<
+    'pl,
+    'fid,
+    'indexer,
+    'index,
+    DC: DocumentChanges<'pl>,
+    E: DocidsExtractor,
+    D: MergerOperationType,
+>(
+    grenad_parameters: GrenadParameters,
+    document_changes: &DC,
+    indexing_context: IndexingContext<'fid, 'indexer, 'index>,
+    extractor_allocs: &mut ThreadLocal<FullySend<RefCell<Bump>>>,
     sender: &ExtractorSender,
 ) -> Result<()> {
-    let merger = E::run_extraction(index, fields_ids_map, indexer, document_changes)?;
+    let merger =
+        E::run_extraction(grenad_parameters, document_changes, indexing_context, extractor_allocs)?;
     sender.send_searchable::<D>(merger).unwrap();
     Ok(())
 }

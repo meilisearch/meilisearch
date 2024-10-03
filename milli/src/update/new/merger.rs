@@ -3,10 +3,10 @@ use std::io::{self};
 
 use bincode::ErrorKind;
 use grenad::Merger;
+use hashbrown::HashSet;
 use heed::types::Bytes;
 use heed::{Database, RoTxn};
 use roaring::RoaringBitmap;
-use std::collections::HashSet;
 
 use super::channel::*;
 use super::extract::FacetKind;
@@ -149,17 +149,8 @@ pub fn merge_grenad_entries(
                     let current = index.documents.remap_data_type::<Bytes>().get(rtxn, &docid)?;
                     let current: Option<&KvReaderFieldId> = current.map(Into::into);
                     let change = match current {
-                        Some(current) => DocumentChange::Update(Update::create(
-                            docid,
-                            external_id,
-                            current.boxed(),
-                            document,
-                        )),
-                        None => DocumentChange::Insertion(Insertion::create(
-                            docid,
-                            external_id,
-                            document,
-                        )),
+                        Some(current) => DocumentChange::Update(todo!()),
+                        None => DocumentChange::Insertion(todo!()),
                     };
                     geo_extractor.manage_change(&mut global_fields_ids_map, &change)?;
                 }
@@ -174,12 +165,7 @@ pub fn merge_grenad_entries(
                 sender.documents().delete(docid, external_id.clone()).unwrap();
 
                 if let Some(geo_extractor) = geo_extractor.as_mut() {
-                    let current = index.document(rtxn, docid)?;
-                    let change = DocumentChange::Deletion(Deletion::create(
-                        docid,
-                        external_id,
-                        current.boxed(),
-                    ));
+                    let change = DocumentChange::Deletion(Deletion::create(docid, todo!()));
                     geo_extractor.manage_change(&mut global_fields_ids_map, &change)?;
                 }
             }

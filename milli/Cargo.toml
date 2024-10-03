@@ -29,8 +29,8 @@ fst = "0.4.7"
 fxhash = "0.2.1"
 geoutils = "0.5.1"
 grenad = { version = "0.4.7", default-features = false, features = [
-    "rayon", # TODO Should we keep this feature
-    "tempfile"
+    "rayon",    # TODO Should we keep this feature
+    "tempfile",
 ], git = "https://github.com/meilisearch/grenad", branch = "various-improvements" }
 heed = { version = "0.20.3", default-features = false, features = [
     "serde-json",
@@ -81,7 +81,13 @@ hf-hub = { git = "https://github.com/dureuill/hf-hub.git", branch = "rust_tls", 
 ] }
 tiktoken-rs = "0.5.9"
 liquid = "0.26.6"
-rhai = { version = "1.19.0", features = ["serde", "no_module", "no_custom_syntax", "no_time", "sync"] }
+rhai = { version = "1.19.0", features = [
+    "serde",
+    "no_module",
+    "no_custom_syntax",
+    "no_time",
+    "sync",
+] }
 arroy = { git = "https://github.com/meilisearch/arroy/", rev = "2386594dfb009ce08821a925ccc89fb8e30bf73d" }
 rand = "0.8.5"
 tracing = "0.1.40"
@@ -89,6 +95,8 @@ ureq = { version = "2.10.0", features = ["json"] }
 url = "2.5.2"
 rayon-par-bridge = "0.1.0"
 hashbrown = "0.14.5"
+raw-collections = { git = "https://github.com/dureuill/raw-collections.git", version = "0.1.0" }
+bumpalo = "3.16.0"
 thread_local = "1.1.8"
 
 [dev-dependencies]
