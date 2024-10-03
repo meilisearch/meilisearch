@@ -14,7 +14,7 @@ use tokenize_document::{tokenizer_builder, DocumentTokenizer};
 
 use super::cache::CboCachedSorter;
 use super::DocidsExtractor;
-use crate::update::new::append_only_vec::AppendOnlyVec;
+use crate::update::new::append_only_linked_list::AppendOnlyLinkedList;
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt;
 use crate::update::new::DocumentChange;
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
@@ -58,7 +58,7 @@ pub trait SearchableExtractor {
             localized_attributes_rules: &localized_attributes_rules,
             max_positions_per_attributes: MAX_POSITION_PER_ATTRIBUTE,
         };
-        let caches = AppendOnlyVec::new();
+        let caches = AppendOnlyLinkedList::new();
 
         {
             let span =

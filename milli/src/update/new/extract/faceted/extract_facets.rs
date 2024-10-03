@@ -12,7 +12,7 @@ use super::super::cache::CboCachedSorter;
 use super::facet_document::extract_document_facets;
 use super::FacetKind;
 use crate::facet::value_encoding::f64_into_bytes;
-use crate::update::new::append_only_vec::AppendOnlyVec;
+use crate::update::new::append_only_linked_list::AppendOnlyLinkedList;
 use crate::update::new::extract::DocidsExtractor;
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt;
 use crate::update::new::DocumentChange;
@@ -210,7 +210,7 @@ impl DocidsExtractor for FacetedDocidsExtractor {
         let attributes_to_extract = Self::attributes_to_extract(&rtxn, index)?;
         let attributes_to_extract: Vec<_> =
             attributes_to_extract.iter().map(|s| s.as_ref()).collect();
-        let caches = AppendOnlyVec::new();
+        let caches = AppendOnlyLinkedList::new();
 
         {
             let span =
