@@ -1,6 +1,5 @@
-use std::fmt;
-use std::mem::{self, ManuallyDrop};
 use std::sync::atomic::AtomicPtr;
+use std::{fmt, mem};
 
 /// An append-only linked-list that returns a mutable references to the pushed items.
 pub struct AppendOnlyLinkedList<T> {
@@ -8,7 +7,7 @@ pub struct AppendOnlyLinkedList<T> {
 }
 
 struct Node<T> {
-    item: ManuallyDrop<T>,
+    item: T,
     parent: AtomicPtr<Node<T>>,
 }
 
@@ -23,10 +22,7 @@ impl<T> AppendOnlyLinkedList<T> {
     pub fn push(&self, item: T) -> &mut T {
         use std::sync::atomic::Ordering::{Relaxed, SeqCst};
 
-        let node = Box::leak(Box::new(Node {
-            item: ManuallyDrop::new(item),
-            parent: AtomicPtr::default(),
-        }));
+        let node = Box::leak(Box::new(Node { item, parent: AtomicPtr::default() }));
 
         let mut head = self.head.load(SeqCst);
         loop {
@@ -82,13 +78,10 @@ impl<T> Iterator for IntoIter<T> {
         if ptr.is_null() {
             None
         } else {
-            let mut node = unsafe { Box::from_raw(ptr) };
+            let node = unsafe { Box::from_raw(ptr) };
             // Let's set the next node to read to be the parent of this one
             self.0 = node.parent;
-            // ...and take the item from the Node before it is dropped
-            let item = unsafe { ManuallyDrop::take(&mut node.item) };
-            Some(item)
-            // ...then drop the Node itself
+            Some(node.item)
         }
     }
 }
@@ -100,9 +93,6 @@ impl<T> Drop for IntoIter<T> {
             let mut node = unsafe { Box::from_raw(ptr) };
             // Let's set the next node to read to be the parent of this one
             ptr = *node.parent.get_mut();
-            // ...and drop the item ourselves.
-            unsafe { ManuallyDrop::drop(&mut node.item) }
-            // ...then drop the Node itself
         }
     }
 }
