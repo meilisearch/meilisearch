@@ -106,7 +106,8 @@ pub enum UserError {
     #[error(
         "Document identifier `{}` is invalid. \
 A document identifier can be of type integer or string, \
-only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_).", .document_id.to_string()
+only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), \
+and can not be more than 512 bytes.", .document_id.to_string()
     )]
     InvalidDocumentId { document_id: Value },
     #[error("Invalid facet distribution, {}", format_invalid_filter_distribution(.invalid_facets_name, .valid_facets_name))]

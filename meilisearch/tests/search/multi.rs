@@ -412,7 +412,7 @@ async fn simple_search_illegal_index_uid() {
     snapshot!(code, @"400 Bad Request");
     insta::assert_json_snapshot!(response, @r###"
     {
-      "message": "Invalid value at `.queries[0].indexUid`: `hé` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+      "message": "Invalid value at `.queries[0].indexUid`: `hé` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
       "code": "invalid_index_uid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
@@ -437,7 +437,7 @@ async fn federation_search_illegal_index_uid() {
     snapshot!(code, @"400 Bad Request");
     insta::assert_json_snapshot!(response, @r###"
     {
-      "message": "Invalid value at `.queries[0].indexUid`: `hé` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+      "message": "Invalid value at `.queries[0].indexUid`: `hé` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
       "code": "invalid_index_uid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
