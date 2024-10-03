@@ -23,15 +23,13 @@ impl<T> AppendOnlyLinkedList<T> {
         use std::sync::atomic::Ordering::{Relaxed, SeqCst};
 
         let node = Box::leak(Box::new(Node { item, parent: AtomicPtr::default() }));
-
         let mut head = self.head.load(SeqCst);
+
         loop {
             std::hint::spin_loop();
+            node.parent = AtomicPtr::new(head);
             match self.head.compare_exchange_weak(head, node, SeqCst, Relaxed) {
-                Ok(parent) => {
-                    node.parent = AtomicPtr::new(parent);
-                    break;
-                }
+                Ok(_) => break,
                 Err(new) => head = new,
             }
         }
