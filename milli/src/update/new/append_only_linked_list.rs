@@ -8,7 +8,7 @@ pub struct AppendOnlyLinkedList<T> {
 
 struct Node<T> {
     item: T,
-    parent: AtomicPtr<Node<T>>,
+    next: AtomicPtr<Node<T>>,
 }
 
 impl<T> AppendOnlyLinkedList<T> {
@@ -22,12 +22,12 @@ impl<T> AppendOnlyLinkedList<T> {
     pub fn push(&self, item: T) -> &mut T {
         use std::sync::atomic::Ordering::{Relaxed, SeqCst};
 
-        let node = Box::leak(Box::new(Node { item, parent: AtomicPtr::default() }));
+        let node = Box::leak(Box::new(Node { item, next: AtomicPtr::default() }));
         let mut head = self.head.load(SeqCst);
 
         loop {
             std::hint::spin_loop();
-            node.parent = AtomicPtr::new(head);
+            node.next = AtomicPtr::new(head);
             match self.head.compare_exchange_weak(head, node, SeqCst, Relaxed) {
                 Ok(_) => break,
                 Err(new) => head = new,
@@ -77,8 +77,8 @@ impl<T> Iterator for IntoIter<T> {
             None
         } else {
             let node = unsafe { Box::from_raw(ptr) };
-            // Let's set the next node to read to be the parent of this one
-            self.0 = node.parent;
+            // Let's set the next node to read to be the next of this one
+            self.0 = node.next;
             Some(node.item)
         }
     }
@@ -89,8 +89,8 @@ impl<T> Drop for IntoIter<T> {
         let mut ptr = *self.0.get_mut();
         while !ptr.is_null() {
             let mut node = unsafe { Box::from_raw(ptr) };
-            // Let's set the next node to read to be the parent of this one
-            ptr = *node.parent.get_mut();
+            // Let's set the next node to read to be the next of this one
+            ptr = *node.next.get_mut();
         }
     }
 }
