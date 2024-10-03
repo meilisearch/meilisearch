@@ -50,6 +50,22 @@ where
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let mut histogram_timer: Option<HistogramTimer> = None;
 
+        let request_uri = req.uri().to_string();
+
+        if !request_uri.starts_with("http://") && !request_uri.starts_with("https://") {
+            
+            let error_response = actix_web::HttpResponse::BadRequest().body(
+                "Invalid URL: Missing scheme. Please provide a URL with 'http://' or 'https://'.
+                This issue might be related to incorrect configuration of --http-addr or MEILI_HTTP_ADDR."
+            );
+            
+            return Box::pin(async move {
+                Ok(req.into_response(error_response.into_body()))
+            });
+        }
+
+
+    
         // calling unwrap here is safe because index scheduler is added to app data while creating actix app.
         // also, the tests will fail if this is not present.
         let index_scheduler = req.app_data::<Data<IndexScheduler>>().unwrap();
