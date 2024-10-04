@@ -27,6 +27,7 @@ use crate::update::index_documents::helpers::{
     as_cloneable_grenad, keep_latest_obkv, try_split_array_at,
 };
 use crate::update::settings::InnerIndexSettingsDiff;
+use crate::vector::ArroyWrapper;
 use crate::{
     lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, FieldId, GeoPoint, Index, InternalError,
     Result, SerializationError, U8StrStrCodec,
@@ -666,9 +667,14 @@ pub(crate) fn write_typed_chunk_into_index(
             let embedder_index = index.embedder_category_id.get(wtxn, &embedder_name)?.ok_or(
                 InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },
             )?;
+            let binary_quantized = settings_diff
+                .old
+                .embedding_configs
+                .get(&embedder_name)
+                .map_or(false, |conf| conf.2);
             // FIXME: allow customizing distance
             let writers: Vec<_> = crate::vector::arroy_db_range_for_embedder(embedder_index)
-                .map(|k| arroy::Writer::new(index.vector_arroy, k, expected_dimension))
+                .map(|k| ArroyWrapper::new(index.vector_arroy, k, binary_quantized))
                 .collect();
 
             // remove vectors for docids we want them removed
@@ -679,7 +685,7 @@ pub(crate) fn write_typed_chunk_into_index(
 
                 for writer in &writers {
                     // Uses invariant: vectors are packed in the first writers.
-                    if !writer.del_item(wtxn, docid)? {
+                    if !writer.del_item(wtxn, expected_dimension, docid)? {
                         break;
                     }
                 }
@@ -711,7 +717,7 @@ pub(crate) fn write_typed_chunk_into_index(
                     )));
                 }
                 for (embedding, writer) in embeddings.iter().zip(&writers) {
-                    writer.add_item(wtxn, docid, embedding)?;
+                    writer.add_item(wtxn, expected_dimension, docid, embedding)?;
                 }
             }
 
@@ -734,7 +740,7 @@ pub(crate) fn write_typed_chunk_into_index(
                             break;
                         };
                         if candidate == vector {
-                            writer.del_item(wtxn, docid)?;
+                            writer.del_item(wtxn, expected_dimension, docid)?;
                             deleted_index = Some(index);
                         }
                     }
@@ -751,8 +757,13 @@ pub(crate) fn write_typed_chunk_into_index(
                         if let Some((last_index, vector)) = last_index_with_a_vector {
                             // unwrap: computed the index from the list of writers
                             let writer = writers.get(last_index).unwrap();
-                            writer.del_item(wtxn, docid)?;
-                            writers.get(deleted_index).unwrap().add_item(wtxn, docid, &vector)?;
+                            writer.del_item(wtxn, expected_dimension, docid)?;
+                            writers.get(deleted_index).unwrap().add_item(
+                                wtxn,
+                                expected_dimension,
+                                docid,
+                                &vector,
+                            )?;
                         }
                     }
                 }
@@ -762,8 +773,8 @@ pub(crate) fn write_typed_chunk_into_index(
 
                     // overflow was detected during vector extraction.
                     for writer in &writers {
-                        if !writer.contains_item(wtxn, docid)? {
-                            writer.add_item(wtxn, docid, &vector)?;
+                        if !writer.contains_item(wtxn, expected_dimension, docid)? {
+                            writer.add_item(wtxn, expected_dimension, docid, &vector)?;
                             break;
                         }
                     }

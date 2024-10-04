@@ -39,7 +39,7 @@ pub async fn multi_search_with_post(
 ) -> Result<HttpResponse, ResponseError> {
     // Since we don't want to process half of the search requests and then get a permit refused
     // we're going to get one permit for the whole duration of the multi-search request.
-    let _permit = search_queue.try_get_search_permit().await?;
+    let permit = search_queue.try_get_search_permit().await?;
 
     let federated_search = params.into_inner();
 
@@ -81,6 +81,7 @@ pub async fn multi_search_with_post(
                 perform_federated_search(&index_scheduler, queries, federation, features)
             })
             .await;
+            permit.drop().await;
 
             if let Ok(Ok(_)) = search_result {
                 multi_aggregate.succeed();
@@ -143,6 +144,7 @@ pub async fn multi_search_with_post(
                 Ok(search_results)
             }
             .await;
+            permit.drop().await;
 
             if search_results.is_ok() {
                 multi_aggregate.succeed();

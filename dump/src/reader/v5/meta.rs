@@ -74,7 +74,8 @@ impl Display for IndexUidFormatError {
             f,
             "invalid index uid `{}`, the uid must be an integer \
             or a string containing only alphanumeric characters \
-            a-z A-Z 0-9, hyphens - and underscores _.",
+            a-z A-Z 0-9, hyphens - and underscores _, \
+            and can not be more than 400 bytes.",
             self.invalid_uid,
         )
     }

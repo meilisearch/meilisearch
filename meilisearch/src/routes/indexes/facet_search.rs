@@ -81,7 +81,7 @@ pub async fn search(
     let index = index_scheduler.index(&index_uid)?;
     let features = index_scheduler.features();
     let search_kind = search_kind(&search_query, &index_scheduler, &index, features)?;
-    let _permit = search_queue.try_get_search_permit().await?;
+    let permit = search_queue.try_get_search_permit().await?;
     let search_result = tokio::task::spawn_blocking(move || {
         perform_facet_search(
             &index,
@@ -93,7 +93,9 @@ pub async fn search(
             locales,
         )
     })
-    .await?;
+    .await;
+    permit.drop().await;
+    let search_result = search_result?;
 
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);

@@ -212,6 +212,8 @@ fn is_keyword(s: &str) -> bool {
             | "NULL"
             | "EMPTY"
             | "CONTAINS"
+            | "STARTS"
+            | "WITH"
             | "_geoRadius"
             | "_geoBoundingBox"
     )

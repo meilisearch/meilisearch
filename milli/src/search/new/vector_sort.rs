@@ -16,6 +16,7 @@ pub struct VectorSort<Q: RankingRuleQueryTrait> {
     limit: usize,
     distribution_shift: Option<DistributionShift>,
     embedder_index: u8,
+    quantized: bool,
 }
 
 impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
@@ -26,6 +27,7 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         limit: usize,
         embedder_name: &str,
         embedder: &Embedder,
+        quantized: bool,
     ) -> Result<Self> {
         let embedder_index = ctx
             .index
@@ -41,6 +43,7 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
             limit,
             distribution_shift: embedder.distribution(),
             embedder_index,
+            quantized,
         })
     }
 
@@ -49,16 +52,12 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         ctx: &mut SearchContext<'_>,
         vector_candidates: &RoaringBitmap,
     ) -> Result<()> {
-        let readers: std::result::Result<Vec<_>, _> =
-            ctx.index.arroy_readers(ctx.txn, self.embedder_index).collect();
-        let readers = readers?;
-
         let target = &self.target;
         let mut results = Vec::new();
 
-        for reader in readers.iter() {
+        for reader in ctx.index.arroy_readers(ctx.txn, self.embedder_index, self.quantized) {
             let nns_by_vector =
-                reader.nns_by_vector(ctx.txn, target, self.limit, None, Some(vector_candidates))?;
+                reader?.nns_by_vector(ctx.txn, target, self.limit, Some(vector_candidates))?;
             results.extend(nns_by_vector.into_iter());
         }
         results.sort_unstable_by_key(|(_, distance)| OrderedFloat(*distance));

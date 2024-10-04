@@ -18,6 +18,7 @@
 //!                         And should drop the Permit only once you have freed all the RAM consumed by the method.
 
 use std::num::NonZeroUsize;
+use std::time::Duration;
 
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -29,16 +30,31 @@ use crate::error::MeilisearchHttpError;
 pub struct SearchQueue {
     sender: mpsc::Sender<oneshot::Sender<Permit>>,
     capacity: usize,
+    /// If we have waited longer than this to get a permit, we should abort the search request entirely.
+    /// The client probably already closed the connection, but we have no way to find out.
+    time_to_abort: Duration,
 }
 
 /// You should only run search requests while holding this permit.
 /// Once it's dropped, a new search request will be able to process.
+/// You should always try to drop the permit yourself calling the `drop` async method on it.
 #[derive(Debug)]
 pub struct Permit {
     sender: mpsc::Sender<()>,
 }
 
+impl Permit {
+    /// Drop the permit giving back on permit to the search queue.
+    pub async fn drop(self) {
+        // if the channel is closed then the whole instance is down
+        let _ = self.sender.send(()).await;
+    }
+}
+
 impl Drop for Permit {
+    /// The implicit drop implementation can still be called in multiple cases:
+    /// - We forgot to call the explicit one somewhere => this should be fixed on our side asap
+    /// - The future is cancelled while running and the permit dropped with it
     fn drop(&mut self) {
         let sender = self.sender.clone();
         // if the channel is closed then the whole instance is down
@@ -53,7 +69,11 @@ impl SearchQueue {
         let (sender, receiver) = mpsc::channel(1);
 
         tokio::task::spawn(Self::run(capacity, paralellism, receiver));
-        Self { sender, capacity }
+        Self { sender, capacity, time_to_abort: Duration::from_secs(60) }
+    }
+
+    pub fn with_time_to_abort(self, time_to_abort: Duration) -> Self {
+        Self { time_to_abort, ..self }
     }
 
     /// This function is the main loop, it's in charge on scheduling which search request should execute first and
@@ -119,9 +139,23 @@ impl SearchQueue {
     /// Returns a search `Permit`.
     /// It should be dropped as soon as you've freed all the RAM associated with the search request being processed.
     pub async fn try_get_search_permit(&self) -> Result<Permit, MeilisearchHttpError> {
+        let now = std::time::Instant::now();
         let (sender, receiver) = oneshot::channel();
         self.sender.send(sender).await.map_err(|_| MeilisearchHttpError::SearchLimiterIsDown)?;
-        receiver.await.map_err(|_| MeilisearchHttpError::TooManySearchRequests(self.capacity))
+        let permit = receiver
+            .await
+            .map_err(|_| MeilisearchHttpError::TooManySearchRequests(self.capacity))?;
+
+        // If we've been for more than one minute to get a search permit, it's better to simply
+        // abort the search request than spending time processing something were the client
+        // most certainly exited or got a timeout a long time ago.
+        // We may find a better solution in https://github.com/actix/actix-web/issues/3462.
+        if now.elapsed() > self.time_to_abort {
+            permit.drop().await;
+            Err(MeilisearchHttpError::TooManySearchRequests(self.capacity))
+        } else {
+            Ok(permit)
+        }
     }
 
     /// Returns `Ok(())` if everything seems normal.

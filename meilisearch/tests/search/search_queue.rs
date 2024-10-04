@@ -38,6 +38,43 @@ async fn search_queue_register() {
 }
 
 #[actix_rt::test]
+async fn search_queue_register_with_explicit_drop() {
+    let queue = SearchQueue::new(4, NonZeroUsize::new(2).unwrap());
+
+    // First, use all the cores
+    let permit1 = queue.try_get_search_permit().await.unwrap();
+    let _permit2 = queue.try_get_search_permit().await.unwrap();
+
+    // If we free one spot we should be able to register one new search
+    permit1.drop().await;
+
+    let permit3 = queue.try_get_search_permit().await.unwrap();
+
+    // And again
+    permit3.drop().await;
+
+    let _permit4 = queue.try_get_search_permit().await.unwrap();
+}
+
+#[actix_rt::test]
+async fn search_queue_register_with_time_to_abort() {
+    let queue = Arc::new(
+        SearchQueue::new(1, NonZeroUsize::new(1).unwrap())
+            .with_time_to_abort(Duration::from_secs(1)),
+    );
+
+    // First, use all the cores
+    let permit1 = queue.try_get_search_permit().await.unwrap();
+    let q = queue.clone();
+    let permit2 = tokio::task::spawn(async move { q.try_get_search_permit().await });
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    permit1.drop().await;
+    let ret = permit2.await.unwrap();
+
+    snapshot!(ret.unwrap_err(), @"Too many search requests running at the same time: 1. Retry after 10s.");
+}
+
+#[actix_rt::test]
 async fn wait_till_cores_are_available() {
     let queue = Arc::new(SearchQueue::new(4, NonZeroUsize::new(1).unwrap()));
 

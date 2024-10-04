@@ -1,8 +1,10 @@
 use std::env;
 use std::io::{stderr, LineWriter, Write};
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::thread::available_parallelism;
 
 use actix_web::http::KeepAlive;
 use actix_web::web::Data;
@@ -11,6 +13,7 @@ use index_scheduler::IndexScheduler;
 use is_terminal::IsTerminal;
 use meilisearch::analytics::Analytics;
 use meilisearch::option::LogMode;
+use meilisearch::search_queue::SearchQueue;
 use meilisearch::{
     analytics, create_app, setup_meilisearch, LogRouteHandle, LogRouteType, LogStderrHandle,
     LogStderrType, Opt, SubscriberForSecondLayer,
@@ -148,11 +151,17 @@ async fn run_http(
     let opt_clone = opt.clone();
     let index_scheduler = Data::from(index_scheduler);
     let auth_controller = Data::from(auth_controller);
+    let search_queue = SearchQueue::new(
+        opt.experimental_search_queue_size,
+        available_parallelism().unwrap_or(NonZeroUsize::new(2).unwrap()),
+    );
+    let search_queue = Data::new(search_queue);
 
     let http_server = HttpServer::new(move || {
         create_app(
             index_scheduler.clone(),
             auth_controller.clone(),
+            search_queue.clone(),
             opt.clone(),
             logs.clone(),
             analytics.clone(),

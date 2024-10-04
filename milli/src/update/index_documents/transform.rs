@@ -28,7 +28,8 @@ use crate::update::index_documents::GrenadParameters;
 use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
 use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
 use crate::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
-use crate::vector::settings::{EmbedderAction, WriteBackToDocuments};
+use crate::vector::settings::WriteBackToDocuments;
+use crate::vector::ArroyWrapper;
 use crate::{
     is_faceted_by, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldsIdsMap, Index, Result,
 };
@@ -989,19 +990,17 @@ impl<'a, 'i> Transform<'a, 'i> {
             None
         };
 
-        let readers: Result<
-            BTreeMap<&str, (Vec<arroy::Reader<'_, arroy::distances::Angular>>, &RoaringBitmap)>,
-        > = settings_diff
+        let readers: Result<BTreeMap<&str, (Vec<ArroyWrapper>, &RoaringBitmap)>> = settings_diff
             .embedding_config_updates
             .iter()
             .filter_map(|(name, action)| {
-                if let EmbedderAction::WriteBackToDocuments(WriteBackToDocuments {
-                    embedder_id,
-                    user_provided,
-                }) = action
+                if let Some(WriteBackToDocuments { embedder_id, user_provided }) =
+                    action.write_back()
                 {
-                    let readers: Result<Vec<_>> =
-                        self.index.arroy_readers(wtxn, *embedder_id).collect();
+                    let readers: Result<Vec<_>> = self
+                        .index
+                        .arroy_readers(wtxn, *embedder_id, action.was_quantized)
+                        .collect();
                     match readers {
                         Ok(readers) => Some(Ok((name.as_str(), (readers, user_provided)))),
                         Err(error) => Some(Err(error)),
@@ -1104,21 +1103,12 @@ impl<'a, 'i> Transform<'a, 'i> {
             }
         }
 
-        let mut writers = Vec::new();
-
         // delete all vectors from the embedders that need removal
         for (_, (readers, _)) in readers {
             for reader in readers {
-                let dimensions = reader.dimensions();
-                let arroy_index = reader.index();
-                drop(reader);
-                let writer = arroy::Writer::new(self.index.vector_arroy, arroy_index, dimensions);
-                writers.push(writer);
+                let dimensions = reader.dimensions(wtxn)?;
+                reader.clear(wtxn, dimensions)?;
             }
-        }
-
-        for writer in writers {
-            writer.clear(wtxn)?;
         }
 
         let grenad_params = GrenadParameters {

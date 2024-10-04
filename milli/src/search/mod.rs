@@ -32,6 +32,7 @@ pub struct SemanticSearch {
     vector: Option<Vec<f32>>,
     embedder_name: String,
     embedder: Arc<Embedder>,
+    quantized: bool,
 }
 
 pub struct Search<'a> {
@@ -89,9 +90,10 @@ impl<'a> Search<'a> {
         &mut self,
         embedder_name: String,
         embedder: Arc<Embedder>,
+        quantized: bool,
         vector: Option<Vec<f32>>,
     ) -> &mut Search<'a> {
-        self.semantic = Some(SemanticSearch { embedder_name, embedder, vector });
+        self.semantic = Some(SemanticSearch { embedder_name, embedder, quantized, vector });
         self
     }
 
@@ -206,7 +208,7 @@ impl<'a> Search<'a> {
             degraded,
             used_negative_operator,
         } = match self.semantic.as_ref() {
-            Some(SemanticSearch { vector: Some(vector), embedder_name, embedder }) => {
+            Some(SemanticSearch { vector: Some(vector), embedder_name, embedder, quantized }) => {
                 execute_vector_search(
                     &mut ctx,
                     vector,
@@ -219,6 +221,7 @@ impl<'a> Search<'a> {
                     self.limit,
                     embedder_name,
                     embedder,
+                    *quantized,
                     self.time_budget.clone(),
                     self.ranking_score_threshold,
                 )?

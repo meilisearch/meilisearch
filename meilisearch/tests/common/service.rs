@@ -1,10 +1,15 @@
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 
+use actix_web::body::MessageBody;
+use actix_web::dev::ServiceResponse;
 use actix_web::http::header::ContentType;
 use actix_web::http::StatusCode;
 use actix_web::test;
 use actix_web::test::TestRequest;
+use actix_web::web::Data;
 use index_scheduler::IndexScheduler;
+use meilisearch::search_queue::SearchQueue;
 use meilisearch::{analytics, create_app, Opt, SubscriberForSecondLayer};
 use meilisearch_auth::AuthController;
 use tracing::level_filters::LevelFilter;
@@ -106,7 +111,13 @@ impl Service {
         self.request(req).await
     }
 
-    pub async fn request(&self, mut req: test::TestRequest) -> (Value, StatusCode) {
+    pub async fn init_web_app(
+        &self,
+    ) -> impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = ServiceResponse<impl MessageBody>,
+        Error = actix_web::Error,
+    > {
         let (_route_layer, route_layer_handle) =
             tracing_subscriber::reload::Layer::new(None.with_filter(
                 tracing_subscriber::filter::Targets::new().with_target("", LevelFilter::OFF),
@@ -119,16 +130,25 @@ impl Service {
                 as Box<dyn tracing_subscriber::Layer<SubscriberForSecondLayer> + Send + Sync>)
                 .with_filter(tracing_subscriber::filter::Targets::new()),
         );
+        let search_queue = SearchQueue::new(
+            self.options.experimental_search_queue_size,
+            NonZeroUsize::new(1).unwrap(),
+        );
 
-        let app = test::init_service(create_app(
+        actix_web::test::init_service(create_app(
             self.index_scheduler.clone().into(),
             self.auth.clone().into(),
+            Data::new(search_queue),
             self.options.clone(),
             (route_layer_handle, stderr_layer_handle),
             analytics::MockAnalytics::new(&self.options),
             true,
         ))
-        .await;
+        .await
+    }
+
+    pub async fn request(&self, mut req: test::TestRequest) -> (Value, StatusCode) {
+        let app = self.init_web_app().await;
 
         if let Some(api_key) = &self.api_key {
             req = req.insert_header(("Authorization", ["Bearer ", api_key].concat()));

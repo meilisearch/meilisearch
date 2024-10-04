@@ -616,7 +616,7 @@ mod tests {
             let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
             snapshot!(meili_snap::json_string!(err), @r###"
             {
-              "message": "Invalid value in parameter `indexUids[1]`: `hé` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+              "message": "Invalid value in parameter `indexUids[1]`: `hé` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
               "code": "invalid_index_uid",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
@@ -628,7 +628,7 @@ mod tests {
             let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
             snapshot!(meili_snap::json_string!(err), @r###"
             {
-              "message": "Invalid value in parameter `indexUids`: `hé` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+              "message": "Invalid value in parameter `indexUids`: `hé` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
               "code": "invalid_index_uid",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_index_uid"

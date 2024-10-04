@@ -190,7 +190,7 @@ impl<'a> Search<'a> {
             return Ok(return_keyword_results(self.limit, self.offset, keyword_results));
         };
         // no embedder, no semantic search
-        let Some(SemanticSearch { vector, embedder_name, embedder }) = semantic else {
+        let Some(SemanticSearch { vector, embedder_name, embedder, quantized }) = semantic else {
             return Ok(return_keyword_results(self.limit, self.offset, keyword_results));
         };
 
@@ -212,7 +212,7 @@ impl<'a> Search<'a> {
         };
 
         search.semantic =
-            Some(SemanticSearch { vector: Some(vector_query), embedder_name, embedder });
+            Some(SemanticSearch { vector: Some(vector_query), embedder_name, embedder, quantized });
 
         // TODO: would be better to have two distinct functions at this point
         let vector_results = search.execute()?;

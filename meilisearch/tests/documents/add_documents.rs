@@ -1023,7 +1023,7 @@ async fn error_document_add_create_index_bad_uid() {
     snapshot!(json_string!(response),
         @r###"
     {
-      "message": "`883  fj!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+      "message": "`883  fj!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
       "code": "invalid_index_uid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
@@ -1280,7 +1280,7 @@ async fn error_add_documents_bad_document_id() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Document identifier `\"foo & bar\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_).",
+        "message": "Document identifier `\"foo & bar\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 512 bytes.",
         "code": "invalid_document_id",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_id"

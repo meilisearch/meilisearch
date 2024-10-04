@@ -11,7 +11,7 @@ async fn error_document_update_create_index_bad_uid() {
     let (response, code) = index.update_documents(json!([{"id": 1}]), None).await;
 
     let expected_response = json!({
-        "message": "`883  fj!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+        "message": "`883  fj!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
         "code": "invalid_index_uid",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
@@ -173,7 +173,7 @@ async fn error_update_documents_bad_document_id() {
     assert_eq!(
         response["error"]["message"],
         json!(
-            r#"Document identifier `"foo & bar"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."#
+            r#"Document identifier `"foo & bar"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 512 bytes."#
         )
     );
     assert_eq!(response["error"]["code"], json!("invalid_document_id"));

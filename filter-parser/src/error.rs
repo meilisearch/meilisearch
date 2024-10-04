@@ -146,7 +146,7 @@ impl<'a> Display for Error<'a> {
             }
             ErrorKind::InvalidPrimary => {
                 let text = if input.trim().is_empty() { "but instead got nothing.".to_string() } else { format!("at `{}`.", escaped_input) };
-                writeln!(f, "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `_geoRadius`, or `_geoBoundingBox` {}", text)?
+                writeln!(f, "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` {}", text)?
             }
             ErrorKind::InvalidEscapedNumber => {
                 writeln!(f, "Found an invalid escaped sequence number: `{}`.", escaped_input)?

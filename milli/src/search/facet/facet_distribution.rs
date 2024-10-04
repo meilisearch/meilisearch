@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fmt::Display;
 use std::ops::ControlFlow;
 use std::{fmt, mem};
 
@@ -35,6 +36,15 @@ pub enum OrderBy {
     Lexicographic,
     /// Or by number of docids in common?
     Count,
+}
+
+impl Display for OrderBy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OrderBy::Lexicographic => f.write_str("alphabetically"),
+            OrderBy::Count => f.write_str("by count"),
+        }
+    }
 }
 
 pub struct FacetDistribution<'a> {
@@ -100,7 +110,6 @@ impl<'a> FacetDistribution<'a> {
                 let mut lexicographic_distribution = BTreeMap::new();
                 let mut key_buffer: Vec<_> = field_id.to_be_bytes().to_vec();
 
-                let distribution_prelength = distribution.len();
                 let db = self.index.field_id_docid_facet_f64s;
                 for docid in candidates {
                     key_buffer.truncate(mem::size_of::<FieldId>());
@@ -113,23 +122,21 @@ impl<'a> FacetDistribution<'a> {
                     for result in iter {
                         let ((_, _, value), ()) = result?;
                         *lexicographic_distribution.entry(value.to_string()).or_insert(0) += 1;
-
-                        if lexicographic_distribution.len() - distribution_prelength
-                            == self.max_values_per_facet
-                        {
-                            break;
-                        }
                     }
                 }
 
-                distribution.extend(lexicographic_distribution);
+                distribution.extend(
+                    lexicographic_distribution
+                        .into_iter()
+                        .take(self.max_values_per_facet.saturating_sub(distribution.len())),
+                );
             }
             FacetType::String => {
                 let mut normalized_distribution = BTreeMap::new();
                 let mut key_buffer: Vec<_> = field_id.to_be_bytes().to_vec();
 
                 let db = self.index.field_id_docid_facet_strings;
-                'outer: for docid in candidates {
+                for docid in candidates {
                     key_buffer.truncate(mem::size_of::<FieldId>());
                     key_buffer.extend_from_slice(&docid.to_be_bytes());
                     let iter = db
@@ -144,14 +151,14 @@ impl<'a> FacetDistribution<'a> {
                             .or_insert_with(|| (original_value, 0));
                         *count += 1;
 
-                        if normalized_distribution.len() == self.max_values_per_facet {
-                            break 'outer;
-                        }
+                        // we'd like to break here if we have enough facet values, but we are collecting them by increasing docid,
+                        // so higher ranked facets could be in later docids
                     }
                 }
 
                 let iter = normalized_distribution
                     .into_iter()
+                    .take(self.max_values_per_facet.saturating_sub(distribution.len()))
                     .map(|(_normalized, (original, count))| (original.to_string(), count));
                 distribution.extend(iter);
             }
@@ -467,7 +474,7 @@ mod tests {
             .execute()
             .unwrap();
 
-        milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 1}}"###);
+        milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2}}"###);
 
         let map = FacetDistribution::new(&txn, &index)
             .facets(iter::once(("colour", OrderBy::Count)))

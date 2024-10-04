@@ -272,6 +272,20 @@ impl<'a> Index<'a, Shared> {
         }
         (task, code)
     }
+
+    pub async fn delete_index_fail(&self) -> (Value, StatusCode) {
+        let (mut task, code) = self._delete().await;
+        if code.is_success() {
+            task = self.wait_task(task.uid()).await;
+            if task.is_success() {
+                panic!(
+                    "`delete_index_fail` succeeded: {}",
+                    serde_json::to_string_pretty(&task).unwrap()
+                );
+            }
+        }
+        (task, code)
+    }
 }
 
 #[allow(dead_code)]
@@ -314,6 +328,12 @@ impl<State> Index<'_, State> {
         });
         self.service.post_encoded("/indexes", body, self.encoder).await
     }
+
+    pub(super) async fn _delete(&self) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}", urlencode(self.uid.as_ref()));
+        self.service.delete(url).await
+    }
+
     pub async fn wait_task(&self, update_id: u64) -> Value {
         // try several times to get status, or panic to not wait forever
         let url = format!("/tasks/{}", update_id);

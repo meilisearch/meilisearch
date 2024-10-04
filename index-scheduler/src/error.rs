@@ -101,7 +101,7 @@ pub enum Error {
     )]
     InvalidTaskCanceledBy { canceled_by: String },
     #[error(
-        "{index_uid} is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_)."
+        "{index_uid} is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes."
     )]
     InvalidIndexUid { index_uid: String },
     #[error("Task `{0}` not found.")]

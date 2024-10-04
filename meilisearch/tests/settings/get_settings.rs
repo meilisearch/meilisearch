@@ -190,7 +190,8 @@ async fn secrets_are_hidden_in_settings() {
           "source": "rest",
           "apiKey": "My suXXXXXX...",
           "dimensions": 4,
-          "documentTemplate": "{% for field in fields %} {{ field.name }}: {{ field.value }}\n{% endfor %}",
+          "documentTemplate": "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
+          "documentTemplateMaxBytes": 400,
           "url": "https://localhost:7777",
           "request": "{{text}}",
           "response": "{{embedding}}",
@@ -329,7 +330,7 @@ async fn error_update_setting_unexisting_index_invalid_uid() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "`test##!  ` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+      "message": "`test##!  ` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
       "code": "invalid_index_uid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_index_uid"

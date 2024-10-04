@@ -3,11 +3,10 @@ source: dump/src/reader/mod.rs
 expression: document
 ---
 {
-  "id": "e3",
-  "desc": "overriden vector + map",
+  "id": "e0",
+  "desc": "overriden vector",
   "_vectors": {
     "default": [
-      0.2,
       0.1,
       0.1,
       0.1,
@@ -774,9 +773,7 @@ expression: document
       0.1,
       0.1,
       0.1,
-      0.1
-    ],
-    "toto": [
+      0.1,
       0.1
     ]
   }

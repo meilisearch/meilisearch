@@ -646,8 +646,6 @@ pub struct SearchAggregator {
     max_vector_size: usize,
     // Whether the semantic ratio passed to a hybrid search equals the default ratio.
     semantic_ratio: bool,
-    // Whether a non-default embedder was specified
-    embedder: bool,
     hybrid: bool,
     retrieve_vectors: bool,
 
@@ -795,7 +793,6 @@ impl SearchAggregator {
 
         if let Some(hybrid) = hybrid {
             ret.semantic_ratio = hybrid.semantic_ratio != DEFAULT_SEMANTIC_RATIO();
-            ret.embedder = hybrid.embedder.is_some();
             ret.hybrid = true;
         }
 
@@ -863,7 +860,6 @@ impl SearchAggregator {
             show_ranking_score,
             show_ranking_score_details,
             semantic_ratio,
-            embedder,
             hybrid,
             total_degraded,
             total_used_negative_operator,
@@ -923,7 +919,6 @@ impl SearchAggregator {
         self.retrieve_vectors |= retrieve_vectors;
         self.semantic_ratio |= semantic_ratio;
         self.hybrid |= hybrid;
-        self.embedder |= embedder;
 
         // pagination
         self.max_limit = self.max_limit.max(max_limit);
@@ -999,7 +994,6 @@ impl SearchAggregator {
             show_ranking_score,
             show_ranking_score_details,
             semantic_ratio,
-            embedder,
             hybrid,
             total_degraded,
             total_used_negative_operator,
@@ -1051,7 +1045,6 @@ impl SearchAggregator {
                 "hybrid": {
                     "enabled": hybrid,
                     "semantic_ratio": semantic_ratio,
-                    "embedder": embedder,
                 },
                 "pagination": {
                    "max_limit": max_limit,
@@ -1782,7 +1775,6 @@ pub struct SimilarAggregator {
     used_syntax: HashMap<String, usize>,
 
     // Whether a non-default embedder was specified
-    embedder: bool,
     retrieve_vectors: bool,
 
     // pagination
@@ -1803,7 +1795,7 @@ impl SimilarAggregator {
     pub fn from_query(query: &SimilarQuery, request: &HttpRequest) -> Self {
         let SimilarQuery {
             id: _,
-            embedder,
+            embedder: _,
             offset,
             limit,
             attributes_to_retrieve: _,
@@ -1851,7 +1843,6 @@ impl SimilarAggregator {
         ret.show_ranking_score_details = *show_ranking_score_details;
         ret.ranking_score_threshold = ranking_score_threshold.is_some();
 
-        ret.embedder = embedder.is_some();
         ret.retrieve_vectors = *retrieve_vectors;
 
         ret
@@ -1883,7 +1874,6 @@ impl SimilarAggregator {
             max_attributes_to_retrieve,
             show_ranking_score,
             show_ranking_score_details,
-            embedder,
             ranking_score_threshold,
             retrieve_vectors,
         } = other;
@@ -1914,7 +1904,6 @@ impl SimilarAggregator {
             *used_syntax = used_syntax.saturating_add(value);
         }
 
-        self.embedder |= embedder;
         self.retrieve_vectors |= retrieve_vectors;
 
         // pagination
@@ -1948,7 +1937,6 @@ impl SimilarAggregator {
             max_attributes_to_retrieve,
             show_ranking_score,
             show_ranking_score_details,
-            embedder,
             ranking_score_threshold,
             retrieve_vectors,
         } = self;
@@ -1979,9 +1967,6 @@ impl SimilarAggregator {
                 },
                 "vector": {
                     "retrieve_vectors": retrieve_vectors,
-                },
-                "hybrid": {
-                    "embedder": embedder,
                 },
                 "pagination": {
                    "max_limit": max_limit,

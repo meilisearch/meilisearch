@@ -267,58 +267,54 @@ impl fmt::Debug for SearchQuery {
 pub struct HybridQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSearchSemanticRatio>, default)]
     pub semantic_ratio: SemanticRatio,
-    #[deserr(default, error = DeserrJsonError<InvalidEmbedder>, default)]
-    pub embedder: Option<String>,
+    #[deserr(error = DeserrJsonError<InvalidEmbedder>)]
+    pub embedder: String,
 }
 
 #[derive(Clone)]
 pub enum SearchKind {
     KeywordOnly,
-    SemanticOnly { embedder_name: String, embedder: Arc<Embedder> },
-    Hybrid { embedder_name: String, embedder: Arc<Embedder>, semantic_ratio: f32 },
+    SemanticOnly { embedder_name: String, embedder: Arc<Embedder>, quantized: bool },
+    Hybrid { embedder_name: String, embedder: Arc<Embedder>, quantized: bool, semantic_ratio: f32 },
 }
 
 impl SearchKind {
     pub(crate) fn semantic(
         index_scheduler: &index_scheduler::IndexScheduler,
         index: &Index,
-        embedder_name: Option<&str>,
+        embedder_name: &str,
         vector_len: Option<usize>,
     ) -> Result<Self, ResponseError> {
-        let (embedder_name, embedder) =
+        let (embedder_name, embedder, quantized) =
             Self::embedder(index_scheduler, index, embedder_name, vector_len)?;
-        Ok(Self::SemanticOnly { embedder_name, embedder })
+        Ok(Self::SemanticOnly { embedder_name, embedder, quantized })
     }
 
     pub(crate) fn hybrid(
         index_scheduler: &index_scheduler::IndexScheduler,
         index: &Index,
-        embedder_name: Option<&str>,
+        embedder_name: &str,
         semantic_ratio: f32,
         vector_len: Option<usize>,
     ) -> Result<Self, ResponseError> {
-        let (embedder_name, embedder) =
+        let (embedder_name, embedder, quantized) =
             Self::embedder(index_scheduler, index, embedder_name, vector_len)?;
-        Ok(Self::Hybrid { embedder_name, embedder, semantic_ratio })
+        Ok(Self::Hybrid { embedder_name, embedder, quantized, semantic_ratio })
     }
 
     pub(crate) fn embedder(
         index_scheduler: &index_scheduler::IndexScheduler,
         index: &Index,
-        embedder_name: Option<&str>,
+        embedder_name: &str,
         vector_len: Option<usize>,
-    ) -> Result<(String, Arc<Embedder>), ResponseError> {
+    ) -> Result<(String, Arc<Embedder>, bool), ResponseError> {
         let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
         let embedders = index_scheduler.embedders(embedder_configs)?;
 
-        let embedder_name = embedder_name.unwrap_or_else(|| embedders.get_default_embedder_name());
-
-        let embedder = embedders.get(embedder_name);
-
-        let embedder = embedder
+        let (embedder, _, quantized) = embedders
+            .get(embedder_name)
             .ok_or(milli::UserError::InvalidEmbedder(embedder_name.to_owned()))
-            .map_err(milli::Error::from)?
-            .0;
+            .map_err(milli::Error::from)?;
 
         if let Some(vector_len) = vector_len {
             if vector_len != embedder.dimensions() {
@@ -332,7 +328,7 @@ impl SearchKind {
             }
         }
 
-        Ok((embedder_name.to_owned(), embedder))
+        Ok((embedder_name.to_owned(), embedder, quantized))
     }
 }
 
@@ -441,9 +437,6 @@ pub struct SearchQueryWithIndex {
 }
 
 impl SearchQueryWithIndex {
-    pub fn has_federation_options(&self) -> bool {
-        self.federation_options.is_some()
-    }
     pub fn has_pagination(&self) -> Option<&'static str> {
         if self.offset.is_some() {
             Some("offset")
@@ -456,6 +449,10 @@ impl SearchQueryWithIndex {
         } else {
             None
         }
+    }
+
+    pub fn has_facets(&self) -> Option<&[String]> {
+        self.facets.as_deref().filter(|v| !v.is_empty())
     }
 
     pub fn into_index_query_federation(self) -> (IndexUid, SearchQuery, Option<FederationOptions>) {
@@ -537,8 +534,8 @@ pub struct SimilarQuery {
     pub limit: usize,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarFilter>)]
     pub filter: Option<Value>,
-    #[deserr(default, error = DeserrJsonError<InvalidEmbedder>, default)]
-    pub embedder: Option<String>,
+    #[deserr(error = DeserrJsonError<InvalidEmbedder>)]
+    pub embedder: String,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarRetrieveVectors>)]
@@ -792,7 +789,7 @@ fn prepare_search<'t>(
                 search.query(q);
             }
         }
-        SearchKind::SemanticOnly { embedder_name, embedder } => {
+        SearchKind::SemanticOnly { embedder_name, embedder, quantized } => {
             let vector = match query.vector.clone() {
                 Some(vector) => vector,
                 None => {
@@ -806,14 +803,19 @@ fn prepare_search<'t>(
                 }
             };
 
-            search.semantic(embedder_name.clone(), embedder.clone(), Some(vector));
+            search.semantic(embedder_name.clone(), embedder.clone(), *quantized, Some(vector));
         }
-        SearchKind::Hybrid { embedder_name, embedder, semantic_ratio: _ } => {
+        SearchKind::Hybrid { embedder_name, embedder, quantized, semantic_ratio: _ } => {
             if let Some(q) = &query.q {
                 search.query(q);
             }
             // will be embedded in hybrid search if necessary
-            search.semantic(embedder_name.clone(), embedder.clone(), query.vector.clone());
+            search.semantic(
+                embedder_name.clone(),
+                embedder.clone(),
+                *quantized,
+                query.vector.clone(),
+            );
         }
     }
 
@@ -987,39 +989,13 @@ pub fn perform_search(
         HitsInfo::OffsetLimit { limit, offset, estimated_total_hits: number_of_hits }
     };
 
-    let (facet_distribution, facet_stats) = match facets {
-        Some(ref fields) => {
-            let mut facet_distribution = index.facets_distribution(&rtxn);
-
-            let max_values_by_facet = index
-                .max_values_per_facet(&rtxn)
-                .map_err(milli::Error::from)?
-                .map(|x| x as usize)
-                .unwrap_or(DEFAULT_VALUES_PER_FACET);
-            facet_distribution.max_values_per_facet(max_values_by_facet);
-
-            let sort_facet_values_by =
-                index.sort_facet_values_by(&rtxn).map_err(milli::Error::from)?;
-
-            if fields.iter().all(|f| f != "*") {
-                let fields: Vec<_> =
-                    fields.iter().map(|n| (n, sort_facet_values_by.get(n))).collect();
-                facet_distribution.facets(fields);
-            }
-
-            let distribution = facet_distribution
-                .candidates(candidates)
-                .default_order_by(sort_facet_values_by.get("*"))
-                .execute()?;
-            let stats = facet_distribution.compute_stats()?;
-            (Some(distribution), Some(stats))
-        }
-        None => (None, None),
-    };
-
-    let facet_stats = facet_stats.map(|stats| {
-        stats.into_iter().map(|(k, (min, max))| (k, FacetStats { min, max })).collect()
-    });
+    let (facet_distribution, facet_stats) = facets
+        .map(move |facets| {
+            compute_facet_distribution_stats(&facets, index, &rtxn, candidates, Route::Search)
+        })
+        .transpose()?
+        .map(|ComputedFacets { distribution, stats }| (distribution, stats))
+        .unzip();
 
     let result = SearchResult {
         hits: documents,
@@ -1033,6 +1009,61 @@ pub fn perform_search(
         semantic_hit_count,
     };
     Ok(result)
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ComputedFacets {
+    pub distribution: BTreeMap<String, IndexMap<String, u64>>,
+    pub stats: BTreeMap<String, FacetStats>,
+}
+
+enum Route {
+    Search,
+    MultiSearch,
+}
+
+fn compute_facet_distribution_stats<S: AsRef<str>>(
+    facets: &[S],
+    index: &Index,
+    rtxn: &RoTxn,
+    candidates: roaring::RoaringBitmap,
+    route: Route,
+) -> Result<ComputedFacets, ResponseError> {
+    let mut facet_distribution = index.facets_distribution(rtxn);
+
+    let max_values_by_facet = index
+        .max_values_per_facet(rtxn)
+        .map_err(milli::Error::from)?
+        .map(|x| x as usize)
+        .unwrap_or(DEFAULT_VALUES_PER_FACET);
+
+    facet_distribution.max_values_per_facet(max_values_by_facet);
+
+    let sort_facet_values_by = index.sort_facet_values_by(rtxn).map_err(milli::Error::from)?;
+
+    // add specific facet if there is no placeholder
+    if facets.iter().all(|f| f.as_ref() != "*") {
+        let fields: Vec<_> =
+            facets.iter().map(|n| (n, sort_facet_values_by.get(n.as_ref()))).collect();
+        facet_distribution.facets(fields);
+    }
+
+    let distribution = facet_distribution
+        .candidates(candidates)
+        .default_order_by(sort_facet_values_by.get("*"))
+        .execute()
+        .map_err(|error| match (error, route) {
+            (
+                error @ milli::Error::UserError(milli::UserError::InvalidFacetsDistribution {
+                    ..
+                }),
+                Route::MultiSearch,
+            ) => ResponseError::from_msg(error.to_string(), Code::InvalidMultiSearchFacets),
+            (error, _) => error.into(),
+        })?;
+    let stats = facet_distribution.compute_stats()?;
+    let stats = stats.into_iter().map(|(k, (min, max))| (k, FacetStats { min, max })).collect();
+    Ok(ComputedFacets { distribution, stats })
 }
 
 pub fn search_from_kind(
@@ -1413,6 +1444,7 @@ pub fn perform_similar(
     query: SimilarQuery,
     embedder_name: String,
     embedder: Arc<Embedder>,
+    quantized: bool,
     retrieve_vectors: RetrieveVectors,
     features: RoFeatures,
 ) -> Result<SimilarResult, ResponseError> {
@@ -1441,8 +1473,16 @@ pub fn perform_similar(
         ));
     };
 
-    let mut similar =
-        milli::Similar::new(internal_id, offset, limit, index, &rtxn, embedder_name, embedder);
+    let mut similar = milli::Similar::new(
+        internal_id,
+        offset,
+        limit,
+        index,
+        &rtxn,
+        embedder_name,
+        embedder,
+        quantized,
+    );
 
     if let Some(ref filter) = query.filter {
         if let Some(facets) = parse_filter(filter, Code::InvalidSimilarFilter, features)? {

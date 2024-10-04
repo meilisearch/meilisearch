@@ -312,6 +312,7 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
     Ok(ranking_rules)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn get_ranking_rules_for_vector<'ctx>(
     ctx: &SearchContext<'ctx>,
     sort_criteria: &Option<Vec<AscDesc>>,
@@ -320,6 +321,7 @@ fn get_ranking_rules_for_vector<'ctx>(
     target: &[f32],
     embedder_name: &str,
     embedder: &Embedder,
+    quantized: bool,
 ) -> Result<Vec<BoxRankingRule<'ctx, PlaceholderQuery>>> {
     // query graph search
 
@@ -347,6 +349,7 @@ fn get_ranking_rules_for_vector<'ctx>(
                         limit_plus_offset,
                         embedder_name,
                         embedder,
+                        quantized,
                     )?;
                     ranking_rules.push(Box::new(vector_sort));
                     vector = true;
@@ -576,6 +579,7 @@ pub fn execute_vector_search(
     length: usize,
     embedder_name: &str,
     embedder: &Embedder,
+    quantized: bool,
     time_budget: TimeBudget,
     ranking_score_threshold: Option<f64>,
 ) -> Result<PartialSearchResult> {
@@ -591,6 +595,7 @@ pub fn execute_vector_search(
         vector,
         embedder_name,
         embedder,
+        quantized,
     )?;
 
     let mut placeholder_search_logger = logger::DefaultSearchLogger;

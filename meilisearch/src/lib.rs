@@ -13,11 +13,10 @@ pub mod search_queue;
 
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
-use std::num::NonZeroUsize;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::thread::{self, available_parallelism};
+use std::thread;
 use std::time::Duration;
 
 use actix_cors::Cors;
@@ -37,7 +36,7 @@ use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchR
 use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod};
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::KindWithContent;
-use meilisearch_types::versioning::{check_version_file, create_version_file};
+use meilisearch_types::versioning::{check_version_file, create_current_version_file};
 use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
 pub use option::Opt;
 use option::ScheduleSnapshot;
@@ -118,6 +117,7 @@ pub type LogStderrType = tracing_subscriber::filter::Filtered<
 pub fn create_app(
     index_scheduler: Data<IndexScheduler>,
     auth_controller: Data<AuthController>,
+    search_queue: Data<SearchQueue>,
     opt: Opt,
     logs: (LogRouteHandle, LogStderrHandle),
     analytics: Arc<dyn Analytics>,
@@ -137,6 +137,7 @@ pub fn create_app(
                 s,
                 index_scheduler.clone(),
                 auth_controller.clone(),
+                search_queue.clone(),
                 &opt,
                 logs,
                 analytics.clone(),
@@ -318,7 +319,7 @@ fn open_or_create_database_unchecked(
     match (
         index_scheduler_builder(),
         auth_controller.map_err(anyhow::Error::from),
-        create_version_file(&opt.db_path).map_err(anyhow::Error::from),
+        create_current_version_file(&opt.db_path).map_err(anyhow::Error::from),
     ) {
         (Ok(i), Ok(a), Ok(())) => Ok((i, a)),
         (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => {
@@ -469,19 +470,16 @@ pub fn configure_data(
     config: &mut web::ServiceConfig,
     index_scheduler: Data<IndexScheduler>,
     auth: Data<AuthController>,
+    search_queue: Data<SearchQueue>,
     opt: &Opt,
     (logs_route, logs_stderr): (LogRouteHandle, LogStderrHandle),
     analytics: Arc<dyn Analytics>,
 ) {
-    let search_queue = SearchQueue::new(
-        opt.experimental_search_queue_size,
-        available_parallelism().unwrap_or(NonZeroUsize::new(2).unwrap()),
-    );
     let http_payload_size_limit = opt.http_payload_size_limit.as_u64() as usize;
     config
         .app_data(index_scheduler)
         .app_data(auth)
-        .app_data(web::Data::new(search_queue))
+        .app_data(search_queue)
         .app_data(web::Data::from(analytics))
         .app_data(web::Data::new(logs_route))
         .app_data(web::Data::new(logs_stderr))

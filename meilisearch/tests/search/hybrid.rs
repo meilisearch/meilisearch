@@ -128,7 +128,7 @@ async fn simple_search() {
 
     let (response, code) = index
         .search_post(
-            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.2}, "retrieveVectors": true}),
+            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.2, "embedder": "default"}, "retrieveVectors": true}),
         )
         .await;
     snapshot!(code, @"200 OK");
@@ -137,7 +137,7 @@ async fn simple_search() {
 
     let (response, code) = index
         .search_post(
-            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.5}, "showRankingScore": true, "retrieveVectors": true}),
+            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.5, "embedder": "default"}, "showRankingScore": true, "retrieveVectors": true}),
         )
         .await;
     snapshot!(code, @"200 OK");
@@ -146,7 +146,7 @@ async fn simple_search() {
 
     let (response, code) = index
         .search_post(
-            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.8}, "showRankingScore": true, "retrieveVectors": true}),
+            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.8, "embedder": "default"}, "showRankingScore": true, "retrieveVectors": true}),
         )
         .await;
     snapshot!(code, @"200 OK");
@@ -161,7 +161,7 @@ async fn limit_offset() {
 
     let (response, code) = index
         .search_post(
-            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.2}, "retrieveVectors": true, "offset": 1, "limit": 1}),
+            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.2, "embedder": "default"}, "retrieveVectors": true, "offset": 1, "limit": 1}),
         )
         .await;
     snapshot!(code, @"200 OK");
@@ -174,7 +174,7 @@ async fn limit_offset() {
 
     let (response, code) = index
         .search_post(
-            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.9}, "retrieveVectors": true, "offset": 1, "limit": 1}),
+            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.9, "embedder": "default"}, "retrieveVectors": true, "offset": 1, "limit": 1}),
         )
         .await;
     snapshot!(code, @"200 OK");
@@ -188,8 +188,11 @@ async fn simple_search_hf() {
     let server = Server::new().await;
     let index = index_with_documents_hf(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
 
-    let (response, code) =
-        index.search_post(json!({"q": "Captain", "hybrid": {"semanticRatio": 0.2}})).await;
+    let (response, code) = index
+        .search_post(
+            json!({"q": "Captain", "hybrid": {"semanticRatio": 0.2, "embedder": "default"}}),
+        )
+        .await;
     snapshot!(code, @"200 OK");
     snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2"},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3"},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1"}]"###);
     snapshot!(response["semanticHitCount"], @"0");
@@ -197,7 +200,7 @@ async fn simple_search_hf() {
     let (response, code) = index
         .search_post(
             // disable ranking score as the vectors between architectures are not equal
-            json!({"q": "Captain", "hybrid": {"semanticRatio": 0.55}, "showRankingScore": false}),
+            json!({"q": "Captain", "hybrid": {"embedder": "default", "semanticRatio": 0.55}, "showRankingScore": false}),
         )
         .await;
     snapshot!(code, @"200 OK");
@@ -206,7 +209,7 @@ async fn simple_search_hf() {
 
     let (response, code) = index
         .search_post(
-            json!({"q": "Captain", "hybrid": {"semanticRatio": 0.8}, "showRankingScore": false}),
+            json!({"q": "Captain", "hybrid": {"embedder": "default", "semanticRatio": 0.8}, "showRankingScore": false}),
         )
         .await;
     snapshot!(code, @"200 OK");
@@ -215,7 +218,7 @@ async fn simple_search_hf() {
 
     let (response, code) = index
         .search_post(
-            json!({"q": "Movie World", "hybrid": {"semanticRatio": 0.2}, "showRankingScore": false}),
+            json!({"q": "Movie World", "hybrid": {"embedder": "default", "semanticRatio": 0.2}, "showRankingScore": false}),
         )
         .await;
     snapshot!(code, @"200 OK");
@@ -224,7 +227,7 @@ async fn simple_search_hf() {
 
     let (response, code) = index
         .search_post(
-            json!({"q": "Wonder replacement", "hybrid": {"semanticRatio": 0.2}, "showRankingScore": false}),
+            json!({"q": "Wonder replacement", "hybrid": {"embedder": "default", "semanticRatio": 0.2}, "showRankingScore": false}),
         )
         .await;
     snapshot!(code, @"200 OK");
@@ -237,7 +240,7 @@ async fn distribution_shift() {
     let server = Server::new().await;
     let index = index_with_documents_user_provided(&server, &SIMPLE_SEARCH_DOCUMENTS_VEC).await;
 
-    let search = json!({"q": "Captain", "vector": [1.0, 1.0], "showRankingScore": true, "hybrid": {"semanticRatio": 1.0}, "retrieveVectors": true});
+    let search = json!({"q": "Captain", "vector": [1.0, 1.0], "showRankingScore": true, "hybrid": {"embedder": "default", "semanticRatio": 1.0}, "retrieveVectors": true});
     let (response, code) = index.search_post(search.clone()).await;
     snapshot!(code, @"200 OK");
     snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"embeddings":[[2.0,3.0]],"regenerate":false}},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}},"_rankingScore":0.974341630935669},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"embeddings":[[1.0,3.0]],"regenerate":false}},"_rankingScore":0.9472135901451112}]"###);
@@ -271,7 +274,7 @@ async fn highlighter() {
 
     let (response, code) = index
         .search_post(json!({"q": "Captain Marvel", "vector": [1.0, 1.0],
-            "hybrid": {"semanticRatio": 0.2},
+            "hybrid": {"embedder": "default", "semanticRatio": 0.2},
            "retrieveVectors": true,
            "attributesToHighlight": [
                      "desc",
@@ -287,7 +290,7 @@ async fn highlighter() {
 
     let (response, code) = index
         .search_post(json!({"q": "Captain Marvel", "vector": [1.0, 1.0],
-            "hybrid": {"semanticRatio": 0.8},
+            "hybrid": {"embedder": "default", "semanticRatio": 0.8},
             "retrieveVectors": true,
             "showRankingScore": true,
             "attributesToHighlight": [
@@ -304,7 +307,7 @@ async fn highlighter() {
     // no highlighting on full semantic
     let (response, code) = index
         .search_post(json!({"q": "Captain Marvel", "vector": [1.0, 1.0],
-            "hybrid": {"semanticRatio": 1.0},
+            "hybrid": {"embedder": "default", "semanticRatio": 1.0},
             "retrieveVectors": true,
             "showRankingScore": true,
             "attributesToHighlight": [
@@ -326,7 +329,7 @@ async fn invalid_semantic_ratio() {
 
     let (response, code) = index
         .search_post(
-            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 1.2}}),
+            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"embedder": "default", "semanticRatio": 1.2}}),
         )
         .await;
     snapshot!(code, @"400 Bad Request");
@@ -341,7 +344,7 @@ async fn invalid_semantic_ratio() {
 
     let (response, code) = index
         .search_post(
-            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": -0.8}}),
+            json!({"q": "Captain", "vector": [1.0, 1.0], "hybrid": {"embedder": "default", "semanticRatio": -0.8}}),
         )
         .await;
     snapshot!(code, @"400 Bad Request");
@@ -357,7 +360,7 @@ async fn invalid_semantic_ratio() {
     let (response, code) = index
         .search_get(
             &yaup::to_string(
-                &json!({"q": "Captain", "vector": [1.0, 1.0], "hybridSemanticRatio": 1.2}),
+                &json!({"q": "Captain", "vector": [1.0, 1.0], "hybridEmbedder": "default", "hybridSemanticRatio": 1.2}),
             )
             .unwrap(),
         )
@@ -375,7 +378,7 @@ async fn invalid_semantic_ratio() {
     let (response, code) = index
         .search_get(
             &yaup::to_string(
-                &json!({"q": "Captain", "vector": [1.0, 1.0], "hybridSemanticRatio": -0.2}),
+                &json!({"q": "Captain", "vector": [1.0, 1.0], "hybridEmbedder": "default", "hybridSemanticRatio": -0.2}),
             )
             .unwrap(),
         )
@@ -398,7 +401,7 @@ async fn single_document() {
 
     let (response, code) = index
     .search_post(
-        json!({"vector": [1.0, 3.0], "hybrid": {"semanticRatio": 1.0}, "showRankingScore": true, "retrieveVectors": true}),
+        json!({"vector": [1.0, 3.0], "hybrid": {"semanticRatio": 1.0, "embedder": "default"}, "showRankingScore": true, "retrieveVectors": true}),
     )
     .await;
 
@@ -414,7 +417,7 @@ async fn query_combination() {
 
     // search without query and vector, but with hybrid => still placeholder
     let (response, code) = index
-        .search_post(json!({"hybrid": {"semanticRatio": 1.0}, "showRankingScore": true, "retrieveVectors": true}))
+        .search_post(json!({"hybrid": {"embedder": "default", "semanticRatio": 1.0}, "showRankingScore": true, "retrieveVectors": true}))
         .await;
 
     snapshot!(code, @"200 OK");
@@ -423,7 +426,7 @@ async fn query_combination() {
 
     // same with a different semantic ratio
     let (response, code) = index
-        .search_post(json!({"hybrid": {"semanticRatio": 0.76}, "showRankingScore": true, "retrieveVectors": true}))
+        .search_post(json!({"hybrid": {"embedder": "default", "semanticRatio": 0.76}, "showRankingScore": true, "retrieveVectors": true}))
         .await;
 
     snapshot!(code, @"200 OK");
@@ -432,7 +435,7 @@ async fn query_combination() {
 
     // wrong vector dimensions
     let (response, code) = index
-    .search_post(json!({"vector": [1.0, 0.0, 1.0], "hybrid": {"semanticRatio": 1.0}, "showRankingScore": true, "retrieveVectors": true}))
+    .search_post(json!({"vector": [1.0, 0.0, 1.0], "hybrid": {"embedder": "default", "semanticRatio": 1.0}, "showRankingScore": true, "retrieveVectors": true}))
     .await;
 
     snapshot!(code, @"400 Bad Request");
@@ -447,7 +450,7 @@ async fn query_combination() {
 
     // full vector
     let (response, code) = index
-    .search_post(json!({"vector": [1.0, 0.0], "hybrid": {"semanticRatio": 1.0}, "showRankingScore": true, "retrieveVectors": true}))
+    .search_post(json!({"vector": [1.0, 0.0], "hybrid": {"embedder": "default", "semanticRatio": 1.0}, "showRankingScore": true, "retrieveVectors": true}))
     .await;
 
     snapshot!(code, @"200 OK");
@@ -456,7 +459,7 @@ async fn query_combination() {
 
     // full keyword, without a query
     let (response, code) = index
-    .search_post(json!({"vector": [1.0, 0.0], "hybrid": {"semanticRatio": 0.0}, "showRankingScore": true, "retrieveVectors": true}))
+    .search_post(json!({"vector": [1.0, 0.0], "hybrid": {"embedder": "default", "semanticRatio": 0.0}, "showRankingScore": true, "retrieveVectors": true}))
     .await;
 
     snapshot!(code, @"200 OK");
@@ -465,7 +468,7 @@ async fn query_combination() {
 
     // query + vector, full keyword => keyword
     let (response, code) = index
-    .search_post(json!({"q": "Captain", "vector": [1.0, 0.0], "hybrid": {"semanticRatio": 0.0}, "showRankingScore": true, "retrieveVectors": true}))
+    .search_post(json!({"q": "Captain", "vector": [1.0, 0.0], "hybrid": {"embedder": "default", "semanticRatio": 0.0}, "showRankingScore": true, "retrieveVectors": true}))
     .await;
 
     snapshot!(code, @"200 OK");
@@ -480,7 +483,7 @@ async fn query_combination() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Invalid request: missing `hybrid` parameter when both `q` and `vector` are present.",
+      "message": "Invalid request: missing `hybrid` parameter when `vector` is present.",
       "code": "missing_search_hybrid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#missing_search_hybrid"
@@ -490,7 +493,7 @@ async fn query_combination() {
     // full vector, without a vector => error
     let (response, code) = index
         .search_post(
-            json!({"q": "Captain", "hybrid": {"semanticRatio": 1.0}, "showRankingScore": true, "retrieveVectors": true}),
+            json!({"q": "Captain", "hybrid": {"semanticRatio": 1.0, "embedder": "default"}, "showRankingScore": true, "retrieveVectors": true}),
         )
         .await;
 
@@ -507,7 +510,7 @@ async fn query_combination() {
     // hybrid without a vector => full keyword
     let (response, code) = index
         .search_post(
-            json!({"q": "Planet", "hybrid": {"semanticRatio": 0.99}, "showRankingScore": true, "retrieveVectors": true}),
+            json!({"q": "Planet", "hybrid": {"semanticRatio": 0.99, "embedder": "default"}, "showRankingScore": true, "retrieveVectors": true}),
         )
         .await;
 
@@ -523,7 +526,7 @@ async fn retrieve_vectors() {
 
     let (response, code) = index
         .search_post(
-            json!({"q": "Captain", "hybrid": {"semanticRatio": 0.2}, "retrieveVectors": true}),
+            json!({"q": "Captain", "hybrid": {"embedder": "default", "semanticRatio": 0.2}, "retrieveVectors": true}),
         )
         .await;
     snapshot!(code, @"200 OK");
@@ -573,7 +576,7 @@ async fn retrieve_vectors() {
 
     let (response, code) = index
         .search_post(
-            json!({"q": "Captain", "hybrid": {"semanticRatio": 0.2}, "retrieveVectors": true}),
+            json!({"q": "Captain", "hybrid": {"embedder": "default", "semanticRatio": 0.2}, "retrieveVectors": true}),
         )
         .await;
     snapshot!(code, @"200 OK");
