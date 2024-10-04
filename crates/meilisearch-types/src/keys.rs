@@ -183,42 +183,60 @@ fn parse_expiration_date(
 bitflags! {
     #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
     #[repr(transparent)]
-    pub struct Action: u8 {
-    const All = 0;
+    pub struct Action: u32 {
     const Search = 1;
-    const DocumentsAll = 2;
-    const DocumentsAdd = 3;
-    const DocumentsGet = 4;
-    const DocumentsDelete = 5;
-    const IndexesAll = 6;
-    const IndexesAdd = 7;
-    const IndexesGet = 8;
-    const IndexesUpdate = 9;
-    const IndexesDelete = 10;
-    const IndexesSwap = 11;
-    const TasksAll = 12;
-    const TasksCancel = 13;
-    const TasksDelete = 14;
-    const TasksGet = 15;
-    const SettingsAll = 16;
-    const SettingsGet = 17;
-    const SettingsUpdate = 18;
-    const StatsAll = 19;
-    const StatsGet = 20;
-    const MetricsAll = 21;
-    const MetricsGet = 22;
-    const DumpsAll = 23;
-    const DumpsCreate = 24;
-    const SnapshotsAll = 25;
-    const SnapshotsCreate = 26;
-    const Version = 27;
-    const KeysAdd = 28;
-    const KeysGet = 29;
-    const KeysUpdate = 30;
-    const KeysDelete = 31;
-    const ExperimentalFeaturesGet = 32;
-    const ExperimentalFeaturesUpdate = 33;
-    }
+    // Documents
+    const DocumentsAdd = 1 << 1;
+    const DocumentsGet = 1 << 2;
+    const DocumentsDelete = 1 << 3;
+    const DocumentsAll = Self::DocumentsAdd.repr() | Self::DocumentsGet.repr() | Self::DocumentsDelete.repr();
+    // Indexes
+    const IndexesAdd = 1 << 4;
+    const IndexesGet = 1 << 5;
+    const IndexesUpdate = 1 << 6;
+    const IndexesDelete = 1 << 7;
+    const IndexesSwap = 1 << 8;
+    const IndexesAll = Self::IndexesAdd.repr() | Self::IndexesGet.repr() | Self::IndexesUpdate.repr() | Self::IndexesDelete.repr() | Self::IndexesSwap.repr();
+    // Tasks
+    const TasksCancel = 1 << 9;
+    const TasksDelete = 1 << 10;
+    const TasksGet = 1 << 11;
+    const TasksAll = Self::TasksCancel.repr() | Self::TasksDelete.repr() | Self::TasksGet.repr();
+    // Settings
+    const SettingsGet = 1 << 12;
+    const SettingsUpdate = 1 << 13;
+    const SettingsAll = Self::SettingsGet.repr() | Self::SettingsUpdate.repr();
+    // Stats
+    const StatsGet = 1 << 14;
+    const StatsAll = Self::StatsGet.repr();
+    // Metrics
+    const MetricsGet = 1 << 15;
+    const MetricsAll = Self::MetricsGet.repr();
+    // Dumps
+    const DumpsCreate = 1 << 16;
+    const DumpsAll = Self::DumpsCreate.repr();
+    // Snapshots
+    const SnapshotsCreate = 1 << 17;
+    const SnapshotsAll = Self::SnapshotsCreate.repr();
+    const Version = 1 << 18;
+    const KeysAdd = 1 << 19;
+    const KeysGet = 1 << 20;
+    const KeysUpdate = 1 << 21;
+    const KeysDelete = 1 << 22;
+    const ExperimentalFeaturesGet = 1 << 23;
+    const ExperimentalFeaturesUpdate = 1 << 24;
+    const All = {
+        let mut all = 0;
+
+        let mut exp = 0;
+        while exp < 24 {
+            all |= 1 << exp;
+            exp += 1;
+        }
+
+        all
+    };
+}
 }
 
 impl Action {
@@ -271,38 +289,40 @@ impl Action {
             .iter()
             .find(|(_, action)| v == action)
             .map(|(serde_name, _)| serde_name)
-            // actions should always have matching serialized values
-            .unwrap()
+            .expect("an action doesn't have a matching serialized value")
     }
 
-    pub const fn from_repr(repr: u8) -> Option<Self> {
+    pub const fn from_repr(repr: u32) -> Option<Self> {
         use actions::*;
         match repr {
-            ALL => Some(Self::All),
             SEARCH => Some(Self::Search),
-            DOCUMENTS_ALL => Some(Self::DocumentsAll),
             DOCUMENTS_ADD => Some(Self::DocumentsAdd),
             DOCUMENTS_GET => Some(Self::DocumentsGet),
             DOCUMENTS_DELETE => Some(Self::DocumentsDelete),
-            INDEXES_ALL => Some(Self::IndexesAll),
+            DOCUMENTS_ALL => Some(Self::DocumentsAll),
             INDEXES_CREATE => Some(Self::IndexesAdd),
             INDEXES_GET => Some(Self::IndexesGet),
             INDEXES_UPDATE => Some(Self::IndexesUpdate),
             INDEXES_DELETE => Some(Self::IndexesDelete),
             INDEXES_SWAP => Some(Self::IndexesSwap),
-            TASKS_ALL => Some(Self::TasksAll),
+            INDEXES_ALL => Some(Self::IndexesAll),
             TASKS_CANCEL => Some(Self::TasksCancel),
             TASKS_DELETE => Some(Self::TasksDelete),
             TASKS_GET => Some(Self::TasksGet),
-            SETTINGS_ALL => Some(Self::SettingsAll),
+            TASKS_ALL => Some(Self::TasksAll),
             SETTINGS_GET => Some(Self::SettingsGet),
             SETTINGS_UPDATE => Some(Self::SettingsUpdate),
-            STATS_ALL => Some(Self::StatsAll),
+            SETTINGS_ALL => Some(Self::SettingsAll),
             STATS_GET => Some(Self::StatsGet),
-            METRICS_ALL => Some(Self::MetricsAll),
+            // @TODO: Issue: Since stats has only one element, all is the same as the one single element
+            //               so this will never match all, because it matches that one and only element first
+            STATS_ALL => Some(Self::StatsAll),
             METRICS_GET => Some(Self::MetricsGet),
-            DUMPS_ALL => Some(Self::DumpsAll),
+            // @TODO: Same
+            METRICS_ALL => Some(Self::MetricsAll),
             DUMPS_CREATE => Some(Self::DumpsCreate),
+            // @TODO: Same
+            DUMPS_ALL => Some(Self::DumpsAll),
             SNAPSHOTS_CREATE => Some(Self::SnapshotsCreate),
             VERSION => Some(Self::Version),
             KEYS_CREATE => Some(Self::KeysAdd),
@@ -311,11 +331,12 @@ impl Action {
             KEYS_DELETE => Some(Self::KeysDelete),
             EXPERIMENTAL_FEATURES_GET => Some(Self::ExperimentalFeaturesGet),
             EXPERIMENTAL_FEATURES_UPDATE => Some(Self::ExperimentalFeaturesUpdate),
+            ALL => Some(Self::All),
             _otherwise => None,
         }
     }
 
-    pub const fn repr(&self) -> u8 {
+    pub const fn repr(&self) -> u32 {
         self.bits()
     }
 }
@@ -419,37 +440,37 @@ impl Sequence for Action {
 pub mod actions {
     use super::Action as A;
 
-    pub(crate) const ALL: u8 = A::All.repr();
-    pub const SEARCH: u8 = A::Search.repr();
-    pub const DOCUMENTS_ALL: u8 = A::DocumentsAll.repr();
-    pub const DOCUMENTS_ADD: u8 = A::DocumentsAdd.repr();
-    pub const DOCUMENTS_GET: u8 = A::DocumentsGet.repr();
-    pub const DOCUMENTS_DELETE: u8 = A::DocumentsDelete.repr();
-    pub const INDEXES_ALL: u8 = A::IndexesAll.repr();
-    pub const INDEXES_CREATE: u8 = A::IndexesAdd.repr();
-    pub const INDEXES_GET: u8 = A::IndexesGet.repr();
-    pub const INDEXES_UPDATE: u8 = A::IndexesUpdate.repr();
-    pub const INDEXES_DELETE: u8 = A::IndexesDelete.repr();
-    pub const INDEXES_SWAP: u8 = A::IndexesSwap.repr();
-    pub const TASKS_ALL: u8 = A::TasksAll.repr();
-    pub const TASKS_CANCEL: u8 = A::TasksCancel.repr();
-    pub const TASKS_DELETE: u8 = A::TasksDelete.repr();
-    pub const TASKS_GET: u8 = A::TasksGet.repr();
-    pub const SETTINGS_ALL: u8 = A::SettingsAll.repr();
-    pub const SETTINGS_GET: u8 = A::SettingsGet.repr();
-    pub const SETTINGS_UPDATE: u8 = A::SettingsUpdate.repr();
-    pub const STATS_ALL: u8 = A::StatsAll.repr();
-    pub const STATS_GET: u8 = A::StatsGet.repr();
-    pub const METRICS_ALL: u8 = A::MetricsAll.repr();
-    pub const METRICS_GET: u8 = A::MetricsGet.repr();
-    pub const DUMPS_ALL: u8 = A::DumpsAll.repr();
-    pub const DUMPS_CREATE: u8 = A::DumpsCreate.repr();
-    pub const SNAPSHOTS_CREATE: u8 = A::SnapshotsCreate.repr();
-    pub const VERSION: u8 = A::Version.repr();
-    pub const KEYS_CREATE: u8 = A::KeysAdd.repr();
-    pub const KEYS_GET: u8 = A::KeysGet.repr();
-    pub const KEYS_UPDATE: u8 = A::KeysUpdate.repr();
-    pub const KEYS_DELETE: u8 = A::KeysDelete.repr();
-    pub const EXPERIMENTAL_FEATURES_GET: u8 = A::ExperimentalFeaturesGet.repr();
-    pub const EXPERIMENTAL_FEATURES_UPDATE: u8 = A::ExperimentalFeaturesUpdate.repr();
+    pub const SEARCH: u32 = A::Search.repr();
+    pub const DOCUMENTS_ADD: u32 = A::DocumentsAdd.repr();
+    pub const DOCUMENTS_GET: u32 = A::DocumentsGet.repr();
+    pub const DOCUMENTS_DELETE: u32 = A::DocumentsDelete.repr();
+    pub const DOCUMENTS_ALL: u32 = A::DocumentsAll.repr();
+    pub const INDEXES_CREATE: u32 = A::IndexesAdd.repr();
+    pub const INDEXES_GET: u32 = A::IndexesGet.repr();
+    pub const INDEXES_UPDATE: u32 = A::IndexesUpdate.repr();
+    pub const INDEXES_DELETE: u32 = A::IndexesDelete.repr();
+    pub const INDEXES_SWAP: u32 = A::IndexesSwap.repr();
+    pub const INDEXES_ALL: u32 = A::IndexesAll.repr();
+    pub const TASKS_CANCEL: u32 = A::TasksCancel.repr();
+    pub const TASKS_DELETE: u32 = A::TasksDelete.repr();
+    pub const TASKS_GET: u32 = A::TasksGet.repr();
+    pub const TASKS_ALL: u32 = A::TasksAll.repr();
+    pub const SETTINGS_GET: u32 = A::SettingsGet.repr();
+    pub const SETTINGS_UPDATE: u32 = A::SettingsUpdate.repr();
+    pub const SETTINGS_ALL: u32 = A::SettingsAll.repr();
+    pub const STATS_GET: u32 = A::StatsGet.repr();
+    pub const STATS_ALL: u32 = A::StatsAll.repr();
+    pub const METRICS_GET: u32 = A::MetricsGet.repr();
+    pub const METRICS_ALL: u32 = A::MetricsAll.repr();
+    pub const DUMPS_CREATE: u32 = A::DumpsCreate.repr();
+    pub const DUMPS_ALL: u32 = A::DumpsAll.repr();
+    pub const SNAPSHOTS_CREATE: u32 = A::SnapshotsCreate.repr();
+    pub const VERSION: u32 = A::Version.repr();
+    pub const KEYS_CREATE: u32 = A::KeysAdd.repr();
+    pub const KEYS_GET: u32 = A::KeysGet.repr();
+    pub const KEYS_UPDATE: u32 = A::KeysUpdate.repr();
+    pub const KEYS_DELETE: u32 = A::KeysDelete.repr();
+    pub const EXPERIMENTAL_FEATURES_GET: u32 = A::ExperimentalFeaturesGet.repr();
+    pub const EXPERIMENTAL_FEATURES_UPDATE: u32 = A::ExperimentalFeaturesUpdate.repr();
+    pub(crate) const ALL: u32 = A::All.repr();
 }
