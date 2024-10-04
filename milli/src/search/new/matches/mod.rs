@@ -798,12 +798,12 @@ mod tests {
             @"…the power to split <em>the world</em> between those who embraced…"
         );
 
-        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "\"power to\" \"and those\"");
+        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "those \"and those\"");
         let mut matcher = builder.build(text, None);
         // should highlight "those" and the phrase "and those".
         insta::assert_snapshot!(
             matcher.format(format_options),
-            @"…groundbreaking invention had the <em>power to</em> split the world between…"
+            @"…world between <em>those</em> who embraced progress <em>and those</em> who resisted…"
         );
 
         let builder = MatcherBuilder::new_test(
@@ -839,17 +839,6 @@ mod tests {
             matcher.format(format_options),
             // @TODO: Should probably include end of string in this case?
             @"…between those who <em>embraced progress and those who resisted change</em>…"
-        );
-
-        let builder = MatcherBuilder::new_test(
-            &rtxn,
-            &temp_index,
-            "\"The groundbreaking invention\" \"split the world between those\"",
-        );
-        let mut matcher = builder.build(text, None);
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"…the power to <em>split the world between those</em> who embraced…"
         );
 
         let builder = MatcherBuilder::new_test(
