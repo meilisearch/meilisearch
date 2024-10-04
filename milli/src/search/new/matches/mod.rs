@@ -139,7 +139,6 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                     Some(MatchType::Full { ids, .. }) => {
                         // save the token that closes the partial match as a match.
                         matches.push(Match {
-                            // @TODO: Shouldn't this be +1?
                             match_len: word.char_end - *first_word_char_start,
                             ids: ids.clone().collect(),
                             position: MatchPosition::Phrase {
