@@ -229,7 +229,7 @@ bitflags! {
         let mut all = 0;
 
         let mut exp = 0;
-        while exp < 24 {
+        while exp <= 24 {
             all |= 1 << exp;
             exp += 1;
         }
