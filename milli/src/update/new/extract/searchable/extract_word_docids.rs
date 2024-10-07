@@ -342,7 +342,7 @@ impl WordDocidsExtractors {
             max_positions_per_attributes: MAX_POSITION_PER_ATTRIBUTE,
         };
 
-        let thread_local = ThreadLocal::new();
+        let thread_local = ThreadLocal::with_capacity(rayon::current_num_threads());
 
         {
             let span =

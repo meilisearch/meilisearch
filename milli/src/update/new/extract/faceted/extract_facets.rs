@@ -211,7 +211,7 @@ impl DocidsExtractor for FacetedDocidsExtractor {
         let attributes_to_extract = Self::attributes_to_extract(&rtxn, index)?;
         let attributes_to_extract: Vec<_> =
             attributes_to_extract.iter().map(|s| s.as_ref()).collect();
-        let thread_local = ThreadLocal::new();
+        let thread_local = ThreadLocal::with_capacity(rayon::current_num_threads());
 
         {
             let span =
