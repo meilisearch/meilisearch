@@ -16,7 +16,6 @@ use tokenize_document::{tokenizer_builder, DocumentTokenizer};
 
 use super::cache::CboCachedSorter;
 use super::DocidsExtractor;
-use crate::update::new::append_only_linked_list::AppendOnlyLinkedList;
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt;
 use crate::update::new::DocumentChange;
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
@@ -60,18 +59,18 @@ pub trait SearchableExtractor {
             localized_attributes_rules: &localized_attributes_rules,
             max_positions_per_attributes: MAX_POSITION_PER_ATTRIBUTE,
         };
-        let caches = AppendOnlyLinkedList::new();
+
+        let thread_local = ThreadLocal::new();
 
         {
             let span =
                 tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
             let _entered = span.enter();
-            let local = ThreadLocal::new();
             document_changes.into_par_iter().try_arc_for_each_try_init(
                 || {
-                    local.get_or_try(|| {
+                    thread_local.get_or_try(|| {
                         let rtxn = index.read_txn().map_err(Error::from)?;
-                        let cache = caches.push(CboCachedSorter::new(
+                        let cache = CboCachedSorter::new(
                             /// TODO use a better value
                             1_000_000.try_into().unwrap(),
                             create_sorter(
@@ -82,7 +81,7 @@ pub trait SearchableExtractor {
                                 indexer.max_nb_chunks,
                                 max_memory,
                             ),
-                        ));
+                        );
                         Ok((
                             rtxn,
                             &document_tokenizer,
@@ -110,10 +109,11 @@ pub trait SearchableExtractor {
                 tracing::trace_span!(target: "indexing::documents::extract", "merger_building");
             let _entered = span.enter();
 
-            let readers: Vec<_> = caches
+            let readers: Vec<_> = thread_local
                 .into_iter()
                 .par_bridge()
-                .map(|cached_sorter| {
+                .map(|(_, _, rc)| {
+                    let (_, cached_sorter) = rc.into_inner();
                     let sorter = cached_sorter.into_sorter()?;
                     sorter.into_reader_cursors()
                 })

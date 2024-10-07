@@ -11,7 +11,6 @@ use thread_local::ThreadLocal;
 
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use super::SearchableExtractor;
-use crate::update::new::append_only_linked_list::AppendOnlyLinkedList;
 use crate::update::new::extract::cache::CboCachedSorter;
 use crate::update::new::extract::perm_json_p::contained_in;
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt;
@@ -343,24 +342,23 @@ impl WordDocidsExtractors {
             max_positions_per_attributes: MAX_POSITION_PER_ATTRIBUTE,
         };
 
-        let caches = AppendOnlyLinkedList::new();
+        let thread_local = ThreadLocal::new();
 
         {
             let span =
                 tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
             let _entered = span.enter();
-            let local = ThreadLocal::new();
             document_changes.into_par_iter().try_arc_for_each_try_init(
                 || {
-                    local.get_or_try(|| {
+                    thread_local.get_or_try(|| {
                         let rtxn = index.read_txn().map_err(Error::from)?;
                         let fields_ids_map = fields_ids_map.clone();
-                        let cache = caches.push(WordDocidsCachedSorters::new(
+                        let cache = WordDocidsCachedSorters::new(
                             indexer,
                             max_memory,
                             // TODO use a better value
                             200_000.try_into().unwrap(),
-                        ));
+                        );
                         Ok((rtxn, &document_tokenizer, RefCell::new((fields_ids_map, cache))))
                     })
                 },
@@ -384,9 +382,8 @@ impl WordDocidsExtractors {
                 tracing::trace_span!(target: "indexing::documents::extract", "merger_building");
             let _entered = span.enter();
             let mut builder = WordDocidsMergerBuilders::new();
-            let mut count = 0;
-            for cache in caches.into_iter() {
-                count += 1;
+            for (_, _, rc) in thread_local.into_iter() {
+                let (_, cache) = rc.into_inner();
                 builder.add_sorters(cache)?;
             }
 
