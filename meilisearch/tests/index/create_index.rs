@@ -152,7 +152,7 @@ async fn create_index_with_invalid_primary_key() {
 
 #[actix_rt::test]
 async fn test_create_multiple_indexes() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let index1 = server.unique_index();
     let index2 = server.unique_index();
     let index3 = server.unique_index();
@@ -174,7 +174,7 @@ async fn test_create_multiple_indexes() {
 
 #[actix_rt::test]
 async fn error_create_existing_index() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let index = server.unique_index();
     let (_, code) = index.create(Some("primary")).await;
 
