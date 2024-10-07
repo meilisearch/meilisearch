@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::fs::File;
@@ -7,6 +8,7 @@ use grenad::{MergeFunction, Merger};
 use heed::RoTxn;
 use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
 use serde_json::Value;
+use thread_local::ThreadLocal;
 
 use super::super::cache::CboCachedSorter;
 use super::facet_document::extract_document_facets;
@@ -216,24 +218,28 @@ impl DocidsExtractor for FacetedDocidsExtractor {
             let span =
                 tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
             let _entered = span.enter();
+            let local = ThreadLocal::new();
             document_changes.into_par_iter().try_arc_for_each_try_init(
                 || {
-                    let rtxn = index.read_txn().map_err(Error::from)?;
-                    let cache = caches.push(CboCachedSorter::new(
-                        // TODO use a better value
-                        100.try_into().unwrap(),
-                        create_sorter(
-                            grenad::SortAlgorithm::Stable,
-                            MergeDeladdCboRoaringBitmaps,
-                            indexer.chunk_compression_type,
-                            indexer.chunk_compression_level,
-                            indexer.max_nb_chunks,
-                            max_memory,
-                        ),
-                    ));
-                    Ok((rtxn, fields_ids_map.clone(), Vec::new(), cache))
+                    local.get_or_try(|| {
+                        let rtxn = index.read_txn().map_err(Error::from)?;
+                        let cache = caches.push(CboCachedSorter::new(
+                            /// TODO use a better value
+                            100.try_into().unwrap(),
+                            create_sorter(
+                                grenad::SortAlgorithm::Stable,
+                                MergeDeladdCboRoaringBitmaps,
+                                indexer.chunk_compression_type,
+                                indexer.chunk_compression_level,
+                                indexer.max_nb_chunks,
+                                max_memory,
+                            ),
+                        ));
+                        Ok((rtxn, RefCell::new((fields_ids_map.clone(), Vec::new(), cache))))
+                    })
                 },
-                |(rtxn, fields_ids_map, buffer, cached_sorter), document_change| {
+                |(rtxn, rc), document_change| {
+                    let (fields_ids_map, buffer, cached_sorter) = &mut *rc.borrow_mut();
                     Self::extract_document_change(
                         rtxn,
                         index,

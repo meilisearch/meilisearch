@@ -2,6 +2,7 @@ mod extract_word_docids;
 mod extract_word_pair_proximity_docids;
 mod tokenize_document;
 
+use std::cell::RefCell;
 use std::fs::File;
 use std::sync::Arc;
 
@@ -10,6 +11,7 @@ pub use extract_word_pair_proximity_docids::WordPairProximityDocidsExtractor;
 use grenad::Merger;
 use heed::RoTxn;
 use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
+use thread_local::ThreadLocal;
 use tokenize_document::{tokenizer_builder, DocumentTokenizer};
 
 use super::cache::CboCachedSorter;
@@ -64,24 +66,32 @@ pub trait SearchableExtractor {
             let span =
                 tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
             let _entered = span.enter();
+            let local = ThreadLocal::new();
             document_changes.into_par_iter().try_arc_for_each_try_init(
                 || {
-                    let rtxn = index.read_txn().map_err(Error::from)?;
-                    let cache = caches.push(CboCachedSorter::new(
-                        // TODO use a better value
-                        1_000_000.try_into().unwrap(),
-                        create_sorter(
-                            grenad::SortAlgorithm::Stable,
-                            MergeDeladdCboRoaringBitmaps,
-                            indexer.chunk_compression_type,
-                            indexer.chunk_compression_level,
-                            indexer.max_nb_chunks,
-                            max_memory,
-                        ),
-                    ));
-                    Ok((rtxn, &document_tokenizer, fields_ids_map.clone(), cache))
+                    local.get_or_try(|| {
+                        let rtxn = index.read_txn().map_err(Error::from)?;
+                        let cache = caches.push(CboCachedSorter::new(
+                            /// TODO use a better value
+                            1_000_000.try_into().unwrap(),
+                            create_sorter(
+                                grenad::SortAlgorithm::Stable,
+                                MergeDeladdCboRoaringBitmaps,
+                                indexer.chunk_compression_type,
+                                indexer.chunk_compression_level,
+                                indexer.max_nb_chunks,
+                                max_memory,
+                            ),
+                        ));
+                        Ok((
+                            rtxn,
+                            &document_tokenizer,
+                            RefCell::new((fields_ids_map.clone(), cache)),
+                        ))
+                    })
                 },
-                |(rtxn, document_tokenizer, fields_ids_map, cached_sorter), document_change| {
+                |(rtxn, document_tokenizer, rc), document_change| {
+                    let (fields_ids_map, cached_sorter) = &mut *rc.borrow_mut();
                     Self::extract_document_change(
                         rtxn,
                         index,

@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs::File;
 use std::num::NonZero;
@@ -6,6 +7,7 @@ use std::sync::Arc;
 use grenad::{Merger, MergerBuilder};
 use heed::RoTxn;
 use rayon::iter::IntoParallelIterator;
+use thread_local::ThreadLocal;
 
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use super::SearchableExtractor;
@@ -347,18 +349,23 @@ impl WordDocidsExtractors {
             let span =
                 tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
             let _entered = span.enter();
+            let local = ThreadLocal::new();
             document_changes.into_par_iter().try_arc_for_each_try_init(
                 || {
-                    let rtxn = index.read_txn().map_err(Error::from)?;
-                    let cache = caches.push(WordDocidsCachedSorters::new(
-                        indexer,
-                        max_memory,
-                        // TODO use a better value
-                        200_000.try_into().unwrap(),
-                    ));
-                    Ok((rtxn, &document_tokenizer, fields_ids_map.clone(), cache))
+                    local.get_or_try(|| {
+                        let rtxn = index.read_txn().map_err(Error::from)?;
+                        let fields_ids_map = fields_ids_map.clone();
+                        let cache = caches.push(WordDocidsCachedSorters::new(
+                            indexer,
+                            max_memory,
+                            // TODO use a better value
+                            200_000.try_into().unwrap(),
+                        ));
+                        Ok((rtxn, &document_tokenizer, RefCell::new((fields_ids_map, cache))))
+                    })
                 },
-                |(rtxn, document_tokenizer, fields_ids_map, cached_sorter), document_change| {
+                |(rtxn, document_tokenizer, rc), document_change| {
+                    let (fields_ids_map, cached_sorter) = &mut *rc.borrow_mut();
                     Self::extract_document_change(
                         rtxn,
                         index,
@@ -377,7 +384,9 @@ impl WordDocidsExtractors {
                 tracing::trace_span!(target: "indexing::documents::extract", "merger_building");
             let _entered = span.enter();
             let mut builder = WordDocidsMergerBuilders::new();
+            let mut count = 0;
             for cache in caches.into_iter() {
+                count += 1;
                 builder.add_sorters(cache)?;
             }
 
