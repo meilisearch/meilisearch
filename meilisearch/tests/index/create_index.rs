@@ -125,11 +125,22 @@ async fn create_index_with_primary_key() {
 
 #[actix_rt::test]
 async fn create_index_with_invalid_primary_key() {
-    let document = json!([ { "id": 2, "title": "Pride and Prejudice" } ]);
+    let documents = json!([ { "id": 2, "title": "Pride and Prejudice" } ]);
 
     let server = Server::new_shared();
     let index = server.unique_index();
-    let (response, code) = index.add_documents(document, Some("title")).await;
+    let (response, code) = index.add_documents(documents, Some("title")).await;
+    assert_eq!(code, 202);
+
+    index.wait_task(response.uid()).await;
+
+    let (response, code) = index.get().await;
+    assert_eq!(code, 200);
+    assert_eq!(response["primaryKey"], json!(null));
+
+    let documents = json!([ { "id": "e".repeat(513) } ]);
+
+    let (response, code) = index.add_documents(documents, Some("id")).await;
     assert_eq!(code, 202);
 
     index.wait_task(response.uid()).await;
@@ -196,7 +207,7 @@ async fn error_create_with_invalid_index_uid() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid value at `.uid`: `test test#!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+      "message": "Invalid value at `.uid`: `test test#!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
       "code": "invalid_index_uid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
