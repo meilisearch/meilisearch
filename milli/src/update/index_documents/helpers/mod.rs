@@ -7,17 +7,8 @@ use std::convert::{TryFrom, TryInto};
 
 pub use clonable_mmap::{ClonableMmap, CursorClonableMmap};
 use fst::{IntoStreamer, Streamer};
-pub use grenad_helpers::{
-    as_cloneable_grenad, create_sorter, create_writer, grenad_obkv_into_chunks,
-    merge_ignore_values, sorter_into_reader, write_sorter_into_database, writer_into_reader,
-    GrenadParameters,
-};
-pub use merge_functions::{
-    keep_first, keep_latest_obkv, merge_cbo_roaring_bitmaps, merge_deladd_btreeset_string,
-    merge_deladd_cbo_roaring_bitmaps, merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
-    merge_roaring_bitmaps, obkvs_keep_last_addition_merge_deletions,
-    obkvs_merge_additions_and_deletions, MergeFn,
-};
+pub use grenad_helpers::*;
+pub use merge_functions::*;
 
 use crate::MAX_WORD_LENGTH;
 

@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
 use std::io::{Read, Seek};
 
+use either::Either;
 use fxhash::FxHashMap;
 use itertools::Itertools;
 use obkv::{KvReader, KvReaderU16, KvWriter};
@@ -13,10 +14,10 @@ use serde_json::Value;
 use smartstring::SmartString;
 
 use super::helpers::{
-    create_sorter, create_writer, keep_first, obkvs_keep_last_addition_merge_deletions,
-    obkvs_merge_additions_and_deletions, sorter_into_reader, MergeFn,
+    create_sorter, create_writer, sorter_into_reader, EitherObkvMerge,
+    ObkvsKeepLastAdditionMergeDeletions, ObkvsMergeAdditionsAndDeletions,
 };
-use super::{IndexDocumentsMethod, IndexerConfig};
+use super::{IndexDocumentsMethod, IndexerConfig, KeepFirst};
 use crate::documents::{DocumentsBatchIndex, EnrichedDocument, EnrichedDocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
 use crate::index::{db_name, main_key};
@@ -26,7 +27,7 @@ use crate::update::del_add::{
 };
 use crate::update::index_documents::GrenadParameters;
 use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
-use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
+use crate::update::{AvailableIds, UpdateIndexingStep};
 use crate::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use crate::vector::settings::WriteBackToDocuments;
 use crate::vector::ArroyWrapper;
@@ -55,13 +56,13 @@ pub struct Transform<'a, 'i> {
 
     indexer_settings: &'a IndexerConfig,
     pub index_documents_method: IndexDocumentsMethod,
-    available_documents_ids: AvailableDocumentsIds,
+    available_documents_ids: AvailableIds,
 
     // Both grenad follows the same format:
     // key | value
     // u32 | 1 byte for the Operation byte, the rest is the obkv of the document stored
-    original_sorter: grenad::Sorter<MergeFn>,
-    flattened_sorter: grenad::Sorter<MergeFn>,
+    original_sorter: grenad::Sorter<EitherObkvMerge>,
+    flattened_sorter: grenad::Sorter<EitherObkvMerge>,
 
     replaced_documents_ids: RoaringBitmap,
     new_documents_ids: RoaringBitmap,
@@ -109,11 +110,13 @@ impl<'a, 'i> Transform<'a, 'i> {
         index_documents_method: IndexDocumentsMethod,
         _autogenerate_docids: bool,
     ) -> Result<Self> {
+        use IndexDocumentsMethod::{ReplaceDocuments, UpdateDocuments};
+
         // We must choose the appropriate merge function for when two or more documents
         // with the same user id must be merged or fully replaced in the same batch.
         let merge_function = match index_documents_method {
-            IndexDocumentsMethod::ReplaceDocuments => obkvs_keep_last_addition_merge_deletions,
-            IndexDocumentsMethod::UpdateDocuments => obkvs_merge_additions_and_deletions,
+            ReplaceDocuments => Either::Left(ObkvsKeepLastAdditionMergeDeletions),
+            UpdateDocuments => Either::Right(ObkvsMergeAdditionsAndDeletions),
         };
 
         // We initialize the sorter with the user indexing settings.
@@ -141,7 +144,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             index,
             fields_ids_map: index.fields_ids_map(wtxn)?,
             indexer_settings,
-            available_documents_ids: AvailableDocumentsIds::from_documents_ids(&documents_ids),
+            available_documents_ids: AvailableIds::new(&documents_ids),
             original_sorter,
             flattened_sorter,
             index_documents_method,
@@ -279,21 +282,21 @@ impl<'a, 'i> Transform<'a, 'i> {
                     document_sorter_value_buffer.clear();
                     document_sorter_value_buffer.push(Operation::Addition as u8);
                     into_del_add_obkv(
-                        KvReaderU16::new(base_obkv),
+                        KvReaderU16::from_slice(base_obkv),
                         deladd_operation,
                         &mut document_sorter_value_buffer,
                     )?;
                     self.original_sorter
                         .insert(&document_sorter_key_buffer, &document_sorter_value_buffer)?;
-                    let base_obkv = KvReader::new(base_obkv);
+                    let base_obkv = KvReader::from_slice(base_obkv);
                     if let Some(flattened_obkv) =
-                        Self::flatten_from_fields_ids_map(&base_obkv, &mut self.fields_ids_map)?
+                        Self::flatten_from_fields_ids_map(base_obkv, &mut self.fields_ids_map)?
                     {
                         // we recreate our buffer with the flattened documents
                         document_sorter_value_buffer.clear();
                         document_sorter_value_buffer.push(Operation::Addition as u8);
                         into_del_add_obkv(
-                            KvReaderU16::new(&flattened_obkv),
+                            KvReaderU16::from_slice(&flattened_obkv),
                             deladd_operation,
                             &mut document_sorter_value_buffer,
                         )?;
@@ -312,7 +315,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                 document_sorter_value_buffer.clear();
                 document_sorter_value_buffer.push(Operation::Addition as u8);
                 into_del_add_obkv(
-                    KvReaderU16::new(&obkv_buffer),
+                    KvReaderU16::from_slice(&obkv_buffer),
                     DelAddOperation::Addition,
                     &mut document_sorter_value_buffer,
                 )?;
@@ -320,14 +323,14 @@ impl<'a, 'i> Transform<'a, 'i> {
                 self.original_sorter
                     .insert(&document_sorter_key_buffer, &document_sorter_value_buffer)?;
 
-                let flattened_obkv = KvReader::new(&obkv_buffer);
+                let flattened_obkv = KvReader::from_slice(&obkv_buffer);
                 if let Some(obkv) =
-                    Self::flatten_from_fields_ids_map(&flattened_obkv, &mut self.fields_ids_map)?
+                    Self::flatten_from_fields_ids_map(flattened_obkv, &mut self.fields_ids_map)?
                 {
                     document_sorter_value_buffer.clear();
                     document_sorter_value_buffer.push(Operation::Addition as u8);
                     into_del_add_obkv(
-                        KvReaderU16::new(&obkv),
+                        KvReaderU16::from_slice(&obkv),
                         DelAddOperation::Addition,
                         &mut document_sorter_value_buffer,
                     )?
@@ -520,22 +523,22 @@ impl<'a, 'i> Transform<'a, 'i> {
         document_sorter_value_buffer.clear();
         document_sorter_value_buffer.push(Operation::Deletion as u8);
         into_del_add_obkv(
-            KvReaderU16::new(base_obkv),
+            KvReaderU16::from_slice(base_obkv),
             DelAddOperation::Deletion,
             document_sorter_value_buffer,
         )?;
         self.original_sorter.insert(&document_sorter_key_buffer, &document_sorter_value_buffer)?;
 
         // flatten it and push it as to delete in the flattened_sorter
-        let flattened_obkv = KvReader::new(base_obkv);
+        let flattened_obkv = KvReader::from_slice(base_obkv);
         if let Some(obkv) =
-            Self::flatten_from_fields_ids_map(&flattened_obkv, &mut self.fields_ids_map)?
+            Self::flatten_from_fields_ids_map(flattened_obkv, &mut self.fields_ids_map)?
         {
             // we recreate our buffer with the flattened documents
             document_sorter_value_buffer.clear();
             document_sorter_value_buffer.push(Operation::Deletion as u8);
             into_del_add_obkv(
-                KvReaderU16::new(&obkv),
+                KvReaderU16::from_slice(&obkv),
                 DelAddOperation::Deletion,
                 document_sorter_value_buffer,
             )?;
@@ -553,7 +556,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         target = "indexing::transform"
     )]
     fn flatten_from_fields_ids_map(
-        obkv: &KvReader<'_, FieldId>,
+        obkv: &KvReader<FieldId>,
         fields_ids_map: &mut FieldsIdsMap,
     ) -> Result<Option<Vec<u8>>> {
         if obkv
@@ -721,10 +724,10 @@ impl<'a, 'i> Transform<'a, 'i> {
                 total_documents: self.documents_count,
             });
 
-            for (key, value) in KvReader::new(val) {
-                let reader = KvReaderDelAdd::new(value);
+            for (key, value) in KvReader::from_slice(val) {
+                let reader = KvReaderDelAdd::from_slice(value);
                 match (reader.get(DelAdd::Deletion), reader.get(DelAdd::Addition)) {
-                    (None, None) => {}
+                    (None, None) => (),
                     (None, Some(_)) => {
                         // New field
                         let name = self.fields_ids_map.name(key).ok_or(
@@ -838,7 +841,7 @@ impl<'a, 'i> Transform<'a, 'i> {
     /// then fill the provided buffers with delta documents using KvWritterDelAdd.
     #[allow(clippy::too_many_arguments)] // need the vectors + fid, feel free to create a struct xo xo
     fn rebind_existing_document(
-        old_obkv: KvReader<'_, FieldId>,
+        old_obkv: &KvReader<FieldId>,
         settings_diff: &InnerIndexSettingsDiff,
         modified_faceted_fields: &HashSet<String>,
         mut injected_vectors: serde_json::Map<String, serde_json::Value>,
@@ -926,7 +929,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         }
 
         let data = obkv_writer.into_inner()?;
-        let obkv = KvReader::<FieldId>::new(&data);
+        let obkv = KvReader::<FieldId>::from_slice(&data);
 
         if let Some(original_obkv_buffer) = original_obkv_buffer {
             original_obkv_buffer.clear();
@@ -936,8 +939,8 @@ impl<'a, 'i> Transform<'a, 'i> {
         if let Some(flattened_obkv_buffer) = flattened_obkv_buffer {
             // take the non-flattened version if flatten_from_fields_ids_map returns None.
             let mut fields_ids_map = settings_diff.new.fields_ids_map.clone();
-            let flattened = Self::flatten_from_fields_ids_map(&obkv, &mut fields_ids_map)?;
-            let flattened = flattened.as_deref().map_or(obkv, KvReader::new);
+            let flattened = Self::flatten_from_fields_ids_map(obkv, &mut fields_ids_map)?;
+            let flattened = flattened.as_deref().map_or(obkv, KvReader::from_slice);
 
             flattened_obkv_buffer.clear();
             into_del_add_obkv_conditional_operation(flattened, flattened_obkv_buffer, |id| {
@@ -980,7 +983,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         let mut original_sorter = if settings_diff.reindex_vectors() {
             Some(create_sorter(
                 grenad::SortAlgorithm::Stable,
-                keep_first,
+                KeepFirst,
                 self.indexer_settings.chunk_compression_type,
                 self.indexer_settings.chunk_compression_level,
                 self.indexer_settings.max_nb_chunks,
@@ -1022,7 +1025,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             if settings_diff.reindex_searchable() || settings_diff.reindex_facets() {
                 Some(create_sorter(
                     grenad::SortAlgorithm::Stable,
-                    keep_first,
+                    KeepFirst,
                     self.indexer_settings.chunk_compression_type,
                     self.indexer_settings.chunk_compression_level,
                     self.indexer_settings.max_nb_chunks,
@@ -1152,6 +1155,8 @@ fn drop_and_reuse<U, T>(mut vec: Vec<U>) -> Vec<T> {
 
 #[cfg(test)]
 mod test {
+    use grenad::MergeFunction;
+
     use super::*;
 
     #[test]
@@ -1163,21 +1168,21 @@ mod test {
         kv_writer.insert(0_u8, [0]).unwrap();
         let buffer = kv_writer.into_inner().unwrap();
         into_del_add_obkv(
-            KvReaderU16::new(&buffer),
+            KvReaderU16::from_slice(&buffer),
             DelAddOperation::Addition,
             &mut additive_doc_0,
         )
         .unwrap();
         additive_doc_0.insert(0, Operation::Addition as u8);
         into_del_add_obkv(
-            KvReaderU16::new(&buffer),
+            KvReaderU16::from_slice(&buffer),
             DelAddOperation::Deletion,
             &mut deletive_doc_0,
         )
         .unwrap();
         deletive_doc_0.insert(0, Operation::Deletion as u8);
         into_del_add_obkv(
-            KvReaderU16::new(&buffer),
+            KvReaderU16::from_slice(&buffer),
             DelAddOperation::DeletionAndAddition,
             &mut del_add_doc_0,
         )
@@ -1189,7 +1194,7 @@ mod test {
         kv_writer.insert(1_u8, [1]).unwrap();
         let buffer = kv_writer.into_inner().unwrap();
         into_del_add_obkv(
-            KvReaderU16::new(&buffer),
+            KvReaderU16::from_slice(&buffer),
             DelAddOperation::Addition,
             &mut additive_doc_1,
         )
@@ -1202,32 +1207,39 @@ mod test {
         kv_writer.insert(1_u8, [1]).unwrap();
         let buffer = kv_writer.into_inner().unwrap();
         into_del_add_obkv(
-            KvReaderU16::new(&buffer),
+            KvReaderU16::from_slice(&buffer),
             DelAddOperation::Addition,
             &mut additive_doc_0_1,
         )
         .unwrap();
         additive_doc_0_1.insert(0, Operation::Addition as u8);
 
-        let ret = obkvs_merge_additions_and_deletions(&[], &[Cow::from(additive_doc_0.as_slice())])
-            .unwrap();
+        let ret = MergeFunction::merge(
+            &ObkvsMergeAdditionsAndDeletions,
+            &[],
+            &[Cow::from(additive_doc_0.as_slice())],
+        )
+        .unwrap();
         assert_eq!(*ret, additive_doc_0);
 
-        let ret = obkvs_merge_additions_and_deletions(
+        let ret = MergeFunction::merge(
+            &ObkvsMergeAdditionsAndDeletions,
             &[],
             &[Cow::from(deletive_doc_0.as_slice()), Cow::from(additive_doc_0.as_slice())],
         )
         .unwrap();
         assert_eq!(*ret, del_add_doc_0);
 
-        let ret = obkvs_merge_additions_and_deletions(
+        let ret = MergeFunction::merge(
+            &ObkvsMergeAdditionsAndDeletions,
             &[],
             &[Cow::from(additive_doc_0.as_slice()), Cow::from(deletive_doc_0.as_slice())],
         )
         .unwrap();
         assert_eq!(*ret, deletive_doc_0);
 
-        let ret = obkvs_merge_additions_and_deletions(
+        let ret = MergeFunction::merge(
+            &ObkvsMergeAdditionsAndDeletions,
             &[],
             &[
                 Cow::from(additive_doc_1.as_slice()),
@@ -1238,21 +1250,24 @@ mod test {
         .unwrap();
         assert_eq!(*ret, del_add_doc_0);
 
-        let ret = obkvs_merge_additions_and_deletions(
+        let ret = MergeFunction::merge(
+            &ObkvsMergeAdditionsAndDeletions,
             &[],
             &[Cow::from(additive_doc_1.as_slice()), Cow::from(additive_doc_0.as_slice())],
         )
         .unwrap();
         assert_eq!(*ret, additive_doc_0_1);
 
-        let ret = obkvs_keep_last_addition_merge_deletions(
+        let ret = MergeFunction::merge(
+            &ObkvsKeepLastAdditionMergeDeletions,
             &[],
             &[Cow::from(additive_doc_1.as_slice()), Cow::from(additive_doc_0.as_slice())],
         )
         .unwrap();
         assert_eq!(*ret, additive_doc_0);
 
-        let ret = obkvs_keep_last_addition_merge_deletions(
+        let ret = MergeFunction::merge(
+            &ObkvsKeepLastAdditionMergeDeletions,
             &[],
             &[
                 Cow::from(deletive_doc_0.as_slice()),

@@ -1682,7 +1682,7 @@ fn add_non_formatted_ids_to_formatted_options(
 fn make_document(
     displayed_attributes: &BTreeSet<FieldId>,
     field_ids_map: &FieldsIdsMap,
-    obkv: obkv::KvReaderU16,
+    obkv: &obkv::KvReaderU16,
 ) -> Result<Document, MeilisearchHttpError> {
     let mut document = serde_json::Map::new();
 

@@ -47,7 +47,7 @@ pub fn enrich_documents_batch<R: Read + Seek>(
                 return match cursor.next_document()? {
                     Some(first_document) => Ok(Err(UserError::MissingDocumentId {
                         primary_key: primary_key.to_string(),
-                        document: obkv_to_object(&first_document, &documents_batch_index)?,
+                        document: obkv_to_object(first_document, &documents_batch_index)?,
                     })),
                     None => unreachable!("Called with reader.is_empty()"),
                 };
@@ -106,7 +106,7 @@ pub fn enrich_documents_batch<R: Read + Seek>(
     let mut count = 0;
     while let Some(document) = cursor.next_document()? {
         let document_id = match fetch_or_generate_document_id(
-            &document,
+            document,
             &documents_batch_index,
             primary_key,
             autogenerate_docids,
@@ -145,7 +145,7 @@ pub fn enrich_documents_batch<R: Read + Seek>(
 #[tracing::instrument(level = "trace", skip(uuid_buffer, documents_batch_index, document)
 target = "indexing::documents")]
 fn fetch_or_generate_document_id(
-    document: &obkv::KvReader<'_, FieldId>,
+    document: &obkv::KvReader<FieldId>,
     documents_batch_index: &DocumentsBatchIndex,
     primary_key: PrimaryKey<'_>,
     autogenerate_docids: bool,

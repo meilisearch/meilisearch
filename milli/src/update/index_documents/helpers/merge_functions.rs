@@ -3,6 +3,8 @@ use std::collections::BTreeSet;
 use std::io;
 use std::result::Result as StdResult;
 
+use either::Either;
+use grenad::MergeFunction;
 use roaring::RoaringBitmap;
 
 use crate::heed_codec::CboRoaringBitmapCodec;
@@ -10,7 +12,8 @@ use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::index_documents::transform::Operation;
 use crate::Result;
 
-pub type MergeFn = for<'a> fn(&[u8], &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>>;
+pub type EitherObkvMerge =
+    Either<ObkvsKeepLastAdditionMergeDeletions, ObkvsMergeAdditionsAndDeletions>;
 
 pub fn serialize_roaring_bitmap(bitmap: &RoaringBitmap, buffer: &mut Vec<u8>) -> io::Result<()> {
     buffer.clear();
@@ -18,35 +21,53 @@ pub fn serialize_roaring_bitmap(bitmap: &RoaringBitmap, buffer: &mut Vec<u8>) ->
     bitmap.serialize_into(buffer)
 }
 
-pub fn merge_roaring_bitmaps<'a>(_key: &[u8], values: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
-    if values.len() == 1 {
-        Ok(values[0].clone())
-    } else {
-        let merged = values
-            .iter()
-            .map(AsRef::as_ref)
-            .map(RoaringBitmap::deserialize_from)
-            .map(StdResult::unwrap)
-            .reduce(|a, b| a | b)
-            .unwrap();
-        let mut buffer = Vec::new();
-        serialize_roaring_bitmap(&merged, &mut buffer)?;
-        Ok(Cow::Owned(buffer))
+pub struct MergeRoaringBitmaps;
+
+impl MergeFunction for MergeRoaringBitmaps {
+    type Error = crate::Error;
+
+    fn merge<'a>(&self, _key: &[u8], values: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
+        if values.len() == 1 {
+            Ok(values[0].clone())
+        } else {
+            let merged = values
+                .iter()
+                .map(AsRef::as_ref)
+                .map(RoaringBitmap::deserialize_from)
+                .map(StdResult::unwrap)
+                .reduce(|a, b| a | b)
+                .unwrap();
+            let mut buffer = Vec::new();
+            serialize_roaring_bitmap(&merged, &mut buffer)?;
+            Ok(Cow::Owned(buffer))
+        }
     }
 }
 
-pub fn keep_first<'a>(_key: &[u8], values: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
-    Ok(values[0].clone())
+pub struct KeepFirst;
+
+impl MergeFunction for KeepFirst {
+    type Error = crate::Error;
+
+    fn merge<'a>(&self, _key: &[u8], values: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
+        Ok(values[0].clone())
+    }
 }
 
 /// Only the last value associated with an id is kept.
-pub fn keep_latest_obkv<'a>(_key: &[u8], obkvs: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
-    Ok(obkvs.last().unwrap().clone())
+pub struct KeepLatestObkv;
+
+impl MergeFunction for KeepLatestObkv {
+    type Error = crate::Error;
+
+    fn merge<'a>(&self, _key: &[u8], obkvs: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
+        Ok(obkvs.last().unwrap().clone())
+    }
 }
 
 pub fn merge_two_del_add_obkvs(
-    base: obkv::KvReaderU16<'_>,
-    update: obkv::KvReaderU16<'_>,
+    base: &obkv::KvReaderU16,
+    update: &obkv::KvReaderU16,
     merge_additions: bool,
     buffer: &mut Vec<u8>,
 ) {
@@ -66,7 +87,7 @@ pub fn merge_two_del_add_obkvs(
                     // If merge_additions is false, recreate an obkv keeping the deletions only.
                     value_buffer.clear();
                     let mut value_writer = KvWriterDelAdd::new(&mut value_buffer);
-                    let base_reader = KvReaderDelAdd::new(v);
+                    let base_reader = KvReaderDelAdd::from_slice(v);
 
                     if let Some(deletion) = base_reader.get(DelAdd::Deletion) {
                         value_writer.insert(DelAdd::Deletion, deletion).unwrap();
@@ -80,8 +101,8 @@ pub fn merge_two_del_add_obkvs(
                 // merge deletions and additions.
                 value_buffer.clear();
                 let mut value_writer = KvWriterDelAdd::new(&mut value_buffer);
-                let base_reader = KvReaderDelAdd::new(base);
-                let update_reader = KvReaderDelAdd::new(update);
+                let base_reader = KvReaderDelAdd::from_slice(base);
+                let update_reader = KvReaderDelAdd::from_slice(update);
 
                 // keep newest deletion.
                 if let Some(deletion) = update_reader
@@ -131,8 +152,8 @@ fn inner_merge_del_add_obkvs<'a>(
             break;
         }
 
-        let newest = obkv::KvReader::new(&acc);
-        let oldest = obkv::KvReader::new(&current[1..]);
+        let newest = obkv::KvReader::from_slice(&acc);
+        let oldest = obkv::KvReader::from_slice(&current[1..]);
         merge_two_del_add_obkvs(oldest, newest, merge_additions, &mut buffer);
 
         // we want the result of the merge into our accumulator.
@@ -145,65 +166,79 @@ fn inner_merge_del_add_obkvs<'a>(
 }
 
 /// Merge all the obkvs from the newest to the oldest.
-pub fn obkvs_merge_additions_and_deletions<'a>(
-    _key: &[u8],
-    obkvs: &[Cow<'a, [u8]>],
-) -> Result<Cow<'a, [u8]>> {
-    inner_merge_del_add_obkvs(obkvs, true)
+#[derive(Copy, Clone)]
+pub struct ObkvsMergeAdditionsAndDeletions;
+
+impl MergeFunction for ObkvsMergeAdditionsAndDeletions {
+    type Error = crate::Error;
+
+    fn merge<'a>(&self, _key: &[u8], obkvs: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
+        inner_merge_del_add_obkvs(obkvs, true)
+    }
 }
 
 /// Merge all the obkvs deletions from the newest to the oldest and keep only the newest additions.
-pub fn obkvs_keep_last_addition_merge_deletions<'a>(
-    _key: &[u8],
-    obkvs: &[Cow<'a, [u8]>],
-) -> Result<Cow<'a, [u8]>> {
-    inner_merge_del_add_obkvs(obkvs, false)
+#[derive(Copy, Clone)]
+pub struct ObkvsKeepLastAdditionMergeDeletions;
+
+impl MergeFunction for ObkvsKeepLastAdditionMergeDeletions {
+    type Error = crate::Error;
+
+    fn merge<'a>(&self, _key: &[u8], obkvs: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
+        inner_merge_del_add_obkvs(obkvs, false)
+    }
 }
 
 /// Do a union of all the CboRoaringBitmaps in the values.
-pub fn merge_cbo_roaring_bitmaps<'a>(
-    _key: &[u8],
-    values: &[Cow<'a, [u8]>],
-) -> Result<Cow<'a, [u8]>> {
-    if values.len() == 1 {
-        Ok(values[0].clone())
-    } else {
-        let mut vec = Vec::new();
-        CboRoaringBitmapCodec::merge_into(values, &mut vec)?;
-        Ok(Cow::from(vec))
+pub struct MergeCboRoaringBitmaps;
+
+impl MergeFunction for MergeCboRoaringBitmaps {
+    type Error = crate::Error;
+
+    fn merge<'a>(&self, _key: &[u8], values: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
+        if values.len() == 1 {
+            Ok(values[0].clone())
+        } else {
+            let mut vec = Vec::new();
+            CboRoaringBitmapCodec::merge_into(values, &mut vec)?;
+            Ok(Cow::from(vec))
+        }
     }
 }
 
 /// Do a union of CboRoaringBitmaps on both sides of a DelAdd obkv
 /// separately and outputs a new DelAdd with both unions.
-pub fn merge_deladd_cbo_roaring_bitmaps<'a>(
-    _key: &[u8],
-    values: &[Cow<'a, [u8]>],
-) -> Result<Cow<'a, [u8]>> {
-    if values.len() == 1 {
-        Ok(values[0].clone())
-    } else {
-        // Retrieve the bitmaps from both sides
-        let mut del_bitmaps_bytes = Vec::new();
-        let mut add_bitmaps_bytes = Vec::new();
-        for value in values {
-            let obkv = KvReaderDelAdd::new(value);
-            if let Some(bitmap_bytes) = obkv.get(DelAdd::Deletion) {
-                del_bitmaps_bytes.push(bitmap_bytes);
-            }
-            if let Some(bitmap_bytes) = obkv.get(DelAdd::Addition) {
-                add_bitmaps_bytes.push(bitmap_bytes);
-            }
-        }
+pub struct MergeDeladdCboRoaringBitmaps;
 
-        let mut output_deladd_obkv = KvWriterDelAdd::memory();
-        let mut buffer = Vec::new();
-        CboRoaringBitmapCodec::merge_into(del_bitmaps_bytes, &mut buffer)?;
-        output_deladd_obkv.insert(DelAdd::Deletion, &buffer)?;
-        buffer.clear();
-        CboRoaringBitmapCodec::merge_into(add_bitmaps_bytes, &mut buffer)?;
-        output_deladd_obkv.insert(DelAdd::Addition, &buffer)?;
-        output_deladd_obkv.into_inner().map(Cow::from).map_err(Into::into)
+impl MergeFunction for MergeDeladdCboRoaringBitmaps {
+    type Error = crate::Error;
+
+    fn merge<'a>(&self, _key: &[u8], values: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
+        if values.len() == 1 {
+            Ok(values[0].clone())
+        } else {
+            // Retrieve the bitmaps from both sides
+            let mut del_bitmaps_bytes = Vec::new();
+            let mut add_bitmaps_bytes = Vec::new();
+            for value in values {
+                let obkv = KvReaderDelAdd::from_slice(value);
+                if let Some(bitmap_bytes) = obkv.get(DelAdd::Deletion) {
+                    del_bitmaps_bytes.push(bitmap_bytes);
+                }
+                if let Some(bitmap_bytes) = obkv.get(DelAdd::Addition) {
+                    add_bitmaps_bytes.push(bitmap_bytes);
+                }
+            }
+
+            let mut output_deladd_obkv = KvWriterDelAdd::memory();
+            let mut buffer = Vec::new();
+            CboRoaringBitmapCodec::merge_into(del_bitmaps_bytes, &mut buffer)?;
+            output_deladd_obkv.insert(DelAdd::Deletion, &buffer)?;
+            buffer.clear();
+            CboRoaringBitmapCodec::merge_into(add_bitmaps_bytes, &mut buffer)?;
+            output_deladd_obkv.insert(DelAdd::Addition, &buffer)?;
+            output_deladd_obkv.into_inner().map(Cow::from).map_err(Into::into)
+        }
     }
 }
 
@@ -217,7 +252,7 @@ pub fn merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap<'a>(
     buffer: &'a mut Vec<u8>,
 ) -> Result<Option<&'a [u8]>> {
     Ok(CboRoaringBitmapCodec::merge_deladd_into(
-        KvReaderDelAdd::new(deladd_obkv),
+        KvReaderDelAdd::from_slice(deladd_obkv),
         previous,
         buffer,
     )?)
@@ -225,37 +260,55 @@ pub fn merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap<'a>(
 
 /// Do a union of BtreeSet on both sides of a DelAdd obkv
 /// separately and outputs a new DelAdd with both unions.
-pub fn merge_deladd_btreeset_string<'a>(
-    _key: &[u8],
-    values: &[Cow<'a, [u8]>],
-) -> Result<Cow<'a, [u8]>> {
-    if values.len() == 1 {
-        Ok(values[0].clone())
-    } else {
-        // Retrieve the bitmaps from both sides
-        let mut del_set = BTreeSet::new();
-        let mut add_set = BTreeSet::new();
-        for value in values {
-            let obkv = KvReaderDelAdd::new(value);
-            if let Some(bytes) = obkv.get(DelAdd::Deletion) {
-                let set = serde_json::from_slice::<BTreeSet<String>>(bytes).unwrap();
-                for value in set {
-                    del_set.insert(value);
-                }
-            }
-            if let Some(bytes) = obkv.get(DelAdd::Addition) {
-                let set = serde_json::from_slice::<BTreeSet<String>>(bytes).unwrap();
-                for value in set {
-                    add_set.insert(value);
-                }
-            }
-        }
+pub struct MergeDeladdBtreesetString;
 
-        let mut output_deladd_obkv = KvWriterDelAdd::memory();
-        let del = serde_json::to_vec(&del_set).unwrap();
-        output_deladd_obkv.insert(DelAdd::Deletion, &del)?;
-        let add = serde_json::to_vec(&add_set).unwrap();
-        output_deladd_obkv.insert(DelAdd::Addition, &add)?;
-        output_deladd_obkv.into_inner().map(Cow::from).map_err(Into::into)
+impl MergeFunction for MergeDeladdBtreesetString {
+    type Error = crate::Error;
+
+    fn merge<'a>(&self, _key: &[u8], values: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
+        if values.len() == 1 {
+            Ok(values[0].clone())
+        } else {
+            // Retrieve the bitmaps from both sides
+            let mut del_set = BTreeSet::new();
+            let mut add_set = BTreeSet::new();
+            for value in values {
+                let obkv = KvReaderDelAdd::from_slice(value);
+                if let Some(bytes) = obkv.get(DelAdd::Deletion) {
+                    let set = serde_json::from_slice::<BTreeSet<String>>(bytes).unwrap();
+                    for value in set {
+                        del_set.insert(value);
+                    }
+                }
+                if let Some(bytes) = obkv.get(DelAdd::Addition) {
+                    let set = serde_json::from_slice::<BTreeSet<String>>(bytes).unwrap();
+                    for value in set {
+                        add_set.insert(value);
+                    }
+                }
+            }
+
+            let mut output_deladd_obkv = KvWriterDelAdd::memory();
+            let del = serde_json::to_vec(&del_set).unwrap();
+            output_deladd_obkv.insert(DelAdd::Deletion, &del)?;
+            let add = serde_json::to_vec(&add_set).unwrap();
+            output_deladd_obkv.insert(DelAdd::Addition, &add)?;
+            output_deladd_obkv.into_inner().map(Cow::from).map_err(Into::into)
+        }
+    }
+}
+
+/// Used when trying to merge readers, but you don't actually care about the values.
+pub struct MergeIgnoreValues;
+
+impl MergeFunction for MergeIgnoreValues {
+    type Error = crate::Error;
+
+    fn merge<'a>(
+        &self,
+        _key: &[u8],
+        _values: &[Cow<'a, [u8]>],
+    ) -> std::result::Result<Cow<'a, [u8]>, Self::Error> {
+        Ok(Cow::Owned(Vec::new()))
     }
 }

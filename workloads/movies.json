@@ -1,6 +1,6 @@
 {
   "name": "movies.json",
-  "run_count": 10,
+  "run_count": 1,
   "extra_cli_args": [],
   "assets": {
     "movies.json": {

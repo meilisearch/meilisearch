@@ -31,23 +31,23 @@ pub enum Error {
 pub enum InternalError {
     #[error("{}", HeedError::DatabaseClosing)]
     DatabaseClosing,
-    #[error("Missing {} in the {db_name} database.", key.unwrap_or("key"))]
+    #[error("missing {} in the {db_name} database", key.unwrap_or("key"))]
     DatabaseMissingEntry { db_name: &'static str, key: Option<&'static str> },
-    #[error("Missing {key} in the fieldids weights mapping.")]
+    #[error("missing {key} in the fieldids weights mapping")]
     FieldidsWeightsMapMissingEntry { key: FieldId },
     #[error(transparent)]
     FieldIdMapMissingEntry(#[from] FieldIdMapMissingEntry),
-    #[error("Missing {key} in the field id mapping.")]
+    #[error("missing {key} in the field id mapping")]
     FieldIdMappingMissingEntry { key: FieldId },
     #[error(transparent)]
     Fst(#[from] fst::Error),
     #[error(transparent)]
     DocumentsError(#[from] documents::Error),
-    #[error("Invalid compression type have been specified to grenad")]
+    #[error("invalid compression type have been specified to grenad")]
     GrenadInvalidCompressionType,
-    #[error("Invalid grenad file with an invalid version format")]
+    #[error("invalid grenad file with an invalid version format")]
     GrenadInvalidFormatVersion,
-    #[error("Invalid merge while processing {process}")]
+    #[error("invalid merge while processing {process}")]
     IndexingMergingKeys { process: &'static str },
     #[error(transparent)]
     RayonThreadPool(#[from] ThreadPoolBuildError),

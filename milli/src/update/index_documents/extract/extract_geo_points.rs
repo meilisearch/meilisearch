@@ -29,22 +29,20 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
 
     let mut cursor = obkv_documents.into_cursor()?;
     while let Some((docid_bytes, value)) = cursor.move_on_next()? {
-        let obkv = obkv::KvReader::new(value);
+        let obkv = obkv::KvReader::from_slice(value);
         // since we only need the primary key when we throw an error
         // we create this getter to lazily get it when needed
         let document_id = || -> Value {
-            let reader = KvReaderDelAdd::new(obkv.get(primary_key_id).unwrap());
+            let reader = KvReaderDelAdd::from_slice(obkv.get(primary_key_id).unwrap());
             let document_id =
                 reader.get(DelAdd::Deletion).or(reader.get(DelAdd::Addition)).unwrap();
             serde_json::from_slice(document_id).unwrap()
         };
 
         // extract old version
-        let del_lat_lng =
-            extract_lat_lng(&obkv, &settings_diff.old, DelAdd::Deletion, document_id)?;
+        let del_lat_lng = extract_lat_lng(obkv, &settings_diff.old, DelAdd::Deletion, document_id)?;
         // extract new version
-        let add_lat_lng =
-            extract_lat_lng(&obkv, &settings_diff.new, DelAdd::Addition, document_id)?;
+        let add_lat_lng = extract_lat_lng(obkv, &settings_diff.new, DelAdd::Addition, document_id)?;
 
         if del_lat_lng != add_lat_lng {
             let mut obkv = KvWriterDelAdd::memory();
@@ -68,15 +66,17 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
 
 /// Extract the finite floats lat and lng from two bytes slices.
 fn extract_lat_lng(
-    document: &obkv::KvReader<'_, FieldId>,
+    document: &obkv::KvReader<FieldId>,
     settings: &InnerIndexSettings,
     deladd: DelAdd,
     document_id: impl Fn() -> Value,
 ) -> Result<Option<[f64; 2]>> {
     match settings.geo_fields_ids {
         Some((lat_fid, lng_fid)) => {
-            let lat = document.get(lat_fid).map(KvReaderDelAdd::new).and_then(|r| r.get(deladd));
-            let lng = document.get(lng_fid).map(KvReaderDelAdd::new).and_then(|r| r.get(deladd));
+            let lat =
+                document.get(lat_fid).map(KvReaderDelAdd::from_slice).and_then(|r| r.get(deladd));
+            let lng =
+                document.get(lng_fid).map(KvReaderDelAdd::from_slice).and_then(|r| r.get(deladd));
             let (lat, lng) = match (lat, lng) {
                 (Some(lat), Some(lng)) => (lat, lng),
                 (Some(_), None) => {

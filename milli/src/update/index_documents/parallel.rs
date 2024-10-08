@@ -31,14 +31,14 @@ impl<'t> ImmutableObkvs<'t> {
     }
 
     /// Returns the OBKVs identified by the given ID.
-    pub fn obkv(&self, docid: DocumentId) -> heed::Result<Option<KvReaderU16<'t>>> {
+    pub fn obkv(&self, docid: DocumentId) -> heed::Result<Option<&'t KvReaderU16>> {
         match self
             .ids
             .rank(docid)
             .checked_sub(1)
             .and_then(|offset| self.slices.get(offset as usize))
         {
-            Some(bytes) => Ok(Some(KvReaderU16::new(bytes))),
+            Some(&bytes) => Ok(Some(bytes.into())),
             None => Ok(None),
         }
     }

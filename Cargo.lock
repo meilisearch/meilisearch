@@ -527,7 +527,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "regex",
- "rustc-hash 1.1.0",
+ "rustc-hash",
  "shlex",
  "syn 2.0.60",
 ]
@@ -934,8 +934,7 @@ dependencies = [
 [[package]]
 name = "charabia"
 version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55ff52497324e7d168505a16949ae836c14595606fab94687238d2f6c8d4c798"
+source = "git+https://github.com/meilisearch/charabia?branch=mutualize-char-normalizer#f8d8308cdb8db80819be7eeed5652cc4a995cc71"
 dependencies = [
  "aho-corasick",
  "csv",
@@ -2221,11 +2220,11 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 [[package]]
 name = "grenad"
 version = "0.4.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "350d89047298d3b1b40050acd11ab76e487b854a104b760ebc5a7f375093de77"
+source = "git+https://github.com/meilisearch/grenad?branch=various-improvements#58ac87d852413571102f44c5e55ca13509a3f1a0"
 dependencies = [
  "bytemuck",
  "byteorder",
+ "either",
  "rayon",
  "tempfile",
 ]
@@ -2308,9 +2307,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.14.3"
+version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "290f1a1d9242c78d09ce40a5e87e7554ee637af1351968159f4952f028f75604"
+checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
 dependencies = [
  "ahash 0.8.11",
  "allocator-api2",
@@ -2570,6 +2569,7 @@ dependencies = [
  "meili-snap",
  "meilisearch-auth",
  "meilisearch-types",
+ "memmap2",
  "page_size",
  "rayon",
  "roaring",
@@ -2591,7 +2591,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "168fb715dda47215e360912c096649d23d58bf392ac62f73919e831745e40f26"
 dependencies = [
  "equivalent",
- "hashbrown 0.14.3",
+ "hashbrown 0.14.5",
  "serde",
 ]
 
@@ -2650,8 +2650,7 @@ checksum = "28b29a3cd74f0f4598934efe3aeba42bae0eb4680554128851ebbecb02af14e6"
 [[package]]
 name = "irg-kvariants"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef2af7c331f2536964a32b78a7d2e0963d78b42f4a76323b16cc7d94b1ddce26"
+source = "git+https://github.com/meilisearch/charabia?branch=mutualize-char-normalizer#f8d8308cdb8db80819be7eeed5652cc4a995cc71"
 dependencies = [
  "csv",
  "once_cell",
@@ -3567,6 +3566,7 @@ dependencies = [
  "fxhash",
  "geoutils",
  "grenad",
+ "hashbrown 0.14.5",
  "heed",
  "hf-hub",
  "indexmap",
@@ -3598,6 +3598,7 @@ dependencies = [
  "smartstring",
  "tempfile",
  "thiserror",
+ "thread_local",
  "tiktoken-rs",
  "time",
  "tokenizers",
@@ -3836,9 +3837,8 @@ dependencies = [
 
 [[package]]
 name = "obkv"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2e27bcfe835a379d32352112f6b8dbae2d99d16a5fff42abe6e5ba5386c1e5a"
+version = "0.3.0"
+source = "git+https://github.com/kerollmops/obkv?branch=unsized-kvreader#ce535874008ecac554f02e0c670e6caf62134d6b"
 
 [[package]]
 name = "once_cell"
@@ -4314,7 +4314,7 @@ dependencies = [
  "pin-project-lite",
  "quinn-proto",
  "quinn-udp",
- "rustc-hash 1.1.0",
+ "rustc-hash",
  "rustls",
  "thiserror",
  "tokio",
@@ -4323,14 +4323,14 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.11.8"
+version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fadfaed2cd7f389d0161bb73eeb07b7b78f8691047a6f3e73caaeae55310a4a6"
+checksum = "ddf517c03a109db8100448a4be38d498df8a210a99fe0e1b9eaf39e78c640efe"
 dependencies = [
  "bytes",
  "rand",
  "ring",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "rustls",
  "slab",
  "thiserror",
@@ -4655,8 +4655,7 @@ dependencies = [
 [[package]]
 name = "roaring"
 version = "0.10.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f4b84ba6e838ceb47b41de5194a60244fac43d9fe03b71dbe8c5a201081d6d1"
+source = "git+https://github.com/RoaringBitmap/roaring-rs?branch=clone-iter-slice#8ff028e484fb6192a0acf5a669eaf18c30cada6e"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -4702,12 +4701,6 @@ name = "rustc-hash"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
-
-[[package]]
-name = "rustc-hash"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "583034fd73374156e66797ed8e5b0d5690409c9226b22d87cb7f19821c05d152"
 
 [[package]]
 name = "rustc_version"
@@ -4847,9 +4840,9 @@ checksum = "a3f0bf26fd526d2a95683cd0f87bf103b8539e2ca1ef48ce002d67aad59aa0b4"
 
 [[package]]
 name = "serde"
-version = "1.0.209"
+version = "1.0.210"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99fce0ffe7310761ca6bf9faf5115afbc19688edd00171d81b1bb1b116c63e09"
+checksum = "c8e3592472072e6e22e0a54d5904d9febf8508f65fb8552499a1abc7d1078c3a"
 dependencies = [
  "serde_derive",
 ]
@@ -4865,9 +4858,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.209"
+version = "1.0.210"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5831b979fd7b5439637af1752d535ff49f4860c0f341d1baeb6faf0f4242170"
+checksum = "243902eda00fad750862fc144cea25caca5e20d615af0a81bee94ca738f1df1f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5340,9 +5333,9 @@ dependencies = [
 
 [[package]]
 name = "thread_local"
-version = "1.1.7"
+version = "1.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fdd6f064ccff2d6567adcb3873ca630700f00b5ad3f060c25b5dcfd9a4ce152"
+checksum = "8b9ef9bad013ada3808854ceac7b46812a6465ba368859a37e2100283d2d719c"
 dependencies = [
  "cfg-if",
  "once_cell",
@@ -5360,7 +5353,7 @@ dependencies = [
  "fancy-regex 0.12.0",
  "lazy_static",
  "parking_lot",
- "rustc-hash 1.1.0",
+ "rustc-hash",
 ]
 
 [[package]]
@@ -6048,7 +6041,7 @@ version = "0.16.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "471d1c1645d361eb782a1650b1786a8fb58dd625e681a04c09f5ff7c8764a7b0"
 dependencies = [
- "hashbrown 0.14.3",
+ "hashbrown 0.14.5",
  "once_cell",
 ]
 

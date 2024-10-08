@@ -111,7 +111,7 @@ impl Prompt {
 
     pub fn render(
         &self,
-        document: obkv::KvReaderU16<'_>,
+        document: &obkv::KvReaderU16,
         side: DelAdd,
         field_id_map: &FieldsIdsMapWithMetadata,
     ) -> Result<String, RenderPromptError> {

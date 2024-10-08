@@ -1,8 +1,10 @@
+use std::borrow::Cow;
 use std::iter;
 use std::result::Result as StdResult;
 
-use serde_json::Value;
+use serde_json::{from_str, Value};
 
+use crate::update::new::{CowStr, TopLevelMap};
 use crate::{FieldId, InternalError, Object, Result, UserError};
 
 /// The symbol used to define levels in a nested primary key.
@@ -52,7 +54,7 @@ impl<'a> PrimaryKey<'a> {
 
     pub fn document_id(
         &self,
-        document: &obkv::KvReader<'_, FieldId>,
+        document: &obkv::KvReader<FieldId>,
         fields: &impl FieldIdMapper,
     ) -> Result<StdResult<String, DocumentIdExtractionError>> {
         match self {
@@ -98,6 +100,45 @@ impl<'a> PrimaryKey<'a> {
                 }
             }
         }
+    }
+
+    /// Returns the document ID based on the primary and
+    /// search for it recursively in zero-copy-deserialized documents.
+    pub fn document_id_from_top_level_map<'p>(
+        &self,
+        document: &TopLevelMap<'p>,
+    ) -> Result<StdResult<CowStr<'p>, DocumentIdExtractionError>> {
+        fn get_docid<'p>(
+            document: &TopLevelMap<'p>,
+            primary_key: &[&str],
+        ) -> Result<StdResult<CowStr<'p>, DocumentIdExtractionError>> {
+            match primary_key {
+                [] => unreachable!("arrrgh"), // would None be ok?
+                [primary_key] => match document.0.get(*primary_key) {
+                    Some(value) => match from_str::<u64>(value.get()) {
+                        Ok(value) => Ok(Ok(CowStr(Cow::Owned(value.to_string())))),
+                        Err(_) => match from_str(value.get()) {
+                            Ok(document_id) => Ok(Ok(document_id)),
+                            Err(e) => Ok(Err(DocumentIdExtractionError::InvalidDocumentId(
+                                UserError::SerdeJson(e),
+                            ))),
+                        },
+                    },
+                    None => Ok(Err(DocumentIdExtractionError::MissingDocumentId)),
+                },
+                [head, tail @ ..] => match document.0.get(*head) {
+                    Some(value) => {
+                        let document = from_str(value.get()).map_err(InternalError::SerdeJson)?;
+                        get_docid(&document, tail)
+                    }
+                    None => Ok(Err(DocumentIdExtractionError::MissingDocumentId)),
+                },
+            }
+        }
+
+        /// TODO do not allocate a vec everytime here
+        let primary_key: Vec<_> = self.name().split(PRIMARY_KEY_SPLIT_SYMBOL).collect();
+        get_docid(document, &primary_key)
     }
 
     /// Returns an `Iterator` that gives all the possible fields names the primary key

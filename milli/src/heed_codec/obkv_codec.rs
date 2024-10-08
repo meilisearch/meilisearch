@@ -6,10 +6,10 @@ use obkv::{KvReaderU16, KvWriterU16};
 pub struct ObkvCodec;
 
 impl<'a> heed::BytesDecode<'a> for ObkvCodec {
-    type DItem = KvReaderU16<'a>;
+    type DItem = &'a KvReaderU16;
 
     fn bytes_decode(bytes: &'a [u8]) -> Result<Self::DItem, BoxedError> {
-        Ok(KvReaderU16::new(bytes))
+        Ok(KvReaderU16::from_slice(bytes))
     }
 }
 

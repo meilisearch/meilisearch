@@ -4,18 +4,17 @@ use std::fs::File;
 use std::io::{self, BufReader};
 
 use bytemuck::allocation::pod_collect_to_vec;
-use grenad::{Merger, MergerBuilder};
+use grenad::{MergeFunction, Merger, MergerBuilder};
 use heed::types::Bytes;
 use heed::{BytesDecode, RwTxn};
 use obkv::{KvReader, KvWriter};
 use roaring::RoaringBitmap;
 
 use super::helpers::{
-    self, keep_first, merge_deladd_btreeset_string, merge_deladd_cbo_roaring_bitmaps,
-    merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, merge_ignore_values, valid_lmdb_key,
-    CursorClonableMmap,
+    self, merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, valid_lmdb_key,
+    CursorClonableMmap, KeepFirst, MergeDeladdBtreesetString, MergeDeladdCboRoaringBitmaps,
+    MergeIgnoreValues,
 };
-use super::MergeFn;
 use crate::external_documents_ids::{DocumentOperation, DocumentOperationKind};
 use crate::facet::FacetType;
 use crate::index::db_name::DOCUMENTS;
@@ -24,7 +23,7 @@ use crate::proximity::MAX_DISTANCE;
 use crate::update::del_add::{deladd_serialize_add_side, DelAdd, KvReaderDelAdd};
 use crate::update::facet::FacetsUpdate;
 use crate::update::index_documents::helpers::{
-    as_cloneable_grenad, keep_latest_obkv, try_split_array_at,
+    as_cloneable_grenad, try_split_array_at, KeepLatestObkv,
 };
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::vector::ArroyWrapper;
@@ -141,7 +140,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let vectors_fid =
                 fields_ids_map.id(crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME);
 
-            let mut builder = MergerBuilder::new(keep_latest_obkv as MergeFn);
+            let mut builder = MergerBuilder::new(KeepLatestObkv);
             for typed_chunk in typed_chunks {
                 let TypedChunk::Documents(chunk) = typed_chunk else {
                     unreachable!();
@@ -163,7 +162,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let mut vectors_buffer = Vec::new();
             while let Some((key, reader)) = iter.next()? {
                 let mut writer: KvWriter<_, FieldId> = KvWriter::memory();
-                let reader: KvReader<'_, FieldId> = KvReader::new(reader);
+                let reader: &KvReader<FieldId> = reader.into();
 
                 let (document_id_bytes, external_id_bytes) = try_split_array_at(key)
                     .ok_or(SerializationError::Decoding { db_name: Some(DOCUMENTS) })?;
@@ -171,7 +170,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 let external_id = std::str::from_utf8(external_id_bytes)?;
 
                 for (field_id, value) in reader.iter() {
-                    let del_add_reader = KvReaderDelAdd::new(value);
+                    let del_add_reader = KvReaderDelAdd::from_slice(value);
 
                     if let Some(addition) = del_add_reader.get(DelAdd::Addition) {
                         let addition = if vectors_fid == Some(field_id) {
@@ -235,7 +234,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 tracing::trace_span!(target: "indexing::write_db", "field_id_word_count_docids");
             let _entered = span.enter();
 
-            let mut builder = MergerBuilder::new(merge_deladd_cbo_roaring_bitmaps as MergeFn);
+            let mut builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
             for typed_chunk in typed_chunks {
                 let TypedChunk::FieldIdWordCountDocids(chunk) = typed_chunk else {
                     unreachable!();
@@ -258,13 +257,10 @@ pub(crate) fn write_typed_chunk_into_index(
             let span = tracing::trace_span!(target: "indexing::write_db", "word_docids");
             let _entered = span.enter();
 
-            let mut word_docids_builder =
-                MergerBuilder::new(merge_deladd_cbo_roaring_bitmaps as MergeFn);
-            let mut exact_word_docids_builder =
-                MergerBuilder::new(merge_deladd_cbo_roaring_bitmaps as MergeFn);
-            let mut word_fid_docids_builder =
-                MergerBuilder::new(merge_deladd_cbo_roaring_bitmaps as MergeFn);
-            let mut fst_merger_builder = MergerBuilder::new(merge_ignore_values as MergeFn);
+            let mut word_docids_builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
+            let mut exact_word_docids_builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
+            let mut word_fid_docids_builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
+            let mut fst_merger_builder = MergerBuilder::new(MergeIgnoreValues);
             for typed_chunk in typed_chunks {
                 let TypedChunk::WordDocids {
                     word_docids_reader,
@@ -329,7 +325,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let span = tracing::trace_span!(target: "indexing::write_db", "word_position_docids");
             let _entered = span.enter();
 
-            let mut builder = MergerBuilder::new(merge_deladd_cbo_roaring_bitmaps as MergeFn);
+            let mut builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
             for typed_chunk in typed_chunks {
                 let TypedChunk::WordPositionDocids(chunk) = typed_chunk else {
                     unreachable!();
@@ -353,7 +349,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 tracing::trace_span!(target: "indexing::write_db","field_id_facet_number_docids");
             let _entered = span.enter();
 
-            let mut builder = MergerBuilder::new(merge_deladd_cbo_roaring_bitmaps as MergeFn);
+            let mut builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
             let mut data_size = 0;
             for typed_chunk in typed_chunks {
                 let TypedChunk::FieldIdFacetNumberDocids(facet_id_number_docids) = typed_chunk
@@ -375,10 +371,9 @@ pub(crate) fn write_typed_chunk_into_index(
                 tracing::trace_span!(target: "indexing::write_db", "field_id_facet_string_docids");
             let _entered = span.enter();
 
-            let mut facet_id_string_builder =
-                MergerBuilder::new(merge_deladd_cbo_roaring_bitmaps as MergeFn);
+            let mut facet_id_string_builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
             let mut normalized_facet_id_string_builder =
-                MergerBuilder::new(merge_deladd_btreeset_string as MergeFn);
+                MergerBuilder::new(MergeDeladdBtreesetString);
             let mut data_size = 0;
             for typed_chunk in typed_chunks {
                 let TypedChunk::FieldIdFacetStringDocids((
@@ -412,7 +407,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 tracing::trace_span!(target: "indexing::write_db", "field_id_facet_exists_docids");
             let _entered = span.enter();
 
-            let mut builder = MergerBuilder::new(merge_deladd_cbo_roaring_bitmaps as MergeFn);
+            let mut builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
             for typed_chunk in typed_chunks {
                 let TypedChunk::FieldIdFacetExistsDocids(chunk) = typed_chunk else {
                     unreachable!();
@@ -436,7 +431,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 tracing::trace_span!(target: "indexing::write_db", "field_id_facet_is_null_docids");
             let _entered = span.enter();
 
-            let mut builder = MergerBuilder::new(merge_deladd_cbo_roaring_bitmaps as MergeFn);
+            let mut builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
             for typed_chunk in typed_chunks {
                 let TypedChunk::FieldIdFacetIsNullDocids(chunk) = typed_chunk else {
                     unreachable!();
@@ -459,7 +454,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let span = tracing::trace_span!(target: "indexing::write_db", "field_id_facet_is_empty_docids");
             let _entered = span.enter();
 
-            let mut builder = MergerBuilder::new(merge_deladd_cbo_roaring_bitmaps as MergeFn);
+            let mut builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
             for typed_chunk in typed_chunks {
                 let TypedChunk::FieldIdFacetIsEmptyDocids(chunk) = typed_chunk else {
                     unreachable!();
@@ -483,7 +478,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 tracing::trace_span!(target: "indexing::write_db", "word_pair_proximity_docids");
             let _entered = span.enter();
 
-            let mut builder = MergerBuilder::new(merge_deladd_cbo_roaring_bitmaps as MergeFn);
+            let mut builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
             for typed_chunk in typed_chunks {
                 let TypedChunk::WordPairProximityDocids(chunk) = typed_chunk else {
                     unreachable!();
@@ -516,7 +511,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 tracing::trace_span!(target: "indexing::write_db", "field_id_docid_facet_numbers");
             let _entered = span.enter();
 
-            let mut builder = MergerBuilder::new(keep_first as MergeFn);
+            let mut builder = MergerBuilder::new(KeepFirst);
             for typed_chunk in typed_chunks {
                 let TypedChunk::FieldIdDocidFacetNumbers(chunk) = typed_chunk else {
                     unreachable!();
@@ -530,7 +525,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 index.field_id_docid_facet_f64s.remap_types::<Bytes, Bytes>();
             let mut iter = merger.into_stream_merger_iter()?;
             while let Some((key, value)) = iter.next()? {
-                let reader = KvReaderDelAdd::new(value);
+                let reader = KvReaderDelAdd::from_slice(value);
                 if valid_lmdb_key(key) {
                     match (reader.get(DelAdd::Deletion), reader.get(DelAdd::Addition)) {
                         (None, None) => {}
@@ -550,7 +545,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 tracing::trace_span!(target: "indexing::write_db", "field_id_docid_facet_strings");
             let _entered = span.enter();
 
-            let mut builder = MergerBuilder::new(keep_first as MergeFn);
+            let mut builder = MergerBuilder::new(KeepFirst);
             for typed_chunk in typed_chunks {
                 let TypedChunk::FieldIdDocidFacetStrings(chunk) = typed_chunk else {
                     unreachable!();
@@ -564,7 +559,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 index.field_id_docid_facet_strings.remap_types::<Bytes, Bytes>();
             let mut iter = merger.into_stream_merger_iter()?;
             while let Some((key, value)) = iter.next()? {
-                let reader = KvReaderDelAdd::new(value);
+                let reader = KvReaderDelAdd::from_slice(value);
                 if valid_lmdb_key(key) {
                     match (reader.get(DelAdd::Deletion), reader.get(DelAdd::Addition)) {
                         (None, None) => {}
@@ -583,7 +578,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let span = tracing::trace_span!(target: "indexing::write_db", "geo_points");
             let _entered = span.enter();
 
-            let mut builder = MergerBuilder::new(keep_first as MergeFn);
+            let mut builder = MergerBuilder::new(KeepFirst);
             for typed_chunk in typed_chunks {
                 let TypedChunk::GeoPoints(chunk) = typed_chunk else {
                     unreachable!();
@@ -601,7 +596,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 // convert the key back to a u32 (4 bytes)
                 let docid = key.try_into().map(DocumentId::from_be_bytes).unwrap();
 
-                let deladd_obkv = KvReaderDelAdd::new(value);
+                let deladd_obkv = KvReaderDelAdd::from_slice(value);
                 if let Some(value) = deladd_obkv.get(DelAdd::Deletion) {
                     let geopoint = extract_geo_point(value, docid);
                     rtree.remove(&geopoint);
@@ -620,9 +615,9 @@ pub(crate) fn write_typed_chunk_into_index(
             let span = tracing::trace_span!(target: "indexing::write_db", "vector_points");
             let _entered = span.enter();
 
-            let mut remove_vectors_builder = MergerBuilder::new(keep_first as MergeFn);
-            let mut manual_vectors_builder = MergerBuilder::new(keep_first as MergeFn);
-            let mut embeddings_builder = MergerBuilder::new(keep_first as MergeFn);
+            let mut remove_vectors_builder = MergerBuilder::new(KeepFirst);
+            let mut manual_vectors_builder = MergerBuilder::new(KeepFirst);
+            let mut embeddings_builder = MergerBuilder::new(KeepFirst);
             let mut add_to_user_provided = RoaringBitmap::new();
             let mut remove_from_user_provided = RoaringBitmap::new();
             let mut params = None;
@@ -729,7 +724,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 let (left, _index) = try_split_array_at(key).unwrap();
                 let docid = DocumentId::from_be_bytes(left);
 
-                let vector_deladd_obkv = KvReaderDelAdd::new(value);
+                let vector_deladd_obkv = KvReaderDelAdd::from_slice(value);
                 if let Some(value) = vector_deladd_obkv.get(DelAdd::Deletion) {
                     let vector: Vec<f32> = pod_collect_to_vec(value);
 
@@ -797,9 +792,13 @@ fn extract_geo_point(value: &[u8], docid: DocumentId) -> GeoPoint {
     GeoPoint::new(xyz_point, (docid, point))
 }
 
-fn merge_word_docids_reader_into_fst(
-    merger: Merger<CursorClonableMmap, MergeFn>,
-) -> Result<fst::Set<Vec<u8>>> {
+fn merge_word_docids_reader_into_fst<MF>(
+    merger: Merger<CursorClonableMmap, MF>,
+) -> Result<fst::Set<Vec<u8>>>
+where
+    MF: MergeFunction,
+    crate::Error: From<MF::Error>,
+{
     let mut iter = merger.into_stream_merger_iter()?;
     let mut builder = fst::SetBuilder::memory();
 
@@ -813,8 +812,8 @@ fn merge_word_docids_reader_into_fst(
 /// Write provided entries in database using serialize_value function.
 /// merge_values function is used if an entry already exist in the database.
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::write_db")]
-fn write_entries_into_database<R, K, V, FS, FM>(
-    merger: Merger<R, MergeFn>,
+fn write_entries_into_database<R, K, V, FS, FM, MF>(
+    merger: Merger<R, MF>,
     database: &heed::Database<K, V>,
     wtxn: &mut RwTxn<'_>,
     serialize_value: FS,
@@ -824,6 +823,8 @@ where
     R: io::Read + io::Seek,
     FS: for<'a> Fn(&'a [u8], &'a mut Vec<u8>) -> Result<&'a [u8]>,
     FM: for<'a> Fn(&[u8], &[u8], &'a mut Vec<u8>) -> Result<Option<&'a [u8]>>,
+    MF: MergeFunction,
+    crate::Error: From<MF::Error>,
 {
     let mut buffer = Vec::new();
     let database = database.remap_types::<Bytes, Bytes>();
@@ -850,20 +851,22 @@ where
 /// Akin to the `write_entries_into_database` function but specialized
 /// for the case when we only index additional searchable fields only.
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::write_db")]
-fn write_proximity_entries_into_database_additional_searchables<R>(
-    merger: Merger<R, MergeFn>,
+fn write_proximity_entries_into_database_additional_searchables<R, MF>(
+    merger: Merger<R, MF>,
     database: &heed::Database<U8StrStrCodec, CboRoaringBitmapCodec>,
     wtxn: &mut RwTxn<'_>,
 ) -> Result<()>
 where
     R: io::Read + io::Seek,
+    MF: MergeFunction,
+    crate::Error: From<MF::Error>,
 {
     let mut iter = merger.into_stream_merger_iter()?;
     while let Some((key, value)) = iter.next()? {
         if valid_lmdb_key(key) {
             let (proximity_to_insert, word1, word2) =
                 U8StrStrCodec::bytes_decode(key).map_err(heed::Error::Decoding)?;
-            let data_to_insert = match KvReaderDelAdd::new(value).get(DelAdd::Addition) {
+            let data_to_insert = match KvReaderDelAdd::from_slice(value).get(DelAdd::Addition) {
                 Some(value) => {
                     CboRoaringBitmapCodec::bytes_decode(value).map_err(heed::Error::Decoding)?
                 }

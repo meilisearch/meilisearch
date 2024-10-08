@@ -1,10 +1,8 @@
-use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::{self, BufReader};
 use std::mem::size_of;
-use std::result::Result as StdResult;
 
 use bytemuck::bytes_of;
 use grenad::Sorter;
@@ -15,13 +13,13 @@ use roaring::RoaringBitmap;
 use serde_json::{from_slice, Value};
 use FilterableValues::{Empty, Null, Values};
 
-use super::helpers::{create_sorter, keep_first, sorter_into_reader, GrenadParameters};
+use super::helpers::{create_sorter, sorter_into_reader, GrenadParameters, KeepFirst};
 use crate::error::InternalError;
 use crate::facet::value_encoding::f64_into_bytes;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::index_documents::{create_writer, writer_into_reader};
 use crate::update::settings::InnerIndexSettingsDiff;
-use crate::{CboRoaringBitmapCodec, DocumentId, Error, FieldId, Result, MAX_FACET_VALUE_LENGTH};
+use crate::{CboRoaringBitmapCodec, DocumentId, FieldId, Result, MAX_FACET_VALUE_LENGTH};
 
 /// The length of the elements that are always in the buffer when inserting new values.
 const TRUNCATE_SIZE: usize = size_of::<FieldId>() + size_of::<DocumentId>();
@@ -50,7 +48,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
 
     let mut fid_docid_facet_numbers_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
-        keep_first,
+        KeepFirst,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -59,7 +57,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
 
     let mut fid_docid_facet_strings_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
-        keep_first,
+        KeepFirst,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -83,10 +81,10 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     if !settings_diff.settings_update_only || old_faceted_fids != new_faceted_fids {
         let mut cursor = obkv_documents.into_cursor()?;
         while let Some((docid_bytes, value)) = cursor.move_on_next()? {
-            let obkv = obkv::KvReader::new(value);
+            let obkv = obkv::KvReader::from_slice(value);
             let get_document_json_value = move |field_id, side| {
                 obkv.get(field_id)
-                    .map(KvReaderDelAdd::new)
+                    .map(KvReaderDelAdd::from_slice)
                     .and_then(|kv| kv.get(side))
                     .map(from_slice)
                     .transpose()
@@ -330,15 +328,12 @@ fn truncate_str(s: &str) -> &str {
 
 /// Computes the diff between both Del and Add numbers and
 /// only inserts the parts that differ in the sorter.
-fn insert_numbers_diff<MF>(
-    fid_docid_facet_numbers_sorter: &mut Sorter<MF>,
+fn insert_numbers_diff(
+    fid_docid_facet_numbers_sorter: &mut Sorter<KeepFirst>,
     key_buffer: &mut Vec<u8>,
     mut del_numbers: Vec<f64>,
     mut add_numbers: Vec<f64>,
-) -> Result<()>
-where
-    MF: for<'a> Fn(&[u8], &[Cow<'a, [u8]>]) -> StdResult<Cow<'a, [u8]>, Error>,
-{
+) -> Result<()> {
     // We sort and dedup the float numbers
     del_numbers.sort_unstable_by_key(|f| OrderedFloat(*f));
     add_numbers.sort_unstable_by_key(|f| OrderedFloat(*f));
@@ -390,15 +385,12 @@ where
 
 /// Computes the diff between both Del and Add strings and
 /// only inserts the parts that differ in the sorter.
-fn insert_strings_diff<MF>(
-    fid_docid_facet_strings_sorter: &mut Sorter<MF>,
+fn insert_strings_diff(
+    fid_docid_facet_strings_sorter: &mut Sorter<KeepFirst>,
     key_buffer: &mut Vec<u8>,
     mut del_strings: Vec<(String, String)>,
     mut add_strings: Vec<(String, String)>,
-) -> Result<()>
-where
-    MF: for<'a> Fn(&[u8], &[Cow<'a, [u8]>]) -> StdResult<Cow<'a, [u8]>, Error>,
-{
+) -> Result<()> {
     // We sort and dedup the normalized and original strings
     del_strings.sort_unstable();
     add_strings.sort_unstable();

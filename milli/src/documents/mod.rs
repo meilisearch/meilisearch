@@ -27,7 +27,7 @@ use crate::{FieldId, Object, Result};
 const DOCUMENTS_BATCH_INDEX_KEY: [u8; 8] = u64::MAX.to_be_bytes();
 
 /// Helper function to convert an obkv reader into a JSON object.
-pub fn obkv_to_object(obkv: &KvReader<'_, FieldId>, index: &DocumentsBatchIndex) -> Result<Object> {
+pub fn obkv_to_object(obkv: &KvReader<FieldId>, index: &DocumentsBatchIndex) -> Result<Object> {
     obkv.iter()
         .map(|(field_id, value)| {
             let field_name = index
@@ -76,7 +76,7 @@ impl DocumentsBatchIndex {
         self.0.get_by_right(name).cloned()
     }
 
-    pub fn recreate_json(&self, document: &obkv::KvReaderU16<'_>) -> Result<Object> {
+    pub fn recreate_json(&self, document: &obkv::KvReaderU16) -> Result<Object> {
         let mut map = Object::new();
 
         for (k, v) in document.iter() {

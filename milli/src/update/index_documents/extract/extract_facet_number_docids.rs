@@ -4,7 +4,7 @@ use std::io::{self, BufReader};
 use heed::{BytesDecode, BytesEncode};
 
 use super::helpers::{
-    create_sorter, merge_deladd_cbo_roaring_bitmaps, sorter_into_reader, GrenadParameters,
+    create_sorter, sorter_into_reader, GrenadParameters, MergeDeladdCboRoaringBitmaps,
 };
 use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FieldDocIdFacetF64Codec, OrderedF64Codec,
@@ -27,7 +27,7 @@ pub fn extract_facet_number_docids<R: io::Read + io::Seek>(
 
     let mut facet_number_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,
-        merge_deladd_cbo_roaring_bitmaps,
+        MergeDeladdCboRoaringBitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -45,7 +45,7 @@ pub fn extract_facet_number_docids<R: io::Read + io::Seek>(
 
         buffer.clear();
         let mut obkv = KvWriterDelAdd::new(&mut buffer);
-        for (deladd_key, _) in KvReaderDelAdd::new(deladd_obkv_bytes).iter() {
+        for (deladd_key, _) in KvReaderDelAdd::from_slice(deladd_obkv_bytes).iter() {
             obkv.insert(deladd_key, document_id.to_ne_bytes())?;
         }
         obkv.finish()?;

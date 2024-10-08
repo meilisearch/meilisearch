@@ -109,14 +109,13 @@ impl ParsedVectorsDiff {
     pub fn new(
         docid: DocumentId,
         embedders_configs: &[IndexEmbeddingConfig],
-        documents_diff: KvReader<'_, FieldId>,
+        documents_diff: &KvReader<FieldId>,
         old_vectors_fid: Option<FieldId>,
         new_vectors_fid: Option<FieldId>,
     ) -> Result<Self, Error> {
         let mut old = match old_vectors_fid
             .and_then(|vectors_fid| documents_diff.get(vectors_fid))
-            .map(KvReaderDelAdd::new)
-            .map(|obkv| to_vector_map(obkv, DelAdd::Deletion))
+            .map(|bytes| to_vector_map(bytes.into(), DelAdd::Deletion))
             .transpose()
         {
             Ok(del) => del,
@@ -143,8 +142,7 @@ impl ParsedVectorsDiff {
             let Some(bytes) = documents_diff.get(new_vectors_fid) else {
                 break 'new VectorsState::NoVectorsFieldInDocument;
             };
-            let obkv = KvReaderDelAdd::new(bytes);
-            match to_vector_map(obkv, DelAdd::Addition)? {
+            match to_vector_map(bytes.into(), DelAdd::Addition)? {
                 Some(new) => VectorsState::Vectors(new),
                 None => VectorsState::NoVectorsFieldInDocument,
             }
@@ -239,7 +237,7 @@ impl Error {
 }
 
 fn to_vector_map(
-    obkv: KvReaderDelAdd<'_>,
+    obkv: &KvReaderDelAdd,
     side: DelAdd,
 ) -> Result<Option<BTreeMap<String, Vectors>>, Error> {
     Ok(if let Some(value) = obkv.get(side) {

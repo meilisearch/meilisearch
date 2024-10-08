@@ -5,14 +5,13 @@ use std::io::{self, BufReader};
 use obkv::KvReaderU16;
 
 use super::helpers::{
-    create_sorter, merge_deladd_cbo_roaring_bitmaps, sorter_into_reader, try_split_array_at,
-    GrenadParameters,
+    create_sorter, sorter_into_reader, try_split_array_at, GrenadParameters,
+    MergeDeladdCboRoaringBitmaps,
 };
 use crate::error::SerializationError;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::settings::InnerIndexSettingsDiff;
-use crate::update::MergeFn;
 use crate::{bucketed_position, DocumentId, Result};
 
 /// Extracts the word positions and the documents ids where this word appear.
@@ -29,7 +28,7 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
 
     let mut word_position_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,
-        merge_deladd_cbo_roaring_bitmaps,
+        MergeDeladdCboRoaringBitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -60,10 +59,10 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
 
         current_document_id = Some(document_id);
 
-        let del_add_reader = KvReaderDelAdd::new(value);
+        let del_add_reader = KvReaderDelAdd::from_slice(value);
         // extract all unique words to remove.
         if let Some(deletion) = del_add_reader.get(DelAdd::Deletion) {
-            for (position, word_bytes) in KvReaderU16::new(deletion).iter() {
+            for (position, word_bytes) in KvReaderU16::from_slice(deletion).iter() {
                 let position = bucketed_position(position);
                 del_word_positions.insert((position, word_bytes.to_vec()));
             }
@@ -71,7 +70,7 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
 
         // extract all unique additional words.
         if let Some(addition) = del_add_reader.get(DelAdd::Addition) {
-            for (position, word_bytes) in KvReaderU16::new(addition).iter() {
+            for (position, word_bytes) in KvReaderU16::from_slice(addition).iter() {
                 let position = bucketed_position(position);
                 add_word_positions.insert((position, word_bytes.to_vec()));
             }
@@ -100,7 +99,7 @@ fn words_position_into_sorter(
     key_buffer: &mut Vec<u8>,
     del_word_positions: &BTreeSet<(u16, Vec<u8>)>,
     add_word_positions: &BTreeSet<(u16, Vec<u8>)>,
-    word_position_docids_sorter: &mut grenad::Sorter<MergeFn>,
+    word_position_docids_sorter: &mut grenad::Sorter<MergeDeladdCboRoaringBitmaps>,
 ) -> Result<()> {
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};

@@ -8,7 +8,7 @@ use obkv::{KvReader, KvWriterU16};
 use roaring::RoaringBitmap;
 use serde_json::Value;
 
-use super::helpers::{create_sorter, keep_latest_obkv, sorter_into_reader, GrenadParameters};
+use super::helpers::{create_sorter, sorter_into_reader, GrenadParameters, KeepLatestObkv};
 use crate::error::{InternalError, SerializationError};
 use crate::update::del_add::{del_add_from_two_obkvs, DelAdd, KvReaderDelAdd};
 use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
@@ -35,7 +35,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     let mut documents_ids = RoaringBitmap::new();
     let mut docid_word_positions_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
-        keep_latest_obkv,
+        KeepLatestObkv,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -80,10 +80,10 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
             .try_into()
             .map(u32::from_be_bytes)
             .map_err(|_| SerializationError::InvalidNumberSerialization)?;
-        let obkv = KvReader::<FieldId>::new(value);
+        let obkv = KvReader::<FieldId>::from_slice(value);
 
         // if the searchable fields didn't change, skip the searchable indexing for this document.
-        if !force_reindexing && !searchable_fields_changed(&obkv, settings_diff) {
+        if !force_reindexing && !searchable_fields_changed(obkv, settings_diff) {
             continue;
         }
 
@@ -98,7 +98,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
             || {
                 // deletions
                 tokens_from_document(
-                    &obkv,
+                    obkv,
                     &settings_diff.old,
                     &del_tokenizer,
                     max_positions_per_attributes,
@@ -109,7 +109,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
             || {
                 // additions
                 tokens_from_document(
-                    &obkv,
+                    obkv,
                     &settings_diff.new,
                     &add_tokenizer,
                     max_positions_per_attributes,
@@ -126,13 +126,13 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         // transforming two KV<FieldId, KV<u16, String>> into one KV<FieldId, KV<DelAdd, KV<u16, String>>>
         value_buffer.clear();
         del_add_from_two_obkvs(
-            &KvReader::<FieldId>::new(del_obkv),
-            &KvReader::<FieldId>::new(add_obkv),
+            KvReader::<FieldId>::from_slice(del_obkv),
+            KvReader::<FieldId>::from_slice(add_obkv),
             &mut value_buffer,
         )?;
 
         // write each KV<DelAdd, KV<u16, String>> into the sorter, field by field.
-        let obkv = KvReader::<FieldId>::new(&value_buffer);
+        let obkv = KvReader::<FieldId>::from_slice(&value_buffer);
         for (field_id, value) in obkv.iter() {
             key_buffer.truncate(mem::size_of::<u32>());
             key_buffer.extend_from_slice(&field_id.to_be_bytes());
@@ -146,13 +146,13 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
 
 /// Check if any searchable fields of a document changed.
 fn searchable_fields_changed(
-    obkv: &KvReader<'_, FieldId>,
+    obkv: &KvReader<FieldId>,
     settings_diff: &InnerIndexSettingsDiff,
 ) -> bool {
     let searchable_fields = &settings_diff.new.searchable_fields_ids;
     for (field_id, field_bytes) in obkv.iter() {
         if searchable_fields.contains(&field_id) {
-            let del_add = KvReaderDelAdd::new(field_bytes);
+            let del_add = KvReaderDelAdd::from_slice(field_bytes);
             match (del_add.get(DelAdd::Deletion), del_add.get(DelAdd::Addition)) {
                 // if both fields are None, check the next field.
                 (None, None) => (),
@@ -189,7 +189,7 @@ fn tokenizer_builder<'a>(
 
 /// Extract words mapped with their positions of a document.
 fn tokens_from_document<'a>(
-    obkv: &KvReader<'a, FieldId>,
+    obkv: &'a KvReader<FieldId>,
     settings: &InnerIndexSettings,
     tokenizer: &Tokenizer<'_>,
     max_positions_per_attributes: u32,
@@ -202,7 +202,7 @@ fn tokens_from_document<'a>(
         // if field is searchable.
         if settings.searchable_fields_ids.contains(&field_id) {
             // extract deletion or addition only.
-            if let Some(field_bytes) = KvReaderDelAdd::new(field_bytes).get(del_add) {
+            if let Some(field_bytes) = KvReaderDelAdd::from_slice(field_bytes).get(del_add) {
                 // parse json.
                 let value =
                     serde_json::from_slice(field_bytes).map_err(InternalError::SerdeJson)?;

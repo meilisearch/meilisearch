@@ -86,12 +86,11 @@ use time::OffsetDateTime;
 use tracing::debug;
 
 use self::incremental::FacetsUpdateIncremental;
-use super::FacetsUpdateBulk;
+use super::{FacetsUpdateBulk, MergeDeladdBtreesetString, MergeDeladdCboRoaringBitmaps};
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec};
 use crate::heed_codec::BytesRefCodec;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd};
-use crate::update::MergeFn;
 use crate::{try_split_array_at, FieldId, Index, Result};
 
 pub mod bulk;
@@ -105,8 +104,8 @@ pub struct FacetsUpdate<'i> {
     index: &'i Index,
     database: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     facet_type: FacetType,
-    delta_data: Merger<BufReader<File>, MergeFn>,
-    normalized_delta_data: Option<Merger<BufReader<File>, MergeFn>>,
+    delta_data: Merger<BufReader<File>, MergeDeladdCboRoaringBitmaps>,
+    normalized_delta_data: Option<Merger<BufReader<File>, MergeDeladdBtreesetString>>,
     group_size: u8,
     max_group_size: u8,
     min_level_size: u8,
@@ -116,8 +115,8 @@ impl<'i> FacetsUpdate<'i> {
     pub fn new(
         index: &'i Index,
         facet_type: FacetType,
-        delta_data: Merger<BufReader<File>, MergeFn>,
-        normalized_delta_data: Option<Merger<BufReader<File>, MergeFn>>,
+        delta_data: Merger<BufReader<File>, MergeDeladdCboRoaringBitmaps>,
+        normalized_delta_data: Option<Merger<BufReader<File>, MergeDeladdBtreesetString>>,
         data_size: u64,
     ) -> Self {
         let database = match facet_type {
@@ -182,12 +181,12 @@ impl<'i> FacetsUpdate<'i> {
 
 fn index_facet_search(
     wtxn: &mut heed::RwTxn<'_>,
-    normalized_delta_data: Merger<BufReader<File>, MergeFn>,
+    normalized_delta_data: Merger<BufReader<File>, MergeDeladdBtreesetString>,
     index: &Index,
 ) -> Result<()> {
     let mut iter = normalized_delta_data.into_stream_merger_iter()?;
     while let Some((key_bytes, delta_bytes)) = iter.next()? {
-        let deladd_reader = KvReaderDelAdd::new(delta_bytes);
+        let deladd_reader = KvReaderDelAdd::from_slice(delta_bytes);
 
         let database_set = index
             .facet_id_normalized_string_strings
@@ -298,8 +297,8 @@ pub(crate) mod test_helpers {
     use crate::search::facet::get_highest_level;
     use crate::snapshot_tests::display_bitmap;
     use crate::update::del_add::{DelAdd, KvWriterDelAdd};
-    use crate::update::index_documents::merge_deladd_cbo_roaring_bitmaps;
-    use crate::update::{FacetsUpdateIncrementalInner, MergeFn};
+    use crate::update::index_documents::MergeDeladdCboRoaringBitmaps;
+    use crate::update::FacetsUpdateIncrementalInner;
     use crate::CboRoaringBitmapCodec;
 
     /// Utility function to generate a string whose position in a lexicographically
@@ -484,7 +483,7 @@ pub(crate) mod test_helpers {
             }
             writer.finish().unwrap();
             let reader = grenad::Reader::new(std::io::Cursor::new(new_data)).unwrap();
-            let mut builder = MergerBuilder::new(merge_deladd_cbo_roaring_bitmaps as MergeFn);
+            let mut builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
             builder.push(reader.into_cursor().unwrap());
             let merger = builder.build();
 

@@ -28,6 +28,9 @@ use meilisearch_types::error::Code;
 use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
 use meilisearch_types::milli::heed::CompactionOption;
+use meilisearch_types::milli::update::new::indexer::{
+    self, retrieve_or_guess_primary_key, DocumentChanges,
+};
 use meilisearch_types::milli::update::{
     IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings as MilliSettings,
 };
@@ -875,10 +878,8 @@ impl IndexScheduler {
                             while let Some(doc) =
                                 cursor.next_document().map_err(milli::Error::from)?
                             {
-                                dump_content_file.push_document(&obkv_to_object(
-                                    &doc,
-                                    &documents_batch_index,
-                                )?)?;
+                                dump_content_file
+                                    .push_document(&obkv_to_object(doc, &documents_batch_index)?)?;
                             }
                             dump_content_file.flush()?;
                         }
@@ -1252,58 +1253,52 @@ impl IndexScheduler {
                 let must_stop_processing = self.must_stop_processing.clone();
                 let indexer_config = self.index_mapper.indexer_config();
 
-                if let Some(primary_key) = primary_key {
-                    match index.primary_key(index_wtxn)? {
-                        // if a primary key was set AND had already been defined in the index
-                        // but to a different value, we can make the whole batch fail.
-                        Some(pk) => {
-                            if primary_key != pk {
-                                return Err(milli::Error::from(
-                                    milli::UserError::PrimaryKeyCannotBeChanged(pk.to_string()),
-                                )
-                                .into());
-                            }
-                        }
-                        // if the primary key was set and there was no primary key set for this index
-                        // we set it to the received value before starting the indexing process.
-                        None => {
-                            let mut builder =
-                                milli::update::Settings::new(index_wtxn, index, indexer_config);
-                            builder.set_primary_key(primary_key);
-                            builder.execute(
-                                |indexing_step| tracing::debug!(update = ?indexing_step),
-                                || must_stop_processing.clone().get(),
-                            )?;
-                            primary_key_has_been_set = true;
+                /// TODO manage errors correctly
+                let rtxn = index.read_txn()?;
+                let first_addition_uuid = operations
+                    .iter()
+                    .find_map(|op| match op {
+                        DocumentOperation::Add(content_uuid) => Some(content_uuid),
+                        _ => None,
+                    })
+                    .unwrap();
+
+                let mut content_files = Vec::new();
+                for operation in &operations {
+                    if let DocumentOperation::Add(content_uuid) = operation {
+                        let content_file = self.file_store.get_update(*content_uuid)?;
+                        let mmap = unsafe { memmap2::Mmap::map(&content_file)? };
+                        if !mmap.is_empty() {
+                            content_files.push(mmap);
                         }
                     }
                 }
 
-                let config = IndexDocumentsConfig { update_method: method, ..Default::default() };
+                let mut fields_ids_map = index.fields_ids_map(&rtxn)?;
+                let first_document = match content_files.first() {
+                    Some(mmap) => {
+                        let mut iter = serde_json::Deserializer::from_slice(mmap).into_iter();
+                        iter.next().transpose().map_err(|e| e.into()).map_err(Error::IoError)?
+                    }
+                    None => None,
+                };
 
-                let embedder_configs = index.embedding_configs(index_wtxn)?;
-                // TODO: consider Arc'ing the map too (we only need read access + we'll be cloning it multiple times, so really makes sense)
-                let embedders = self.embedders(embedder_configs)?;
-
-                let mut builder = milli::update::IndexDocuments::new(
-                    index_wtxn,
+                let primary_key = retrieve_or_guess_primary_key(
+                    &rtxn,
                     index,
-                    indexer_config,
-                    config,
-                    |indexing_step| tracing::trace!(?indexing_step, "Update"),
-                    || must_stop_processing.get(),
-                )?;
+                    &mut fields_ids_map,
+                    first_document.as_ref(),
+                )?
+                .unwrap();
 
+                let mut content_files_iter = content_files.iter();
+                let mut indexer = indexer::DocumentOperation::new(method);
                 for (operation, task) in operations.into_iter().zip(tasks.iter_mut()) {
                     match operation {
-                        DocumentOperation::Add(content_uuid) => {
-                            let content_file = self.file_store.get_update(content_uuid)?;
-                            let reader = DocumentsBatchReader::from_reader(content_file)
-                                .map_err(milli::Error::from)?;
-                            let (new_builder, user_result) = builder.add_documents(reader)?;
-                            builder = new_builder;
-
-                            builder = builder.with_embedders(embedders.clone());
+                        DocumentOperation::Add(_content_uuid) => {
+                            let mmap = content_files_iter.next().unwrap();
+                            let stats = indexer.add_documents(mmap)?;
+                            // builder = builder.with_embedders(embedders.clone());
 
                             let received_documents =
                                 if let Some(Details::DocumentAdditionOrUpdate {
@@ -1317,30 +1312,17 @@ impl IndexScheduler {
                                     unreachable!();
                                 };
 
-                            match user_result {
-                                Ok(count) => {
-                                    task.status = Status::Succeeded;
-                                    task.details = Some(Details::DocumentAdditionOrUpdate {
-                                        received_documents,
-                                        indexed_documents: Some(count),
-                                    })
-                                }
-                                Err(e) => {
-                                    task.status = Status::Failed;
-                                    task.details = Some(Details::DocumentAdditionOrUpdate {
-                                        received_documents,
-                                        indexed_documents: Some(0),
-                                    });
-                                    task.error = Some(milli::Error::from(e).into());
-                                }
-                            }
+                            task.status = Status::Succeeded;
+                            task.details = Some(Details::DocumentAdditionOrUpdate {
+                                received_documents,
+                                indexed_documents: Some(stats.document_count as u64),
+                            })
                         }
                         DocumentOperation::Delete(document_ids) => {
-                            let (new_builder, user_result) =
-                                builder.remove_documents(document_ids)?;
-                            builder = new_builder;
+                            let count = document_ids.len();
+                            indexer.delete_documents(document_ids);
                             // Uses Invariant: remove documents actually always returns Ok for the inner result
-                            let count = user_result.unwrap();
+                            // let count = user_result.unwrap();
                             let provided_ids =
                                 if let Some(Details::DocumentDeletion { provided_ids, .. }) =
                                     task.details
@@ -1354,26 +1336,35 @@ impl IndexScheduler {
                             task.status = Status::Succeeded;
                             task.details = Some(Details::DocumentDeletion {
                                 provided_ids,
-                                deleted_documents: Some(count),
+                                deleted_documents: Some(count as u64),
                             });
                         }
                     }
                 }
 
                 if !tasks.iter().all(|res| res.error.is_some()) {
-                    let addition = builder.execute()?;
-                    tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
-                } else if primary_key_has_been_set {
-                    // Everything failed but we've set a primary key.
-                    // We need to remove it.
-                    let mut builder =
-                        milli::update::Settings::new(index_wtxn, index, indexer_config);
-                    builder.reset_primary_key();
-                    builder.execute(
-                        |indexing_step| tracing::trace!(update = ?indexing_step),
-                        || must_stop_processing.clone().get(),
-                    )?;
+                    /// TODO create a pool if needed
+                    // let pool = indexer_config.thread_pool.unwrap();
+                    let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
+
+                    let param = (index, &rtxn, &primary_key);
+                    let document_changes = indexer.document_changes(&mut fields_ids_map, param)?;
+                    /// TODO pass/write the FieldsIdsMap
+                    indexer::index(index_wtxn, index, fields_ids_map, &pool, document_changes)?;
+
+                    // tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
                 }
+                // else if primary_key_has_been_set {
+                //     // Everything failed but we've set a primary key.
+                //     // We need to remove it.
+                //     let mut builder =
+                //         milli::update::Settings::new(index_wtxn, index, indexer_config);
+                //     builder.reset_primary_key();
+                //     builder.execute(
+                //         |indexing_step| tracing::trace!(update = ?indexing_step),
+                //         || must_stop_processing.clone().get(),
+                //     )?;
+                // }
 
                 Ok(tasks)
             }
@@ -1509,26 +1500,35 @@ impl IndexScheduler {
                     }
                 }
 
-                let config = IndexDocumentsConfig {
-                    update_method: IndexDocumentsMethod::ReplaceDocuments,
-                    ..Default::default()
-                };
+                let rtxn = index.read_txn()?;
+                let mut fields_ids_map = index.fields_ids_map(&rtxn)?;
 
-                let must_stop_processing = self.must_stop_processing.clone();
-                let mut builder = milli::update::IndexDocuments::new(
-                    index_wtxn,
-                    index,
-                    self.index_mapper.indexer_config(),
-                    config,
-                    |indexing_step| tracing::debug!(update = ?indexing_step),
-                    || must_stop_processing.get(),
-                )?;
+                let primary_key =
+                    retrieve_or_guess_primary_key(&rtxn, index, &mut fields_ids_map, None)?
+                        .unwrap();
 
-                let (new_builder, _count) =
-                    builder.remove_documents_from_db_no_batch(&to_delete)?;
-                builder = new_builder;
+                if !tasks.iter().all(|res| res.error.is_some()) {
+                    /// TODO create a pool if needed
+                    // let pool = indexer_config.thread_pool.unwrap();
+                    let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
 
-                let _ = builder.execute()?;
+                    let param = (index, &fields_ids_map, &primary_key);
+                    let mut indexer = indexer::DocumentDeletion::new();
+                    indexer.delete_documents_by_docids(to_delete);
+                    /// TODO remove this fields-ids-map, it's useless for the deletion pipeline (the &mut cloned one).
+                    let document_changes =
+                        indexer.document_changes(&mut fields_ids_map.clone(), param)?;
+                    /// TODO pass/write the FieldsIdsMap
+                    indexer::index(
+                        index_wtxn,
+                        index,
+                        fields_ids_map.clone(),
+                        &pool,
+                        document_changes,
+                    )?;
+
+                    // tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
+                }
 
                 Ok(tasks)
             }

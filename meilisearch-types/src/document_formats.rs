@@ -1,20 +1,22 @@
 use std::fmt::{self, Debug, Display};
 use std::fs::File;
-use std::io::{self, BufWriter, Write};
+use std::io::{self, BufWriter};
 use std::marker::PhantomData;
 
-use memmap2::MmapOptions;
-use milli::documents::{DocumentsBatchBuilder, Error};
+use memmap2::Mmap;
+use milli::documents::Error;
+use milli::update::new::TopLevelMap;
 use milli::Object;
 use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_json::error::Category;
+use serde_json::{to_writer, Map, Value};
 
 use crate::error::{Code, ErrorCode};
 
 type Result<T> = std::result::Result<T, DocumentFormatError>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum PayloadType {
     Ndjson,
     Json,
@@ -88,6 +90,26 @@ impl From<(PayloadType, Error)> for DocumentFormatError {
     }
 }
 
+impl From<(PayloadType, serde_json::Error)> for DocumentFormatError {
+    fn from((ty, error): (PayloadType, serde_json::Error)) -> Self {
+        if error.classify() == Category::Data {
+            Self::Io(error.into())
+        } else {
+            Self::MalformedPayload(Error::Json(error), ty)
+        }
+    }
+}
+
+impl From<(PayloadType, csv::Error)> for DocumentFormatError {
+    fn from((ty, error): (PayloadType, csv::Error)) -> Self {
+        if error.is_io_error() {
+            Self::Io(error.into())
+        } else {
+            Self::MalformedPayload(Error::Csv(error), ty)
+        }
+    }
+}
+
 impl From<io::Error> for DocumentFormatError {
     fn from(error: io::Error) -> Self {
         Self::Io(error)
@@ -103,67 +125,140 @@ impl ErrorCode for DocumentFormatError {
     }
 }
 
-/// Reads CSV from input and write an obkv batch to writer.
-pub fn read_csv(file: &File, writer: impl Write, delimiter: u8) -> Result<u64> {
-    let mut builder = DocumentsBatchBuilder::new(BufWriter::new(writer));
-    let mmap = unsafe { MmapOptions::new().map(file)? };
-    let csv = csv::ReaderBuilder::new().delimiter(delimiter).from_reader(mmap.as_ref());
-    builder.append_csv(csv).map_err(|e| (PayloadType::Csv { delimiter }, e))?;
-
-    let count = builder.documents_count();
-    let _ = builder.into_inner().map_err(DocumentFormatError::Io)?;
-
-    Ok(count as u64)
+// TODO remove that from the place I've borrowed it
+#[derive(Debug)]
+enum AllowedType {
+    String,
+    Boolean,
+    Number,
 }
 
-/// Reads JSON from temporary file and write an obkv batch to writer.
-pub fn read_json(file: &File, writer: impl Write) -> Result<u64> {
-    let mut builder = DocumentsBatchBuilder::new(BufWriter::new(writer));
-    let mmap = unsafe { MmapOptions::new().map(file)? };
-    let mut deserializer = serde_json::Deserializer::from_slice(&mmap);
+fn parse_csv_header(header: &str) -> (&str, AllowedType) {
+    // if there are several separators we only split on the last one.
+    match header.rsplit_once(':') {
+        Some((field_name, field_type)) => match field_type {
+            "string" => (field_name, AllowedType::String),
+            "boolean" => (field_name, AllowedType::Boolean),
+            "number" => (field_name, AllowedType::Number),
+            // if the pattern isn't recognized, we keep the whole field.
+            _otherwise => (header, AllowedType::String),
+        },
+        None => (header, AllowedType::String),
+    }
+}
 
-    match array_each(&mut deserializer, |obj| builder.append_json_object(&obj)) {
+/// Reads CSV from file and write it in NDJSON in a file checking it along the way.
+pub fn read_csv(input: &File, output: impl io::Write, delimiter: u8) -> Result<u64> {
+    let ptype = PayloadType::Csv { delimiter };
+    let mut output = BufWriter::new(output);
+    let mut reader = csv::ReaderBuilder::new().delimiter(delimiter).from_reader(input);
+
+    let headers = reader.headers().map_err(|e| DocumentFormatError::from((ptype, e)))?.clone();
+    let typed_fields: Vec<_> = headers.iter().map(parse_csv_header).collect();
+    let mut object: Map<_, _> =
+        typed_fields.iter().map(|(k, _)| (k.to_string(), Value::Null)).collect();
+
+    let mut line = 0;
+    let mut record = csv::StringRecord::new();
+    while reader.read_record(&mut record).map_err(|e| DocumentFormatError::from((ptype, e)))? {
+        // We increment here and not at the end of the loop
+        // to take the header offset into account.
+        line += 1;
+
+        // Reset the document values
+        object.iter_mut().for_each(|(_, v)| *v = Value::Null);
+
+        for (i, (name, atype)) in typed_fields.iter().enumerate() {
+            let value = &record[i];
+            let trimmed_value = value.trim();
+            let value = match atype {
+                AllowedType::Number if trimmed_value.is_empty() => Value::Null,
+                AllowedType::Number => match trimmed_value.parse::<i64>() {
+                    Ok(integer) => Value::from(integer),
+                    Err(_) => match trimmed_value.parse::<f64>() {
+                        Ok(float) => Value::from(float),
+                        Err(error) => {
+                            return Err(DocumentFormatError::MalformedPayload(
+                                Error::ParseFloat { error, line, value: value.to_string() },
+                                ptype,
+                            ))
+                        }
+                    },
+                },
+                AllowedType::Boolean if trimmed_value.is_empty() => Value::Null,
+                AllowedType::Boolean => match trimmed_value.parse::<bool>() {
+                    Ok(bool) => Value::from(bool),
+                    Err(error) => {
+                        return Err(DocumentFormatError::MalformedPayload(
+                            Error::ParseBool { error, line, value: value.to_string() },
+                            ptype,
+                        ))
+                    }
+                },
+                AllowedType::String if value.is_empty() => Value::Null,
+                AllowedType::String => Value::from(value),
+            };
+
+            *object.get_mut(*name).expect("encountered an unknown field") = value;
+        }
+
+        to_writer(&mut output, &object).map_err(|e| DocumentFormatError::from((ptype, e)))?;
+    }
+
+    Ok(line as u64)
+}
+
+/// Reads JSON from file and write it in NDJSON in a file checking it along the way.
+pub fn read_json(input: &File, output: impl io::Write) -> Result<u64> {
+    // We memory map to be able to deserailize into a TopLevelMap<'pl> that
+    // does not allocate when possible and only materialize the first/top level.
+    let input = unsafe { Mmap::map(input).map_err(DocumentFormatError::Io)? };
+
+    let mut out = BufWriter::new(output);
+    let mut deserializer = serde_json::Deserializer::from_slice(&input);
+    let count = match array_each(&mut deserializer, |obj: TopLevelMap| to_writer(&mut out, &obj)) {
         // The json data has been deserialized and does not need to be processed again.
         // The data has been transferred to the writer during the deserialization process.
-        Ok(Ok(_)) => (),
-        Ok(Err(e)) => return Err(DocumentFormatError::Io(e)),
+        Ok(Ok(count)) => count,
+        Ok(Err(e)) => return Err(DocumentFormatError::from((PayloadType::Json, e))),
         Err(e) => {
             // Attempt to deserialize a single json string when the cause of the exception is not Category.data
             // Other types of deserialisation exceptions are returned directly to the front-end
-            if e.classify() != serde_json::error::Category::Data {
-                return Err(DocumentFormatError::MalformedPayload(
-                    Error::Json(e),
-                    PayloadType::Json,
-                ));
+            if e.classify() != Category::Data {
+                return Err(DocumentFormatError::from((PayloadType::Json, e)));
             }
 
-            let content: Object = serde_json::from_slice(&mmap)
+            let content: Object = serde_json::from_slice(&input)
                 .map_err(Error::Json)
                 .map_err(|e| (PayloadType::Json, e))?;
-            builder.append_json_object(&content).map_err(DocumentFormatError::Io)?;
+            to_writer(&mut out, &content)
+                .map(|_| 1)
+                .map_err(|e| DocumentFormatError::from((PayloadType::Json, e)))?
         }
+    };
+
+    match out.into_inner() {
+        Ok(_) => Ok(count),
+        Err(ie) => Err(DocumentFormatError::Io(ie.into_error())),
     }
-
-    let count = builder.documents_count();
-    let _ = builder.into_inner().map_err(DocumentFormatError::Io)?;
-
-    Ok(count as u64)
 }
 
-/// Reads JSON from temporary file  and write an obkv batch to writer.
-pub fn read_ndjson(file: &File, writer: impl Write) -> Result<u64> {
-    let mut builder = DocumentsBatchBuilder::new(BufWriter::new(writer));
-    let mmap = unsafe { MmapOptions::new().map(file)? };
+/// Reads NDJSON from file and write it in NDJSON in a file checking it along the way.
+pub fn read_ndjson(input: &File, output: impl io::Write) -> Result<u64> {
+    // We memory map to be able to deserailize into a TopLevelMap<'pl> that
+    // does not allocate when possible and only materialize the first/top level.
+    let input = unsafe { Mmap::map(input).map_err(DocumentFormatError::Io)? };
+    let mut output = BufWriter::new(output);
 
-    for result in serde_json::Deserializer::from_slice(&mmap).into_iter() {
-        let object = result.map_err(Error::Json).map_err(|e| (PayloadType::Ndjson, e))?;
-        builder.append_json_object(&object).map_err(Into::into).map_err(DocumentFormatError::Io)?;
+    let mut count = 0;
+    for result in serde_json::Deserializer::from_slice(&input).into_iter() {
+        count += 1;
+        result
+            .and_then(|map: TopLevelMap| to_writer(&mut output, &map))
+            .map_err(|e| DocumentFormatError::from((PayloadType::Ndjson, e)))?;
     }
 
-    let count = builder.documents_count();
-    let _ = builder.into_inner().map_err(Into::into).map_err(DocumentFormatError::Io)?;
-
-    Ok(count as u64)
+    Ok(count)
 }
 
 /// The actual handling of the deserialization process in serde
@@ -172,20 +267,23 @@ pub fn read_ndjson(file: &File, writer: impl Write) -> Result<u64> {
 /// ## References
 /// <https://serde.rs/stream-array.html>
 /// <https://github.com/serde-rs/json/issues/160>
-fn array_each<'de, D, T, F>(deserializer: D, f: F) -> std::result::Result<io::Result<u64>, D::Error>
+fn array_each<'de, D, T, F>(
+    deserializer: D,
+    f: F,
+) -> std::result::Result<serde_json::Result<u64>, D::Error>
 where
     D: Deserializer<'de>,
     T: Deserialize<'de>,
-    F: FnMut(T) -> io::Result<()>,
+    F: FnMut(T) -> serde_json::Result<()>,
 {
     struct SeqVisitor<T, F>(F, PhantomData<T>);
 
     impl<'de, T, F> Visitor<'de> for SeqVisitor<T, F>
     where
         T: Deserialize<'de>,
-        F: FnMut(T) -> io::Result<()>,
+        F: FnMut(T) -> serde_json::Result<()>,
     {
-        type Value = io::Result<u64>;
+        type Value = serde_json::Result<u64>;
 
         fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
             formatter.write_str("a nonempty sequence")
@@ -194,7 +292,7 @@ where
         fn visit_seq<A>(
             mut self,
             mut seq: A,
-        ) -> std::result::Result<io::Result<u64>, <A as SeqAccess<'de>>::Error>
+        ) -> std::result::Result<serde_json::Result<u64>, <A as SeqAccess<'de>>::Error>
         where
             A: SeqAccess<'de>,
         {
@@ -203,7 +301,7 @@ where
                 match self.0(value) {
                     Ok(()) => max += 1,
                     Err(e) => return Ok(Err(e)),
-                };
+                }
             }
             Ok(Ok(max))
         }

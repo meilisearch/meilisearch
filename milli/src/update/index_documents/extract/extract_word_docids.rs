@@ -7,8 +7,8 @@ use obkv::KvReaderU16;
 use roaring::RoaringBitmap;
 
 use super::helpers::{
-    create_sorter, create_writer, merge_deladd_cbo_roaring_bitmaps, try_split_array_at,
-    writer_into_reader, GrenadParameters,
+    create_sorter, create_writer, try_split_array_at, writer_into_reader, GrenadParameters,
+    MergeDeladdCboRoaringBitmaps,
 };
 use crate::error::SerializationError;
 use crate::heed_codec::StrBEU16Codec;
@@ -16,7 +16,6 @@ use crate::index::db_name::DOCID_WORD_POSITIONS;
 use crate::update::del_add::{is_noop_del_add_obkv, DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::index_documents::helpers::sorter_into_reader;
 use crate::update::settings::InnerIndexSettingsDiff;
-use crate::update::MergeFn;
 use crate::{CboRoaringBitmapCodec, DocumentId, FieldId, Result};
 
 /// Extracts the word and the documents ids where this word appear.
@@ -40,7 +39,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
 
     let mut word_fid_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,
-        merge_deladd_cbo_roaring_bitmaps,
+        MergeDeladdCboRoaringBitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -58,17 +57,17 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         let document_id = u32::from_be_bytes(document_id_bytes);
         let fid = u16::from_be_bytes(fid_bytes);
 
-        let del_add_reader = KvReaderDelAdd::new(value);
+        let del_add_reader = KvReaderDelAdd::from_slice(value);
         // extract all unique words to remove.
         if let Some(deletion) = del_add_reader.get(DelAdd::Deletion) {
-            for (_pos, word) in KvReaderU16::new(deletion).iter() {
+            for (_pos, word) in KvReaderU16::from_slice(deletion).iter() {
                 del_words.insert(word.to_vec());
             }
         }
 
         // extract all unique additional words.
         if let Some(addition) = del_add_reader.get(DelAdd::Addition) {
-            for (_pos, word) in KvReaderU16::new(addition).iter() {
+            for (_pos, word) in KvReaderU16::from_slice(addition).iter() {
                 add_words.insert(word.to_vec());
             }
         }
@@ -94,7 +93,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
 
     let mut word_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,
-        merge_deladd_cbo_roaring_bitmaps,
+        MergeDeladdCboRoaringBitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -103,7 +102,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
 
     let mut exact_word_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,
-        merge_deladd_cbo_roaring_bitmaps,
+        MergeDeladdCboRoaringBitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -115,7 +114,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     // NOTE: replacing sorters by bitmap merging is less efficient, so, use sorters.
     while let Some((key, value)) = iter.next()? {
         // only keep the value if their is a change to apply in the DB.
-        if !is_noop_del_add_obkv(KvReaderDelAdd::new(value)) {
+        if !is_noop_del_add_obkv(KvReaderDelAdd::from_slice(value)) {
             word_fid_docids_writer.insert(key, value)?;
         }
 
@@ -123,7 +122,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
             .map_err(|_| SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
 
         // merge all deletions
-        let obkv = KvReaderDelAdd::new(value);
+        let obkv = KvReaderDelAdd::from_slice(value);
         if let Some(value) = obkv.get(DelAdd::Deletion) {
             let delete_from_exact = settings_diff.old.exact_attributes.contains(&fid);
             buffer.clear();
@@ -163,7 +162,7 @@ fn words_into_sorter(
     key_buffer: &mut Vec<u8>,
     del_words: &BTreeSet<Vec<u8>>,
     add_words: &BTreeSet<Vec<u8>>,
-    word_fid_docids_sorter: &mut grenad::Sorter<MergeFn>,
+    word_fid_docids_sorter: &mut grenad::Sorter<MergeDeladdCboRoaringBitmaps>,
 ) -> Result<()> {
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};

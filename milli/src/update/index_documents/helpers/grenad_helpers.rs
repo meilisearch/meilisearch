@@ -1,11 +1,10 @@
-use std::borrow::Cow;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Seek};
 
-use grenad::{CompressionType, Sorter};
+use grenad::{CompressionType, MergeFunction, Sorter};
 use heed::types::Bytes;
 
-use super::{ClonableMmap, MergeFn};
+use super::ClonableMmap;
 use crate::update::index_documents::valid_lmdb_key;
 use crate::Result;
 
@@ -31,14 +30,14 @@ pub fn create_writer<R: io::Write>(
 /// A helper function that creates a grenad sorter
 /// with the given parameters. The max memory is
 /// clamped to something reasonable.
-pub fn create_sorter(
+pub fn create_sorter<MF: MergeFunction>(
     sort_algorithm: grenad::SortAlgorithm,
-    merge: MergeFn,
+    merge: MF,
     chunk_compression_type: grenad::CompressionType,
     chunk_compression_level: Option<u32>,
     max_nb_chunks: Option<usize>,
     max_memory: Option<usize>,
-) -> grenad::Sorter<MergeFn> {
+) -> grenad::Sorter<MF> {
     let mut builder = grenad::Sorter::builder(merge);
     builder.chunk_compression_type(chunk_compression_type);
     if let Some(level) = chunk_compression_level {
@@ -57,10 +56,14 @@ pub fn create_sorter(
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::grenad")]
-pub fn sorter_into_reader(
-    sorter: grenad::Sorter<MergeFn>,
+pub fn sorter_into_reader<MF>(
+    sorter: grenad::Sorter<MF>,
     indexer: GrenadParameters,
-) -> Result<grenad::Reader<BufReader<File>>> {
+) -> Result<grenad::Reader<BufReader<File>>>
+where
+    MF: MergeFunction,
+    crate::Error: From<MF::Error>,
+{
     let mut writer = create_writer(
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
@@ -169,8 +172,8 @@ pub fn grenad_obkv_into_chunks<R: io::Read + io::Seek>(
 /// Write provided sorter in database using serialize_value function.
 /// merge_values function is used if an entry already exist in the database.
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::grenad")]
-pub fn write_sorter_into_database<K, V, FS, FM>(
-    sorter: Sorter<MergeFn>,
+pub fn write_sorter_into_database<K, V, FS, FM, MF>(
+    sorter: Sorter<MF>,
     database: &heed::Database<K, V>,
     wtxn: &mut heed::RwTxn<'_>,
     index_is_empty: bool,
@@ -180,6 +183,8 @@ pub fn write_sorter_into_database<K, V, FS, FM>(
 where
     FS: for<'a> Fn(&'a [u8], &'a mut Vec<u8>) -> Result<&'a [u8]>,
     FM: for<'a> Fn(&[u8], &[u8], &'a mut Vec<u8>) -> Result<Option<&'a [u8]>>,
+    MF: MergeFunction,
+    crate::Error: From<MF::Error>,
 {
     let mut buffer = Vec::new();
     let database = database.remap_types::<Bytes, Bytes>();
@@ -206,9 +211,4 @@ where
     }
 
     Ok(())
-}
-
-/// Used when trying to merge readers, but you don't actually care about the values.
-pub fn merge_ignore_values<'a>(_key: &[u8], _values: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
-    Ok(Cow::Owned(Vec::new()))
 }

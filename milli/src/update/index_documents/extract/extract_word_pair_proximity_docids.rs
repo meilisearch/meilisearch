@@ -6,8 +6,8 @@ use std::{cmp, io};
 use obkv::KvReaderU16;
 
 use super::helpers::{
-    create_sorter, create_writer, merge_deladd_cbo_roaring_bitmaps, try_split_array_at,
-    writer_into_reader, GrenadParameters, MergeFn,
+    create_sorter, create_writer, try_split_array_at, writer_into_reader, GrenadParameters,
+    MergeDeladdCboRoaringBitmaps,
 };
 use crate::error::SerializationError;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
@@ -44,7 +44,7 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
         .map(|_| {
             create_sorter(
                 grenad::SortAlgorithm::Unstable,
-                merge_deladd_cbo_roaring_bitmaps,
+                MergeDeladdCboRoaringBitmaps,
                 indexer.chunk_compression_type,
                 indexer.chunk_compression_level,
                 indexer.max_nb_chunks,
@@ -92,8 +92,8 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
                 }
 
                 // deletions
-                if let Some(deletion) = KvReaderDelAdd::new(value).get(DelAdd::Deletion) {
-                    for (position, word) in KvReaderU16::new(deletion).iter() {
+                if let Some(deletion) = KvReaderDelAdd::from_slice(value).get(DelAdd::Deletion) {
+                    for (position, word) in KvReaderU16::from_slice(deletion).iter() {
                         // drain the proximity window until the head word is considered close to the word we are inserting.
                         while del_word_positions.front().map_or(false, |(_w, p)| {
                             index_proximity(*p as u32, position as u32) >= MAX_DISTANCE
@@ -125,8 +125,8 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
                 }
 
                 // additions
-                if let Some(addition) = KvReaderDelAdd::new(value).get(DelAdd::Addition) {
-                    for (position, word) in KvReaderU16::new(addition).iter() {
+                if let Some(addition) = KvReaderDelAdd::from_slice(value).get(DelAdd::Addition) {
+                    for (position, word) in KvReaderU16::from_slice(addition).iter() {
                         // drain the proximity window until the head word is considered close to the word we are inserting.
                         while add_word_positions.front().map_or(false, |(_w, p)| {
                             index_proximity(*p as u32, position as u32) >= MAX_DISTANCE
@@ -197,7 +197,7 @@ fn document_word_positions_into_sorter(
     document_id: DocumentId,
     del_word_pair_proximity: &BTreeMap<(String, String), u8>,
     add_word_pair_proximity: &BTreeMap<(String, String), u8>,
-    word_pair_proximity_docids_sorters: &mut [grenad::Sorter<MergeFn>],
+    word_pair_proximity_docids_sorters: &mut [grenad::Sorter<MergeDeladdCboRoaringBitmaps>],
 ) -> Result<()> {
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};

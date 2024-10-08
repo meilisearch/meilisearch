@@ -1251,12 +1251,20 @@ impl Index {
 
     /* documents */
 
+    /// Returns a document by using the document id.
+    pub fn document<'t>(&self, rtxn: &'t RoTxn, id: DocumentId) -> Result<&'t obkv::KvReaderU16> {
+        self.documents
+            .get(rtxn, &id)?
+            .ok_or(UserError::UnknownInternalDocumentId { document_id: id })
+            .map_err(Into::into)
+    }
+
     /// Returns an iterator over the requested documents. The next item will be an error if a document is missing.
     pub fn iter_documents<'a, 't: 'a>(
         &'a self,
         rtxn: &'t RoTxn<'t>,
         ids: impl IntoIterator<Item = DocumentId> + 'a,
-    ) -> Result<impl Iterator<Item = Result<(DocumentId, obkv::KvReaderU16<'t>)>> + 'a> {
+    ) -> Result<impl Iterator<Item = Result<(DocumentId, &'t obkv::KvReaderU16)>> + 'a> {
         Ok(ids.into_iter().map(move |id| {
             let kv = self
                 .documents
@@ -1271,7 +1279,7 @@ impl Index {
         &self,
         rtxn: &'t RoTxn<'t>,
         ids: impl IntoIterator<Item = DocumentId>,
-    ) -> Result<Vec<(DocumentId, obkv::KvReaderU16<'t>)>> {
+    ) -> Result<Vec<(DocumentId, &'t obkv::KvReaderU16)>> {
         self.iter_documents(rtxn, ids)?.collect()
     }
 
@@ -1279,7 +1287,7 @@ impl Index {
     pub fn all_documents<'a, 't: 'a>(
         &'a self,
         rtxn: &'t RoTxn<'t>,
-    ) -> Result<impl Iterator<Item = Result<(DocumentId, obkv::KvReaderU16<'t>)>> + 'a> {
+    ) -> Result<impl Iterator<Item = Result<(DocumentId, &'t obkv::KvReaderU16)>> + 'a> {
         self.iter_documents(rtxn, self.documents_ids(rtxn)?)
     }
 
@@ -1303,7 +1311,7 @@ impl Index {
         })?;
         Ok(self.iter_documents(rtxn, ids)?.map(move |entry| -> Result<_> {
             let (_docid, obkv) = entry?;
-            match primary_key.document_id(&obkv, &fields)? {
+            match primary_key.document_id(obkv, &fields)? {
                 Ok(document_id) => Ok(document_id),
                 Err(_) => Err(InternalError::DocumentsError(
                     crate::documents::Error::InvalidDocumentFormat,
