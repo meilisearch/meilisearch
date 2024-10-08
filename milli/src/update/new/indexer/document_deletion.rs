@@ -43,7 +43,7 @@ impl<'p> DocumentChanges<'p> for DocumentDeletion {
             |rtxn, docid| {
                 let current = index.document(rtxn, docid)?;
                 let external_document_id = primary_key
-                    .document_id(&current, fields_ids_map)?
+                    .document_id(current, fields_ids_map)?
                     .map_err(|_| InternalError::DatabaseMissingEntry {
                         db_name: EXTERNAL_DOCUMENTS_IDS,
                         key: None,
