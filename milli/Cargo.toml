@@ -89,6 +89,7 @@ ureq = { version = "2.10.0", features = ["json"] }
 url = "2.5.2"
 rayon-par-bridge = "0.1.0"
 hashbrown = "0.14.5"
+thread_local = "1.1.8"
 
 [dev-dependencies]
 mimalloc = { version = "0.1.43", default-features = false }

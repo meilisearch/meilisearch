@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::fs::File;
@@ -7,12 +8,12 @@ use grenad::{MergeFunction, Merger};
 use heed::RoTxn;
 use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
 use serde_json::Value;
+use thread_local::ThreadLocal;
 
 use super::super::cache::CboCachedSorter;
 use super::facet_document::extract_document_facets;
 use super::FacetKind;
 use crate::facet::value_encoding::f64_into_bytes;
-use crate::update::new::append_only_linked_list::AppendOnlyLinkedList;
 use crate::update::new::extract::DocidsExtractor;
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt;
 use crate::update::new::DocumentChange;
@@ -210,7 +211,7 @@ impl DocidsExtractor for FacetedDocidsExtractor {
         let attributes_to_extract = Self::attributes_to_extract(&rtxn, index)?;
         let attributes_to_extract: Vec<_> =
             attributes_to_extract.iter().map(|s| s.as_ref()).collect();
-        let caches = AppendOnlyLinkedList::new();
+        let thread_local = ThreadLocal::with_capacity(rayon::current_num_threads());
 
         {
             let span =
@@ -218,22 +219,25 @@ impl DocidsExtractor for FacetedDocidsExtractor {
             let _entered = span.enter();
             document_changes.into_par_iter().try_arc_for_each_try_init(
                 || {
-                    let rtxn = index.read_txn().map_err(Error::from)?;
-                    let cache = caches.push(CboCachedSorter::new(
-                        // TODO use a better value
-                        100.try_into().unwrap(),
-                        create_sorter(
-                            grenad::SortAlgorithm::Stable,
-                            MergeDeladdCboRoaringBitmaps,
-                            indexer.chunk_compression_type,
-                            indexer.chunk_compression_level,
-                            indexer.max_nb_chunks,
-                            max_memory,
-                        ),
-                    ));
-                    Ok((rtxn, fields_ids_map.clone(), Vec::new(), cache))
+                    thread_local.get_or_try(|| {
+                        let rtxn = index.read_txn().map_err(Error::from)?;
+                        let cache = CboCachedSorter::new(
+                            /// TODO use a better value
+                            100.try_into().unwrap(),
+                            create_sorter(
+                                grenad::SortAlgorithm::Stable,
+                                MergeDeladdCboRoaringBitmaps,
+                                indexer.chunk_compression_type,
+                                indexer.chunk_compression_level,
+                                indexer.max_nb_chunks,
+                                max_memory,
+                            ),
+                        );
+                        Ok((rtxn, RefCell::new((fields_ids_map.clone(), Vec::new(), cache))))
+                    })
                 },
-                |(rtxn, fields_ids_map, buffer, cached_sorter), document_change| {
+                |(rtxn, rc), document_change| {
+                    let (fields_ids_map, buffer, cached_sorter) = &mut *rc.borrow_mut();
                     Self::extract_document_change(
                         rtxn,
                         index,
@@ -253,10 +257,11 @@ impl DocidsExtractor for FacetedDocidsExtractor {
                 tracing::trace_span!(target: "indexing::documents::extract", "merger_building");
             let _entered = span.enter();
 
-            let readers: Vec<_> = caches
+            let readers: Vec<_> = thread_local
                 .into_iter()
                 .par_bridge()
-                .map(|cached_sorter| {
+                .map(|(_, rc)| {
+                    let (_, _, cached_sorter) = rc.into_inner();
                     let sorter = cached_sorter.into_sorter()?;
                     sorter.into_reader_cursors()
                 })

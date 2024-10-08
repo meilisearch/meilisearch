@@ -2,6 +2,7 @@ mod extract_word_docids;
 mod extract_word_pair_proximity_docids;
 mod tokenize_document;
 
+use std::cell::RefCell;
 use std::fs::File;
 use std::sync::Arc;
 
@@ -10,11 +11,11 @@ pub use extract_word_pair_proximity_docids::WordPairProximityDocidsExtractor;
 use grenad::Merger;
 use heed::RoTxn;
 use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
+use thread_local::ThreadLocal;
 use tokenize_document::{tokenizer_builder, DocumentTokenizer};
 
 use super::cache::CboCachedSorter;
 use super::DocidsExtractor;
-use crate::update::new::append_only_linked_list::AppendOnlyLinkedList;
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt;
 use crate::update::new::DocumentChange;
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
@@ -58,7 +59,8 @@ pub trait SearchableExtractor {
             localized_attributes_rules: &localized_attributes_rules,
             max_positions_per_attributes: MAX_POSITION_PER_ATTRIBUTE,
         };
-        let caches = AppendOnlyLinkedList::new();
+
+        let thread_local = ThreadLocal::with_capacity(rayon::current_num_threads());
 
         {
             let span =
@@ -66,22 +68,29 @@ pub trait SearchableExtractor {
             let _entered = span.enter();
             document_changes.into_par_iter().try_arc_for_each_try_init(
                 || {
-                    let rtxn = index.read_txn().map_err(Error::from)?;
-                    let cache = caches.push(CboCachedSorter::new(
-                        // TODO use a better value
-                        1_000_000.try_into().unwrap(),
-                        create_sorter(
-                            grenad::SortAlgorithm::Stable,
-                            MergeDeladdCboRoaringBitmaps,
-                            indexer.chunk_compression_type,
-                            indexer.chunk_compression_level,
-                            indexer.max_nb_chunks,
-                            max_memory,
-                        ),
-                    ));
-                    Ok((rtxn, &document_tokenizer, fields_ids_map.clone(), cache))
+                    thread_local.get_or_try(|| {
+                        let rtxn = index.read_txn().map_err(Error::from)?;
+                        let cache = CboCachedSorter::new(
+                            /// TODO use a better value
+                            1_000_000.try_into().unwrap(),
+                            create_sorter(
+                                grenad::SortAlgorithm::Stable,
+                                MergeDeladdCboRoaringBitmaps,
+                                indexer.chunk_compression_type,
+                                indexer.chunk_compression_level,
+                                indexer.max_nb_chunks,
+                                max_memory,
+                            ),
+                        );
+                        Ok((
+                            rtxn,
+                            &document_tokenizer,
+                            RefCell::new((fields_ids_map.clone(), cache)),
+                        ))
+                    })
                 },
-                |(rtxn, document_tokenizer, fields_ids_map, cached_sorter), document_change| {
+                |(rtxn, document_tokenizer, rc), document_change| {
+                    let (fields_ids_map, cached_sorter) = &mut *rc.borrow_mut();
                     Self::extract_document_change(
                         rtxn,
                         index,
@@ -100,10 +109,11 @@ pub trait SearchableExtractor {
                 tracing::trace_span!(target: "indexing::documents::extract", "merger_building");
             let _entered = span.enter();
 
-            let readers: Vec<_> = caches
+            let readers: Vec<_> = thread_local
                 .into_iter()
                 .par_bridge()
-                .map(|cached_sorter| {
+                .map(|(_, _, rc)| {
+                    let (_, cached_sorter) = rc.into_inner();
                     let sorter = cached_sorter.into_sorter()?;
                     sorter.into_reader_cursors()
                 })
