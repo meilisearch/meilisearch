@@ -4655,7 +4655,7 @@ dependencies = [
 [[package]]
 name = "roaring"
 version = "0.10.6"
-source = "git+https://github.com/RoaringBitmap/roaring-rs?branch=clone-iter-slice#6bba84b1a47da1d6e52d5c4dc0ce8593ae4646a5"
+source = "git+https://github.com/RoaringBitmap/roaring-rs?branch=clone-iter-slice#8ff028e484fb6192a0acf5a669eaf18c30cada6e"
 dependencies = [
  "bytemuck",
  "byteorder",

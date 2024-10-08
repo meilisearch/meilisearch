@@ -1,7 +1,9 @@
+use std::fmt::Write as _;
 use std::mem;
 use std::num::NonZeroUsize;
 
 use grenad::{MergeFunction, Sorter};
+use roaring::bitmap::Statistics;
 use roaring::RoaringBitmap;
 use smallvec::SmallVec;
 
@@ -38,7 +40,7 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
     pub fn insert_del_u32(&mut self, key: &[u8], n: u32) -> grenad::Result<(), MF::Error> {
         match self.cache.get_mut(key) {
             Some(DelAddRoaringBitmap { del, add: _ }) => {
-                del.get_or_insert_with(PushOptimizedBitmap::default).insert(n);
+                del.get_or_insert_with(RoaringBitmap::default).insert(n);
             }
             None => {
                 self.total_insertions += 1;
@@ -60,7 +62,7 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
     ) -> grenad::Result<(), MF::Error> {
         match self.cache.get_mut(key) {
             Some(DelAddRoaringBitmap { del, add: _ }) => {
-                del.get_or_insert_with(PushOptimizedBitmap::default).union_with_bitmap(bitmap);
+                *del.get_or_insert_with(RoaringBitmap::default) |= bitmap;
             }
             None => {
                 self.total_insertions += 1;
@@ -78,7 +80,7 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
     pub fn insert_add_u32(&mut self, key: &[u8], n: u32) -> grenad::Result<(), MF::Error> {
         match self.cache.get_mut(key) {
             Some(DelAddRoaringBitmap { del: _, add }) => {
-                add.get_or_insert_with(PushOptimizedBitmap::default).insert(n);
+                add.get_or_insert_with(RoaringBitmap::default).insert(n);
             }
             None => {
                 self.total_insertions += 1;
@@ -100,7 +102,7 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
     ) -> grenad::Result<(), MF::Error> {
         match self.cache.get_mut(key) {
             Some(DelAddRoaringBitmap { del: _, add }) => {
-                add.get_or_insert_with(PushOptimizedBitmap::default).union_with_bitmap(bitmap);
+                *add.get_or_insert_with(RoaringBitmap::default) |= bitmap;
             }
             None => {
                 self.total_insertions += 1;
@@ -118,8 +120,8 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
     pub fn insert_del_add_u32(&mut self, key: &[u8], n: u32) -> grenad::Result<(), MF::Error> {
         match self.cache.get_mut(key) {
             Some(DelAddRoaringBitmap { del, add }) => {
-                del.get_or_insert_with(PushOptimizedBitmap::default).insert(n);
-                add.get_or_insert_with(PushOptimizedBitmap::default).insert(n);
+                del.get_or_insert_with(RoaringBitmap::default).insert(n);
+                add.get_or_insert_with(RoaringBitmap::default).insert(n);
             }
             None => {
                 self.total_insertions += 1;
@@ -145,21 +147,21 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
         match deladd {
             DelAddRoaringBitmap { del: Some(del), add: None } => {
                 self.cbo_buffer.clear();
-                CboRoaringBitmapCodec::serialize_into(&del.bitmap, &mut self.cbo_buffer);
+                CboRoaringBitmapCodec::serialize_into(&del, &mut self.cbo_buffer);
                 value_writer.insert(DelAdd::Deletion, &self.cbo_buffer)?;
             }
             DelAddRoaringBitmap { del: None, add: Some(add) } => {
                 self.cbo_buffer.clear();
-                CboRoaringBitmapCodec::serialize_into(&add.bitmap, &mut self.cbo_buffer);
+                CboRoaringBitmapCodec::serialize_into(&add, &mut self.cbo_buffer);
                 value_writer.insert(DelAdd::Addition, &self.cbo_buffer)?;
             }
             DelAddRoaringBitmap { del: Some(del), add: Some(add) } => {
                 self.cbo_buffer.clear();
-                CboRoaringBitmapCodec::serialize_into(&del.bitmap, &mut self.cbo_buffer);
+                CboRoaringBitmapCodec::serialize_into(&del, &mut self.cbo_buffer);
                 value_writer.insert(DelAdd::Deletion, &self.cbo_buffer)?;
 
                 self.cbo_buffer.clear();
-                CboRoaringBitmapCodec::serialize_into(&add.bitmap, &mut self.cbo_buffer);
+                CboRoaringBitmapCodec::serialize_into(&add, &mut self.cbo_buffer);
                 value_writer.insert(DelAdd::Addition, &self.cbo_buffer)?;
             }
             DelAddRoaringBitmap { del: None, add: None } => return Ok(()),
@@ -173,78 +175,125 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
     }
 
     pub fn into_sorter(mut self) -> grenad::Result<Sorter<MF>, MF::Error> {
+        let mut all_n_containers = Vec::new();
+        let mut all_n_array_containers = Vec::new();
+        let mut all_n_bitset_containers = Vec::new();
+        let mut all_n_values_array_containers = Vec::new();
+        let mut all_n_values_bitset_containers = Vec::new();
+        let mut all_cardinality = Vec::new();
+
         let default_arc = Lru::new(NonZeroUsize::MIN);
         for (key, deladd) in mem::replace(&mut self.cache, default_arc) {
+            for bitmap in [&deladd.del, &deladd.add].into_iter().flatten() {
+                let Statistics {
+                    n_containers,
+                    n_array_containers,
+                    n_bitset_containers,
+                    n_values_array_containers,
+                    n_values_bitset_containers,
+                    cardinality,
+                    ..
+                } = bitmap.statistics();
+                all_n_containers.push(n_containers);
+                all_n_array_containers.push(n_array_containers);
+                all_n_bitset_containers.push(n_bitset_containers);
+                all_n_values_array_containers.push(n_values_array_containers);
+                all_n_values_bitset_containers.push(n_values_bitset_containers);
+                all_cardinality.push(cardinality as u32);
+            }
+
             self.write_entry(key, deladd)?;
         }
 
-        eprintln!(
+        let mut output = String::new();
+
+        for (name, mut slice) in [
+            ("n_containers", all_n_containers),
+            ("n_array_containers", all_n_array_containers),
+            ("n_bitset_containers", all_n_bitset_containers),
+            ("n_values_array_containers", all_n_values_array_containers),
+            ("n_values_bitset_containers", all_n_values_bitset_containers),
+            ("cardinality", all_cardinality),
+        ] {
+            let _ = writeln!(&mut output, "{name} (p100) {:?}", Stats::from_slice(&mut slice));
+            // let _ = writeln!(&mut output, "{name} (p99)  {:?}", Stats::from_slice_p99(&mut slice));
+        }
+
+        let _ = writeln!(
+            &mut output,
             "LruCache stats: {} <= {KEY_SIZE} bytes ({}%) on a total of {} insertions",
             self.fitted_in_key,
             (self.fitted_in_key as f32 / self.total_insertions as f32) * 100.0,
             self.total_insertions,
         );
 
+        eprintln!("{output}");
+
         Ok(self.sorter)
+    }
+}
+
+#[derive(Default, Debug)]
+struct Stats {
+    pub len: usize,
+    pub average: f32,
+    pub mean: u32,
+    pub min: u32,
+    pub max: u32,
+}
+
+impl Stats {
+    fn from_slice(slice: &mut [u32]) -> Stats {
+        slice.sort_unstable();
+        Self::from_sorted_slice(slice)
+    }
+
+    fn from_slice_p99(slice: &mut [u32]) -> Stats {
+        slice.sort_unstable();
+        let new_len = slice.len() - (slice.len() as f32 / 100.0) as usize;
+        match slice.get(..new_len) {
+            Some(slice) => Self::from_sorted_slice(slice),
+            None => Stats::default(),
+        }
+    }
+
+    fn from_sorted_slice(slice: &[u32]) -> Stats {
+        let sum: f64 = slice.iter().map(|i| *i as f64).sum();
+        let average = (sum / slice.len() as f64) as f32;
+        let mean = *slice.len().checked_div(2).and_then(|middle| slice.get(middle)).unwrap_or(&0);
+        let min = *slice.first().unwrap_or(&0);
+        let max = *slice.last().unwrap_or(&0);
+        Stats { len: slice.len(), average, mean, min, max }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct DelAddRoaringBitmap {
-    pub(crate) del: Option<PushOptimizedBitmap>,
-    pub(crate) add: Option<PushOptimizedBitmap>,
+    pub(crate) del: Option<RoaringBitmap>,
+    pub(crate) add: Option<RoaringBitmap>,
 }
 
 impl DelAddRoaringBitmap {
     fn new_del_add_u32(n: u32) -> Self {
         DelAddRoaringBitmap {
-            del: Some(PushOptimizedBitmap::from_single(n)),
-            add: Some(PushOptimizedBitmap::from_single(n)),
+            del: Some(RoaringBitmap::from([n])),
+            add: Some(RoaringBitmap::from([n])),
         }
     }
 
     fn new_del(bitmap: RoaringBitmap) -> Self {
-        DelAddRoaringBitmap { del: Some(PushOptimizedBitmap::from_bitmap(bitmap)), add: None }
+        DelAddRoaringBitmap { del: Some(bitmap), add: None }
     }
 
     fn new_del_u32(n: u32) -> Self {
-        DelAddRoaringBitmap { del: Some(PushOptimizedBitmap::from_single(n)), add: None }
+        DelAddRoaringBitmap { del: Some(RoaringBitmap::from([n])), add: None }
     }
 
     fn new_add(bitmap: RoaringBitmap) -> Self {
-        DelAddRoaringBitmap { del: None, add: Some(PushOptimizedBitmap::from_bitmap(bitmap)) }
+        DelAddRoaringBitmap { del: None, add: Some(bitmap) }
     }
 
     fn new_add_u32(n: u32) -> Self {
-        DelAddRoaringBitmap { del: None, add: Some(PushOptimizedBitmap::from_single(n)) }
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-struct PushOptimizedBitmap {
-    bitmap: RoaringBitmap,
-}
-
-impl PushOptimizedBitmap {
-    #[inline]
-    fn from_bitmap(bitmap: RoaringBitmap) -> PushOptimizedBitmap {
-        PushOptimizedBitmap { bitmap }
-    }
-
-    #[inline]
-    fn from_single(single: u32) -> PushOptimizedBitmap {
-        PushOptimizedBitmap { bitmap: RoaringBitmap::from([single]) }
-    }
-
-    #[inline]
-    fn insert(&mut self, n: u32) {
-        if !self.bitmap.push(n) {
-            self.bitmap.insert(n);
-        }
-    }
-
-    #[inline]
-    fn union_with_bitmap(&mut self, bitmap: RoaringBitmap) {
-        self.bitmap |= bitmap;
+        DelAddRoaringBitmap { del: None, add: Some(RoaringBitmap::from([n])) }
     }
 }
