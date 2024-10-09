@@ -357,8 +357,8 @@ pub struct Opt {
     /// Lets you customize the size of the search queue. Meilisearch processes your search requests as fast as possible but once the
     /// queue is full it starts returning HTTP 503, Service Unavailable.
     /// The default value is 1000.
-    #[clap(long, env = MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE, default_value_t = 1000)]
-    #[serde(default)]
+    #[clap(long, env = MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE, default_value_t = default_experimental_search_queue_size())]
+    #[serde(default = "default_experimental_search_queue_size")]
     pub experimental_search_queue_size: usize,
 
     /// Experimental logs mode feature. For more information, see: <https://github.com/orgs/meilisearch/discussions/723>
@@ -888,6 +888,10 @@ fn default_snapshot_interval_sec() -> &'static str {
 
 fn default_dump_dir() -> PathBuf {
     PathBuf::from(DEFAULT_DUMP_DIR)
+}
+
+fn default_experimental_search_queue_size() -> usize {
+    1000
 }
 
 /// Indicates if a snapshot was scheduled, and if yes with which interval.
