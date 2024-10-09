@@ -12,6 +12,7 @@ pub use document_operation::DocumentOperation;
 use heed::{RoTxn, RwTxn};
 pub use partial_dump::PartialDump;
 use rayon::ThreadPool;
+use time::OffsetDateTime;
 pub use update_by_function::UpdateByFunction;
 
 use super::channel::*;
@@ -284,6 +285,8 @@ where
     let mut inner_index_settings = InnerIndexSettings::from_index(index, wtxn)?;
     inner_index_settings.recompute_facets(wtxn, index)?;
     inner_index_settings.recompute_searchables(wtxn, index)?;
+
+    index.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
 
     Ok(())
 }
