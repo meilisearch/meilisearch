@@ -26,10 +26,11 @@ use super::words_prefix_docids::{
 use super::{StdResult, TopLevelMap};
 use crate::documents::{PrimaryKey, DEFAULT_PRIMARY_KEY};
 use crate::facet::FacetType;
+use crate::proximity::ProximityPrecision;
 use crate::update::new::channel::ExtractorSender;
 use crate::update::settings::InnerIndexSettings;
 use crate::update::{FacetsUpdateBulk, GrenadParameters};
-use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
+use crate::{Error, FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
 
 mod de;
 pub mod document_changes;
@@ -184,7 +185,11 @@ where
                         extractor_sender.send_searchable::<FidWordCountDocids>(fid_word_count_docids).unwrap();
                     }
 
-                    {
+                    // run the proximity extraction only if the precision is by word
+                    // this works only if the settings didn't change during this transaction.
+                    let rtxn = index.read_txn().unwrap();
+                    let proximity_precision = index.proximity_precision(&rtxn)?.unwrap_or_default();
+                    if proximity_precision == ProximityPrecision::ByWord {
                         let span = tracing::trace_span!(target: "indexing::documents::extract", "word_pair_proximity_docids");
                         let _entered = span.enter();
                         extract_and_send_docids::<
