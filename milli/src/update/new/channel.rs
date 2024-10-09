@@ -5,6 +5,7 @@ use crossbeam_channel::{IntoIter, Receiver, SendError, Sender};
 use grenad::Merger;
 use heed::types::Bytes;
 use memmap2::Mmap;
+use roaring::RoaringBitmap;
 
 use super::extract::FacetKind;
 use super::StdResult;
@@ -43,6 +44,13 @@ impl KeyValueEntry {
         let mut data = Vec::with_capacity(key.len() + value.len());
         data.extend_from_slice(key);
         data.extend_from_slice(value);
+        KeyValueEntry::SmallInMemory { key_length: key.len(), data: data.into_boxed_slice() }
+    }
+
+    pub fn from_small_key_bitmap(key: &[u8], bitmap: RoaringBitmap) -> Self {
+        let mut data = Vec::with_capacity(key.len() + bitmap.serialized_size());
+        data.extend_from_slice(key);
+        bitmap.serialize_into(&mut data).unwrap();
         KeyValueEntry::SmallInMemory { key_length: key.len(), data: data.into_boxed_slice() }
     }
 
@@ -232,10 +240,10 @@ impl MergerSender {
         DocumentsSender(self)
     }
 
-    pub fn send_documents_ids(&self, bitmap: &[u8]) -> StdResult<(), SendError<()>> {
-        let entry = EntryOperation::Write(KeyValueEntry::from_small_key_value(
+    pub fn send_documents_ids(&self, documents_ids: RoaringBitmap) -> StdResult<(), SendError<()>> {
+        let entry = EntryOperation::Write(KeyValueEntry::from_small_key_bitmap(
             DOCUMENTS_IDS_KEY.as_bytes(),
-            bitmap,
+            documents_ids,
         ));
         match self.send(WriterOperation { database: Database::Main, entry }) {
             Ok(()) => Ok(()),

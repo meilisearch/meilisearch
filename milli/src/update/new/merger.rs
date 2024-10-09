@@ -189,9 +189,7 @@ pub fn merge_grenad_entries(
         let _entered = span.enter();
 
         // Send the documents ids unionized with the current one
-        /// TODO return the slice of bytes directly
-        serialize_bitmap_into_vec(&documents_ids, &mut buffer);
-        sender.send_documents_ids(&buffer).unwrap();
+        sender.send_documents_ids(documents_ids).unwrap();
     }
 
     // ...
@@ -446,11 +444,4 @@ fn cbo_bitmap_serialize_into_vec<'b>(bitmap: &RoaringBitmap, buffer: &'b mut Vec
     buffer.clear();
     CboRoaringBitmapCodec::serialize_into(bitmap, buffer);
     buffer.as_slice()
-}
-
-/// TODO Return the slice directly from the serialize_into method
-fn serialize_bitmap_into_vec(bitmap: &RoaringBitmap, buffer: &mut Vec<u8>) {
-    buffer.clear();
-    bitmap.serialize_into(buffer).unwrap();
-    // buffer.as_slice()
 }
