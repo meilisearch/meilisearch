@@ -1,30 +1,47 @@
 use milli::Object;
 use serde::Serialize;
 use time::{Duration, OffsetDateTime};
+use utoipa::ToSchema;
 
 use crate::error::ResponseError;
 use crate::settings::{Settings, Unchecked};
 use crate::tasks::{serialize_duration, Details, IndexSwap, Kind, Status, Task, TaskId};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct TaskView {
+    /// The unique sequential identifier of the task.
+    #[schema(value_type = u32, example = 4312)]
     pub uid: TaskId,
+    /// The unique identifier of the index where this task is operated.
+    #[schema(example = json!("movies"))]
     #[serde(default)]
     pub index_uid: Option<String>,
     pub status: Status,
+    /// The type of the task.
     #[serde(rename = "type")]
     pub kind: Kind,
+    /// The uid of the task that performed the taskCancelation if the task has been canceled.
+    #[schema(value_type = Option<u32>, example = json!(4326))]
     pub canceled_by: Option<TaskId>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<DetailsView>,
     pub error: Option<ResponseError>,
+    /// Total elasped time the engine was in processing state expressed as a `ISO-8601` duration format.
+    #[schema(value_type = Option<String>, example = json!(null))]
     #[serde(serialize_with = "serialize_duration", default)]
     pub duration: Option<Duration>,
+    /// An `RFC 3339` format for date/time/duration.
+    #[schema(value_type = String, example = json!("2024-08-08_14:12:09.393Z"))]
     #[serde(with = "time::serde::rfc3339")]
     pub enqueued_at: OffsetDateTime,
+    /// An `RFC 3339` format for date/time/duration.
+    #[schema(value_type = String, example = json!("2024-08-08_14:12:09.393Z"))]
     #[serde(with = "time::serde::rfc3339::option", default)]
     pub started_at: Option<OffsetDateTime>,
+    /// An `RFC 3339` format for date/time/duration.
+    #[schema(value_type = String, example = json!("2024-08-08_14:12:09.393Z"))]
     #[serde(with = "time::serde::rfc3339::option", default)]
     pub finished_at: Option<OffsetDateTime>,
 }
@@ -47,37 +64,52 @@ impl TaskView {
     }
 }
 
-#[derive(Default, Debug, PartialEq, Eq, Clone, Serialize)]
+/// Details information of the task payload.
+#[derive(Default, Debug, PartialEq, Eq, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct DetailsView {
+    /// Number of documents received for documentAdditionOrUpdate task.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub received_documents: Option<u64>,
+    /// Number of documents finally indexed for documentAdditionOrUpdate task or a documentAdditionOrUpdate batch of tasks.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub indexed_documents: Option<Option<u64>>,
+    /// Number of documents edited for editDocumentByFunction task.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub edited_documents: Option<Option<u64>>,
+    /// Value for the primaryKey field encountered if any for indexCreation or indexUpdate task.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub primary_key: Option<Option<String>>,
+    /// Number of provided document ids for the documentDeletion task.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provided_ids: Option<usize>,
+    /// Number of documents finally deleted for documentDeletion and indexDeletion tasks.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deleted_documents: Option<Option<u64>>,
+    /// Number of tasks that match the request for taskCancelation or taskDeletion tasks.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub matched_tasks: Option<u64>,
+    /// Number of tasks canceled for taskCancelation.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub canceled_tasks: Option<Option<u64>>,
+    /// Number of tasks deleted for taskDeletion.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deleted_tasks: Option<Option<u64>>,
+    /// Original filter query for taskCancelation or taskDeletion tasks.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_filter: Option<Option<String>>,
+    /// Identifier generated for the dump for dumpCreation task.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dump_uid: Option<Option<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context: Option<Option<Object>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub function: Option<String>,
+    /// [Learn more about the settings in this guide](https://www.meilisearch.com/docs/reference/api/settings).
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(flatten)]
+    // #[serde(flatten)]
+    #[schema(value_type = Option<Settings<Unchecked>>)]
     pub settings: Option<Box<Settings<Unchecked>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub swaps: Option<Vec<IndexSwap>>,
