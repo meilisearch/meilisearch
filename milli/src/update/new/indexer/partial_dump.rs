@@ -1,12 +1,10 @@
 use std::ops::DerefMut;
 
 use rayon::iter::IndexedParallelIterator;
-use serde::Deserializer;
 use serde_json::value::RawValue;
 
-use super::de::FieldAndDocidExtractor;
 use super::document_changes::{DocumentChangeContext, DocumentChanges, MostlySend, RefCellExt};
-use crate::documents::{DocumentIdExtractionError, PrimaryKey};
+use crate::documents::PrimaryKey;
 use crate::update::concurrent_available_ids::ConcurrentAvailableIds;
 use crate::update::new::document::DocumentFromVersions;
 use crate::update::new::document_change::Versions;

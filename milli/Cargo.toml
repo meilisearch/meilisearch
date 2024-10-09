@@ -94,10 +94,12 @@ tracing = "0.1.40"
 ureq = { version = "2.10.0", features = ["json"] }
 url = "2.5.2"
 rayon-par-bridge = "0.1.0"
-hashbrown = "0.14.5"
+hashbrown = "0.15.0"
 raw-collections = { git = "https://github.com/dureuill/raw-collections.git", version = "0.1.0" }
 bumpalo = "3.16.0"
 thread_local = "1.1.8"
+allocator-api2 = "0.2.18"
+rustc-hash = "2.0.0"
 
 [dev-dependencies]
 mimalloc = { version = "0.1.43", default-features = false }

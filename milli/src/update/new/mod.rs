@@ -1,4 +1,7 @@
 pub use document_change::{Deletion, DocumentChange, Insertion, Update};
+pub use merger::{
+    merge_and_send_docids, merge_and_send_facet_docids, FacetDatabases, FacetFieldIdsDelta,
+};
 pub use top_level_map::{CowStr, TopLevelMap};
 
 use super::del_add::DelAdd;

@@ -1,42 +1,33 @@
-use std::fs::File;
 use std::marker::PhantomData;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crossbeam_channel::{IntoIter, Receiver, SendError, Sender};
-use grenad::Merger;
 use heed::types::Bytes;
-use memmap2::Mmap;
 use roaring::RoaringBitmap;
 
 use super::extract::FacetKind;
 use super::StdResult;
-use crate::index::main_key::{DOCUMENTS_IDS_KEY, WORDS_FST_KEY, WORDS_PREFIXES_FST_KEY};
+use crate::index::main_key::DOCUMENTS_IDS_KEY;
 use crate::update::new::KvReaderFieldId;
-use crate::update::MergeDeladdCboRoaringBitmaps;
 use crate::{DocumentId, Index};
 
 /// The capacity of the channel is currently in number of messages.
-pub fn merger_writer_channel(cap: usize) -> (MergerSender, WriterReceiver) {
+pub fn extractor_writer_channel(cap: usize) -> (ExtractorSender, WriterReceiver) {
     let (sender, receiver) = crossbeam_channel::bounded(cap);
     (
-        MergerSender {
+        ExtractorSender {
             sender,
             send_count: Default::default(),
             writer_contentious_count: Default::default(),
-            merger_contentious_count: Default::default(),
+            extractor_contentious_count: Default::default(),
         },
         WriterReceiver(receiver),
     )
 }
 
-/// The capacity of the channel is currently in number of messages.
-pub fn extractors_merger_channels(cap: usize) -> (ExtractorSender, MergerReceiver) {
-    let (sender, receiver) = crossbeam_channel::bounded(cap);
-    (ExtractorSender(sender), MergerReceiver(receiver))
-}
-
-pub enum KeyValueEntry {
-    SmallInMemory { key_length: usize, data: Box<[u8]> },
-    LargeOnDisk { key: Box<[u8]>, value: Mmap },
+pub struct KeyValueEntry {
+    pub key_length: usize,
+    pub data: Box<[u8]>,
 }
 
 impl KeyValueEntry {
@@ -44,32 +35,22 @@ impl KeyValueEntry {
         let mut data = Vec::with_capacity(key.len() + value.len());
         data.extend_from_slice(key);
         data.extend_from_slice(value);
-        KeyValueEntry::SmallInMemory { key_length: key.len(), data: data.into_boxed_slice() }
+        KeyValueEntry { key_length: key.len(), data: data.into_boxed_slice() }
     }
 
     pub fn from_small_key_bitmap(key: &[u8], bitmap: RoaringBitmap) -> Self {
         let mut data = Vec::with_capacity(key.len() + bitmap.serialized_size());
         data.extend_from_slice(key);
         bitmap.serialize_into(&mut data).unwrap();
-        KeyValueEntry::SmallInMemory { key_length: key.len(), data: data.into_boxed_slice() }
-    }
-
-    pub fn from_large_key_value(key: &[u8], value: Mmap) -> Self {
-        KeyValueEntry::LargeOnDisk { key: key.to_vec().into_boxed_slice(), value }
+        KeyValueEntry { key_length: key.len(), data: data.into_boxed_slice() }
     }
 
     pub fn key(&self) -> &[u8] {
-        match self {
-            KeyValueEntry::SmallInMemory { key_length, data } => &data.as_ref()[..*key_length],
-            KeyValueEntry::LargeOnDisk { key, value: _ } => key.as_ref(),
-        }
+        &self.data[..self.key_length]
     }
 
     pub fn value(&self) -> &[u8] {
-        match self {
-            KeyValueEntry::SmallInMemory { key_length, data } => &data.as_ref()[*key_length..],
-            KeyValueEntry::LargeOnDisk { key: _, value } => value.as_ref(),
-        }
+        &self.data[self.key_length..]
     }
 }
 
@@ -90,37 +71,6 @@ impl KeyEntry {
 pub enum EntryOperation {
     Delete(KeyEntry),
     Write(KeyValueEntry),
-}
-
-pub struct DocumentEntry {
-    docid: DocumentId,
-    content: Box<[u8]>,
-}
-
-impl DocumentEntry {
-    pub fn new_uncompressed(docid: DocumentId, content: Box<KvReaderFieldId>) -> Self {
-        DocumentEntry { docid, content: content.into() }
-    }
-
-    pub fn new_compressed(docid: DocumentId, content: Box<[u8]>) -> Self {
-        DocumentEntry { docid, content }
-    }
-
-    pub fn key(&self) -> [u8; 4] {
-        self.docid.to_be_bytes()
-    }
-
-    pub fn content(&self) -> &[u8] {
-        &self.content
-    }
-}
-
-pub struct DocumentDeletionEntry(DocumentId);
-
-impl DocumentDeletionEntry {
-    pub fn key(&self) -> [u8; 4] {
-        self.0.to_be_bytes()
-    }
 }
 
 pub struct WriterOperation {
@@ -206,34 +156,32 @@ impl IntoIterator for WriterReceiver {
     }
 }
 
-pub struct MergerSender {
+pub struct ExtractorSender {
     sender: Sender<WriterOperation>,
-    /// The number of message we send in total in the channel.
-    send_count: std::cell::Cell<usize>,
+    /// The number of message we sent in total in the channel.
+    send_count: AtomicUsize,
     /// The number of times we sent something in a channel that was full.
-    writer_contentious_count: std::cell::Cell<usize>,
+    writer_contentious_count: AtomicUsize,
     /// The number of times we sent something in a channel that was empty.
-    merger_contentious_count: std::cell::Cell<usize>,
+    extractor_contentious_count: AtomicUsize,
 }
 
-impl Drop for MergerSender {
+impl Drop for ExtractorSender {
     fn drop(&mut self) {
+        let send_count = *self.send_count.get_mut();
+        let writer_contentious_count = *self.writer_contentious_count.get_mut();
+        let extractor_contentious_count = *self.extractor_contentious_count.get_mut();
         eprintln!(
-            "Merger channel stats: {} sends, {} writer contentions ({}%), {} merger contentions ({}%)",
-            self.send_count.get(),
-            self.writer_contentious_count.get(),
-            (self.writer_contentious_count.get() as f32 / self.send_count.get() as f32) * 100.0,
-            self.merger_contentious_count.get(),
-            (self.merger_contentious_count.get() as f32 / self.send_count.get() as f32) * 100.0
+            "Extractor channel stats: {send_count} sends, \
+            {writer_contentious_count} writer contentions ({}%), \
+            {extractor_contentious_count} extractor contentions ({}%)",
+            (writer_contentious_count as f32 / send_count as f32) * 100.0,
+            (extractor_contentious_count as f32 / send_count as f32) * 100.0
         )
     }
 }
 
-impl MergerSender {
-    pub fn main(&self) -> MainSender<'_> {
-        MainSender(self)
-    }
-
+impl ExtractorSender {
     pub fn docids<D: DatabaseType>(&self) -> WordDocidsSender<'_, D> {
         WordDocidsSender { sender: self, _marker: PhantomData }
     }
@@ -263,47 +211,13 @@ impl MergerSender {
 
     fn send(&self, op: WriterOperation) -> StdResult<(), SendError<()>> {
         if self.sender.is_full() {
-            self.writer_contentious_count.set(self.writer_contentious_count.get() + 1);
+            self.writer_contentious_count.fetch_add(1, Ordering::SeqCst);
         }
         if self.sender.is_empty() {
-            self.merger_contentious_count.set(self.merger_contentious_count.get() + 1);
+            self.extractor_contentious_count.fetch_add(1, Ordering::SeqCst);
         }
-        self.send_count.set(self.send_count.get() + 1);
+        self.send_count.fetch_add(1, Ordering::SeqCst);
         match self.sender.send(op) {
-            Ok(()) => Ok(()),
-            Err(SendError(_)) => Err(SendError(())),
-        }
-    }
-}
-
-pub struct MainSender<'a>(&'a MergerSender);
-
-impl MainSender<'_> {
-    pub fn write_words_fst(&self, value: Mmap) -> StdResult<(), SendError<()>> {
-        let entry = EntryOperation::Write(KeyValueEntry::from_large_key_value(
-            WORDS_FST_KEY.as_bytes(),
-            value,
-        ));
-        match self.0.send(WriterOperation { database: Database::Main, entry }) {
-            Ok(()) => Ok(()),
-            Err(SendError(_)) => Err(SendError(())),
-        }
-    }
-
-    pub fn write_words_prefixes_fst(&self, value: Mmap) -> StdResult<(), SendError<()>> {
-        let entry = EntryOperation::Write(KeyValueEntry::from_large_key_value(
-            WORDS_PREFIXES_FST_KEY.as_bytes(),
-            value,
-        ));
-        match self.0.send(WriterOperation { database: Database::Main, entry }) {
-            Ok(()) => Ok(()),
-            Err(SendError(_)) => Err(SendError(())),
-        }
-    }
-
-    pub fn delete(&self, key: &[u8]) -> StdResult<(), SendError<()>> {
-        let entry = EntryOperation::Delete(KeyEntry::from_key(key));
-        match self.0.send(WriterOperation { database: Database::Main, entry }) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
@@ -316,80 +230,33 @@ pub enum WordDocids {}
 pub enum WordFidDocids {}
 pub enum WordPairProximityDocids {}
 pub enum WordPositionDocids {}
-pub enum FacetDocids {}
 
 pub trait DatabaseType {
     const DATABASE: Database;
-}
-
-pub trait MergerOperationType {
-    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation;
 }
 
 impl DatabaseType for ExactWordDocids {
     const DATABASE: Database = Database::ExactWordDocids;
 }
 
-impl MergerOperationType for ExactWordDocids {
-    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
-        MergerOperation::ExactWordDocidsMerger(merger)
-    }
-}
-
 impl DatabaseType for FidWordCountDocids {
     const DATABASE: Database = Database::FidWordCountDocids;
-}
-
-impl MergerOperationType for FidWordCountDocids {
-    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
-        MergerOperation::FidWordCountDocidsMerger(merger)
-    }
 }
 
 impl DatabaseType for WordDocids {
     const DATABASE: Database = Database::WordDocids;
 }
 
-impl MergerOperationType for WordDocids {
-    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
-        MergerOperation::WordDocidsMerger(merger)
-    }
-}
-
 impl DatabaseType for WordFidDocids {
     const DATABASE: Database = Database::WordFidDocids;
-}
-
-impl MergerOperationType for WordFidDocids {
-    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
-        MergerOperation::WordFidDocidsMerger(merger)
-    }
 }
 
 impl DatabaseType for WordPairProximityDocids {
     const DATABASE: Database = Database::WordPairProximityDocids;
 }
 
-impl MergerOperationType for WordPairProximityDocids {
-    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
-        MergerOperation::WordPairProximityDocidsMerger(merger)
-    }
-}
-
 impl DatabaseType for WordPositionDocids {
     const DATABASE: Database = Database::WordPositionDocids;
-}
-
-impl MergerOperationType for WordPositionDocids {
-    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
-        MergerOperation::WordPositionDocidsMerger(merger)
-    }
-}
-
-impl MergerOperationType for FacetDocids {
-    fn new_merger_operation(merger: Merger<File, MergeDeladdCboRoaringBitmaps>) -> MergerOperation {
-        MergerOperation::FacetDocidsMerger(merger)
-    }
 }
 
 pub trait DocidsSender {
@@ -398,7 +265,7 @@ pub trait DocidsSender {
 }
 
 pub struct WordDocidsSender<'a, D> {
-    sender: &'a MergerSender,
+    sender: &'a ExtractorSender,
     _marker: PhantomData<D>,
 }
 
@@ -421,7 +288,7 @@ impl<D: DatabaseType> DocidsSender for WordDocidsSender<'_, D> {
 }
 
 pub struct FacetDocidsSender<'a> {
-    sender: &'a MergerSender,
+    sender: &'a ExtractorSender,
 }
 
 impl DocidsSender for FacetDocidsSender<'_> {
@@ -456,7 +323,7 @@ impl DocidsSender for FacetDocidsSender<'_> {
 }
 
 pub struct FacetSearchableSender<'a> {
-    sender: &'a MergerSender,
+    sender: &'a ExtractorSender,
 }
 
 impl FacetSearchableSender<'_> {
@@ -481,25 +348,9 @@ impl FacetSearchableSender<'_> {
             Err(SendError(_)) => Err(SendError(())),
         }
     }
-
-    pub fn write_fst(&self, key: &[u8], value: Mmap) -> StdResult<(), SendError<()>> {
-        let entry = EntryOperation::Write(KeyValueEntry::from_large_key_value(key, value));
-        match self.sender.send(WriterOperation { database: Database::FacetIdStringFst, entry }) {
-            Ok(()) => Ok(()),
-            Err(SendError(_)) => Err(SendError(())),
-        }
-    }
-
-    pub fn delete_fst(&self, key: &[u8]) -> StdResult<(), SendError<()>> {
-        let entry = EntryOperation::Delete(KeyEntry::from_key(key));
-        match self.sender.send(WriterOperation { database: Database::FacetIdStringFst, entry }) {
-            Ok(()) => Ok(()),
-            Err(SendError(_)) => Err(SendError(())),
-        }
-    }
 }
 
-pub struct DocumentsSender<'a>(&'a MergerSender);
+pub struct DocumentsSender<'a>(&'a ExtractorSender);
 
 impl DocumentsSender<'_> {
     /// TODO do that efficiently
@@ -539,89 +390,6 @@ impl DocumentsSender<'_> {
         match self.0.send(WriterOperation { database: Database::ExternalDocumentsIds, entry }) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
-        }
-    }
-}
-
-pub enum MergerOperation {
-    ExactWordDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
-    FidWordCountDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
-    WordDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
-    WordFidDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
-    WordPairProximityDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
-    WordPositionDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
-    FacetDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
-    DeleteDocument { docid: DocumentId, external_id: String },
-    InsertDocument { docid: DocumentId, external_id: String, document: Box<KvReaderFieldId> },
-    FinishedDocument,
-}
-
-pub struct MergerReceiver(Receiver<MergerOperation>);
-
-impl IntoIterator for MergerReceiver {
-    type Item = MergerOperation;
-    type IntoIter = IntoIter<Self::Item>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
-    }
-}
-
-pub struct ExtractorSender(Sender<MergerOperation>);
-
-impl ExtractorSender {
-    pub fn document_sender(&self) -> DocumentSender<'_> {
-        DocumentSender(Some(&self.0))
-    }
-
-    pub fn send_searchable<D: MergerOperationType>(
-        &self,
-        merger: Merger<File, MergeDeladdCboRoaringBitmaps>,
-    ) -> StdResult<(), SendError<()>> {
-        match self.0.send(D::new_merger_operation(merger)) {
-            Ok(()) => Ok(()),
-            Err(SendError(_)) => Err(SendError(())),
-        }
-    }
-}
-
-pub struct DocumentSender<'a>(Option<&'a Sender<MergerOperation>>);
-
-impl DocumentSender<'_> {
-    pub fn insert(
-        &self,
-        docid: DocumentId,
-        external_id: String,
-        document: Box<KvReaderFieldId>,
-    ) -> StdResult<(), SendError<()>> {
-        let sender = self.0.unwrap();
-        match sender.send(MergerOperation::InsertDocument { docid, external_id, document }) {
-            Ok(()) => Ok(()),
-            Err(SendError(_)) => Err(SendError(())),
-        }
-    }
-
-    pub fn delete(&self, docid: DocumentId, external_id: String) -> StdResult<(), SendError<()>> {
-        let sender = self.0.unwrap();
-        match sender.send(MergerOperation::DeleteDocument { docid, external_id }) {
-            Ok(()) => Ok(()),
-            Err(SendError(_)) => Err(SendError(())),
-        }
-    }
-
-    pub fn finish(mut self) -> StdResult<(), SendError<()>> {
-        let sender = self.0.take().unwrap();
-        match sender.send(MergerOperation::FinishedDocument) {
-            Ok(()) => Ok(()),
-            Err(SendError(_)) => Err(SendError(())),
-        }
-    }
-}
-
-impl Drop for DocumentSender<'_> {
-    fn drop(&mut self) {
-        if let Some(sender) = self.0.take() {
-            let _ = sender.send(MergerOperation::FinishedDocument);
         }
     }
 }

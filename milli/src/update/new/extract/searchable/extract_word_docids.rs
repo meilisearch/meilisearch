@@ -1,113 +1,46 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fs::File;
 use std::mem::size_of;
-use std::num::NonZero;
 use std::ops::DerefMut as _;
 
 use bumpalo::collections::vec::Vec as BumpVec;
 use bumpalo::Bump;
-use grenad::{Merger, MergerBuilder};
 use heed::RoTxn;
 
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
-use crate::update::new::extract::cache::CboCachedSorter;
+use crate::update::new::extract::cache::BalancedCaches;
 use crate::update::new::extract::perm_json_p::contained_in;
 use crate::update::new::indexer::document_changes::{
     for_each_document_change, DocumentChangeContext, DocumentChanges, Extractor, FullySend,
-    IndexingContext, RefCellExt, ThreadLocal,
+    IndexingContext, MostlySend, RefCellExt, ThreadLocal,
 };
 use crate::update::new::DocumentChange;
-use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
+use crate::update::GrenadParameters;
 use crate::{bucketed_position, DocumentId, FieldId, Index, Result, MAX_POSITION_PER_ATTRIBUTE};
 
 const MAX_COUNTED_WORDS: usize = 30;
 
-pub struct WordDocidsCachedSorters {
-    word_fid_docids: CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
-    word_docids: CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
-    exact_word_docids: CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
-    word_position_docids: CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
-    fid_word_count_docids: CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
+pub struct WordDocidsBalancedCaches<'extractor> {
+    word_fid_docids: BalancedCaches<'extractor>,
+    word_docids: BalancedCaches<'extractor>,
+    exact_word_docids: BalancedCaches<'extractor>,
+    word_position_docids: BalancedCaches<'extractor>,
+    fid_word_count_docids: BalancedCaches<'extractor>,
     fid_word_count: HashMap<FieldId, (usize, usize)>,
     current_docid: Option<DocumentId>,
 }
 
-impl WordDocidsCachedSorters {
-    pub fn new(
-        indexer: GrenadParameters,
-        max_memory: Option<usize>,
-        capacity: NonZero<usize>,
-    ) -> Self {
-        let max_memory = max_memory.map(|max_memory| max_memory / 4);
+unsafe impl<'extractor> MostlySend for WordDocidsBalancedCaches<'extractor> {}
 
-        let word_fid_docids = CboCachedSorter::new(
-            capacity,
-            create_sorter(
-                grenad::SortAlgorithm::Stable,
-                MergeDeladdCboRoaringBitmaps,
-                indexer.chunk_compression_type,
-                indexer.chunk_compression_level,
-                indexer.max_nb_chunks,
-                max_memory,
-                false,
-            ),
-        );
-        let word_docids = CboCachedSorter::new(
-            capacity,
-            create_sorter(
-                grenad::SortAlgorithm::Stable,
-                MergeDeladdCboRoaringBitmaps,
-                indexer.chunk_compression_type,
-                indexer.chunk_compression_level,
-                indexer.max_nb_chunks,
-                max_memory,
-                false,
-            ),
-        );
-        let exact_word_docids = CboCachedSorter::new(
-            capacity,
-            create_sorter(
-                grenad::SortAlgorithm::Stable,
-                MergeDeladdCboRoaringBitmaps,
-                indexer.chunk_compression_type,
-                indexer.chunk_compression_level,
-                indexer.max_nb_chunks,
-                max_memory,
-                false,
-            ),
-        );
-        let word_position_docids = CboCachedSorter::new(
-            capacity,
-            create_sorter(
-                grenad::SortAlgorithm::Stable,
-                MergeDeladdCboRoaringBitmaps,
-                indexer.chunk_compression_type,
-                indexer.chunk_compression_level,
-                indexer.max_nb_chunks,
-                max_memory,
-                false,
-            ),
-        );
-        let fid_word_count_docids = CboCachedSorter::new(
-            capacity,
-            create_sorter(
-                grenad::SortAlgorithm::Stable,
-                MergeDeladdCboRoaringBitmaps,
-                indexer.chunk_compression_type,
-                indexer.chunk_compression_level,
-                indexer.max_nb_chunks,
-                max_memory,
-                false,
-            ),
-        );
-
+impl<'extractor> WordDocidsBalancedCaches<'extractor> {
+    /// TODO Make sure to give the same max_memory to all of them, without splitting it
+    pub fn new_in(buckets: usize, max_memory: Option<usize>, alloc: &'extractor Bump) -> Self {
         Self {
-            word_fid_docids,
-            word_docids,
-            exact_word_docids,
-            word_position_docids,
-            fid_word_count_docids,
+            word_fid_docids: BalancedCaches::new_in(buckets, max_memory, alloc),
+            word_docids: BalancedCaches::new_in(buckets, max_memory, alloc),
+            exact_word_docids: BalancedCaches::new_in(buckets, max_memory, alloc),
+            word_position_docids: BalancedCaches::new_in(buckets, max_memory, alloc),
+            fid_word_count_docids: BalancedCaches::new_in(buckets, max_memory, alloc),
             fid_word_count: HashMap::new(),
             current_docid: None,
         }
@@ -198,6 +131,7 @@ impl WordDocidsCachedSorters {
             .entry(field_id)
             .and_modify(|(current_count, _new_count)| *current_count += 1)
             .or_insert((1, 0));
+
         self.current_docid = Some(docid);
 
         Ok(())
@@ -227,37 +161,29 @@ impl WordDocidsCachedSorters {
     }
 }
 
-struct WordDocidsMergerBuilders {
-    word_fid_docids: MergerBuilder<File, MergeDeladdCboRoaringBitmaps>,
-    word_docids: MergerBuilder<File, MergeDeladdCboRoaringBitmaps>,
-    exact_word_docids: MergerBuilder<File, MergeDeladdCboRoaringBitmaps>,
-    word_position_docids: MergerBuilder<File, MergeDeladdCboRoaringBitmaps>,
-    fid_word_count_docids: MergerBuilder<File, MergeDeladdCboRoaringBitmaps>,
+pub struct WordDocidsCaches<'extractor> {
+    pub word_docids: Vec<BalancedCaches<'extractor>>,
+    pub word_fid_docids: Vec<BalancedCaches<'extractor>>,
+    pub exact_word_docids: Vec<BalancedCaches<'extractor>>,
+    pub word_position_docids: Vec<BalancedCaches<'extractor>>,
+    pub fid_word_count_docids: Vec<BalancedCaches<'extractor>>,
 }
 
-pub struct WordDocidsMergers {
-    pub word_fid_docids: Merger<File, MergeDeladdCboRoaringBitmaps>,
-    pub word_docids: Merger<File, MergeDeladdCboRoaringBitmaps>,
-    pub exact_word_docids: Merger<File, MergeDeladdCboRoaringBitmaps>,
-    pub word_position_docids: Merger<File, MergeDeladdCboRoaringBitmaps>,
-    pub fid_word_count_docids: Merger<File, MergeDeladdCboRoaringBitmaps>,
-}
-
-impl WordDocidsMergerBuilders {
+impl<'extractor> WordDocidsCaches<'extractor> {
     fn new() -> Self {
         Self {
-            word_fid_docids: MergerBuilder::new(MergeDeladdCboRoaringBitmaps),
-            word_docids: MergerBuilder::new(MergeDeladdCboRoaringBitmaps),
-            exact_word_docids: MergerBuilder::new(MergeDeladdCboRoaringBitmaps),
-            word_position_docids: MergerBuilder::new(MergeDeladdCboRoaringBitmaps),
-            fid_word_count_docids: MergerBuilder::new(MergeDeladdCboRoaringBitmaps),
+            word_docids: Vec::new(),
+            word_fid_docids: Vec::new(),
+            exact_word_docids: Vec::new(),
+            word_position_docids: Vec::new(),
+            fid_word_count_docids: Vec::new(),
         }
     }
 
-    fn add_sorters(&mut self, other: WordDocidsCachedSorters) -> Result<()> {
-        let WordDocidsCachedSorters {
-            word_fid_docids,
+    fn push(&mut self, other: WordDocidsBalancedCaches<'extractor>) -> Result<()> {
+        let WordDocidsBalancedCaches {
             word_docids,
+            word_fid_docids,
             exact_word_docids,
             word_position_docids,
             fid_word_count_docids,
@@ -265,78 +191,37 @@ impl WordDocidsMergerBuilders {
             current_docid: _,
         } = other;
 
-        let mut word_fid_docids_readers = Ok(vec![]);
-        let mut word_docids_readers = Ok(vec![]);
-        let mut exact_word_docids_readers = Ok(vec![]);
-        let mut word_position_docids_readers = Ok(vec![]);
-        let mut fid_word_count_docids_readers = Ok(vec![]);
-        rayon::scope(|s| {
-            s.spawn(|_| {
-                word_fid_docids_readers =
-                    word_fid_docids.into_sorter().and_then(|s| s.into_reader_cursors());
-            });
-            s.spawn(|_| {
-                word_docids_readers =
-                    word_docids.into_sorter().and_then(|s| s.into_reader_cursors());
-            });
-            s.spawn(|_| {
-                exact_word_docids_readers =
-                    exact_word_docids.into_sorter().and_then(|s| s.into_reader_cursors());
-            });
-            s.spawn(|_| {
-                word_position_docids_readers =
-                    word_position_docids.into_sorter().and_then(|s| s.into_reader_cursors());
-            });
-            s.spawn(|_| {
-                fid_word_count_docids_readers =
-                    fid_word_count_docids.into_sorter().and_then(|s| s.into_reader_cursors());
-            });
-        });
-        self.word_fid_docids.extend(word_fid_docids_readers?);
-        self.word_docids.extend(word_docids_readers?);
-        self.exact_word_docids.extend(exact_word_docids_readers?);
-        self.word_position_docids.extend(word_position_docids_readers?);
-        self.fid_word_count_docids.extend(fid_word_count_docids_readers?);
+        self.word_docids.push(word_docids);
+        self.word_fid_docids.push(word_fid_docids);
+        self.exact_word_docids.push(exact_word_docids);
+        self.word_position_docids.push(word_position_docids);
+        self.fid_word_count_docids.push(fid_word_count_docids);
 
         Ok(())
     }
-
-    fn build(self) -> WordDocidsMergers {
-        WordDocidsMergers {
-            word_fid_docids: self.word_fid_docids.build(),
-            word_docids: self.word_docids.build(),
-            exact_word_docids: self.exact_word_docids.build(),
-            word_position_docids: self.word_position_docids.build(),
-            fid_word_count_docids: self.fid_word_count_docids.build(),
-        }
-    }
 }
 
-pub struct WordDocidsExtractorData<'extractor> {
-    tokenizer: &'extractor DocumentTokenizer<'extractor>,
+pub struct WordDocidsExtractorData<'a> {
+    tokenizer: &'a DocumentTokenizer<'a>,
     grenad_parameters: GrenadParameters,
-    max_memory: Option<usize>,
+    buckets: usize,
 }
 
-impl<'extractor> Extractor<'extractor> for WordDocidsExtractorData<'extractor> {
-    type Data = FullySend<RefCell<WordDocidsCachedSorters>>;
+impl<'a, 'extractor> Extractor<'extractor> for WordDocidsExtractorData<'a> {
+    type Data = RefCell<Option<WordDocidsBalancedCaches<'extractor>>>;
 
-    fn init_data(
-        &self,
-        _extractor_alloc: raw_collections::alloc::RefBump<'extractor>,
-    ) -> Result<Self::Data> {
-        Ok(FullySend(RefCell::new(WordDocidsCachedSorters::new(
-            self.grenad_parameters,
-            self.max_memory,
-            // TODO use a better value
-            200_000.try_into().unwrap(),
+    fn init_data(&self, extractor_alloc: &'extractor Bump) -> Result<Self::Data> {
+        Ok(RefCell::new(Some(WordDocidsBalancedCaches::new_in(
+            self.buckets,
+            self.grenad_parameters.max_memory,
+            extractor_alloc,
         ))))
     }
 
     fn process(
         &self,
         change: DocumentChange,
-        context: &crate::update::new::indexer::document_changes::DocumentChangeContext<Self::Data>,
+        context: &DocumentChangeContext<Self::Data>,
     ) -> Result<()> {
         WordDocidsExtractors::extract_document_change(context, self.tokenizer, change)
     }
@@ -345,16 +230,15 @@ impl<'extractor> Extractor<'extractor> for WordDocidsExtractorData<'extractor> {
 pub struct WordDocidsExtractors;
 
 impl WordDocidsExtractors {
-    pub fn run_extraction<'pl, 'fid, 'indexer, 'index, DC: DocumentChanges<'pl>>(
+    pub fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>>(
         grenad_parameters: GrenadParameters,
         document_changes: &DC,
         indexing_context: IndexingContext<'fid, 'indexer, 'index>,
-        extractor_allocs: &mut ThreadLocal<FullySend<RefCell<Bump>>>,
-    ) -> Result<WordDocidsMergers> {
-        let max_memory = grenad_parameters.max_memory_by_thread();
+        extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
+    ) -> Result<WordDocidsCaches<'extractor>> {
         let index = indexing_context.index;
-
         let rtxn = index.read_txn()?;
+
         let stop_words = index.stop_words(&rtxn)?;
         let allowed_separators = index.allowed_separators(&rtxn)?;
         let allowed_separators: Option<Vec<_>> =
@@ -392,7 +276,7 @@ impl WordDocidsExtractors {
             let extractor = WordDocidsExtractorData {
                 tokenizer: &document_tokenizer,
                 grenad_parameters,
-                max_memory,
+                buckets: rayon::current_num_threads(),
             };
 
             for_each_document_change(
@@ -404,28 +288,23 @@ impl WordDocidsExtractors {
             )?;
         }
 
-        {
-            let span =
-                tracing::trace_span!(target: "indexing::documents::extract", "merger_building");
-            let _entered = span.enter();
-            let mut builder = WordDocidsMergerBuilders::new();
-            for cache in datastore.into_iter().map(|cache| cache.0.into_inner()) {
-                builder.add_sorters(cache)?;
-            }
-
-            Ok(builder.build())
+        let mut merger = WordDocidsCaches::new();
+        for cache in datastore.into_iter().flat_map(RefCell::into_inner) {
+            merger.push(cache)?;
         }
+
+        Ok(merger)
     }
 
     fn extract_document_change(
-        context: &DocumentChangeContext<FullySend<RefCell<WordDocidsCachedSorters>>>,
+        context: &DocumentChangeContext<RefCell<Option<WordDocidsBalancedCaches>>>,
         document_tokenizer: &DocumentTokenizer,
         document_change: DocumentChange,
     ) -> Result<()> {
         let index = &context.index;
         let rtxn = &context.txn;
-        let mut cached_sorter = context.data.0.borrow_mut_or_yield();
-        let cached_sorter = cached_sorter.deref_mut();
+        let mut cached_sorter_ref = context.data.borrow_mut_or_yield();
+        let cached_sorter = cached_sorter_ref.as_mut().unwrap();
         let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut_or_yield();
         let new_fields_ids_map = new_fields_ids_map.deref_mut();
         let doc_alloc = &context.doc_alloc;
@@ -436,16 +315,14 @@ impl WordDocidsExtractors {
         match document_change {
             DocumentChange::Deletion(inner) => {
                 let mut token_fn = |fname: &str, fid, pos, word: &str| {
-                    cached_sorter
-                        .insert_del_u32(
-                            fid,
-                            pos,
-                            word,
-                            is_exact_attribute(fname),
-                            inner.docid(),
-                            doc_alloc,
-                        )
-                        .map_err(crate::Error::from)
+                    cached_sorter.insert_del_u32(
+                        fid,
+                        pos,
+                        word,
+                        is_exact_attribute(fname),
+                        inner.docid(),
+                        doc_alloc,
+                    )
                 };
                 document_tokenizer.tokenize_document(
                     inner.current(rtxn, index, context.db_fields_ids_map)?,
@@ -455,16 +332,14 @@ impl WordDocidsExtractors {
             }
             DocumentChange::Update(inner) => {
                 let mut token_fn = |fname: &str, fid, pos, word: &str| {
-                    cached_sorter
-                        .insert_del_u32(
-                            fid,
-                            pos,
-                            word,
-                            is_exact_attribute(fname),
-                            inner.docid(),
-                            doc_alloc,
-                        )
-                        .map_err(crate::Error::from)
+                    cached_sorter.insert_del_u32(
+                        fid,
+                        pos,
+                        word,
+                        is_exact_attribute(fname),
+                        inner.docid(),
+                        doc_alloc,
+                    )
                 };
                 document_tokenizer.tokenize_document(
                     inner.current(rtxn, index, context.db_fields_ids_map)?,
@@ -473,16 +348,14 @@ impl WordDocidsExtractors {
                 )?;
 
                 let mut token_fn = |fname: &str, fid, pos, word: &str| {
-                    cached_sorter
-                        .insert_add_u32(
-                            fid,
-                            pos,
-                            word,
-                            is_exact_attribute(fname),
-                            inner.docid(),
-                            doc_alloc,
-                        )
-                        .map_err(crate::Error::from)
+                    cached_sorter.insert_add_u32(
+                        fid,
+                        pos,
+                        word,
+                        is_exact_attribute(fname),
+                        inner.docid(),
+                        doc_alloc,
+                    )
                 };
                 document_tokenizer.tokenize_document(
                     inner.new(rtxn, index, context.db_fields_ids_map)?,
@@ -492,16 +365,14 @@ impl WordDocidsExtractors {
             }
             DocumentChange::Insertion(inner) => {
                 let mut token_fn = |fname: &str, fid, pos, word: &str| {
-                    cached_sorter
-                        .insert_add_u32(
-                            fid,
-                            pos,
-                            word,
-                            is_exact_attribute(fname),
-                            inner.docid(),
-                            doc_alloc,
-                        )
-                        .map_err(crate::Error::from)
+                    cached_sorter.insert_add_u32(
+                        fid,
+                        pos,
+                        word,
+                        is_exact_attribute(fname),
+                        inner.docid(),
+                        doc_alloc,
+                    )
                 };
                 document_tokenizer.tokenize_document(
                     inner.new(),

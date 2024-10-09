@@ -33,13 +33,11 @@ use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::update::new::indexer::{
     self, retrieve_or_guess_primary_key, UpdateByFunction,
 };
-use meilisearch_types::milli::update::{
-    IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings as MilliSettings,
-};
+use meilisearch_types::milli::update::{IndexDocumentsMethod, Settings as MilliSettings};
 use meilisearch_types::milli::vector::parsed_vectors::{
     ExplicitVectors, VectorOrArrayOfVectors, RESERVED_VECTORS_FIELD_NAME,
 };
-use meilisearch_types::milli::{self, Filter, Object};
+use meilisearch_types::milli::{self, Filter};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::{compression, Index, VERSION_FILE_NAME};
@@ -50,7 +48,7 @@ use uuid::Uuid;
 
 use crate::autobatcher::{self, BatchKind};
 use crate::utils::{self, swap_index_uid_in_task};
-use crate::{Error, IndexScheduler, MustStopProcessing, ProcessingTasks, Result, TaskId};
+use crate::{Error, IndexScheduler, ProcessingTasks, Result, TaskId};
 
 /// Represents a combination of tasks that can all be processed at the same time.
 ///

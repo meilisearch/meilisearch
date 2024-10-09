@@ -171,7 +171,6 @@ mod test {
     use bumpalo::Bump;
     use charabia::TokenizerBuilder;
     use meili_snap::snapshot;
-    
     use raw_collections::RawMap;
     use serde_json::json;
     use serde_json::value::RawValue;

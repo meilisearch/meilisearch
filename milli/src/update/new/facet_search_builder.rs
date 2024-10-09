@@ -1,29 +1,22 @@
 use std::collections::{BTreeSet, HashMap};
 
-use charabia::{normalizer::NormalizerOption, Language, Normalize, StrDetection, Token};
+use charabia::normalizer::NormalizerOption;
+use charabia::{Language, Normalize, StrDetection, Token};
 use grenad::Sorter;
-use heed::{
-    types::{Bytes, SerdeJson},
-    BytesDecode, BytesEncode, RoTxn,
-};
+use heed::types::{Bytes, SerdeJson};
+use heed::{BytesDecode, BytesEncode, RoTxn, RwTxn};
 
+use super::channel::FacetSearchableSender;
+use super::extract::FacetKind;
+use super::fst_merger_builder::FstMergerBuilder;
+use super::KvReaderDelAdd;
+use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
+use crate::heed_codec::StrRefCodec;
+use crate::update::del_add::{DelAdd, KvWriterDelAdd};
+use crate::update::{create_sorter, MergeDeladdBtreesetString};
 use crate::{
-    heed_codec::{
-        facet::{FacetGroupKey, FacetGroupKeyCodec},
-        StrRefCodec,
-    },
-    update::{
-        create_sorter,
-        del_add::{DelAdd, KvWriterDelAdd},
-        MergeDeladdBtreesetString,
-    },
     BEU16StrCodec, FieldId, GlobalFieldsIdsMap, Index, LocalizedAttributesRule, Result,
     MAX_FACET_VALUE_LENGTH,
-};
-
-use super::{
-    channel::FacetSearchableSender, extract::FacetKind, fst_merger_builder::FstMergerBuilder,
-    KvReaderDelAdd,
 };
 
 pub struct FacetSearchBuilder<'indexer> {
@@ -49,6 +42,7 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
             None,
             None,
             Some(0),
+            false,
         );
 
         Self {
@@ -84,7 +78,7 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
         }
 
         let locales = self.locales(field_id);
-        let hyper_normalized_value = normalize_facet_string(left_bound, locales.as_deref());
+        let hyper_normalized_value = normalize_facet_string(left_bound, locales);
 
         let set = BTreeSet::from_iter(std::iter::once(left_bound));
 
@@ -103,7 +97,7 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
     }
 
     fn locales(&mut self, field_id: FieldId) -> Option<&[Language]> {
-        if self.localized_field_ids.get(&field_id).is_none() {
+        if !self.localized_field_ids.contains_key(&field_id) {
             let Some(field_name) = self.global_fields_ids_map.name(field_id) else {
                 unreachable!("Field id {} not found in the global fields ids map", field_id);
             };
@@ -124,7 +118,8 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
     pub fn merge_and_send(
         self,
         index: &Index,
-        rtxn: &RoTxn<'_>,
+        wtxn: &mut RwTxn,
+        rtxn: &RoTxn,
         sender: FacetSearchableSender,
     ) -> Result<()> {
         let reader = self.normalized_facet_string_docids_sorter.into_reader_cursors()?;
@@ -139,13 +134,14 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
         let mut fst_merger_builder: Option<FstMergerBuilder> = None;
         while let Some((key, deladd)) = merger_iter.next()? {
             let (field_id, normalized_facet_string) =
-                BEU16StrCodec::bytes_decode(&key).map_err(heed::Error::Encoding)?;
+                BEU16StrCodec::bytes_decode(key).map_err(heed::Error::Encoding)?;
 
             if current_field_id != Some(field_id) {
                 if let Some(fst_merger_builder) = fst_merger_builder {
                     // send the previous fst to the channel
                     let mmap = fst_merger_builder.build(&mut callback)?;
-                    sender.write_fst(&field_id.to_be_bytes(), mmap).unwrap();
+                    // sender.write_fst(&field_id.to_be_bytes(), mmap).unwrap();
+                    todo!("What to do");
                 }
 
                 println!("getting fst for field_id: {}", field_id);
@@ -198,7 +194,8 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
 
         if let (Some(field_id), Some(fst_merger_builder)) = (current_field_id, fst_merger_builder) {
             let mmap = fst_merger_builder.build(&mut callback)?;
-            sender.write_fst(&field_id.to_be_bytes(), mmap).unwrap();
+            // sender.write_fst(&field_id.to_be_bytes(), mmap).unwrap();
+            todo!("What to do");
         }
 
         Ok(())
@@ -209,7 +206,7 @@ fn callback(_bytes: &[u8], _deladd: DelAdd, _is_modified: bool) -> Result<()> {
     Ok(())
 }
 
-fn merge_btreesets<'a>(
+fn merge_btreesets(
     current: Option<&[u8]>,
     del: Option<&[u8]>,
     add: Option<&[u8]>,

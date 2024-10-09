@@ -1,27 +1,25 @@
 mod cache;
+mod documents;
 mod faceted;
-mod lru;
 mod searchable;
 
-use std::cell::RefCell;
-use std::fs::File;
-
 use bumpalo::Bump;
+pub use cache::{merge_caches, transpose_and_freeze_caches, BalancedCaches, DelAddRoaringBitmap};
+pub use documents::*;
 pub use faceted::*;
-use grenad::Merger;
 pub use searchable::*;
 
 use super::indexer::document_changes::{DocumentChanges, FullySend, IndexingContext, ThreadLocal};
-use crate::update::{GrenadParameters, MergeDeladdCboRoaringBitmaps};
+use crate::update::GrenadParameters;
 use crate::Result;
 
 pub trait DocidsExtractor {
-    fn run_extraction<'pl, 'fid, 'indexer, 'index, DC: DocumentChanges<'pl>>(
+    fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>>(
         grenad_parameters: GrenadParameters,
         document_changes: &DC,
         indexing_context: IndexingContext<'fid, 'indexer, 'index>,
-        extractor_allocs: &mut ThreadLocal<FullySend<RefCell<Bump>>>,
-    ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>>;
+        extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
+    ) -> Result<Vec<BalancedCaches<'extractor>>>;
 }
 
 /// TODO move in permissive json pointer

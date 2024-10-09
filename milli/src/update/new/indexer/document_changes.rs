@@ -3,7 +3,6 @@ use std::sync::{Arc, RwLock};
 
 use bumpalo::Bump;
 use heed::RoTxn;
-use raw_collections::alloc::RefBump;
 use rayon::iter::IndexedParallelIterator;
 
 use super::super::document_change::DocumentChange;
@@ -103,6 +102,10 @@ pub struct FullySend<T>(pub T);
 
 // SAFETY: a type **fully** send is always mostly send as well.
 unsafe impl<T> MostlySend for FullySend<T> where T: Send {}
+
+unsafe impl<T> MostlySend for RefCell<T> where T: MostlySend {}
+
+unsafe impl<T> MostlySend for Option<T> where T: MostlySend {}
 
 impl<T> FullySend<T> {
     pub fn into(self) -> T {
@@ -256,7 +259,7 @@ pub struct DocumentChangeContext<
     pub doc_alloc: Bump,
 
     /// Data allocated in this allocator is not cleared between each call to `process`, unless the data spills.
-    pub extractor_alloc: RefBump<'extractor>,
+    pub extractor_alloc: &'extractor Bump,
 
     /// Pool of doc allocators, used to retrieve the doc allocator we provided for the documents
     doc_allocs: &'doc ThreadLocal<FullySend<Cell<Bump>>>,
@@ -279,14 +282,14 @@ impl<
         index: &'indexer Index,
         db_fields_ids_map: &'indexer FieldsIdsMap,
         new_fields_ids_map: &'fid RwLock<FieldsIdsMap>,
-        extractor_allocs: &'extractor ThreadLocal<FullySend<RefCell<Bump>>>,
+        extractor_allocs: &'extractor ThreadLocal<FullySend<Bump>>,
         doc_allocs: &'doc ThreadLocal<FullySend<Cell<Bump>>>,
         datastore: &'data ThreadLocal<T>,
         fields_ids_map_store: &'doc ThreadLocal<FullySend<RefCell<GlobalFieldsIdsMap<'fid>>>>,
         init_data: F,
     ) -> Result<Self>
     where
-        F: FnOnce(RefBump<'extractor>) -> Result<T>,
+        F: FnOnce(&'extractor Bump) -> Result<T>,
     {
         let doc_alloc =
             doc_allocs.get_or(|| FullySend(Cell::new(Bump::with_capacity(1024 * 1024 * 1024))));
@@ -297,9 +300,7 @@ impl<
         let fields_ids_map = &fields_ids_map.0;
         let extractor_alloc = extractor_allocs.get_or_default();
 
-        let extractor_alloc = RefBump::new(extractor_alloc.0.borrow_or_yield());
-
-        let data = datastore.get_or_try(|| init_data(RefBump::clone(&extractor_alloc)))?;
+        let data = datastore.get_or_try(move || init_data(&extractor_alloc.0))?;
 
         let txn = index.read_txn()?;
         Ok(DocumentChangeContext {
@@ -308,7 +309,7 @@ impl<
             db_fields_ids_map,
             new_fields_ids_map: fields_ids_map,
             doc_alloc,
-            extractor_alloc,
+            extractor_alloc: &extractor_alloc.0,
             data,
             doc_allocs,
         })
@@ -319,7 +320,7 @@ impl<
 pub trait Extractor<'extractor>: Sync {
     type Data: MostlySend;
 
-    fn init_data<'doc>(&'doc self, extractor_alloc: RefBump<'extractor>) -> Result<Self::Data>;
+    fn init_data<'doc>(&'doc self, extractor_alloc: &'extractor Bump) -> Result<Self::Data>;
 
     fn process<'doc>(
         &'doc self,
@@ -375,15 +376,17 @@ pub fn for_each_document_change<
         doc_allocs,
         fields_ids_map_store,
     }: IndexingContext<'fid, 'indexer, 'index>,
-    extractor_allocs: &'extractor mut ThreadLocal<FullySend<RefCell<Bump>>>,
+    extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
     datastore: &'data ThreadLocal<EX::Data>,
 ) -> Result<()>
 where
     EX: Extractor<'extractor>,
 {
+    eprintln!("We are resetting the extractor allocators");
     // Clean up and reuse the extractor allocs
     for extractor_alloc in extractor_allocs.iter_mut() {
-        extractor_alloc.0.get_mut().reset();
+        eprintln!("\tWith {} bytes resetted", extractor_alloc.0.allocated_bytes());
+        extractor_alloc.0.reset();
     }
 
     let pi = document_changes.iter();

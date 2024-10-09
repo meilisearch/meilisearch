@@ -1,222 +1,20 @@
-use std::fs::File;
 use std::io::{self};
 
 use bincode::ErrorKind;
-use grenad::Merger;
 use hashbrown::HashSet;
 use heed::types::Bytes;
 use heed::{Database, RoTxn};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use roaring::RoaringBitmap;
 
 use super::channel::*;
-use super::extract::FacetKind;
-use super::facet_search_builder::FacetSearchBuilder;
-use super::word_fst_builder::{PrefixData, PrefixDelta};
-use super::{Deletion, DocumentChange, KvReaderDelAdd, KvReaderFieldId};
-use crate::update::del_add::DelAdd;
-use crate::update::new::channel::MergerOperation;
-use crate::update::new::word_fst_builder::WordFstBuilder;
-use crate::update::MergeDeladdCboRoaringBitmaps;
-use crate::{
-    localized_attributes_rules, CboRoaringBitmapCodec, Error, FieldId, GeoPoint,
-    GlobalFieldsIdsMap, Index, Result,
+use super::extract::{
+    merge_caches, transpose_and_freeze_caches, BalancedCaches, DelAddRoaringBitmap, FacetKind,
 };
-
-/// TODO We must return some infos/stats
-#[tracing::instrument(level = "trace", skip_all, target = "indexing::documents", name = "merge")]
-pub fn merge_grenad_entries(
-    receiver: MergerReceiver,
-    sender: MergerSender,
-    rtxn: &RoTxn,
-    index: &Index,
-    global_fields_ids_map: GlobalFieldsIdsMap<'_>,
-) -> Result<MergerResult> {
-    let mut buffer: Vec<u8> = Vec::new();
-    let mut documents_ids = index.documents_ids(rtxn)?;
-    let mut geo_extractor = GeoExtractor::new(rtxn, index)?;
-    let mut merger_result = MergerResult::default();
-
-    for merger_operation in receiver {
-        match merger_operation {
-            MergerOperation::ExactWordDocidsMerger(merger) => {
-                let span =
-                    tracing::trace_span!(target: "indexing::documents::merge", "exact_word_docids");
-                let _entered = span.enter();
-                merge_and_send_docids(
-                    merger,
-                    /// TODO do a MergerOperation::database(&Index) -> Database<Bytes, Bytes>.
-                    index.exact_word_docids.remap_types(),
-                    rtxn,
-                    &mut buffer,
-                    sender.docids::<ExactWordDocids>(),
-                    |_, _key| Ok(()),
-                )?;
-            }
-            MergerOperation::FidWordCountDocidsMerger(merger) => {
-                let span = tracing::trace_span!(target: "indexing::documents::merge", "fid_word_count_docids");
-                let _entered = span.enter();
-                merge_and_send_docids(
-                    merger,
-                    index.field_id_word_count_docids.remap_types(),
-                    rtxn,
-                    &mut buffer,
-                    sender.docids::<FidWordCountDocids>(),
-                    |_, _key| Ok(()),
-                )?;
-            }
-            MergerOperation::WordDocidsMerger(merger) => {
-                let words_fst = index.words_fst(rtxn)?;
-                let mut word_fst_builder = WordFstBuilder::new(&words_fst)?;
-                let prefix_settings = index.prefix_settings(rtxn)?;
-                word_fst_builder.with_prefix_settings(prefix_settings);
-
-                {
-                    let span =
-                        tracing::trace_span!(target: "indexing::documents::merge", "word_docids");
-                    let _entered = span.enter();
-
-                    merge_and_send_docids(
-                        merger,
-                        index.word_docids.remap_types(),
-                        rtxn,
-                        &mut buffer,
-                        sender.docids::<WordDocids>(),
-                        |deladd, key| word_fst_builder.register_word(deladd, key),
-                    )?;
-                }
-
-                {
-                    let span =
-                        tracing::trace_span!(target: "indexing::documents::merge", "words_fst");
-                    let _entered = span.enter();
-
-                    let (word_fst_mmap, prefix_data) = word_fst_builder.build(index, rtxn)?;
-                    sender.main().write_words_fst(word_fst_mmap).unwrap();
-                    if let Some(PrefixData { prefixes_fst_mmap, prefix_delta }) = prefix_data {
-                        sender.main().write_words_prefixes_fst(prefixes_fst_mmap).unwrap();
-                        merger_result.prefix_delta = Some(prefix_delta);
-                    }
-                }
-            }
-            MergerOperation::WordFidDocidsMerger(merger) => {
-                let span =
-                    tracing::trace_span!(target: "indexing::documents::merge", "word_fid_docids");
-                let _entered = span.enter();
-                merge_and_send_docids(
-                    merger,
-                    index.word_fid_docids.remap_types(),
-                    rtxn,
-                    &mut buffer,
-                    sender.docids::<WordFidDocids>(),
-                    |_, _key| Ok(()),
-                )?;
-            }
-            MergerOperation::WordPairProximityDocidsMerger(merger) => {
-                let span = tracing::trace_span!(target: "indexing::documents::merge", "word_pair_proximity_docids");
-                let _entered = span.enter();
-                merge_and_send_docids(
-                    merger,
-                    index.word_pair_proximity_docids.remap_types(),
-                    rtxn,
-                    &mut buffer,
-                    sender.docids::<WordPairProximityDocids>(),
-                    |_, _key| Ok(()),
-                )?;
-            }
-            MergerOperation::WordPositionDocidsMerger(merger) => {
-                let span = tracing::trace_span!(target: "indexing::documents::merge", "word_position_docids");
-                let _entered = span.enter();
-                merge_and_send_docids(
-                    merger,
-                    index.word_position_docids.remap_types(),
-                    rtxn,
-                    &mut buffer,
-                    sender.docids::<WordPositionDocids>(),
-                    |_, _key| Ok(()),
-                )?;
-            }
-            MergerOperation::InsertDocument { docid, external_id, document } => {
-                let span =
-                    tracing::trace_span!(target: "indexing::documents::merge", "insert_document");
-                let _entered = span.enter();
-                documents_ids.insert(docid);
-                sender.documents().uncompressed(docid, external_id.clone(), &document).unwrap();
-
-                if let Some(geo_extractor) = geo_extractor.as_mut() {
-                    let current = index.documents.remap_data_type::<Bytes>().get(rtxn, &docid)?;
-                    let current: Option<&KvReaderFieldId> = current.map(Into::into);
-                    let change = match current {
-                        Some(current) => DocumentChange::Update(todo!()),
-                        None => DocumentChange::Insertion(todo!()),
-                    };
-                    geo_extractor.manage_change(&mut global_fields_ids_map, &change)?;
-                }
-            }
-            MergerOperation::DeleteDocument { docid, external_id } => {
-                let span =
-                    tracing::trace_span!(target: "indexing::documents::merge", "delete_document");
-                let _entered = span.enter();
-                if !documents_ids.remove(docid) {
-                    unreachable!("Tried deleting a document that we do not know about");
-                }
-                sender.documents().delete(docid, external_id.clone()).unwrap();
-
-                if let Some(geo_extractor) = geo_extractor.as_mut() {
-                    let change = DocumentChange::Deletion(Deletion::create(docid, todo!()));
-                    geo_extractor.manage_change(&mut global_fields_ids_map, &change)?;
-                }
-            }
-            MergerOperation::FinishedDocument => {
-                // send the rtree
-            }
-            MergerOperation::FacetDocidsMerger(merger) => {
-                let span =
-                    tracing::trace_span!(target: "indexing::documents::merge", "facet_docids");
-                let _entered = span.enter();
-                let mut facet_field_ids_delta = FacetFieldIdsDelta::new();
-                let localized_attributes_rules =
-                    index.localized_attributes_rules(rtxn)?.unwrap_or_default();
-                let mut facet_search_builder = FacetSearchBuilder::new(
-                    global_fields_ids_map.clone(),
-                    localized_attributes_rules,
-                );
-                merge_and_send_facet_docids(
-                    merger,
-                    FacetDatabases::new(index),
-                    rtxn,
-                    &mut buffer,
-                    sender.facet_docids(),
-                    &mut facet_field_ids_delta,
-                    &mut facet_search_builder,
-                )?;
-
-                merger_result.facet_field_ids_delta = Some(facet_field_ids_delta);
-                // merge and send the facet fst and the searchable facet values
-                facet_search_builder.merge_and_send(index, rtxn, sender.facet_searchable())?;
-            }
-        }
-    }
-
-    {
-        let span = tracing::trace_span!(target: "indexing::documents::merge", "documents_ids");
-        let _entered = span.enter();
-
-        // Send the documents ids unionized with the current one
-        sender.send_documents_ids(documents_ids).unwrap();
-    }
-
-    // ...
-
-    Ok(merger_result)
-}
-
-#[derive(Default, Debug)]
-pub struct MergerResult {
-    /// The delta of the prefixes
-    pub prefix_delta: Option<PrefixDelta>,
-    /// The field ids that have been modified
-    pub facet_field_ids_delta: Option<FacetFieldIdsDelta>,
-}
+use super::facet_search_builder::FacetSearchBuilder;
+use super::DocumentChange;
+use crate::update::del_add::DelAdd;
+use crate::{CboRoaringBitmapCodec, Error, FieldId, GeoPoint, GlobalFieldsIdsMap, Index, Result};
 
 pub struct GeoExtractor {
     rtree: Option<rstar::RTree<GeoPoint>>,
@@ -267,80 +65,92 @@ impl GeoExtractor {
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
-fn merge_and_send_docids(
-    merger: Merger<File, MergeDeladdCboRoaringBitmaps>,
+pub fn merge_and_send_docids<'extractor>(
+    mut caches: Vec<BalancedCaches<'extractor>>,
     database: Database<Bytes, Bytes>,
-    rtxn: &RoTxn<'_>,
-    buffer: &mut Vec<u8>,
-    docids_sender: impl DocidsSender,
-    mut register_key: impl FnMut(DelAdd, &[u8]) -> Result<()>,
+    index: &Index,
+    docids_sender: impl DocidsSender + Sync,
 ) -> Result<()> {
-    let mut merger_iter = merger.into_stream_merger_iter().unwrap();
-    while let Some((key, deladd)) = merger_iter.next().unwrap() {
-        let current = database.get(rtxn, key)?;
-        let deladd: &KvReaderDelAdd = deladd.into();
-        let del = deladd.get(DelAdd::Deletion);
-        let add = deladd.get(DelAdd::Addition);
-
-        match merge_cbo_bitmaps(current, del, add)? {
-            Operation::Write(bitmap) => {
-                let value = cbo_bitmap_serialize_into_vec(&bitmap, buffer);
-                docids_sender.write(key, value).unwrap();
-                register_key(DelAdd::Addition, key)?;
+    transpose_and_freeze_caches(&mut caches)?.into_par_iter().try_for_each(|frozen| {
+        let rtxn = index.read_txn()?;
+        let mut buffer = Vec::new();
+        merge_caches(frozen, |key, DelAddRoaringBitmap { del, add }| {
+            let current = database.get(&rtxn, key)?;
+            match merge_cbo_bitmaps(current, del, add)? {
+                Operation::Write(bitmap) => {
+                    let value = cbo_bitmap_serialize_into_vec(&bitmap, &mut buffer);
+                    docids_sender.write(key, value).unwrap();
+                    Ok(())
+                }
+                Operation::Delete => {
+                    docids_sender.delete(key).unwrap();
+                    Ok(())
+                }
+                Operation::Ignore => Ok(()),
             }
-            Operation::Delete => {
-                docids_sender.delete(key).unwrap();
-                register_key(DelAdd::Deletion, key)?;
-            }
-            Operation::Ignore => (),
-        }
-    }
-
-    Ok(())
+        })
+    })
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
-fn merge_and_send_facet_docids(
-    merger: Merger<File, MergeDeladdCboRoaringBitmaps>,
+pub fn merge_and_send_facet_docids<'indexer, 'extractor>(
+    global_fields_ids_map: GlobalFieldsIdsMap<'indexer>,
+    mut caches: Vec<BalancedCaches<'extractor>>,
     database: FacetDatabases,
-    rtxn: &RoTxn<'_>,
-    buffer: &mut Vec<u8>,
-    docids_sender: impl DocidsSender,
-    facet_field_ids_delta: &mut FacetFieldIdsDelta,
-    facet_search_builder: &mut FacetSearchBuilder,
-) -> Result<()> {
-    let mut merger_iter = merger.into_stream_merger_iter().unwrap();
-    while let Some((key, deladd)) = merger_iter.next().unwrap() {
-        let current = database.get_cbo_roaring_bytes_value(rtxn, key)?;
-        let deladd: &KvReaderDelAdd = deladd.into();
-        let del = deladd.get(DelAdd::Deletion);
-        let add = deladd.get(DelAdd::Addition);
+    index: &Index,
+    docids_sender: impl DocidsSender + Sync,
+) -> Result<(FacetFieldIdsDelta, FacetSearchBuilder<'indexer>)> {
+    transpose_and_freeze_caches(&mut caches)?
+        .into_par_iter()
+        .map(|frozen| {
+            let mut facet_field_ids_delta = FacetFieldIdsDelta::default();
+            let rtxn = index.read_txn()?;
+            let localized_attributes_rules = index.localized_attributes_rules(&rtxn)?;
+            let mut facet_search_builder = FacetSearchBuilder::new(
+                global_fields_ids_map.clone(),
+                localized_attributes_rules.unwrap_or_default(),
+            );
+            let mut buffer = Vec::new();
+            merge_caches(frozen, |key, DelAddRoaringBitmap { del, add }| {
+                let current = database.get_cbo_roaring_bytes_value(&rtxn, key)?;
+                match merge_cbo_bitmaps(current, del, add)? {
+                    Operation::Write(bitmap) => {
+                        facet_field_ids_delta.register_from_key(key);
+                        facet_search_builder.register_from_key(DelAdd::Addition, key)?;
+                        let value = cbo_bitmap_serialize_into_vec(&bitmap, &mut buffer);
+                        docids_sender.write(key, value).unwrap();
+                        Ok(())
+                    }
+                    Operation::Delete => {
+                        facet_field_ids_delta.register_from_key(key);
+                        facet_search_builder.register_from_key(DelAdd::Deletion, key)?;
+                        docids_sender.delete(key).unwrap();
+                        Ok(())
+                    }
+                    Operation::Ignore => Ok(()),
+                }
+            })?;
 
-        match merge_cbo_bitmaps(current, del, add)? {
-            Operation::Write(bitmap) => {
-                facet_field_ids_delta.register_from_key(key);
-                facet_search_builder.register_from_key(DelAdd::Addition, key)?;
-                let value = cbo_bitmap_serialize_into_vec(&bitmap, buffer);
-                docids_sender.write(key, value).unwrap();
-            }
-            Operation::Delete => {
-                facet_field_ids_delta.register_from_key(key);
-                facet_search_builder.register_from_key(DelAdd::Deletion, key)?;
-                docids_sender.delete(key).unwrap();
-            }
-            Operation::Ignore => (),
-        }
-    }
-
-    Ok(())
+            Ok((facet_field_ids_delta, facet_search_builder))
+        })
+        .reduce(
+            || Ok((FacetFieldIdsDelta::default(), todo!())),
+            |lhs, rhs| {
+                let (lhs_ffid, lhs_fsb) = lhs?;
+                let (rhs_ffid, rhs_fsb) = rhs?;
+                let ffid_merged = lhs_ffid.merge(rhs_ffid);
+                let fsb_merged = todo!();
+                Ok((ffid_merged, fsb_merged))
+            },
+        )
 }
 
-struct FacetDatabases<'a> {
+pub struct FacetDatabases<'a> {
     index: &'a Index,
 }
 
 impl<'a> FacetDatabases<'a> {
-    fn new(index: &'a Index) -> Self {
+    pub fn new(index: &'a Index) -> Self {
         Self { index }
     }
 
@@ -361,7 +171,7 @@ impl<'a> FacetDatabases<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct FacetFieldIdsDelta {
     /// The field ids that have been modified
     modified_facet_string_ids: HashSet<FieldId>,
@@ -369,13 +179,6 @@ pub struct FacetFieldIdsDelta {
 }
 
 impl FacetFieldIdsDelta {
-    fn new() -> Self {
-        Self {
-            modified_facet_string_ids: HashSet::new(),
-            modified_facet_number_ids: HashSet::new(),
-        }
-    }
-
     fn register_facet_string_id(&mut self, field_id: FieldId) {
         self.modified_facet_string_ids.insert(field_id);
     }
@@ -414,6 +217,17 @@ impl FacetFieldIdsDelta {
             Some(self.modified_facet_number_ids.iter().copied().collect())
         }
     }
+
+    pub fn merge(mut self, rhs: Self) -> Self {
+        let Self { modified_facet_number_ids, modified_facet_string_ids } = rhs;
+        modified_facet_number_ids.into_iter().for_each(|fid| {
+            self.modified_facet_number_ids.insert(fid);
+        });
+        modified_facet_string_ids.into_iter().for_each(|fid| {
+            self.modified_facet_string_ids.insert(fid);
+        });
+        self
+    }
 }
 
 enum Operation {
@@ -425,13 +239,10 @@ enum Operation {
 /// A function that merges the DelAdd CboRoaringBitmaps with the current bitmap.
 fn merge_cbo_bitmaps(
     current: Option<&[u8]>,
-    del: Option<&[u8]>,
-    add: Option<&[u8]>,
+    del: Option<RoaringBitmap>,
+    add: Option<RoaringBitmap>,
 ) -> Result<Operation> {
     let current = current.map(CboRoaringBitmapCodec::deserialize_from).transpose()?;
-    let del = del.map(CboRoaringBitmapCodec::deserialize_from).transpose()?;
-    let add = add.map(CboRoaringBitmapCodec::deserialize_from).transpose()?;
-
     match (current, del, add) {
         (None, None, None) => Ok(Operation::Ignore), // but it's strange
         (None, None, Some(add)) => Ok(Operation::Write(add)),

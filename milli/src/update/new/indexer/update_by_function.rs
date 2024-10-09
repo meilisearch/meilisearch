@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use raw_collections::RawMap;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rhai::{Dynamic, Engine, OptimizationLevel, Scope, AST};
@@ -12,8 +10,8 @@ use crate::documents::PrimaryKey;
 use crate::error::{FieldIdMapMissingEntry, InternalError};
 use crate::update::new::document::DocumentFromVersions;
 use crate::update::new::document_change::Versions;
-use crate::update::new::{Deletion, DocumentChange, KvReaderFieldId, KvWriterFieldId, Update};
-use crate::{all_obkv_to_json, Error, FieldsIdsMap, GlobalFieldsIdsMap, Object, Result, UserError};
+use crate::update::new::{Deletion, DocumentChange, KvReaderFieldId, Update};
+use crate::{all_obkv_to_json, Error, FieldsIdsMap, Object, Result, UserError};
 
 pub struct UpdateByFunction {
     documents: RoaringBitmap,

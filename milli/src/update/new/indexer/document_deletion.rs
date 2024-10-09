@@ -80,7 +80,6 @@ mod test {
     use std::sync::RwLock;
 
     use bumpalo::Bump;
-    use raw_collections::alloc::RefBump;
 
     use crate::index::tests::TempIndex;
     use crate::update::new::indexer::document_changes::{
@@ -95,11 +94,7 @@ mod test {
     fn test_deletions() {
         struct DeletionWithData<'extractor> {
             deleted: RefCell<
-                hashbrown::HashSet<
-                    DocumentId,
-                    hashbrown::hash_map::DefaultHashBuilder,
-                    RefBump<'extractor>,
-                >,
+                hashbrown::HashSet<DocumentId, hashbrown::DefaultHashBuilder, &'extractor Bump>,
             >,
         }
 
@@ -110,10 +105,7 @@ mod test {
         impl<'extractor> Extractor<'extractor> for TrackDeletion<'extractor> {
             type Data = DeletionWithData<'extractor>;
 
-            fn init_data(
-                &self,
-                extractor_alloc: raw_collections::alloc::RefBump<'extractor>,
-            ) -> crate::Result<Self::Data> {
+            fn init_data(&self, extractor_alloc: &'extractor Bump) -> crate::Result<Self::Data> {
                 let deleted = RefCell::new(hashbrown::HashSet::new_in(extractor_alloc));
                 Ok(DeletionWithData { deleted })
             }
@@ -173,8 +165,7 @@ mod test {
                 println!("deleted by {index}: {:?}", data.deleted.borrow());
             }
             for alloc in extractor_allocs.iter_mut() {
-                let alloc = &mut alloc.0;
-                alloc.get_mut().reset();
+                alloc.0.reset();
             }
         }
     }

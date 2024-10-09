@@ -3,76 +3,60 @@ mod extract_word_pair_proximity_docids;
 mod tokenize_document;
 
 use std::cell::RefCell;
-use std::fs::File;
 use std::marker::PhantomData;
 
 use bumpalo::Bump;
-pub use extract_word_docids::{WordDocidsExtractors, WordDocidsMergers};
+pub use extract_word_docids::{WordDocidsCaches, WordDocidsExtractors};
 pub use extract_word_pair_proximity_docids::WordPairProximityDocidsExtractor;
-use grenad::Merger;
 use heed::RoTxn;
-use rayon::iter::{ParallelBridge, ParallelIterator};
 use tokenize_document::{tokenizer_builder, DocumentTokenizer};
 
-use super::cache::CboCachedSorter;
+use super::cache::BalancedCaches;
 use super::DocidsExtractor;
 use crate::update::new::indexer::document_changes::{
     for_each_document_change, DocumentChangeContext, DocumentChanges, Extractor, FullySend,
     IndexingContext, ThreadLocal,
 };
 use crate::update::new::DocumentChange;
-use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
+use crate::update::GrenadParameters;
 use crate::{Index, Result, MAX_POSITION_PER_ATTRIBUTE};
 
-pub struct SearchableExtractorData<'extractor, EX: SearchableExtractor> {
-    tokenizer: &'extractor DocumentTokenizer<'extractor>,
+pub struct SearchableExtractorData<'a, EX: SearchableExtractor> {
+    tokenizer: &'a DocumentTokenizer<'a>,
     grenad_parameters: GrenadParameters,
-    max_memory: Option<usize>,
+    buckets: usize,
     _ex: PhantomData<EX>,
 }
 
-impl<'extractor, EX: SearchableExtractor + Sync> Extractor<'extractor>
-    for SearchableExtractorData<'extractor, EX>
+impl<'a, 'extractor, EX: SearchableExtractor + Sync> Extractor<'extractor>
+    for SearchableExtractorData<'a, EX>
 {
-    type Data = FullySend<RefCell<CboCachedSorter<MergeDeladdCboRoaringBitmaps>>>;
+    type Data = RefCell<BalancedCaches<'extractor>>;
 
-    fn init_data(
-        &self,
-        _extractor_alloc: raw_collections::alloc::RefBump<'extractor>,
-    ) -> Result<Self::Data> {
-        Ok(FullySend(RefCell::new(CboCachedSorter::new(
-            // TODO use a better value
-            1_000_000.try_into().unwrap(),
-            create_sorter(
-                grenad::SortAlgorithm::Stable,
-                MergeDeladdCboRoaringBitmaps,
-                self.grenad_parameters.chunk_compression_type,
-                self.grenad_parameters.chunk_compression_level,
-                self.grenad_parameters.max_nb_chunks,
-                self.max_memory,
-                false,
-            ),
-        ))))
+    fn init_data(&self, extractor_alloc: &'extractor Bump) -> Result<Self::Data> {
+        Ok(RefCell::new(BalancedCaches::new_in(
+            self.buckets,
+            self.grenad_parameters.max_memory,
+            extractor_alloc,
+        )))
     }
 
     fn process(
         &self,
         change: DocumentChange,
-        context: &crate::update::new::indexer::document_changes::DocumentChangeContext<Self::Data>,
+        context: &DocumentChangeContext<Self::Data>,
     ) -> Result<()> {
         EX::extract_document_change(context, self.tokenizer, change)
     }
 }
 
 pub trait SearchableExtractor: Sized + Sync {
-    fn run_extraction<'pl, 'fid, 'indexer, 'index, DC: DocumentChanges<'pl>>(
+    fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>>(
         grenad_parameters: GrenadParameters,
         document_changes: &DC,
         indexing_context: IndexingContext<'fid, 'indexer, 'index>,
-        extractor_allocs: &mut ThreadLocal<FullySend<RefCell<Bump>>>,
-    ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>> {
-        let max_memory = grenad_parameters.max_memory_by_thread();
-
+        extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
+    ) -> Result<Vec<BalancedCaches<'extractor>>> {
         let rtxn = indexing_context.index.read_txn()?;
         let stop_words = indexing_context.index.stop_words(&rtxn)?;
         let allowed_separators = indexing_context.index.allowed_separators(&rtxn)?;
@@ -104,7 +88,7 @@ pub trait SearchableExtractor: Sized + Sync {
         let extractor_data: SearchableExtractorData<Self> = SearchableExtractorData {
             tokenizer: &document_tokenizer,
             grenad_parameters,
-            max_memory,
+            buckets: rayon::current_num_threads(),
             _ex: PhantomData,
         };
 
@@ -122,37 +106,12 @@ pub trait SearchableExtractor: Sized + Sync {
                 &datastore,
             )?;
         }
-        {
-            let mut builder = grenad::MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
-            let span =
-                tracing::trace_span!(target: "indexing::documents::extract", "merger_building");
-            let _entered = span.enter();
 
-            let readers: Vec<_> = datastore
-                .into_iter()
-                .par_bridge()
-                .map(|cache_entry| {
-                    let cached_sorter: FullySend<
-                        RefCell<CboCachedSorter<MergeDeladdCboRoaringBitmaps>>,
-                    > = cache_entry;
-                    let cached_sorter = cached_sorter.0.into_inner();
-                    let sorter = cached_sorter.into_sorter()?;
-                    sorter.into_reader_cursors()
-                })
-                .collect();
-
-            for reader in readers {
-                builder.extend(reader?);
-            }
-
-            Ok(builder.build())
-        }
+        Ok(datastore.into_iter().map(RefCell::into_inner).collect())
     }
 
     fn extract_document_change(
-        context: &DocumentChangeContext<
-            FullySend<RefCell<CboCachedSorter<MergeDeladdCboRoaringBitmaps>>>,
-        >,
+        context: &DocumentChangeContext<RefCell<BalancedCaches>>,
         document_tokenizer: &DocumentTokenizer,
         document_change: DocumentChange,
     ) -> Result<()>;
@@ -164,12 +123,12 @@ pub trait SearchableExtractor: Sized + Sync {
 }
 
 impl<T: SearchableExtractor> DocidsExtractor for T {
-    fn run_extraction<'pl, 'fid, 'indexer, 'index, DC: DocumentChanges<'pl>>(
+    fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>>(
         grenad_parameters: GrenadParameters,
         document_changes: &DC,
         indexing_context: IndexingContext<'fid, 'indexer, 'index>,
-        extractor_allocs: &mut ThreadLocal<FullySend<RefCell<Bump>>>,
-    ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>> {
+        extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
+    ) -> Result<Vec<BalancedCaches<'extractor>>> {
         Self::run_extraction(
             grenad_parameters,
             document_changes,
