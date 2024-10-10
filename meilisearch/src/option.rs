@@ -365,7 +365,7 @@ pub struct Opt {
 
     /// Experimental drop search after. For more information, see: <https://github.com/orgs/meilisearch/discussions/783>
     ///
-    /// Let you customize after how many seconds Meilisearch should consider a search as irrelevant and drop it.
+    /// Let you customize after how many seconds Meilisearch should consider a search request irrelevant and drop it.
     /// The default value is 60.
     #[clap(long, env = MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER, default_value_t = default_drop_search_after())]
     #[serde(default = "default_drop_search_after")]
