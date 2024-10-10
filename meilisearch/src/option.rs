@@ -373,7 +373,7 @@ pub struct Opt {
 
     /// Experimental number of searches per core. For more information, see: <https://github.com/orgs/meilisearch/discussions/784>
     ///
-    /// Lets you customize how many search requests can run on each core.
+    /// Lets you customize how many search requests can run on each core concurrently.
     /// The default value is 4.
     #[clap(long, env = MEILI_EXPERIMENTAL_NB_SEARCHES_PER_CORE, default_value_t = default_nb_searches_per_core())]
     #[serde(default = "default_nb_searches_per_core")]
