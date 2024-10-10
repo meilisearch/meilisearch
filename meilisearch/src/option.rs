@@ -2,7 +2,7 @@ use std::env::VarError;
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::io::{BufReader, Read};
-use std::num::ParseIntError;
+use std::num::{NonZeroUsize, ParseIntError};
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -55,6 +55,8 @@ const MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE: &str = "MEILI_EXPERIMENTAL_ENABLE_LO
 const MEILI_EXPERIMENTAL_CONTAINS_FILTER: &str = "MEILI_EXPERIMENTAL_CONTAINS_FILTER";
 const MEILI_EXPERIMENTAL_ENABLE_METRICS: &str = "MEILI_EXPERIMENTAL_ENABLE_METRICS";
 const MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE: &str = "MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE";
+const MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER: &str = "MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER";
+const MEILI_EXPERIMENTAL_NB_SEARCHES_PER_CORE: &str = "MEILI_EXPERIMENTAL_NB_SEARCHES_PER_CORE";
 const MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE: &str =
     "MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE";
 const MEILI_EXPERIMENTAL_MAX_NUMBER_OF_BATCHED_TASKS: &str =
@@ -361,6 +363,22 @@ pub struct Opt {
     #[serde(default = "default_experimental_search_queue_size")]
     pub experimental_search_queue_size: usize,
 
+    /// Experimental drop search after. For more information, see: <https://github.com/orgs/meilisearch/discussions/783>
+    ///
+    /// Lets you customize after how much seconds should Meilisearch consider a search as irrelevant and drop it.
+    /// The default value is 60.
+    #[clap(long, env = MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER, default_value_t = default_drop_search_after())]
+    #[serde(default = "default_drop_search_after")]
+    pub experimental_drop_search_after: NonZeroUsize,
+
+    /// Experimental number of searches per core. For more information, see: <https://github.com/orgs/meilisearch/discussions/784>
+    ///
+    /// Lets you customize after how many search requests can run on each cores.
+    /// The default value is 4.
+    #[clap(long, env = MEILI_EXPERIMENTAL_NB_SEARCHES_PER_CORE, default_value_t = default_nb_searches_per_core())]
+    #[serde(default = "default_drop_search_after")]
+    pub experimental_nb_searches_per_core: NonZeroUsize,
+
     /// Experimental logs mode feature. For more information, see: <https://github.com/orgs/meilisearch/discussions/723>
     ///
     /// Change the mode of the logs on the console.
@@ -492,6 +510,8 @@ impl Opt {
             experimental_contains_filter,
             experimental_enable_metrics,
             experimental_search_queue_size,
+            experimental_drop_search_after,
+            experimental_nb_searches_per_core,
             experimental_logs_mode,
             experimental_enable_logs_route,
             experimental_replication_parameters,
@@ -558,6 +578,14 @@ impl Opt {
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE,
             experimental_search_queue_size.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER,
+            experimental_drop_search_after.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_NB_SEARCHES_PER_CORE,
+            experimental_nb_searches_per_core.to_string(),
         );
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_LOGS_MODE,
@@ -892,6 +920,14 @@ fn default_dump_dir() -> PathBuf {
 
 fn default_experimental_search_queue_size() -> usize {
     1000
+}
+
+fn default_drop_search_after() -> NonZeroUsize {
+    NonZeroUsize::new(60).unwrap()
+}
+
+fn default_nb_searches_per_core() -> NonZeroUsize {
+    NonZeroUsize::new(4).unwrap()
 }
 
 /// Indicates if a snapshot was scheduled, and if yes with which interval.
