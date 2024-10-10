@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 use std::thread::{self, Builder};
 
 use big_s::S;
@@ -11,27 +11,25 @@ pub use document_deletion::DocumentDeletion;
 pub use document_operation::DocumentOperation;
 use heed::{RoTxn, RwTxn};
 pub use partial_dump::PartialDump;
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator};
 use rayon::ThreadPool;
 pub use update_by_function::UpdateByFunction;
 
 use super::channel::*;
 use super::document::write_to_obkv;
-use super::document_change::{Deletion, DocumentChange, Insertion, Update};
+use super::document_change::DocumentChange;
 use super::extract::*;
 use super::merger::{merge_grenad_entries, FacetFieldIdsDelta};
 use super::word_fst_builder::PrefixDelta;
 use super::words_prefix_docids::{
     compute_word_prefix_docids, compute_word_prefix_fid_docids, compute_word_prefix_position_docids,
 };
-use super::{extract, StdResult, TopLevelMap};
+use super::{StdResult, TopLevelMap};
 use crate::documents::{PrimaryKey, DEFAULT_PRIMARY_KEY};
 use crate::facet::FacetType;
 use crate::update::new::channel::ExtractorSender;
-use crate::update::new::parallel_iterator_ext::ParallelIteratorExt;
 use crate::update::settings::InnerIndexSettings;
 use crate::update::{FacetsUpdateBulk, GrenadParameters};
-use crate::{fields_ids_map, Error, FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
+use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
 
 mod de;
 pub mod document_changes;
@@ -49,7 +47,7 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentExtractor<'a> {
 
     fn init_data(
         &self,
-        extractor_alloc: raw_collections::alloc::RefBump<'extractor>,
+        _extractor_alloc: raw_collections::alloc::RefBump<'extractor>,
     ) -> Result<Self::Data> {
         Ok(FullySend(()))
     }
@@ -271,7 +269,7 @@ where
         Ok(()) as Result<_>
     })?;
 
-    drop(indexing_context);
+    // required to into_inner the new_fields_ids_map
     drop(fields_ids_map_store);
 
     let fields_ids_map = new_fields_ids_map.into_inner().unwrap();

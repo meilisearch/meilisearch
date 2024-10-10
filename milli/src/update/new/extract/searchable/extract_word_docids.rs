@@ -3,29 +3,21 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::num::NonZero;
 use std::ops::DerefMut as _;
-use std::sync::Arc;
 
 use bumpalo::Bump;
 use grenad::{Merger, MergerBuilder};
 use heed::RoTxn;
-use rayon::iter::IntoParallelIterator;
 
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
-use super::SearchableExtractor;
-use crate::update::new::document::Document;
 use crate::update::new::extract::cache::CboCachedSorter;
 use crate::update::new::extract::perm_json_p::contained_in;
 use crate::update::new::indexer::document_changes::{
     for_each_document_change, DocumentChangeContext, DocumentChanges, Extractor, FullySend,
     IndexingContext, ThreadLocal,
 };
-use crate::update::new::parallel_iterator_ext::ParallelIteratorExt;
 use crate::update::new::DocumentChange;
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
-use crate::{
-    bucketed_position, DocumentId, Error, FieldId, GlobalFieldsIdsMap, Index, Result,
-    MAX_POSITION_PER_ATTRIBUTE,
-};
+use crate::{bucketed_position, DocumentId, FieldId, Index, Result, MAX_POSITION_PER_ATTRIBUTE};
 
 const MAX_COUNTED_WORDS: usize = 30;
 

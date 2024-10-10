@@ -6,10 +6,10 @@ use roaring::RoaringBitmap;
 use super::document_changes::{DocumentChangeContext, DocumentChanges, MostlySend};
 use crate::documents::PrimaryKey;
 use crate::index::db_name::EXTERNAL_DOCUMENTS_IDS;
-use crate::update::new::parallel_iterator_ext::ParallelIteratorExt as _;
 use crate::update::new::{Deletion, DocumentChange};
 use crate::{DocumentId, InternalError, Result};
 
+#[derive(Default)]
 pub struct DocumentDeletion {
     pub to_delete: RoaringBitmap,
 }
@@ -177,8 +177,5 @@ mod test {
                 alloc.get_mut().reset();
             }
         }
-        drop(deletion_tracker);
-        drop(changes);
-        drop(rtxn);
     }
 }

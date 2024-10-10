@@ -45,7 +45,7 @@ impl<'de, 'p, 'indexer: 'de, Mapper: MutFieldIdMapper> serde::de::Visitor<'de>
             let fid = fid.unwrap();
 
             match self.primary_key {
-                PrimaryKey::Flat { name, field_id } => {
+                PrimaryKey::Flat { name: _, field_id } => {
                     let value: &'de RawValue = map.next_value()?;
                     if fid == *field_id {
                         let value = match value
@@ -145,8 +145,8 @@ impl<'de, 'indexer: 'de> serde::de::Visitor<'de> for DocumentIdVisitor<'indexer>
     {
         use std::fmt::Write as _;
 
-        let mut out = bumpalo::collections::String::new_in(&self.0);
-        write!(&mut out, "{v}");
+        let mut out = bumpalo::collections::String::new_in(self.0);
+        write!(&mut out, "{v}").unwrap();
         Ok(Ok(out.into_bump_str()))
     }
 

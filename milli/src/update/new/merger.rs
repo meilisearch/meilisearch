@@ -11,14 +11,12 @@ use roaring::RoaringBitmap;
 use super::channel::*;
 use super::extract::FacetKind;
 use super::word_fst_builder::{PrefixData, PrefixDelta, PrefixSettings};
-use super::{Deletion, DocumentChange, Insertion, KvReaderDelAdd, KvReaderFieldId, Update};
+use super::{Deletion, DocumentChange, KvReaderDelAdd, KvReaderFieldId};
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::MergerOperation;
 use crate::update::new::word_fst_builder::WordFstBuilder;
 use crate::update::MergeDeladdCboRoaringBitmaps;
-use crate::{
-    CboRoaringBitmapCodec, Error, FieldId, GeoPoint, GlobalFieldsIdsMap, Index, Prefix, Result,
-};
+use crate::{CboRoaringBitmapCodec, Error, FieldId, GeoPoint, GlobalFieldsIdsMap, Index, Result};
 
 /// TODO We must return some infos/stats
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents", name = "merge")]
@@ -27,7 +25,7 @@ pub fn merge_grenad_entries(
     sender: MergerSender,
     rtxn: &RoTxn,
     index: &Index,
-    mut global_fields_ids_map: GlobalFieldsIdsMap<'_>,
+    global_fields_ids_map: GlobalFieldsIdsMap<'_>,
 ) -> Result<MergerResult> {
     let mut buffer: Vec<u8> = Vec::new();
     let mut documents_ids = index.documents_ids(rtxn)?;
@@ -386,7 +384,7 @@ impl FacetFieldIdsDelta {
         }
     }
 
-    fn extract_key_data<'a>(&self, key: &'a [u8]) -> (FacetKind, FieldId) {
+    fn extract_key_data(&self, key: &[u8]) -> (FacetKind, FieldId) {
         let facet_kind = FacetKind::from(key[0]);
         let field_id = FieldId::from_be_bytes([key[1], key[2]]);
         (facet_kind, field_id)

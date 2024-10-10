@@ -5,7 +5,6 @@ mod tokenize_document;
 use std::cell::RefCell;
 use std::fs::File;
 use std::marker::PhantomData;
-use std::ops::DerefMut;
 
 use bumpalo::Bump;
 pub use extract_word_docids::{WordDocidsExtractors, WordDocidsMergers};
@@ -23,7 +22,7 @@ use crate::update::new::indexer::document_changes::{
 };
 use crate::update::new::DocumentChange;
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
-use crate::{GlobalFieldsIdsMap, Index, Result, MAX_POSITION_PER_ATTRIBUTE};
+use crate::{Index, Result, MAX_POSITION_PER_ATTRIBUTE};
 
 pub struct SearchableExtractorData<'extractor, EX: SearchableExtractor> {
     tokenizer: &'extractor DocumentTokenizer<'extractor>,
@@ -120,7 +119,7 @@ pub trait SearchableExtractor: Sized + Sync {
                 indexing_context,
                 extractor_allocs,
                 &datastore,
-            );
+            )?;
         }
         {
             let mut builder = grenad::MergerBuilder::new(MergeDeladdCboRoaringBitmaps);

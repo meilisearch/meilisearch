@@ -7,7 +7,7 @@ use super::document_change::{Entry, Versions};
 use super::{KvReaderFieldId, KvWriterFieldId};
 use crate::documents::FieldIdMapper;
 use crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME;
-use crate::{DocumentId, FieldId, Index, InternalError, Result};
+use crate::{DocumentId, Index, InternalError, Result};
 
 /// A view into a document that can represent either the current version from the DB,
 /// the update data from payload or other means, or the merged updated version.
@@ -65,14 +65,6 @@ impl<'t, Mapper: FieldIdMapper> DocumentFromDb<'t, Mapper> {
         index.documents.get(rtxn, &docid).map_err(crate::Error::from).map(|reader| {
             reader.map(|reader| Self { fields_ids_map: db_fields_ids_map, content: reader })
         })
-    }
-
-    fn field_from_fid(&self, fid: FieldId) -> Result<Option<&'t RawValue>> {
-        Ok(self
-            .content
-            .get(fid)
-            .map(|v| serde_json::from_slice(v).map_err(InternalError::SerdeJson))
-            .transpose()?)
     }
 }
 

@@ -27,7 +27,7 @@ impl From<u8> for FacetKind {
 }
 
 impl FacetKind {
-    pub fn extract_from_key<'k>(key: &'k [u8]) -> (FacetKind, &'k [u8]) {
+    pub fn extract_from_key(key: &[u8]) -> (FacetKind, &[u8]) {
         debug_assert!(key.len() > 3);
         (FacetKind::from(key[0]), &key[1..])
     }

@@ -30,7 +30,6 @@ use meilisearch_types::error::Code;
 use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
 use meilisearch_types::milli::heed::CompactionOption;
-use meilisearch_types::milli::update::new::indexer::document_changes::DocumentChanges;
 use meilisearch_types::milli::update::new::indexer::{self, retrieve_or_guess_primary_key};
 use meilisearch_types::milli::update::{
     IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings as MilliSettings,
@@ -1252,7 +1251,7 @@ impl IndexScheduler {
                 mut tasks,
             } => {
                 let started_processing_at = std::time::Instant::now();
-                let mut primary_key_has_been_set = false;
+                let primary_key_has_been_set = false;
                 let must_stop_processing = self.must_stop_processing.clone();
                 let indexer_config = self.index_mapper.indexer_config();
                 // TODO: at some point, for better efficiency we might want to reuse the bumpalo for successive batches.

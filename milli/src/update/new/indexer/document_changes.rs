@@ -76,20 +76,6 @@ impl<T: MostlySend> MostlySendWrapper<T> {
         Self(t)
     }
 
-    fn new_send(t: T) -> Self
-    where
-        T: Send,
-    {
-        Self(t)
-    }
-
-    fn get(&self) -> T
-    where
-        T: Copy,
-    {
-        self.0
-    }
-
     fn as_ref(&self) -> &T {
         &self.0
     }
@@ -111,6 +97,7 @@ impl<T: MostlySend> MostlySendWrapper<T> {
 unsafe impl<T: MostlySend> Send for MostlySendWrapper<T> {}
 
 /// A wrapper around [`thread_local::ThreadLocal`] that accepts [`MostlySend`] `T`s.
+#[derive(Default)]
 pub struct ThreadLocal<T: MostlySend> {
     inner: thread_local::ThreadLocal<MostlySendWrapper<T>>,
     // FIXME: this should be necessary
@@ -235,6 +222,7 @@ impl<
         T: MostlySend,
     > DocumentChangeContext<'doc, 'extractor, 'fid, 'indexer, T>
 {
+    #[allow(clippy::too_many_arguments)]
     pub fn new<F>(
         index: &'indexer Index,
         db_fields_ids_map: &'indexer FieldsIdsMap,
@@ -252,7 +240,7 @@ impl<
             doc_allocs.get_or(|| FullySend(Cell::new(Bump::with_capacity(1024 * 1024 * 1024))));
         let doc_alloc = doc_alloc.0.take();
         let fields_ids_map = fields_ids_map_store
-            .get_or(|| RefCell::new(GlobalFieldsIdsMap::new(&new_fields_ids_map)).into());
+            .get_or(|| RefCell::new(GlobalFieldsIdsMap::new(new_fields_ids_map)).into());
 
         let fields_ids_map = &fields_ids_map.0;
         let extractor_alloc = extractor_allocs.get_or_default();

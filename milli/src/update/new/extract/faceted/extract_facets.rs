@@ -55,11 +55,7 @@ impl<'extractor> Extractor<'extractor> for FacetedExtractorData<'extractor> {
         change: DocumentChange,
         context: &crate::update::new::indexer::document_changes::DocumentChangeContext<Self::Data>,
     ) -> Result<()> {
-        FacetedDocidsExtractor::extract_document_change(
-            &context,
-            self.attributes_to_extract,
-            change,
-        )
+        FacetedDocidsExtractor::extract_document_change(context, self.attributes_to_extract, change)
     }
 }
 
@@ -162,7 +158,7 @@ impl FacetedDocidsExtractor {
         // key: fid
         buffer.push(FacetKind::Exists as u8);
         buffer.extend_from_slice(&fid.to_be_bytes());
-        cache_fn(cached_sorter, &*buffer, docid).map_err(Into::into)?;
+        cache_fn(cached_sorter, &buffer, docid).map_err(Into::into)?;
 
         match value {
             // Number
@@ -178,7 +174,7 @@ impl FacetedDocidsExtractor {
                     buffer.extend_from_slice(&ordered);
                     buffer.extend_from_slice(&n.to_be_bytes());
 
-                    cache_fn(cached_sorter, &*buffer, docid).map_err(Into::into)
+                    cache_fn(cached_sorter, &buffer, docid).map_err(Into::into)
                 } else {
                     Ok(())
                 }
@@ -192,7 +188,7 @@ impl FacetedDocidsExtractor {
                 buffer.extend_from_slice(&fid.to_be_bytes());
                 buffer.push(0); // level 0
                 buffer.extend_from_slice(truncated.as_bytes());
-                cache_fn(cached_sorter, &*buffer, docid).map_err(Into::into)
+                cache_fn(cached_sorter, &buffer, docid).map_err(Into::into)
             }
             // Null
             // key: fid
@@ -200,7 +196,7 @@ impl FacetedDocidsExtractor {
                 buffer.clear();
                 buffer.push(FacetKind::Null as u8);
                 buffer.extend_from_slice(&fid.to_be_bytes());
-                cache_fn(cached_sorter, &*buffer, docid).map_err(Into::into)
+                cache_fn(cached_sorter, &buffer, docid).map_err(Into::into)
             }
             // Empty
             // key: fid
@@ -208,13 +204,13 @@ impl FacetedDocidsExtractor {
                 buffer.clear();
                 buffer.push(FacetKind::Empty as u8);
                 buffer.extend_from_slice(&fid.to_be_bytes());
-                cache_fn(cached_sorter, &*buffer, docid).map_err(Into::into)
+                cache_fn(cached_sorter, &buffer, docid).map_err(Into::into)
             }
             Value::Object(o) if o.is_empty() => {
                 buffer.clear();
                 buffer.push(FacetKind::Empty as u8);
                 buffer.extend_from_slice(&fid.to_be_bytes());
-                cache_fn(cached_sorter, &*buffer, docid).map_err(Into::into)
+                cache_fn(cached_sorter, &buffer, docid).map_err(Into::into)
             }
             // Otherwise, do nothing
             /// TODO: What about Value::Bool?

@@ -2,9 +2,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
-use bumpalo::Bump;
 use heed::RoTxn;
-use obkv::KvReader;
 
 use super::tokenize_document::DocumentTokenizer;
 use super::SearchableExtractor;
