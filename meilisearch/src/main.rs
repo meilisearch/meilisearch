@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::thread::available_parallelism;
+use std::time::Duration;
 
 use actix_web::http::KeepAlive;
 use actix_web::web::Data;
@@ -153,8 +154,14 @@ async fn run_http(
     let auth_controller = Data::from(auth_controller);
     let search_queue = SearchQueue::new(
         opt.experimental_search_queue_size,
-        available_parallelism().unwrap_or(NonZeroUsize::new(2).unwrap()),
-    );
+        available_parallelism()
+            .unwrap_or(NonZeroUsize::new(2).unwrap())
+            .checked_mul(opt.experimental_nb_searches_per_core)
+            .unwrap_or(NonZeroUsize::MAX),
+    )
+    .with_time_to_abort(Duration::from_secs(
+        usize::from(opt.experimental_drop_search_after) as u64
+    ));
     let search_queue = Data::new(search_queue);
 
     let http_server = HttpServer::new(move || {
