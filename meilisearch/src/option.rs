@@ -365,7 +365,7 @@ pub struct Opt {
 
     /// Experimental drop search after. For more information, see: <https://github.com/orgs/meilisearch/discussions/783>
     ///
-    /// Lets you customize after how much seconds should Meilisearch consider a search as irrelevant and drop it.
+    /// Let you customize after how many seconds Meilisearch should consider a search as irrelevant and drop it.
     /// The default value is 60.
     #[clap(long, env = MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER, default_value_t = default_drop_search_after())]
     #[serde(default = "default_drop_search_after")]
@@ -373,7 +373,7 @@ pub struct Opt {
 
     /// Experimental number of searches per core. For more information, see: <https://github.com/orgs/meilisearch/discussions/784>
     ///
-    /// Lets you customize after how many search requests can run on each cores.
+    /// Lets you customize how many search requests can run on each core.
     /// The default value is 4.
     #[clap(long, env = MEILI_EXPERIMENTAL_NB_SEARCHES_PER_CORE, default_value_t = default_nb_searches_per_core())]
     #[serde(default = "default_drop_search_after")]
