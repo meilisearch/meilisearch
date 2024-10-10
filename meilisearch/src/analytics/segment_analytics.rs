@@ -1572,6 +1572,10 @@ impl EditDocumentsByFunctionAggregator {
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
         let Self { timestamp, user_agents, index_creation, filtered, with_context } = self;
 
+        // if we had no timestamp it means we never encountered any events and
+        // thus we don't need to send this event.
+        let timestamp = timestamp?;
+
         let properties = json!({
             "user-agent": user_agents,
             "filtered": filtered,
@@ -1580,7 +1584,7 @@ impl EditDocumentsByFunctionAggregator {
         });
 
         Some(Track {
-            timestamp,
+            timestamp: Some(timestamp),
             user: user.clone(),
             event: event_name.to_string(),
             properties,
