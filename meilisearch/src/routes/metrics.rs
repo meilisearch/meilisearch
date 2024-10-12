@@ -1,6 +1,7 @@
 use actix_web::http::header;
 use actix_web::web::{self, Data};
 use actix_web::HttpResponse;
+use build_info;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
 use meilisearch_types::error::ResponseError;
@@ -53,6 +54,11 @@ pub async fn get_metrics(
         crate::metrics::MEILISEARCH_LAST_UPDATE.set(last_update.unix_timestamp());
     }
     crate::metrics::MEILISEARCH_IS_INDEXING.set(index_scheduler.is_task_processing()? as i64);
+
+    let build_info = build_info::BuildInfo::from_build();
+    let commit_sha = build_info.commit_sha1.unwrap_or("unknown").to_string();
+    let pkg_version = env!("CARGO_PKG_VERSION").to_string();
+    crate::metrics::MEILISEARCH_BUILD_INFO.with_label_values(&[&commit_sha, &pkg_version]).set(1);
 
     let encoder = TextEncoder::new();
     let mut buffer = vec![];
