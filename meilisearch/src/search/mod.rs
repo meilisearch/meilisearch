@@ -1195,8 +1195,13 @@ impl<'a> HitMaker<'a> {
         let vectors_is_hidden = match (&displayed_ids, vectors_fid) {
             // displayed_ids is a wildcard, so `_vectors` can be displayed regardless of its fid
             (None, _) => false,
-            // displayed_ids is a finite list, and `_vectors` cannot be part of it because it is not an existing field
-            (Some(_), None) => true,
+            // vectors has no fid, so check its explicit name
+            (Some(_), None) => {
+                // unwrap as otherwise we'd go to the first one
+                let displayed_names = index.displayed_fields(rtxn)?.unwrap();
+                !displayed_names
+                    .contains(&milli::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME)
+            }
             // displayed_ids is a finit list, so hide if `_vectors` is not part of it
             (Some(map), Some(vectors_fid)) => map.contains(&vectors_fid),
         };
