@@ -1669,6 +1669,14 @@ impl Index {
         }
         Ok(res)
     }
+
+    pub fn prefix_settings(&self, _rtxn: &RoTxn<'_>) -> Result<PrefixSettings> {
+        Ok(PrefixSettings {
+            compute_prefixes: true,
+            max_prefix_length: 4,
+            prefix_count_threshold: 100,
+        })
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1676,6 +1684,13 @@ pub struct IndexEmbeddingConfig {
     pub name: String,
     pub config: EmbeddingConfig,
     pub user_provided: RoaringBitmap,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PrefixSettings {
+    pub prefix_count_threshold: u64,
+    pub max_prefix_length: usize,
+    pub compute_prefixes: bool,
 }
 
 #[derive(Serialize, Deserialize)]

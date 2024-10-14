@@ -5,7 +5,7 @@ use memmap2::Mmap;
 use std::collections::HashSet;
 use tempfile::tempfile;
 
-use crate::{update::del_add::DelAdd, Prefix, Result};
+use crate::{index::PrefixSettings, update::del_add::DelAdd, InternalError, Prefix, Result};
 
 pub struct WordFstBuilder<'a> {
     stream: Option<fst::set::Stream<'a>>,
@@ -143,8 +143,10 @@ impl<'a> WordFstBuilder<'a> {
     ) -> Result<(Mmap, Option<PrefixData>)> {
         self.drain_stream()?;
 
-        /// TODO: ugly unwrap
-        let words_fst_file = self.word_fst_builder.into_inner()?.into_inner().unwrap();
+        let words_fst_file =
+            self.word_fst_builder.into_inner()?.into_inner().map_err(|_| {
+                InternalError::IndexingMergingKeys { process: "building-words-fst" }
+            })?;
         let words_fst_mmap = unsafe { Mmap::map(&words_fst_file)? };
 
         let prefix_data = self
@@ -154,13 +156,6 @@ impl<'a> WordFstBuilder<'a> {
 
         Ok((words_fst_mmap, prefix_data))
     }
-}
-
-#[derive(Debug)]
-pub struct PrefixSettings {
-    pub prefix_count_threshold: u64,
-    pub max_prefix_length: usize,
-    pub compute_prefixes: bool,
 }
 
 pub struct PrefixData {
@@ -269,8 +264,9 @@ impl PrefixFstBuilder {
         let op = fst::set::OpBuilder::from_iter(prefix_fsts.iter());
         let mut builder = SetBuilder::new(BufWriter::new(tempfile()?))?;
         builder.extend_stream(op.r#union())?;
-        /// TODO: ugly unwrap
-        let prefix_fst_file = builder.into_inner()?.into_inner().unwrap();
+        let prefix_fst_file = builder.into_inner()?.into_inner().map_err(|_| {
+            InternalError::IndexingMergingKeys { process: "building-words-prefixes-fst" }
+        })?;
         let prefix_fst_mmap = unsafe { Mmap::map(&prefix_fst_file)? };
         let new_prefix_fst = Set::new(&prefix_fst_mmap)?;
         let old_prefix_fst = index.words_prefixes_fst(rtxn)?;

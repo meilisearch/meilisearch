@@ -10,7 +10,7 @@ use roaring::RoaringBitmap;
 
 use super::channel::*;
 use super::extract::FacetKind;
-use super::word_fst_builder::{PrefixData, PrefixDelta, PrefixSettings};
+use super::word_fst_builder::{PrefixData, PrefixDelta};
 use super::{Deletion, DocumentChange, KvReaderDelAdd, KvReaderFieldId};
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::MergerOperation;
@@ -63,12 +63,7 @@ pub fn merge_grenad_entries(
             MergerOperation::WordDocidsMerger(merger) => {
                 let words_fst = index.words_fst(rtxn)?;
                 let mut word_fst_builder = WordFstBuilder::new(&words_fst)?;
-                /// TODO make this configurable
-                let prefix_settings = PrefixSettings {
-                    compute_prefixes: true,
-                    max_prefix_length: 4,
-                    prefix_count_threshold: 100,
-                };
+                let prefix_settings = index.prefix_settings(rtxn)?;
                 word_fst_builder.with_prefix_settings(prefix_settings);
 
                 {
