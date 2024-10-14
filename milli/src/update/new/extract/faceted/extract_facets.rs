@@ -182,7 +182,8 @@ impl FacetedDocidsExtractor {
             // String
             // key: fid - level - truncated_string
             Value::String(s) => {
-                let truncated = truncate_str(s);
+                let normalized = crate::normalize_facet(s);
+                let truncated = truncate_str(&normalized);
                 buffer.clear();
                 buffer.push(FacetKind::String as u8);
                 buffer.extend_from_slice(&fid.to_be_bytes());
