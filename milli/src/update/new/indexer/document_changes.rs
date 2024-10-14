@@ -278,7 +278,7 @@ pub trait Extractor<'extractor>: Sync {
 
 pub trait DocumentChanges<'pl // lifetime of the underlying payload
 >: Sync {
-    type Item;
+    type Item: Send;
 
     fn iter(&self) -> impl IndexedParallelIterator<Item = Self::Item>;
 

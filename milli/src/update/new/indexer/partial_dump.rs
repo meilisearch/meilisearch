@@ -67,7 +67,7 @@ where
         let fields_ids_map = fields_ids_map.deref_mut();
 
         let res = document
-            .deserialize_map(DocumentVisitor::new(fields_ids_map, self.primary_key, &doc_alloc))
+            .deserialize_map(DocumentVisitor::new(fields_ids_map, self.primary_key, doc_alloc))
             .map_err(UserError::SerdeJson)?;
 
         let external_document_id = match res {

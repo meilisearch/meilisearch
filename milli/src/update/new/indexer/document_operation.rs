@@ -131,7 +131,7 @@ impl<'pl> DocumentOperation<'pl> {
                             None => {
                                 let (docid, is_new) = match index
                                     .external_documents_ids()
-                                    .get(rtxn, &external_document_id)?
+                                    .get(rtxn, external_document_id)?
                                 {
                                     Some(docid) => (docid, false),
                                     None => (
@@ -401,7 +401,7 @@ impl MergeChanges for MergeDocumentForUpdates {
 
         let versions = versions.into_bump_slice();
         let versions = match versions {
-            [single] => Versions::Single(*single),
+            [single] => Versions::Single(single),
             versions => Versions::Multiple(versions),
         };
 
