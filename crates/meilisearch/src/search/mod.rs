@@ -1808,45 +1808,9 @@ fn format_value(
                 None => Value::String(old_string),
             }
         }
-        Value::Array(values) => Value::Array(
-            values
-                .into_iter()
-                .map(|v| {
-                    format_value(
-                        v,
-                        builder,
-                        format_options.map(|format_options| FormatOptions {
-                            highlight: format_options.highlight,
-                            crop: None,
-                        }),
-                        infos,
-                        compute_matches,
-                        locales,
-                    )
-                })
-                .collect(),
-        ),
-        Value::Object(object) => Value::Object(
-            object
-                .into_iter()
-                .map(|(k, v)| {
-                    (
-                        k,
-                        format_value(
-                            v,
-                            builder,
-                            format_options.map(|format_options| FormatOptions {
-                                highlight: format_options.highlight,
-                                crop: None,
-                            }),
-                            infos,
-                            compute_matches,
-                            locales,
-                        ),
-                    )
-                })
-                .collect(),
-        ),
+        // `map_leaf_values` makes sure this is only called for leaf fields
+        Value::Array(_) => unreachable!(),
+        Value::Object(_) => unreachable!(),
         Value::Number(number) => {
             let s = number.to_string();
 
