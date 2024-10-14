@@ -10,6 +10,7 @@ use itertools::{EitherOrBoth, Itertools};
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use time::OffsetDateTime;
+use utoipa::{PartialSchema, ToSchema};
 
 use super::del_add::DelAddOperation;
 use super::index_documents::{IndexDocumentsConfig, Transform};
@@ -37,6 +38,18 @@ pub enum Setting<T> {
     Set(T),
     Reset,
     NotSet,
+}
+
+impl<T: ToSchema> ToSchema for Setting<T> {
+    fn name() -> std::borrow::Cow<'static, str> {
+        T::name()
+    }
+}
+
+impl<T: PartialSchema> PartialSchema for Setting<T> {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        T::schema()
+    }
 }
 
 impl<T, E> Deserr<E> for Setting<T>

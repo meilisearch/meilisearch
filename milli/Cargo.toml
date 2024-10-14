@@ -86,6 +86,7 @@ tracing = "0.1.40"
 ureq = { version = "2.10.0", features = ["json"] }
 url = "2.5.2"
 rayon-par-bridge = "0.1.0"
+utoipa = { version = "5.0.0-rc.0", features = ["non_strict_integers", "preserve_order", "uuid", "time", "openapi_extensions"] }
 
 [dev-dependencies]
 mimalloc = { version = "0.1.43", default-features = false }
