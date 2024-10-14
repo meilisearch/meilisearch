@@ -2,9 +2,13 @@ use std::borrow::Cow;
 use std::iter;
 use std::result::Result as StdResult;
 
+use bumpalo::Bump;
+use serde_json::value::RawValue;
 use serde_json::{from_str, Value};
 
-use crate::update::new::{CowStr, TopLevelMap};
+use crate::fields_ids_map::MutFieldIdMapper;
+use crate::update::new::indexer::de::DeOrBumpStr;
+use crate::update::new::{CowStr, KvReaderFieldId, TopLevelMap};
 use crate::{FieldId, InternalError, Object, Result, UserError};
 
 /// The symbol used to define levels in a nested primary key.
@@ -115,6 +119,78 @@ impl<'a> PrimaryKey<'a> {
                 }
             }
         }
+    }
+
+    pub fn extract_docid_from_db<'pl, 'bump: 'pl, Mapper: FieldIdMapper>(
+        &self,
+        document: &'pl KvReaderFieldId,
+        db_fields_ids_map: &Mapper,
+        indexer: &'bump Bump,
+    ) -> Result<DeOrBumpStr<'pl, 'bump>> {
+        use serde::Deserializer as _;
+
+        match self {
+            PrimaryKey::Flat { name: _, field_id } => {
+                let Some(document_id) = document.get(*field_id) else {
+                    return Err(InternalError::DocumentsError(
+                        crate::documents::Error::InvalidDocumentFormat,
+                    )
+                    .into());
+                };
+
+                let document_id: &RawValue =
+                    serde_json::from_slice(document_id).map_err(InternalError::SerdeJson)?;
+
+                let document_id = document_id
+                    .deserialize_any(crate::update::new::indexer::de::DocumentIdVisitor(indexer))
+                    .map_err(InternalError::SerdeJson)?;
+
+                let external_document_id = match document_id {
+                    Ok(document_id) => Ok(document_id),
+                    Err(_) => Err(InternalError::DocumentsError(
+                        crate::documents::Error::InvalidDocumentFormat,
+                    )),
+                }?;
+
+                Ok(external_document_id)
+            }
+            PrimaryKey::Nested { name } => todo!(),
+        }
+    }
+
+    pub fn extract_fields_and_docid<'pl, 'bump: 'pl, Mapper: MutFieldIdMapper>(
+        &self,
+        document: &'pl RawValue,
+        new_fields_ids_map: &mut Mapper,
+        indexer: &'bump Bump,
+    ) -> Result<DeOrBumpStr<'pl, 'bump>> {
+        use serde::Deserializer as _;
+        let res = document
+            .deserialize_map(crate::update::new::indexer::de::FieldAndDocidExtractor::new(
+                new_fields_ids_map,
+                self,
+                indexer,
+            ))
+            .map_err(UserError::SerdeJson)?;
+
+        let external_document_id = match res {
+            Ok(document_id) => Ok(document_id),
+            Err(DocumentIdExtractionError::InvalidDocumentId(e)) => Err(e),
+            Err(DocumentIdExtractionError::MissingDocumentId) => {
+                Err(UserError::MissingDocumentId {
+                    primary_key: self.name().to_string(),
+                    document: serde_json::from_str(document.get()).unwrap(),
+                })
+            }
+            Err(DocumentIdExtractionError::TooManyDocumentIds(_)) => {
+                Err(UserError::TooManyDocumentIds {
+                    primary_key: self.name().to_string(),
+                    document: serde_json::from_str(document.get()).unwrap(),
+                })
+            }
+        }?;
+
+        Ok(external_document_id)
     }
 
     /// Returns the document ID based on the primary and
