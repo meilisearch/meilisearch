@@ -5,9 +5,8 @@ use roaring::RoaringBitmap;
 
 use super::document_changes::{DocumentChangeContext, DocumentChanges, MostlySend};
 use crate::documents::PrimaryKey;
-use crate::index::db_name::EXTERNAL_DOCUMENTS_IDS;
 use crate::update::new::{Deletion, DocumentChange};
-use crate::{DocumentId, InternalError, Result};
+use crate::{DocumentId, Result};
 
 #[derive(Default)]
 pub struct DocumentDeletion {
@@ -61,12 +60,15 @@ impl<'pl> DocumentChanges<'pl> for DocumentDeletionChanges<'pl> {
         'pl: 'doc, // the payload must survive the process calls
     {
         let current = context.index.document(&context.txn, docid)?;
-        let new_fields_ids_map = context.new_fields_ids_map.borrow();
-        let new_fields_ids_map = new_fields_ids_map.local_map();
-        let external_document_id =
-            self.primary_key.document_id(current, new_fields_ids_map)?.map_err(|_| {
-                InternalError::DatabaseMissingEntry { db_name: EXTERNAL_DOCUMENTS_IDS, key: None }
-            })?;
+
+        let external_document_id = self.primary_key.extract_docid_from_db(
+            current,
+            &context.db_fields_ids_map,
+            &context.doc_alloc,
+        )?;
+
+        let external_document_id = external_document_id.to_bump(&context.doc_alloc);
+
         Ok(DocumentChange::Deletion(Deletion::create(docid, external_document_id)))
     }
 }

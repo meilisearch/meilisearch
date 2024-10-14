@@ -11,10 +11,10 @@ use super::document_changes::{DocumentChangeContext, DocumentChanges, MostlySend
 use crate::documents::{DocumentIdExtractionError, PrimaryKey};
 use crate::update::new::document::DocumentFromVersions;
 use crate::update::new::document_change::Versions;
-use crate::update::new::indexer::de::DocumentVisitor;
+use crate::update::new::indexer::de::FieldAndDocidExtractor;
 use crate::update::new::{Deletion, Insertion, Update};
 use crate::update::{AvailableIds, IndexDocumentsMethod};
-use crate::{DocumentId, Error, FieldsIdsMap, Index, Result, UserError};
+use crate::{external_documents_ids, DocumentId, Error, FieldsIdsMap, Index, Result, UserError};
 
 pub struct DocumentOperation<'pl> {
     operations: Vec<Payload<'pl>>,
@@ -98,7 +98,7 @@ impl<'pl> DocumentOperation<'pl> {
                         iter.next().transpose().map_err(UserError::SerdeJson)?
                     {
                         let res = document
-                            .deserialize_map(DocumentVisitor::new(
+                            .deserialize_map(FieldAndDocidExtractor::new(
                                 new_fields_ids_map,
                                 primary_key,
                                 indexer,
@@ -121,6 +121,8 @@ impl<'pl> DocumentOperation<'pl> {
                                 })
                             }
                         }?;
+
+                        let external_document_id = external_document_id.to_de();
 
                         let current_offset = iter.byte_offset();
                         let document_operation = InnerDocOp::Addition(DocumentOffset {
@@ -310,23 +312,14 @@ impl MergeChanges for MergeDocumentForReplacement {
                 let document = DocumentFromVersions::new(Versions::Single(document));
 
                 if is_new {
-                    Ok(DocumentChange::Insertion(Insertion::create(
-                        docid,
-                        external_doc.to_owned(),
-                        document,
-                    )))
+                    Ok(DocumentChange::Insertion(Insertion::create(docid, external_doc, document)))
                 } else {
-                    Ok(DocumentChange::Update(Update::create(
-                        docid,
-                        external_doc.to_owned(),
-                        document,
-                        true,
-                    )))
+                    Ok(DocumentChange::Update(Update::create(docid, external_doc, document, true)))
                 }
             }
             Some(InnerDocOp::Deletion) => {
                 let deletion = if is_new {
-                    Deletion::create(docid, external_doc.to_owned())
+                    Deletion::create(docid, external_doc)
                 } else {
                     todo!("Do that with Louis")
                 };
@@ -373,7 +366,7 @@ impl MergeChanges for MergeDocumentForUpdates {
 
         if operations.is_empty() {
             let deletion = if !is_new {
-                Deletion::create(docid, external_docid.to_owned())
+                Deletion::create(docid, external_docid)
             } else {
                 todo!("Do that with Louis")
             };
@@ -408,15 +401,11 @@ impl MergeChanges for MergeDocumentForUpdates {
         let document = DocumentFromVersions::new(versions);
 
         if is_new {
-            Ok(DocumentChange::Insertion(Insertion::create(
-                docid,
-                external_docid.to_owned(),
-                document,
-            )))
+            Ok(DocumentChange::Insertion(Insertion::create(docid, external_docid, document)))
         } else {
             Ok(DocumentChange::Update(Update::create(
                 docid,
-                external_docid.to_owned(),
+                external_docid,
                 document,
                 has_deletion,
             )))

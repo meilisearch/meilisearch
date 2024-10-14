@@ -4,7 +4,7 @@ use rayon::iter::IndexedParallelIterator;
 use serde::Deserializer;
 use serde_json::value::RawValue;
 
-use super::de::DocumentVisitor;
+use super::de::FieldAndDocidExtractor;
 use super::document_changes::{DocumentChangeContext, DocumentChanges, MostlySend};
 use crate::documents::{DocumentIdExtractionError, PrimaryKey};
 use crate::update::concurrent_available_ids::ConcurrentAvailableIds;
@@ -66,28 +66,12 @@ where
         let mut fields_ids_map = context.new_fields_ids_map.borrow_mut();
         let fields_ids_map = fields_ids_map.deref_mut();
 
-        let res = document
-            .deserialize_map(DocumentVisitor::new(fields_ids_map, self.primary_key, doc_alloc))
-            .map_err(UserError::SerdeJson)?;
-
-        let external_document_id = match res {
-            Ok(document_id) => Ok(document_id),
-            Err(DocumentIdExtractionError::InvalidDocumentId(e)) => Err(e),
-            Err(DocumentIdExtractionError::MissingDocumentId) => {
-                Err(UserError::MissingDocumentId {
-                    primary_key: self.primary_key.name().to_string(),
-                    document: serde_json::from_str(document.get()).unwrap(),
-                })
-            }
-            Err(DocumentIdExtractionError::TooManyDocumentIds(_)) => {
-                Err(UserError::TooManyDocumentIds {
-                    primary_key: self.primary_key.name().to_string(),
-                    document: serde_json::from_str(document.get()).unwrap(),
-                })
-            }
-        }?;
         let document = doc_alloc.alloc_str(document.get());
         let document: &RawValue = unsafe { std::mem::transmute(document) };
+
+        let external_document_id =
+            self.primary_key.extract_fields_and_docid(document, fields_ids_map, doc_alloc)?;
+        let external_document_id = external_document_id.to_de();
 
         let document = raw_collections::RawMap::from_raw_value(document, doc_alloc)
             .map_err(InternalError::SerdeJson)?;
@@ -95,7 +79,7 @@ where
         let document = document.into_bump_slice();
         let document = DocumentFromVersions::new(Versions::Single(document));
 
-        let insertion = Insertion::create(docid, external_document_id.to_owned(), document);
+        let insertion = Insertion::create(docid, external_document_id, document);
         Ok(DocumentChange::Insertion(insertion))
     }
 }
