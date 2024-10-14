@@ -141,7 +141,7 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
                     //
                     // Future: Use a custom function rhai function to track changes.
                     //         <https://docs.rs/rhai/latest/rhai/struct.Engine.html#method.register_indexer_set>
-                    if dbg!(json_document) != dbg!(rhaimap_to_object(new_rhai_document)) {
+                    if json_document != rhaimap_to_object(new_rhai_document) {
                         let mut global_fields_ids_map = new_fields_ids_map.borrow_mut();
                         let new_document_id = self
                             .primary_key

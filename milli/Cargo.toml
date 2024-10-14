@@ -81,7 +81,7 @@ hf-hub = { git = "https://github.com/dureuill/hf-hub.git", branch = "rust_tls", 
 ] }
 tiktoken-rs = "0.5.9"
 liquid = "0.26.6"
-rhai = { version = "1.19.0", features = [
+rhai = { git = "https://github.com/rhaiscript/rhai", rev = "ef3df63121d27aacd838f366f2b83fd65f20a1e4", features = [
     "serde",
     "no_module",
     "no_custom_syntax",

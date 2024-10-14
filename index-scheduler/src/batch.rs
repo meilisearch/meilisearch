@@ -1355,7 +1355,7 @@ impl IndexScheduler {
                     }
                 }
 
-                if !tasks.iter().all(|res| res.error.is_some()) {
+                if tasks.iter().any(|res| res.error.is_none()) {
                     /// TODO create a pool if needed
                     // let pool = indexer_config.thread_pool.unwrap();
                     let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
@@ -1790,45 +1790,4 @@ impl IndexScheduler {
 
         Ok(content_files_to_delete)
     }
-}
-
-fn edit_documents_by_function<'a>(
-    wtxn: &mut RwTxn<'a>,
-    filter: &Option<serde_json::Value>,
-    context: Option<Object>,
-    code: &str,
-    indexer_config: &IndexerConfig,
-    must_stop_processing: MustStopProcessing,
-    index: &'a Index,
-) -> Result<(u64, u64)> {
-    let candidates = match filter.as_ref().map(Filter::from_json) {
-        Some(Ok(Some(filter))) => filter.evaluate(wtxn, index).map_err(|err| match err {
-            milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
-                Error::from(err).with_custom_error_code(Code::InvalidDocumentFilter)
-            }
-            e => e.into(),
-        })?,
-        None | Some(Ok(None)) => index.documents_ids(wtxn)?,
-        Some(Err(e)) => return Err(e.into()),
-    };
-
-    let config = IndexDocumentsConfig {
-        update_method: IndexDocumentsMethod::ReplaceDocuments,
-        ..Default::default()
-    };
-
-    let mut builder = milli::update::IndexDocuments::new(
-        wtxn,
-        index,
-        indexer_config,
-        config,
-        |indexing_step| tracing::debug!(update = ?indexing_step),
-        || must_stop_processing.get(),
-    )?;
-
-    let (new_builder, count) = builder.edit_documents(&candidates, context, code)?;
-    builder = new_builder;
-
-    let _ = builder.execute()?;
-    Ok(count.unwrap())
 }
