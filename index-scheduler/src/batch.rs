@@ -30,7 +30,9 @@ use meilisearch_types::error::Code;
 use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
 use meilisearch_types::milli::heed::CompactionOption;
-use meilisearch_types::milli::update::new::indexer::{self, retrieve_or_guess_primary_key};
+use meilisearch_types::milli::update::new::indexer::{
+    self, retrieve_or_guess_primary_key, UpdateByFunction,
+};
 use meilisearch_types::milli::update::{
     IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings as MilliSettings,
 };
@@ -1392,7 +1394,7 @@ impl IndexScheduler {
                 Ok(tasks)
             }
             IndexOperation::DocumentEdition { mut task, .. } => {
-                let (filter, context, function) =
+                let (filter, context, code) =
                     if let KindWithContent::DocumentEdition {
                         filter_expr, context, function, ..
                     } = &task.kind
@@ -1401,51 +1403,83 @@ impl IndexScheduler {
                     } else {
                         unreachable!()
                     };
-                let result_count = edit_documents_by_function(
-                    index_wtxn,
-                    filter,
-                    context.clone(),
-                    function,
-                    self.index_mapper.indexer_config(),
-                    self.must_stop_processing.clone(),
-                    index,
-                );
-                let (original_filter, context, function) = if let Some(Details::DocumentEdition {
-                    original_filter,
-                    context,
-                    function,
-                    ..
-                }) = task.details
-                {
-                    (original_filter, context, function)
-                } else {
-                    // In the case of a `documentEdition` the details MUST be set
-                    unreachable!();
+
+                let candidates = match filter.as_ref().map(Filter::from_json) {
+                    Some(Ok(Some(filter))) => {
+                        filter.evaluate(index_wtxn, index).map_err(|err| match err {
+                            milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
+                                Error::from(err).with_custom_error_code(Code::InvalidDocumentFilter)
+                            }
+                            e => e.into(),
+                        })?
+                    }
+                    None | Some(Ok(None)) => index.documents_ids(index_wtxn)?,
+                    Some(Err(e)) => return Err(e.into()),
                 };
 
-                match result_count {
-                    Ok((deleted_documents, edited_documents)) => {
-                        task.status = Status::Succeeded;
-                        task.details = Some(Details::DocumentEdition {
-                            original_filter,
-                            context,
-                            function,
-                            deleted_documents: Some(deleted_documents),
-                            edited_documents: Some(edited_documents),
-                        });
-                    }
-                    Err(e) => {
-                        task.status = Status::Failed;
-                        task.details = Some(Details::DocumentEdition {
-                            original_filter,
-                            context,
-                            function,
-                            deleted_documents: Some(0),
-                            edited_documents: Some(0),
-                        });
-                        task.error = Some(e.into());
-                    }
+                let rtxn = index.read_txn()?;
+                let db_fields_ids_map = index.fields_ids_map(&rtxn)?;
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+                let primary_key =
+                    retrieve_or_guess_primary_key(&rtxn, index, &mut new_fields_ids_map, None)?
+                        .unwrap();
+
+                if task.error.is_none() {
+                    /// TODO create a pool if needed
+                    // let pool = indexer_config.thread_pool.unwrap();
+                    let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
+
+                    let indexer = UpdateByFunction::new(candidates, context.clone(), code.clone());
+                    let document_changes = indexer.into_changes(&primary_key)?;
+
+                    indexer::index(
+                        index_wtxn,
+                        index,
+                        &db_fields_ids_map,
+                        new_fields_ids_map,
+                        &pool,
+                        &document_changes,
+                    )?;
+
+                    // tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
                 }
+
+                // let (original_filter, context, function) = if let Some(Details::DocumentEdition {
+                //     original_filter,
+                //     context,
+                //     function,
+                //     ..
+                // }) = task.details
+                // {
+                //     (original_filter, context, function)
+                // } else {
+                //     // In the case of a `documentEdition` the details MUST be set
+                //     unreachable!();
+                // };
+
+                // match result_count {
+                //     Ok((deleted_documents, edited_documents)) => {
+                //         task.status = Status::Succeeded;
+                //         task.details = Some(Details::DocumentEdition {
+                //             original_filter,
+                //             context,
+                //             function,
+                //             deleted_documents: Some(deleted_documents),
+                //             edited_documents: Some(edited_documents),
+                //         });
+                //     }
+                //     Err(e) => {
+                //         task.status = Status::Failed;
+                //         task.details = Some(Details::DocumentEdition {
+                //             original_filter,
+                //             context,
+                //             function,
+                //             deleted_documents: Some(0),
+                //             edited_documents: Some(0),
+                //         });
+                //         task.error = Some(e.into());
+                //     }
+                // }
 
                 Ok(vec![task])
             }

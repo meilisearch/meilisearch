@@ -287,7 +287,7 @@ pub trait DocumentChanges<'pl // lifetime of the underlying payload
         &'doc self,
         context: &'doc DocumentChangeContext<T>,
         item: Self::Item,
-    ) -> Result<DocumentChange<'doc>> where 'pl: 'doc // the payload must survive the process calls
+    ) -> Result<Option<DocumentChange<'doc>>> where 'pl: 'doc // the payload must survive the process calls
     ;
 }
 
@@ -352,8 +352,11 @@ where
             // Clean up and reuse the document-specific allocator
             context.doc_alloc.reset();
 
-            let change =
-                document_changes.item_to_document_change(context, item).map_err(Arc::new)?;
+            let Some(change) =
+                document_changes.item_to_document_change(context, item).map_err(Arc::new)?
+            else {
+                return Ok(());
+            };
 
             let res = extractor.process(change, context).map_err(Arc::new);
 

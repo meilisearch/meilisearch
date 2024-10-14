@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
 use hashbrown::HashMap;
-use heed::{types::Bytes, RwTxn};
-use heed::{BytesDecode, Database};
+use heed::types::Bytes;
+use heed::{BytesDecode, Database, RwTxn};
 use roaring::RoaringBitmap;
 
 use crate::heed_codec::StrBEU16Codec;
@@ -110,7 +110,7 @@ impl WordPrefixIntegerDocids {
                     key_buffer.extend_from_slice(prefix);
                     key_buffer.push(0);
                     key_buffer.extend_from_slice(&pos.to_be_bytes());
-                    self.prefix_database.put(wtxn, &key_buffer, &docids)?;
+                    self.prefix_database.put(wtxn, &key_buffer, docids)?;
                 }
                 docids.clear();
             }

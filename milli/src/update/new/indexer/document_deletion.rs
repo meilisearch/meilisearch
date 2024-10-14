@@ -55,7 +55,7 @@ impl<'pl> DocumentChanges<'pl> for DocumentDeletionChanges<'pl> {
         &'doc self,
         context: &'doc DocumentChangeContext<T>,
         docid: Self::Item,
-    ) -> Result<DocumentChange<'doc>>
+    ) -> Result<Option<DocumentChange<'doc>>>
     where
         'pl: 'doc, // the payload must survive the process calls
     {
@@ -69,7 +69,7 @@ impl<'pl> DocumentChanges<'pl> for DocumentDeletionChanges<'pl> {
 
         let external_document_id = external_document_id.to_bump(&context.doc_alloc);
 
-        Ok(DocumentChange::Deletion(Deletion::create(docid, external_document_id)))
+        Ok(Some(DocumentChange::Deletion(Deletion::create(docid, external_document_id))))
     }
 }
 

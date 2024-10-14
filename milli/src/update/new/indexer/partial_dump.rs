@@ -53,7 +53,7 @@ where
         &'doc self,
         context: &'doc DocumentChangeContext<T>,
         document: Self::Item,
-    ) -> Result<DocumentChange<'doc>>
+    ) -> Result<Option<DocumentChange<'doc>>>
     where
         'index: 'doc,
     {
@@ -80,6 +80,6 @@ where
         let document = DocumentFromVersions::new(Versions::Single(document));
 
         let insertion = Insertion::create(docid, external_document_id, document);
-        Ok(DocumentChange::Insertion(insertion))
+        Ok(Some(DocumentChange::Insertion(insertion)))
     }
 }

@@ -240,7 +240,7 @@ impl<'pl> DocumentChanges<'pl> for DocumentOperationChanges<'pl> {
         &'doc self,
         context: &'doc DocumentChangeContext<T>,
         item: Self::Item,
-    ) -> Result<DocumentChange<'doc>>
+    ) -> Result<Option<DocumentChange<'doc>>>
     where
         'pl: 'doc,
     {
@@ -275,7 +275,7 @@ trait MergeChanges {
         is_new: bool,
         doc_alloc: &'doc Bump,
         operations: &'doc [InnerDocOp],
-    ) -> Result<DocumentChange<'doc>>;
+    ) -> Result<Option<DocumentChange<'doc>>>;
 }
 
 struct MergeDocumentForReplacement;
@@ -301,7 +301,7 @@ impl MergeChanges for MergeDocumentForReplacement {
         is_new: bool,
         doc_alloc: &'doc Bump,
         operations: &'doc [InnerDocOp],
-    ) -> Result<DocumentChange<'doc>> {
+    ) -> Result<Option<DocumentChange<'doc>>> {
         match operations.last() {
             Some(InnerDocOp::Addition(DocumentOffset { content })) => {
                 let document = serde_json::from_slice(content).unwrap();
@@ -312,18 +312,27 @@ impl MergeChanges for MergeDocumentForReplacement {
                 let document = DocumentFromVersions::new(Versions::Single(document));
 
                 if is_new {
-                    Ok(DocumentChange::Insertion(Insertion::create(docid, external_doc, document)))
+                    Ok(Some(DocumentChange::Insertion(Insertion::create(
+                        docid,
+                        external_doc,
+                        document,
+                    ))))
                 } else {
-                    Ok(DocumentChange::Update(Update::create(docid, external_doc, document, true)))
+                    Ok(Some(DocumentChange::Update(Update::create(
+                        docid,
+                        external_doc,
+                        document,
+                        true,
+                    ))))
                 }
             }
             Some(InnerDocOp::Deletion) => {
-                let deletion = if is_new {
-                    Deletion::create(docid, external_doc)
+                return if is_new {
+                    let deletion = Deletion::create(docid, external_doc);
+                    Ok(Some(DocumentChange::Deletion(deletion)))
                 } else {
-                    todo!("Do that with Louis")
+                    Ok(None)
                 };
-                Ok(DocumentChange::Deletion(deletion))
             }
             None => unreachable!("We must not have empty set of operations on a document"),
         }
@@ -354,7 +363,7 @@ impl MergeChanges for MergeDocumentForUpdates {
         is_new: bool,
         doc_alloc: &'doc Bump,
         operations: &'doc [InnerDocOp],
-    ) -> Result<DocumentChange<'doc>> {
+    ) -> Result<Option<DocumentChange<'doc>>> {
         if operations.is_empty() {
             unreachable!("We must not have empty set of operations on a document");
         }
@@ -365,13 +374,12 @@ impl MergeChanges for MergeDocumentForUpdates {
         let has_deletion = last_deletion.is_some();
 
         if operations.is_empty() {
-            let deletion = if !is_new {
-                Deletion::create(docid, external_docid)
+            return if !is_new {
+                let deletion = Deletion::create(docid, external_docid);
+                Ok(Some(DocumentChange::Deletion(deletion)))
             } else {
-                todo!("Do that with Louis")
+                Ok(None)
             };
-
-            return Ok(DocumentChange::Deletion(deletion));
         }
 
         let mut versions = bumpalo::collections::Vec::with_capacity_in(operations.len(), doc_alloc);
@@ -401,14 +409,14 @@ impl MergeChanges for MergeDocumentForUpdates {
         let document = DocumentFromVersions::new(versions);
 
         if is_new {
-            Ok(DocumentChange::Insertion(Insertion::create(docid, external_docid, document)))
+            Ok(Some(DocumentChange::Insertion(Insertion::create(docid, external_docid, document))))
         } else {
-            Ok(DocumentChange::Update(Update::create(
+            Ok(Some(DocumentChange::Update(Update::create(
                 docid,
                 external_docid,
                 document,
                 has_deletion,
-            )))
+            ))))
         }
     }
 }
