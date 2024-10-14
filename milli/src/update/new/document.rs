@@ -142,9 +142,9 @@ impl<'d, 'doc: 'd, 't: 'd, Mapper: FieldIdMapper> Document<'d>
     fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'d str, &'d RawValue)>> {
         let mut new_doc_it = self.new_doc.iter_top_level_fields();
         let mut db_it = self.db.iter().flat_map(|db| db.iter_top_level_fields());
+        let mut seen_fields = BTreeSet::new();
 
         std::iter::from_fn(move || {
-            let mut seen_fields = BTreeSet::new();
             if let Some(next) = new_doc_it.next() {
                 if let Ok((name, _)) = next {
                     seen_fields.insert(name);
