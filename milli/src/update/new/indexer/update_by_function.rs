@@ -113,16 +113,15 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
             scope.push_constant_dynamic("context", context.clone());
         }
         scope.push("doc", rhai_document);
-        // That's were the magic happens. We run the user script
-        // which edits "doc" scope variable reprensenting the document
-        // and ignore the output and even the type of it, i.e., Dynamic.
+        // We run the user script which edits "doc" scope variable reprensenting
+        // the document and ignore the output and even the type of it, i.e., Dynamic.
         let _ = self
             .engine
             .eval_ast_with_scope::<Dynamic>(&mut scope, &self.ast)
             .map_err(UserError::DocumentEditionRuntimeError)?;
 
         match scope.remove::<Dynamic>("doc") {
-            // If the "doc" variable has set to (), we effectively delete the document.
+            // If the "doc" variable has been set to (), we effectively delete the document.
             Some(doc) if doc.is_unit() => Ok(Some(DocumentChange::Deletion(Deletion::create(
                 docid,
                 doc_alloc.alloc_str(&document_id),
@@ -142,7 +141,7 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
                     //
                     // Future: Use a custom function rhai function to track changes.
                     //         <https://docs.rs/rhai/latest/rhai/struct.Engine.html#method.register_indexer_set>
-                    if json_document != rhaimap_to_object(new_rhai_document) {
+                    if dbg!(json_document) != dbg!(rhaimap_to_object(new_rhai_document)) {
                         let mut global_fields_ids_map = new_fields_ids_map.borrow_mut();
                         let new_document_id = self
                             .primary_key

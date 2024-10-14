@@ -1424,6 +1424,8 @@ impl IndexScheduler {
                     retrieve_or_guess_primary_key(&rtxn, index, &mut new_fields_ids_map, None)?
                         .unwrap();
 
+                let result_count = Ok((candidates.len(), candidates.len())) as Result<_>;
+
                 if task.error.is_none() {
                     /// TODO create a pool if needed
                     // let pool = indexer_config.thread_pool.unwrap();
@@ -1444,42 +1446,42 @@ impl IndexScheduler {
                     // tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
                 }
 
-                // let (original_filter, context, function) = if let Some(Details::DocumentEdition {
-                //     original_filter,
-                //     context,
-                //     function,
-                //     ..
-                // }) = task.details
-                // {
-                //     (original_filter, context, function)
-                // } else {
-                //     // In the case of a `documentEdition` the details MUST be set
-                //     unreachable!();
-                // };
+                let (original_filter, context, function) = if let Some(Details::DocumentEdition {
+                    original_filter,
+                    context,
+                    function,
+                    ..
+                }) = task.details
+                {
+                    (original_filter, context, function)
+                } else {
+                    // In the case of a `documentEdition` the details MUST be set
+                    unreachable!();
+                };
 
-                // match result_count {
-                //     Ok((deleted_documents, edited_documents)) => {
-                //         task.status = Status::Succeeded;
-                //         task.details = Some(Details::DocumentEdition {
-                //             original_filter,
-                //             context,
-                //             function,
-                //             deleted_documents: Some(deleted_documents),
-                //             edited_documents: Some(edited_documents),
-                //         });
-                //     }
-                //     Err(e) => {
-                //         task.status = Status::Failed;
-                //         task.details = Some(Details::DocumentEdition {
-                //             original_filter,
-                //             context,
-                //             function,
-                //             deleted_documents: Some(0),
-                //             edited_documents: Some(0),
-                //         });
-                //         task.error = Some(e.into());
-                //     }
-                // }
+                match result_count {
+                    Ok((deleted_documents, edited_documents)) => {
+                        task.status = Status::Succeeded;
+                        task.details = Some(Details::DocumentEdition {
+                            original_filter,
+                            context,
+                            function,
+                            deleted_documents: Some(deleted_documents),
+                            edited_documents: Some(edited_documents),
+                        });
+                    }
+                    Err(e) => {
+                        task.status = Status::Failed;
+                        task.details = Some(Details::DocumentEdition {
+                            original_filter,
+                            context,
+                            function,
+                            deleted_documents: Some(0),
+                            edited_documents: Some(0),
+                        });
+                        task.error = Some(e.into());
+                    }
+                }
 
                 Ok(vec![task])
             }
