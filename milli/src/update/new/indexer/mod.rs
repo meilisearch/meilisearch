@@ -34,7 +34,7 @@ use crate::update::settings::InnerIndexSettings;
 use crate::update::{FacetsUpdateBulk, GrenadParameters};
 use crate::{Error, FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
 
-mod de;
+pub(crate) mod de;
 pub mod document_changes;
 mod document_deletion;
 mod document_operation;
