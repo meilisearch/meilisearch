@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::iter;
+use std::ops::ControlFlow;
 use std::result::Result as StdResult;
 
 use bumpalo::Bump;
@@ -7,7 +8,7 @@ use serde_json::value::RawValue;
 use serde_json::{from_str, Value};
 
 use crate::fields_ids_map::MutFieldIdMapper;
-use crate::update::new::indexer::de::DeOrBumpStr;
+use crate::update::new::indexer::de::{match_component, DeOrBumpStr};
 use crate::update::new::{CowStr, KvReaderFieldId, TopLevelMap};
 use crate::{FieldId, InternalError, Object, Result, UserError};
 
@@ -64,7 +65,7 @@ impl<'a> PrimaryKey<'a> {
         })
     }
 
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> &'a str {
         match self {
             PrimaryKey::Flat { name, .. } => name,
             PrimaryKey::Nested { name } => name,
@@ -154,7 +155,31 @@ impl<'a> PrimaryKey<'a> {
 
                 Ok(external_document_id)
             }
-            PrimaryKey::Nested { name } => todo!(),
+            nested @ PrimaryKey::Nested { name: _ } => {
+                let mut docid = None;
+                for (first_level, right) in nested.possible_level_names() {
+                    let Some(fid) = db_fields_ids_map.id(first_level) else { continue };
+
+                    let Some(value) = document.get(fid) else { continue };
+                    let value: &RawValue =
+                        serde_json::from_slice(value).map_err(InternalError::SerdeJson)?;
+                    match match_component(first_level, right, value, indexer, &mut docid) {
+                        ControlFlow::Continue(()) => continue,
+                        ControlFlow::Break(Ok(_)) => {
+                            return Err(InternalError::DocumentsError(
+                                crate::documents::Error::InvalidDocumentFormat,
+                            )
+                            .into())
+                        }
+                        ControlFlow::Break(Err(err)) => {
+                            return Err(InternalError::SerdeJson(err).into())
+                        }
+                    }
+                }
+                Ok(docid.ok_or(InternalError::DocumentsError(
+                    crate::documents::Error::InvalidDocumentFormat,
+                ))?)
+            }
         }
     }
 
@@ -171,7 +196,7 @@ impl<'a> PrimaryKey<'a> {
                 self,
                 indexer,
             ))
-            .map_err(UserError::SerdeJson)?;
+            .map_err(UserError::SerdeJson)??;
 
         let external_document_id = match res {
             Ok(document_id) => Ok(document_id),
@@ -234,7 +259,7 @@ impl<'a> PrimaryKey<'a> {
 
     /// Returns an `Iterator` that gives all the possible fields names the primary key
     /// can have depending of the first level name and depth of the objects.
-    pub fn possible_level_names(&self) -> impl Iterator<Item = (&str, &str)> + '_ {
+    pub fn possible_level_names(&self) -> impl Iterator<Item = (&'a str, &'a str)> + '_ {
         let name = self.name();
         name.match_indices(PRIMARY_KEY_SPLIT_SYMBOL)
             .map(move |(i, _)| (&name[..i], &name[i + PRIMARY_KEY_SPLIT_SYMBOL.len_utf8()..]))
