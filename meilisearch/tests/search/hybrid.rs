@@ -568,6 +568,57 @@ async fn retrieve_vectors() {
     ]
     "###);
 
+    // use explicit `_vectors` in displayed attributes
+    let (response, code) = index
+        .update_settings(json!({ "displayedAttributes": ["id", "title", "desc", "_vectors"]} ))
+        .await;
+    assert_eq!(202, code, "{:?}", response);
+    index.wait_task(response.uid()).await;
+
+    let (response, code) = index
+        .search_post(
+            json!({"q": "Captain", "hybrid": {"embedder": "default", "semanticRatio": 0.2}, "retrieveVectors": true}),
+        )
+        .await;
+    snapshot!(code, @"200 OK");
+    insta::assert_json_snapshot!(response["hits"], {"[]._vectors.default.embeddings" => "[vectors]"},  @r###"
+    [
+      {
+        "title": "Captain Planet",
+        "desc": "He's not part of the Marvel Cinematic Universe",
+        "id": "2",
+        "_vectors": {
+          "default": {
+            "embeddings": "[vectors]",
+            "regenerate": true
+          }
+        }
+      },
+      {
+        "title": "Captain Marvel",
+        "desc": "a Shazam ersatz",
+        "id": "3",
+        "_vectors": {
+          "default": {
+            "embeddings": "[vectors]",
+            "regenerate": true
+          }
+        }
+      },
+      {
+        "title": "Shazam!",
+        "desc": "a Captain Marvel ersatz",
+        "id": "1",
+        "_vectors": {
+          "default": {
+            "embeddings": "[vectors]",
+            "regenerate": true
+          }
+        }
+      }
+    ]
+    "###);
+
     // remove `_vectors` from displayed attributes
     let (response, code) =
         index.update_settings(json!({ "displayedAttributes": ["id", "title", "desc"]} )).await;
