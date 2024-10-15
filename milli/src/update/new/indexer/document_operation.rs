@@ -8,13 +8,12 @@ use IndexDocumentsMethod as Idm;
 
 use super::super::document_change::DocumentChange;
 use super::document_changes::{DocumentChangeContext, DocumentChanges, MostlySend};
-use crate::documents::{DocumentIdExtractionError, PrimaryKey};
+use crate::documents::PrimaryKey;
 use crate::update::new::document::DocumentFromVersions;
 use crate::update::new::document_change::Versions;
-use crate::update::new::indexer::de::FieldAndDocidExtractor;
 use crate::update::new::{Deletion, Insertion, Update};
 use crate::update::{AvailableIds, IndexDocumentsMethod};
-use crate::{external_documents_ids, DocumentId, Error, FieldsIdsMap, Index, Result, UserError};
+use crate::{DocumentId, Error, FieldsIdsMap, Index, Result, UserError};
 
 pub struct DocumentOperation<'pl> {
     operations: Vec<Payload<'pl>>,
@@ -77,7 +76,6 @@ impl<'pl> DocumentOperation<'pl> {
         primary_key: &PrimaryKey,
         new_fields_ids_map: &mut FieldsIdsMap,
     ) -> Result<DocumentOperationChanges<'pl>> {
-        use serde::de::Deserializer;
         // will contain nodes from the intermediate hashmap
         let document_changes_alloc = Bump::with_capacity(1024 * 1024 * 1024); // 1 MiB
 
@@ -97,30 +95,11 @@ impl<'pl> DocumentOperation<'pl> {
                     while let Some(document) =
                         iter.next().transpose().map_err(UserError::SerdeJson)?
                     {
-                        let res = document
-                            .deserialize_map(FieldAndDocidExtractor::new(
-                                new_fields_ids_map,
-                                primary_key,
-                                indexer,
-                            ))
-                            .map_err(UserError::SerdeJson)?;
-
-                        let external_document_id = match res {
-                            Ok(document_id) => Ok(document_id),
-                            Err(DocumentIdExtractionError::InvalidDocumentId(e)) => Err(e),
-                            Err(DocumentIdExtractionError::MissingDocumentId) => {
-                                Err(UserError::MissingDocumentId {
-                                    primary_key: primary_key.name().to_string(),
-                                    document: serde_json::from_str(document.get()).unwrap(),
-                                })
-                            }
-                            Err(DocumentIdExtractionError::TooManyDocumentIds(_)) => {
-                                Err(UserError::TooManyDocumentIds {
-                                    primary_key: primary_key.name().to_string(),
-                                    document: serde_json::from_str(document.get()).unwrap(),
-                                })
-                            }
-                        }?;
+                        let external_document_id = primary_key.extract_fields_and_docid(
+                            document,
+                            new_fields_ids_map,
+                            indexer,
+                        )?;
 
                         let external_document_id = external_document_id.to_de();
 
