@@ -213,7 +213,10 @@ async fn format_nested() {
                         "doggos.name": [
                           {
                             "start": 0,
-                            "length": 5
+                            "length": 5,
+                            "indices": [
+                              0
+                            ]
                           }
                         ]
                       }

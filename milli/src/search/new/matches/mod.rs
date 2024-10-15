@@ -108,6 +108,8 @@ pub struct Match {
 pub struct MatchBounds {
     pub start: usize,
     pub length: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub indices: Option<Vec<usize>>,
 }
 
 /// Structure used to analyze a string, compute words that match,
@@ -237,14 +239,19 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
     }
 
     /// Returns boundaries of the words that match the query.
-    pub fn matches(&mut self) -> Vec<MatchBounds> {
+    pub fn matches(&mut self, array_indices: &[usize]) -> Vec<MatchBounds> {
         match &self.matches {
-            None => self.compute_matches().matches(),
+            None => self.compute_matches().matches(array_indices),
             Some((tokens, matches)) => matches
                 .iter()
                 .map(|m| MatchBounds {
                     start: tokens[m.token_position].byte_start,
                     length: m.match_len,
+                    indices: if array_indices.is_empty() {
+                        None
+                    } else {
+                        Some(array_indices.to_owned())
+                    },
                 })
                 .collect(),
         }

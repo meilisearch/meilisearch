@@ -45,7 +45,7 @@ fn contained_in(selector: &str, key: &str) -> bool {
 /// map_leaf_values(
 ///     value.as_object_mut().unwrap(),
 ///     ["jean.race.name"],
-///     |key, value| match (value, key) {
+///     |key, _array_indices, value| match (value, key) {
 ///         (Value::String(name), "jean.race.name") => *name = "patou".to_string(),
 ///         _ => unreachable!(),
 ///     },
@@ -66,17 +66,18 @@ fn contained_in(selector: &str, key: &str) -> bool {
 pub fn map_leaf_values<'a>(
     value: &mut Map<String, Value>,
     selectors: impl IntoIterator<Item = &'a str>,
-    mut mapper: impl FnMut(&str, &mut Value),
+    mut mapper: impl FnMut(&str, &[usize], &mut Value),
 ) {
     let selectors: Vec<_> = selectors.into_iter().collect();
-    map_leaf_values_in_object(value, &selectors, "", &mut mapper);
+    map_leaf_values_in_object(value, &selectors, "", &[], &mut mapper);
 }
 
 pub fn map_leaf_values_in_object(
     value: &mut Map<String, Value>,
     selectors: &[&str],
     base_key: &str,
-    mapper: &mut impl FnMut(&str, &mut Value),
+    array_indices: &[usize],
+    mapper: &mut impl FnMut(&str, &[usize], &mut Value),
 ) {
     for (key, value) in value.iter_mut() {
         let base_key = if base_key.is_empty() {
@@ -94,12 +95,12 @@ pub fn map_leaf_values_in_object(
         if should_continue {
             match value {
                 Value::Object(object) => {
-                    map_leaf_values_in_object(object, selectors, &base_key, mapper)
+                    map_leaf_values_in_object(object, selectors, &base_key, array_indices, mapper)
                 }
                 Value::Array(array) => {
-                    map_leaf_values_in_array(array, selectors, &base_key, mapper)
+                    map_leaf_values_in_array(array, selectors, &base_key, array_indices, mapper)
                 }
-                value => mapper(&base_key, value),
+                value => mapper(&base_key, array_indices, value),
             }
         }
     }
@@ -109,13 +110,24 @@ pub fn map_leaf_values_in_array(
     values: &mut [Value],
     selectors: &[&str],
     base_key: &str,
-    mapper: &mut impl FnMut(&str, &mut Value),
+    base_array_indices: &[usize],
+    mapper: &mut impl FnMut(&str, &[usize], &mut Value),
 ) {
-    for value in values.iter_mut() {
+    // This avoids allocating twice
+    let mut array_indices = Vec::with_capacity(base_array_indices.len() + 1);
+    array_indices.extend_from_slice(base_array_indices);
+    array_indices.push(0);
+
+    for (i, value) in values.iter_mut().enumerate() {
+        *array_indices.last_mut().unwrap() = i;
         match value {
-            Value::Object(object) => map_leaf_values_in_object(object, selectors, base_key, mapper),
-            Value::Array(array) => map_leaf_values_in_array(array, selectors, base_key, mapper),
-            value => mapper(base_key, value),
+            Value::Object(object) => {
+                map_leaf_values_in_object(object, selectors, base_key, &array_indices, mapper)
+            }
+            Value::Array(array) => {
+                map_leaf_values_in_array(array, selectors, base_key, &array_indices, mapper)
+            }
+            value => mapper(base_key, &array_indices, value),
         }
     }
 }
@@ -743,12 +755,14 @@ mod tests {
             }
         });
 
-        map_leaf_values(value.as_object_mut().unwrap(), ["jean.race.name"], |key, value| {
-            match (value, key) {
+        map_leaf_values(
+            value.as_object_mut().unwrap(),
+            ["jean.race.name"],
+            |key, _, value| match (value, key) {
                 (Value::String(name), "jean.race.name") => *name = S("patou"),
                 _ => unreachable!(),
-            }
-        });
+            },
+        );
 
         assert_eq!(
             value,
@@ -775,7 +789,7 @@ mod tests {
         });
 
         let mut calls = 0;
-        map_leaf_values(value.as_object_mut().unwrap(), ["jean"], |key, value| {
+        map_leaf_values(value.as_object_mut().unwrap(), ["jean"], |key, _, value| {
             calls += 1;
             match (value, key) {
                 (Value::String(name), "jean.race.name") => *name = S("patou"),
@@ -795,6 +809,54 @@ mod tests {
                     }
                 },
                 "bob": "lolpied",
+            })
+        );
+    }
+
+    #[test]
+    fn map_array() {
+        let mut value: Value = json!({
+            "no_array": "peter",
+            "simple": ["foo", "bar"],
+            "nested": [
+                {
+                    "a": [
+                        ["cat", "dog"],
+                        ["fox", "bear"],
+                    ],
+                    "b": "hi",
+                },
+                {
+                    "a": ["green", "blue"],
+                },
+            ],
+        });
+
+        map_leaf_values(
+            value.as_object_mut().unwrap(),
+            ["no_array", "simple", "nested"],
+            |_key, array_indices, value| {
+                *value = format!("{array_indices:?}").into();
+            },
+        );
+
+        assert_eq!(
+            value,
+            json!({
+                "no_array": "[]",
+                "simple": ["[0]", "[1]"],
+                "nested": [
+                    {
+                        "a": [
+                            ["[0, 0, 0]", "[0, 0, 1]"],
+                            ["[0, 1, 0]", "[0, 1, 1]"],
+                        ],
+                        "b": "[0]",
+                    },
+                    {
+                        "a": ["[1, 0]", "[1, 1]"],
+                    },
+                ],
             })
         );
     }
