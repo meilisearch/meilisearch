@@ -128,9 +128,10 @@ fn delete_prefixes(
 ) -> Result<()> {
     // We remove all the entries that are no more required in this word prefix docids database.
     for prefix in prefixes {
-        let prefix = prefix.as_bytes();
-        if !prefix_database.delete(wtxn, prefix)? {
-            unreachable!("We tried to delete an unknown key")
+        let mut iter = prefix_database.prefix_iter_mut(wtxn, prefix.as_bytes())?;
+        while iter.next().transpose()?.is_some() {
+            // safety: we do not keep a reference on database entries.
+            unsafe { iter.del_current()? };
         }
     }
 

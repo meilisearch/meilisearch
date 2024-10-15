@@ -204,32 +204,3 @@ fn rhaimap_to_object(map: rhai::Map) -> Object {
     }
     output
 }
-
-fn rhaimap_to_obkv(
-    map: rhai::Map,
-    global_fields_ids_map: &mut GlobalFieldsIdsMap,
-    buffer: &mut Vec<u8>,
-) -> Result<Box<KvReaderFieldId>> {
-    let result: Result<BTreeMap<_, _>> = map
-        .keys()
-        .map(|key| {
-            global_fields_ids_map
-                .id_or_insert(key)
-                .ok_or(UserError::AttributeLimitReached)
-                .map_err(Error::from)
-                .map(|fid| (fid, key))
-        })
-        .collect();
-
-    let ordered_fields = result?;
-    let mut writer = KvWriterFieldId::memory();
-    for (fid, key) in ordered_fields {
-        let value = map.get(key).unwrap();
-        let value = serde_json::to_value(value).unwrap();
-        buffer.clear();
-        serde_json::to_writer(&mut *buffer, &value).unwrap();
-        writer.insert(fid, &buffer)?;
-    }
-
-    Ok(writer.into_boxed())
-}
