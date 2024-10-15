@@ -1,9 +1,11 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs::File;
+use std::mem::size_of;
 use std::num::NonZero;
 use std::ops::DerefMut as _;
 
+use bumpalo::collections::vec::Vec as BumpVec;
 use bumpalo::Bump;
 use grenad::{Merger, MergerBuilder};
 use heed::RoTxn;
@@ -113,30 +115,33 @@ impl WordDocidsCachedSorters {
         word: &str,
         exact: bool,
         docid: u32,
-        buffer: &mut Vec<u8>,
+        bump: &Bump,
     ) -> Result<()> {
-        let key = word.as_bytes();
+        let word_bytes = word.as_bytes();
         if exact {
-            self.exact_word_docids.insert_add_u32(key, docid)?;
+            self.exact_word_docids.insert_add_u32(word_bytes, docid)?;
         } else {
-            self.word_docids.insert_add_u32(key, docid)?;
+            self.word_docids.insert_add_u32(word_bytes, docid)?;
         }
 
+        let buffer_size = word_bytes.len() + 1 + size_of::<FieldId>();
+        let mut buffer = BumpVec::with_capacity_in(buffer_size, bump);
+
         buffer.clear();
-        buffer.extend_from_slice(word.as_bytes());
+        buffer.extend_from_slice(word_bytes);
         buffer.push(0);
         buffer.extend_from_slice(&field_id.to_be_bytes());
-        self.word_fid_docids.insert_add_u32(buffer, docid)?;
+        self.word_fid_docids.insert_add_u32(&buffer, docid)?;
 
         let position = bucketed_position(position);
         buffer.clear();
-        buffer.extend_from_slice(word.as_bytes());
+        buffer.extend_from_slice(word_bytes);
         buffer.push(0);
         buffer.extend_from_slice(&position.to_be_bytes());
-        self.word_position_docids.insert_add_u32(buffer, docid)?;
+        self.word_position_docids.insert_add_u32(&buffer, docid)?;
 
         if self.current_docid.map_or(false, |id| docid != id) {
-            self.flush_fid_word_count(buffer)?;
+            self.flush_fid_word_count(&mut buffer)?;
         }
 
         self.fid_word_count
@@ -155,30 +160,33 @@ impl WordDocidsCachedSorters {
         word: &str,
         exact: bool,
         docid: u32,
-        buffer: &mut Vec<u8>,
+        bump: &Bump,
     ) -> Result<()> {
-        let key = word.as_bytes();
+        let word_bytes = word.as_bytes();
         if exact {
-            self.exact_word_docids.insert_del_u32(key, docid)?;
+            self.exact_word_docids.insert_del_u32(word_bytes, docid)?;
         } else {
-            self.word_docids.insert_del_u32(key, docid)?;
+            self.word_docids.insert_del_u32(word_bytes, docid)?;
         }
 
+        let buffer_size = word_bytes.len() + 1 + size_of::<FieldId>();
+        let mut buffer = BumpVec::with_capacity_in(buffer_size, bump);
+
         buffer.clear();
-        buffer.extend_from_slice(word.as_bytes());
+        buffer.extend_from_slice(word_bytes);
         buffer.push(0);
         buffer.extend_from_slice(&field_id.to_be_bytes());
-        self.word_fid_docids.insert_del_u32(buffer, docid)?;
+        self.word_fid_docids.insert_del_u32(&buffer, docid)?;
 
         let position = bucketed_position(position);
         buffer.clear();
-        buffer.extend_from_slice(word.as_bytes());
+        buffer.extend_from_slice(word_bytes);
         buffer.push(0);
         buffer.extend_from_slice(&position.to_be_bytes());
-        self.word_position_docids.insert_del_u32(buffer, docid)?;
+        self.word_position_docids.insert_del_u32(&buffer, docid)?;
 
         if self.current_docid.map_or(false, |id| docid != id) {
-            self.flush_fid_word_count(buffer)?;
+            self.flush_fid_word_count(&mut buffer)?;
         }
 
         self.fid_word_count
@@ -190,7 +198,7 @@ impl WordDocidsCachedSorters {
         Ok(())
     }
 
-    fn flush_fid_word_count(&mut self, buffer: &mut Vec<u8>) -> Result<()> {
+    fn flush_fid_word_count(&mut self, buffer: &mut BumpVec<u8>) -> Result<()> {
         for (fid, (current_count, new_count)) in self.fid_word_count.drain() {
             if current_count != new_count {
                 if current_count <= MAX_COUNTED_WORDS {
@@ -415,11 +423,11 @@ impl WordDocidsExtractors {
         let cached_sorter = cached_sorter.deref_mut();
         let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut();
         let new_fields_ids_map = new_fields_ids_map.deref_mut();
+        let doc_alloc = &context.doc_alloc;
 
         let exact_attributes = index.exact_attributes(rtxn)?;
         let is_exact_attribute =
             |fname: &str| exact_attributes.iter().any(|attr| contained_in(fname, attr));
-        let mut buffer = Vec::new();
         match document_change {
             DocumentChange::Deletion(inner) => {
                 let mut token_fn = |fname: &str, fid, pos, word: &str| {
@@ -430,7 +438,7 @@ impl WordDocidsExtractors {
                             word,
                             is_exact_attribute(fname),
                             inner.docid(),
-                            &mut buffer,
+                            doc_alloc,
                         )
                         .map_err(crate::Error::from)
                 };
@@ -449,7 +457,7 @@ impl WordDocidsExtractors {
                             word,
                             is_exact_attribute(fname),
                             inner.docid(),
-                            &mut buffer,
+                            doc_alloc,
                         )
                         .map_err(crate::Error::from)
                 };
@@ -467,7 +475,7 @@ impl WordDocidsExtractors {
                             word,
                             is_exact_attribute(fname),
                             inner.docid(),
-                            &mut buffer,
+                            doc_alloc,
                         )
                         .map_err(crate::Error::from)
                 };
@@ -486,7 +494,7 @@ impl WordDocidsExtractors {
                             word,
                             is_exact_attribute(fname),
                             inner.docid(),
-                            &mut buffer,
+                            doc_alloc,
                         )
                         .map_err(crate::Error::from)
                 };
@@ -498,6 +506,8 @@ impl WordDocidsExtractors {
             }
         }
 
+        let buffer_size = size_of::<FieldId>();
+        let mut buffer = BumpVec::with_capacity_in(buffer_size, &context.doc_alloc);
         cached_sorter.flush_fid_word_count(&mut buffer)
     }
 
