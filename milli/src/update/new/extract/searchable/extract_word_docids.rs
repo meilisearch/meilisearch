@@ -7,6 +7,7 @@ use std::ops::DerefMut as _;
 use bumpalo::Bump;
 use grenad::{Merger, MergerBuilder};
 use heed::RoTxn;
+use raw_collections::alloc::RefBump;
 
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use crate::update::new::extract::cache::CboCachedSorter;
@@ -331,6 +332,49 @@ impl<'extractor> Extractor<'extractor> for WordDocidsExtractorData<'extractor> {
         context: &crate::update::new::indexer::document_changes::DocumentChangeContext<Self::Data>,
     ) -> Result<()> {
         WordDocidsExtractors::extract_document_change(context, self.tokenizer, change)
+    }
+
+    fn spill_if_needed<'doc>(
+        &'doc self,
+        data: &'doc Self::Data,
+        extractor_alloc: &'extractor RefCell<Bump>,
+    ) -> Result<()> {
+        if self.max_memory.map_or(true, |mm| extractor_alloc.borrow().allocated_bytes() < mm) {
+            return Ok(());
+        }
+
+        let mut data = data.0.borrow_mut();
+        let WordDocidsCachedSorters {
+            word_fid_docids,
+            word_docids,
+            exact_word_docids,
+            word_position_docids,
+            fid_word_count_docids,
+            fid_word_count,
+            current_docid,
+        } = &mut *data;
+
+        let spilled_word_fid_docids = word_fid_docids.spill_to_disk()?;
+        let spilled_word_docids = word_docids.spill_to_disk()?;
+        let spilled_exact_word_docids = exact_word_docids.spill_to_disk()?;
+        let spilled_word_position_docids = word_position_docids.spill_to_disk()?;
+        let spilled_fid_word_count_docids = fid_word_count_docids.spill_to_disk()?;
+        // let spilled_fid_word_count = fid_word_count.spill_to_disk()?;
+        // let spilled_current_docid = current_docid.spill_to_disk()?;
+
+        extractor_alloc.borrow_mut().reset();
+
+        let alloc = RefBump::new(extractor_alloc.borrow());
+        data.word_fid_docids = spilled_word_fid_docids.reconstruct(RefBump::clone(&alloc));
+        data.word_docids = spilled_word_docids.reconstruct(RefBump::clone(&alloc));
+        data.exact_word_docids = spilled_exact_word_docids.reconstruct(RefBump::clone(&alloc));
+        data.word_position_docids =
+            spilled_word_position_docids.reconstruct(RefBump::clone(&alloc));
+        data.fid_word_count_docids = spilled_fid_word_count_docids.reconstruct(alloc);
+        // data.fid_word_count = spilled_fid_word_count.reconstruct();
+        // data.current_docid = spilled_current_docid.reconstruct();
+
+        Ok(())
     }
 }
 

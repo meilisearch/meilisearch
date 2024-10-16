@@ -432,7 +432,7 @@ where
             // send back the doc_alloc in the pool
             context.doc_allocs.get_or_default().0.set(std::mem::take(&mut context.doc_alloc));
 
-            extractor.spill_if_needed(&context.data, &context.extractor_alloc);
+            extractor.spill_if_needed(&context.data, &context.extractor_alloc)?;
 
             res
         },

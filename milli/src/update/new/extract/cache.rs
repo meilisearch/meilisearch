@@ -3,6 +3,7 @@ use std::fmt::Write as _;
 
 use bumpalo::Bump;
 use grenad::{MergeFunction, Sorter};
+use hashbrown::hash_map::RawEntryMut;
 use raw_collections::alloc::{RefBump, RefBytes};
 use roaring::bitmap::Statistics;
 use roaring::RoaringBitmap;
@@ -12,17 +13,16 @@ use crate::CboRoaringBitmapCodec;
 
 const KEY_SIZE: usize = 12;
 
-#[derive(Debug)]
+// #[derive(Debug)]
 pub struct CboCachedSorter<'extractor, MF> {
-    cache: Option<
-        hashbrown::HashMap<
-            // TODO check the size of it
-            RefBytes<'extractor>,
-            DelAddRoaringBitmap,
-            hashbrown::DefaultHashBuilder,
-            RefBump<'extractor>,
-        >,
+    cache: hashbrown::HashMap<
+        // TODO check the size of it
+        RefBytes<'extractor>,
+        DelAddRoaringBitmap,
+        hashbrown::DefaultHashBuilder,
+        RefBump<'extractor>,
     >,
+    alloc: RefBump<'extractor>,
     sorter: Sorter<MF>,
     deladd_buffer: Vec<u8>,
     cbo_buffer: Vec<u8>,
@@ -34,7 +34,8 @@ impl<'extractor, MF> CboCachedSorter<'extractor, MF> {
     /// TODO may add the capacity
     pub fn new_in(sorter: Sorter<MF>, alloc: RefBump<'extractor>) -> Self {
         CboCachedSorter {
-            cache: Some(hashbrown::HashMap::new_in(alloc)),
+            cache: hashbrown::HashMap::new_in(RefBump::clone(&alloc)),
+            alloc,
             sorter,
             deladd_buffer: Vec::new(),
             cbo_buffer: Vec::new(),
@@ -45,103 +46,85 @@ impl<'extractor, MF> CboCachedSorter<'extractor, MF> {
 }
 
 impl<'extractor, MF: MergeFunction> CboCachedSorter<'extractor, MF> {
-    pub fn insert_del_u32(&mut self, key: &[u8], n: u32) -> grenad::Result<(), MF::Error> {
-        match self.cache.unwrap().get_mut(key) {
-            Some(DelAddRoaringBitmap { del, add: _ }) => {
+    pub fn insert_del_u32(&mut self, key: &[u8], n: u32) {
+        match self.cache.raw_entry_mut().from_key(key) {
+            RawEntryMut::Occupied(mut entry) => {
+                let DelAddRoaringBitmap { del, add: _ } = entry.get_mut();
                 del.get_or_insert_with(RoaringBitmap::default).insert(n);
             }
-            None => {
+            RawEntryMut::Vacant(entry) => {
                 self.total_insertions += 1;
                 self.fitted_in_key += (key.len() <= KEY_SIZE) as usize;
-                let value = DelAddRoaringBitmap::new_del_u32(n);
-                if let Some((key, deladd)) = self.cache.push(key.into(), value) {
-                    self.write_entry(key, deladd)?;
-                }
+                let alloc = RefBump::clone(&self.alloc);
+                let key = RefBump::map(alloc, |b| b.alloc_slice_copy(key));
+                entry.insert(RefBytes(key), DelAddRoaringBitmap::new_del_u32(n));
             }
         }
-
-        Ok(())
     }
 
-    pub fn insert_del(
-        &mut self,
-        key: &[u8],
-        bitmap: RoaringBitmap,
-    ) -> grenad::Result<(), MF::Error> {
-        match self.cache.unwrap().get_mut(key) {
-            Some(DelAddRoaringBitmap { del, add: _ }) => {
+    pub fn insert_del(&mut self, key: &[u8], bitmap: RoaringBitmap) {
+        match self.cache.raw_entry_mut().from_key(key) {
+            RawEntryMut::Occupied(mut entry) => {
+                let DelAddRoaringBitmap { del, add: _ } = entry.get_mut();
                 *del.get_or_insert_with(RoaringBitmap::default) |= bitmap;
             }
-            None => {
+            RawEntryMut::Vacant(entry) => {
                 self.total_insertions += 1;
                 self.fitted_in_key += (key.len() <= KEY_SIZE) as usize;
-                let value = DelAddRoaringBitmap::new_del(bitmap);
-                if let Some((key, deladd)) = self.cache.push(key.into(), value) {
-                    self.write_entry(key, deladd)?;
-                }
+                let alloc = RefBump::clone(&self.alloc);
+                let key = RefBump::map(alloc, |b| b.alloc_slice_copy(key));
+                entry.insert(RefBytes(key), DelAddRoaringBitmap::new_del(bitmap));
             }
         }
-
-        Ok(())
     }
 
-    pub fn insert_add_u32(&mut self, key: &[u8], n: u32) -> grenad::Result<(), MF::Error> {
-        match self.cache.unwrap().get_mut(key) {
-            Some(DelAddRoaringBitmap { del: _, add }) => {
+    pub fn insert_add_u32(&mut self, key: &[u8], n: u32) {
+        match self.cache.raw_entry_mut().from_key(key) {
+            RawEntryMut::Occupied(mut entry) => {
+                let DelAddRoaringBitmap { del: _, add } = entry.get_mut();
                 add.get_or_insert_with(RoaringBitmap::default).insert(n);
             }
-            None => {
+            RawEntryMut::Vacant(entry) => {
                 self.total_insertions += 1;
                 self.fitted_in_key += (key.len() <= KEY_SIZE) as usize;
-                let value = DelAddRoaringBitmap::new_add_u32(n);
-                if let Some((key, deladd)) = self.cache.push(key.into(), value) {
-                    self.write_entry(key, deladd)?;
-                }
+                let alloc = RefBump::clone(&self.alloc);
+                let key = RefBump::map(alloc, |b| b.alloc_slice_copy(key));
+                entry.insert(RefBytes(key), DelAddRoaringBitmap::new_add_u32(n));
             }
         }
-
-        Ok(())
     }
 
-    pub fn insert_add(
-        &mut self,
-        key: &[u8],
-        bitmap: RoaringBitmap,
-    ) -> grenad::Result<(), MF::Error> {
-        match self.cache.unwrap().get_mut(key) {
-            Some(DelAddRoaringBitmap { del: _, add }) => {
+    pub fn insert_add(&mut self, key: &[u8], bitmap: RoaringBitmap) {
+        match self.cache.raw_entry_mut().from_key(key) {
+            RawEntryMut::Occupied(mut entry) => {
+                let DelAddRoaringBitmap { del: _, add } = entry.get_mut();
                 *add.get_or_insert_with(RoaringBitmap::default) |= bitmap;
             }
-            None => {
+            RawEntryMut::Vacant(entry) => {
                 self.total_insertions += 1;
                 self.fitted_in_key += (key.len() <= KEY_SIZE) as usize;
-                let value = DelAddRoaringBitmap::new_add(bitmap);
-                if let Some((key, deladd)) = self.cache.push(key.into(), value) {
-                    self.write_entry(key, deladd)?;
-                }
+                let alloc = RefBump::clone(&self.alloc);
+                let key = RefBump::map(alloc, |b| b.alloc_slice_copy(key));
+                entry.insert(RefBytes(key), DelAddRoaringBitmap::new_add(bitmap));
             }
         }
-
-        Ok(())
     }
 
-    pub fn insert_del_add_u32(&mut self, key: &[u8], n: u32) -> grenad::Result<(), MF::Error> {
-        match self.cache.unwrap().get_mut(key) {
-            Some(DelAddRoaringBitmap { del, add }) => {
+    pub fn insert_del_add_u32(&mut self, key: &[u8], n: u32) {
+        match self.cache.raw_entry_mut().from_key(key) {
+            RawEntryMut::Occupied(mut entry) => {
+                let DelAddRoaringBitmap { del, add } = entry.get_mut();
                 del.get_or_insert_with(RoaringBitmap::default).insert(n);
                 add.get_or_insert_with(RoaringBitmap::default).insert(n);
             }
-            None => {
+            RawEntryMut::Vacant(entry) => {
                 self.total_insertions += 1;
                 self.fitted_in_key += (key.len() <= KEY_SIZE) as usize;
-                let value = DelAddRoaringBitmap::new_del_add_u32(n);
-                if let Some((key, deladd)) = self.cache.push(key.into(), value) {
-                    self.write_entry(key, deladd)?;
-                }
+                let alloc = RefBump::clone(&self.alloc);
+                let key = RefBump::map(alloc, |b| b.alloc_slice_copy(key));
+                entry.insert(RefBytes(key), DelAddRoaringBitmap::new_del_add_u32(n));
             }
         }
-
-        Ok(())
     }
 
     fn write_entry<A: AsRef<[u8]>>(
@@ -182,23 +165,25 @@ impl<'extractor, MF: MergeFunction> CboCachedSorter<'extractor, MF> {
         self.sorter.insert(key, val)
     }
 
-    pub fn spill_to_disk(&mut self, bump: &'extractor RefCell<Bump>) -> std::io::Result<()> {
-        let cache = self.cache.take().unwrap();
+    pub fn spill_to_disk(self) -> std::io::Result<SpilledCache<MF>> {
+        let Self {
+            cache,
+            alloc: _,
+            sorter,
+            deladd_buffer,
+            cbo_buffer,
+            total_insertions,
+            fitted_in_key,
+        } = self;
 
         /// I want to spill to disk for real
         drop(cache);
 
-        bump.borrow_mut().reset();
-
-        let alloc = RefBump::new(bump.borrow());
-        self.cache = Some(hashbrown::HashMap::new_in(alloc));
-
-        Ok(())
+        Ok(SpilledCache { sorter, deladd_buffer, cbo_buffer, total_insertions, fitted_in_key })
     }
 
     pub fn into_sorter(self) -> grenad::Result<Sorter<MF>, MF::Error> {
         let Self { cache, sorter, total_insertions, fitted_in_key, .. } = self;
-        let cache = cache.unwrap();
 
         let mut all_n_containers = Vec::new();
         let mut all_n_array_containers = Vec::new();
@@ -257,6 +242,34 @@ impl<'extractor, MF: MergeFunction> CboCachedSorter<'extractor, MF> {
         eprintln!("{output}");
 
         Ok(sorter)
+    }
+}
+
+pub struct SpilledCache<MF> {
+    sorter: Sorter<MF>,
+    deladd_buffer: Vec<u8>,
+    cbo_buffer: Vec<u8>,
+    total_insertions: usize,
+    fitted_in_key: usize,
+}
+
+impl<MF> SpilledCache<MF> {
+    pub fn reconstruct<'extractor>(
+        self,
+        alloc: RefBump<'extractor>,
+    ) -> CboCachedSorter<'extractor, MF> {
+        let SpilledCache { sorter, deladd_buffer, cbo_buffer, total_insertions, fitted_in_key } =
+            self;
+
+        CboCachedSorter {
+            cache: hashbrown::HashMap::new_in(RefBump::clone(&alloc)),
+            alloc,
+            sorter,
+            deladd_buffer,
+            cbo_buffer,
+            total_insertions,
+            fitted_in_key,
+        }
     }
 }
 
