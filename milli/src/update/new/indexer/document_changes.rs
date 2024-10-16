@@ -308,7 +308,7 @@ impl<
             db_fields_ids_map,
             new_fields_ids_map: fields_ids_map,
             doc_alloc,
-            extractor_alloc,
+            extractor_alloc: &extractor_alloc.0,
             data,
             doc_allocs,
         })
@@ -327,6 +327,15 @@ pub trait Extractor<'extractor>: Sync {
         context: &'doc DocumentChangeContext<Self::Data>,
     ) -> Result<()>;
 
+    /// Gives a chance to the data to spill itself on disk and reset the extractor allocator.
+    ///
+    /// The Extractor and data implementations are responsible for checking that there are no live allocations before
+    /// attempting to reset the extractor allocator. Failure to uphold this invariant will result in a panic.
+    ///
+    /// # Panics
+    ///
+    /// - calls `extractor_alloc.borrow_mut()` while there are outstanding allocations referencing the `extractor_alloc`
+    #[inline]
     fn spill_if_needed<'doc>(
         &'doc self,
         _data: &'doc Self::Data,
@@ -422,6 +431,8 @@ where
 
             // send back the doc_alloc in the pool
             context.doc_allocs.get_or_default().0.set(std::mem::take(&mut context.doc_alloc));
+
+            extractor.spill_if_needed(&context.data, &context.extractor_alloc);
 
             res
         },
