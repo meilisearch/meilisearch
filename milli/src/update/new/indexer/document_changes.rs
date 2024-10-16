@@ -256,7 +256,7 @@ pub struct DocumentChangeContext<
     pub doc_alloc: Bump,
 
     /// Data allocated in this allocator is not cleared between each call to `process`, unless the data spills.
-    pub extractor_alloc: RefBump<'extractor>,
+    pub extractor_alloc: &'extractor RefCell<Bump>,
 
     /// Pool of doc allocators, used to retrieve the doc allocator we provided for the documents
     doc_allocs: &'doc ThreadLocal<FullySend<Cell<Bump>>>,
@@ -297,9 +297,9 @@ impl<
         let fields_ids_map = &fields_ids_map.0;
         let extractor_alloc = extractor_allocs.get_or_default();
 
-        let extractor_alloc = RefBump::new(extractor_alloc.0.borrow_or_yield());
+        let extractor_alloc_ref = RefBump::new(extractor_alloc.0.borrow_or_yield());
 
-        let data = datastore.get_or_try(|| init_data(RefBump::clone(&extractor_alloc)))?;
+        let data = datastore.get_or_try(move || init_data(extractor_alloc_ref))?;
 
         let txn = index.read_txn()?;
         Ok(DocumentChangeContext {
@@ -326,6 +326,14 @@ pub trait Extractor<'extractor>: Sync {
         change: DocumentChange<'doc>,
         context: &'doc DocumentChangeContext<Self::Data>,
     ) -> Result<()>;
+
+    fn spill_if_needed<'doc>(
+        &'doc self,
+        _data: &'doc Self::Data,
+        _extractor_alloc: &'extractor RefCell<Bump>,
+    ) -> Result<()> {
+        Ok(())
+    }
 }
 
 pub trait DocumentChanges<'pl // lifetime of the underlying payload
