@@ -28,11 +28,10 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
     }
 
     // This method is reimplemented to count the number of words in the document in each field
-    // and to store the docids of the documents that have a number of words in a given field equal to or under than MAX_COUNTED_WORDS.
+    // and to store the docids of the documents that have a number of words in a given field
+    // equal to or under than MAX_COUNTED_WORDS.
     fn extract_document_change(
-        context: &DocumentChangeContext<
-            FullySend<RefCell<CboCachedSorter<MergeDeladdCboRoaringBitmaps>>>,
-        >,
+        context: &DocumentChangeContext<RefCell<CboCachedSorter<MergeDeladdCboRoaringBitmaps>>>,
         document_tokenizer: &DocumentTokenizer,
         document_change: DocumentChange,
     ) -> Result<()> {
@@ -48,7 +47,7 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
         let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut_or_yield();
         let new_fields_ids_map = &mut *new_fields_ids_map;
 
-        let mut cached_sorter = context.data.0.borrow_mut_or_yield();
+        let mut cached_sorter = context.data.borrow_mut_or_yield();
         let cached_sorter = &mut *cached_sorter;
 
         // is a vecdequeue, and will be smol, so can stay on the heap for now
@@ -109,14 +108,14 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
         del_word_pair_proximity.dedup_by(|(k1, _), (k2, _)| k1 == k2);
         for ((w1, w2), prox) in del_word_pair_proximity.iter() {
             let key = build_key(*prox, w1, w2, &mut key_buffer);
-            cached_sorter.insert_del_u32(key, docid)?;
+            cached_sorter.insert_del_u32(key, docid);
         }
 
         add_word_pair_proximity.sort_unstable();
         add_word_pair_proximity.dedup_by(|(k1, _), (k2, _)| k1 == k2);
         for ((w1, w2), prox) in add_word_pair_proximity.iter() {
             let key = build_key(*prox, w1, w2, &mut key_buffer);
-            cached_sorter.insert_add_u32(key, docid)?;
+            cached_sorter.insert_add_u32(key, docid);
         }
         Ok(())
     }
@@ -139,7 +138,7 @@ fn build_key<'a>(
 fn word_positions_into_word_pair_proximity(
     word_positions: &mut VecDeque<(Rc<str>, u16)>,
     word_pair_proximity: &mut impl FnMut((Rc<str>, Rc<str>), u8),
-) -> Result<()> {
+) {
     let (head_word, head_position) = word_positions.pop_front().unwrap();
     for (word, position) in word_positions.iter() {
         let prox = index_proximity(head_position as u32, *position as u32) as u8;
@@ -147,7 +146,6 @@ fn word_positions_into_word_pair_proximity(
             word_pair_proximity((head_word.clone(), word.clone()), prox);
         }
     }
-    Ok(())
 }
 
 fn process_document_tokens<'doc>(
@@ -163,17 +161,16 @@ fn process_document_tokens<'doc>(
             .front()
             .map_or(false, |(_w, p)| index_proximity(*p as u32, pos as u32) >= MAX_DISTANCE)
         {
-            word_positions_into_word_pair_proximity(word_positions, word_pair_proximity)?;
+            word_positions_into_word_pair_proximity(word_positions, word_pair_proximity)
         }
 
         // insert the new word.
         word_positions.push_back((Rc::from(word), pos));
-        Ok(())
     };
     document_tokenizer.tokenize_document(document, fields_ids_map, &mut token_fn)?;
 
     while !word_positions.is_empty() {
-        word_positions_into_word_pair_proximity(word_positions, word_pair_proximity)?;
+        word_positions_into_word_pair_proximity(word_positions, word_pair_proximity);
     }
 
     Ok(())

@@ -307,14 +307,14 @@ pub struct WordDocidsExtractorData<'extractor> {
 }
 
 impl<'extractor> Extractor<'extractor> for WordDocidsExtractorData<'extractor> {
-    type Data = RefCell<WordDocidsCachedSorters<'extractor>>;
+    type Data = RefCell<Option<WordDocidsCachedSorters<'extractor>>>;
 
     fn init_data(&self, extractor_alloc: RefBump<'extractor>) -> Result<Self::Data> {
-        Ok(RefCell::new(WordDocidsCachedSorters::new_in(
+        Ok(RefCell::new(Some(WordDocidsCachedSorters::new_in(
             self.grenad_parameters,
             self.max_memory,
             extractor_alloc,
-        )))
+        ))))
     }
 
     fn process(
@@ -334,7 +334,7 @@ impl<'extractor> Extractor<'extractor> for WordDocidsExtractorData<'extractor> {
             return Ok(());
         }
 
-        let mut data = data.borrow_mut();
+        let sorters = data.borrow_mut().take().unwrap();
         let WordDocidsCachedSorters {
             word_fid_docids,
             word_docids,
@@ -343,7 +343,7 @@ impl<'extractor> Extractor<'extractor> for WordDocidsExtractorData<'extractor> {
             fid_word_count_docids,
             fid_word_count,
             current_docid,
-        } = &mut *data;
+        } = sorters;
 
         let spilled_word_fid_docids = word_fid_docids.spill_to_disk()?;
         let spilled_word_docids = word_docids.spill_to_disk()?;
@@ -356,14 +356,17 @@ impl<'extractor> Extractor<'extractor> for WordDocidsExtractorData<'extractor> {
         extractor_alloc.borrow_mut().reset();
 
         let alloc = RefBump::new(extractor_alloc.borrow());
-        data.word_fid_docids = spilled_word_fid_docids.reconstruct(RefBump::clone(&alloc));
-        data.word_docids = spilled_word_docids.reconstruct(RefBump::clone(&alloc));
-        data.exact_word_docids = spilled_exact_word_docids.reconstruct(RefBump::clone(&alloc));
-        data.word_position_docids =
-            spilled_word_position_docids.reconstruct(RefBump::clone(&alloc));
-        data.fid_word_count_docids = spilled_fid_word_count_docids.reconstruct(alloc);
-        // data.fid_word_count = spilled_fid_word_count.reconstruct();
-        // data.current_docid = spilled_current_docid.reconstruct();
+        *data.borrow_mut() = Some(WordDocidsCachedSorters {
+            word_fid_docids: spilled_word_fid_docids.reconstruct(RefBump::clone(&alloc)),
+            word_docids: spilled_word_docids.reconstruct(RefBump::clone(&alloc)),
+            exact_word_docids: spilled_exact_word_docids.reconstruct(RefBump::clone(&alloc)),
+            word_position_docids: spilled_word_position_docids.reconstruct(RefBump::clone(&alloc)),
+            fid_word_count_docids: spilled_fid_word_count_docids.reconstruct(alloc),
+            // fid_word_count: spilled_fid_word_count.reconstruct(),
+            // current_docid: spilled_current_docid.reconstruct(),
+            fid_word_count,
+            current_docid,
+        });
 
         Ok(())
     }
@@ -436,7 +439,7 @@ impl WordDocidsExtractors {
                 tracing::trace_span!(target: "indexing::documents::extract", "merger_building");
             let _entered = span.enter();
             let mut builder = WordDocidsMergerBuilders::new();
-            for cache in datastore.into_iter().map(|cache| cache.0.into_inner()) {
+            for cache in datastore.into_iter().flat_map(RefCell::into_inner) {
                 builder.add_sorters(cache)?;
             }
 
@@ -445,14 +448,14 @@ impl WordDocidsExtractors {
     }
 
     fn extract_document_change(
-        context: &DocumentChangeContext<RefCell<WordDocidsCachedSorters>>,
+        context: &DocumentChangeContext<RefCell<Option<WordDocidsCachedSorters>>>,
         document_tokenizer: &DocumentTokenizer,
         document_change: DocumentChange,
     ) -> Result<()> {
         let index = &context.index;
         let rtxn = &context.txn;
-        let mut cached_sorter = context.data.0.borrow_mut_or_yield();
-        let cached_sorter = cached_sorter.deref_mut();
+        let mut cached_sorter_ref = context.data.borrow_mut_or_yield();
+        let cached_sorter = cached_sorter.as_mut().unwrap();
         let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut_or_yield();
         let new_fields_ids_map = new_fields_ids_map.deref_mut();
 
@@ -463,16 +466,14 @@ impl WordDocidsExtractors {
         match document_change {
             DocumentChange::Deletion(inner) => {
                 let mut token_fn = |fname: &str, fid, pos, word: &str| {
-                    cached_sorter
-                        .insert_del_u32(
-                            fid,
-                            pos,
-                            word,
-                            is_exact_attribute(fname),
-                            inner.docid(),
-                            &mut buffer,
-                        )
-                        .map_err(crate::Error::from)
+                    cached_sorter.insert_del_u32(
+                        fid,
+                        pos,
+                        word,
+                        is_exact_attribute(fname),
+                        inner.docid(),
+                        &mut buffer,
+                    );
                 };
                 document_tokenizer.tokenize_document(
                     inner.current(rtxn, index, context.db_fields_ids_map)?,
@@ -482,16 +483,14 @@ impl WordDocidsExtractors {
             }
             DocumentChange::Update(inner) => {
                 let mut token_fn = |fname: &str, fid, pos, word: &str| {
-                    cached_sorter
-                        .insert_del_u32(
-                            fid,
-                            pos,
-                            word,
-                            is_exact_attribute(fname),
-                            inner.docid(),
-                            &mut buffer,
-                        )
-                        .map_err(crate::Error::from)
+                    cached_sorter.insert_del_u32(
+                        fid,
+                        pos,
+                        word,
+                        is_exact_attribute(fname),
+                        inner.docid(),
+                        &mut buffer,
+                    );
                 };
                 document_tokenizer.tokenize_document(
                     inner.current(rtxn, index, context.db_fields_ids_map)?,
@@ -500,16 +499,14 @@ impl WordDocidsExtractors {
                 )?;
 
                 let mut token_fn = |fname: &str, fid, pos, word: &str| {
-                    cached_sorter
-                        .insert_add_u32(
-                            fid,
-                            pos,
-                            word,
-                            is_exact_attribute(fname),
-                            inner.docid(),
-                            &mut buffer,
-                        )
-                        .map_err(crate::Error::from)
+                    cached_sorter.insert_add_u32(
+                        fid,
+                        pos,
+                        word,
+                        is_exact_attribute(fname),
+                        inner.docid(),
+                        &mut buffer,
+                    );
                 };
                 document_tokenizer.tokenize_document(
                     inner.new(rtxn, index, context.db_fields_ids_map)?,
@@ -519,16 +516,14 @@ impl WordDocidsExtractors {
             }
             DocumentChange::Insertion(inner) => {
                 let mut token_fn = |fname: &str, fid, pos, word: &str| {
-                    cached_sorter
-                        .insert_add_u32(
-                            fid,
-                            pos,
-                            word,
-                            is_exact_attribute(fname),
-                            inner.docid(),
-                            &mut buffer,
-                        )
-                        .map_err(crate::Error::from)
+                    cached_sorter.insert_add_u32(
+                        fid,
+                        pos,
+                        word,
+                        is_exact_attribute(fname),
+                        inner.docid(),
+                        &mut buffer,
+                    );
                 };
                 document_tokenizer.tokenize_document(
                     inner.new(),
@@ -538,7 +533,9 @@ impl WordDocidsExtractors {
             }
         }
 
-        cached_sorter.flush_fid_word_count(&mut buffer)
+        cached_sorter.flush_fid_word_count(&mut buffer);
+
+        Ok(())
     }
 
     fn attributes_to_extract<'a>(

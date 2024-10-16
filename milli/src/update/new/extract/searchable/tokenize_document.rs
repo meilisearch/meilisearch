@@ -26,7 +26,7 @@ impl<'a> DocumentTokenizer<'a> {
         &self,
         document: impl Document<'doc>,
         field_id_map: &mut GlobalFieldsIdsMap,
-        token_fn: &mut impl FnMut(&str, FieldId, u16, &str) -> Result<()>,
+        token_fn: &mut impl FnMut(&str, FieldId, u16, &str),
     ) -> Result<()> {
         let mut field_position = HashMap::new();
 
@@ -50,7 +50,7 @@ impl<'a> DocumentTokenizer<'a> {
                     Value::Number(n) => {
                         let token = n.to_string();
                         if let Ok(position) = (*position).try_into() {
-                            token_fn(name, field_id, position, token.as_str())?;
+                            token_fn(name, field_id, position, token.as_str());
                         }
 
                         Ok(())
@@ -74,7 +74,7 @@ impl<'a> DocumentTokenizer<'a> {
                             if !token.is_empty() && token.len() <= MAX_WORD_LENGTH {
                                 *position = index;
                                 if let Ok(position) = (*position).try_into() {
-                                    token_fn(name, field_id, position, token)?;
+                                    token_fn(name, field_id, position, token);
                                 }
                             }
                         }
@@ -171,7 +171,6 @@ mod test {
     use bumpalo::Bump;
     use charabia::TokenizerBuilder;
     use meili_snap::snapshot;
-    
     use raw_collections::RawMap;
     use serde_json::json;
     use serde_json::value::RawValue;
@@ -230,7 +229,6 @@ mod test {
                 &mut global_fields_ids_map,
                 &mut |_fname, fid, pos, word| {
                     words.insert([fid, pos], word.to_string());
-                    Ok(())
                 },
             )
             .unwrap();

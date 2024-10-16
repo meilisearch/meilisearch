@@ -95,11 +95,7 @@ mod test {
     fn test_deletions() {
         struct DeletionWithData<'extractor> {
             deleted: RefCell<
-                hashbrown::HashSet<
-                    DocumentId,
-                    hashbrown::hash_map::DefaultHashBuilder,
-                    RefBump<'extractor>,
-                >,
+                hashbrown::HashSet<DocumentId, hashbrown::DefaultHashBuilder, RefBump<'extractor>>,
             >,
         }
 

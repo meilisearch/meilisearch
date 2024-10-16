@@ -11,6 +11,7 @@ pub use extract_word_docids::{WordDocidsExtractors, WordDocidsMergers};
 pub use extract_word_pair_proximity_docids::WordPairProximityDocidsExtractor;
 use grenad::Merger;
 use heed::RoTxn;
+use raw_collections::alloc::RefBump;
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use tokenize_document::{tokenizer_builder, DocumentTokenizer};
 
@@ -34,15 +35,10 @@ pub struct SearchableExtractorData<'extractor, EX: SearchableExtractor> {
 impl<'extractor, EX: SearchableExtractor + Sync> Extractor<'extractor>
     for SearchableExtractorData<'extractor, EX>
 {
-    type Data = FullySend<RefCell<CboCachedSorter<MergeDeladdCboRoaringBitmaps>>>;
+    type Data = RefCell<CboCachedSorter<'extractor, MergeDeladdCboRoaringBitmaps>>;
 
-    fn init_data(
-        &self,
-        _extractor_alloc: raw_collections::alloc::RefBump<'extractor>,
-    ) -> Result<Self::Data> {
-        Ok(FullySend(RefCell::new(CboCachedSorter::new(
-            // TODO use a better value
-            1_000_000.try_into().unwrap(),
+    fn init_data(&self, extractor_alloc: RefBump<'extractor>) -> Result<Self::Data> {
+        Ok(RefCell::new(CboCachedSorter::new_in(
             create_sorter(
                 grenad::SortAlgorithm::Stable,
                 MergeDeladdCboRoaringBitmaps,
@@ -52,13 +48,14 @@ impl<'extractor, EX: SearchableExtractor + Sync> Extractor<'extractor>
                 self.max_memory,
                 false,
             ),
-        ))))
+            extractor_alloc,
+        )))
     }
 
     fn process(
         &self,
         change: DocumentChange,
-        context: &crate::update::new::indexer::document_changes::DocumentChangeContext<Self::Data>,
+        context: &DocumentChangeContext<Self::Data>,
     ) -> Result<()> {
         EX::extract_document_change(context, self.tokenizer, change)
     }
@@ -150,9 +147,7 @@ pub trait SearchableExtractor: Sized + Sync {
     }
 
     fn extract_document_change(
-        context: &DocumentChangeContext<
-            FullySend<RefCell<CboCachedSorter<MergeDeladdCboRoaringBitmaps>>>,
-        >,
+        context: &DocumentChangeContext<RefCell<CboCachedSorter<MergeDeladdCboRoaringBitmaps>>>,
         document_tokenizer: &DocumentTokenizer,
         document_change: DocumentChange,
     ) -> Result<()>;
