@@ -72,9 +72,12 @@ pub fn extract_user_agents(request: &HttpRequest) -> Vec<String> {
 }
 
 pub struct Message {
+    // Since the type_id is solved statically we cannot retrieve it from the Box.
+    // Thus we have to send it in the message directly.
     type_id: TypeId,
-    event: Box<dyn Aggregate>,
+    // Same for the aggregate function.
     aggregator_function: fn(Box<dyn Aggregate>, Box<dyn Aggregate>) -> Option<Box<dyn Aggregate>>,
+    event: Box<dyn Aggregate>,
 }
 
 impl Message {

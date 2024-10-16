@@ -110,7 +110,7 @@ mopafy!(Aggregate);
 
 /// Helper trait to define multiple aggregate with the same content but a different name.
 /// Commonly used when you must aggregate a search with POST or with GET for example.
-pub trait AggregateMethod: 'static + Default {
+pub trait AggregateMethod: 'static + Default + Send {
     fn event_name() -> &'static str;
 }
 
