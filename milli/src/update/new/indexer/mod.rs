@@ -106,6 +106,7 @@ pub fn index<'pl, 'indexer, 'index, DC>(
     index: &'index Index,
     db_fields_ids_map: &'indexer FieldsIdsMap,
     new_fields_ids_map: FieldsIdsMap,
+    new_primary_key: Option<PrimaryKey<'pl>>,
     pool: &ThreadPool,
     document_changes: &DC,
 ) -> Result<()>
@@ -282,6 +283,10 @@ where
     let fields_ids_map = new_fields_ids_map.into_inner().unwrap();
     index.put_fields_ids_map(wtxn, &fields_ids_map)?;
 
+    if let Some(new_primary_key) = new_primary_key {
+        index.put_primary_key(wtxn, new_primary_key.name())?;
+    }
+
     // used to update the localized and weighted maps while sharing the update code with the settings pipeline.
     let mut inner_index_settings = InnerIndexSettings::from_index(index, wtxn)?;
     inner_index_settings.recompute_facets(wtxn, index)?;
@@ -365,23 +370,48 @@ fn extract_and_send_docids<
     Ok(())
 }
 
-/// Returns the primary key *field id* that has already been set for this index or the
-/// one we will guess by searching for the first key that contains "id" as a substring.
+/// Returns the primary key that has already been set for this index or the
+/// one we will guess by searching for the first key that contains "id" as a substring,
+/// and whether the primary key changed
 /// TODO move this elsewhere
 pub fn retrieve_or_guess_primary_key<'a>(
     rtxn: &'a RoTxn<'a>,
     index: &Index,
-    fields_ids_map: &mut FieldsIdsMap,
-    first_document: Option<&'a TopLevelMap<'_>>,
-) -> Result<StdResult<PrimaryKey<'a>, UserError>> {
-    match index.primary_key(rtxn)? {
-        Some(primary_key) => match PrimaryKey::new(primary_key, fields_ids_map) {
-            Some(primary_key) => Ok(Ok(primary_key)),
-            None => unreachable!("Why is the primary key not in the fidmap?"),
-        },
-        None => {
+    new_fields_ids_map: &mut FieldsIdsMap,
+    primary_key_from_op: Option<&'a str>,
+    first_document: Option<&'a TopLevelMap<'a>>,
+) -> Result<StdResult<(PrimaryKey<'a>, bool), UserError>> {
+    // make sure that we have a declared primary key, either fetching it from the index or attempting to guess it.
+
+    // do we have an existing declared primary key?
+    let (primary_key, has_changed) = if let Some(primary_key_from_db) = index.primary_key(rtxn)? {
+        // did we request a primary key in the operation?
+        match primary_key_from_op {
+            // we did, and it is different from the DB one
+            Some(primary_key_from_op) if primary_key_from_op != primary_key_from_db => {
+                // is the index empty?
+                if index.number_of_documents(rtxn)? == 0 {
+                    // change primary key
+                    (primary_key_from_op, true)
+                } else {
+                    return Ok(Err(UserError::PrimaryKeyCannotBeChanged(
+                        primary_key_from_db.to_string(),
+                    )));
+                }
+            }
+            _ => (primary_key_from_db, false),
+        }
+    } else {
+        // no primary key in the DB => let's set one
+        // did we request a primary key in the operation?
+        let primary_key = if let Some(primary_key_from_op) = primary_key_from_op {
+            // set primary key from operation
+            primary_key_from_op
+        } else {
+            // guess primary key
             let first_document = match first_document {
                 Some(document) => document,
+                // previous indexer when no pk is set + we send an empty payload => index_primary_key_no_candidate_found
                 None => return Ok(Err(UserError::NoPrimaryKeyCandidateFound)),
             };
 
@@ -395,18 +425,26 @@ pub fn retrieve_or_guess_primary_key<'a>(
             guesses.sort_unstable();
 
             match guesses.as_slice() {
-                [] => Ok(Err(UserError::NoPrimaryKeyCandidateFound)),
+                [] => return Ok(Err(UserError::NoPrimaryKeyCandidateFound)),
                 [name] => {
                     tracing::info!("Primary key was not specified in index. Inferred to '{name}'");
-                    match fields_ids_map.insert(name) {
-                        Some(field_id) => Ok(Ok(PrimaryKey::Flat { name, field_id })),
-                        None => Ok(Err(UserError::AttributeLimitReached)),
-                    }
+                    *name
                 }
-                multiple => Ok(Err(UserError::MultiplePrimaryKeyCandidatesFound {
-                    candidates: multiple.iter().map(|candidate| candidate.to_string()).collect(),
-                })),
+                multiple => {
+                    return Ok(Err(UserError::MultiplePrimaryKeyCandidatesFound {
+                        candidates: multiple
+                            .iter()
+                            .map(|candidate| candidate.to_string())
+                            .collect(),
+                    }))
+                }
             }
-        }
+        };
+        (primary_key, true)
+    };
+
+    match PrimaryKey::new_or_insert(primary_key, new_fields_ids_map) {
+        Ok(primary_key) => Ok(Ok((primary_key, has_changed))),
+        Err(err) => Ok(Err(err)),
     }
 }
