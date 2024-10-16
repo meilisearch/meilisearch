@@ -65,6 +65,18 @@ impl<'a> PrimaryKey<'a> {
         })
     }
 
+    pub fn new_or_insert(
+        path: &'a str,
+        fields: &mut impl MutFieldIdMapper,
+    ) -> StdResult<Self, UserError> {
+        Ok(if path.contains(PRIMARY_KEY_SPLIT_SYMBOL) {
+            Self::Nested { name: path }
+        } else {
+            let field_id = fields.insert(path).ok_or(UserError::AttributeLimitReached)?;
+            Self::Flat { name: path, field_id }
+        })
+    }
+
     pub fn name(&self) -> &'a str {
         match self {
             PrimaryKey::Flat { name, .. } => name,
