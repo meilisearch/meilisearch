@@ -14,7 +14,7 @@ use crate::update::new::extract::cache::CboCachedSorter;
 use crate::update::new::extract::perm_json_p::contained_in;
 use crate::update::new::indexer::document_changes::{
     for_each_document_change, DocumentChangeContext, DocumentChanges, Extractor, FullySend,
-    IndexingContext, RefCellExt, ThreadLocal,
+    IndexingContext, MostlySend, RefCellExt, ThreadLocal,
 };
 use crate::update::new::DocumentChange;
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
@@ -22,26 +22,27 @@ use crate::{bucketed_position, DocumentId, FieldId, Index, Result, MAX_POSITION_
 
 const MAX_COUNTED_WORDS: usize = 30;
 
-pub struct WordDocidsCachedSorters {
-    word_fid_docids: CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
-    word_docids: CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
-    exact_word_docids: CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
-    word_position_docids: CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
-    fid_word_count_docids: CboCachedSorter<MergeDeladdCboRoaringBitmaps>,
+pub struct WordDocidsCachedSorters<'indexer> {
+    word_fid_docids: CboCachedSorter<'indexer, MergeDeladdCboRoaringBitmaps>,
+    word_docids: CboCachedSorter<'indexer, MergeDeladdCboRoaringBitmaps>,
+    exact_word_docids: CboCachedSorter<'indexer, MergeDeladdCboRoaringBitmaps>,
+    word_position_docids: CboCachedSorter<'indexer, MergeDeladdCboRoaringBitmaps>,
+    fid_word_count_docids: CboCachedSorter<'indexer, MergeDeladdCboRoaringBitmaps>,
     fid_word_count: HashMap<FieldId, (usize, usize)>,
     current_docid: Option<DocumentId>,
 }
 
-impl WordDocidsCachedSorters {
-    pub fn new(
+unsafe impl<'indexer> MostlySend for WordDocidsCachedSorters<'indexer> {}
+
+impl<'indexer> WordDocidsCachedSorters<'indexer> {
+    pub fn new_in(
         indexer: GrenadParameters,
         max_memory: Option<usize>,
-        capacity: NonZero<usize>,
+        alloc: RefBump<'indexer>,
     ) -> Self {
         let max_memory = max_memory.map(|max_memory| max_memory / 4);
 
-        let word_fid_docids = CboCachedSorter::new(
-            capacity,
+        let word_fid_docids = CboCachedSorter::new_in(
             create_sorter(
                 grenad::SortAlgorithm::Stable,
                 MergeDeladdCboRoaringBitmaps,
@@ -51,9 +52,9 @@ impl WordDocidsCachedSorters {
                 max_memory,
                 false,
             ),
+            RefBump::clone(&alloc),
         );
-        let word_docids = CboCachedSorter::new(
-            capacity,
+        let word_docids = CboCachedSorter::new_in(
             create_sorter(
                 grenad::SortAlgorithm::Stable,
                 MergeDeladdCboRoaringBitmaps,
@@ -63,9 +64,9 @@ impl WordDocidsCachedSorters {
                 max_memory,
                 false,
             ),
+            RefBump::clone(&alloc),
         );
-        let exact_word_docids = CboCachedSorter::new(
-            capacity,
+        let exact_word_docids = CboCachedSorter::new_in(
             create_sorter(
                 grenad::SortAlgorithm::Stable,
                 MergeDeladdCboRoaringBitmaps,
@@ -75,9 +76,9 @@ impl WordDocidsCachedSorters {
                 max_memory,
                 false,
             ),
+            RefBump::clone(&alloc),
         );
-        let word_position_docids = CboCachedSorter::new(
-            capacity,
+        let word_position_docids = CboCachedSorter::new_in(
             create_sorter(
                 grenad::SortAlgorithm::Stable,
                 MergeDeladdCboRoaringBitmaps,
@@ -87,9 +88,9 @@ impl WordDocidsCachedSorters {
                 max_memory,
                 false,
             ),
+            RefBump::clone(&alloc),
         );
-        let fid_word_count_docids = CboCachedSorter::new(
-            capacity,
+        let fid_word_count_docids = CboCachedSorter::new_in(
             create_sorter(
                 grenad::SortAlgorithm::Stable,
                 MergeDeladdCboRoaringBitmaps,
@@ -99,6 +100,7 @@ impl WordDocidsCachedSorters {
                 max_memory,
                 false,
             ),
+            alloc,
         );
 
         Self {
@@ -120,29 +122,29 @@ impl WordDocidsCachedSorters {
         exact: bool,
         docid: u32,
         buffer: &mut Vec<u8>,
-    ) -> Result<()> {
+    ) {
         let key = word.as_bytes();
         if exact {
-            self.exact_word_docids.insert_add_u32(key, docid)?;
+            self.exact_word_docids.insert_add_u32(key, docid);
         } else {
-            self.word_docids.insert_add_u32(key, docid)?;
+            self.word_docids.insert_add_u32(key, docid);
         }
 
         buffer.clear();
         buffer.extend_from_slice(word.as_bytes());
         buffer.push(0);
         buffer.extend_from_slice(&field_id.to_be_bytes());
-        self.word_fid_docids.insert_add_u32(buffer, docid)?;
+        self.word_fid_docids.insert_add_u32(buffer, docid);
 
         let position = bucketed_position(position);
         buffer.clear();
         buffer.extend_from_slice(word.as_bytes());
         buffer.push(0);
         buffer.extend_from_slice(&position.to_be_bytes());
-        self.word_position_docids.insert_add_u32(buffer, docid)?;
+        self.word_position_docids.insert_add_u32(buffer, docid);
 
         if self.current_docid.map_or(false, |id| docid != id) {
-            self.flush_fid_word_count(buffer)?;
+            self.flush_fid_word_count(buffer);
         }
 
         self.fid_word_count
@@ -150,8 +152,6 @@ impl WordDocidsCachedSorters {
             .and_modify(|(_current_count, new_count)| *new_count += 1)
             .or_insert((0, 1));
         self.current_docid = Some(docid);
-
-        Ok(())
     }
 
     fn insert_del_u32(
@@ -162,61 +162,56 @@ impl WordDocidsCachedSorters {
         exact: bool,
         docid: u32,
         buffer: &mut Vec<u8>,
-    ) -> Result<()> {
+    ) {
         let key = word.as_bytes();
         if exact {
-            self.exact_word_docids.insert_del_u32(key, docid)?;
+            self.exact_word_docids.insert_del_u32(key, docid);
         } else {
-            self.word_docids.insert_del_u32(key, docid)?;
+            self.word_docids.insert_del_u32(key, docid);
         }
 
         buffer.clear();
         buffer.extend_from_slice(word.as_bytes());
         buffer.push(0);
         buffer.extend_from_slice(&field_id.to_be_bytes());
-        self.word_fid_docids.insert_del_u32(buffer, docid)?;
+        self.word_fid_docids.insert_del_u32(buffer, docid);
 
         let position = bucketed_position(position);
         buffer.clear();
         buffer.extend_from_slice(word.as_bytes());
         buffer.push(0);
         buffer.extend_from_slice(&position.to_be_bytes());
-        self.word_position_docids.insert_del_u32(buffer, docid)?;
+        self.word_position_docids.insert_del_u32(buffer, docid);
 
         if self.current_docid.map_or(false, |id| docid != id) {
-            self.flush_fid_word_count(buffer)?;
+            self.flush_fid_word_count(buffer);
         }
 
         self.fid_word_count
             .entry(field_id)
             .and_modify(|(current_count, _new_count)| *current_count += 1)
             .or_insert((1, 0));
-        self.current_docid = Some(docid);
 
-        Ok(())
+        self.current_docid = Some(docid);
     }
 
-    fn flush_fid_word_count(&mut self, buffer: &mut Vec<u8>) -> Result<()> {
+    fn flush_fid_word_count(&mut self, buffer: &mut Vec<u8>) {
         for (fid, (current_count, new_count)) in self.fid_word_count.drain() {
             if current_count != new_count {
                 if current_count <= MAX_COUNTED_WORDS {
                     buffer.clear();
                     buffer.extend_from_slice(&fid.to_be_bytes());
                     buffer.push(current_count as u8);
-                    self.fid_word_count_docids
-                        .insert_del_u32(buffer, self.current_docid.unwrap())?;
+                    self.fid_word_count_docids.insert_del_u32(buffer, self.current_docid.unwrap());
                 }
                 if new_count <= MAX_COUNTED_WORDS {
                     buffer.clear();
                     buffer.extend_from_slice(&fid.to_be_bytes());
                     buffer.push(new_count as u8);
-                    self.fid_word_count_docids
-                        .insert_add_u32(buffer, self.current_docid.unwrap())?;
+                    self.fid_word_count_docids.insert_add_u32(buffer, self.current_docid.unwrap());
                 }
             }
         }
-
-        Ok(())
     }
 }
 
@@ -312,24 +307,20 @@ pub struct WordDocidsExtractorData<'extractor> {
 }
 
 impl<'extractor> Extractor<'extractor> for WordDocidsExtractorData<'extractor> {
-    type Data = FullySend<RefCell<WordDocidsCachedSorters>>;
+    type Data = RefCell<WordDocidsCachedSorters<'extractor>>;
 
-    fn init_data(
-        &self,
-        _extractor_alloc: raw_collections::alloc::RefBump<'extractor>,
-    ) -> Result<Self::Data> {
-        Ok(FullySend(RefCell::new(WordDocidsCachedSorters::new(
+    fn init_data(&self, extractor_alloc: RefBump<'extractor>) -> Result<Self::Data> {
+        Ok(RefCell::new(WordDocidsCachedSorters::new_in(
             self.grenad_parameters,
             self.max_memory,
-            // TODO use a better value
-            200_000.try_into().unwrap(),
-        ))))
+            extractor_alloc,
+        )))
     }
 
     fn process(
         &self,
         change: DocumentChange,
-        context: &crate::update::new::indexer::document_changes::DocumentChangeContext<Self::Data>,
+        context: &DocumentChangeContext<Self::Data>,
     ) -> Result<()> {
         WordDocidsExtractors::extract_document_change(context, self.tokenizer, change)
     }
@@ -343,7 +334,7 @@ impl<'extractor> Extractor<'extractor> for WordDocidsExtractorData<'extractor> {
             return Ok(());
         }
 
-        let mut data = data.0.borrow_mut();
+        let mut data = data.borrow_mut();
         let WordDocidsCachedSorters {
             word_fid_docids,
             word_docids,
@@ -454,7 +445,7 @@ impl WordDocidsExtractors {
     }
 
     fn extract_document_change(
-        context: &DocumentChangeContext<FullySend<RefCell<WordDocidsCachedSorters>>>,
+        context: &DocumentChangeContext<RefCell<WordDocidsCachedSorters>>,
         document_tokenizer: &DocumentTokenizer,
         document_change: DocumentChange,
     ) -> Result<()> {

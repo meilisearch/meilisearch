@@ -7,6 +7,7 @@ use std::ops::DerefMut as _;
 use bumpalo::Bump;
 use grenad::{MergeFunction, Merger};
 use heed::RoTxn;
+use raw_collections::alloc::RefBump;
 use rayon::iter::{ParallelBridge as _, ParallelIterator as _};
 use serde_json::Value;
 
@@ -30,15 +31,10 @@ pub struct FacetedExtractorData<'extractor> {
 }
 
 impl<'extractor> Extractor<'extractor> for FacetedExtractorData<'extractor> {
-    type Data = FullySend<RefCell<CboCachedSorter<MergeDeladdCboRoaringBitmaps>>>;
+    type Data = RefCell<CboCachedSorter<'extractor, MergeDeladdCboRoaringBitmaps>>;
 
-    fn init_data(
-        &self,
-        _extractor_alloc: raw_collections::alloc::RefBump<'extractor>,
-    ) -> Result<Self::Data> {
-        Ok(FullySend(RefCell::new(CboCachedSorter::new(
-            // TODO use a better value
-            1_000_000.try_into().unwrap(),
+    fn init_data(&self, extractor_alloc: RefBump<'extractor>) -> Result<Self::Data> {
+        Ok(RefCell::new(CboCachedSorter::new_in(
             create_sorter(
                 grenad::SortAlgorithm::Stable,
                 MergeDeladdCboRoaringBitmaps,
@@ -51,13 +47,14 @@ impl<'extractor> Extractor<'extractor> for FacetedExtractorData<'extractor> {
                 // 2. it creates correctness issues if it causes to yield a borrow-mut wielding task
                 false,
             ),
-        ))))
+            extractor_alloc,
+        )))
     }
 
     fn process(
         &self,
         change: DocumentChange,
-        context: &crate::update::new::indexer::document_changes::DocumentChangeContext<Self::Data>,
+        context: &DocumentChangeContext<Self::Data>,
     ) -> Result<()> {
         FacetedDocidsExtractor::extract_document_change(context, self.attributes_to_extract, change)
     }
@@ -67,16 +64,14 @@ pub struct FacetedDocidsExtractor;
 
 impl FacetedDocidsExtractor {
     fn extract_document_change(
-        context: &DocumentChangeContext<
-            FullySend<RefCell<CboCachedSorter<MergeDeladdCboRoaringBitmaps>>>,
-        >,
+        context: &DocumentChangeContext<RefCell<CboCachedSorter<MergeDeladdCboRoaringBitmaps>>>,
         attributes_to_extract: &[&str],
         document_change: DocumentChange,
     ) -> Result<()> {
         let index = &context.index;
         let rtxn = &context.txn;
         let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut_or_yield();
-        let mut cached_sorter = context.data.0.borrow_mut_or_yield();
+        let mut cached_sorter = context.data.borrow_mut_or_yield();
         match document_change {
             DocumentChange::Deletion(inner) => extract_document_facets(
                 attributes_to_extract,
@@ -90,7 +85,8 @@ impl FacetedDocidsExtractor {
                         inner.docid(),
                         fid,
                         value,
-                    )
+                    );
+                    Ok(())
                 },
             ),
             DocumentChange::Update(inner) => {
@@ -106,7 +102,8 @@ impl FacetedDocidsExtractor {
                             inner.docid(),
                             fid,
                             value,
-                        )
+                        );
+                        Ok(())
                     },
                 )?;
 
@@ -122,7 +119,8 @@ impl FacetedDocidsExtractor {
                             inner.docid(),
                             fid,
                             value,
-                        )
+                        );
+                        Ok(())
                     },
                 )
             }
@@ -138,31 +136,27 @@ impl FacetedDocidsExtractor {
                         inner.docid(),
                         fid,
                         value,
-                    )
+                    );
+                    Ok(())
                 },
             ),
         }
     }
 
-    fn facet_fn_with_options<MF>(
+    fn facet_fn_with_options<'extractor, MF>(
         doc_alloc: &Bump,
-        cached_sorter: &mut CboCachedSorter<MF>,
-        cache_fn: impl Fn(&mut CboCachedSorter<MF>, &[u8], u32) -> grenad::Result<(), MF::Error>,
+        cached_sorter: &mut CboCachedSorter<'extractor, MF>,
+        cache_fn: impl Fn(&mut CboCachedSorter<'extractor, MF>, &[u8], u32),
         docid: DocumentId,
         fid: FieldId,
         value: &Value,
-    ) -> Result<()>
-    where
-        MF: MergeFunction,
-        MF::Error: Debug,
-        grenad::Error<MF::Error>: Into<crate::Error>,
-    {
+    ) {
         let mut buffer = bumpalo::collections::Vec::new_in(doc_alloc);
         // Exists
         // key: fid
         buffer.push(FacetKind::Exists as u8);
         buffer.extend_from_slice(&fid.to_be_bytes());
-        cache_fn(cached_sorter, &buffer, docid).map_err(Into::into)?;
+        cache_fn(cached_sorter, &buffer, docid);
 
         match value {
             // Number
@@ -177,10 +171,7 @@ impl FacetedDocidsExtractor {
                     buffer.push(0); // level 0
                     buffer.extend_from_slice(&ordered);
                     buffer.extend_from_slice(&n.to_be_bytes());
-
-                    cache_fn(cached_sorter, &buffer, docid).map_err(Into::into)
-                } else {
-                    Ok(())
+                    cache_fn(cached_sorter, &buffer, docid);
                 }
             }
             // String
@@ -193,7 +184,7 @@ impl FacetedDocidsExtractor {
                 buffer.extend_from_slice(&fid.to_be_bytes());
                 buffer.push(0); // level 0
                 buffer.extend_from_slice(truncated.as_bytes());
-                cache_fn(cached_sorter, &buffer, docid).map_err(Into::into)
+                cache_fn(cached_sorter, &buffer, docid);
             }
             // Null
             // key: fid
@@ -201,7 +192,7 @@ impl FacetedDocidsExtractor {
                 buffer.clear();
                 buffer.push(FacetKind::Null as u8);
                 buffer.extend_from_slice(&fid.to_be_bytes());
-                cache_fn(cached_sorter, &buffer, docid).map_err(Into::into)
+                cache_fn(cached_sorter, &buffer, docid);
             }
             // Empty
             // key: fid
@@ -209,17 +200,17 @@ impl FacetedDocidsExtractor {
                 buffer.clear();
                 buffer.push(FacetKind::Empty as u8);
                 buffer.extend_from_slice(&fid.to_be_bytes());
-                cache_fn(cached_sorter, &buffer, docid).map_err(Into::into)
+                cache_fn(cached_sorter, &buffer, docid);
             }
             Value::Object(o) if o.is_empty() => {
                 buffer.clear();
                 buffer.push(FacetKind::Empty as u8);
                 buffer.extend_from_slice(&fid.to_be_bytes());
-                cache_fn(cached_sorter, &buffer, docid).map_err(Into::into)
+                cache_fn(cached_sorter, &buffer, docid);
             }
             // Otherwise, do nothing
             /// TODO: What about Value::Bool?
-            _ => Ok(()),
+            _ => (),
         }
     }
 

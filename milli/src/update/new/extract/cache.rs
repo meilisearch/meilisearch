@@ -9,6 +9,7 @@ use roaring::bitmap::Statistics;
 use roaring::RoaringBitmap;
 
 use crate::update::del_add::{DelAdd, KvWriterDelAdd};
+use crate::update::new::indexer::document_changes::MostlySend;
 use crate::CboRoaringBitmapCodec;
 
 const KEY_SIZE: usize = 12;
@@ -272,6 +273,8 @@ impl<MF> SpilledCache<MF> {
         }
     }
 }
+
+unsafe impl<'extractor, MF: Send> MostlySend for CboCachedSorter<'extractor, MF> {}
 
 #[derive(Default, Debug)]
 struct Stats {
