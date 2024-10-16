@@ -1,7 +1,5 @@
 pub mod segment_analytics;
 
-use std::any::TypeId;
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -10,7 +8,6 @@ use actix_web::HttpRequest;
 use meilisearch_types::InstanceUid;
 use once_cell::sync::Lazy;
 use platform_dirs::AppDirs;
-use segment::message::User;
 use serde::Serialize;
 
 // if the feature analytics is enabled we use the real analytics
@@ -83,7 +80,7 @@ pub enum DocumentFetchKind {
     Normal { with_filter: bool, limit: usize, offset: usize, retrieve_vectors: bool },
 }
 
-pub trait Aggregate {
+pub trait Aggregate: 'static {
     fn event_name(&self) -> &'static str;
 
     fn aggregate(self, other: Self) -> Self
@@ -97,7 +94,7 @@ pub trait Aggregate {
 
 /// Helper trait to define multiple aggregate with the same content but a different name.
 /// Commonly used when you must aggregate a search with POST or with GET for example.
-pub trait AggregateMethod {
+pub trait AggregateMethod: 'static + Default {
     fn event_name() -> &'static str;
 }
 
@@ -105,7 +102,8 @@ pub trait AggregateMethod {
 #[macro_export]
 macro_rules! aggregate_methods {
     ($method:ident => $event_name:literal) => {
-        pub enum $method {}
+        #[derive(Default)]
+        pub struct $method {}
 
         impl $crate::analytics::AggregateMethod for $method {
             fn event_name() -> &'static str {
@@ -122,35 +120,26 @@ macro_rules! aggregate_methods {
 }
 
 pub struct Analytics {
-    // TODO: TAMO: remove
-    inner: Option<SegmentAnalytics>,
-
-    instance_uid: Option<InstanceUid>,
-    user: Option<User>,
-    events: HashMap<TypeId, Box<dyn Aggregate>>,
+    segment: Option<SegmentAnalytics>,
 }
 
 impl Analytics {
     fn no_analytics() -> Self {
-        Self { inner: None, events: HashMap::new(), instance_uid: None, user: None }
+        Self { segment: None }
     }
 
     fn segment_analytics(segment: SegmentAnalytics) -> Self {
-        Self {
-            instance_uid: Some(segment.instance_uid),
-            user: Some(segment.user),
-            inner: Some(segment),
-            events: HashMap::new(),
-        }
+        Self { segment: Some(segment) }
     }
 
     pub fn instance_uid(&self) -> Option<&InstanceUid> {
-        self.instance_uid
+        self.segment.as_ref().map(|segment| segment.instance_uid.as_ref())
     }
 
     /// The method used to publish most analytics that do not need to be batched every hours
-    pub fn publish(&self, send: impl Aggregate, request: &HttpRequest) {
-        let Some(segment) = self.inner else { return };
+    pub fn publish(&self, event: impl Aggregate, request: &HttpRequest) {
+        let Some(ref segment) = self.segment else { return };
         let user_agents = extract_user_agents(request);
+        let _ = segment.sender.try_send(Box::new(event));
     }
 }

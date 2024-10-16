@@ -9,7 +9,6 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use serde::Serialize;
-use serde_json::json;
 
 use super::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::analytics::{Aggregate, Analytics};

@@ -14,7 +14,6 @@ use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::{self, FieldDistribution, Index};
 use meilisearch_types::tasks::KindWithContent;
 use serde::Serialize;
-use serde_json::json;
 use time::OffsetDateTime;
 use tracing::debug;
 
@@ -138,7 +137,7 @@ impl Aggregate for IndexCreatedAggregate {
     where
         Self: Sized,
     {
-        Self { primary_key: self.primary_key.union(&other.primary_key).collect() }
+        Self { primary_key: self.primary_key.union(&other.primary_key).cloned().collect() }
     }
 
     fn into_event(self) -> impl Serialize {
@@ -227,7 +226,7 @@ impl Aggregate for IndexUpdatedAggregate {
     }
 
     fn aggregate(self, other: Self) -> Self {
-        Self { primary_key: self.primary_key.union(&other.primary_key).collect() }
+        Self { primary_key: self.primary_key.union(&other.primary_key).cloned().collect() }
     }
 
     fn into_event(self) -> impl Serialize {

@@ -1,3 +1,4 @@
+use std::any::{Any, TypeId};
 use std::collections::{BTreeSet, BinaryHeap, HashMap, HashSet};
 use std::fs;
 use std::mem::take;
@@ -74,6 +75,7 @@ pub fn extract_user_agents(request: &HttpRequest) -> Vec<String> {
 pub struct SegmentAnalytics {
     pub instance_uid: InstanceUid,
     pub user: User,
+    pub sender: Sender<Box<dyn Aggregate>>,
 }
 
 impl SegmentAnalytics {
@@ -128,18 +130,7 @@ impl SegmentAnalytics {
             user: user.clone(),
             opt: opt.clone(),
             batcher,
-            post_search_aggregator: SearchAggregator::default(),
-            post_multi_search_aggregator: MultiSearchAggregator::default(),
-            post_facet_search_aggregator: FacetSearchAggregator::default(),
-            get_search_aggregator: SearchAggregator::default(),
-            add_documents_aggregator: DocumentsAggregator::default(),
-            delete_documents_aggregator: DocumentsDeletionAggregator::default(),
-            update_documents_aggregator: DocumentsAggregator::default(),
-            edit_documents_by_function_aggregator: EditDocumentsByFunctionAggregator::default(),
-            get_fetch_documents_aggregator: DocumentsFetchAggregator::default(),
-            post_fetch_documents_aggregator: DocumentsFetchAggregator::default(),
-            get_similar_aggregator: SimilarAggregator::default(),
-            post_similar_aggregator: SimilarAggregator::default(),
+            events: todo!(),
         });
         tokio::spawn(segment.run(index_scheduler.clone(), auth_controller.clone()));
 
@@ -387,22 +378,11 @@ impl From<Opt> for Infos {
 }
 
 pub struct Segment {
-    inbox: Receiver<AnalyticsMsg>,
+    inbox: Receiver<Box<dyn Aggregate>>,
     user: User,
     opt: Opt,
     batcher: AutoBatcher,
-    get_search_aggregator: SearchAggregator,
-    post_search_aggregator: SearchAggregator,
-    post_multi_search_aggregator: MultiSearchAggregator,
-    post_facet_search_aggregator: FacetSearchAggregator,
-    add_documents_aggregator: DocumentsAggregator,
-    delete_documents_aggregator: DocumentsDeletionAggregator,
-    update_documents_aggregator: DocumentsAggregator,
-    edit_documents_by_function_aggregator: EditDocumentsByFunctionAggregator,
-    get_fetch_documents_aggregator: DocumentsFetchAggregator,
-    post_fetch_documents_aggregator: DocumentsFetchAggregator,
-    get_similar_aggregator: SimilarAggregator,
-    post_similar_aggregator: SimilarAggregator,
+    events: HashMap<TypeId, Box<dyn Aggregate>>,
 }
 
 impl Segment {
@@ -455,19 +435,8 @@ impl Segment {
                 },
                 msg = self.inbox.recv() => {
                     match msg {
-                        Some(AnalyticsMsg::BatchMessage(msg)) => drop(self.batcher.push(msg).await),
-                        Some(AnalyticsMsg::AggregateGetSearch(agreg)) => self.get_search_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregatePostSearch(agreg)) => self.post_search_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregatePostMultiSearch(agreg)) => self.post_multi_search_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregatePostFacetSearch(agreg)) => self.post_facet_search_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregateAddDocuments(agreg)) => self.add_documents_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregateDeleteDocuments(agreg)) => self.delete_documents_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregateUpdateDocuments(agreg)) => self.update_documents_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregateEditDocumentsByFunction(agreg)) => self.edit_documents_by_function_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregateGetFetchDocuments(agreg)) => self.get_fetch_documents_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregatePostFetchDocuments(agreg)) => self.post_fetch_documents_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregateGetSimilar(agreg)) => self.get_similar_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregatePostSimilar(agreg)) => self.post_similar_aggregator.aggregate(agreg),
+                        // Some(AnalyticsMsg::BatchMessage(msg)) => drop(self.batcher.push(msg).await),
+                        Some(_) => todo!(),
                         None => (),
                     }
                 }
@@ -507,87 +476,19 @@ impl Segment {
                 .await;
         }
 
-        let Segment {
-            inbox: _,
-            opt: _,
-            batcher: _,
-            user,
-            get_search_aggregator,
-            post_search_aggregator,
-            post_multi_search_aggregator,
-            post_facet_search_aggregator,
-            add_documents_aggregator,
-            delete_documents_aggregator,
-            update_documents_aggregator,
-            edit_documents_by_function_aggregator,
-            get_fetch_documents_aggregator,
-            post_fetch_documents_aggregator,
-            get_similar_aggregator,
-            post_similar_aggregator,
-        } = self;
+        // We empty the list of events
+        let events = std::mem::take(&mut self.events);
 
-        if let Some(get_search) =
-            take(get_search_aggregator).into_event(user, "Documents Searched GET")
-        {
-            let _ = self.batcher.push(get_search).await;
-        }
-        if let Some(post_search) =
-            take(post_search_aggregator).into_event(user, "Documents Searched POST")
-        {
-            let _ = self.batcher.push(post_search).await;
-        }
-        if let Some(post_multi_search) = take(post_multi_search_aggregator)
-            .into_event(user, "Documents Searched by Multi-Search POST")
-        {
-            let _ = self.batcher.push(post_multi_search).await;
-        }
-        if let Some(post_facet_search) =
-            take(post_facet_search_aggregator).into_event(user, "Facet Searched POST")
-        {
-            let _ = self.batcher.push(post_facet_search).await;
-        }
-        if let Some(add_documents) =
-            take(add_documents_aggregator).into_event(user, "Documents Added")
-        {
-            let _ = self.batcher.push(add_documents).await;
-        }
-        if let Some(delete_documents) =
-            take(delete_documents_aggregator).into_event(user, "Documents Deleted")
-        {
-            let _ = self.batcher.push(delete_documents).await;
-        }
-        if let Some(update_documents) =
-            take(update_documents_aggregator).into_event(user, "Documents Updated")
-        {
-            let _ = self.batcher.push(update_documents).await;
-        }
-        if let Some(edit_documents_by_function) = take(edit_documents_by_function_aggregator)
-            .into_event(user, "Documents Edited By Function")
-        {
-            let _ = self.batcher.push(edit_documents_by_function).await;
-        }
-        if let Some(get_fetch_documents) =
-            take(get_fetch_documents_aggregator).into_event(user, "Documents Fetched GET")
-        {
-            let _ = self.batcher.push(get_fetch_documents).await;
-        }
-        if let Some(post_fetch_documents) =
-            take(post_fetch_documents_aggregator).into_event(user, "Documents Fetched POST")
-        {
-            let _ = self.batcher.push(post_fetch_documents).await;
+        for (_, mut event) in events {
+            self.batcher.push(Track {
+                user: self.user,
+                event: event.event_name().to_string(),
+                properties: event.into_event(),
+                timestamp: todo!(),
+                ..Default::default()
+            });
         }
 
-        if let Some(get_similar_documents) =
-            take(get_similar_aggregator).into_event(user, "Similar GET")
-        {
-            let _ = self.batcher.push(get_similar_documents).await;
-        }
-
-        if let Some(post_similar_documents) =
-            take(post_similar_aggregator).into_event(user, "Similar POST")
-        {
-            let _ = self.batcher.push(post_similar_documents).await;
-        }
         let _ = self.batcher.flush().await;
     }
 }
@@ -702,10 +603,8 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
         } = query;
 
         let mut ret = Self::default();
-        ret.timestamp = Some(OffsetDateTime::now_utc());
 
         ret.total_received = 1;
-        ret.user_agents = extract_user_agents(request).into_iter().collect();
 
         if let Some(ref sort) = sort {
             ret.sort_total_number_of_criteria = 1;
@@ -949,7 +848,7 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
         self
     }
 
-    fn into_event(self) -> Option<Track> {
+    fn into_event(self) -> impl Serialize {
         let Self {
             total_received,
             total_succeeded,
@@ -1087,10 +986,7 @@ pub struct MultiSearchAggregator {
 }
 
 impl MultiSearchAggregator {
-    pub fn from_federated_search(
-        federated_search: &FederatedSearch,
-        request: &HttpRequest,
-    ) -> Self {
+    pub fn from_federated_search(federated_search: &FederatedSearch) -> Self {
         let use_federation = federated_search.federation.is_some();
 
         let distinct_indexes: HashSet<_> = federated_search
@@ -1162,7 +1058,7 @@ impl Aggregate for MultiSearchAggregator {
     }
 
     /// Aggregate one [MultiSearchAggregator] into another.
-    fn aggregate(mut self, other: Self) -> Self {
+    fn aggregate(self, other: Self) -> Self {
         // write the aggregate in a way that will cause a compilation error if a field is added.
 
         // get ownership of self, replacing it by a default value.
@@ -1177,12 +1073,7 @@ impl Aggregate for MultiSearchAggregator {
         let show_ranking_score = this.show_ranking_score || other.show_ranking_score;
         let show_ranking_score_details =
             this.show_ranking_score_details || other.show_ranking_score_details;
-        let mut user_agents = this.user_agents;
         let use_federation = this.use_federation || other.use_federation;
-
-        for user_agent in other.user_agents.into_iter() {
-            user_agents.insert(user_agent);
-        }
 
         Self {
             total_received,
@@ -1748,7 +1639,7 @@ pub struct SimilarAggregator<Method: AggregateMethod> {
 
 impl<Method: AggregateMethod> SimilarAggregator<Method> {
     #[allow(clippy::field_reassign_with_default)]
-    pub fn from_query(query: &SimilarQuery, request: &HttpRequest) -> Self {
+    pub fn from_query(query: &SimilarQuery) -> Self {
         let SimilarQuery {
             id: _,
             embedder: _,
@@ -1763,10 +1654,8 @@ impl<Method: AggregateMethod> SimilarAggregator<Method> {
         } = query;
 
         let mut ret = Self::default();
-        ret.timestamp = Some(OffsetDateTime::now_utc());
 
         ret.total_received = 1;
-        ret.user_agents = extract_user_agents(request).into_iter().collect();
 
         if let Some(ref filter) = filter {
             static RE: Lazy<Regex> = Lazy::new(|| Regex::new("AND | OR").unwrap());

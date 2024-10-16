@@ -7,7 +7,6 @@ use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use serde::Serialize;
-use serde_json::json;
 use tracing::debug;
 
 use crate::analytics::{Aggregate, Analytics};

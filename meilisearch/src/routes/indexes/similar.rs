@@ -41,7 +41,7 @@ pub async fn similar_get(
 
     let query = params.0.try_into()?;
 
-    let mut aggregate = SimilarAggregator::<SimilarGET>::from_query(&query, &req);
+    let mut aggregate = SimilarAggregator::<SimilarGET>::from_query(&query);
 
     debug!(parameters = ?query, "Similar get");
 
@@ -70,7 +70,7 @@ pub async fn similar_post(
     let query = params.into_inner();
     debug!(parameters = ?query, "Similar post");
 
-    let mut aggregate = SimilarAggregator::<SimilarPOST>::from_query(&query, &req);
+    let mut aggregate = SimilarAggregator::<SimilarPOST>::from_query(&query);
 
     let similar = similar(index_scheduler, index_uid, query).await;
 

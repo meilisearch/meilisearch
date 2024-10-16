@@ -43,7 +43,7 @@ pub async fn multi_search_with_post(
 
     let federated_search = params.into_inner();
 
-    let mut multi_aggregate = MultiSearchAggregator::from_federated_search(&federated_search, &req);
+    let mut multi_aggregate = MultiSearchAggregator::from_federated_search(&federated_search);
 
     let FederatedSearch { mut queries, federation } = federated_search;
 

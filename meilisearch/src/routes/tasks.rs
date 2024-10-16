@@ -180,7 +180,7 @@ struct TaskFilterAnalytics<Method: AggregateMethod> {
     marker: std::marker::PhantomData<Method>,
 }
 
-impl<Method: AggregateMethod> Aggregate for TaskFilterAnalytics<Method> {
+impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method> {
     fn event_name(&self) -> &'static str {
         Method::event_name()
     }

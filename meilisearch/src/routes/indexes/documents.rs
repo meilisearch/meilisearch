@@ -32,7 +32,7 @@ use tokio::fs::File;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
 use tracing::debug;
 
-use crate::analytics::{Aggregate, AggregateMethod, Analytics, DocumentDeletionKind};
+use crate::analytics::{Aggregate, AggregateMethod, Analytics};
 use crate::error::MeilisearchHttpError;
 use crate::error::PayloadError::ReceivePayload;
 use crate::extractors::authentication::policies::*;
@@ -102,8 +102,13 @@ pub struct GetDocument {
     retrieve_vectors: Param<bool>,
 }
 
+aggregate_methods!(
+    DocumentsGET => "Documents Fetched GET",
+    DocumentsPOST => "Documents Fetched POST",
+);
+
 #[derive(Default, Serialize)]
-pub struct DocumentsFetchAggregator {
+pub struct DocumentsFetchAggregator<Method: AggregateMethod> {
     #[serde(rename = "requests.total_received")]
     total_received: usize,
 
@@ -120,6 +125,8 @@ pub struct DocumentsFetchAggregator {
     max_limit: usize,
     #[serde(rename = "pagination.max_offset")]
     max_offset: usize,
+
+    marker: std::marker::PhantomData<Method>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -128,7 +135,7 @@ pub enum DocumentFetchKind {
     Normal { with_filter: bool, limit: usize, offset: usize, retrieve_vectors: bool },
 }
 
-impl DocumentsFetchAggregator {
+impl<Method: AggregateMethod> DocumentsFetchAggregator<Method> {
     pub fn from_query(query: &DocumentFetchKind) -> Self {
         let (limit, offset, retrieve_vectors) = match query {
             DocumentFetchKind::PerDocumentId { retrieve_vectors } => (1, 0, *retrieve_vectors),
@@ -136,6 +143,7 @@ impl DocumentsFetchAggregator {
                 (*limit, *offset, *retrieve_vectors)
             }
         };
+
         Self {
             total_received: 1,
             per_document_id: matches!(query, DocumentFetchKind::PerDocumentId { .. }),
@@ -143,20 +151,18 @@ impl DocumentsFetchAggregator {
             max_limit: limit,
             max_offset: offset,
             retrieve_vectors,
+
+            marker: PhantomData,
         }
     }
 }
 
-impl Aggregate for DocumentsFetchAggregator {
-    // TODO: TAMO: Should we do the same event for the GET requests
+impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
     fn event_name(&self) -> &'static str {
-        "Documents Fetched POST"
+        Method::event_name()
     }
 
-    fn aggregate(self, other: Self) -> Self
-    where
-        Self: Sized,
-    {
+    fn aggregate(self, other: Self) -> Self {
         Self {
             total_received: self.total_received.saturating_add(other.total_received),
             per_document_id: self.per_document_id | other.per_document_id,
@@ -164,11 +170,12 @@ impl Aggregate for DocumentsFetchAggregator {
             retrieve_vectors: self.retrieve_vectors | other.retrieve_vectors,
             max_limit: self.max_limit.max(other.max_limit),
             max_offset: self.max_offset.max(other.max_offset),
+            marker: PhantomData,
         }
     }
 
-    fn into_event(self) -> Value {
-        serde_json::to_value(self).unwrap()
+    fn into_event(self) -> impl Serialize {
+        self
     }
 }
 
@@ -190,7 +197,7 @@ pub async fn get_document(
     let retrieve_vectors = RetrieveVectors::new(param_retrieve_vectors.0, features)?;
 
     analytics.publish(
-        DocumentsFetchAggregator {
+        DocumentsFetchAggregator::<DocumentsGET> {
             retrieve_vectors: param_retrieve_vectors.0,
             ..Default::default()
         },
@@ -232,8 +239,8 @@ impl Aggregate for DocumentsDeletionAggregator {
         }
     }
 
-    fn into_event(self) -> Value {
-        serde_json::to_value(self).unwrap()
+    fn into_event(self) -> impl Serialize {
+        self
     }
 }
 
@@ -311,7 +318,7 @@ pub async fn documents_by_query_post(
     debug!(parameters = ?body, "Get documents POST");
 
     analytics.publish(
-        DocumentsFetchAggregator {
+        DocumentsFetchAggregator::<DocumentsPOST> {
             total_received: 1,
             per_filter: body.filter.is_some(),
             retrieve_vectors: body.retrieve_vectors,
@@ -353,7 +360,7 @@ pub async fn get_documents(
     };
 
     analytics.publish(
-        DocumentsFetchAggregator {
+        DocumentsFetchAggregator::<DocumentsGET> {
             total_received: 1,
             per_filter: query.filter.is_some(),
             retrieve_vectors: query.retrieve_vectors,
@@ -436,20 +443,17 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
         Method::event_name()
     }
 
-    fn aggregate(mut self, other: Self) -> Self
-    where
-        Self: Sized,
-    {
+    fn aggregate(self, other: Self) -> Self {
         Self {
-            payload_types: self.payload_types.union(&other.payload_types).collect(),
-            primary_key: self.primary_key.union(&other.primary_key).collect(),
+            payload_types: self.payload_types.union(&other.payload_types).cloned().collect(),
+            primary_key: self.primary_key.union(&other.primary_key).cloned().collect(),
             index_creation: self.index_creation | other.index_creation,
             method: PhantomData,
         }
     }
 
-    fn into_event(self) -> Value {
-        serde_json::to_value(self).unwrap()
+    fn into_event(self) -> impl Serialize {
+        self
     }
 }
 
@@ -818,8 +822,8 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
         }
     }
 
-    fn into_event(self) -> Value {
-        serde_json::to_value(self).unwrap()
+    fn into_event(self) -> impl Serialize {
+        self
     }
 }
 

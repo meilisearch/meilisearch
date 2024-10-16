@@ -9,6 +9,7 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
+use serde::Serialize;
 use serde_json::Value;
 use tracing::debug;
 
@@ -72,7 +73,7 @@ pub struct FacetSearchAggregator {
 
 impl FacetSearchAggregator {
     #[allow(clippy::field_reassign_with_default)]
-    pub fn from_query(query: &FacetSearchQuery, request: &HttpRequest) -> Self {
+    pub fn from_query(query: &FacetSearchQuery) -> Self {
         let FacetSearchQuery {
             facet_query: _,
             facet_name,
@@ -113,23 +114,22 @@ impl Aggregate for FacetSearchAggregator {
         "Facet Searched POST"
     }
 
-    fn aggregate(mut self, other: Self) -> Self
-    where
-        Self: Sized,
-    {
-        self.time_spent.insert(other.time_spent);
+    fn aggregate(mut self, other: Self) -> Self {
+        for time in other.time_spent {
+            self.time_spent.push(time);
+        }
 
         Self {
             total_received: self.total_received.saturating_add(other.total_received),
             total_succeeded: self.total_succeeded.saturating_add(other.total_succeeded),
             time_spent: self.time_spent,
-            facet_names: self.facet_names.union(&other.facet_names).collect(),
+            facet_names: self.facet_names.union(&other.facet_names).cloned().collect(),
             additional_search_parameters_provided: self.additional_search_parameters_provided
                 | other.additional_search_parameters_provided,
         }
     }
 
-    fn into_event(self) -> Value {
+    fn into_event(self) -> impl Serialize {
         let Self {
             total_received,
             total_succeeded,
@@ -137,6 +137,12 @@ impl Aggregate for FacetSearchAggregator {
             facet_names,
             additional_search_parameters_provided,
         } = self;
+        // the index of the 99th percentage of value
+        let percentile_99th = 0.99 * (total_succeeded as f64 - 1.) + 1.;
+        // we get all the values in a sorted manner
+        let time_spent = time_spent.into_sorted_vec();
+        // We are only interested by the slowest value of the 99th fastest results
+        let time_spent = time_spent.get(percentile_99th as usize);
 
         serde_json::json!({
             "requests": {
@@ -166,7 +172,7 @@ pub async fn search(
     let query = params.into_inner();
     debug!(parameters = ?query, "Facet search");
 
-    let mut aggregate = FacetSearchAggregator::from_query(&query, &req);
+    let mut aggregate = FacetSearchAggregator::from_query(&query);
 
     let facet_query = query.facet_query.clone();
     let facet_name = query.facet_name.clone();
