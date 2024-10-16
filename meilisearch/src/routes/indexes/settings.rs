@@ -14,7 +14,6 @@ use meilisearch_types::settings::{
 };
 use meilisearch_types::tasks::KindWithContent;
 use serde::Serialize;
-use serde_json::json;
 use tracing::debug;
 
 use crate::analytics::{Aggregate, Analytics};
@@ -25,7 +24,7 @@ use crate::Opt;
 
 #[macro_export]
 macro_rules! make_setting_route {
-    ($route:literal, $update_verb:ident, $type:ty, $err_ty:ty, $attr:ident, $camelcase_attr:literal, $analytics_var:ident, $analytics:expr) => {
+    ($route:literal, $update_verb:ident, $type:ty, $err_ty:ty, $attr:ident, $camelcase_attr:literal, $analytics:ident) => {
         pub mod $attr {
             use actix_web::web::Data;
             use actix_web::{web, HttpRequest, HttpResponse, Resource};
@@ -85,7 +84,7 @@ macro_rules! make_setting_route {
                 body: deserr::actix_web::AwebJson<Option<$type>, $err_ty>,
                 req: HttpRequest,
                 opt: web::Data<Opt>,
-                $analytics_var: web::Data<Analytics>,
+                analytics: web::Data<Analytics>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
                 let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
@@ -93,7 +92,10 @@ macro_rules! make_setting_route {
                 debug!(parameters = ?body, "Update settings");
 
                 #[allow(clippy::redundant_closure_call)]
-                $analytics(&body, &req);
+                analytics.publish(
+                    $crate::routes::indexes::settings::$analytics::new(body.as_ref()).to_settings(),
+                    Some(&req),
+                );
 
                 let new_settings = Settings {
                     $attr: match body {
@@ -165,13 +167,7 @@ make_setting_route!(
     >,
     filterable_attributes,
     "filterableAttributes",
-    analytics,
-    |setting: &Option<std::collections::BTreeSet<String>>, req: &HttpRequest| {
-        analytics.publish(
-            crate::routes::indexes::settings::FilterableAttributesAnalytics::new(setting.as_ref()).to_settings(),
-            Some(req),
-        );
-    }
+    FilterableAttributesAnalytics
 );
 
 make_setting_route!(
@@ -183,13 +179,7 @@ make_setting_route!(
     >,
     sortable_attributes,
     "sortableAttributes",
-    analytics,
-    |setting: &Option<std::collections::BTreeSet<String>>, req: &HttpRequest| {
-        analytics.publish(
-            crate::routes::indexes::settings::SortableAttributesAnalytics::new(setting.as_ref()).to_settings(),
-            Some(req),
-        );
-    }
+    SortableAttributesAnalytics
 );
 
 make_setting_route!(
@@ -201,13 +191,7 @@ make_setting_route!(
     >,
     displayed_attributes,
     "displayedAttributes",
-    analytics,
-    |displayed: &Option<Vec<String>>, req: &HttpRequest| {
-        analytics.publish(
-            crate::routes::indexes::settings::DisplayedAttributesAnalytics::new(displayed.as_ref()).to_settings(),
-            Some(req),
-        );
-    }
+    DisplayedAttributesAnalytics
 );
 
 make_setting_route!(
@@ -219,13 +203,7 @@ make_setting_route!(
     >,
     typo_tolerance,
     "typoTolerance",
-    analytics,
-    |setting: &Option<meilisearch_types::settings::TypoSettings>, req: &HttpRequest| {
-        analytics.publish(
-            crate::routes::indexes::settings::TypoToleranceAnalytics::new(setting.as_ref()).to_settings(),
-            Some(req),
-        );
-    }
+    TypoToleranceAnalytics
 );
 
 make_setting_route!(
@@ -237,13 +215,7 @@ make_setting_route!(
     >,
     searchable_attributes,
     "searchableAttributes",
-    analytics,
-    |setting: &Option<Vec<String>>, req: &HttpRequest| {
-        analytics.publish(
-            crate::routes::indexes::settings::SearchableAttributesAnalytics::new(setting.as_ref()).to_settings(),
-            Some(req),
-        );
-    }
+    SearchableAttributesAnalytics
 );
 
 make_setting_route!(
@@ -255,13 +227,7 @@ make_setting_route!(
     >,
     stop_words,
     "stopWords",
-    analytics,
-    |stop_words: &Option<std::collections::BTreeSet<String>>, req: &HttpRequest| {
-        analytics.publish(
-            crate::routes::indexes::settings::StopWordsAnalytics::new(stop_words.as_ref()).to_settings(),
-            Some(req),
-        );
-    }
+    StopWordsAnalytics
 );
 
 make_setting_route!(
@@ -273,13 +239,7 @@ make_setting_route!(
     >,
     non_separator_tokens,
     "nonSeparatorTokens",
-    analytics,
-    |non_separator_tokens: &Option<std::collections::BTreeSet<String>>, req: &HttpRequest| {
-        analytics.publish(
-            crate::routes::indexes::settings::NonSeparatorTokensAnalytics::new(non_separator_tokens.as_ref()).to_settings(),
-            Some(req),
-        );
-    }
+    NonSeparatorTokensAnalytics
 );
 
 make_setting_route!(
@@ -291,13 +251,7 @@ make_setting_route!(
     >,
     separator_tokens,
     "separatorTokens",
-    analytics,
-    |separator_tokens: &Option<std::collections::BTreeSet<String>>, req: &HttpRequest| {
-        analytics.publish(
-            crate::routes::indexes::settings::SeparatorTokensAnalytics::new(separator_tokens.as_ref()).to_settings(),
-            Some(req),
-        );
-    }
+    SeparatorTokensAnalytics
 );
 
 make_setting_route!(
@@ -309,13 +263,7 @@ make_setting_route!(
     >,
     dictionary,
     "dictionary",
-    analytics,
-    |dictionary: &Option<std::collections::BTreeSet<String>>, req: &HttpRequest| {
-        analytics.publish(
-            crate::routes::indexes::settings::DictionaryAnalytics::new(dictionary.as_ref()).to_settings(),
-            Some(req),
-        );
-    }
+    DictionaryAnalytics
 );
 
 make_setting_route!(
@@ -327,13 +275,7 @@ make_setting_route!(
     >,
     synonyms,
     "synonyms",
-    analytics,
-    |synonyms: &Option<std::collections::BTreeMap<String, Vec<String>>>, req: &HttpRequest| {
-        analytics.publish(
-            crate::routes::indexes::settings::SynonymsAnalytics::new(synonyms.as_ref()).to_settings(),
-            Some(req),
-        );
-    }
+    SynonymsAnalytics
 );
 
 make_setting_route!(
@@ -345,13 +287,7 @@ make_setting_route!(
     >,
     distinct_attribute,
     "distinctAttribute",
-    analytics,
-    |distinct: &Option<String>, req: &HttpRequest| {
-        analytics.publish(
-            crate::routes::indexes::settings::DistinctAttributeAnalytics::new(distinct.as_ref()).to_settings(),
-            Some(req),
-        );
-    }
+    DistinctAttributeAnalytics
 );
 
 make_setting_route!(
@@ -363,13 +299,7 @@ make_setting_route!(
     >,
     proximity_precision,
     "proximityPrecision",
-    analytics,
-    |precision: &Option<meilisearch_types::settings::ProximityPrecisionView>, req: &HttpRequest| {
-        analytics.publish(
-            crate::routes::indexes::settings::ProximityPrecisionAnalytics::new(precision.as_ref()).to_settings(),
-            Some(req),
-        );
-    }
+    ProximityPrecisionAnalytics
 );
 
 make_setting_route!(
@@ -381,13 +311,7 @@ make_setting_route!(
     >,
     localized_attributes,
     "localizedAttributes",
-    analytics,
-    |rules: &Option<Vec<meilisearch_types::locales::LocalizedAttributesRuleView>>, req: &HttpRequest| {
-        analytics.publish(
-            crate::routes::indexes::settings::LocalesAnalytics::new(rules.as_ref()).to_settings(),
-            Some(req),
-        );
-    }
+    LocalesAnalytics
 );
 
 make_setting_route!(
@@ -399,13 +323,7 @@ make_setting_route!(
     >,
     ranking_rules,
     "rankingRules",
-    analytics,
-    |setting: &Option<Vec<meilisearch_types::settings::RankingRuleView>>, req: &HttpRequest| {
-        analytics.publish(
-            crate::routes::indexes::settings::RankingRulesAnalytics::new(setting.as_ref()).to_settings(),
-            Some(req),
-        );
-    }
+    RankingRulesAnalytics
 );
 
 make_setting_route!(
@@ -417,13 +335,7 @@ make_setting_route!(
     >,
     faceting,
     "faceting",
-    analytics,
-    |setting: &Option<meilisearch_types::settings::FacetingSettings>, req: &HttpRequest| {
-        analytics.publish(
-            crate::routes::indexes::settings::FacetingAnalytics::new(setting.as_ref()).to_settings(),
-            Some(req),
-        );
-    }
+    FacetingAnalytics
 );
 
 make_setting_route!(
@@ -435,13 +347,7 @@ make_setting_route!(
     >,
     pagination,
     "pagination",
-    analytics,
-    |setting: &Option<meilisearch_types::settings::PaginationSettings>, req: &HttpRequest| {
-        analytics.publish(
-            crate::routes::indexes::settings::PaginationAnalytics::new(setting.as_ref()).to_settings(),
-            Some(req),
-        );
-    }
+    PaginationAnalytics
 );
 
 make_setting_route!(
@@ -453,76 +359,8 @@ make_setting_route!(
     >,
     embedders,
     "embedders",
-    analytics,
-    |setting: &Option<std::collections::BTreeMap<String, Setting<meilisearch_types::milli::vector::settings::EmbeddingSettings>>>, req: &HttpRequest| {
-        analytics.publish(
-            crate::routes::indexes::settings::EmbeddersAnalytics::new(setting.as_ref()).to_settings(),
-            Some(req),
-        );
-    }
+    EmbeddersAnalytics
 );
-
-fn embedder_analytics(
-    setting: Option<
-        &std::collections::BTreeMap<
-            String,
-            Setting<meilisearch_types::milli::vector::settings::EmbeddingSettings>,
-        >,
-    >,
-) -> serde_json::Value {
-    let mut sources = std::collections::HashSet::new();
-
-    if let Some(s) = &setting {
-        for source in s
-            .values()
-            .filter_map(|config| config.clone().set())
-            .filter_map(|config| config.source.set())
-        {
-            use meilisearch_types::milli::vector::settings::EmbedderSource;
-            match source {
-                EmbedderSource::OpenAi => sources.insert("openAi"),
-                EmbedderSource::HuggingFace => sources.insert("huggingFace"),
-                EmbedderSource::UserProvided => sources.insert("userProvided"),
-                EmbedderSource::Ollama => sources.insert("ollama"),
-                EmbedderSource::Rest => sources.insert("rest"),
-            };
-        }
-    };
-
-    let document_template_used = setting.as_ref().map(|map| {
-        map.values()
-            .filter_map(|config| config.clone().set())
-            .any(|config| config.document_template.set().is_some())
-    });
-
-    let document_template_max_bytes = setting.as_ref().and_then(|map| {
-        map.values()
-            .filter_map(|config| config.clone().set())
-            .filter_map(|config| config.document_template_max_bytes.set())
-            .max()
-    });
-
-    let binary_quantization_used = setting.as_ref().map(|map| {
-        map.values()
-            .filter_map(|config| config.clone().set())
-            .any(|config| config.binary_quantized.set().is_some())
-    });
-
-    json!(
-        {
-            // last
-            "total": setting.as_ref().map(|s| s.len()),
-            // Merge the sources
-            "sources": sources,
-            // |=
-            "document_template_used": document_template_used,
-            // max
-            "document_template_max_bytes": document_template_max_bytes,
-            // |=
-            "binary_quantization_used": binary_quantization_used,
-        }
-    )
-}
 
 make_setting_route!(
     "/search-cutoff-ms",
@@ -533,13 +371,7 @@ make_setting_route!(
     >,
     search_cutoff_ms,
     "searchCutoffMs",
-    analytics,
-    |setting: &Option<u64>, req: &HttpRequest| {
-        analytics.publish(
-            crate::routes::indexes::settings::SearchCutoffMsAnalytics::new(setting.as_ref()).to_settings(),
-            Some(req),
-        );
-    }
+    SearchCutoffMsAnalytics
 );
 
 macro_rules! generate_configure {
