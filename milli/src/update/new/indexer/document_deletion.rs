@@ -73,8 +73,6 @@ impl<'pl> DocumentChanges<'pl> for DocumentDeletionChanges<'pl> {
     }
 }
 
-// TODO: implement Allocator for Ref<'bump, Bump>
-
 #[cfg(test)]
 mod test {
     use std::cell::RefCell;
