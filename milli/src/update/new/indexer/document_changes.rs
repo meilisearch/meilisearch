@@ -1,4 +1,4 @@
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::sync::{Arc, RwLock};
 
 use bumpalo::Bump;
@@ -9,6 +9,49 @@ use rayon::iter::IndexedParallelIterator;
 use super::super::document_change::DocumentChange;
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt as _;
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, Result};
+
+pub trait RefCellExt<T: ?Sized> {
+    fn try_borrow_or_yield(&self) -> std::result::Result<Ref<'_, T>, std::cell::BorrowError>;
+    fn try_borrow_mut_or_yield(
+        &self,
+    ) -> std::result::Result<RefMut<'_, T>, std::cell::BorrowMutError>;
+
+    fn borrow_or_yield(&self) -> Ref<'_, T> {
+        self.try_borrow_or_yield().unwrap()
+    }
+
+    fn borrow_mut_or_yield(&self) -> RefMut<'_, T> {
+        self.try_borrow_mut_or_yield().unwrap()
+    }
+}
+
+impl<T: ?Sized> RefCellExt<T> for RefCell<T> {
+    fn try_borrow_or_yield(&self) -> std::result::Result<Ref<'_, T>, std::cell::BorrowError> {
+        loop {
+            match self.try_borrow() {
+                Ok(borrow) => break Ok(borrow),
+                Err(error) => match rayon::yield_local() {
+                    Some(rayon::Yield::Executed) => continue,
+                    _ => return Err(error),
+                },
+            }
+        }
+    }
+
+    fn try_borrow_mut_or_yield(
+        &self,
+    ) -> std::result::Result<RefMut<'_, T>, std::cell::BorrowMutError> {
+        loop {
+            match self.try_borrow_mut() {
+                Ok(borrow) => break Ok(borrow),
+                Err(error) => match rayon::yield_local() {
+                    Some(rayon::Yield::Executed) => continue,
+                    _ => return Err(error),
+                },
+            }
+        }
+    }
+}
 
 /// A trait for types that are **not** [`Send`] only because they would then allow concurrent access to a type that is not [`Sync`].
 ///
@@ -245,7 +288,7 @@ impl<
         let fields_ids_map = &fields_ids_map.0;
         let extractor_alloc = extractor_allocs.get_or_default();
 
-        let extractor_alloc = RefBump::new(extractor_alloc.0.borrow());
+        let extractor_alloc = RefBump::new(extractor_alloc.0.borrow_or_yield());
 
         let data = datastore.get_or_try(|| init_data(RefBump::clone(&extractor_alloc)))?;
 

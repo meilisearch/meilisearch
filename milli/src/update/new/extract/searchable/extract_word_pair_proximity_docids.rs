@@ -9,7 +9,7 @@ use super::SearchableExtractor;
 use crate::proximity::{index_proximity, MAX_DISTANCE};
 use crate::update::new::document::Document;
 use crate::update::new::extract::cache::CboCachedSorter;
-use crate::update::new::indexer::document_changes::{DocumentChangeContext, FullySend};
+use crate::update::new::indexer::document_changes::{DocumentChangeContext, FullySend, RefCellExt};
 use crate::update::new::DocumentChange;
 use crate::update::MergeDeladdCboRoaringBitmaps;
 use crate::{FieldId, GlobalFieldsIdsMap, Index, Result};
@@ -45,10 +45,10 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
         let mut del_word_pair_proximity = bumpalo::collections::Vec::new_in(doc_alloc);
         let mut add_word_pair_proximity = bumpalo::collections::Vec::new_in(doc_alloc);
 
-        let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut();
+        let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut_or_yield();
         let new_fields_ids_map = &mut *new_fields_ids_map;
 
-        let mut cached_sorter = context.data.0.borrow_mut();
+        let mut cached_sorter = context.data.0.borrow_mut_or_yield();
         let cached_sorter = &mut *cached_sorter;
 
         // is a vecdequeue, and will be smol, so can stay on the heap for now

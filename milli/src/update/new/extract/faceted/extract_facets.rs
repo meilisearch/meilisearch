@@ -17,7 +17,7 @@ use crate::facet::value_encoding::f64_into_bytes;
 use crate::update::new::extract::DocidsExtractor;
 use crate::update::new::indexer::document_changes::{
     for_each_document_change, DocumentChangeContext, DocumentChanges, Extractor, FullySend,
-    IndexingContext, ThreadLocal,
+    IndexingContext, RefCellExt, ThreadLocal,
 };
 use crate::update::new::DocumentChange;
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
@@ -71,8 +71,8 @@ impl FacetedDocidsExtractor {
     ) -> Result<()> {
         let index = &context.index;
         let rtxn = &context.txn;
-        let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut();
-        let mut cached_sorter = context.data.0.borrow_mut();
+        let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut_or_yield();
+        let mut cached_sorter = context.data.0.borrow_mut_or_yield();
         match document_change {
             DocumentChange::Deletion(inner) => extract_document_facets(
                 attributes_to_extract,

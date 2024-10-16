@@ -5,7 +5,7 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIter
 use rhai::{Dynamic, Engine, OptimizationLevel, Scope, AST};
 use roaring::RoaringBitmap;
 
-use super::document_changes::{DocumentChangeContext, MostlySend};
+use super::document_changes::{DocumentChangeContext, MostlySend, RefCellExt};
 use super::DocumentChanges;
 use crate::documents::Error::InvalidDocumentFormat;
 use crate::documents::PrimaryKey;
@@ -142,7 +142,7 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
                     // Future: Use a custom function rhai function to track changes.
                     //         <https://docs.rs/rhai/latest/rhai/struct.Engine.html#method.register_indexer_set>
                     if json_document != rhaimap_to_object(new_rhai_document) {
-                        let mut global_fields_ids_map = new_fields_ids_map.borrow_mut();
+                        let mut global_fields_ids_map = new_fields_ids_map.borrow_mut_or_yield();
                         let new_document_id = self
                             .primary_key
                             .extract_fields_and_docid(

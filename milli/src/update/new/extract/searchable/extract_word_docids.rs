@@ -13,7 +13,7 @@ use crate::update::new::extract::cache::CboCachedSorter;
 use crate::update::new::extract::perm_json_p::contained_in;
 use crate::update::new::indexer::document_changes::{
     for_each_document_change, DocumentChangeContext, DocumentChanges, Extractor, FullySend,
-    IndexingContext, ThreadLocal,
+    IndexingContext, RefCellExt, ThreadLocal,
 };
 use crate::update::new::DocumentChange;
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
@@ -411,9 +411,9 @@ impl WordDocidsExtractors {
     ) -> Result<()> {
         let index = &context.index;
         let rtxn = &context.txn;
-        let mut cached_sorter = context.data.0.borrow_mut();
+        let mut cached_sorter = context.data.0.borrow_mut_or_yield();
         let cached_sorter = cached_sorter.deref_mut();
-        let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut();
+        let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut_or_yield();
         let new_fields_ids_map = new_fields_ids_map.deref_mut();
 
         let exact_attributes = index.exact_attributes(rtxn)?;

@@ -5,7 +5,8 @@ use std::thread::{self, Builder};
 use big_s::S;
 use bumpalo::Bump;
 use document_changes::{
-    for_each_document_change, DocumentChanges, Extractor, FullySend, IndexingContext, ThreadLocal,
+    for_each_document_change, DocumentChanges, Extractor, FullySend, IndexingContext, RefCellExt,
+    ThreadLocal,
 };
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::DocumentOperation;
@@ -62,7 +63,7 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentExtractor<'a> {
     ) -> Result<()> {
         let mut document_buffer = Vec::new();
 
-        let new_fields_ids_map = context.new_fields_ids_map.borrow();
+        let new_fields_ids_map = context.new_fields_ids_map.borrow_or_yield();
         let new_fields_ids_map = &*new_fields_ids_map;
         let new_fields_ids_map = new_fields_ids_map.local_map();
 

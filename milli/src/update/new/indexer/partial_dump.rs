@@ -5,7 +5,7 @@ use serde::Deserializer;
 use serde_json::value::RawValue;
 
 use super::de::FieldAndDocidExtractor;
-use super::document_changes::{DocumentChangeContext, DocumentChanges, MostlySend};
+use super::document_changes::{DocumentChangeContext, DocumentChanges, MostlySend, RefCellExt};
 use crate::documents::{DocumentIdExtractionError, PrimaryKey};
 use crate::update::concurrent_available_ids::ConcurrentAvailableIds;
 use crate::update::new::document::DocumentFromVersions;
@@ -63,7 +63,7 @@ where
             None => return Err(Error::UserError(UserError::DocumentLimitReached)),
         };
 
-        let mut fields_ids_map = context.new_fields_ids_map.borrow_mut();
+        let mut fields_ids_map = context.new_fields_ids_map.borrow_mut_or_yield();
         let fields_ids_map = fields_ids_map.deref_mut();
 
         let document = doc_alloc.alloc_str(document.get());
