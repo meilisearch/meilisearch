@@ -1,3 +1,5 @@
+#![allow(clippy::transmute_ptr_to_ref)] // mopify isn't updated with the latest version of clippy yet
+
 pub mod segment_analytics;
 
 use std::fs;

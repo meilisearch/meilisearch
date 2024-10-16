@@ -437,11 +437,8 @@ impl Aggregate for SettingsAnalytics {
         "Settings Updated"
     }
 
-    fn aggregate(self, other: Self) -> Self
-    where
-        Self: Sized,
-    {
-        Self {
+    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
+        Box::new(Self {
             ranking_rules: RankingRulesAnalytics {
                 words_position: self
                     .ranking_rules
@@ -586,14 +583,11 @@ impl Aggregate for SettingsAnalytics {
             non_separator_tokens: NonSeparatorTokensAnalytics {
                 total: self.non_separator_tokens.total.or(other.non_separator_tokens.total),
             },
-        }
+        })
     }
 
-    fn into_event(self) -> impl Serialize
-    where
-        Self: Sized,
-    {
-        self
+    fn into_event(self: Box<Self>) -> serde_json::Value {
+        serde_json::to_value(*self).unwrap_or_default()
     }
 }
 

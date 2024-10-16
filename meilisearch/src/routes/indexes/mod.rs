@@ -133,15 +133,14 @@ impl Aggregate for IndexCreatedAggregate {
         "Index Created"
     }
 
-    fn aggregate(self, other: Self) -> Self
-    where
-        Self: Sized,
-    {
-        Self { primary_key: self.primary_key.union(&other.primary_key).cloned().collect() }
+    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
+        Box::new(Self {
+            primary_key: self.primary_key.union(&other.primary_key).cloned().collect(),
+        })
     }
 
-    fn into_event(self) -> impl Serialize {
-        self
+    fn into_event(self: Box<Self>) -> serde_json::Value {
+        serde_json::to_value(*self).unwrap_or_default()
     }
 }
 
@@ -225,12 +224,14 @@ impl Aggregate for IndexUpdatedAggregate {
         "Index Updated"
     }
 
-    fn aggregate(self, other: Self) -> Self {
-        Self { primary_key: self.primary_key.union(&other.primary_key).cloned().collect() }
+    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
+        Box::new(Self {
+            primary_key: self.primary_key.union(&other.primary_key).cloned().collect(),
+        })
     }
 
-    fn into_event(self) -> impl Serialize {
-        self
+    fn into_event(self: Box<Self>) -> serde_json::Value {
+        serde_json::to_value(*self).unwrap_or_default()
     }
 }
 pub async fn update_index(

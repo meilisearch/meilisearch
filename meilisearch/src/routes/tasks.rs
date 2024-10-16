@@ -185,8 +185,8 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
         Method::event_name()
     }
 
-    fn aggregate(self, other: Self) -> Self {
-        Self {
+    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
+        Box::new(Self {
             filtered_by_uid: self.filtered_by_uid | other.filtered_by_uid,
             filtered_by_index_uid: self.filtered_by_index_uid | other.filtered_by_index_uid,
             filtered_by_type: self.filtered_by_type | other.filtered_by_type,
@@ -206,11 +206,11 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
                 | other.filtered_by_after_finished_at,
 
             marker: std::marker::PhantomData,
-        }
+        })
     }
 
-    fn into_event(self) -> impl Serialize {
-        self
+    fn into_event(self: Box<Self>) -> serde_json::Value {
+        serde_json::to_value(*self).unwrap_or_default()
     }
 }
 

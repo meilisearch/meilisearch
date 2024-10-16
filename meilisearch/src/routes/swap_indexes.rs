@@ -39,12 +39,14 @@ impl Aggregate for IndexSwappedAnalytics {
         "Indexes Swapped"
     }
 
-    fn aggregate(self, other: Self) -> Self {
-        Self { swap_operation_number: self.swap_operation_number.max(other.swap_operation_number) }
+    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
+        Box::new(Self {
+            swap_operation_number: self.swap_operation_number.max(other.swap_operation_number),
+        })
     }
 
-    fn into_event(self) -> impl Serialize {
-        self
+    fn into_event(self: Box<Self>) -> serde_json::Value {
+        serde_json::to_value(*self).unwrap_or_default()
     }
 }
 

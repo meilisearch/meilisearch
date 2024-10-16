@@ -162,8 +162,8 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
         Method::event_name()
     }
 
-    fn aggregate(self, other: Self) -> Self {
-        Self {
+    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
+        Box::new(Self {
             total_received: self.total_received.saturating_add(other.total_received),
             per_document_id: self.per_document_id | other.per_document_id,
             per_filter: self.per_filter | other.per_filter,
@@ -171,11 +171,11 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
             max_limit: self.max_limit.max(other.max_limit),
             max_offset: self.max_offset.max(other.max_offset),
             marker: PhantomData,
-        }
+        })
     }
 
-    fn into_event(self) -> impl Serialize {
-        self
+    fn into_event(self: Box<Self>) -> serde_json::Value {
+        serde_json::to_value(*self).unwrap_or_default()
     }
 }
 
@@ -226,21 +226,18 @@ impl Aggregate for DocumentsDeletionAggregator {
         "Documents Deleted"
     }
 
-    fn aggregate(self, other: Self) -> Self
-    where
-        Self: Sized,
-    {
-        Self {
+    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
+        Box::new(Self {
             total_received: self.total_received.saturating_add(other.total_received),
             per_document_id: self.per_document_id | other.per_document_id,
             clear_all: self.clear_all | other.clear_all,
             per_batch: self.per_batch | other.per_batch,
             per_filter: self.per_filter | other.per_filter,
-        }
+        })
     }
 
-    fn into_event(self) -> impl Serialize {
-        self
+    fn into_event(self: Box<Self>) -> serde_json::Value {
+        serde_json::to_value(*self).unwrap_or_default()
     }
 }
 
@@ -443,17 +440,17 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
         Method::event_name()
     }
 
-    fn aggregate(self, other: Self) -> Self {
-        Self {
+    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
+        Box::new(Self {
             payload_types: self.payload_types.union(&other.payload_types).cloned().collect(),
             primary_key: self.primary_key.union(&other.primary_key).cloned().collect(),
             index_creation: self.index_creation | other.index_creation,
             method: PhantomData,
-        }
+        })
     }
 
-    fn into_event(self) -> impl Serialize {
-        self
+    fn into_event(self: Box<Self>) -> serde_json::Value {
+        serde_json::to_value(self).unwrap_or_default()
     }
 }
 
@@ -811,19 +808,16 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
         "Documents Edited By Function"
     }
 
-    fn aggregate(self, other: Self) -> Self
-    where
-        Self: Sized,
-    {
-        Self {
+    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
+        Box::new(Self {
             filtered: self.filtered | other.filtered,
             with_context: self.with_context | other.with_context,
             index_creation: self.index_creation | other.index_creation,
-        }
+        })
     }
 
-    fn into_event(self) -> impl Serialize {
-        self
+    fn into_event(self: Box<Self>) -> serde_json::Value {
+        serde_json::to_value(*self).unwrap_or_default()
     }
 }
 

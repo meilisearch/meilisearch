@@ -104,7 +104,7 @@ tracing-trace = { version = "0.1.0", path = "../tracing-trace" }
 tracing-actix-web = "0.7.11"
 build-info = { version = "1.7.0", path = "../build-info" }
 roaring = "0.10.2"
-mopa = "0.2.2"
+mopa-maintained = "0.2.3"
 
 [dev-dependencies]
 actix-rt = "2.10.0"

@@ -114,29 +114,29 @@ impl Aggregate for FacetSearchAggregator {
         "Facet Searched POST"
     }
 
-    fn aggregate(mut self, other: Self) -> Self {
+    fn aggregate(mut self: Box<Self>, other: Box<Self>) -> Box<Self> {
         for time in other.time_spent {
             self.time_spent.push(time);
         }
 
-        Self {
+        Box::new(Self {
             total_received: self.total_received.saturating_add(other.total_received),
             total_succeeded: self.total_succeeded.saturating_add(other.total_succeeded),
             time_spent: self.time_spent,
             facet_names: self.facet_names.union(&other.facet_names).cloned().collect(),
             additional_search_parameters_provided: self.additional_search_parameters_provided
                 | other.additional_search_parameters_provided,
-        }
+        })
     }
 
-    fn into_event(self) -> impl Serialize {
+    fn into_event(self: Box<Self>) -> serde_json::Value {
         let Self {
             total_received,
             total_succeeded,
             time_spent,
             facet_names,
             additional_search_parameters_provided,
-        } = self;
+        } = *self;
         // the index of the 99th percentage of value
         let percentile_99th = 0.99 * (total_succeeded as f64 - 1.) + 1.;
         // we get all the values in a sorted manner

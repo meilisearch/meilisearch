@@ -69,21 +69,18 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
         "Experimental features Updated"
     }
 
-    fn aggregate(self, other: Self) -> Self
-    where
-        Self: Sized,
-    {
-        Self {
+    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
+        Box::new(Self {
             vector_store: other.vector_store,
             metrics: other.metrics,
             logs_route: other.logs_route,
             edit_documents_by_function: other.edit_documents_by_function,
             contains_filter: other.contains_filter,
-        }
+        })
     }
 
-    fn into_event(self) -> impl Serialize {
-        self
+    fn into_event(self: Box<Self>) -> serde_json::Value {
+        serde_json::to_value(*self).unwrap_or_default()
     }
 }
 

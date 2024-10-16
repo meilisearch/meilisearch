@@ -3415,7 +3415,7 @@ dependencies = [
  "meilisearch-types",
  "mimalloc",
  "mime",
- "mopa",
+ "mopa-maintained",
  "num_cpus",
  "obkv",
  "once_cell",
@@ -3683,10 +3683,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "mopa"
-version = "0.2.2"
+name = "mopa-maintained"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a785740271256c230f57462d3b83e52f998433a7062fc18f96d5999474a9f915"
+checksum = "79b7f3e22167862cc7c95b21a6f326c22e4bf40da59cbf000b368a310173ba11"
 
 [[package]]
 name = "mutually_exclusive_features"
