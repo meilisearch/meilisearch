@@ -55,12 +55,16 @@ impl<'extractor, EX: SearchableExtractor + Sync> Extractor<'extractor>
         ))))
     }
 
-    fn process(
+    fn process<'doc>(
         &self,
-        change: DocumentChange,
-        context: &crate::update::new::indexer::document_changes::DocumentChangeContext<Self::Data>,
+        changes: impl Iterator<Item = Result<DocumentChange<'doc>>>,
+        context: &DocumentChangeContext<Self::Data>,
     ) -> Result<()> {
-        EX::extract_document_change(context, self.tokenizer, change)
+        for change in changes {
+            let change = change?;
+            EX::extract_document_change(context, self.tokenizer, change)?;
+        }
+        Ok(())
     }
 }
 

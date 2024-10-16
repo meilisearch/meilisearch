@@ -1,7 +1,6 @@
-use std::collections::BTreeMap;
-
 use raw_collections::RawMap;
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::IndexedParallelIterator;
+use rayon::slice::ParallelSlice as _;
 use rhai::{Dynamic, Engine, OptimizationLevel, Scope, AST};
 use roaring::RoaringBitmap;
 
@@ -12,8 +11,8 @@ use crate::documents::PrimaryKey;
 use crate::error::{FieldIdMapMissingEntry, InternalError};
 use crate::update::new::document::DocumentFromVersions;
 use crate::update::new::document_change::Versions;
-use crate::update::new::{Deletion, DocumentChange, KvReaderFieldId, KvWriterFieldId, Update};
-use crate::{all_obkv_to_json, Error, FieldsIdsMap, GlobalFieldsIdsMap, Object, Result, UserError};
+use crate::update::new::{Deletion, DocumentChange, KvReaderFieldId, Update};
+use crate::{all_obkv_to_json, Error, FieldsIdsMap, Object, Result, UserError};
 
 pub struct UpdateByFunction {
     documents: RoaringBitmap,
@@ -76,14 +75,17 @@ impl UpdateByFunction {
 impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
     type Item = u32;
 
-    fn iter(&self) -> impl IndexedParallelIterator<Item = Self::Item> {
-        self.documents.par_iter().copied()
+    fn iter(
+        &self,
+        chunk_size: usize,
+    ) -> impl IndexedParallelIterator<Item = impl AsRef<[Self::Item]>> {
+        self.documents.as_slice().par_chunks(chunk_size)
     }
 
     fn item_to_document_change<'doc, T: MostlySend + 'doc>(
         &self,
         context: &'doc DocumentChangeContext<T>,
-        docid: Self::Item,
+        docid: &'doc Self::Item,
     ) -> Result<Option<DocumentChange<'doc>>>
     where
         'index: 'doc,
@@ -96,6 +98,8 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
             doc_alloc,
             ..
         } = context;
+
+        let docid = *docid;
 
         // safety: Both documents *must* exists in the database as
         //         their IDs comes from the list of documents ids.

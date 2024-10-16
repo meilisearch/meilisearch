@@ -323,7 +323,7 @@ pub trait Extractor<'extractor>: Sync {
 
     fn process<'doc>(
         &'doc self,
-        change: DocumentChange<'doc>,
+        changes: impl Iterator<Item = Result<DocumentChange<'doc>>>,
         context: &'doc DocumentChangeContext<Self::Data>,
     ) -> Result<()>;
 }
@@ -332,13 +332,13 @@ pub trait DocumentChanges<'pl // lifetime of the underlying payload
 >: Sync {
     type Item: Send;
 
-    fn iter(&self) -> impl IndexedParallelIterator<Item = Self::Item>;
+    fn iter(&self, chunk_size: usize) -> impl IndexedParallelIterator<Item = impl AsRef<[Self::Item]>>;
 
     fn item_to_document_change<'doc, // lifetime of a single `process` call
      T: MostlySend>(
         &'doc self,
         context: &'doc DocumentChangeContext<T>,
-        item: Self::Item,
+        item: &'doc Self::Item,
     ) -> Result<Option<DocumentChange<'doc>>> where 'pl: 'doc // the payload must survive the process calls
     ;
 }
@@ -355,6 +355,8 @@ pub struct IndexingContext<
     pub doc_allocs: &'indexer ThreadLocal<FullySend<Cell<Bump>>>,
     pub fields_ids_map_store: &'indexer ThreadLocal<FullySend<RefCell<GlobalFieldsIdsMap<'fid>>>>,
 }
+
+const CHUNK_SIZE: usize = 100;
 
 pub fn for_each_document_change<
     'pl,        // covariant lifetime of the underlying payload
@@ -386,7 +388,7 @@ where
         extractor_alloc.0.get_mut().reset();
     }
 
-    let pi = document_changes.iter();
+    let pi = document_changes.iter(CHUNK_SIZE);
     pi.try_arc_for_each_try_init(
         || {
             DocumentChangeContext::new(
@@ -400,17 +402,16 @@ where
                 move |index_alloc| extractor.init_data(index_alloc),
             )
         },
-        |context, item| {
+        |context, items| {
             // Clean up and reuse the document-specific allocator
             context.doc_alloc.reset();
 
-            let Some(change) =
-                document_changes.item_to_document_change(context, item).map_err(Arc::new)?
-            else {
-                return Ok(());
-            };
+            let items = items.as_ref();
+            let changes = items.iter().filter_map(|item| {
+                document_changes.item_to_document_change(context, item).transpose()
+            });
 
-            let res = extractor.process(change, context).map_err(Arc::new);
+            let res = extractor.process(changes, context).map_err(Arc::new);
 
             // send back the doc_alloc in the pool
             context.doc_allocs.get_or_default().0.set(std::mem::take(&mut context.doc_alloc));

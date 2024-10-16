@@ -1,6 +1,7 @@
 use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
-use rayon::iter::{IntoParallelIterator, ParallelIterator as _};
+use rayon::iter::IndexedParallelIterator;
+use rayon::slice::ParallelSlice as _;
 use roaring::RoaringBitmap;
 
 use super::document_changes::{DocumentChangeContext, DocumentChanges, MostlySend};
@@ -44,8 +45,11 @@ pub struct DocumentDeletionChanges<'indexer> {
 impl<'pl> DocumentChanges<'pl> for DocumentDeletionChanges<'pl> {
     type Item = DocumentId;
 
-    fn iter(&self) -> impl rayon::prelude::IndexedParallelIterator<Item = Self::Item> {
-        self.to_delete.into_par_iter().copied()
+    fn iter(
+        &self,
+        chunk_size: usize,
+    ) -> impl IndexedParallelIterator<Item = impl AsRef<[Self::Item]>> {
+        self.to_delete.par_chunks(chunk_size)
     }
 
     fn item_to_document_change<
@@ -54,12 +58,12 @@ impl<'pl> DocumentChanges<'pl> for DocumentDeletionChanges<'pl> {
     >(
         &'doc self,
         context: &'doc DocumentChangeContext<T>,
-        docid: Self::Item,
+        docid: &'doc Self::Item,
     ) -> Result<Option<DocumentChange<'doc>>>
     where
         'pl: 'doc, // the payload must survive the process calls
     {
-        let current = context.index.document(&context.txn, docid)?;
+        let current = context.index.document(&context.txn, *docid)?;
 
         let external_document_id = self.primary_key.extract_docid_from_db(
             current,
@@ -69,7 +73,7 @@ impl<'pl> DocumentChanges<'pl> for DocumentDeletionChanges<'pl> {
 
         let external_document_id = external_document_id.to_bump(&context.doc_alloc);
 
-        Ok(Some(DocumentChange::Deletion(Deletion::create(docid, external_document_id))))
+        Ok(Some(DocumentChange::Deletion(Deletion::create(*docid, external_document_id))))
     }
 }
 
@@ -118,12 +122,15 @@ mod test {
                 Ok(DeletionWithData { deleted })
             }
 
-            fn process(
+            fn process<'doc>(
                 &self,
-                change: DocumentChange,
+                changes: impl Iterator<Item = crate::Result<DocumentChange<'doc>>>,
                 context: &DocumentChangeContext<Self::Data>,
             ) -> crate::Result<()> {
-                context.data.deleted.borrow_mut().insert(change.docid());
+                for change in changes {
+                    let change = change?;
+                    context.data.deleted.borrow_mut().insert(change.docid());
+                }
                 Ok(())
             }
         }

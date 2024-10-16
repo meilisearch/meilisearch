@@ -5,8 +5,8 @@ use std::thread::{self, Builder};
 use big_s::S;
 use bumpalo::Bump;
 use document_changes::{
-    for_each_document_change, DocumentChanges, Extractor, FullySend, IndexingContext, RefCellExt,
-    ThreadLocal,
+    for_each_document_change, DocumentChangeContext, DocumentChanges, Extractor, FullySend,
+    IndexingContext, RefCellExt, ThreadLocal,
 };
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::DocumentOperation;
@@ -33,7 +33,7 @@ use crate::update::new::channel::ExtractorSender;
 use crate::update::new::words_prefix_docids::compute_exact_word_prefix_docids;
 use crate::update::settings::InnerIndexSettings;
 use crate::update::{FacetsUpdateBulk, GrenadParameters};
-use crate::{Error, FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
+use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
 
 pub(crate) mod de;
 pub mod document_changes;
@@ -56,10 +56,10 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentExtractor<'a> {
         Ok(FullySend(()))
     }
 
-    fn process(
+    fn process<'doc>(
         &self,
-        change: DocumentChange,
-        context: &document_changes::DocumentChangeContext<Self::Data>,
+        changes: impl Iterator<Item = Result<DocumentChange<'doc>>>,
+        context: &DocumentChangeContext<Self::Data>,
     ) -> Result<()> {
         let mut document_buffer = Vec::new();
 
@@ -67,32 +67,36 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentExtractor<'a> {
         let new_fields_ids_map = &*new_fields_ids_map;
         let new_fields_ids_map = new_fields_ids_map.local_map();
 
-        let external_docid = change.external_docid().to_owned();
+        for change in changes {
+            let change = change?;
+            let external_docid = change.external_docid().to_owned();
 
-        // document but we need to create a function that collects and compresses documents.
-        match change {
-            DocumentChange::Deletion(deletion) => {
-                let docid = deletion.docid();
-                self.document_sender.delete(docid, external_docid).unwrap();
-            }
-            /// TODO: change NONE by SOME(vector) when implemented
-            DocumentChange::Update(update) => {
-                let docid = update.docid();
-                let content =
-                    update.new(&context.txn, context.index, &context.db_fields_ids_map)?;
-                let content =
-                    write_to_obkv(&content, None, new_fields_ids_map, &mut document_buffer)?;
-                self.document_sender.insert(docid, external_docid, content.boxed()).unwrap();
-            }
-            DocumentChange::Insertion(insertion) => {
-                let docid = insertion.docid();
-                let content = insertion.new();
-                let content =
-                    write_to_obkv(&content, None, new_fields_ids_map, &mut document_buffer)?;
-                self.document_sender.insert(docid, external_docid, content.boxed()).unwrap();
-                // extracted_dictionary_sender.send(self, dictionary: &[u8]);
+            // document but we need to create a function that collects and compresses documents.
+            match change {
+                DocumentChange::Deletion(deletion) => {
+                    let docid = deletion.docid();
+                    self.document_sender.delete(docid, external_docid).unwrap();
+                }
+                /// TODO: change NONE by SOME(vector) when implemented
+                DocumentChange::Update(update) => {
+                    let docid = update.docid();
+                    let content =
+                        update.new(&context.txn, context.index, &context.db_fields_ids_map)?;
+                    let content =
+                        write_to_obkv(&content, None, new_fields_ids_map, &mut document_buffer)?;
+                    self.document_sender.insert(docid, external_docid, content.boxed()).unwrap();
+                }
+                DocumentChange::Insertion(insertion) => {
+                    let docid = insertion.docid();
+                    let content = insertion.new();
+                    let content =
+                        write_to_obkv(&content, None, new_fields_ids_map, &mut document_buffer)?;
+                    self.document_sender.insert(docid, external_docid, content.boxed()).unwrap();
+                    // extracted_dictionary_sender.send(self, dictionary: &[u8]);
+                }
             }
         }
+
         Ok(())
     }
 }

@@ -3,6 +3,7 @@ use bumpalo::Bump;
 use heed::RoTxn;
 use memmap2::Mmap;
 use rayon::iter::IntoParallelIterator;
+use rayon::slice::ParallelSlice;
 use serde_json::value::RawValue;
 use IndexDocumentsMethod as Idm;
 
@@ -209,16 +210,19 @@ impl<'pl> DocumentOperation<'pl> {
 }
 
 impl<'pl> DocumentChanges<'pl> for DocumentOperationChanges<'pl> {
-    type Item = &'pl (&'pl str, ((u32, bool), &'pl [InnerDocOp<'pl>]));
+    type Item = (&'pl str, ((u32, bool), &'pl [InnerDocOp<'pl>]));
 
-    fn iter(&self) -> impl rayon::prelude::IndexedParallelIterator<Item = Self::Item> {
-        self.docids_version_offsets.into_par_iter()
+    fn iter(
+        &self,
+        chunk_size: usize,
+    ) -> impl rayon::prelude::IndexedParallelIterator<Item = impl AsRef<[Self::Item]>> {
+        self.docids_version_offsets.par_chunks(chunk_size)
     }
 
     fn item_to_document_change<'doc, T: MostlySend + 'doc>(
         &'doc self,
         context: &'doc DocumentChangeContext<T>,
-        item: Self::Item,
+        item: &'doc Self::Item,
     ) -> Result<Option<DocumentChange<'doc>>>
     where
         'pl: 'doc,

@@ -45,14 +45,17 @@ where
 {
     type Item = Box<RawValue>;
 
-    fn iter(&self) -> impl IndexedParallelIterator<Item = Self::Item> {
-        self.iter.clone()
+    fn iter(
+        &self,
+        chunk_size: usize,
+    ) -> impl IndexedParallelIterator<Item = impl AsRef<[Self::Item]>> {
+        self.iter.clone().chunks(chunk_size)
     }
 
     fn item_to_document_change<'doc, T: MostlySend + 'doc>(
         &'doc self,
         context: &'doc DocumentChangeContext<T>,
-        document: Self::Item,
+        document: &'doc Self::Item,
     ) -> Result<Option<DocumentChange<'doc>>>
     where
         'index: 'doc,

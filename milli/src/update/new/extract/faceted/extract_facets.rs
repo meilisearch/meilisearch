@@ -54,12 +54,20 @@ impl<'extractor> Extractor<'extractor> for FacetedExtractorData<'extractor> {
         ))))
     }
 
-    fn process(
+    fn process<'doc>(
         &self,
-        change: DocumentChange,
-        context: &crate::update::new::indexer::document_changes::DocumentChangeContext<Self::Data>,
+        changes: impl Iterator<Item = Result<DocumentChange<'doc>>>,
+        context: &DocumentChangeContext<Self::Data>,
     ) -> Result<()> {
-        FacetedDocidsExtractor::extract_document_change(context, self.attributes_to_extract, change)
+        for change in changes {
+            let change = change?;
+            FacetedDocidsExtractor::extract_document_change(
+                context,
+                self.attributes_to_extract,
+                change,
+            )?
+        }
+        Ok(())
     }
 }
 
