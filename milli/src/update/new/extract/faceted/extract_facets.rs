@@ -275,9 +275,9 @@ impl DocidsExtractor for FacetedDocidsExtractor {
 
             let readers: Vec<_> = datastore
                 .into_iter()
-                .par_bridge()
+                // .par_bridge() // T is !Send
                 .map(|cached_sorter| {
-                    let cached_sorter = cached_sorter.0.into_inner();
+                    let cached_sorter = cached_sorter.into_inner();
                     let sorter = cached_sorter.into_sorter()?;
                     sorter.into_reader_cursors()
                 })

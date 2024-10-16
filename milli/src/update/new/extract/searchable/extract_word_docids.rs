@@ -253,33 +253,16 @@ impl WordDocidsMergerBuilders {
             current_docid: _,
         } = other;
 
-        let mut word_fid_docids_readers = Ok(vec![]);
-        let mut word_docids_readers = Ok(vec![]);
-        let mut exact_word_docids_readers = Ok(vec![]);
-        let mut word_position_docids_readers = Ok(vec![]);
-        let mut fid_word_count_docids_readers = Ok(vec![]);
-        rayon::scope(|s| {
-            s.spawn(|_| {
-                word_fid_docids_readers =
-                    word_fid_docids.into_sorter().and_then(|s| s.into_reader_cursors());
-            });
-            s.spawn(|_| {
-                word_docids_readers =
-                    word_docids.into_sorter().and_then(|s| s.into_reader_cursors());
-            });
-            s.spawn(|_| {
-                exact_word_docids_readers =
-                    exact_word_docids.into_sorter().and_then(|s| s.into_reader_cursors());
-            });
-            s.spawn(|_| {
-                word_position_docids_readers =
-                    word_position_docids.into_sorter().and_then(|s| s.into_reader_cursors());
-            });
-            s.spawn(|_| {
-                fid_word_count_docids_readers =
-                    fid_word_count_docids.into_sorter().and_then(|s| s.into_reader_cursors());
-            });
-        });
+        let word_fid_docids_readers =
+            word_fid_docids.into_sorter().and_then(|s| s.into_reader_cursors());
+        let word_docids_readers = word_docids.into_sorter().and_then(|s| s.into_reader_cursors());
+        let exact_word_docids_readers =
+            exact_word_docids.into_sorter().and_then(|s| s.into_reader_cursors());
+        let word_position_docids_readers =
+            word_position_docids.into_sorter().and_then(|s| s.into_reader_cursors());
+        let fid_word_count_docids_readers =
+            fid_word_count_docids.into_sorter().and_then(|s| s.into_reader_cursors());
+
         self.word_fid_docids.extend(word_fid_docids_readers?);
         self.word_docids.extend(word_docids_readers?);
         self.exact_word_docids.extend(exact_word_docids_readers?);
@@ -455,7 +438,7 @@ impl WordDocidsExtractors {
         let index = &context.index;
         let rtxn = &context.txn;
         let mut cached_sorter_ref = context.data.borrow_mut_or_yield();
-        let cached_sorter = cached_sorter.as_mut().unwrap();
+        let cached_sorter = cached_sorter_ref.as_mut().unwrap();
         let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut_or_yield();
         let new_fields_ids_map = new_fields_ids_map.deref_mut();
 

@@ -127,12 +127,9 @@ pub trait SearchableExtractor: Sized + Sync {
 
             let readers: Vec<_> = datastore
                 .into_iter()
-                .par_bridge()
-                .map(|cache_entry| {
-                    let cached_sorter: FullySend<
-                        RefCell<CboCachedSorter<MergeDeladdCboRoaringBitmaps>>,
-                    > = cache_entry;
-                    let cached_sorter = cached_sorter.0.into_inner();
+                // .par_bridge() // T is !Send
+                .map(|cache_sorter| {
+                    let cached_sorter = cache_sorter.into_inner();
                     let sorter = cached_sorter.into_sorter()?;
                     sorter.into_reader_cursors()
                 })
