@@ -255,7 +255,7 @@ pub async fn search_with_url_query(
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
-    analytics.publish(aggregate, Some(&req));
+    analytics.publish(aggregate, &req);
 
     let search_result = search_result?;
 
@@ -303,7 +303,7 @@ pub async fn search_with_post(
             MEILISEARCH_DEGRADED_SEARCH_REQUESTS.inc();
         }
     }
-    analytics.publish(aggregate, Some(&req));
+    analytics.publish(aggregate, &req);
 
     let search_result = search_result?;
 

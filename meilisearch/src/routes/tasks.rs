@@ -12,18 +12,17 @@ use meilisearch_types::star_or::{OptionStarOr, OptionStarOrList};
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status};
 use serde::Serialize;
-use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 use time::macros::format_description;
 use time::{Date, Duration, OffsetDateTime, Time};
 use tokio::task;
 
 use super::{get_task_id, is_dry_run, SummarizedTaskView};
-use crate::analytics::Analytics;
+use crate::analytics::{Aggregate, AggregateMethod, Analytics};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::Opt;
+use crate::{aggregate_methods, Opt};
 
 const DEFAULT_LIMIT: u32 = 20;
 
@@ -158,12 +157,69 @@ impl TaskDeletionOrCancelationQuery {
     }
 }
 
+aggregate_methods!(
+    CancelTasks => "Tasks Canceled",
+    DeleteTasks => "Tasks Deleted",
+);
+
+#[derive(Serialize)]
+struct TaskFilterAnalytics<Method: AggregateMethod> {
+    filtered_by_uid: bool,
+    filtered_by_index_uid: bool,
+    filtered_by_type: bool,
+    filtered_by_status: bool,
+    filtered_by_canceled_by: bool,
+    filtered_by_before_enqueued_at: bool,
+    filtered_by_after_enqueued_at: bool,
+    filtered_by_before_started_at: bool,
+    filtered_by_after_started_at: bool,
+    filtered_by_before_finished_at: bool,
+    filtered_by_after_finished_at: bool,
+
+    #[serde(skip)]
+    marker: std::marker::PhantomData<Method>,
+}
+
+impl<Method: AggregateMethod> Aggregate for TaskFilterAnalytics<Method> {
+    fn event_name(&self) -> &'static str {
+        Method::event_name()
+    }
+
+    fn aggregate(self, other: Self) -> Self {
+        Self {
+            filtered_by_uid: self.filtered_by_uid | other.filtered_by_uid,
+            filtered_by_index_uid: self.filtered_by_index_uid | other.filtered_by_index_uid,
+            filtered_by_type: self.filtered_by_type | other.filtered_by_type,
+            filtered_by_status: self.filtered_by_status | other.filtered_by_status,
+            filtered_by_canceled_by: self.filtered_by_canceled_by | other.filtered_by_canceled_by,
+            filtered_by_before_enqueued_at: self.filtered_by_before_enqueued_at
+                | other.filtered_by_before_enqueued_at,
+            filtered_by_after_enqueued_at: self.filtered_by_after_enqueued_at
+                | other.filtered_by_after_enqueued_at,
+            filtered_by_before_started_at: self.filtered_by_before_started_at
+                | other.filtered_by_before_started_at,
+            filtered_by_after_started_at: self.filtered_by_after_started_at
+                | other.filtered_by_after_started_at,
+            filtered_by_before_finished_at: self.filtered_by_before_finished_at
+                | other.filtered_by_before_finished_at,
+            filtered_by_after_finished_at: self.filtered_by_after_finished_at
+                | other.filtered_by_after_finished_at,
+
+            marker: std::marker::PhantomData,
+        }
+    }
+
+    fn into_event(self) -> impl Serialize {
+        self
+    }
+}
+
 async fn cancel_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_CANCEL }>, Data<IndexScheduler>>,
     params: AwebQueryParameter<TaskDeletionOrCancelationQuery, DeserrQueryParamError>,
     req: HttpRequest,
     opt: web::Data<Opt>,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = params.into_inner();
 
@@ -172,21 +228,22 @@ async fn cancel_tasks(
     }
 
     analytics.publish(
-        "Tasks Canceled".to_string(),
-        json!({
-            "filtered_by_uid": params.uids.is_some(),
-            "filtered_by_index_uid": params.index_uids.is_some(),
-            "filtered_by_type": params.types.is_some(),
-            "filtered_by_status": params.statuses.is_some(),
-            "filtered_by_canceled_by": params.canceled_by.is_some(),
-            "filtered_by_before_enqueued_at": params.before_enqueued_at.is_some(),
-            "filtered_by_after_enqueued_at": params.after_enqueued_at.is_some(),
-            "filtered_by_before_started_at": params.before_started_at.is_some(),
-            "filtered_by_after_started_at": params.after_started_at.is_some(),
-            "filtered_by_before_finished_at": params.before_finished_at.is_some(),
-            "filtered_by_after_finished_at": params.after_finished_at.is_some(),
-        }),
-        Some(&req),
+        TaskFilterAnalytics::<CancelTasks> {
+            filtered_by_uid: params.uids.is_some(),
+            filtered_by_index_uid: params.index_uids.is_some(),
+            filtered_by_type: params.types.is_some(),
+            filtered_by_status: params.statuses.is_some(),
+            filtered_by_canceled_by: params.canceled_by.is_some(),
+            filtered_by_before_enqueued_at: params.before_enqueued_at.is_some(),
+            filtered_by_after_enqueued_at: params.after_enqueued_at.is_some(),
+            filtered_by_before_started_at: params.before_started_at.is_some(),
+            filtered_by_after_started_at: params.after_started_at.is_some(),
+            filtered_by_before_finished_at: params.before_finished_at.is_some(),
+            filtered_by_after_finished_at: params.after_finished_at.is_some(),
+
+            marker: std::marker::PhantomData,
+        },
+        &req,
     );
 
     let query = params.into_query();
@@ -214,7 +271,7 @@ async fn delete_tasks(
     params: AwebQueryParameter<TaskDeletionOrCancelationQuery, DeserrQueryParamError>,
     req: HttpRequest,
     opt: web::Data<Opt>,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = params.into_inner();
 
@@ -223,22 +280,24 @@ async fn delete_tasks(
     }
 
     analytics.publish(
-        "Tasks Deleted".to_string(),
-        json!({
-            "filtered_by_uid": params.uids.is_some(),
-            "filtered_by_index_uid": params.index_uids.is_some(),
-            "filtered_by_type": params.types.is_some(),
-            "filtered_by_status": params.statuses.is_some(),
-            "filtered_by_canceled_by": params.canceled_by.is_some(),
-            "filtered_by_before_enqueued_at": params.before_enqueued_at.is_some(),
-            "filtered_by_after_enqueued_at": params.after_enqueued_at.is_some(),
-            "filtered_by_before_started_at": params.before_started_at.is_some(),
-            "filtered_by_after_started_at": params.after_started_at.is_some(),
-            "filtered_by_before_finished_at": params.before_finished_at.is_some(),
-            "filtered_by_after_finished_at": params.after_finished_at.is_some(),
-        }),
-        Some(&req),
+        TaskFilterAnalytics::<DeleteTasks> {
+            filtered_by_uid: params.uids.is_some(),
+            filtered_by_index_uid: params.index_uids.is_some(),
+            filtered_by_type: params.types.is_some(),
+            filtered_by_status: params.statuses.is_some(),
+            filtered_by_canceled_by: params.canceled_by.is_some(),
+            filtered_by_before_enqueued_at: params.before_enqueued_at.is_some(),
+            filtered_by_after_enqueued_at: params.after_enqueued_at.is_some(),
+            filtered_by_before_started_at: params.before_started_at.is_some(),
+            filtered_by_after_started_at: params.after_started_at.is_some(),
+            filtered_by_before_finished_at: params.before_finished_at.is_some(),
+            filtered_by_after_finished_at: params.after_finished_at.is_some(),
+
+            marker: std::marker::PhantomData,
+        },
+        &req,
     );
+
     let query = params.into_query();
 
     let (tasks, _) = index_scheduler.get_task_ids_from_authorized_indexes(

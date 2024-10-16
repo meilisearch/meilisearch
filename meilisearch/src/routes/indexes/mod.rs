@@ -160,7 +160,7 @@ pub async fn create_index(
     if allow_index_creation {
         analytics.publish(
             IndexCreatedAggregate { primary_key: primary_key.iter().cloned().collect() },
-            Some(&req),
+            &req,
         );
 
         let task = KindWithContent::IndexCreation { index_uid: uid.to_string(), primary_key };
@@ -247,7 +247,7 @@ pub async fn update_index(
     let body = body.into_inner();
     analytics.publish(
         IndexUpdatedAggregate { primary_key: body.primary_key.iter().cloned().collect() },
-        Some(&req),
+        &req,
     );
 
     let task = KindWithContent::IndexUpdate {

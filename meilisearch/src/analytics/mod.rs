@@ -16,7 +16,9 @@ use serde::Serialize;
 // if the feature analytics is enabled we use the real analytics
 pub type SegmentAnalytics = segment_analytics::SegmentAnalytics;
 pub use segment_analytics::SearchAggregator;
-pub type SimilarAggregator = segment_analytics::SimilarAggregator;
+pub use segment_analytics::SimilarAggregator;
+
+use self::segment_analytics::extract_user_agents;
 pub type MultiSearchAggregator = segment_analytics::MultiSearchAggregator;
 pub type FacetSearchAggregator = segment_analytics::FacetSearchAggregator;
 
@@ -32,14 +34,11 @@ macro_rules! empty_analytics {
                 $event_name
             }
 
-            fn aggregate(self, other: Self) -> Self
-            where
-                Self: Sized,
-            {
+            fn aggregate(self, _other: Self) -> Self {
                 self
             }
 
-            fn into_event(self) -> serde_json::Value {
+            fn into_event(self) -> impl serde::Serialize {
                 serde_json::json!({})
             }
         }
@@ -150,7 +149,8 @@ impl Analytics {
     }
 
     /// The method used to publish most analytics that do not need to be batched every hours
-    pub fn publish(&self, send: impl Aggregate, request: Option<&HttpRequest>) {
+    pub fn publish(&self, send: impl Aggregate, request: &HttpRequest) {
         let Some(segment) = self.inner else { return };
+        let user_agents = extract_user_agents(request);
     }
 }

@@ -200,7 +200,7 @@ pub async fn search(
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
-    analytics.publish(aggregate, Some(&req));
+    analytics.publish(aggregate, &req);
 
     let search_result = search_result?;
 

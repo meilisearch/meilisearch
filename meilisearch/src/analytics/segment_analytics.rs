@@ -71,25 +71,8 @@ pub fn extract_user_agents(request: &HttpRequest) -> Vec<String> {
         .collect()
 }
 
-pub enum AnalyticsMsg {
-    BatchMessage(Track),
-    AggregateGetSearch(SearchAggregator),
-    AggregatePostSearch(SearchAggregator),
-    AggregateGetSimilar(SimilarAggregator),
-    AggregatePostSimilar(SimilarAggregator),
-    AggregatePostMultiSearch(MultiSearchAggregator),
-    AggregatePostFacetSearch(FacetSearchAggregator),
-    AggregateAddDocuments(DocumentsAggregator),
-    AggregateDeleteDocuments(DocumentsDeletionAggregator),
-    AggregateUpdateDocuments(DocumentsAggregator),
-    AggregateEditDocumentsByFunction(EditDocumentsByFunctionAggregator),
-    AggregateGetFetchDocuments(DocumentsFetchAggregator),
-    AggregatePostFetchDocuments(DocumentsFetchAggregator),
-}
-
 pub struct SegmentAnalytics {
     pub instance_uid: InstanceUid,
-    sender: Sender<AnalyticsMsg>,
     pub user: User,
 }
 
@@ -1083,8 +1066,6 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
 
 #[derive(Default)]
 pub struct MultiSearchAggregator {
-    timestamp: Option<OffsetDateTime>,
-
     // requests
     total_received: usize,
     total_succeeded: usize,
@@ -1103,9 +1084,6 @@ pub struct MultiSearchAggregator {
 
     // federation
     use_federation: bool,
-
-    // context
-    user_agents: HashSet<String>,
 }
 
 impl MultiSearchAggregator {
@@ -1113,10 +1091,6 @@ impl MultiSearchAggregator {
         federated_search: &FederatedSearch,
         request: &HttpRequest,
     ) -> Self {
-        let timestamp = Some(OffsetDateTime::now_utc());
-
-        let user_agents = extract_user_agents(request).into_iter().collect();
-
         let use_federation = federated_search.federation.is_some();
 
         let distinct_indexes: HashSet<_> = federated_search
@@ -1166,7 +1140,6 @@ impl MultiSearchAggregator {
             federated_search.queries.iter().any(|query| query.show_ranking_score_details);
 
         Self {
-            timestamp,
             total_received: 1,
             total_succeeded: 0,
             total_distinct_index_count: distinct_indexes.len(),
@@ -1174,7 +1147,6 @@ impl MultiSearchAggregator {
             total_search_count: federated_search.queries.len(),
             show_ranking_score,
             show_ranking_score_details,
-            user_agents,
             use_federation,
         }
     }
@@ -1182,15 +1154,20 @@ impl MultiSearchAggregator {
     pub fn succeed(&mut self) {
         self.total_succeeded = self.total_succeeded.saturating_add(1);
     }
+}
+
+impl Aggregate for MultiSearchAggregator {
+    fn event_name(&self) -> &'static str {
+        "Documents Searched by Multi-Search POST"
+    }
 
     /// Aggregate one [MultiSearchAggregator] into another.
-    pub fn aggregate(&mut self, other: Self) {
+    fn aggregate(mut self, other: Self) -> Self {
         // write the aggregate in a way that will cause a compilation error if a field is added.
 
         // get ownership of self, replacing it by a default value.
-        let this = std::mem::take(self);
+        let this = self;
 
-        let timestamp = this.timestamp.or(other.timestamp);
         let total_received = this.total_received.saturating_add(other.total_received);
         let total_succeeded = this.total_succeeded.saturating_add(other.total_succeeded);
         let total_distinct_index_count =
@@ -1207,75 +1184,53 @@ impl MultiSearchAggregator {
             user_agents.insert(user_agent);
         }
 
-        // need all fields or compile error
-        let mut aggregated = Self {
-            timestamp,
+        Self {
             total_received,
             total_succeeded,
             total_distinct_index_count,
             total_single_index,
             total_search_count,
-            user_agents,
             show_ranking_score,
             show_ranking_score_details,
             use_federation,
-            // do not add _ or ..Default::default() here
-        };
-
-        // replace the default self with the aggregated value
-        std::mem::swap(self, &mut aggregated);
+        }
     }
 
-    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
+    fn into_event(self) -> impl Serialize {
         let Self {
-            timestamp,
             total_received,
             total_succeeded,
             total_distinct_index_count,
             total_single_index,
             total_search_count,
-            user_agents,
             show_ranking_score,
             show_ranking_score_details,
             use_federation,
         } = self;
 
-        if total_received == 0 {
-            None
-        } else {
-            let properties = json!({
-                "user-agent": user_agents,
-                "requests": {
-                    "total_succeeded": total_succeeded,
-                    "total_failed": total_received.saturating_sub(total_succeeded), // just to be sure we never panics
-                    "total_received": total_received,
-                },
-                "indexes": {
-                    "total_single_index": total_single_index,
-                    "total_distinct_index_count": total_distinct_index_count,
-                    "avg_distinct_index_count": (total_distinct_index_count as f64) / (total_received as f64), // not 0 else returned early
-                },
-                "searches": {
-                    "total_search_count": total_search_count,
-                    "avg_search_count": (total_search_count as f64) / (total_received as f64),
-                },
-                "scoring": {
-                    "show_ranking_score": show_ranking_score,
-                    "show_ranking_score_details": show_ranking_score_details,
-                },
-                "federation": {
-                    "use_federation": use_federation,
-                }
-            });
-
-            Some(Track {
-                timestamp,
-                user: user.clone(),
-                event: event_name.to_string(),
-                properties,
-                ..Default::default()
-            })
-        }
+        json!({
+            "requests": {
+                "total_succeeded": total_succeeded,
+                "total_failed": total_received.saturating_sub(total_succeeded), // just to be sure we never panics
+                "total_received": total_received,
+            },
+            "indexes": {
+                "total_single_index": total_single_index,
+                "total_distinct_index_count": total_distinct_index_count,
+                "avg_distinct_index_count": (total_distinct_index_count as f64) / (total_received as f64), // not 0 else returned early
+            },
+            "searches": {
+                "total_search_count": total_search_count,
+                "avg_search_count": (total_search_count as f64) / (total_received as f64),
+            },
+            "scoring": {
+                "show_ranking_score": show_ranking_score,
+                "show_ranking_score_details": show_ranking_score_details,
+            },
+            "federation": {
+                "use_federation": use_federation,
+            }
+        })
     }
 }
 
@@ -1752,13 +1707,13 @@ impl DocumentsFetchAggregator {
     }
 }
 
+aggregate_methods!(
+    SimilarPOST => "Similar POST",
+    SimilarGET => "Similar GET",
+);
+
 #[derive(Default)]
-pub struct SimilarAggregator {
-    timestamp: Option<OffsetDateTime>,
-
-    // context
-    user_agents: HashSet<String>,
-
+pub struct SimilarAggregator<Method: AggregateMethod> {
     // requests
     total_received: usize,
     total_succeeded: usize,
@@ -1787,9 +1742,11 @@ pub struct SimilarAggregator {
     show_ranking_score: bool,
     show_ranking_score_details: bool,
     ranking_score_threshold: bool,
+
+    marker: std::marker::PhantomData<Method>,
 }
 
-impl SimilarAggregator {
+impl<Method: AggregateMethod> SimilarAggregator<Method> {
     #[allow(clippy::field_reassign_with_default)]
     pub fn from_query(query: &SimilarQuery, request: &HttpRequest) -> Self {
         let SimilarQuery {
@@ -1854,12 +1811,16 @@ impl SimilarAggregator {
 
         self.time_spent.push(*processing_time_ms as usize);
     }
+}
+
+impl<Method: AggregateMethod> Aggregate for SimilarAggregator<Method> {
+    fn event_name(&self) -> &'static str {
+        Method::event_name()
+    }
 
     /// Aggregate one [SimilarAggregator] into another.
-    pub fn aggregate(&mut self, mut other: Self) {
+    fn aggregate(mut self, mut other: Self) -> Self {
         let Self {
-            timestamp,
-            user_agents,
             total_received,
             total_succeeded,
             ref mut time_spent,
@@ -1875,16 +1836,8 @@ impl SimilarAggregator {
             show_ranking_score_details,
             ranking_score_threshold,
             retrieve_vectors,
+            marker: _,
         } = other;
-
-        if self.timestamp.is_none() {
-            self.timestamp = timestamp;
-        }
-
-        // context
-        for user_agent in user_agents.into_iter() {
-            self.user_agents.insert(user_agent);
-        }
 
         // request
         self.total_received = self.total_received.saturating_add(total_received);
@@ -1917,12 +1870,12 @@ impl SimilarAggregator {
         self.show_ranking_score |= show_ranking_score;
         self.show_ranking_score_details |= show_ranking_score_details;
         self.ranking_score_threshold |= ranking_score_threshold;
+
+        self
     }
 
-    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
+    fn into_event(self) -> impl Serialize {
         let Self {
-            timestamp,
-            user_agents,
             total_received,
             total_succeeded,
             time_spent,
@@ -1938,56 +1891,44 @@ impl SimilarAggregator {
             show_ranking_score_details,
             ranking_score_threshold,
             retrieve_vectors,
+            marker: _,
         } = self;
 
-        if total_received == 0 {
-            None
-        } else {
-            // we get all the values in a sorted manner
-            let time_spent = time_spent.into_sorted_vec();
-            // the index of the 99th percentage of value
-            let percentile_99th = time_spent.len() * 99 / 100;
-            // We are only interested by the slowest value of the 99th fastest results
-            let time_spent = time_spent.get(percentile_99th);
+        // we get all the values in a sorted manner
+        let time_spent = time_spent.into_sorted_vec();
+        // the index of the 99th percentage of value
+        let percentile_99th = time_spent.len() * 99 / 100;
+        // We are only interested by the slowest value of the 99th fastest results
+        let time_spent = time_spent.get(percentile_99th);
 
-            let properties = json!({
-                "user-agent": user_agents,
-                "requests": {
-                    "99th_response_time": time_spent.map(|t| format!("{:.2}", t)),
-                    "total_succeeded": total_succeeded,
-                    "total_failed": total_received.saturating_sub(total_succeeded), // just to be sure we never panics
-                    "total_received": total_received,
-                },
-                "filter": {
-                   "with_geoRadius": filter_with_geo_radius,
-                   "with_geoBoundingBox": filter_with_geo_bounding_box,
-                   "avg_criteria_number": format!("{:.2}", filter_sum_of_criteria_terms as f64 / filter_total_number_of_criteria as f64),
-                   "most_used_syntax": used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
-                },
-                "vector": {
-                    "retrieve_vectors": retrieve_vectors,
-                },
-                "pagination": {
-                   "max_limit": max_limit,
-                   "max_offset": max_offset,
-                },
-                "formatting": {
-                    "max_attributes_to_retrieve": max_attributes_to_retrieve,
-                },
-                "scoring": {
-                    "show_ranking_score": show_ranking_score,
-                    "show_ranking_score_details": show_ranking_score_details,
-                    "ranking_score_threshold": ranking_score_threshold,
-                },
-            });
-
-            Some(Track {
-                timestamp,
-                user: user.clone(),
-                event: event_name.to_string(),
-                properties,
-                ..Default::default()
-            })
-        }
+        json!({
+            "requests": {
+                "99th_response_time": time_spent.map(|t| format!("{:.2}", t)),
+                "total_succeeded": total_succeeded,
+                "total_failed": total_received.saturating_sub(total_succeeded), // just to be sure we never panics
+                "total_received": total_received,
+            },
+            "filter": {
+               "with_geoRadius": filter_with_geo_radius,
+               "with_geoBoundingBox": filter_with_geo_bounding_box,
+               "avg_criteria_number": format!("{:.2}", filter_sum_of_criteria_terms as f64 / filter_total_number_of_criteria as f64),
+               "most_used_syntax": used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
+            },
+            "vector": {
+                "retrieve_vectors": retrieve_vectors,
+            },
+            "pagination": {
+               "max_limit": max_limit,
+               "max_offset": max_offset,
+            },
+            "formatting": {
+                "max_attributes_to_retrieve": max_attributes_to_retrieve,
+            },
+            "scoring": {
+                "show_ranking_score": show_ranking_score,
+                "show_ranking_score_details": show_ranking_score_details,
+                "ranking_score_threshold": ranking_score_threshold,
+            }
+        })
     }
 }

@@ -35,7 +35,7 @@ async fn get_features(
 ) -> HttpResponse {
     let features = index_scheduler.features();
 
-    analytics.publish(GetExperimentalFeatureAnalytics::default(), Some(&req));
+    analytics.publish(GetExperimentalFeatureAnalytics::default(), &req);
     let features = features.runtime_features();
     debug!(returns = ?features, "Get features");
     HttpResponse::Ok().json(features)
@@ -83,8 +83,8 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
         }
     }
 
-    fn into_event(self) -> serde_json::Value {
-        serde_json::to_value(self).unwrap()
+    fn into_event(self) -> impl Serialize {
+        self
     }
 }
 
@@ -131,7 +131,7 @@ async fn patch_features(
             edit_documents_by_function,
             contains_filter,
         },
-        Some(&req),
+        &req,
     );
     index_scheduler.put_runtime_features(new_features)?;
     debug!(returns = ?new_features, "Patch features");

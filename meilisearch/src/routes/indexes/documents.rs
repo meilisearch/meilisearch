@@ -194,7 +194,7 @@ pub async fn get_document(
             retrieve_vectors: param_retrieve_vectors.0,
             ..Default::default()
         },
-        Some(&req),
+        &req,
     );
 
     let index = index_scheduler.index(&index_uid)?;
@@ -253,7 +253,7 @@ pub async fn delete_document(
             per_document_id: true,
             ..Default::default()
         },
-        Some(&req),
+        &req,
     );
 
     let task = KindWithContent::DocumentDeletion {
@@ -319,7 +319,7 @@ pub async fn documents_by_query_post(
             max_offset: body.offset,
             ..Default::default()
         },
-        Some(&req),
+        &req,
     );
 
     documents_by_query(&index_scheduler, index_uid, body)
@@ -361,7 +361,7 @@ pub async fn get_documents(
             max_offset: query.offset,
             ..Default::default()
         },
-        Some(&req),
+        &req,
     );
 
     documents_by_query(&index_scheduler, index_uid, query)
@@ -486,7 +486,7 @@ pub async fn replace_documents(
             index_creation: index_scheduler.index_exists(&index_uid).map_or(true, |x| !x),
             method: PhantomData,
         },
-        Some(&req),
+        &req,
     );
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
@@ -543,7 +543,7 @@ pub async fn update_documents(
             index_creation: index_scheduler.index_exists(&index_uid).map_or(true, |x| !x),
             method: PhantomData,
         },
-        Some(&req),
+        &req,
     );
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
@@ -718,7 +718,7 @@ pub async fn delete_documents_batch(
 
     analytics.publish(
         DocumentsDeletionAggregator { total_received: 1, per_batch: true, ..Default::default() },
-        Some(&req),
+        &req,
     );
 
     let ids = body
@@ -761,7 +761,7 @@ pub async fn delete_documents_by_filter(
 
     analytics.publish(
         DocumentsDeletionAggregator { total_received: 1, per_filter: true, ..Default::default() },
-        Some(&req),
+        &req,
     );
 
     // we ensure the filter is well formed before enqueuing it
@@ -847,7 +847,7 @@ pub async fn edit_documents_by_function(
             with_context: params.context.is_some(),
             index_creation: index_scheduler.index(&index_uid).is_err(),
         },
-        Some(&req),
+        &req,
     );
 
     let DocumentEditionByFunction { filter, context, function } = params;
@@ -902,7 +902,7 @@ pub async fn clear_all_documents(
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     analytics.publish(
         DocumentsDeletionAggregator { total_received: 1, clear_all: true, ..Default::default() },
-        Some(&req),
+        &req,
     );
 
     let task = KindWithContent::DocumentClear { index_uid: index_uid.to_string() };

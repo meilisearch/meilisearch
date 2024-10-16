@@ -26,7 +26,7 @@ pub async fn create_dump(
     opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    analytics.publish(DumpAnalytics::default(), Some(&req));
+    analytics.publish(DumpAnalytics::default(), &req);
 
     let task = KindWithContent::DumpCreation {
         keys: auth_controller.list_keys()?,
