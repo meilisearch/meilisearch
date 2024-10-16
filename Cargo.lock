@@ -3567,6 +3567,7 @@ dependencies = [
 name = "milli"
 version = "1.11.0"
 dependencies = [
+ "allocator-api2",
  "arroy",
  "big_s",
  "bimap",
@@ -3590,7 +3591,7 @@ dependencies = [
  "fxhash",
  "geoutils",
  "grenad",
- "hashbrown 0.14.5",
+ "hashbrown 0.15.0",
  "heed",
  "hf-hub",
  "indexmap",
@@ -4434,7 +4435,7 @@ dependencies = [
 [[package]]
 name = "raw-collections"
 version = "0.1.0"
-source = "git+https://github.com/dureuill/raw-collections.git#0ecd143c1707d237e3c4d749bc685418da2fccc2"
+source = "git+https://github.com/dureuill/raw-collections.git#147dfe8eee739f2638c921c83e7d64ca1d47dcb2"
 dependencies = [
  "allocator-api2",
  "bumpalo",

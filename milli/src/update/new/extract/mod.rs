@@ -1,6 +1,5 @@
 mod cache;
 mod faceted;
-mod lru;
 mod searchable;
 
 use std::cell::RefCell;

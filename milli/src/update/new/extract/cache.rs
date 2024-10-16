@@ -1,21 +1,28 @@
+use std::cell::RefCell;
 use std::fmt::Write as _;
-use std::mem;
-use std::num::NonZeroUsize;
 
+use bumpalo::Bump;
 use grenad::{MergeFunction, Sorter};
+use raw_collections::alloc::{RefBump, RefBytes};
 use roaring::bitmap::Statistics;
 use roaring::RoaringBitmap;
-use smallvec::SmallVec;
 
-use super::lru::Lru;
 use crate::update::del_add::{DelAdd, KvWriterDelAdd};
 use crate::CboRoaringBitmapCodec;
 
 const KEY_SIZE: usize = 12;
 
 #[derive(Debug)]
-pub struct CboCachedSorter<MF> {
-    cache: Lru<SmallVec<[u8; KEY_SIZE]>, DelAddRoaringBitmap>,
+pub struct CboCachedSorter<'extractor, MF> {
+    cache: Option<
+        hashbrown::HashMap<
+            // TODO check the size of it
+            RefBytes<'extractor>,
+            DelAddRoaringBitmap,
+            hashbrown::DefaultHashBuilder,
+            RefBump<'extractor>,
+        >,
+    >,
     sorter: Sorter<MF>,
     deladd_buffer: Vec<u8>,
     cbo_buffer: Vec<u8>,
@@ -23,10 +30,11 @@ pub struct CboCachedSorter<MF> {
     fitted_in_key: usize,
 }
 
-impl<MF> CboCachedSorter<MF> {
-    pub fn new(cap: NonZeroUsize, sorter: Sorter<MF>) -> Self {
+impl<'extractor, MF> CboCachedSorter<'extractor, MF> {
+    /// TODO may add the capacity
+    pub fn new_in(sorter: Sorter<MF>, alloc: RefBump<'extractor>) -> Self {
         CboCachedSorter {
-            cache: Lru::new(cap),
+            cache: Some(hashbrown::HashMap::new_in(alloc)),
             sorter,
             deladd_buffer: Vec::new(),
             cbo_buffer: Vec::new(),
@@ -36,9 +44,9 @@ impl<MF> CboCachedSorter<MF> {
     }
 }
 
-impl<MF: MergeFunction> CboCachedSorter<MF> {
+impl<'extractor, MF: MergeFunction> CboCachedSorter<'extractor, MF> {
     pub fn insert_del_u32(&mut self, key: &[u8], n: u32) -> grenad::Result<(), MF::Error> {
-        match self.cache.get_mut(key) {
+        match self.cache.unwrap().get_mut(key) {
             Some(DelAddRoaringBitmap { del, add: _ }) => {
                 del.get_or_insert_with(RoaringBitmap::default).insert(n);
             }
@@ -60,7 +68,7 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
         key: &[u8],
         bitmap: RoaringBitmap,
     ) -> grenad::Result<(), MF::Error> {
-        match self.cache.get_mut(key) {
+        match self.cache.unwrap().get_mut(key) {
             Some(DelAddRoaringBitmap { del, add: _ }) => {
                 *del.get_or_insert_with(RoaringBitmap::default) |= bitmap;
             }
@@ -78,7 +86,7 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
     }
 
     pub fn insert_add_u32(&mut self, key: &[u8], n: u32) -> grenad::Result<(), MF::Error> {
-        match self.cache.get_mut(key) {
+        match self.cache.unwrap().get_mut(key) {
             Some(DelAddRoaringBitmap { del: _, add }) => {
                 add.get_or_insert_with(RoaringBitmap::default).insert(n);
             }
@@ -100,7 +108,7 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
         key: &[u8],
         bitmap: RoaringBitmap,
     ) -> grenad::Result<(), MF::Error> {
-        match self.cache.get_mut(key) {
+        match self.cache.unwrap().get_mut(key) {
             Some(DelAddRoaringBitmap { del: _, add }) => {
                 *add.get_or_insert_with(RoaringBitmap::default) |= bitmap;
             }
@@ -118,7 +126,7 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
     }
 
     pub fn insert_del_add_u32(&mut self, key: &[u8], n: u32) -> grenad::Result<(), MF::Error> {
-        match self.cache.get_mut(key) {
+        match self.cache.unwrap().get_mut(key) {
             Some(DelAddRoaringBitmap { del, add }) => {
                 del.get_or_insert_with(RoaringBitmap::default).insert(n);
                 add.get_or_insert_with(RoaringBitmap::default).insert(n);
@@ -174,7 +182,24 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
         self.sorter.insert(key, val)
     }
 
-    pub fn into_sorter(mut self) -> grenad::Result<Sorter<MF>, MF::Error> {
+    pub fn spill_to_disk(&mut self, bump: &'extractor RefCell<Bump>) -> std::io::Result<()> {
+        let cache = self.cache.take().unwrap();
+
+        /// I want to spill to disk for real
+        drop(cache);
+
+        bump.borrow_mut().reset();
+
+        let alloc = RefBump::new(bump.borrow());
+        self.cache = Some(hashbrown::HashMap::new_in(alloc));
+
+        Ok(())
+    }
+
+    pub fn into_sorter(self) -> grenad::Result<Sorter<MF>, MF::Error> {
+        let Self { cache, sorter, total_insertions, fitted_in_key, .. } = self;
+        let cache = cache.unwrap();
+
         let mut all_n_containers = Vec::new();
         let mut all_n_array_containers = Vec::new();
         let mut all_n_bitset_containers = Vec::new();
@@ -182,8 +207,7 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
         let mut all_n_values_bitset_containers = Vec::new();
         let mut all_cardinality = Vec::new();
 
-        let default_arc = Lru::new(NonZeroUsize::MIN);
-        for (key, deladd) in mem::replace(&mut self.cache, default_arc) {
+        for (_key, deladd) in &cache {
             for bitmap in [&deladd.del, &deladd.add].into_iter().flatten() {
                 let Statistics {
                     n_containers,
@@ -201,8 +225,11 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
                 all_n_values_bitset_containers.push(n_values_bitset_containers);
                 all_cardinality.push(cardinality as u32);
             }
+        }
 
-            self.write_entry(key, deladd)?;
+        for (key, deladd) in cache {
+            // self.write_entry(key, deladd)?;
+            todo!("spill into the sorter")
         }
 
         let mut output = String::new();
@@ -222,14 +249,14 @@ impl<MF: MergeFunction> CboCachedSorter<MF> {
         let _ = writeln!(
             &mut output,
             "LruCache stats: {} <= {KEY_SIZE} bytes ({}%) on a total of {} insertions",
-            self.fitted_in_key,
-            (self.fitted_in_key as f32 / self.total_insertions as f32) * 100.0,
-            self.total_insertions,
+            fitted_in_key,
+            (fitted_in_key as f32 / total_insertions as f32) * 100.0,
+            total_insertions,
         );
 
         eprintln!("{output}");
 
-        Ok(self.sorter)
+        Ok(sorter)
     }
 }
 
