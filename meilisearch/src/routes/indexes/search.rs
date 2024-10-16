@@ -13,6 +13,7 @@ use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 use tracing::debug;
 
+use crate::analytics::segment_analytics::{SearchGET, SearchPOST};
 use crate::analytics::{Analytics, SearchAggregator};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
@@ -225,7 +226,7 @@ pub async fn search_with_url_query(
     index_uid: web::Path<String>,
     params: AwebQueryParameter<SearchQueryGet, DeserrQueryParamError>,
     req: HttpRequest,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?params, "Search get");
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
@@ -237,7 +238,7 @@ pub async fn search_with_url_query(
         add_search_rules(&mut query.filter, search_rules);
     }
 
-    let mut aggregate = SearchAggregator::from_query(&query, &req);
+    let mut aggregate = SearchAggregator::<SearchGET>::from_query(&query, &req);
 
     let index = index_scheduler.index(&index_uid)?;
     let features = index_scheduler.features();
@@ -254,7 +255,7 @@ pub async fn search_with_url_query(
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
-    analytics.get_search(aggregate);
+    analytics.publish(aggregate, Some(&req));
 
     let search_result = search_result?;
 
@@ -268,7 +269,7 @@ pub async fn search_with_post(
     index_uid: web::Path<String>,
     params: AwebJson<SearchQuery, DeserrJsonError>,
     req: HttpRequest,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
@@ -280,7 +281,7 @@ pub async fn search_with_post(
         add_search_rules(&mut query.filter, search_rules);
     }
 
-    let mut aggregate = SearchAggregator::from_query(&query, &req);
+    let mut aggregate = SearchAggregator::<SearchPOST>::from_query(&query, &req);
 
     let index = index_scheduler.index(&index_uid)?;
 
@@ -302,7 +303,7 @@ pub async fn search_with_post(
             MEILISEARCH_DEGRADED_SEARCH_REQUESTS.inc();
         }
     }
-    analytics.post_search(aggregate);
+    analytics.publish(aggregate, Some(&req));
 
     let search_result = search_result?;
 

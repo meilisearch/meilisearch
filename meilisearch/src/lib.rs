@@ -120,7 +120,7 @@ pub fn create_app(
     search_queue: Data<SearchQueue>,
     opt: Opt,
     logs: (LogRouteHandle, LogStderrHandle),
-    analytics: Arc<dyn Analytics>,
+    analytics: Arc<Analytics>,
     enable_dashboard: bool,
 ) -> actix_web::App<
     impl ServiceFactory<
@@ -473,7 +473,7 @@ pub fn configure_data(
     search_queue: Data<SearchQueue>,
     opt: &Opt,
     (logs_route, logs_stderr): (LogRouteHandle, LogStderrHandle),
-    analytics: Arc<dyn Analytics>,
+    analytics: Arc<Analytics>,
 ) {
     let http_payload_size_limit = opt.http_payload_size_limit.as_u64() as usize;
     config

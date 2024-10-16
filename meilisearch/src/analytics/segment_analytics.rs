@@ -25,7 +25,8 @@ use tokio::sync::mpsc::{self, Receiver, Sender};
 use uuid::Uuid;
 
 use super::{
-    config_user_id_path, DocumentDeletionKind, DocumentFetchKind, MEILISEARCH_CONFIG_PATH,
+    config_user_id_path, Aggregate, AggregateMethod, DocumentDeletionKind, DocumentFetchKind,
+    MEILISEARCH_CONFIG_PATH,
 };
 use crate::analytics::Analytics;
 use crate::option::{
@@ -40,7 +41,7 @@ use crate::search::{
     DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
     DEFAULT_SEMANTIC_RATIO,
 };
-use crate::Opt;
+use crate::{aggregate_methods, Opt};
 
 const ANALYTICS_HEADER: &str = "X-Meilisearch-Client";
 
@@ -87,9 +88,9 @@ pub enum AnalyticsMsg {
 }
 
 pub struct SegmentAnalytics {
-    instance_uid: InstanceUid,
+    pub instance_uid: InstanceUid,
     sender: Sender<AnalyticsMsg>,
-    user: User,
+    pub user: User,
 }
 
 impl SegmentAnalytics {
@@ -98,7 +99,7 @@ impl SegmentAnalytics {
         opt: &Opt,
         index_scheduler: Arc<IndexScheduler>,
         auth_controller: Arc<AuthController>,
-    ) -> Arc<dyn Analytics> {
+    ) -> Arc<Analytics> {
         let instance_uid = super::find_user_id(&opt.db_path);
         let first_time_run = instance_uid.is_none();
         let instance_uid = instance_uid.unwrap_or_else(Uuid::new_v4);
@@ -108,7 +109,7 @@ impl SegmentAnalytics {
 
         // if reqwest throws an error we won't be able to send analytics
         if client.is_err() {
-            return super::MockAnalytics::new(opt);
+            return Arc::new(Analytics::no_analytics());
         }
 
         let client =
@@ -161,10 +162,11 @@ impl SegmentAnalytics {
 
         let this = Self { instance_uid, sender, user: user.clone() };
 
-        Arc::new(this)
+        Arc::new(Analytics::segment_analytics(this))
     }
 }
 
+/*
 impl super::Analytics for SegmentAnalytics {
     fn instance_uid(&self) -> Option<&InstanceUid> {
         Some(&self.instance_uid)
@@ -253,6 +255,7 @@ impl super::Analytics for SegmentAnalytics {
         let _ = self.sender.try_send(AnalyticsMsg::AggregatePostFetchDocuments(aggregate));
     }
 }
+*/
 
 /// This structure represent the `infos` field we send in the analytics.
 /// It's quite close to the `Opt` structure except all sensitive informations
@@ -607,12 +610,7 @@ impl Segment {
 }
 
 #[derive(Default)]
-pub struct SearchAggregator {
-    timestamp: Option<OffsetDateTime>,
-
-    // context
-    user_agents: HashSet<String>,
-
+pub struct SearchAggregator<Method: AggregateMethod> {
     // requests
     total_received: usize,
     total_succeeded: usize,
@@ -684,9 +682,11 @@ pub struct SearchAggregator {
     show_ranking_score: bool,
     show_ranking_score_details: bool,
     ranking_score_threshold: bool,
+
+    marker: std::marker::PhantomData<Method>,
 }
 
-impl SearchAggregator {
+impl<Method: AggregateMethod> SearchAggregator<Method> {
     #[allow(clippy::field_reassign_with_default)]
     pub fn from_query(query: &SearchQuery, request: &HttpRequest) -> Self {
         let SearchQuery {
@@ -827,12 +827,21 @@ impl SearchAggregator {
         }
         self.time_spent.push(*processing_time_ms as usize);
     }
+}
 
-    /// Aggregate one [SearchAggregator] into another.
-    pub fn aggregate(&mut self, mut other: Self) {
+aggregate_methods!(
+    SearchGET => "Documents Searched GET",
+    SearchPOST => "Documents Searched POST",
+
+);
+
+impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
+    fn event_name(&self) -> &'static str {
+        Method::event_name()
+    }
+
+    fn aggregate(mut self, mut other: Self) -> Self {
         let Self {
-            timestamp,
-            user_agents,
             total_received,
             total_succeeded,
             ref mut time_spent,
@@ -871,16 +880,8 @@ impl SearchAggregator {
             total_used_negative_operator,
             ranking_score_threshold,
             ref mut locales,
+            marker: _,
         } = other;
-
-        if self.timestamp.is_none() {
-            self.timestamp = timestamp;
-        }
-
-        // context
-        for user_agent in user_agents.into_iter() {
-            self.user_agents.insert(user_agent);
-        }
 
         // request
         self.total_received = self.total_received.saturating_add(total_received);
@@ -961,12 +962,12 @@ impl SearchAggregator {
 
         // locales
         self.locales.append(locales);
+
+        self
     }
 
-    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
+    fn into_event(self) -> Option<Track> {
         let Self {
-            timestamp,
-            user_agents,
             total_received,
             total_succeeded,
             time_spent,
@@ -1005,90 +1006,78 @@ impl SearchAggregator {
             total_used_negative_operator,
             ranking_score_threshold,
             locales,
+            marker: _,
         } = self;
 
-        if total_received == 0 {
-            None
-        } else {
-            // we get all the values in a sorted manner
-            let time_spent = time_spent.into_sorted_vec();
-            // the index of the 99th percentage of value
-            let percentile_99th = time_spent.len() * 99 / 100;
-            // We are only interested by the slowest value of the 99th fastest results
-            let time_spent = time_spent.get(percentile_99th);
+        // we get all the values in a sorted manner
+        let time_spent = time_spent.into_sorted_vec();
+        // the index of the 99th percentage of value
+        let percentile_99th = time_spent.len() * 99 / 100;
+        // We are only interested by the slowest value of the 99th fastest results
+        let time_spent = time_spent.get(percentile_99th);
 
-            let properties = json!({
-                "user-agent": user_agents,
-                "requests": {
-                    "99th_response_time": time_spent.map(|t| format!("{:.2}", t)),
-                    "total_succeeded": total_succeeded,
-                    "total_failed": total_received.saturating_sub(total_succeeded), // just to be sure we never panics
-                    "total_received": total_received,
-                    "total_degraded": total_degraded,
-                    "total_used_negative_operator": total_used_negative_operator,
-                },
-                "sort": {
-                    "with_geoPoint": sort_with_geo_point,
-                    "avg_criteria_number": format!("{:.2}", sort_sum_of_criteria_terms as f64 / sort_total_number_of_criteria as f64),
-                },
-                "distinct": distinct,
-                "filter": {
-                   "with_geoRadius": filter_with_geo_radius,
-                   "with_geoBoundingBox": filter_with_geo_bounding_box,
-                   "avg_criteria_number": format!("{:.2}", filter_sum_of_criteria_terms as f64 / filter_total_number_of_criteria as f64),
-                   "most_used_syntax": used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
-                },
-                "attributes_to_search_on": {
-                   "total_number_of_uses": attributes_to_search_on_total_number_of_uses,
-                },
-                "q": {
-                   "max_terms_number": max_terms_number,
-                },
-                "vector": {
-                    "max_vector_size": max_vector_size,
-                    "retrieve_vectors": retrieve_vectors,
-                },
-                "hybrid": {
-                    "enabled": hybrid,
-                    "semantic_ratio": semantic_ratio,
-                },
-                "pagination": {
-                   "max_limit": max_limit,
-                   "max_offset": max_offset,
-                   "most_used_navigation": if finite_pagination > (total_received / 2) { "exhaustive" } else { "estimated" },
-                },
-                "formatting": {
-                    "max_attributes_to_retrieve": max_attributes_to_retrieve,
-                    "max_attributes_to_highlight": max_attributes_to_highlight,
-                    "highlight_pre_tag": highlight_pre_tag,
-                    "highlight_post_tag": highlight_post_tag,
-                    "max_attributes_to_crop": max_attributes_to_crop,
-                    "crop_marker": crop_marker,
-                    "show_matches_position": show_matches_position,
-                    "crop_length": crop_length,
-                },
-                "facets": {
-                    "avg_facets_number": format!("{:.2}", facets_sum_of_terms as f64 / facets_total_number_of_facets as f64),
-                },
-                "matching_strategy": {
-                    "most_used_strategy": matching_strategy.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
-                },
-                "locales": locales,
-                "scoring": {
-                    "show_ranking_score": show_ranking_score,
-                    "show_ranking_score_details": show_ranking_score_details,
-                    "ranking_score_threshold": ranking_score_threshold,
-                },
-            });
-
-            Some(Track {
-                timestamp,
-                user: user.clone(),
-                event: event_name.to_string(),
-                properties,
-                ..Default::default()
-            })
-        }
+        json!({
+            "requests": {
+                "99th_response_time": time_spent.map(|t| format!("{:.2}", t)),
+                "total_succeeded": total_succeeded,
+                "total_failed": total_received.saturating_sub(total_succeeded), // just to be sure we never panics
+                "total_received": total_received,
+                "total_degraded": total_degraded,
+                "total_used_negative_operator": total_used_negative_operator,
+            },
+            "sort": {
+                "with_geoPoint": sort_with_geo_point,
+                "avg_criteria_number": format!("{:.2}", sort_sum_of_criteria_terms as f64 / sort_total_number_of_criteria as f64),
+            },
+            "distinct": distinct,
+            "filter": {
+               "with_geoRadius": filter_with_geo_radius,
+               "with_geoBoundingBox": filter_with_geo_bounding_box,
+               "avg_criteria_number": format!("{:.2}", filter_sum_of_criteria_terms as f64 / filter_total_number_of_criteria as f64),
+               "most_used_syntax": used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
+            },
+            "attributes_to_search_on": {
+               "total_number_of_uses": attributes_to_search_on_total_number_of_uses,
+            },
+            "q": {
+               "max_terms_number": max_terms_number,
+            },
+            "vector": {
+                "max_vector_size": max_vector_size,
+                "retrieve_vectors": retrieve_vectors,
+            },
+            "hybrid": {
+                "enabled": hybrid,
+                "semantic_ratio": semantic_ratio,
+            },
+            "pagination": {
+               "max_limit": max_limit,
+               "max_offset": max_offset,
+               "most_used_navigation": if finite_pagination > (total_received / 2) { "exhaustive" } else { "estimated" },
+            },
+            "formatting": {
+                "max_attributes_to_retrieve": max_attributes_to_retrieve,
+                "max_attributes_to_highlight": max_attributes_to_highlight,
+                "highlight_pre_tag": highlight_pre_tag,
+                "highlight_post_tag": highlight_post_tag,
+                "max_attributes_to_crop": max_attributes_to_crop,
+                "crop_marker": crop_marker,
+                "show_matches_position": show_matches_position,
+                "crop_length": crop_length,
+            },
+            "facets": {
+                "avg_facets_number": format!("{:.2}", facets_sum_of_terms as f64 / facets_total_number_of_facets as f64),
+            },
+            "matching_strategy": {
+                "most_used_strategy": matching_strategy.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
+            },
+            "locales": locales,
+            "scoring": {
+                "show_ranking_score": show_ranking_score,
+                "show_ranking_score_details": show_ranking_score_details,
+                "ranking_score_threshold": ranking_score_threshold,
+            },
+        })
     }
 }
 

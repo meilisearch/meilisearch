@@ -40,7 +40,7 @@ pub async fn swap_indexes(
     analytics.publish(
         "Indexes Swapped".to_string(),
         json!({
-            "swap_operation_number": params.len(),
+            "swap_operation_number": params.len(), // Return the max ever encountered
         }),
         Some(&req),
     );

@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::convert::Infallible;
 
 use actix_web::web::Data;
@@ -18,7 +19,7 @@ use time::OffsetDateTime;
 use tracing::debug;
 
 use super::{get_task_id, Pagination, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
-use crate::analytics::Analytics;
+use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
@@ -123,12 +124,34 @@ pub struct IndexCreateRequest {
     primary_key: Option<String>,
 }
 
+#[derive(Serialize)]
+struct IndexCreatedAggregate {
+    primary_key: BTreeSet<String>,
+}
+
+impl Aggregate for IndexCreatedAggregate {
+    fn event_name(&self) -> &'static str {
+        "Index Created"
+    }
+
+    fn aggregate(self, other: Self) -> Self
+    where
+        Self: Sized,
+    {
+        Self { primary_key: self.primary_key.union(&other.primary_key).collect() }
+    }
+
+    fn into_event(self) -> impl Serialize {
+        self
+    }
+}
+
 pub async fn create_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_CREATE }>, Data<IndexScheduler>>,
     body: AwebJson<IndexCreateRequest, DeserrJsonError>,
     req: HttpRequest,
     opt: web::Data<Opt>,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Create index");
     let IndexCreateRequest { primary_key, uid } = body.into_inner();
@@ -136,8 +159,7 @@ pub async fn create_index(
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&uid);
     if allow_index_creation {
         analytics.publish(
-            "Index Created".to_string(),
-            json!({ "primary_key": primary_key }),
+            IndexCreatedAggregate { primary_key: primary_key.iter().cloned().collect() },
             Some(&req),
         );
 
@@ -194,20 +216,37 @@ pub async fn get_index(
     Ok(HttpResponse::Ok().json(index_view))
 }
 
+#[derive(Serialize)]
+struct IndexUpdatedAggregate {
+    primary_key: BTreeSet<String>,
+}
+
+impl Aggregate for IndexUpdatedAggregate {
+    fn event_name(&self) -> &'static str {
+        "Index Updated"
+    }
+
+    fn aggregate(self, other: Self) -> Self {
+        Self { primary_key: self.primary_key.union(&other.primary_key).collect() }
+    }
+
+    fn into_event(self) -> impl Serialize {
+        self
+    }
+}
 pub async fn update_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     body: AwebJson<UpdateIndexRequest, DeserrJsonError>,
     req: HttpRequest,
     opt: web::Data<Opt>,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Update index");
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let body = body.into_inner();
     analytics.publish(
-        "Index Updated".to_string(),
-        json!({ "primary_key": body.primary_key }),
+        IndexUpdatedAggregate { primary_key: body.primary_key.iter().cloned().collect() },
         Some(&req),
     );
 
