@@ -1,7 +1,6 @@
-use std::any::{Any, TypeId};
+use std::any::TypeId;
 use std::collections::{BTreeSet, BinaryHeap, HashMap, HashSet};
 use std::fs;
-use std::mem::take;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -72,10 +71,26 @@ pub fn extract_user_agents(request: &HttpRequest) -> Vec<String> {
         .collect()
 }
 
+pub struct Message {
+    type_id: TypeId,
+    event: Box<dyn Aggregate>,
+    aggregator_function: fn(Box<dyn Aggregate>, Box<dyn Aggregate>) -> Option<Box<dyn Aggregate>>,
+}
+
+impl Message {
+    pub fn new<T: Aggregate>(event: T) -> Self {
+        Self {
+            type_id: TypeId::of::<T>(),
+            event: Box::new(event),
+            aggregator_function: T::downcast_aggregate,
+        }
+    }
+}
+
 pub struct SegmentAnalytics {
     pub instance_uid: InstanceUid,
     pub user: User,
-    pub sender: Sender<Box<dyn Aggregate>>,
+    pub sender: Sender<Message>,
 }
 
 impl SegmentAnalytics {
@@ -378,7 +393,7 @@ impl From<Opt> for Infos {
 }
 
 pub struct Segment {
-    inbox: Receiver<Box<dyn Aggregate>>,
+    inbox: Receiver<Message>,
     user: User,
     opt: Opt,
     batcher: AutoBatcher,
@@ -435,8 +450,13 @@ impl Segment {
                 },
                 msg = self.inbox.recv() => {
                     match msg {
-                        // Some(AnalyticsMsg::BatchMessage(msg)) => drop(self.batcher.push(msg).await),
-                        Some(_) => todo!(),
+                        Some(Message { type_id, event, aggregator_function }) => {
+                            let new_event = match self.events.remove(&type_id) {
+                                Some(old) => (aggregator_function)(old, event).unwrap(),
+                                None => event,
+                            };
+                            self.events.insert(type_id, new_event);
+                       },
                         None => (),
                     }
                 }
@@ -479,9 +499,9 @@ impl Segment {
         // We empty the list of events
         let events = std::mem::take(&mut self.events);
 
-        for (_, mut event) in events {
+        for (_, event) in events {
             self.batcher.push(Track {
-                user: self.user,
+                user: self.user.clone(),
                 event: event.event_name().to_string(),
                 properties: event.into_event(),
                 timestamp: todo!(),
@@ -722,11 +742,11 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
         Method::event_name()
     }
 
-    fn aggregate(mut self, mut other: Self) -> Self {
+    fn aggregate(mut self: Box<Self>, other: Box<Self>) -> Box<Self> {
         let Self {
             total_received,
             total_succeeded,
-            ref mut time_spent,
+            mut time_spent,
             sort_with_geo_point,
             sort_sum_of_criteria_terms,
             sort_total_number_of_criteria,
@@ -761,9 +781,9 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
             total_degraded,
             total_used_negative_operator,
             ranking_score_threshold,
-            ref mut locales,
+            mut locales,
             marker: _,
-        } = other;
+        } = *other;
 
         // request
         self.total_received = self.total_received.saturating_add(total_received);
@@ -771,7 +791,7 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
         self.total_degraded = self.total_degraded.saturating_add(total_degraded);
         self.total_used_negative_operator =
             self.total_used_negative_operator.saturating_add(total_used_negative_operator);
-        self.time_spent.append(time_spent);
+        self.time_spent.append(&mut time_spent);
 
         // sort
         self.sort_with_geo_point |= sort_with_geo_point;
@@ -843,12 +863,12 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
         self.ranking_score_threshold |= ranking_score_threshold;
 
         // locales
-        self.locales.append(locales);
+        self.locales.append(&mut locales);
 
         self
     }
 
-    fn into_event(self) -> impl Serialize {
+    fn into_event(self: Box<Self>) -> serde_json::Value {
         let Self {
             total_received,
             total_succeeded,
@@ -889,7 +909,7 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
             ranking_score_threshold,
             locales,
             marker: _,
-        } = self;
+        } = *self;
 
         // we get all the values in a sorted manner
         let time_spent = time_spent.into_sorted_vec();
@@ -1058,11 +1078,11 @@ impl Aggregate for MultiSearchAggregator {
     }
 
     /// Aggregate one [MultiSearchAggregator] into another.
-    fn aggregate(self, other: Self) -> Self {
+    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
         // write the aggregate in a way that will cause a compilation error if a field is added.
 
         // get ownership of self, replacing it by a default value.
-        let this = self;
+        let this = *self;
 
         let total_received = this.total_received.saturating_add(other.total_received);
         let total_succeeded = this.total_succeeded.saturating_add(other.total_succeeded);
@@ -1075,7 +1095,7 @@ impl Aggregate for MultiSearchAggregator {
             this.show_ranking_score_details || other.show_ranking_score_details;
         let use_federation = this.use_federation || other.use_federation;
 
-        Self {
+        Box::new(Self {
             total_received,
             total_succeeded,
             total_distinct_index_count,
@@ -1084,10 +1104,10 @@ impl Aggregate for MultiSearchAggregator {
             show_ranking_score,
             show_ranking_score_details,
             use_federation,
-        }
+        })
     }
 
-    fn into_event(self) -> impl Serialize {
+    fn into_event(self: Box<Self>) -> serde_json::Value {
         let Self {
             total_received,
             total_succeeded,
@@ -1097,7 +1117,7 @@ impl Aggregate for MultiSearchAggregator {
             show_ranking_score,
             show_ranking_score_details,
             use_federation,
-        } = self;
+        } = *self;
 
         json!({
             "requests": {
@@ -1708,11 +1728,11 @@ impl<Method: AggregateMethod> Aggregate for SimilarAggregator<Method> {
     }
 
     /// Aggregate one [SimilarAggregator] into another.
-    fn aggregate(mut self, mut other: Self) -> Self {
+    fn aggregate(mut self: Box<Self>, other: Box<Self>) -> Box<Self> {
         let Self {
             total_received,
             total_succeeded,
-            ref mut time_spent,
+            mut time_spent,
             filter_with_geo_radius,
             filter_with_geo_bounding_box,
             filter_sum_of_criteria_terms,
@@ -1726,12 +1746,12 @@ impl<Method: AggregateMethod> Aggregate for SimilarAggregator<Method> {
             ranking_score_threshold,
             retrieve_vectors,
             marker: _,
-        } = other;
+        } = *other;
 
         // request
         self.total_received = self.total_received.saturating_add(total_received);
         self.total_succeeded = self.total_succeeded.saturating_add(total_succeeded);
-        self.time_spent.append(time_spent);
+        self.time_spent.append(&mut time_spent);
 
         // filter
         self.filter_with_geo_radius |= filter_with_geo_radius;
@@ -1763,7 +1783,7 @@ impl<Method: AggregateMethod> Aggregate for SimilarAggregator<Method> {
         self
     }
 
-    fn into_event(self) -> impl Serialize {
+    fn into_event(self: Box<Self>) -> serde_json::Value {
         let Self {
             total_received,
             total_succeeded,
@@ -1781,7 +1801,7 @@ impl<Method: AggregateMethod> Aggregate for SimilarAggregator<Method> {
             ranking_score_threshold,
             retrieve_vectors,
             marker: _,
-        } = self;
+        } = *self;
 
         // we get all the values in a sorted manner
         let time_spent = time_spent.into_sorted_vec();

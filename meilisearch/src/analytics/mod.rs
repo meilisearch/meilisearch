@@ -6,9 +6,9 @@ use std::str::FromStr;
 
 use actix_web::HttpRequest;
 use meilisearch_types::InstanceUid;
+use mopa::mopafy;
 use once_cell::sync::Lazy;
 use platform_dirs::AppDirs;
-use serde::Serialize;
 
 // if the feature analytics is enabled we use the real analytics
 pub type SegmentAnalytics = segment_analytics::SegmentAnalytics;
@@ -31,11 +31,11 @@ macro_rules! empty_analytics {
                 $event_name
             }
 
-            fn aggregate(self, _other: Self) -> Self {
+            fn aggregate(self: Box<Self>, _other: Box<Self>) -> Box<Self> {
                 self
             }
 
-            fn into_event(self) -> impl serde::Serialize {
+            fn into_event(self: Box<Self>) -> serde_json::Value {
                 serde_json::json!({})
             }
         }
@@ -80,17 +80,33 @@ pub enum DocumentFetchKind {
     Normal { with_filter: bool, limit: usize, offset: usize, retrieve_vectors: bool },
 }
 
-pub trait Aggregate: 'static {
+pub trait Aggregate: 'static + mopa::Any + Send {
     fn event_name(&self) -> &'static str;
 
-    fn aggregate(self, other: Self) -> Self
+    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self>
     where
         Self: Sized;
 
-    fn into_event(self) -> impl Serialize
+    fn downcast_aggregate(
+        this: Box<dyn Aggregate>,
+        other: Box<dyn Aggregate>,
+    ) -> Option<Box<dyn Aggregate>>
     where
-        Self: Sized;
+        Self: Sized,
+    {
+        if this.is::<Self>() && other.is::<Self>() {
+            let this = this.downcast::<Self>().ok()?;
+            let other = other.downcast::<Self>().ok()?;
+            Some(Self::aggregate(this, other))
+        } else {
+            None
+        }
+    }
+
+    fn into_event(self: Box<Self>) -> serde_json::Value;
 }
+
+mopafy!(Aggregate);
 
 /// Helper trait to define multiple aggregate with the same content but a different name.
 /// Commonly used when you must aggregate a search with POST or with GET for example.
@@ -137,9 +153,9 @@ impl Analytics {
     }
 
     /// The method used to publish most analytics that do not need to be batched every hours
-    pub fn publish(&self, event: impl Aggregate, request: &HttpRequest) {
+    pub fn publish<T: Aggregate>(&self, event: T, request: &HttpRequest) {
         let Some(ref segment) = self.segment else { return };
         let user_agents = extract_user_agents(request);
-        let _ = segment.sender.try_send(Box::new(event));
+        let _ = segment.sender.try_send(segment_analytics::Message::new(event));
     }
 }
