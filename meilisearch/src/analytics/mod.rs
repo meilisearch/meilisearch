@@ -158,6 +158,10 @@ impl Analytics {
         }
     }
 
+    pub fn no_analytics() -> Self {
+        Self { segment: None }
+    }
+
     pub fn instance_uid(&self) -> Option<&InstanceUid> {
         self.segment.as_ref().map(|segment| segment.instance_uid.as_ref())
     }
