@@ -10,6 +10,7 @@ use actix_web::HttpRequest;
 use byte_unit::Byte;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::{AuthController, AuthFilter};
+use meilisearch_types::features::RuntimeTogglableFeatures;
 use meilisearch_types::locales::Locale;
 use meilisearch_types::InstanceUid;
 use once_cell::sync::Lazy;
@@ -173,7 +174,9 @@ impl SegmentAnalytics {
 struct Infos {
     env: String,
     experimental_contains_filter: bool,
+    experimental_vector_store: bool,
     experimental_enable_metrics: bool,
+    experimental_edit_documents_by_function: bool,
     experimental_search_queue_size: usize,
     experimental_drop_search_after: usize,
     experimental_nb_searches_per_core: usize,
@@ -210,8 +213,8 @@ struct Infos {
     ssl_tickets: bool,
 }
 
-impl From<Opt> for Infos {
-    fn from(options: Opt) -> Self {
+impl Infos {
+    pub fn new(options: Opt, features: RuntimeTogglableFeatures) -> Self {
         // We wants to decompose this whole struct by hand to be sure we don't forget
         // to add analytics when we add a field in the Opt.
         // Thus we must not insert `..` at the end.
@@ -254,8 +257,7 @@ impl From<Opt> for Infos {
             log_level,
             indexer_options,
             config_file_path,
-            #[cfg(feature = "analytics")]
-                no_analytics: _,
+            no_analytics: _,
         } = options;
 
         let schedule_snapshot = match schedule_snapshot {
@@ -266,18 +268,28 @@ impl From<Opt> for Infos {
         let IndexerOpts { max_indexing_memory, max_indexing_threads, skip_index_budget: _ } =
             indexer_options;
 
+        let RuntimeTogglableFeatures {
+            vector_store,
+            metrics,
+            logs_route,
+            edit_documents_by_function,
+            contains_filter,
+        } = features;
+
         // We're going to override every sensible information.
         // We consider information sensible if it contains a path, an address, or a key.
         Self {
             env,
-            experimental_contains_filter,
-            experimental_enable_metrics,
+            experimental_contains_filter: experimental_contains_filter | contains_filter,
+            experimental_vector_store: vector_store,
+            experimental_edit_documents_by_function: edit_documents_by_function,
+            experimental_enable_metrics: experimental_enable_metrics | metrics,
             experimental_search_queue_size,
             experimental_drop_search_after: experimental_drop_search_after.into(),
             experimental_nb_searches_per_core: experimental_nb_searches_per_core.into(),
             experimental_logs_mode,
             experimental_replication_parameters,
-            experimental_enable_logs_route,
+            experimental_enable_logs_route: experimental_enable_logs_route | logs_route,
             experimental_reduce_indexing_memory_usage,
             gpu_enabled: meilisearch_types::milli::vector::is_cuda_enabled(),
             db_path: db_path != PathBuf::from("./data.ms"),
@@ -319,7 +331,7 @@ pub struct Segment {
 }
 
 impl Segment {
-    fn compute_traits(opt: &Opt, stats: Stats) -> Value {
+    fn compute_traits(opt: &Opt, stats: Stats, features: RuntimeTogglableFeatures) -> Value {
         static FIRST_START_TIMESTAMP: Lazy<Instant> = Lazy::new(Instant::now);
         static SYSTEM: Lazy<Value> = Lazy::new(|| {
             let disks = Disks::new_with_refreshed_list();
@@ -347,7 +359,7 @@ impl Segment {
                 "indexes_number": stats.indexes.len(),
                 "documents_number": number_of_documents,
             },
-            "infos": Infos::from(opt.clone()),
+            "infos": Infos::new(opt.clone(), features),
         })
     }
 
@@ -399,9 +411,11 @@ impl Segment {
         index_scheduler: Arc<IndexScheduler>,
         auth_controller: Arc<AuthController>,
     ) {
-        if let Ok(stats) =
-            create_all_stats(index_scheduler.into(), auth_controller.into(), &AuthFilter::default())
-        {
+        if let Ok(stats) = create_all_stats(
+            index_scheduler.clone().into(),
+            auth_controller.into(),
+            &AuthFilter::default(),
+        ) {
             // Replace the version number with the prototype name if any.
             let version = if let Some(prototype) = build_info::DescribeResult::from_build()
                 .and_then(|describe| describe.as_prototype())
@@ -420,7 +434,11 @@ impl Segment {
                         },
                     })),
                     user: self.user.clone(),
-                    traits: Self::compute_traits(&self.opt, stats),
+                    traits: Self::compute_traits(
+                        &self.opt,
+                        stats,
+                        index_scheduler.features().runtime_features(),
+                    ),
                     ..Default::default()
                 })
                 .await;
