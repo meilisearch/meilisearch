@@ -29,6 +29,7 @@ pub mod documents;
 pub mod facet_search;
 pub mod search;
 pub mod settings;
+mod settings_analytics;
 pub mod similar;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
