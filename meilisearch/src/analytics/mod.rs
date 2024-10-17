@@ -128,6 +128,8 @@ pub trait AggregateMethod: 'static + Default + Send {
 /// A macro used to quickly define multiple aggregate method with their name
 /// Usage:
 /// ```rust
+/// use meilisearch::aggregate_methods;
+///
 /// aggregate_methods!(
 ///     SearchGET => "Documents Searched GET",
 ///     SearchPOST => "Documents Searched POST",
