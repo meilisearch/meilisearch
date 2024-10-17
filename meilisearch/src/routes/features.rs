@@ -17,24 +17,19 @@ use crate::extractors::sequential_extractor::SeqHandler;
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
-            .route(web::get().to(SeqHandler(get_features)))
+            .route(web::get().to(get_features))
             .route(web::patch().to(SeqHandler(patch_features))),
     );
 }
-
-crate::empty_analytics!(GetExperimentalFeatureAnalytics, "Experimental features Seen");
 
 async fn get_features(
     index_scheduler: GuardedData<
         ActionPolicy<{ actions::EXPERIMENTAL_FEATURES_GET }>,
         Data<IndexScheduler>,
     >,
-    req: HttpRequest,
-    analytics: Data<Analytics>,
 ) -> HttpResponse {
     let features = index_scheduler.features();
 
-    analytics.publish(GetExperimentalFeatureAnalytics::default(), &req);
     let features = features.runtime_features();
     debug!(returns = ?features, "Get features");
     HttpResponse::Ok().json(features)
