@@ -53,6 +53,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
         max_memory.map(|m| m / 2),
+        true,
     );
 
     let mut fid_docid_facet_strings_sorter = create_sorter(
@@ -62,6 +63,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
         max_memory.map(|m| m / 2),
+        true,
     );
 
     // The tuples represents the Del and Add side for a bitmap

@@ -49,6 +49,7 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
                 indexer.chunk_compression_level,
                 indexer.max_nb_chunks,
                 max_memory.map(|m| m / MAX_DISTANCE as usize),
+                true,
             )
         })
         .collect();

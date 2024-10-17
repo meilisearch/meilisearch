@@ -44,6 +44,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
         max_memory.map(|m| m / 3),
+        true,
     );
     let mut key_buffer = Vec::new();
     let mut del_words = BTreeSet::new();
@@ -98,6 +99,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
         max_memory.map(|m| m / 3),
+        true,
     );
 
     let mut exact_word_docids_sorter = create_sorter(
@@ -107,6 +109,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
         max_memory.map(|m| m / 3),
+        true,
     );
 
     let mut iter = word_fid_docids_sorter.into_stream_merger_iter()?;

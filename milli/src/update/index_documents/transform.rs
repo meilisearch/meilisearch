@@ -127,6 +127,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             indexer_settings.chunk_compression_level,
             indexer_settings.max_nb_chunks,
             indexer_settings.max_memory.map(|mem| mem / 2),
+            true,
         );
 
         // We initialize the sorter with the user indexing settings.
@@ -137,6 +138,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             indexer_settings.chunk_compression_level,
             indexer_settings.max_nb_chunks,
             indexer_settings.max_memory.map(|mem| mem / 2),
+            true,
         );
         let documents_ids = index.documents_ids(wtxn)?;
 
@@ -988,6 +990,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                 self.indexer_settings.chunk_compression_level,
                 self.indexer_settings.max_nb_chunks,
                 self.indexer_settings.max_memory.map(|mem| mem / 2),
+                true,
             ))
         } else {
             None
@@ -1030,6 +1033,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                     self.indexer_settings.chunk_compression_level,
                     self.indexer_settings.max_nb_chunks,
                     self.indexer_settings.max_memory.map(|mem| mem / 2),
+                    true,
                 ))
             } else {
                 None

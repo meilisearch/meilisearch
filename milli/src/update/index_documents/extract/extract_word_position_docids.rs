@@ -33,6 +33,7 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
         max_memory,
+        true,
     );
 
     let mut del_word_positions: BTreeSet<(u16, Vec<u8>)> = BTreeSet::new();

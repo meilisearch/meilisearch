@@ -46,6 +46,10 @@ impl<'extractor> Extractor<'extractor> for FacetedExtractorData<'extractor> {
                 self.grenad_parameters.chunk_compression_level,
                 self.grenad_parameters.max_nb_chunks,
                 self.max_memory,
+                // *NOTE*: this must not be set to true:
+                // 1. we're already using max parallelism in the pool, so it wouldn't help
+                // 2. it creates correctness issues if it causes to yield a borrow-mut wielding task
+                false,
             ),
         ))))
     }

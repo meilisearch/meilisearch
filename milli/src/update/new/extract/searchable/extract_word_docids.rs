@@ -48,6 +48,7 @@ impl WordDocidsCachedSorters {
                 indexer.chunk_compression_level,
                 indexer.max_nb_chunks,
                 max_memory,
+                false,
             ),
         );
         let word_docids = CboCachedSorter::new(
@@ -59,6 +60,7 @@ impl WordDocidsCachedSorters {
                 indexer.chunk_compression_level,
                 indexer.max_nb_chunks,
                 max_memory,
+                false,
             ),
         );
         let exact_word_docids = CboCachedSorter::new(
@@ -70,6 +72,7 @@ impl WordDocidsCachedSorters {
                 indexer.chunk_compression_level,
                 indexer.max_nb_chunks,
                 max_memory,
+                false,
             ),
         );
         let word_position_docids = CboCachedSorter::new(
@@ -81,6 +84,7 @@ impl WordDocidsCachedSorters {
                 indexer.chunk_compression_level,
                 indexer.max_nb_chunks,
                 max_memory,
+                false,
             ),
         );
         let fid_word_count_docids = CboCachedSorter::new(
@@ -92,6 +96,7 @@ impl WordDocidsCachedSorters {
                 indexer.chunk_compression_level,
                 indexer.max_nb_chunks,
                 max_memory,
+                false,
             ),
         );
 

@@ -60,6 +60,7 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
             self.chunk_compression_level,
             self.max_nb_chunks,
             self.max_memory,
+            true,
         );
 
         if !common_prefix_fst_words.is_empty() {

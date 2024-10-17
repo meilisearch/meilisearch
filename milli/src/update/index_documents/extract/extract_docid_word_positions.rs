@@ -40,6 +40,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
         max_memory,
+        true,
     );
 
     // initialize buffers.

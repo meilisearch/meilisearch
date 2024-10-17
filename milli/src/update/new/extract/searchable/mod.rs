@@ -50,6 +50,7 @@ impl<'extractor, EX: SearchableExtractor + Sync> Extractor<'extractor>
                 self.grenad_parameters.chunk_compression_level,
                 self.grenad_parameters.max_nb_chunks,
                 self.max_memory,
+                false,
             ),
         ))))
     }

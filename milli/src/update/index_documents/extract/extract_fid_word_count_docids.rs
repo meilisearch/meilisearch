@@ -35,6 +35,7 @@ pub fn extract_fid_word_count_docids<R: io::Read + io::Seek>(
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
         max_memory,
+        true,
     );
 
     let mut key_buffer = Vec::new();

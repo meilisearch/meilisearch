@@ -37,6 +37,7 @@ pub fn create_sorter<MF: MergeFunction>(
     chunk_compression_level: Option<u32>,
     max_nb_chunks: Option<usize>,
     max_memory: Option<usize>,
+    sort_in_parallel: bool,
 ) -> grenad::Sorter<MF> {
     let mut builder = grenad::Sorter::builder(merge);
     builder.chunk_compression_type(chunk_compression_type);
@@ -51,7 +52,7 @@ pub fn create_sorter<MF: MergeFunction>(
         builder.allow_realloc(false);
     }
     builder.sort_algorithm(sort_algorithm);
-    builder.sort_in_parallel(true);
+    builder.sort_in_parallel(sort_in_parallel);
     builder.build()
 }
 

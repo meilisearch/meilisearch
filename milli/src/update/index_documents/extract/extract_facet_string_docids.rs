@@ -61,6 +61,7 @@ fn extract_facet_string_docids_document_update<R: io::Read + io::Seek>(
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
         max_memory.map(|m| m / 2),
+        true,
     );
 
     let mut normalized_facet_string_docids_sorter = create_sorter(
@@ -70,6 +71,7 @@ fn extract_facet_string_docids_document_update<R: io::Read + io::Seek>(
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
         max_memory.map(|m| m / 2),
+        true,
     );
 
     let mut buffer = Vec::new();
@@ -149,6 +151,7 @@ fn extract_facet_string_docids_settings<R: io::Read + io::Seek>(
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
         max_memory.map(|m| m / 2),
+        true,
     );
 
     let mut normalized_facet_string_docids_sorter = create_sorter(
@@ -158,6 +161,7 @@ fn extract_facet_string_docids_settings<R: io::Read + io::Seek>(
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
         max_memory.map(|m| m / 2),
+        true,
     );
 
     let mut buffer = Vec::new();
