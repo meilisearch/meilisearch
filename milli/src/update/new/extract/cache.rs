@@ -1,5 +1,8 @@
 use std::cell::RefCell;
 use std::fmt::Write as _;
+use std::fs::File;
+use std::io::{self, BufReader, BufWriter, Read as _, Write as _};
+use std::vec;
 
 use bumpalo::Bump;
 use grenad::{MergeFunction, Sorter};
@@ -228,6 +231,71 @@ impl<MF> SpilledCache<MF> {
 }
 
 unsafe impl<'extractor, MF: Send> MostlySend for CboCachedSorter<'extractor, MF> {}
+
+pub struct UnorderedEntries {
+    entry_offsets: Vec<(u32, u32)>,
+    file: BufWriter<File>,
+}
+
+impl UnorderedEntries {
+    pub fn new(file: File) -> Self {
+        UnorderedEntries { entry_offsets: Vec::new(), file: BufWriter::new(file) }
+    }
+
+    /// Pushes a new tuple of key/value into a file.
+    ///
+    /// If the function fails you must not continue to use this struct and rather drop it.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if the key or value length is larger than 2^32 bytes.
+    pub fn push(&mut self, key: &[u8], value: &[u8]) -> io::Result<()> {
+        let key_len = key.len().try_into().unwrap();
+        let value_len = key.len().try_into().unwrap();
+
+        self.file.write_all(key)?;
+        self.file.write_all(value)?;
+
+        self.entry_offsets.push((key_len, value_len));
+
+        Ok(())
+    }
+
+    pub fn into_iter_ref(self) -> IntoIterRef {
+        let Self { entry_offsets, file } = self;
+        IntoIterRef { entry_offsets: entry_offsets.into_iter(), file, buffer: Vec::new() }
+    }
+}
+
+pub struct IntoIterRef {
+    entry_offsets: vec::IntoIter<(u32, u32)>,
+    file: BufReader<File>,
+    buffer: Vec<u8>,
+}
+
+impl IntoIterRef {
+    pub fn next(&mut self) -> io::Result<Option<(&[u8], &[u8])>> {
+        match self.entry_offsets.next() {
+            Some((key_len, value_len)) => {
+                let key_len = key_len as usize;
+                let value_len = value_len as usize;
+                let total_len = key_len + value_len;
+
+                self.buffer.resize(total_len, 0);
+                let buffer = &mut self.buffer[..total_len];
+
+                self.file.read_exact(buffer)?;
+                let buffer = &self.buffer[..total_len];
+
+                let (key, value) = buffer.split_at(key_len);
+                debug_assert_eq!(value.len(), value_len);
+
+                Ok(Some((key, value)))
+            }
+            None => Ok(None),
+        }
+    }
+}
 
 #[derive(Default, Debug)]
 struct Stats {
