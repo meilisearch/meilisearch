@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs::File;
-use std::num::NonZero;
+use std::io;
 use std::ops::DerefMut as _;
 
 use bumpalo::Bump;
@@ -17,17 +17,16 @@ use crate::update::new::indexer::document_changes::{
     IndexingContext, MostlySend, RefCellExt, ThreadLocal,
 };
 use crate::update::new::DocumentChange;
-use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
 use crate::{bucketed_position, DocumentId, FieldId, Index, Result, MAX_POSITION_PER_ATTRIBUTE};
 
 const MAX_COUNTED_WORDS: usize = 30;
 
 pub struct WordDocidsCachedSorters<'indexer> {
-    word_fid_docids: CboCachedSorter<'indexer, MergeDeladdCboRoaringBitmaps>,
-    word_docids: CboCachedSorter<'indexer, MergeDeladdCboRoaringBitmaps>,
-    exact_word_docids: CboCachedSorter<'indexer, MergeDeladdCboRoaringBitmaps>,
-    word_position_docids: CboCachedSorter<'indexer, MergeDeladdCboRoaringBitmaps>,
-    fid_word_count_docids: CboCachedSorter<'indexer, MergeDeladdCboRoaringBitmaps>,
+    word_fid_docids: CboCachedSorter<'indexer>,
+    word_docids: CboCachedSorter<'indexer>,
+    exact_word_docids: CboCachedSorter<'indexer>,
+    word_position_docids: CboCachedSorter<'indexer>,
+    fid_word_count_docids: CboCachedSorter<'indexer>,
     fid_word_count: HashMap<FieldId, (usize, usize)>,
     current_docid: Option<DocumentId>,
 }
@@ -35,83 +34,16 @@ pub struct WordDocidsCachedSorters<'indexer> {
 unsafe impl<'indexer> MostlySend for WordDocidsCachedSorters<'indexer> {}
 
 impl<'indexer> WordDocidsCachedSorters<'indexer> {
-    pub fn new_in(
-        indexer: GrenadParameters,
-        max_memory: Option<usize>,
-        alloc: RefBump<'indexer>,
-    ) -> Self {
-        let max_memory = max_memory.map(|max_memory| max_memory / 4);
-
-        let word_fid_docids = CboCachedSorter::new_in(
-            create_sorter(
-                grenad::SortAlgorithm::Stable,
-                MergeDeladdCboRoaringBitmaps,
-                indexer.chunk_compression_type,
-                indexer.chunk_compression_level,
-                indexer.max_nb_chunks,
-                max_memory,
-                false,
-            ),
-            RefBump::clone(&alloc),
-        );
-        let word_docids = CboCachedSorter::new_in(
-            create_sorter(
-                grenad::SortAlgorithm::Stable,
-                MergeDeladdCboRoaringBitmaps,
-                indexer.chunk_compression_type,
-                indexer.chunk_compression_level,
-                indexer.max_nb_chunks,
-                max_memory,
-                false,
-            ),
-            RefBump::clone(&alloc),
-        );
-        let exact_word_docids = CboCachedSorter::new_in(
-            create_sorter(
-                grenad::SortAlgorithm::Stable,
-                MergeDeladdCboRoaringBitmaps,
-                indexer.chunk_compression_type,
-                indexer.chunk_compression_level,
-                indexer.max_nb_chunks,
-                max_memory,
-                false,
-            ),
-            RefBump::clone(&alloc),
-        );
-        let word_position_docids = CboCachedSorter::new_in(
-            create_sorter(
-                grenad::SortAlgorithm::Stable,
-                MergeDeladdCboRoaringBitmaps,
-                indexer.chunk_compression_type,
-                indexer.chunk_compression_level,
-                indexer.max_nb_chunks,
-                max_memory,
-                false,
-            ),
-            RefBump::clone(&alloc),
-        );
-        let fid_word_count_docids = CboCachedSorter::new_in(
-            create_sorter(
-                grenad::SortAlgorithm::Stable,
-                MergeDeladdCboRoaringBitmaps,
-                indexer.chunk_compression_type,
-                indexer.chunk_compression_level,
-                indexer.max_nb_chunks,
-                max_memory,
-                false,
-            ),
-            alloc,
-        );
-
-        Self {
-            word_fid_docids,
-            word_docids,
-            exact_word_docids,
-            word_position_docids,
-            fid_word_count_docids,
+    pub fn new_in(alloc: RefBump<'indexer>) -> io::Result<Self> {
+        Ok(Self {
+            word_fid_docids: CboCachedSorter::new_in(RefBump::clone(&alloc))?,
+            word_docids: CboCachedSorter::new_in(RefBump::clone(&alloc))?,
+            exact_word_docids: CboCachedSorter::new_in(RefBump::clone(&alloc))?,
+            word_position_docids: CboCachedSorter::new_in(RefBump::clone(&alloc))?,
+            fid_word_count_docids: CboCachedSorter::new_in(alloc)?,
             fid_word_count: HashMap::new(),
             current_docid: None,
-        }
+        })
     }
 
     fn insert_add_u32(
@@ -253,21 +185,17 @@ impl WordDocidsMergerBuilders {
             current_docid: _,
         } = other;
 
-        let word_fid_docids_readers =
-            word_fid_docids.into_sorter().and_then(|s| s.into_reader_cursors());
-        let word_docids_readers = word_docids.into_sorter().and_then(|s| s.into_reader_cursors());
-        let exact_word_docids_readers =
-            exact_word_docids.into_sorter().and_then(|s| s.into_reader_cursors());
-        let word_position_docids_readers =
-            word_position_docids.into_sorter().and_then(|s| s.into_reader_cursors());
-        let fid_word_count_docids_readers =
-            fid_word_count_docids.into_sorter().and_then(|s| s.into_reader_cursors());
+        let word_fid_docids_entries = word_fid_docids.into_unordered_entries()?;
+        let word_docids_entries = word_docids.into_unordered_entries()?;
+        let exact_word_docids_entries = exact_word_docids.into_unordered_entries()?;
+        let word_position_docids_entries = word_position_docids.into_unordered_entries()?;
+        let fid_word_count_docids_entries = fid_word_count_docids.into_unordered_entries()?;
 
-        self.word_fid_docids.extend(word_fid_docids_readers?);
-        self.word_docids.extend(word_docids_readers?);
-        self.exact_word_docids.extend(exact_word_docids_readers?);
-        self.word_position_docids.extend(word_position_docids_readers?);
-        self.fid_word_count_docids.extend(fid_word_count_docids_readers?);
+        self.word_fid_docids.push(word_fid_docids_entries);
+        self.word_docids.push(word_docids_entries);
+        self.exact_word_docids.push(exact_word_docids_entries);
+        self.word_position_docids.push(word_position_docids_entries);
+        self.fid_word_count_docids.push(fid_word_count_docids_entries);
 
         Ok(())
     }
@@ -293,11 +221,7 @@ impl<'extractor> Extractor<'extractor> for WordDocidsExtractorData<'extractor> {
     type Data = RefCell<Option<WordDocidsCachedSorters<'extractor>>>;
 
     fn init_data(&self, extractor_alloc: RefBump<'extractor>) -> Result<Self::Data> {
-        Ok(RefCell::new(Some(WordDocidsCachedSorters::new_in(
-            self.grenad_parameters,
-            self.max_memory,
-            extractor_alloc,
-        ))))
+        Ok(RefCell::new(Some(WordDocidsCachedSorters::new_in(extractor_alloc))))
     }
 
     fn process(
@@ -357,7 +281,6 @@ pub struct WordDocidsExtractors;
 
 impl WordDocidsExtractors {
     pub fn run_extraction<'pl, 'fid, 'indexer, 'index, DC: DocumentChanges<'pl>>(
-        grenad_parameters: GrenadParameters,
         document_changes: &DC,
         indexing_context: IndexingContext<'fid, 'indexer, 'index>,
         extractor_allocs: &mut ThreadLocal<FullySend<RefCell<Bump>>>,

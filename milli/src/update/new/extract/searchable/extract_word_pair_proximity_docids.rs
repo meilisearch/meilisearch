@@ -31,7 +31,7 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
     // and to store the docids of the documents that have a number of words in a given field
     // equal to or under than MAX_COUNTED_WORDS.
     fn extract_document_change(
-        context: &DocumentChangeContext<RefCell<CboCachedSorter<MergeDeladdCboRoaringBitmaps>>>,
+        context: &DocumentChangeContext<RefCell<CboCachedSorter>>,
         document_tokenizer: &DocumentTokenizer,
         document_change: DocumentChange,
     ) -> Result<()> {

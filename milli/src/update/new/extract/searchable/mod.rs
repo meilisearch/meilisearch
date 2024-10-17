@@ -12,7 +12,6 @@ pub use extract_word_pair_proximity_docids::WordPairProximityDocidsExtractor;
 use grenad::Merger;
 use heed::RoTxn;
 use raw_collections::alloc::RefBump;
-use rayon::iter::{ParallelBridge, ParallelIterator};
 use tokenize_document::{tokenizer_builder, DocumentTokenizer};
 
 use super::cache::CboCachedSorter;
@@ -22,7 +21,7 @@ use crate::update::new::indexer::document_changes::{
     IndexingContext, ThreadLocal,
 };
 use crate::update::new::DocumentChange;
-use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
+use crate::update::{GrenadParameters, MergeDeladdCboRoaringBitmaps};
 use crate::{Index, Result, MAX_POSITION_PER_ATTRIBUTE};
 
 pub struct SearchableExtractorData<'extractor, EX: SearchableExtractor> {
@@ -35,21 +34,10 @@ pub struct SearchableExtractorData<'extractor, EX: SearchableExtractor> {
 impl<'extractor, EX: SearchableExtractor + Sync> Extractor<'extractor>
     for SearchableExtractorData<'extractor, EX>
 {
-    type Data = RefCell<CboCachedSorter<'extractor, MergeDeladdCboRoaringBitmaps>>;
+    type Data = RefCell<CboCachedSorter<'extractor>>;
 
     fn init_data(&self, extractor_alloc: RefBump<'extractor>) -> Result<Self::Data> {
-        Ok(RefCell::new(CboCachedSorter::new_in(
-            create_sorter(
-                grenad::SortAlgorithm::Stable,
-                MergeDeladdCboRoaringBitmaps,
-                self.grenad_parameters.chunk_compression_type,
-                self.grenad_parameters.chunk_compression_level,
-                self.grenad_parameters.max_nb_chunks,
-                self.max_memory,
-                false,
-            ),
-            extractor_alloc,
-        )))
+        Ok(RefCell::new(CboCachedSorter::new_in(extractor_alloc)?))
     }
 
     fn process(

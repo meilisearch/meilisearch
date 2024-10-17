@@ -1,14 +1,12 @@
 use std::cell::RefCell;
 use std::collections::HashSet;
-use std::fmt::Debug;
 use std::fs::File;
 use std::ops::DerefMut as _;
 
 use bumpalo::Bump;
-use grenad::{MergeFunction, Merger};
+use grenad::Merger;
 use heed::RoTxn;
 use raw_collections::alloc::RefBump;
-use rayon::iter::{ParallelBridge as _, ParallelIterator as _};
 use serde_json::Value;
 
 use super::super::cache::CboCachedSorter;
@@ -21,7 +19,7 @@ use crate::update::new::indexer::document_changes::{
     IndexingContext, RefCellExt, ThreadLocal,
 };
 use crate::update::new::DocumentChange;
-use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
+use crate::update::{GrenadParameters, MergeDeladdCboRoaringBitmaps};
 use crate::{DocumentId, FieldId, Index, Result, MAX_FACET_VALUE_LENGTH};
 
 pub struct FacetedExtractorData<'extractor> {
@@ -31,24 +29,10 @@ pub struct FacetedExtractorData<'extractor> {
 }
 
 impl<'extractor> Extractor<'extractor> for FacetedExtractorData<'extractor> {
-    type Data = RefCell<CboCachedSorter<'extractor, MergeDeladdCboRoaringBitmaps>>;
+    type Data = RefCell<CboCachedSorter<'extractor>>;
 
     fn init_data(&self, extractor_alloc: RefBump<'extractor>) -> Result<Self::Data> {
-        Ok(RefCell::new(CboCachedSorter::new_in(
-            create_sorter(
-                grenad::SortAlgorithm::Stable,
-                MergeDeladdCboRoaringBitmaps,
-                self.grenad_parameters.chunk_compression_type,
-                self.grenad_parameters.chunk_compression_level,
-                self.grenad_parameters.max_nb_chunks,
-                self.max_memory,
-                // *NOTE*: this must not be set to true:
-                // 1. we're already using max parallelism in the pool, so it wouldn't help
-                // 2. it creates correctness issues if it causes to yield a borrow-mut wielding task
-                false,
-            ),
-            extractor_alloc,
-        )))
+        Ok(RefCell::new(CboCachedSorter::new_in(extractor_alloc)?))
     }
 
     fn process(
@@ -64,7 +48,7 @@ pub struct FacetedDocidsExtractor;
 
 impl FacetedDocidsExtractor {
     fn extract_document_change(
-        context: &DocumentChangeContext<RefCell<CboCachedSorter<MergeDeladdCboRoaringBitmaps>>>,
+        context: &DocumentChangeContext<RefCell<CboCachedSorter>>,
         attributes_to_extract: &[&str],
         document_change: DocumentChange,
     ) -> Result<()> {
@@ -143,10 +127,10 @@ impl FacetedDocidsExtractor {
         }
     }
 
-    fn facet_fn_with_options<'extractor, MF>(
+    fn facet_fn_with_options<'extractor>(
         doc_alloc: &Bump,
-        cached_sorter: &mut CboCachedSorter<'extractor, MF>,
-        cache_fn: impl Fn(&mut CboCachedSorter<'extractor, MF>, &[u8], u32),
+        cached_sorter: &mut CboCachedSorter<'extractor>,
+        cache_fn: impl Fn(&mut CboCachedSorter<'extractor>, &[u8], u32),
         docid: DocumentId,
         fid: FieldId,
         value: &Value,
