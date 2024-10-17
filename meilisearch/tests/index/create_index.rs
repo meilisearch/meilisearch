@@ -9,15 +9,15 @@ use crate::json;
 
 #[actix_rt::test]
 async fn create_index_no_primary_key() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (response, code) = index.create(None).await;
 
     assert_eq!(code, 202);
 
     assert_eq!(response["status"], "enqueued");
 
-    let response = index.wait_task(0).await;
+    let response = index.wait_task(response.uid()).await;
 
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["type"], "indexCreation");
@@ -26,15 +26,15 @@ async fn create_index_no_primary_key() {
 
 #[actix_rt::test]
 async fn create_index_with_gzip_encoded_request() {
-    let server = Server::new().await;
-    let index = server.index_with_encoder("test", Encoder::Gzip);
+    let server = Server::new_shared();
+    let index = server.unique_index_with_encoder(Encoder::Gzip);
     let (response, code) = index.create(None).await;
 
     assert_eq!(code, 202);
 
     assert_eq!(response["status"], "enqueued");
 
-    let response = index.wait_task(0).await;
+    let response = index.wait_task(response.uid()).await;
 
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["type"], "indexCreation");
@@ -43,7 +43,7 @@ async fn create_index_with_gzip_encoded_request() {
 
 #[actix_rt::test]
 async fn create_index_with_gzip_encoded_request_and_receiving_brotli_encoded_response() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     let body = serde_json::to_string(&json!({
@@ -68,21 +68,20 @@ async fn create_index_with_gzip_encoded_request_and_receiving_brotli_encoded_res
     let parsed_response =
         serde_json::from_slice::<Value>(decoded.into().as_ref()).expect("Expecting valid json");
 
-    assert_eq!(parsed_response["taskUid"], 0);
     assert_eq!(parsed_response["indexUid"], "test");
 }
 
 #[actix_rt::test]
 async fn create_index_with_zlib_encoded_request() {
-    let server = Server::new().await;
-    let index = server.index_with_encoder("test", Encoder::Deflate);
+    let server = Server::new_shared();
+    let index = server.unique_index_with_encoder(Encoder::Deflate);
     let (response, code) = index.create(None).await;
 
     assert_eq!(code, 202);
 
     assert_eq!(response["status"], "enqueued");
 
-    let response = index.wait_task(0).await;
+    let response = index.wait_task(response.uid()).await;
 
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["type"], "indexCreation");
@@ -91,15 +90,15 @@ async fn create_index_with_zlib_encoded_request() {
 
 #[actix_rt::test]
 async fn create_index_with_brotli_encoded_request() {
-    let server = Server::new().await;
-    let index = server.index_with_encoder("test", Encoder::Brotli);
+    let server = Server::new_shared();
+    let index = server.unique_index_with_encoder(Encoder::Brotli);
     let (response, code) = index.create(None).await;
 
     assert_eq!(code, 202);
 
     assert_eq!(response["status"], "enqueued");
 
-    let response = index.wait_task(0).await;
+    let response = index.wait_task(response.uid()).await;
 
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["type"], "indexCreation");
@@ -108,15 +107,15 @@ async fn create_index_with_brotli_encoded_request() {
 
 #[actix_rt::test]
 async fn create_index_with_primary_key() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (response, code) = index.create(Some("primary")).await;
 
     assert_eq!(code, 202);
 
     assert_eq!(response["status"], "enqueued");
 
-    let response = index.wait_task(0).await;
+    let response = index.wait_task(response.uid()).await;
 
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["type"], "indexCreation");
@@ -127,12 +126,12 @@ async fn create_index_with_primary_key() {
 async fn create_index_with_invalid_primary_key() {
     let documents = json!([ { "id": 2, "title": "Pride and Prejudice" } ]);
 
-    let server = Server::new().await;
-    let index = server.index("movies");
-    let (_response, code) = index.add_documents(documents, Some("title")).await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (response, code) = index.add_documents(documents, Some("title")).await;
     assert_eq!(code, 202);
 
-    index.wait_task(0).await;
+    index.wait_task(response.uid()).await;
 
     let (response, code) = index.get().await;
     assert_eq!(code, 200);
@@ -140,10 +139,10 @@ async fn create_index_with_invalid_primary_key() {
 
     let documents = json!([ { "id": "e".repeat(513) } ]);
 
-    let (_response, code) = index.add_documents(documents, Some("id")).await;
+    let (response, code) = index.add_documents(documents, Some("id")).await;
     assert_eq!(code, 202);
 
-    index.wait_task(1).await;
+    index.wait_task(response.uid()).await;
 
     let (response, code) = index.get().await;
     assert_eq!(code, 200);
@@ -152,19 +151,19 @@ async fn create_index_with_invalid_primary_key() {
 
 #[actix_rt::test]
 async fn test_create_multiple_indexes() {
-    let server = Server::new().await;
-    let index1 = server.index("test1");
-    let index2 = server.index("test2");
-    let index3 = server.index("test3");
-    let index4 = server.index("test4");
+    let server = Server::new_shared();
+    let index1 = server.unique_index();
+    let index2 = server.unique_index();
+    let index3 = server.unique_index();
+    let index4 = server.unique_index();
 
-    index1.create(None).await;
-    index2.create(None).await;
-    index3.create(None).await;
+    let (task1, _) = index1.create(None).await;
+    let (task2, _) = index2.create(None).await;
+    let (task3, _) = index3.create(None).await;
 
-    index1.wait_task(0).await;
-    index1.wait_task(1).await;
-    index1.wait_task(2).await;
+    index1.wait_task(task1.uid()).await.succeeded();
+    index2.wait_task(task2.uid()).await.succeeded();
+    index3.wait_task(task3.uid()).await.succeeded();
 
     assert_eq!(index1.get().await.1, 200);
     assert_eq!(index2.get().await.1, 200);
@@ -174,18 +173,22 @@ async fn test_create_multiple_indexes() {
 
 #[actix_rt::test]
 async fn error_create_existing_index() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (_, code) = index.create(Some("primary")).await;
 
     assert_eq!(code, 202);
 
-    index.create(Some("primary")).await;
+    let (task, _) = index.create(Some("primary")).await;
 
-    let response = index.wait_task(1).await;
+    let response = index.wait_task(task.uid()).await;
+    let msg = format!(
+        "Index `{}` already exists.",
+        task["indexUid"].as_str().expect("indexUid should exist").trim_matches('"')
+    );
 
     let expected_response = json!({
-        "message": "Index `test` already exists.",
+        "message": msg,
         "code": "index_already_exists",
         "type": "invalid_request",
         "link":"https://docs.meilisearch.com/errors#index_already_exists"
