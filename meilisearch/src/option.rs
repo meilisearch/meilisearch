@@ -29,7 +29,6 @@ const MEILI_MASTER_KEY: &str = "MEILI_MASTER_KEY";
 const MEILI_ENV: &str = "MEILI_ENV";
 const MEILI_TASK_WEBHOOK_URL: &str = "MEILI_TASK_WEBHOOK_URL";
 const MEILI_TASK_WEBHOOK_AUTHORIZATION_HEADER: &str = "MEILI_TASK_WEBHOOK_AUTHORIZATION_HEADER";
-#[cfg(feature = "analytics")]
 const MEILI_NO_ANALYTICS: &str = "MEILI_NO_ANALYTICS";
 const MEILI_HTTP_PAYLOAD_SIZE_LIMIT: &str = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT";
 const MEILI_SSL_CERT_PATH: &str = "MEILI_SSL_CERT_PATH";
@@ -210,7 +209,6 @@ pub struct Opt {
     /// Meilisearch automatically collects data from all instances that do not opt out using this flag.
     /// All gathered data is used solely for the purpose of improving Meilisearch, and can be deleted
     /// at any time.
-    #[cfg(feature = "analytics")]
     #[serde(default)] // we can't send true
     #[clap(long, env = MEILI_NO_ANALYTICS)]
     pub no_analytics: bool,
@@ -425,7 +423,6 @@ pub struct Opt {
 
 impl Opt {
     /// Whether analytics should be enabled or not.
-    #[cfg(all(not(debug_assertions), feature = "analytics"))]
     pub fn analytics(&self) -> bool {
         !self.no_analytics
     }
@@ -505,7 +502,6 @@ impl Opt {
             ignore_missing_dump: _,
             ignore_dump_if_db_exists: _,
             config_file_path: _,
-            #[cfg(feature = "analytics")]
             no_analytics,
             experimental_contains_filter,
             experimental_enable_metrics,
@@ -533,10 +529,7 @@ impl Opt {
             );
         }
 
-        #[cfg(feature = "analytics")]
-        {
-            export_to_env_if_not_present(MEILI_NO_ANALYTICS, no_analytics.to_string());
-        }
+        export_to_env_if_not_present(MEILI_NO_ANALYTICS, no_analytics.to_string());
         export_to_env_if_not_present(
             MEILI_HTTP_PAYLOAD_SIZE_LIMIT,
             http_payload_size_limit.to_string(),

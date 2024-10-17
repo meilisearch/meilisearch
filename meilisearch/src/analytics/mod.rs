@@ -1,5 +1,3 @@
-#![allow(clippy::transmute_ptr_to_ref)] // mopify isn't updated with the latest version of clippy yet
-
 pub mod segment_analytics;
 
 use std::fs;
@@ -85,13 +83,19 @@ pub enum DocumentFetchKind {
     Normal { with_filter: bool, limit: usize, offset: usize, retrieve_vectors: bool },
 }
 
+/// To send an event to segment, your event must be able to aggregate itself with another event of the same type.
 pub trait Aggregate: 'static + mopa::Any + Send {
+    /// The name of the event that will be sent to segment.
     fn event_name(&self) -> &'static str;
 
+    /// Will be called every time an event has been used twice before segment flushed its buffer.
     fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self>
     where
         Self: Sized;
 
+    /// An internal helper function, you shouldn't implement it yourself.
+    /// This function should always be called on the same type. If `this` and `other`
+    /// aren't the same type behind the function will do nothing and return `None`.
     fn downcast_aggregate(
         this: Box<dyn Aggregate>,
         other: Box<dyn Aggregate>,
@@ -100,6 +104,7 @@ pub trait Aggregate: 'static + mopa::Any + Send {
         Self: Sized,
     {
         if this.is::<Self>() && other.is::<Self>() {
+            // Both the two following lines cannot fail, but just to be sure we don't crash, we're still avoiding unwrapping
             let this = this.downcast::<Self>().ok()?;
             let other = other.downcast::<Self>().ok()?;
             Some(Self::aggregate(this, other))
@@ -108,18 +113,26 @@ pub trait Aggregate: 'static + mopa::Any + Send {
         }
     }
 
+    /// Converts your structure to the final event that'll be sent to segment.
     fn into_event(self: Box<Self>) -> serde_json::Value;
 }
 
 mopafy!(Aggregate);
 
-/// Helper trait to define multiple aggregate with the same content but a different name.
-/// Commonly used when you must aggregate a search with POST or with GET for example.
+/// Helper trait to define multiple aggregates with the same content but a different name.
+/// Commonly used when you must aggregate a search with POST or with GET, for example.
 pub trait AggregateMethod: 'static + Default + Send {
     fn event_name() -> &'static str;
 }
 
 /// A macro used to quickly define multiple aggregate method with their name
+/// Usage:
+/// ```rust
+/// aggregate_methods!(
+///     SearchGET => "Documents Searched GET",
+///     SearchPOST => "Documents Searched POST",
+/// );
+/// ```
 #[macro_export]
 macro_rules! aggregate_methods {
     ($method:ident => $event_name:literal) => {

@@ -695,7 +695,6 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
 aggregate_methods!(
     SearchGET => "Documents Searched GET",
     SearchPOST => "Documents Searched POST",
-
 );
 
 impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
