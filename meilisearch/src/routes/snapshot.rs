@@ -3,7 +3,6 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::tasks::KindWithContent;
-use serde_json::json;
 use tracing::debug;
 
 use crate::analytics::Analytics;
@@ -17,13 +16,15 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(SeqHandler(create_snapshot))));
 }
 
+crate::empty_analytics!(SnapshotAnalytics, "Snapshot Created");
+
 pub async fn create_snapshot(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SNAPSHOTS_CREATE }>, Data<IndexScheduler>>,
     req: HttpRequest,
     opt: web::Data<Opt>,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    analytics.publish("Snapshot Created".to_string(), json!({}), Some(&req));
+    analytics.publish(SnapshotAnalytics::default(), &req);
 
     let task = KindWithContent::SnapshotCreation;
     let uid = get_task_id(&req, &opt)?;

@@ -9,8 +9,9 @@ use actix_web::test;
 use actix_web::test::TestRequest;
 use actix_web::web::Data;
 use index_scheduler::IndexScheduler;
+use meilisearch::analytics::Analytics;
 use meilisearch::search_queue::SearchQueue;
-use meilisearch::{analytics, create_app, Opt, SubscriberForSecondLayer};
+use meilisearch::{create_app, Opt, SubscriberForSecondLayer};
 use meilisearch_auth::AuthController;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::Layer;
@@ -141,7 +142,7 @@ impl Service {
             Data::new(search_queue),
             self.options.clone(),
             (route_layer_handle, stderr_layer_handle),
-            analytics::MockAnalytics::new(&self.options),
+            Data::new(Analytics::no_analytics()),
             true,
         ))
         .await

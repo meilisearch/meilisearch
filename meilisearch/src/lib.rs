@@ -120,7 +120,7 @@ pub fn create_app(
     search_queue: Data<SearchQueue>,
     opt: Opt,
     logs: (LogRouteHandle, LogStderrHandle),
-    analytics: Arc<dyn Analytics>,
+    analytics: Data<Analytics>,
     enable_dashboard: bool,
 ) -> actix_web::App<
     impl ServiceFactory<
@@ -473,14 +473,14 @@ pub fn configure_data(
     search_queue: Data<SearchQueue>,
     opt: &Opt,
     (logs_route, logs_stderr): (LogRouteHandle, LogStderrHandle),
-    analytics: Arc<dyn Analytics>,
+    analytics: Data<Analytics>,
 ) {
     let http_payload_size_limit = opt.http_payload_size_limit.as_u64() as usize;
     config
         .app_data(index_scheduler)
         .app_data(auth)
         .app_data(search_queue)
-        .app_data(web::Data::from(analytics))
+        .app_data(analytics)
         .app_data(web::Data::new(logs_route))
         .app_data(web::Data::new(logs_stderr))
         .app_data(web::Data::new(opt.clone()))

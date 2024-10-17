@@ -1,15 +1,16 @@
+use std::any::TypeId;
 use std::collections::{BTreeSet, BinaryHeap, HashMap, HashSet};
 use std::fs;
-use std::mem::take;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use actix_web::http::header::{CONTENT_TYPE, USER_AGENT};
+use actix_web::http::header::USER_AGENT;
 use actix_web::HttpRequest;
 use byte_unit::Byte;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::{AuthController, AuthFilter};
+use meilisearch_types::features::RuntimeTogglableFeatures;
 use meilisearch_types::locales::Locale;
 use meilisearch_types::InstanceUid;
 use once_cell::sync::Lazy;
@@ -24,23 +25,17 @@ use tokio::select;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use uuid::Uuid;
 
-use super::{
-    config_user_id_path, DocumentDeletionKind, DocumentFetchKind, MEILISEARCH_CONFIG_PATH,
-};
-use crate::analytics::Analytics;
+use super::{config_user_id_path, Aggregate, AggregateMethod, MEILISEARCH_CONFIG_PATH};
 use crate::option::{
     default_http_addr, IndexerOpts, LogMode, MaxMemory, MaxThreads, ScheduleSnapshot,
 };
-use crate::routes::indexes::documents::{DocumentEditionByFunction, UpdateDocumentsQuery};
-use crate::routes::indexes::facet_search::FacetSearchQuery;
 use crate::routes::{create_all_stats, Stats};
 use crate::search::{
-    FacetSearchResult, FederatedSearch, MatchingStrategy, SearchQuery, SearchQueryWithIndex,
-    SearchResult, SimilarQuery, SimilarResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
-    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
-    DEFAULT_SEMANTIC_RATIO,
+    FederatedSearch, SearchQuery, SearchQueryWithIndex, SearchResult, SimilarQuery, SimilarResult,
+    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEMANTIC_RATIO,
 };
-use crate::Opt;
+use crate::{aggregate_methods, Opt};
 
 const ANALYTICS_HEADER: &str = "X-Meilisearch-Client";
 
@@ -57,7 +52,7 @@ fn write_user_id(db_path: &Path, user_id: &InstanceUid) {
 
 const SEGMENT_API_KEY: &str = "P3FWhhEsJiEDCuEHpmcN9DHcK4hVfBvb";
 
-pub fn extract_user_agents(request: &HttpRequest) -> Vec<String> {
+pub fn extract_user_agents(request: &HttpRequest) -> HashSet<String> {
     request
         .headers()
         .get(ANALYTICS_HEADER)
@@ -70,26 +65,42 @@ pub fn extract_user_agents(request: &HttpRequest) -> Vec<String> {
         .collect()
 }
 
-pub enum AnalyticsMsg {
-    BatchMessage(Track),
-    AggregateGetSearch(SearchAggregator),
-    AggregatePostSearch(SearchAggregator),
-    AggregateGetSimilar(SimilarAggregator),
-    AggregatePostSimilar(SimilarAggregator),
-    AggregatePostMultiSearch(MultiSearchAggregator),
-    AggregatePostFacetSearch(FacetSearchAggregator),
-    AggregateAddDocuments(DocumentsAggregator),
-    AggregateDeleteDocuments(DocumentsDeletionAggregator),
-    AggregateUpdateDocuments(DocumentsAggregator),
-    AggregateEditDocumentsByFunction(EditDocumentsByFunctionAggregator),
-    AggregateGetFetchDocuments(DocumentsFetchAggregator),
-    AggregatePostFetchDocuments(DocumentsFetchAggregator),
+pub struct Message {
+    // Since the type_id is solved statically we cannot retrieve it from the Box.
+    // Thus we have to send it in the message directly.
+    type_id: TypeId,
+    // Same for the aggregate function.
+    #[allow(clippy::type_complexity)]
+    aggregator_function: fn(Box<dyn Aggregate>, Box<dyn Aggregate>) -> Option<Box<dyn Aggregate>>,
+    event: Event,
+}
+
+pub struct Event {
+    original: Box<dyn Aggregate>,
+    timestamp: OffsetDateTime,
+    user_agents: HashSet<String>,
+    total: usize,
+}
+
+impl Message {
+    pub fn new<T: Aggregate>(event: T, request: &HttpRequest) -> Self {
+        Self {
+            type_id: TypeId::of::<T>(),
+            event: Event {
+                original: Box::new(event),
+                timestamp: OffsetDateTime::now_utc(),
+                user_agents: extract_user_agents(request),
+                total: 1,
+            },
+            aggregator_function: T::downcast_aggregate,
+        }
+    }
 }
 
 pub struct SegmentAnalytics {
-    instance_uid: InstanceUid,
-    sender: Sender<AnalyticsMsg>,
-    user: User,
+    pub instance_uid: InstanceUid,
+    pub user: User,
+    pub sender: Sender<Message>,
 }
 
 impl SegmentAnalytics {
@@ -98,7 +109,7 @@ impl SegmentAnalytics {
         opt: &Opt,
         index_scheduler: Arc<IndexScheduler>,
         auth_controller: Arc<AuthController>,
-    ) -> Arc<dyn Analytics> {
+    ) -> Option<Arc<Self>> {
         let instance_uid = super::find_user_id(&opt.db_path);
         let first_time_run = instance_uid.is_none();
         let instance_uid = instance_uid.unwrap_or_else(Uuid::new_v4);
@@ -108,7 +119,7 @@ impl SegmentAnalytics {
 
         // if reqwest throws an error we won't be able to send analytics
         if client.is_err() {
-            return super::MockAnalytics::new(opt);
+            return None;
         }
 
         let client =
@@ -144,113 +155,13 @@ impl SegmentAnalytics {
             user: user.clone(),
             opt: opt.clone(),
             batcher,
-            post_search_aggregator: SearchAggregator::default(),
-            post_multi_search_aggregator: MultiSearchAggregator::default(),
-            post_facet_search_aggregator: FacetSearchAggregator::default(),
-            get_search_aggregator: SearchAggregator::default(),
-            add_documents_aggregator: DocumentsAggregator::default(),
-            delete_documents_aggregator: DocumentsDeletionAggregator::default(),
-            update_documents_aggregator: DocumentsAggregator::default(),
-            edit_documents_by_function_aggregator: EditDocumentsByFunctionAggregator::default(),
-            get_fetch_documents_aggregator: DocumentsFetchAggregator::default(),
-            post_fetch_documents_aggregator: DocumentsFetchAggregator::default(),
-            get_similar_aggregator: SimilarAggregator::default(),
-            post_similar_aggregator: SimilarAggregator::default(),
+            events: HashMap::new(),
         });
         tokio::spawn(segment.run(index_scheduler.clone(), auth_controller.clone()));
 
         let this = Self { instance_uid, sender, user: user.clone() };
 
-        Arc::new(this)
-    }
-}
-
-impl super::Analytics for SegmentAnalytics {
-    fn instance_uid(&self) -> Option<&InstanceUid> {
-        Some(&self.instance_uid)
-    }
-
-    fn publish(&self, event_name: String, mut send: Value, request: Option<&HttpRequest>) {
-        let user_agent = request.map(extract_user_agents);
-
-        send["user-agent"] = json!(user_agent);
-        let event = Track {
-            user: self.user.clone(),
-            event: event_name.clone(),
-            properties: send,
-            ..Default::default()
-        };
-        let _ = self.sender.try_send(AnalyticsMsg::BatchMessage(event));
-    }
-
-    fn get_search(&self, aggregate: SearchAggregator) {
-        let _ = self.sender.try_send(AnalyticsMsg::AggregateGetSearch(aggregate));
-    }
-
-    fn post_search(&self, aggregate: SearchAggregator) {
-        let _ = self.sender.try_send(AnalyticsMsg::AggregatePostSearch(aggregate));
-    }
-
-    fn get_similar(&self, aggregate: SimilarAggregator) {
-        let _ = self.sender.try_send(AnalyticsMsg::AggregateGetSimilar(aggregate));
-    }
-
-    fn post_similar(&self, aggregate: SimilarAggregator) {
-        let _ = self.sender.try_send(AnalyticsMsg::AggregatePostSimilar(aggregate));
-    }
-
-    fn post_facet_search(&self, aggregate: FacetSearchAggregator) {
-        let _ = self.sender.try_send(AnalyticsMsg::AggregatePostFacetSearch(aggregate));
-    }
-
-    fn post_multi_search(&self, aggregate: MultiSearchAggregator) {
-        let _ = self.sender.try_send(AnalyticsMsg::AggregatePostMultiSearch(aggregate));
-    }
-
-    fn add_documents(
-        &self,
-        documents_query: &UpdateDocumentsQuery,
-        index_creation: bool,
-        request: &HttpRequest,
-    ) {
-        let aggregate = DocumentsAggregator::from_query(documents_query, index_creation, request);
-        let _ = self.sender.try_send(AnalyticsMsg::AggregateAddDocuments(aggregate));
-    }
-
-    fn delete_documents(&self, kind: DocumentDeletionKind, request: &HttpRequest) {
-        let aggregate = DocumentsDeletionAggregator::from_query(kind, request);
-        let _ = self.sender.try_send(AnalyticsMsg::AggregateDeleteDocuments(aggregate));
-    }
-
-    fn update_documents(
-        &self,
-        documents_query: &UpdateDocumentsQuery,
-        index_creation: bool,
-        request: &HttpRequest,
-    ) {
-        let aggregate = DocumentsAggregator::from_query(documents_query, index_creation, request);
-        let _ = self.sender.try_send(AnalyticsMsg::AggregateUpdateDocuments(aggregate));
-    }
-
-    fn update_documents_by_function(
-        &self,
-        documents_query: &DocumentEditionByFunction,
-        index_creation: bool,
-        request: &HttpRequest,
-    ) {
-        let aggregate =
-            EditDocumentsByFunctionAggregator::from_query(documents_query, index_creation, request);
-        let _ = self.sender.try_send(AnalyticsMsg::AggregateEditDocumentsByFunction(aggregate));
-    }
-
-    fn get_fetch_documents(&self, documents_query: &DocumentFetchKind, request: &HttpRequest) {
-        let aggregate = DocumentsFetchAggregator::from_query(documents_query, request);
-        let _ = self.sender.try_send(AnalyticsMsg::AggregateGetFetchDocuments(aggregate));
-    }
-
-    fn post_fetch_documents(&self, documents_query: &DocumentFetchKind, request: &HttpRequest) {
-        let aggregate = DocumentsFetchAggregator::from_query(documents_query, request);
-        let _ = self.sender.try_send(AnalyticsMsg::AggregatePostFetchDocuments(aggregate));
+        Some(Arc::new(this))
     }
 }
 
@@ -263,7 +174,9 @@ impl super::Analytics for SegmentAnalytics {
 struct Infos {
     env: String,
     experimental_contains_filter: bool,
+    experimental_vector_store: bool,
     experimental_enable_metrics: bool,
+    experimental_edit_documents_by_function: bool,
     experimental_search_queue_size: usize,
     experimental_drop_search_after: usize,
     experimental_nb_searches_per_core: usize,
@@ -300,8 +213,8 @@ struct Infos {
     ssl_tickets: bool,
 }
 
-impl From<Opt> for Infos {
-    fn from(options: Opt) -> Self {
+impl Infos {
+    pub fn new(options: Opt, features: RuntimeTogglableFeatures) -> Self {
         // We wants to decompose this whole struct by hand to be sure we don't forget
         // to add analytics when we add a field in the Opt.
         // Thus we must not insert `..` at the end.
@@ -344,8 +257,7 @@ impl From<Opt> for Infos {
             log_level,
             indexer_options,
             config_file_path,
-            #[cfg(feature = "analytics")]
-                no_analytics: _,
+            no_analytics: _,
         } = options;
 
         let schedule_snapshot = match schedule_snapshot {
@@ -356,18 +268,28 @@ impl From<Opt> for Infos {
         let IndexerOpts { max_indexing_memory, max_indexing_threads, skip_index_budget: _ } =
             indexer_options;
 
+        let RuntimeTogglableFeatures {
+            vector_store,
+            metrics,
+            logs_route,
+            edit_documents_by_function,
+            contains_filter,
+        } = features;
+
         // We're going to override every sensible information.
         // We consider information sensible if it contains a path, an address, or a key.
         Self {
             env,
-            experimental_contains_filter,
-            experimental_enable_metrics,
+            experimental_contains_filter: experimental_contains_filter | contains_filter,
+            experimental_vector_store: vector_store,
+            experimental_edit_documents_by_function: edit_documents_by_function,
+            experimental_enable_metrics: experimental_enable_metrics | metrics,
             experimental_search_queue_size,
             experimental_drop_search_after: experimental_drop_search_after.into(),
             experimental_nb_searches_per_core: experimental_nb_searches_per_core.into(),
             experimental_logs_mode,
             experimental_replication_parameters,
-            experimental_enable_logs_route,
+            experimental_enable_logs_route: experimental_enable_logs_route | logs_route,
             experimental_reduce_indexing_memory_usage,
             gpu_enabled: meilisearch_types::milli::vector::is_cuda_enabled(),
             db_path: db_path != PathBuf::from("./data.ms"),
@@ -401,26 +323,15 @@ impl From<Opt> for Infos {
 }
 
 pub struct Segment {
-    inbox: Receiver<AnalyticsMsg>,
+    inbox: Receiver<Message>,
     user: User,
     opt: Opt,
     batcher: AutoBatcher,
-    get_search_aggregator: SearchAggregator,
-    post_search_aggregator: SearchAggregator,
-    post_multi_search_aggregator: MultiSearchAggregator,
-    post_facet_search_aggregator: FacetSearchAggregator,
-    add_documents_aggregator: DocumentsAggregator,
-    delete_documents_aggregator: DocumentsDeletionAggregator,
-    update_documents_aggregator: DocumentsAggregator,
-    edit_documents_by_function_aggregator: EditDocumentsByFunctionAggregator,
-    get_fetch_documents_aggregator: DocumentsFetchAggregator,
-    post_fetch_documents_aggregator: DocumentsFetchAggregator,
-    get_similar_aggregator: SimilarAggregator,
-    post_similar_aggregator: SimilarAggregator,
+    events: HashMap<TypeId, Event>,
 }
 
 impl Segment {
-    fn compute_traits(opt: &Opt, stats: Stats) -> Value {
+    fn compute_traits(opt: &Opt, stats: Stats, features: RuntimeTogglableFeatures) -> Value {
         static FIRST_START_TIMESTAMP: Lazy<Instant> = Lazy::new(Instant::now);
         static SYSTEM: Lazy<Value> = Lazy::new(|| {
             let disks = Disks::new_with_refreshed_list();
@@ -448,7 +359,7 @@ impl Segment {
                 "indexes_number": stats.indexes.len(),
                 "documents_number": number_of_documents,
             },
-            "infos": Infos::from(opt.clone()),
+            "infos": Infos::new(opt.clone(), features),
         })
     }
 
@@ -467,26 +378,32 @@ impl Segment {
                 _ = interval.tick() => {
                     self.tick(index_scheduler.clone(), auth_controller.clone()).await;
                 },
-                msg = self.inbox.recv() => {
-                    match msg {
-                        Some(AnalyticsMsg::BatchMessage(msg)) => drop(self.batcher.push(msg).await),
-                        Some(AnalyticsMsg::AggregateGetSearch(agreg)) => self.get_search_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregatePostSearch(agreg)) => self.post_search_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregatePostMultiSearch(agreg)) => self.post_multi_search_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregatePostFacetSearch(agreg)) => self.post_facet_search_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregateAddDocuments(agreg)) => self.add_documents_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregateDeleteDocuments(agreg)) => self.delete_documents_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregateUpdateDocuments(agreg)) => self.update_documents_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregateEditDocumentsByFunction(agreg)) => self.edit_documents_by_function_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregateGetFetchDocuments(agreg)) => self.get_fetch_documents_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregatePostFetchDocuments(agreg)) => self.post_fetch_documents_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregateGetSimilar(agreg)) => self.get_similar_aggregator.aggregate(agreg),
-                        Some(AnalyticsMsg::AggregatePostSimilar(agreg)) => self.post_similar_aggregator.aggregate(agreg),
-                        None => (),
-                    }
-                }
+                Some(msg) = self.inbox.recv() => {
+                    self.handle_msg(msg);
+               }
             }
         }
+    }
+
+    fn handle_msg(&mut self, Message { type_id, aggregator_function, event }: Message) {
+        let new_event = match self.events.remove(&type_id) {
+            Some(old) => {
+                // The function should never fail since we retrieved the corresponding TypeId in the map. But in the unfortunate
+                // case it could happens we're going to silently ignore the error
+                let Some(original) = (aggregator_function)(old.original, event.original) else {
+                    return;
+                };
+                Event {
+                    original,
+                    // We always want to return the FIRST timestamp ever encountered
+                    timestamp: old.timestamp,
+                    user_agents: old.user_agents.union(&event.user_agents).cloned().collect(),
+                    total: old.total.saturating_add(event.total),
+                }
+            }
+            None => event,
+        };
+        self.events.insert(type_id, new_event);
     }
 
     async fn tick(
@@ -494,9 +411,11 @@ impl Segment {
         index_scheduler: Arc<IndexScheduler>,
         auth_controller: Arc<AuthController>,
     ) {
-        if let Ok(stats) =
-            create_all_stats(index_scheduler.into(), auth_controller.into(), &AuthFilter::default())
-        {
+        if let Ok(stats) = create_all_stats(
+            index_scheduler.clone().into(),
+            auth_controller.into(),
+            &AuthFilter::default(),
+        ) {
             // Replace the version number with the prototype name if any.
             let version = if let Some(prototype) = build_info::DescribeResult::from_build()
                 .and_then(|describe| describe.as_prototype())
@@ -515,104 +434,48 @@ impl Segment {
                         },
                     })),
                     user: self.user.clone(),
-                    traits: Self::compute_traits(&self.opt, stats),
+                    traits: Self::compute_traits(
+                        &self.opt,
+                        stats,
+                        index_scheduler.features().runtime_features(),
+                    ),
                     ..Default::default()
                 })
                 .await;
         }
 
-        let Segment {
-            inbox: _,
-            opt: _,
-            batcher: _,
-            user,
-            get_search_aggregator,
-            post_search_aggregator,
-            post_multi_search_aggregator,
-            post_facet_search_aggregator,
-            add_documents_aggregator,
-            delete_documents_aggregator,
-            update_documents_aggregator,
-            edit_documents_by_function_aggregator,
-            get_fetch_documents_aggregator,
-            post_fetch_documents_aggregator,
-            get_similar_aggregator,
-            post_similar_aggregator,
-        } = self;
+        // We empty the list of events
+        let events = std::mem::take(&mut self.events);
 
-        if let Some(get_search) =
-            take(get_search_aggregator).into_event(user, "Documents Searched GET")
-        {
-            let _ = self.batcher.push(get_search).await;
-        }
-        if let Some(post_search) =
-            take(post_search_aggregator).into_event(user, "Documents Searched POST")
-        {
-            let _ = self.batcher.push(post_search).await;
-        }
-        if let Some(post_multi_search) = take(post_multi_search_aggregator)
-            .into_event(user, "Documents Searched by Multi-Search POST")
-        {
-            let _ = self.batcher.push(post_multi_search).await;
-        }
-        if let Some(post_facet_search) =
-            take(post_facet_search_aggregator).into_event(user, "Facet Searched POST")
-        {
-            let _ = self.batcher.push(post_facet_search).await;
-        }
-        if let Some(add_documents) =
-            take(add_documents_aggregator).into_event(user, "Documents Added")
-        {
-            let _ = self.batcher.push(add_documents).await;
-        }
-        if let Some(delete_documents) =
-            take(delete_documents_aggregator).into_event(user, "Documents Deleted")
-        {
-            let _ = self.batcher.push(delete_documents).await;
-        }
-        if let Some(update_documents) =
-            take(update_documents_aggregator).into_event(user, "Documents Updated")
-        {
-            let _ = self.batcher.push(update_documents).await;
-        }
-        if let Some(edit_documents_by_function) = take(edit_documents_by_function_aggregator)
-            .into_event(user, "Documents Edited By Function")
-        {
-            let _ = self.batcher.push(edit_documents_by_function).await;
-        }
-        if let Some(get_fetch_documents) =
-            take(get_fetch_documents_aggregator).into_event(user, "Documents Fetched GET")
-        {
-            let _ = self.batcher.push(get_fetch_documents).await;
-        }
-        if let Some(post_fetch_documents) =
-            take(post_fetch_documents_aggregator).into_event(user, "Documents Fetched POST")
-        {
-            let _ = self.batcher.push(post_fetch_documents).await;
+        for (_, event) in events {
+            let Event { original, timestamp, user_agents, total } = event;
+            let name = original.event_name();
+            let mut properties = original.into_event();
+            if properties["user-agent"].is_null() {
+                properties["user-agent"] = json!(user_agents);
+            };
+            if properties["requests"]["total_received"].is_null() {
+                properties["requests"]["total_received"] = total.into();
+            };
+
+            let _ = self
+                .batcher
+                .push(Track {
+                    user: self.user.clone(),
+                    event: name.to_string(),
+                    properties,
+                    timestamp: Some(timestamp),
+                    ..Default::default()
+                })
+                .await;
         }
 
-        if let Some(get_similar_documents) =
-            take(get_similar_aggregator).into_event(user, "Similar GET")
-        {
-            let _ = self.batcher.push(get_similar_documents).await;
-        }
-
-        if let Some(post_similar_documents) =
-            take(post_similar_aggregator).into_event(user, "Similar POST")
-        {
-            let _ = self.batcher.push(post_similar_documents).await;
-        }
         let _ = self.batcher.flush().await;
     }
 }
 
 #[derive(Default)]
-pub struct SearchAggregator {
-    timestamp: Option<OffsetDateTime>,
-
-    // context
-    user_agents: HashSet<String>,
-
+pub struct SearchAggregator<Method: AggregateMethod> {
     // requests
     total_received: usize,
     total_succeeded: usize,
@@ -684,11 +547,13 @@ pub struct SearchAggregator {
     show_ranking_score: bool,
     show_ranking_score_details: bool,
     ranking_score_threshold: bool,
+
+    marker: std::marker::PhantomData<Method>,
 }
 
-impl SearchAggregator {
+impl<Method: AggregateMethod> SearchAggregator<Method> {
     #[allow(clippy::field_reassign_with_default)]
-    pub fn from_query(query: &SearchQuery, request: &HttpRequest) -> Self {
+    pub fn from_query(query: &SearchQuery) -> Self {
         let SearchQuery {
             q,
             vector,
@@ -719,10 +584,8 @@ impl SearchAggregator {
         } = query;
 
         let mut ret = Self::default();
-        ret.timestamp = Some(OffsetDateTime::now_utc());
 
         ret.total_received = 1;
-        ret.user_agents = extract_user_agents(request).into_iter().collect();
 
         if let Some(ref sort) = sort {
             ret.sort_total_number_of_criteria = 1;
@@ -827,15 +690,23 @@ impl SearchAggregator {
         }
         self.time_spent.push(*processing_time_ms as usize);
     }
+}
 
-    /// Aggregate one [SearchAggregator] into another.
-    pub fn aggregate(&mut self, mut other: Self) {
+aggregate_methods!(
+    SearchGET => "Documents Searched GET",
+    SearchPOST => "Documents Searched POST",
+);
+
+impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
+    fn event_name(&self) -> &'static str {
+        Method::event_name()
+    }
+
+    fn aggregate(mut self: Box<Self>, other: Box<Self>) -> Box<Self> {
         let Self {
-            timestamp,
-            user_agents,
             total_received,
             total_succeeded,
-            ref mut time_spent,
+            mut time_spent,
             sort_with_geo_point,
             sort_sum_of_criteria_terms,
             sort_total_number_of_criteria,
@@ -870,17 +741,9 @@ impl SearchAggregator {
             total_degraded,
             total_used_negative_operator,
             ranking_score_threshold,
-            ref mut locales,
-        } = other;
-
-        if self.timestamp.is_none() {
-            self.timestamp = timestamp;
-        }
-
-        // context
-        for user_agent in user_agents.into_iter() {
-            self.user_agents.insert(user_agent);
-        }
+            mut locales,
+            marker: _,
+        } = *other;
 
         // request
         self.total_received = self.total_received.saturating_add(total_received);
@@ -888,7 +751,7 @@ impl SearchAggregator {
         self.total_degraded = self.total_degraded.saturating_add(total_degraded);
         self.total_used_negative_operator =
             self.total_used_negative_operator.saturating_add(total_used_negative_operator);
-        self.time_spent.append(time_spent);
+        self.time_spent.append(&mut time_spent);
 
         // sort
         self.sort_with_geo_point |= sort_with_geo_point;
@@ -960,13 +823,13 @@ impl SearchAggregator {
         self.ranking_score_threshold |= ranking_score_threshold;
 
         // locales
-        self.locales.append(locales);
+        self.locales.append(&mut locales);
+
+        self
     }
 
-    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
+    fn into_event(self: Box<Self>) -> serde_json::Value {
         let Self {
-            timestamp,
-            user_agents,
             total_received,
             total_succeeded,
             time_spent,
@@ -1005,97 +868,83 @@ impl SearchAggregator {
             total_used_negative_operator,
             ranking_score_threshold,
             locales,
-        } = self;
+            marker: _,
+        } = *self;
 
-        if total_received == 0 {
-            None
-        } else {
-            // we get all the values in a sorted manner
-            let time_spent = time_spent.into_sorted_vec();
-            // the index of the 99th percentage of value
-            let percentile_99th = time_spent.len() * 99 / 100;
-            // We are only interested by the slowest value of the 99th fastest results
-            let time_spent = time_spent.get(percentile_99th);
+        // we get all the values in a sorted manner
+        let time_spent = time_spent.into_sorted_vec();
+        // the index of the 99th percentage of value
+        let percentile_99th = time_spent.len() * 99 / 100;
+        // We are only interested by the slowest value of the 99th fastest results
+        let time_spent = time_spent.get(percentile_99th);
 
-            let properties = json!({
-                "user-agent": user_agents,
-                "requests": {
-                    "99th_response_time": time_spent.map(|t| format!("{:.2}", t)),
-                    "total_succeeded": total_succeeded,
-                    "total_failed": total_received.saturating_sub(total_succeeded), // just to be sure we never panics
-                    "total_received": total_received,
-                    "total_degraded": total_degraded,
-                    "total_used_negative_operator": total_used_negative_operator,
-                },
-                "sort": {
-                    "with_geoPoint": sort_with_geo_point,
-                    "avg_criteria_number": format!("{:.2}", sort_sum_of_criteria_terms as f64 / sort_total_number_of_criteria as f64),
-                },
-                "distinct": distinct,
-                "filter": {
-                   "with_geoRadius": filter_with_geo_radius,
-                   "with_geoBoundingBox": filter_with_geo_bounding_box,
-                   "avg_criteria_number": format!("{:.2}", filter_sum_of_criteria_terms as f64 / filter_total_number_of_criteria as f64),
-                   "most_used_syntax": used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
-                },
-                "attributes_to_search_on": {
-                   "total_number_of_uses": attributes_to_search_on_total_number_of_uses,
-                },
-                "q": {
-                   "max_terms_number": max_terms_number,
-                },
-                "vector": {
-                    "max_vector_size": max_vector_size,
-                    "retrieve_vectors": retrieve_vectors,
-                },
-                "hybrid": {
-                    "enabled": hybrid,
-                    "semantic_ratio": semantic_ratio,
-                },
-                "pagination": {
-                   "max_limit": max_limit,
-                   "max_offset": max_offset,
-                   "most_used_navigation": if finite_pagination > (total_received / 2) { "exhaustive" } else { "estimated" },
-                },
-                "formatting": {
-                    "max_attributes_to_retrieve": max_attributes_to_retrieve,
-                    "max_attributes_to_highlight": max_attributes_to_highlight,
-                    "highlight_pre_tag": highlight_pre_tag,
-                    "highlight_post_tag": highlight_post_tag,
-                    "max_attributes_to_crop": max_attributes_to_crop,
-                    "crop_marker": crop_marker,
-                    "show_matches_position": show_matches_position,
-                    "crop_length": crop_length,
-                },
-                "facets": {
-                    "avg_facets_number": format!("{:.2}", facets_sum_of_terms as f64 / facets_total_number_of_facets as f64),
-                },
-                "matching_strategy": {
-                    "most_used_strategy": matching_strategy.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
-                },
-                "locales": locales,
-                "scoring": {
-                    "show_ranking_score": show_ranking_score,
-                    "show_ranking_score_details": show_ranking_score_details,
-                    "ranking_score_threshold": ranking_score_threshold,
-                },
-            });
-
-            Some(Track {
-                timestamp,
-                user: user.clone(),
-                event: event_name.to_string(),
-                properties,
-                ..Default::default()
-            })
-        }
+        json!({
+            "requests": {
+                "99th_response_time": time_spent.map(|t| format!("{:.2}", t)),
+                "total_succeeded": total_succeeded,
+                "total_failed": total_received.saturating_sub(total_succeeded), // just to be sure we never panics
+                "total_received": total_received,
+                "total_degraded": total_degraded,
+                "total_used_negative_operator": total_used_negative_operator,
+            },
+            "sort": {
+                "with_geoPoint": sort_with_geo_point,
+                "avg_criteria_number": format!("{:.2}", sort_sum_of_criteria_terms as f64 / sort_total_number_of_criteria as f64),
+            },
+            "distinct": distinct,
+            "filter": {
+               "with_geoRadius": filter_with_geo_radius,
+               "with_geoBoundingBox": filter_with_geo_bounding_box,
+               "avg_criteria_number": format!("{:.2}", filter_sum_of_criteria_terms as f64 / filter_total_number_of_criteria as f64),
+               "most_used_syntax": used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
+            },
+            "attributes_to_search_on": {
+               "total_number_of_uses": attributes_to_search_on_total_number_of_uses,
+            },
+            "q": {
+               "max_terms_number": max_terms_number,
+            },
+            "vector": {
+                "max_vector_size": max_vector_size,
+                "retrieve_vectors": retrieve_vectors,
+            },
+            "hybrid": {
+                "enabled": hybrid,
+                "semantic_ratio": semantic_ratio,
+            },
+            "pagination": {
+               "max_limit": max_limit,
+               "max_offset": max_offset,
+               "most_used_navigation": if finite_pagination > (total_received / 2) { "exhaustive" } else { "estimated" },
+            },
+            "formatting": {
+                "max_attributes_to_retrieve": max_attributes_to_retrieve,
+                "max_attributes_to_highlight": max_attributes_to_highlight,
+                "highlight_pre_tag": highlight_pre_tag,
+                "highlight_post_tag": highlight_post_tag,
+                "max_attributes_to_crop": max_attributes_to_crop,
+                "crop_marker": crop_marker,
+                "show_matches_position": show_matches_position,
+                "crop_length": crop_length,
+            },
+            "facets": {
+                "avg_facets_number": format!("{:.2}", facets_sum_of_terms as f64 / facets_total_number_of_facets as f64),
+            },
+            "matching_strategy": {
+                "most_used_strategy": matching_strategy.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
+            },
+            "locales": locales,
+            "scoring": {
+                "show_ranking_score": show_ranking_score,
+                "show_ranking_score_details": show_ranking_score_details,
+                "ranking_score_threshold": ranking_score_threshold,
+            },
+        })
     }
 }
 
 #[derive(Default)]
 pub struct MultiSearchAggregator {
-    timestamp: Option<OffsetDateTime>,
-
     // requests
     total_received: usize,
     total_succeeded: usize,
@@ -1114,20 +963,10 @@ pub struct MultiSearchAggregator {
 
     // federation
     use_federation: bool,
-
-    // context
-    user_agents: HashSet<String>,
 }
 
 impl MultiSearchAggregator {
-    pub fn from_federated_search(
-        federated_search: &FederatedSearch,
-        request: &HttpRequest,
-    ) -> Self {
-        let timestamp = Some(OffsetDateTime::now_utc());
-
-        let user_agents = extract_user_agents(request).into_iter().collect();
-
+    pub fn from_federated_search(federated_search: &FederatedSearch) -> Self {
         let use_federation = federated_search.federation.is_some();
 
         let distinct_indexes: HashSet<_> = federated_search
@@ -1177,7 +1016,6 @@ impl MultiSearchAggregator {
             federated_search.queries.iter().any(|query| query.show_ranking_score_details);
 
         Self {
-            timestamp,
             total_received: 1,
             total_succeeded: 0,
             total_distinct_index_count: distinct_indexes.len(),
@@ -1185,7 +1023,6 @@ impl MultiSearchAggregator {
             total_search_count: federated_search.queries.len(),
             show_ranking_score,
             show_ranking_score_details,
-            user_agents,
             use_federation,
         }
     }
@@ -1193,15 +1030,20 @@ impl MultiSearchAggregator {
     pub fn succeed(&mut self) {
         self.total_succeeded = self.total_succeeded.saturating_add(1);
     }
+}
+
+impl Aggregate for MultiSearchAggregator {
+    fn event_name(&self) -> &'static str {
+        "Documents Searched by Multi-Search POST"
+    }
 
     /// Aggregate one [MultiSearchAggregator] into another.
-    pub fn aggregate(&mut self, other: Self) {
+    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
         // write the aggregate in a way that will cause a compilation error if a field is added.
 
         // get ownership of self, replacing it by a default value.
-        let this = std::mem::take(self);
+        let this = *self;
 
-        let timestamp = this.timestamp.or(other.timestamp);
         let total_received = this.total_received.saturating_add(other.total_received);
         let total_succeeded = this.total_succeeded.saturating_add(other.total_succeeded);
         let total_distinct_index_count =
@@ -1211,565 +1053,65 @@ impl MultiSearchAggregator {
         let show_ranking_score = this.show_ranking_score || other.show_ranking_score;
         let show_ranking_score_details =
             this.show_ranking_score_details || other.show_ranking_score_details;
-        let mut user_agents = this.user_agents;
         let use_federation = this.use_federation || other.use_federation;
 
-        for user_agent in other.user_agents.into_iter() {
-            user_agents.insert(user_agent);
-        }
-
-        // need all fields or compile error
-        let mut aggregated = Self {
-            timestamp,
+        Box::new(Self {
             total_received,
             total_succeeded,
             total_distinct_index_count,
             total_single_index,
             total_search_count,
-            user_agents,
             show_ranking_score,
             show_ranking_score_details,
             use_federation,
-            // do not add _ or ..Default::default() here
-        };
-
-        // replace the default self with the aggregated value
-        std::mem::swap(self, &mut aggregated);
+        })
     }
 
-    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
+    fn into_event(self: Box<Self>) -> serde_json::Value {
         let Self {
-            timestamp,
             total_received,
             total_succeeded,
             total_distinct_index_count,
             total_single_index,
             total_search_count,
-            user_agents,
             show_ranking_score,
             show_ranking_score_details,
             use_federation,
-        } = self;
-
-        if total_received == 0 {
-            None
-        } else {
-            let properties = json!({
-                "user-agent": user_agents,
-                "requests": {
-                    "total_succeeded": total_succeeded,
-                    "total_failed": total_received.saturating_sub(total_succeeded), // just to be sure we never panics
-                    "total_received": total_received,
-                },
-                "indexes": {
-                    "total_single_index": total_single_index,
-                    "total_distinct_index_count": total_distinct_index_count,
-                    "avg_distinct_index_count": (total_distinct_index_count as f64) / (total_received as f64), // not 0 else returned early
-                },
-                "searches": {
-                    "total_search_count": total_search_count,
-                    "avg_search_count": (total_search_count as f64) / (total_received as f64),
-                },
-                "scoring": {
-                    "show_ranking_score": show_ranking_score,
-                    "show_ranking_score_details": show_ranking_score_details,
-                },
-                "federation": {
-                    "use_federation": use_federation,
-                }
-            });
-
-            Some(Track {
-                timestamp,
-                user: user.clone(),
-                event: event_name.to_string(),
-                properties,
-                ..Default::default()
-            })
-        }
-    }
-}
-
-#[derive(Default)]
-pub struct FacetSearchAggregator {
-    timestamp: Option<OffsetDateTime>,
-
-    // context
-    user_agents: HashSet<String>,
-
-    // requests
-    total_received: usize,
-    total_succeeded: usize,
-    time_spent: BinaryHeap<usize>,
-
-    // The set of all facetNames that were used
-    facet_names: HashSet<String>,
-
-    // As there been any other parameter than the facetName or facetQuery ones?
-    additional_search_parameters_provided: bool,
-}
-
-impl FacetSearchAggregator {
-    #[allow(clippy::field_reassign_with_default)]
-    pub fn from_query(query: &FacetSearchQuery, request: &HttpRequest) -> Self {
-        let FacetSearchQuery {
-            facet_query: _,
-            facet_name,
-            vector,
-            q,
-            filter,
-            matching_strategy,
-            attributes_to_search_on,
-            hybrid,
-            ranking_score_threshold,
-            locales,
-        } = query;
-
-        let mut ret = Self::default();
-        ret.timestamp = Some(OffsetDateTime::now_utc());
-
-        ret.total_received = 1;
-        ret.user_agents = extract_user_agents(request).into_iter().collect();
-        ret.facet_names = Some(facet_name.clone()).into_iter().collect();
-
-        ret.additional_search_parameters_provided = q.is_some()
-            || vector.is_some()
-            || filter.is_some()
-            || *matching_strategy != MatchingStrategy::default()
-            || attributes_to_search_on.is_some()
-            || hybrid.is_some()
-            || ranking_score_threshold.is_some()
-            || locales.is_some();
-
-        ret
-    }
-
-    pub fn succeed(&mut self, result: &FacetSearchResult) {
-        let FacetSearchResult { facet_hits: _, facet_query: _, processing_time_ms } = result;
-        self.total_succeeded = self.total_succeeded.saturating_add(1);
-        self.time_spent.push(*processing_time_ms as usize);
-    }
-
-    /// Aggregate one [FacetSearchAggregator] into another.
-    pub fn aggregate(&mut self, mut other: Self) {
-        let Self {
-            timestamp,
-            user_agents,
-            total_received,
-            total_succeeded,
-            ref mut time_spent,
-            facet_names,
-            additional_search_parameters_provided,
-        } = other;
-
-        if self.timestamp.is_none() {
-            self.timestamp = timestamp;
-        }
-
-        // context
-        for user_agent in user_agents.into_iter() {
-            self.user_agents.insert(user_agent);
-        }
-
-        // request
-        self.total_received = self.total_received.saturating_add(total_received);
-        self.total_succeeded = self.total_succeeded.saturating_add(total_succeeded);
-        self.time_spent.append(time_spent);
-
-        // facet_names
-        for facet_name in facet_names.into_iter() {
-            self.facet_names.insert(facet_name);
-        }
-
-        // additional_search_parameters_provided
-        self.additional_search_parameters_provided |= additional_search_parameters_provided;
-    }
-
-    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
-        let Self {
-            timestamp,
-            user_agents,
-            total_received,
-            total_succeeded,
-            time_spent,
-            facet_names,
-            additional_search_parameters_provided,
-        } = self;
-
-        if total_received == 0 {
-            None
-        } else {
-            // the index of the 99th percentage of value
-            let percentile_99th = 0.99 * (total_succeeded as f64 - 1.) + 1.;
-            // we get all the values in a sorted manner
-            let time_spent = time_spent.into_sorted_vec();
-            // We are only interested by the slowest value of the 99th fastest results
-            let time_spent = time_spent.get(percentile_99th as usize);
-
-            let properties = json!({
-                "user-agent": user_agents,
-                "requests": {
-                    "99th_response_time":  time_spent.map(|t| format!("{:.2}", t)),
-                    "total_succeeded": total_succeeded,
-                    "total_failed": total_received.saturating_sub(total_succeeded), // just to be sure we never panics
-                    "total_received": total_received,
-                },
-                "facets": {
-                    "total_distinct_facet_count": facet_names.len(),
-                    "additional_search_parameters_provided": additional_search_parameters_provided,
-                },
-            });
-
-            Some(Track {
-                timestamp,
-                user: user.clone(),
-                event: event_name.to_string(),
-                properties,
-                ..Default::default()
-            })
-        }
-    }
-}
-
-#[derive(Default)]
-pub struct DocumentsAggregator {
-    timestamp: Option<OffsetDateTime>,
-
-    // set to true when at least one request was received
-    updated: bool,
-
-    // context
-    user_agents: HashSet<String>,
-
-    content_types: HashSet<String>,
-    primary_keys: HashSet<String>,
-    index_creation: bool,
-}
-
-impl DocumentsAggregator {
-    pub fn from_query(
-        documents_query: &UpdateDocumentsQuery,
-        index_creation: bool,
-        request: &HttpRequest,
-    ) -> Self {
-        let UpdateDocumentsQuery { primary_key, csv_delimiter: _ } = documents_query;
-
-        let mut primary_keys = HashSet::new();
-        if let Some(primary_key) = primary_key.clone() {
-            primary_keys.insert(primary_key);
-        }
-
-        let mut content_types = HashSet::new();
-        let content_type = request
-            .headers()
-            .get(CONTENT_TYPE)
-            .and_then(|s| s.to_str().ok())
-            .unwrap_or("unknown")
-            .to_string();
-        content_types.insert(content_type);
-
-        Self {
-            timestamp: Some(OffsetDateTime::now_utc()),
-            updated: true,
-            user_agents: extract_user_agents(request).into_iter().collect(),
-            content_types,
-            primary_keys,
-            index_creation,
-        }
-    }
-
-    /// Aggregate one [DocumentsAggregator] into another.
-    pub fn aggregate(&mut self, other: Self) {
-        let Self { timestamp, user_agents, primary_keys, content_types, index_creation, updated } =
-            other;
-
-        if self.timestamp.is_none() {
-            self.timestamp = timestamp;
-        }
-
-        self.updated |= updated;
-        // we can't create a union because there is no `into_union` method
-        for user_agent in user_agents {
-            self.user_agents.insert(user_agent);
-        }
-        for primary_key in primary_keys {
-            self.primary_keys.insert(primary_key);
-        }
-        for content_type in content_types {
-            self.content_types.insert(content_type);
-        }
-        self.index_creation |= index_creation;
-    }
-
-    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
-        let Self { timestamp, user_agents, primary_keys, content_types, index_creation, updated } =
-            self;
-
-        if !updated {
-            None
-        } else {
-            let properties = json!({
-                "user-agent": user_agents,
-                "payload_type": content_types,
-                "primary_key": primary_keys,
-                "index_creation": index_creation,
-            });
-
-            Some(Track {
-                timestamp,
-                user: user.clone(),
-                event: event_name.to_string(),
-                properties,
-                ..Default::default()
-            })
-        }
-    }
-}
-
-#[derive(Default)]
-pub struct EditDocumentsByFunctionAggregator {
-    timestamp: Option<OffsetDateTime>,
-
-    // Set to true if at least one request was filtered
-    filtered: bool,
-    // Set to true if at least one request contained a context
-    with_context: bool,
-
-    // context
-    user_agents: HashSet<String>,
-
-    index_creation: bool,
-}
-
-impl EditDocumentsByFunctionAggregator {
-    pub fn from_query(
-        documents_query: &DocumentEditionByFunction,
-        index_creation: bool,
-        request: &HttpRequest,
-    ) -> Self {
-        let DocumentEditionByFunction { filter, context, function: _ } = documents_query;
-
-        Self {
-            timestamp: Some(OffsetDateTime::now_utc()),
-            user_agents: extract_user_agents(request).into_iter().collect(),
-            filtered: filter.is_some(),
-            with_context: context.is_some(),
-            index_creation,
-        }
-    }
-
-    /// Aggregate one [DocumentsAggregator] into another.
-    pub fn aggregate(&mut self, other: Self) {
-        let Self { timestamp, user_agents, index_creation, filtered, with_context } = other;
-
-        if self.timestamp.is_none() {
-            self.timestamp = timestamp;
-        }
-
-        // we can't create a union because there is no `into_union` method
-        for user_agent in user_agents {
-            self.user_agents.insert(user_agent);
-        }
-        self.index_creation |= index_creation;
-        self.filtered |= filtered;
-        self.with_context |= with_context;
-    }
-
-    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
-        let Self { timestamp, user_agents, index_creation, filtered, with_context } = self;
-
-        // if we had no timestamp it means we never encountered any events and
-        // thus we don't need to send this event.
-        let timestamp = timestamp?;
-
-        let properties = json!({
-            "user-agent": user_agents,
-            "filtered": filtered,
-            "with_context": with_context,
-            "index_creation": index_creation,
-        });
-
-        Some(Track {
-            timestamp: Some(timestamp),
-            user: user.clone(),
-            event: event_name.to_string(),
-            properties,
-            ..Default::default()
-        })
-    }
-}
-
-#[derive(Default, Serialize)]
-pub struct DocumentsDeletionAggregator {
-    #[serde(skip)]
-    timestamp: Option<OffsetDateTime>,
-
-    // context
-    #[serde(rename = "user-agent")]
-    user_agents: HashSet<String>,
-
-    #[serde(rename = "requests.total_received")]
-    total_received: usize,
-    per_document_id: bool,
-    clear_all: bool,
-    per_batch: bool,
-    per_filter: bool,
-}
-
-impl DocumentsDeletionAggregator {
-    pub fn from_query(kind: DocumentDeletionKind, request: &HttpRequest) -> Self {
-        Self {
-            timestamp: Some(OffsetDateTime::now_utc()),
-            user_agents: extract_user_agents(request).into_iter().collect(),
-            total_received: 1,
-            per_document_id: matches!(kind, DocumentDeletionKind::PerDocumentId),
-            clear_all: matches!(kind, DocumentDeletionKind::ClearAll),
-            per_batch: matches!(kind, DocumentDeletionKind::PerBatch),
-            per_filter: matches!(kind, DocumentDeletionKind::PerFilter),
-        }
-    }
-
-    /// Aggregate one [DocumentsAggregator] into another.
-    pub fn aggregate(&mut self, other: Self) {
-        let Self {
-            timestamp,
-            user_agents,
-            total_received,
-            per_document_id,
-            clear_all,
-            per_batch,
-            per_filter,
-        } = other;
-
-        if self.timestamp.is_none() {
-            self.timestamp = timestamp;
-        }
-
-        // we can't create a union because there is no `into_union` method
-        for user_agent in user_agents {
-            self.user_agents.insert(user_agent);
-        }
-        self.total_received = self.total_received.saturating_add(total_received);
-        self.per_document_id |= per_document_id;
-        self.clear_all |= clear_all;
-        self.per_batch |= per_batch;
-        self.per_filter |= per_filter;
-    }
-
-    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
-        // if we had no timestamp it means we never encountered any events and
-        // thus we don't need to send this event.
-        let timestamp = self.timestamp?;
-
-        Some(Track {
-            timestamp: Some(timestamp),
-            user: user.clone(),
-            event: event_name.to_string(),
-            properties: serde_json::to_value(self).ok()?,
-            ..Default::default()
-        })
-    }
-}
-
-#[derive(Default, Serialize)]
-pub struct DocumentsFetchAggregator {
-    #[serde(skip)]
-    timestamp: Option<OffsetDateTime>,
-
-    // context
-    #[serde(rename = "user-agent")]
-    user_agents: HashSet<String>,
-
-    #[serde(rename = "requests.total_received")]
-    total_received: usize,
-
-    // a call on ../documents/:doc_id
-    per_document_id: bool,
-    // if a filter was used
-    per_filter: bool,
-
-    #[serde(rename = "vector.retrieve_vectors")]
-    retrieve_vectors: bool,
-
-    // pagination
-    #[serde(rename = "pagination.max_limit")]
-    max_limit: usize,
-    #[serde(rename = "pagination.max_offset")]
-    max_offset: usize,
-}
-
-impl DocumentsFetchAggregator {
-    pub fn from_query(query: &DocumentFetchKind, request: &HttpRequest) -> Self {
-        let (limit, offset, retrieve_vectors) = match query {
-            DocumentFetchKind::PerDocumentId { retrieve_vectors } => (1, 0, *retrieve_vectors),
-            DocumentFetchKind::Normal { limit, offset, retrieve_vectors, .. } => {
-                (*limit, *offset, *retrieve_vectors)
+        } = *self;
+
+        json!({
+            "requests": {
+                "total_succeeded": total_succeeded,
+                "total_failed": total_received.saturating_sub(total_succeeded), // just to be sure we never panics
+                "total_received": total_received,
+            },
+            "indexes": {
+                "total_single_index": total_single_index,
+                "total_distinct_index_count": total_distinct_index_count,
+                "avg_distinct_index_count": (total_distinct_index_count as f64) / (total_received as f64), // not 0 else returned early
+            },
+            "searches": {
+                "total_search_count": total_search_count,
+                "avg_search_count": (total_search_count as f64) / (total_received as f64),
+            },
+            "scoring": {
+                "show_ranking_score": show_ranking_score,
+                "show_ranking_score_details": show_ranking_score_details,
+            },
+            "federation": {
+                "use_federation": use_federation,
             }
-        };
-        Self {
-            timestamp: Some(OffsetDateTime::now_utc()),
-            user_agents: extract_user_agents(request).into_iter().collect(),
-            total_received: 1,
-            per_document_id: matches!(query, DocumentFetchKind::PerDocumentId { .. }),
-            per_filter: matches!(query, DocumentFetchKind::Normal { with_filter, .. } if *with_filter),
-            max_limit: limit,
-            max_offset: offset,
-            retrieve_vectors,
-        }
-    }
-
-    /// Aggregate one [DocumentsFetchAggregator] into another.
-    pub fn aggregate(&mut self, other: Self) {
-        let Self {
-            timestamp,
-            user_agents,
-            total_received,
-            per_document_id,
-            per_filter,
-            max_limit,
-            max_offset,
-            retrieve_vectors,
-        } = other;
-
-        if self.timestamp.is_none() {
-            self.timestamp = timestamp;
-        }
-        for user_agent in user_agents {
-            self.user_agents.insert(user_agent);
-        }
-
-        self.total_received = self.total_received.saturating_add(total_received);
-        self.per_document_id |= per_document_id;
-        self.per_filter |= per_filter;
-
-        self.max_limit = self.max_limit.max(max_limit);
-        self.max_offset = self.max_offset.max(max_offset);
-
-        self.retrieve_vectors |= retrieve_vectors;
-    }
-
-    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
-        // if we had no timestamp it means we never encountered any events and
-        // thus we don't need to send this event.
-        let timestamp = self.timestamp?;
-
-        Some(Track {
-            timestamp: Some(timestamp),
-            user: user.clone(),
-            event: event_name.to_string(),
-            properties: serde_json::to_value(self).ok()?,
-            ..Default::default()
         })
     }
 }
 
+aggregate_methods!(
+    SimilarPOST => "Similar POST",
+    SimilarGET => "Similar GET",
+);
+
 #[derive(Default)]
-pub struct SimilarAggregator {
-    timestamp: Option<OffsetDateTime>,
-
-    // context
-    user_agents: HashSet<String>,
-
+pub struct SimilarAggregator<Method: AggregateMethod> {
     // requests
     total_received: usize,
     total_succeeded: usize,
@@ -1798,11 +1140,13 @@ pub struct SimilarAggregator {
     show_ranking_score: bool,
     show_ranking_score_details: bool,
     ranking_score_threshold: bool,
+
+    marker: std::marker::PhantomData<Method>,
 }
 
-impl SimilarAggregator {
+impl<Method: AggregateMethod> SimilarAggregator<Method> {
     #[allow(clippy::field_reassign_with_default)]
-    pub fn from_query(query: &SimilarQuery, request: &HttpRequest) -> Self {
+    pub fn from_query(query: &SimilarQuery) -> Self {
         let SimilarQuery {
             id: _,
             embedder: _,
@@ -1817,10 +1161,8 @@ impl SimilarAggregator {
         } = query;
 
         let mut ret = Self::default();
-        ret.timestamp = Some(OffsetDateTime::now_utc());
 
         ret.total_received = 1;
-        ret.user_agents = extract_user_agents(request).into_iter().collect();
 
         if let Some(ref filter) = filter {
             static RE: Lazy<Regex> = Lazy::new(|| Regex::new("AND | OR").unwrap());
@@ -1865,15 +1207,19 @@ impl SimilarAggregator {
 
         self.time_spent.push(*processing_time_ms as usize);
     }
+}
+
+impl<Method: AggregateMethod> Aggregate for SimilarAggregator<Method> {
+    fn event_name(&self) -> &'static str {
+        Method::event_name()
+    }
 
     /// Aggregate one [SimilarAggregator] into another.
-    pub fn aggregate(&mut self, mut other: Self) {
+    fn aggregate(mut self: Box<Self>, other: Box<Self>) -> Box<Self> {
         let Self {
-            timestamp,
-            user_agents,
             total_received,
             total_succeeded,
-            ref mut time_spent,
+            mut time_spent,
             filter_with_geo_radius,
             filter_with_geo_bounding_box,
             filter_sum_of_criteria_terms,
@@ -1886,21 +1232,13 @@ impl SimilarAggregator {
             show_ranking_score_details,
             ranking_score_threshold,
             retrieve_vectors,
-        } = other;
-
-        if self.timestamp.is_none() {
-            self.timestamp = timestamp;
-        }
-
-        // context
-        for user_agent in user_agents.into_iter() {
-            self.user_agents.insert(user_agent);
-        }
+            marker: _,
+        } = *other;
 
         // request
         self.total_received = self.total_received.saturating_add(total_received);
         self.total_succeeded = self.total_succeeded.saturating_add(total_succeeded);
-        self.time_spent.append(time_spent);
+        self.time_spent.append(&mut time_spent);
 
         // filter
         self.filter_with_geo_radius |= filter_with_geo_radius;
@@ -1928,12 +1266,12 @@ impl SimilarAggregator {
         self.show_ranking_score |= show_ranking_score;
         self.show_ranking_score_details |= show_ranking_score_details;
         self.ranking_score_threshold |= ranking_score_threshold;
+
+        self
     }
 
-    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
+    fn into_event(self: Box<Self>) -> serde_json::Value {
         let Self {
-            timestamp,
-            user_agents,
             total_received,
             total_succeeded,
             time_spent,
@@ -1949,56 +1287,44 @@ impl SimilarAggregator {
             show_ranking_score_details,
             ranking_score_threshold,
             retrieve_vectors,
-        } = self;
+            marker: _,
+        } = *self;
 
-        if total_received == 0 {
-            None
-        } else {
-            // we get all the values in a sorted manner
-            let time_spent = time_spent.into_sorted_vec();
-            // the index of the 99th percentage of value
-            let percentile_99th = time_spent.len() * 99 / 100;
-            // We are only interested by the slowest value of the 99th fastest results
-            let time_spent = time_spent.get(percentile_99th);
+        // we get all the values in a sorted manner
+        let time_spent = time_spent.into_sorted_vec();
+        // the index of the 99th percentage of value
+        let percentile_99th = time_spent.len() * 99 / 100;
+        // We are only interested by the slowest value of the 99th fastest results
+        let time_spent = time_spent.get(percentile_99th);
 
-            let properties = json!({
-                "user-agent": user_agents,
-                "requests": {
-                    "99th_response_time": time_spent.map(|t| format!("{:.2}", t)),
-                    "total_succeeded": total_succeeded,
-                    "total_failed": total_received.saturating_sub(total_succeeded), // just to be sure we never panics
-                    "total_received": total_received,
-                },
-                "filter": {
-                   "with_geoRadius": filter_with_geo_radius,
-                   "with_geoBoundingBox": filter_with_geo_bounding_box,
-                   "avg_criteria_number": format!("{:.2}", filter_sum_of_criteria_terms as f64 / filter_total_number_of_criteria as f64),
-                   "most_used_syntax": used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
-                },
-                "vector": {
-                    "retrieve_vectors": retrieve_vectors,
-                },
-                "pagination": {
-                   "max_limit": max_limit,
-                   "max_offset": max_offset,
-                },
-                "formatting": {
-                    "max_attributes_to_retrieve": max_attributes_to_retrieve,
-                },
-                "scoring": {
-                    "show_ranking_score": show_ranking_score,
-                    "show_ranking_score_details": show_ranking_score_details,
-                    "ranking_score_threshold": ranking_score_threshold,
-                },
-            });
-
-            Some(Track {
-                timestamp,
-                user: user.clone(),
-                event: event_name.to_string(),
-                properties,
-                ..Default::default()
-            })
-        }
+        json!({
+            "requests": {
+                "99th_response_time": time_spent.map(|t| format!("{:.2}", t)),
+                "total_succeeded": total_succeeded,
+                "total_failed": total_received.saturating_sub(total_succeeded), // just to be sure we never panics
+                "total_received": total_received,
+            },
+            "filter": {
+               "with_geoRadius": filter_with_geo_radius,
+               "with_geoBoundingBox": filter_with_geo_bounding_box,
+               "avg_criteria_number": format!("{:.2}", filter_sum_of_criteria_terms as f64 / filter_total_number_of_criteria as f64),
+               "most_used_syntax": used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
+            },
+            "vector": {
+                "retrieve_vectors": retrieve_vectors,
+            },
+            "pagination": {
+               "max_limit": max_limit,
+               "max_offset": max_offset,
+            },
+            "formatting": {
+                "max_attributes_to_retrieve": max_attributes_to_retrieve,
+            },
+            "scoring": {
+                "show_ranking_score": show_ranking_score,
+                "show_ranking_score_details": show_ranking_score_details,
+                "ranking_score_threshold": ranking_score_threshold,
+            }
+        })
     }
 }
