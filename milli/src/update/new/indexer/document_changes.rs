@@ -27,13 +27,17 @@ pub trait RefCellExt<T: ?Sized> {
 
 impl<T: ?Sized> RefCellExt<T> for RefCell<T> {
     fn try_borrow_or_yield(&self) -> std::result::Result<Ref<'_, T>, std::cell::BorrowError> {
+        /// TODO: move this trait and impl elsewhere
         loop {
             match self.try_borrow() {
                 Ok(borrow) => break Ok(borrow),
-                Err(error) => match rayon::yield_local() {
-                    Some(rayon::Yield::Executed) => continue,
-                    _ => return Err(error),
-                },
+                Err(error) => {
+                    tracing::warn!("dynamic borrow failed, yielding to local tasks");
+                    match rayon::yield_local() {
+                        Some(rayon::Yield::Executed) => continue,
+                        _ => return Err(error),
+                    }
+                }
             }
         }
     }
@@ -44,10 +48,14 @@ impl<T: ?Sized> RefCellExt<T> for RefCell<T> {
         loop {
             match self.try_borrow_mut() {
                 Ok(borrow) => break Ok(borrow),
-                Err(error) => match rayon::yield_local() {
-                    Some(rayon::Yield::Executed) => continue,
-                    _ => return Err(error),
-                },
+                Err(error) => {
+                    tracing::warn!("dynamic borrow failed, yielding to local tasks");
+
+                    match rayon::yield_local() {
+                        Some(rayon::Yield::Executed) => continue,
+                        _ => return Err(error),
+                    }
+                }
             }
         }
     }
@@ -168,6 +176,7 @@ impl<T: MostlySend> ThreadLocal<T> {
     where
         F: FnOnce() -> T,
     {
+        /// TODO: move ThreadLocal, MostlySend, FullySend to a dedicated file
         self.inner.get_or(|| unsafe { MostlySendWrapper::new(create()) }).as_ref()
     }
 
