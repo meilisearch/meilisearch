@@ -9,7 +9,6 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
-use serde::Serialize;
 use serde_json::Value;
 use tracing::debug;
 

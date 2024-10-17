@@ -22,9 +22,7 @@ pub use segment_analytics::SimilarAggregator;
 
 use crate::Opt;
 
-use self::segment_analytics::extract_user_agents;
-pub type MultiSearchAggregator = segment_analytics::MultiSearchAggregator;
-pub type FacetSearchAggregator = segment_analytics::FacetSearchAggregator;
+pub use self::segment_analytics::MultiSearchAggregator;
 
 /// A macro used to quickly define events that don't aggregate or send anything besides an empty event with its name.
 #[macro_export]
