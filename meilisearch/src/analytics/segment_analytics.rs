@@ -102,7 +102,7 @@ impl SegmentAnalytics {
         opt: &Opt,
         index_scheduler: Arc<IndexScheduler>,
         auth_controller: Arc<AuthController>,
-    ) -> Arc<Analytics> {
+    ) -> Option<Arc<Self>> {
         let instance_uid = super::find_user_id(&opt.db_path);
         let first_time_run = instance_uid.is_none();
         let instance_uid = instance_uid.unwrap_or_else(Uuid::new_v4);
@@ -112,7 +112,7 @@ impl SegmentAnalytics {
 
         // if reqwest throws an error we won't be able to send analytics
         if client.is_err() {
-            return Arc::new(Analytics::no_analytics());
+            return None;
         }
 
         let client =
@@ -148,13 +148,13 @@ impl SegmentAnalytics {
             user: user.clone(),
             opt: opt.clone(),
             batcher,
-            events: todo!(),
+            events: HashMap::new(),
         });
         tokio::spawn(segment.run(index_scheduler.clone(), auth_controller.clone()));
 
         let this = Self { instance_uid, sender, user: user.clone() };
 
-        Arc::new(Analytics::segment_analytics(this))
+        Some(Arc::new(this))
     }
 }
 
@@ -595,7 +595,7 @@ pub struct SearchAggregator<Method: AggregateMethod> {
 
 impl<Method: AggregateMethod> SearchAggregator<Method> {
     #[allow(clippy::field_reassign_with_default)]
-    pub fn from_query(query: &SearchQuery, request: &HttpRequest) -> Self {
+    pub fn from_query(query: &SearchQuery) -> Self {
         let SearchQuery {
             q,
             vector,

@@ -5,8 +5,11 @@ pub mod segment_analytics;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::Arc;
 
 use actix_web::HttpRequest;
+use index_scheduler::IndexScheduler;
+use meilisearch_auth::AuthController;
 use meilisearch_types::InstanceUid;
 use mopa::mopafy;
 use once_cell::sync::Lazy;
@@ -16,6 +19,8 @@ use platform_dirs::AppDirs;
 pub type SegmentAnalytics = segment_analytics::SegmentAnalytics;
 pub use segment_analytics::SearchAggregator;
 pub use segment_analytics::SimilarAggregator;
+
+use crate::Opt;
 
 use self::segment_analytics::extract_user_agents;
 pub type MultiSearchAggregator = segment_analytics::MultiSearchAggregator;
@@ -137,17 +142,22 @@ macro_rules! aggregate_methods {
     };
 }
 
+#[derive(Clone)]
 pub struct Analytics {
-    segment: Option<SegmentAnalytics>,
+    segment: Option<Arc<SegmentAnalytics>>,
 }
 
 impl Analytics {
-    fn no_analytics() -> Self {
-        Self { segment: None }
-    }
-
-    fn segment_analytics(segment: SegmentAnalytics) -> Self {
-        Self { segment: Some(segment) }
+    pub async fn new(
+        opt: &Opt,
+        index_scheduler: Arc<IndexScheduler>,
+        auth_controller: Arc<AuthController>,
+    ) -> Self {
+        if opt.no_analytics {
+            Self { segment: None }
+        } else {
+            Self { segment: SegmentAnalytics::new(opt, index_scheduler, auth_controller).await }
+        }
     }
 
     pub fn instance_uid(&self) -> Option<&InstanceUid> {
