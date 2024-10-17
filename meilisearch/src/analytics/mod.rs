@@ -166,8 +166,8 @@ impl Analytics {
 
     /// The method used to publish most analytics that do not need to be batched every hours
     pub fn publish<T: Aggregate>(&self, event: T, request: &HttpRequest) {
-        let Some(ref segment) = self.segment else { return };
-        let user_agents = extract_user_agents(request);
-        let _ = segment.sender.try_send(segment_analytics::Message::new(event));
+        if let Some(ref segment) = self.segment {
+            let _ = segment.sender.try_send(segment_analytics::Message::new(event, request));
+        }
     }
 }

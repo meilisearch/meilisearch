@@ -28,7 +28,6 @@ use super::{
     config_user_id_path, Aggregate, AggregateMethod, DocumentDeletionKind, DocumentFetchKind,
     MEILISEARCH_CONFIG_PATH,
 };
-use crate::analytics::Analytics;
 use crate::option::{
     default_http_addr, IndexerOpts, LogMode, MaxMemory, MaxThreads, ScheduleSnapshot,
 };
@@ -58,7 +57,7 @@ fn write_user_id(db_path: &Path, user_id: &InstanceUid) {
 
 const SEGMENT_API_KEY: &str = "P3FWhhEsJiEDCuEHpmcN9DHcK4hVfBvb";
 
-pub fn extract_user_agents(request: &HttpRequest) -> Vec<String> {
+pub fn extract_user_agents(request: &HttpRequest) -> HashSet<String> {
     request
         .headers()
         .get(ANALYTICS_HEADER)
@@ -77,14 +76,26 @@ pub struct Message {
     type_id: TypeId,
     // Same for the aggregate function.
     aggregator_function: fn(Box<dyn Aggregate>, Box<dyn Aggregate>) -> Option<Box<dyn Aggregate>>,
-    event: Box<dyn Aggregate>,
+    event: Event,
+}
+
+pub struct Event {
+    original: Box<dyn Aggregate>,
+    timestamp: OffsetDateTime,
+    user_agents: HashSet<String>,
+    total: usize,
 }
 
 impl Message {
-    pub fn new<T: Aggregate>(event: T) -> Self {
+    pub fn new<T: Aggregate>(event: T, request: &HttpRequest) -> Self {
         Self {
             type_id: TypeId::of::<T>(),
-            event: Box::new(event),
+            event: Event {
+                original: Box::new(event),
+                timestamp: OffsetDateTime::now_utc(),
+                user_agents: extract_user_agents(request),
+                total: 1,
+            },
             aggregator_function: T::downcast_aggregate,
         }
     }
@@ -400,7 +411,7 @@ pub struct Segment {
     user: User,
     opt: Opt,
     batcher: AutoBatcher,
-    events: HashMap<TypeId, Box<dyn Aggregate>>,
+    events: HashMap<TypeId, Event>,
 }
 
 impl Segment {
@@ -451,20 +462,32 @@ impl Segment {
                 _ = interval.tick() => {
                     self.tick(index_scheduler.clone(), auth_controller.clone()).await;
                 },
-                msg = self.inbox.recv() => {
-                    match msg {
-                        Some(Message { type_id, event, aggregator_function }) => {
-                            let new_event = match self.events.remove(&type_id) {
-                                Some(old) => (aggregator_function)(old, event).unwrap(),
-                                None => event,
-                            };
-                            self.events.insert(type_id, new_event);
-                       },
-                        None => (),
-                    }
-                }
+                Some(msg) = self.inbox.recv() => {
+                    self.handle_msg(msg);
+               }
             }
         }
+    }
+
+    fn handle_msg(&mut self, Message { type_id, aggregator_function, event }: Message) {
+        let new_event = match self.events.remove(&type_id) {
+            Some(old) => {
+                // The function should never fail since we retrieved the corresponding TypeId in the map. But in the unfortunate
+                // case it could happens we're going to silently ignore the error
+                let Some(original) = (aggregator_function)(old.original, event.original) else {
+                    return;
+                };
+                Event {
+                    original,
+                    // We always want to return the FIRST timestamp ever encountered
+                    timestamp: old.timestamp,
+                    user_agents: old.user_agents.union(&event.user_agents).cloned().collect(),
+                    total: old.total.saturating_add(event.total),
+                }
+            }
+            None => event,
+        };
+        self.events.insert(type_id, new_event);
     }
 
     async fn tick(
@@ -503,11 +526,21 @@ impl Segment {
         let events = std::mem::take(&mut self.events);
 
         for (_, event) in events {
+            let Event { original, timestamp, user_agents, total } = event;
+            let name = original.event_name();
+            let mut properties = original.into_event();
+            if properties["user-agent"].is_null() {
+                properties["user-agent"] = json!(user_agents);
+            };
+            if properties["requests"]["total_received"].is_null() {
+                properties["requests"]["total_received"] = total.into();
+            };
+
             self.batcher.push(Track {
                 user: self.user.clone(),
-                event: event.event_name().to_string(),
-                properties: event.into_event(),
-                timestamp: todo!(),
+                event: name.to_string(),
+                properties,
+                timestamp: Some(timestamp),
                 ..Default::default()
             });
         }
