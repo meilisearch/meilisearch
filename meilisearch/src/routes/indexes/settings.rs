@@ -94,7 +94,7 @@ macro_rules! make_setting_route {
 
                 #[allow(clippy::redundant_closure_call)]
                 analytics.publish(
-                    $crate::routes::indexes::settings::$analytics::new(body.as_ref()).to_settings(),
+                    $crate::routes::indexes::settings::$analytics::new(body.as_ref()).into_settings(),
                     &req,
                 );
 
@@ -605,58 +605,33 @@ struct RankingRulesAnalytics {
 impl RankingRulesAnalytics {
     pub fn new(rr: Option<&Vec<RankingRuleView>>) -> Self {
         RankingRulesAnalytics {
-            words_position: rr
-                .as_ref()
-                .map(|rr| {
-                    rr.iter().position(|s| {
-                        matches!(s, meilisearch_types::settings::RankingRuleView::Words)
-                    })
+            words_position: rr.as_ref().and_then(|rr| {
+                rr.iter()
+                    .position(|s| matches!(s, meilisearch_types::settings::RankingRuleView::Words))
+            }),
+            typo_position: rr.as_ref().and_then(|rr| {
+                rr.iter()
+                    .position(|s| matches!(s, meilisearch_types::settings::RankingRuleView::Typo))
+            }),
+            proximity_position: rr.as_ref().and_then(|rr| {
+                rr.iter().position(|s| {
+                    matches!(s, meilisearch_types::settings::RankingRuleView::Proximity)
                 })
-                .flatten(),
-
-            typo_position: rr
-                .as_ref()
-                .map(|rr| {
-                    rr.iter().position(|s| {
-                        matches!(s, meilisearch_types::settings::RankingRuleView::Typo)
-                    })
+            }),
+            attribute_position: rr.as_ref().and_then(|rr| {
+                rr.iter().position(|s| {
+                    matches!(s, meilisearch_types::settings::RankingRuleView::Attribute)
                 })
-                .flatten(),
-
-            proximity_position: rr
-                .as_ref()
-                .map(|rr| {
-                    rr.iter().position(|s| {
-                        matches!(s, meilisearch_types::settings::RankingRuleView::Proximity)
-                    })
+            }),
+            sort_position: rr.as_ref().and_then(|rr| {
+                rr.iter()
+                    .position(|s| matches!(s, meilisearch_types::settings::RankingRuleView::Sort))
+            }),
+            exactness_position: rr.as_ref().and_then(|rr| {
+                rr.iter().position(|s| {
+                    matches!(s, meilisearch_types::settings::RankingRuleView::Exactness)
                 })
-                .flatten(),
-
-            attribute_position: rr
-                .as_ref()
-                .map(|rr| {
-                    rr.iter().position(|s| {
-                        matches!(s, meilisearch_types::settings::RankingRuleView::Attribute)
-                    })
-                })
-                .flatten(),
-            sort_position: rr
-                .as_ref()
-                .map(|rr| {
-                    rr.iter().position(|s| {
-                        matches!(s, meilisearch_types::settings::RankingRuleView::Sort)
-                    })
-                })
-                .flatten(),
-            exactness_position: rr
-                .as_ref()
-                .map(|rr| {
-                    rr.iter().position(|s| {
-                        matches!(s, meilisearch_types::settings::RankingRuleView::Exactness)
-                    })
-                })
-                .flatten(),
-
+            }),
             values: rr.as_ref().map(|rr| {
                 rr.iter()
                     .filter(|s| {
@@ -673,7 +648,7 @@ impl RankingRulesAnalytics {
         }
     }
 
-    pub fn to_settings(self) -> SettingsAnalytics {
+    pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { ranking_rules: self, ..Default::default() }
     }
 }
@@ -694,7 +669,7 @@ impl SearchableAttributesAnalytics {
         }
     }
 
-    pub fn to_settings(self) -> SettingsAnalytics {
+    pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { searchable_attributes: self, ..Default::default() }
     }
 }
@@ -715,7 +690,7 @@ impl DisplayedAttributesAnalytics {
         }
     }
 
-    pub fn to_settings(self) -> SettingsAnalytics {
+    pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { displayed_attributes: self, ..Default::default() }
     }
 }
@@ -734,7 +709,7 @@ impl SortableAttributesAnalytics {
         }
     }
 
-    pub fn to_settings(self) -> SettingsAnalytics {
+    pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { sortable_attributes: self, ..Default::default() }
     }
 }
@@ -753,7 +728,7 @@ impl FilterableAttributesAnalytics {
         }
     }
 
-    pub fn to_settings(self) -> SettingsAnalytics {
+    pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { filterable_attributes: self, ..Default::default() }
     }
 }
@@ -768,7 +743,7 @@ impl DistinctAttributeAnalytics {
         Self { set: distinct.is_some() }
     }
 
-    pub fn to_settings(self) -> SettingsAnalytics {
+    pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { distinct_attribute: self, ..Default::default() }
     }
 }
@@ -784,7 +759,7 @@ impl ProximityPrecisionAnalytics {
         Self { set: precision.is_some(), value: precision.cloned() }
     }
 
-    pub fn to_settings(self) -> SettingsAnalytics {
+    pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { proximity_precision: self, ..Default::default() }
     }
 }
@@ -818,7 +793,7 @@ impl TypoToleranceAnalytics {
                 .flatten(),
         }
     }
-    pub fn to_settings(self) -> SettingsAnalytics {
+    pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { typo_tolerance: self, ..Default::default() }
     }
 }
@@ -846,7 +821,7 @@ impl FacetingAnalytics {
         }
     }
 
-    pub fn to_settings(self) -> SettingsAnalytics {
+    pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { faceting: self, ..Default::default() }
     }
 }
@@ -861,7 +836,7 @@ impl PaginationAnalytics {
         Self { max_total_hits: setting.as_ref().and_then(|s| s.max_total_hits.set()) }
     }
 
-    pub fn to_settings(self) -> SettingsAnalytics {
+    pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { pagination: self, ..Default::default() }
     }
 }
@@ -876,7 +851,7 @@ impl StopWordsAnalytics {
         Self { total: stop_words.as_ref().map(|stop_words| stop_words.len()) }
     }
 
-    pub fn to_settings(self) -> SettingsAnalytics {
+    pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { stop_words: self, ..Default::default() }
     }
 }
@@ -891,7 +866,7 @@ impl SynonymsAnalytics {
         Self { total: synonyms.as_ref().map(|synonyms| synonyms.len()) }
     }
 
-    pub fn to_settings(self) -> SettingsAnalytics {
+    pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { synonyms: self, ..Default::default() }
     }
 }
@@ -960,7 +935,7 @@ impl EmbeddersAnalytics {
         }
     }
 
-    pub fn to_settings(self) -> SettingsAnalytics {
+    pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { embedders: self, ..Default::default() }
     }
 }
@@ -976,7 +951,7 @@ impl SearchCutoffMsAnalytics {
         Self { search_cutoff_ms: setting.copied() }
     }
 
-    pub fn to_settings(self) -> SettingsAnalytics {
+    pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { search_cutoff_ms: self, ..Default::default() }
     }
 }
@@ -1001,7 +976,7 @@ impl LocalesAnalytics {
         }
     }
 
-    pub fn to_settings(self) -> SettingsAnalytics {
+    pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { locales: self, ..Default::default() }
     }
 }
@@ -1016,7 +991,7 @@ impl DictionaryAnalytics {
         Self { total: dictionary.as_ref().map(|dictionary| dictionary.len()) }
     }
 
-    pub fn to_settings(self) -> SettingsAnalytics {
+    pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { dictionary: self, ..Default::default() }
     }
 }
@@ -1031,7 +1006,7 @@ impl SeparatorTokensAnalytics {
         Self { total: separator_tokens.as_ref().map(|separator_tokens| separator_tokens.len()) }
     }
 
-    pub fn to_settings(self) -> SettingsAnalytics {
+    pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { separator_tokens: self, ..Default::default() }
     }
 }
@@ -1050,7 +1025,7 @@ impl NonSeparatorTokensAnalytics {
         }
     }
 
-    pub fn to_settings(self) -> SettingsAnalytics {
+    pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { non_separator_tokens: self, ..Default::default() }
     }
 }

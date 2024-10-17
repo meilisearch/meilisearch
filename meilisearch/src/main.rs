@@ -223,7 +223,6 @@ pub fn print_launch_resume(opt: &Opt, analytics: Analytics, config_read_from: Op
         eprintln!("Prototype:\t\t{:?}", prototype);
     }
 
-    #[cfg(all(not(debug_assertions), feature = "analytics"))]
     {
         if !opt.no_analytics {
             eprintln!(
