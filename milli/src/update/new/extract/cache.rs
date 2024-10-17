@@ -211,10 +211,7 @@ pub struct SpilledCache<MF> {
 }
 
 impl<MF> SpilledCache<MF> {
-    pub fn reconstruct<'extractor>(
-        self,
-        alloc: RefBump<'extractor>,
-    ) -> CboCachedSorter<'extractor, MF> {
+    pub fn reconstruct(self, alloc: RefBump<'_>) -> CboCachedSorter<'_, MF> {
         let SpilledCache { sorter, deladd_buffer, cbo_buffer, total_insertions, fitted_in_key } =
             self;
 

@@ -324,6 +324,8 @@ impl<'extractor> Extractor<'extractor> for WordDocidsExtractorData<'extractor> {
             exact_word_docids,
             word_position_docids,
             fid_word_count_docids,
+            // Note that fid_word_count and current_docid do not have any reference
+            // to any 'extractor-allocated memory so we don't have to spill it to disk
             fid_word_count,
             current_docid,
         } = sorters;
@@ -333,8 +335,6 @@ impl<'extractor> Extractor<'extractor> for WordDocidsExtractorData<'extractor> {
         let spilled_exact_word_docids = exact_word_docids.spill_to_disk()?;
         let spilled_word_position_docids = word_position_docids.spill_to_disk()?;
         let spilled_fid_word_count_docids = fid_word_count_docids.spill_to_disk()?;
-        // let spilled_fid_word_count = fid_word_count.spill_to_disk()?;
-        // let spilled_current_docid = current_docid.spill_to_disk()?;
 
         extractor_alloc.borrow_mut().reset();
 
@@ -345,8 +345,6 @@ impl<'extractor> Extractor<'extractor> for WordDocidsExtractorData<'extractor> {
             exact_word_docids: spilled_exact_word_docids.reconstruct(RefBump::clone(&alloc)),
             word_position_docids: spilled_word_position_docids.reconstruct(RefBump::clone(&alloc)),
             fid_word_count_docids: spilled_fid_word_count_docids.reconstruct(alloc),
-            // fid_word_count: spilled_fid_word_count.reconstruct(),
-            // current_docid: spilled_current_docid.reconstruct(),
             fid_word_count,
             current_docid,
         });
