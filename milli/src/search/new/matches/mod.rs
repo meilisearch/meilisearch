@@ -10,7 +10,10 @@ use matching_words::{MatchType, PartialMatch};
 use r#match::{Match, MatchPosition};
 use serde::Serialize;
 use simple_token_kind::SimpleTokenKind;
-use std::borrow::Cow;
+use std::{
+    borrow::Cow,
+    cmp::{max, min},
+};
 
 const DEFAULT_CROP_MARKER: &str = "…";
 const DEFAULT_HIGHLIGHT_PREFIX: &str = "<em>";
@@ -139,7 +142,7 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                     Some(MatchType::Full { ids, .. }) => {
                         // save the token that closes the partial match as a match.
                         matches.push(Match {
-                            match_len: word.char_end - *first_word_char_start,
+                            char_count: word.char_end - *first_word_char_start,
                             ids: ids.clone().collect(),
                             position: MatchPosition::Phrase {
                                 word_positions: [first_word_position, word_position],
@@ -182,10 +185,10 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                 match match_type {
                     // we match, we save the current token as a match,
                     // then we continue the rest of the tokens.
-                    MatchType::Full { char_len, ids } => {
+                    MatchType::Full { ids, char_count, .. } => {
                         let ids: Vec<_> = ids.clone().collect();
                         matches.push(Match {
-                            match_len: char_len,
+                            char_count,
                             ids,
                             position: MatchPosition::Word { word_position, token_position },
                         });
@@ -224,19 +227,15 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                 .iter()
                 .map(|m| MatchBounds {
                     start: tokens[m.get_first_token_pos()].byte_start,
-                    length: m.match_len,
+                    // TODO: Why is this in chars, while start is in bytes?
+                    length: m.char_count,
                 })
                 .collect(),
         }
     }
 
     /// Returns the bounds in byte index of the crop window.
-    fn crop_bounds(
-        &self,
-        tokens: &[Token<'_>],
-        matches: &[Match],
-        crop_size: usize,
-    ) -> (usize, usize) {
+    fn crop_bounds(&self, tokens: &[Token<'_>], matches: &[Match], crop_size: usize) -> [usize; 2] {
         let (
             mut remaining_words,
             is_iterating_forward,
@@ -371,7 +370,7 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
         let crop_byte_start = before_tokens.next().map_or(0, |t| t.byte_end);
         let crop_byte_end = after_tokens.next().map_or(self.text.len(), |t| t.byte_start);
 
-        (crop_byte_start, crop_byte_end)
+        [crop_byte_start, crop_byte_end]
     }
 
     // Returns the formatted version of the original text.
@@ -382,78 +381,87 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
         } else {
             match &self.matches {
                 Some((tokens, matches)) => {
-                    // If the text has to be cropped,
-                    // crop around the best interval.
-                    let (byte_start, byte_end) = match format_options.crop {
+                    // If the text has to be cropped, crop around the best interval.
+                    let [crop_byte_start, crop_byte_end] = match format_options.crop {
                         Some(crop_size) if crop_size > 0 => {
                             self.crop_bounds(tokens, matches, crop_size)
                         }
-                        _ => (0, self.text.len()),
+                        _ => [0, self.text.len()],
                     };
 
                     let mut formatted = Vec::new();
 
                     // push crop marker if it's not the start of the text.
-                    if byte_start > 0 && !self.crop_marker.is_empty() {
+                    if crop_byte_start > 0 && !self.crop_marker.is_empty() {
                         formatted.push(self.crop_marker);
                     }
 
-                    let mut byte_index = byte_start;
+                    let mut byte_index = crop_byte_start;
 
                     if format_options.highlight {
                         // insert highlight markers around matches.
                         for m in matches {
-                            let (current_byte_start, current_byte_end) = match m.position {
+                            let [m_byte_start, m_byte_end] = match m.position {
                                 MatchPosition::Word { token_position, .. } => {
                                     let token = &tokens[token_position];
-                                    (&token.byte_start, &token.byte_end)
+                                    [&token.byte_start, &token.byte_end]
                                 }
                                 MatchPosition::Phrase { token_positions: [ftp, ltp], .. } => {
-                                    (&tokens[ftp].byte_start, &tokens[ltp].byte_end)
+                                    [&tokens[ftp].byte_start, &tokens[ltp].byte_end]
                                 }
                             };
 
-                            // skip matches out of the crop window.
-                            if *current_byte_start < byte_start || *current_byte_end > byte_end {
+                            // skip matches out of the crop window
+                            if *m_byte_end < crop_byte_start || *m_byte_start > crop_byte_end {
                                 continue;
                             }
 
-                            if byte_index < *current_byte_start {
-                                formatted.push(&self.text[byte_index..*current_byte_start]);
+                            // adjust start and end to the crop window size
+                            let [m_byte_start, m_byte_end] = [
+                                max(m_byte_start, &crop_byte_start),
+                                min(m_byte_end, &crop_byte_end),
+                            ];
+
+                            // push text that is positioned before our matches
+                            if byte_index < *m_byte_start {
+                                formatted.push(&self.text[byte_index..*m_byte_start]);
                             }
 
-                            let highlight_byte_index = self.text[*current_byte_start..]
-                                .char_indices()
-                                .enumerate()
-                                .find(|(i, _)| *i == m.match_len)
-                                .map_or(*current_byte_end, |(_, (i, _))| i + *current_byte_start);
-
                             formatted.push(self.highlight_prefix);
-                            formatted.push(&self.text[*current_byte_start..highlight_byte_index]);
+
+                            // TODO: This is additional work done, charabia::token::Token byte_len
+                            // should already get us the original byte length, however, that doesn't work as
+                            // it's supposed to, investigate why
+                            let highlight_byte_index = self.text[*m_byte_start..]
+                                .char_indices()
+                                .nth(m.char_count)
+                                .map_or(*m_byte_end, |(i, _)| min(i + *m_byte_start, *m_byte_end));
+                            formatted.push(&self.text[*m_byte_start..highlight_byte_index]);
+
                             formatted.push(self.highlight_suffix);
 
                             // if it's a prefix highlight, we put the end of the word after the highlight marker.
-                            if highlight_byte_index < *current_byte_end {
-                                formatted.push(&self.text[highlight_byte_index..*current_byte_end]);
+                            if highlight_byte_index < *m_byte_end {
+                                formatted.push(&self.text[highlight_byte_index..*m_byte_end]);
                             }
 
-                            byte_index = *current_byte_end;
+                            byte_index = *m_byte_end;
                         }
                     }
 
                     // push the rest of the text between last match and the end of crop.
-                    if byte_index < byte_end {
-                        formatted.push(&self.text[byte_index..byte_end]);
+                    if byte_index < crop_byte_end {
+                        formatted.push(&self.text[byte_index..crop_byte_end]);
                     }
 
                     // push crop marker if it's not the end of the text.
-                    if byte_end < self.text.len() && !self.crop_marker.is_empty() {
+                    if crop_byte_end < self.text.len() && !self.crop_marker.is_empty() {
                         formatted.push(self.crop_marker);
                     }
 
                     if formatted.len() == 1 {
                         // avoid concatenating if there is already 1 slice.
-                        Cow::Borrowed(&self.text[byte_start..byte_end])
+                        Cow::Borrowed(&self.text[crop_byte_start..crop_byte_end])
                     } else {
                         Cow::Owned(formatted.concat())
                     }
@@ -825,8 +833,7 @@ mod tests {
         let mut matcher = builder.build(text, None);
         insta::assert_snapshot!(
             matcher.format(format_options),
-            // @TODO: Should probably highlight it all, even if it didn't fit the whole phrase
-            @"The groundbreaking invention had the power to split the world…"
+            @"<em>The groundbreaking invention had the power to split the world</em>…"
         );
 
         let builder = MatcherBuilder::new_test(
@@ -837,7 +844,7 @@ mod tests {
         let mut matcher = builder.build(text, None);
         insta::assert_snapshot!(
             matcher.format(format_options),
-            // @TODO: Should probably include end of string in this case?
+            // TODO: Should include exclamation mark without crop markers
             @"…between those who <em>embraced progress and those who resisted change</em>…"
         );
 
@@ -860,8 +867,7 @@ mod tests {
         let mut matcher = builder.build(text, None);
         insta::assert_snapshot!(
             matcher.format(format_options),
-            // @TODO: "invention" should be highlighted as well
-            @"…invention <em>had the power to split the world between those</em>…"
+            @"…<em>invention</em> <em>had the power to split the world between those</em>…"
         );
     }
 

@@ -86,14 +86,17 @@ impl MatchingWords {
                         continue;
                     };
                     let prefix_length = char_index + c.len_utf8();
-                    let char_len = token.original_lengths(prefix_length).0;
+                    let (char_count, byte_len) = token.original_lengths(prefix_length);
                     let ids = &located_words.positions;
-                    return Some(MatchType::Full { char_len, ids });
+                    return Some(MatchType::Full { ids, char_count, byte_len });
                 // else we exact match the token.
                 } else if token.lemma() == word {
-                    let char_len = token.char_end - token.char_start;
                     let ids = &located_words.positions;
-                    return Some(MatchType::Full { char_len, ids });
+                    return Some(MatchType::Full {
+                        char_count: token.char_end - token.char_start,
+                        byte_len: token.byte_end - token.byte_start,
+                        ids,
+                    });
                 }
             }
         }
@@ -149,7 +152,7 @@ pub type WordId = u16;
 /// In these cases we need to match consecutively several tokens to consider that the match is full.
 #[derive(Debug, PartialEq)]
 pub enum MatchType<'a> {
-    Full { char_len: usize, ids: &'a RangeInclusive<WordId> },
+    Full { char_count: usize, byte_len: usize, ids: &'a RangeInclusive<WordId> },
     Partial(PartialMatch<'a>),
 }
 
@@ -183,7 +186,11 @@ impl<'a> PartialMatch<'a> {
         // if there is no remaining word to match in the phrase and the current token is matching,
         // return a Full match.
         } else if is_matching {
-            Some(MatchType::Full { char_len: token.char_end - token.char_start, ids })
+            Some(MatchType::Full {
+                char_count: token.char_end - token.char_start,
+                byte_len: token.byte_end - token.byte_start,
+                ids,
+            })
         // if the current token doesn't match, return None to break the match sequence.
         } else {
             None
@@ -270,7 +277,7 @@ pub(crate) mod tests {
                     ..Default::default()
                 })
                 .next(),
-            Some(MatchType::Full { char_len: 5, ids: &(0..=0) })
+            Some(MatchType::Full { char_count: 5, byte_len: 5, ids: &(0..=0) })
         );
         assert_eq!(
             matching_words
@@ -294,7 +301,7 @@ pub(crate) mod tests {
                     ..Default::default()
                 })
                 .next(),
-            Some(MatchType::Full { char_len: 5, ids: &(2..=2) })
+            Some(MatchType::Full { char_count: 5, byte_len: 5, ids: &(2..=2) })
         );
         assert_eq!(
             matching_words
@@ -306,7 +313,7 @@ pub(crate) mod tests {
                     ..Default::default()
                 })
                 .next(),
-            Some(MatchType::Full { char_len: 5, ids: &(2..=2) })
+            Some(MatchType::Full { char_count: 5, byte_len: 5, ids: &(2..=2) })
         );
         assert_eq!(
             matching_words

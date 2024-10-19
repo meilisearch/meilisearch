@@ -18,7 +18,7 @@ pub enum MatchPosition {
 
 #[derive(Clone, Debug)]
 pub struct Match {
-    pub match_len: usize,
+    pub char_count: usize,
     // ids of the query words that matches.
     pub ids: Vec<WordId>,
     pub position: MatchPosition,
