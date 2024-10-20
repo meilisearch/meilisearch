@@ -82,6 +82,22 @@ pub struct Event {
     total: usize,
 }
 
+/// This function should always be called on the same type. If `this` and `other`
+/// aren't the same type the function will do nothing and return `None`.
+fn downcast_aggregate<ConcreteType: Aggregate>(
+    old: Box<dyn Aggregate>,
+    new: Box<dyn Aggregate>,
+) -> Option<Box<dyn Aggregate>> {
+    if old.is::<ConcreteType>() && new.is::<ConcreteType>() {
+        // Both the two following lines cannot fail, but just to be sure we don't crash, we're still avoiding unwrapping
+        let this = old.downcast::<ConcreteType>().ok()?;
+        let other = new.downcast::<ConcreteType>().ok()?;
+        Some(ConcreteType::aggregate(this, other))
+    } else {
+        None
+    }
+}
+
 impl Message {
     pub fn new<T: Aggregate>(event: T, request: &HttpRequest) -> Self {
         Self {
@@ -92,7 +108,7 @@ impl Message {
                 user_agents: extract_user_agents(request),
                 total: 1,
             },
-            aggregator_function: T::downcast_aggregate,
+            aggregator_function: downcast_aggregate::<T>,
         }
     }
 }

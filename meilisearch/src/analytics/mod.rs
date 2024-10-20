@@ -93,26 +93,6 @@ pub trait Aggregate: 'static + mopa::Any + Send {
     where
         Self: Sized;
 
-    /// An internal helper function, you shouldn't implement it yourself.
-    /// This function should always be called on the same type. If `this` and `other`
-    /// aren't the same type behind the function will do nothing and return `None`.
-    fn downcast_aggregate(
-        old: Box<dyn Aggregate>,
-        new: Box<dyn Aggregate>,
-    ) -> Option<Box<dyn Aggregate>>
-    where
-        Self: Sized,
-    {
-        if old.is::<Self>() && new.is::<Self>() {
-            // Both the two following lines cannot fail, but just to be sure we don't crash, we're still avoiding unwrapping
-            let this = old.downcast::<Self>().ok()?;
-            let other = new.downcast::<Self>().ok()?;
-            Some(Self::aggregate(this, other))
-        } else {
-            None
-        }
-    }
-
     /// Converts your structure to the final event that'll be sent to segment.
     fn into_event(self: Box<Self>) -> serde_json::Value;
 }
