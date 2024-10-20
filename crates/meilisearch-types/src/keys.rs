@@ -189,35 +189,35 @@ bitflags! {
     const DocumentsAdd = 1 << 1;
     const DocumentsGet = 1 << 2;
     const DocumentsDelete = 1 << 3;
-    const DocumentsAll = Self::DocumentsAdd.repr() | Self::DocumentsGet.repr() | Self::DocumentsDelete.repr();
+    const DocumentsAll = Self::DocumentsAdd.bits() | Self::DocumentsGet.bits() | Self::DocumentsDelete.bits();
     // Indexes
     const IndexesAdd = 1 << 4;
     const IndexesGet = 1 << 5;
     const IndexesUpdate = 1 << 6;
     const IndexesDelete = 1 << 7;
     const IndexesSwap = 1 << 8;
-    const IndexesAll = Self::IndexesAdd.repr() | Self::IndexesGet.repr() | Self::IndexesUpdate.repr() | Self::IndexesDelete.repr() | Self::IndexesSwap.repr();
+    const IndexesAll = Self::IndexesAdd.bits() | Self::IndexesGet.bits() | Self::IndexesUpdate.bits() | Self::IndexesDelete.bits() | Self::IndexesSwap.bits();
     // Tasks
     const TasksCancel = 1 << 9;
     const TasksDelete = 1 << 10;
     const TasksGet = 1 << 11;
-    const TasksAll = Self::TasksCancel.repr() | Self::TasksDelete.repr() | Self::TasksGet.repr();
+    const TasksAll = Self::TasksCancel.bits() | Self::TasksDelete.bits() | Self::TasksGet.bits();
     // Settings
     const SettingsGet = 1 << 12;
     const SettingsUpdate = 1 << 13;
-    const SettingsAll = Self::SettingsGet.repr() | Self::SettingsUpdate.repr();
+    const SettingsAll = Self::SettingsGet.bits() | Self::SettingsUpdate.bits();
     // Stats
     const StatsGet = 1 << 14;
-    const StatsAll = Self::StatsGet.repr();
+    const StatsAll = Self::StatsGet.bits();
     // Metrics
     const MetricsGet = 1 << 15;
-    const MetricsAll = Self::MetricsGet.repr();
+    const MetricsAll = Self::MetricsGet.bits();
     // Dumps
     const DumpsCreate = 1 << 16;
-    const DumpsAll = Self::DumpsCreate.repr();
+    const DumpsAll = Self::DumpsCreate.bits();
     // Snapshots
     const SnapshotsCreate = 1 << 17;
-    const SnapshotsAll = Self::SnapshotsCreate.repr();
+    const SnapshotsAll = Self::SnapshotsCreate.bits();
     const Version = 1 << 18;
     const KeysAdd = 1 << 19;
     const KeysGet = 1 << 20;
@@ -241,33 +241,32 @@ bitflags! {
 
 impl Action {
     const SERDE_MAP_ARR: [(&'static str, Self); 34] = [
-        ("*", Self::All),
         ("search", Self::Search),
-        ("documents.*", Self::DocumentsAll),
         ("documents.add", Self::DocumentsAdd),
         ("documents.get", Self::DocumentsGet),
         ("documents.delete", Self::DocumentsDelete),
-        ("indexes.*", Self::IndexesAll),
+        ("documents.*", Self::DocumentsAll),
         ("indexes.create", Self::IndexesAdd),
         ("indexes.get", Self::IndexesGet),
         ("indexes.update", Self::IndexesUpdate),
         ("indexes.delete", Self::IndexesDelete),
         ("indexes.swap", Self::IndexesSwap),
-        ("tasks.*", Self::TasksAll),
+        ("indexes.*", Self::IndexesAll),
         ("tasks.cancel", Self::TasksCancel),
         ("tasks.delete", Self::TasksDelete),
         ("tasks.get", Self::TasksGet),
-        ("settings.*", Self::SettingsAll),
+        ("tasks.*", Self::TasksAll),
         ("settings.get", Self::SettingsGet),
         ("settings.update", Self::SettingsUpdate),
-        ("stats.*", Self::StatsAll),
+        ("settings.*", Self::SettingsAll),
         ("stats.get", Self::StatsGet),
-        ("metrics.*", Self::MetricsAll),
+        ("stats.*", Self::StatsAll),
         ("metrics.get", Self::MetricsGet),
-        ("dumps.*", Self::DumpsAll),
+        ("metrics.*", Self::MetricsAll),
         ("dumps.create", Self::DumpsCreate),
-        ("snapshots.*", Self::SnapshotsAll),
+        ("dumps.*", Self::DumpsAll),
         ("snapshots.create", Self::SnapshotsCreate),
+        ("snapshots.*", Self::SnapshotsAll),
         ("version", Self::Version),
         ("keys.create", Self::KeysAdd),
         ("keys.get", Self::KeysGet),
@@ -275,6 +274,7 @@ impl Action {
         ("keys.delete", Self::KeysDelete),
         ("experimental.get", Self::ExperimentalFeaturesGet),
         ("experimental.update", Self::ExperimentalFeaturesUpdate),
+        ("*", Self::All),
     ];
 
     fn get_action(v: &str) -> Option<Action> {
@@ -289,92 +289,54 @@ impl Action {
             .iter()
             .find(|(_, action)| v == action)
             .map(|(serde_name, _)| serde_name)
-            .expect("an action doesn't have a matching serialized value")
+            .expect("an action is missing a matching serialized value")
     }
 
-    pub const fn from_repr(repr: u32) -> Option<Self> {
-        use actions::*;
-        match repr {
-            SEARCH => Some(Self::Search),
-            DOCUMENTS_ADD => Some(Self::DocumentsAdd),
-            DOCUMENTS_GET => Some(Self::DocumentsGet),
-            DOCUMENTS_DELETE => Some(Self::DocumentsDelete),
-            DOCUMENTS_ALL => Some(Self::DocumentsAll),
-            INDEXES_CREATE => Some(Self::IndexesAdd),
-            INDEXES_GET => Some(Self::IndexesGet),
-            INDEXES_UPDATE => Some(Self::IndexesUpdate),
-            INDEXES_DELETE => Some(Self::IndexesDelete),
-            INDEXES_SWAP => Some(Self::IndexesSwap),
-            INDEXES_ALL => Some(Self::IndexesAll),
-            TASKS_CANCEL => Some(Self::TasksCancel),
-            TASKS_DELETE => Some(Self::TasksDelete),
-            TASKS_GET => Some(Self::TasksGet),
-            TASKS_ALL => Some(Self::TasksAll),
-            SETTINGS_GET => Some(Self::SettingsGet),
-            SETTINGS_UPDATE => Some(Self::SettingsUpdate),
-            SETTINGS_ALL => Some(Self::SettingsAll),
-            STATS_GET => Some(Self::StatsGet),
-            // TODO: Issue: Since stats has only one element, all is the same as the one single element
-            //               so this will never match all, because it matches that one and only element first
-            // STATS_ALL => Some(Self::StatsAll),
-            METRICS_GET => Some(Self::MetricsGet),
-            // METRICS_ALL => Some(Self::MetricsAll),
-            DUMPS_CREATE => Some(Self::DumpsCreate),
-            // DUMPS_ALL => Some(Self::DumpsAll),
-            SNAPSHOTS_CREATE => Some(Self::SnapshotsCreate),
-            VERSION => Some(Self::Version),
-            KEYS_CREATE => Some(Self::KeysAdd),
-            KEYS_GET => Some(Self::KeysGet),
-            KEYS_UPDATE => Some(Self::KeysUpdate),
-            KEYS_DELETE => Some(Self::KeysDelete),
-            EXPERIMENTAL_FEATURES_GET => Some(Self::ExperimentalFeaturesGet),
-            EXPERIMENTAL_FEATURES_UPDATE => Some(Self::ExperimentalFeaturesUpdate),
-            ALL => Some(Self::All),
-            _ => None,
-        }
-    }
-
-    pub const fn repr(&self) -> u32 {
-        self.bits()
+    fn get_index(&self) -> usize {
+        Self::SERDE_MAP_ARR
+            .iter()
+            .enumerate()
+            .find(|(_, (_, action))| action == self)
+            .map(|(i, _)| i)
+            .unwrap()
     }
 }
 
 pub mod actions {
     use super::Action as A;
 
-    pub const SEARCH: u32 = A::Search.repr();
-    pub const DOCUMENTS_ADD: u32 = A::DocumentsAdd.repr();
-    pub const DOCUMENTS_GET: u32 = A::DocumentsGet.repr();
-    pub const DOCUMENTS_DELETE: u32 = A::DocumentsDelete.repr();
-    pub const DOCUMENTS_ALL: u32 = A::DocumentsAll.repr();
-    pub const INDEXES_CREATE: u32 = A::IndexesAdd.repr();
-    pub const INDEXES_GET: u32 = A::IndexesGet.repr();
-    pub const INDEXES_UPDATE: u32 = A::IndexesUpdate.repr();
-    pub const INDEXES_DELETE: u32 = A::IndexesDelete.repr();
-    pub const INDEXES_SWAP: u32 = A::IndexesSwap.repr();
-    pub const INDEXES_ALL: u32 = A::IndexesAll.repr();
-    pub const TASKS_CANCEL: u32 = A::TasksCancel.repr();
-    pub const TASKS_DELETE: u32 = A::TasksDelete.repr();
-    pub const TASKS_GET: u32 = A::TasksGet.repr();
-    pub const TASKS_ALL: u32 = A::TasksAll.repr();
-    pub const SETTINGS_GET: u32 = A::SettingsGet.repr();
-    pub const SETTINGS_UPDATE: u32 = A::SettingsUpdate.repr();
-    pub const SETTINGS_ALL: u32 = A::SettingsAll.repr();
-    pub const STATS_GET: u32 = A::StatsGet.repr();
-    pub const STATS_ALL: u32 = A::StatsAll.repr();
-    pub const METRICS_GET: u32 = A::MetricsGet.repr();
-    pub const METRICS_ALL: u32 = A::MetricsAll.repr();
-    pub const DUMPS_CREATE: u32 = A::DumpsCreate.repr();
-    pub const DUMPS_ALL: u32 = A::DumpsAll.repr();
-    pub const SNAPSHOTS_CREATE: u32 = A::SnapshotsCreate.repr();
-    pub const VERSION: u32 = A::Version.repr();
-    pub const KEYS_CREATE: u32 = A::KeysAdd.repr();
-    pub const KEYS_GET: u32 = A::KeysGet.repr();
-    pub const KEYS_UPDATE: u32 = A::KeysUpdate.repr();
-    pub const KEYS_DELETE: u32 = A::KeysDelete.repr();
-    pub const EXPERIMENTAL_FEATURES_GET: u32 = A::ExperimentalFeaturesGet.repr();
-    pub const EXPERIMENTAL_FEATURES_UPDATE: u32 = A::ExperimentalFeaturesUpdate.repr();
-    pub(crate) const ALL: u32 = A::All.repr();
+    pub const SEARCH: u32 = A::Search.bits();
+    pub const DOCUMENTS_ADD: u32 = A::DocumentsAdd.bits();
+    pub const DOCUMENTS_GET: u32 = A::DocumentsGet.bits();
+    pub const DOCUMENTS_DELETE: u32 = A::DocumentsDelete.bits();
+    pub const DOCUMENTS_ALL: u32 = A::DocumentsAll.bits();
+    pub const INDEXES_CREATE: u32 = A::IndexesAdd.bits();
+    pub const INDEXES_GET: u32 = A::IndexesGet.bits();
+    pub const INDEXES_UPDATE: u32 = A::IndexesUpdate.bits();
+    pub const INDEXES_DELETE: u32 = A::IndexesDelete.bits();
+    pub const INDEXES_SWAP: u32 = A::IndexesSwap.bits();
+    pub const INDEXES_ALL: u32 = A::IndexesAll.bits();
+    pub const TASKS_CANCEL: u32 = A::TasksCancel.bits();
+    pub const TASKS_DELETE: u32 = A::TasksDelete.bits();
+    pub const TASKS_GET: u32 = A::TasksGet.bits();
+    pub const TASKS_ALL: u32 = A::TasksAll.bits();
+    pub const SETTINGS_GET: u32 = A::SettingsGet.bits();
+    pub const SETTINGS_UPDATE: u32 = A::SettingsUpdate.bits();
+    pub const SETTINGS_ALL: u32 = A::SettingsAll.bits();
+    pub const STATS_GET: u32 = A::StatsGet.bits();
+    pub const STATS_ALL: u32 = A::StatsAll.bits();
+    pub const METRICS_GET: u32 = A::MetricsGet.bits();
+    pub const METRICS_ALL: u32 = A::MetricsAll.bits();
+    pub const DUMPS_CREATE: u32 = A::DumpsCreate.bits();
+    pub const DUMPS_ALL: u32 = A::DumpsAll.bits();
+    pub const SNAPSHOTS_CREATE: u32 = A::SnapshotsCreate.bits();
+    pub const VERSION: u32 = A::Version.bits();
+    pub const KEYS_CREATE: u32 = A::KeysAdd.bits();
+    pub const KEYS_GET: u32 = A::KeysGet.bits();
+    pub const KEYS_UPDATE: u32 = A::KeysUpdate.bits();
+    pub const KEYS_DELETE: u32 = A::KeysDelete.bits();
+    pub const EXPERIMENTAL_FEATURES_GET: u32 = A::ExperimentalFeaturesGet.bits();
+    pub const EXPERIMENTAL_FEATURES_UPDATE: u32 = A::ExperimentalFeaturesUpdate.bits();
 }
 
 impl<E: DeserializeError> Deserr<E> for Action {
@@ -447,7 +409,7 @@ impl Sequence for Action {
     const CARDINALITY: usize = Self::SERDE_MAP_ARR.len();
 
     fn next(&self) -> Option<Self> {
-        let next_index = self.bits() as usize + 1;
+        let next_index = self.get_index() + 1;
         if next_index == Self::CARDINALITY {
             None
         } else {
@@ -456,7 +418,7 @@ impl Sequence for Action {
     }
 
     fn previous(&self) -> Option<Self> {
-        let current_index = self.bits() as usize;
+        let current_index = self.get_index();
         if current_index == 0 {
             None
         } else {

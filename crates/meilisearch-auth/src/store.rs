@@ -304,13 +304,13 @@ impl<'a> milli::heed::BytesDecode<'a> for KeyIdActionCodec {
 
     fn bytes_decode(bytes: &'a [u8]) -> StdResult<Self::DItem, BoxedError> {
         let (key_id_bytes, action_bytes) = try_split_array_at(bytes).ok_or(SliceTooShortError)?;
-        let (action_repr, index) =
+        let (action_bits, index) =
             match try_split_array_at::<u8, 4>(action_bytes).ok_or(SliceTooShortError)? {
                 (action_parts, []) => (Self::action_parts_to_repr(action_parts), None),
                 (action_parts, index) => (Self::action_parts_to_repr(action_parts), Some(index)),
             };
         let key_id = Uuid::from_bytes(*key_id_bytes);
-        let action = Action::from_repr(action_repr).ok_or(InvalidActionError { action_repr })?;
+        let action = Action::from_bits(action_bits).ok_or(InvalidActionError { action_bits })?;
 
         Ok((key_id, action, index))
     }
@@ -323,7 +323,7 @@ impl<'a> milli::heed::BytesEncode<'a> for KeyIdActionCodec {
         let mut bytes = Vec::new();
 
         bytes.extend_from_slice(key_id.as_bytes());
-        let action_bytes = u32::to_be_bytes(action.repr());
+        let action_bytes = u32::to_be_bytes(action.bits());
         bytes.extend_from_slice(&action_bytes);
         if let Some(index) = index {
             bytes.extend_from_slice(index);
@@ -338,9 +338,9 @@ impl<'a> milli::heed::BytesEncode<'a> for KeyIdActionCodec {
 pub struct SliceTooShortError;
 
 #[derive(Error, Debug)]
-#[error("cannot construct a valid Action from {action_repr}")]
+#[error("cannot construct a valid Action from {action_bits}")]
 pub struct InvalidActionError {
-    pub action_repr: u32,
+    pub action_bits: u32,
 }
 
 pub fn generate_key_as_hexa(uid: Uuid, master_key: &[u8]) -> String {
