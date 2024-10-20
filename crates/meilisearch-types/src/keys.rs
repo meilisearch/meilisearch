@@ -2,7 +2,7 @@ use std::convert::Infallible;
 use std::hash::Hash;
 use std::str::FromStr;
 
-use bitflags::bitflags;
+use bitflags::{bitflags, Flags};
 use deserr::{take_cf_content, DeserializeError, Deserr, MergeWithError, ValuePointerRef};
 use enum_iterator::Sequence;
 use milli::update::Setting;
@@ -291,15 +291,6 @@ impl Action {
             .map(|(serde_name, _)| serde_name)
             .expect("an action is missing a matching serialized value")
     }
-
-    fn get_index(&self) -> usize {
-        Self::SERDE_MAP_ARR
-            .iter()
-            .enumerate()
-            .find(|(_, (_, action))| action == self)
-            .map(|(i, _)| i)
-            .unwrap()
-    }
 }
 
 pub mod actions {
@@ -409,28 +400,51 @@ impl Sequence for Action {
     const CARDINALITY: usize = Self::SERDE_MAP_ARR.len();
 
     fn next(&self) -> Option<Self> {
-        let next_index = self.get_index() + 1;
-        if next_index == Self::CARDINALITY {
-            None
-        } else {
-            Some(Self::SERDE_MAP_ARR[next_index].1)
+        let mut iter = Self::FLAGS.iter();
+        while let Some(action) = iter.next() {
+            if action.value() == self {
+                if let Some(action) = iter.next() {
+                    return Some(*action.value());
+                }
+
+                break;
+            }
         }
+
+        Non
     }
 
     fn previous(&self) -> Option<Self> {
-        let current_index = self.get_index();
-        if current_index == 0 {
-            None
-        } else {
-            Some(Self::SERDE_MAP_ARR[current_index - 1].1)
+        let mut iter = Self::FLAGS.iter().peekable();
+
+        if let Some(action) = iter.next() {
+            if action.value() == self {
+                return None;
+            }
+
+            if let Some(next_action) = iter.peek() {
+                if next_action.value() == self {
+                    return Some(*action.value());
+                }
+            }
         }
+
+        while let Some(action) = iter.next() {
+            if let Some(next_action) = iter.peek() {
+                if next_action.value() == self {
+                    return Some(*action.value());
+                }
+            }
+        }
+
+        None
     }
 
     fn first() -> Option<Self> {
-        Some(Self::SERDE_MAP_ARR[0].1)
+        Self::FLAGS.first().map(|v| *v.value())
     }
 
     fn last() -> Option<Self> {
-        Some(Self::SERDE_MAP_ARR[Self::CARDINALITY - 1].1)
+        Self::FLAGS.last().map(|v| *v.value())
     }
 }
