@@ -113,18 +113,18 @@ impl Aggregate for FacetSearchAggregator {
         "Facet Searched POST"
     }
 
-    fn aggregate(mut self: Box<Self>, other: Box<Self>) -> Box<Self> {
-        for time in other.time_spent {
+    fn aggregate(mut self: Box<Self>, new: Box<Self>) -> Box<Self> {
+        for time in new.time_spent {
             self.time_spent.push(time);
         }
 
         Box::new(Self {
-            total_received: self.total_received.saturating_add(other.total_received),
-            total_succeeded: self.total_succeeded.saturating_add(other.total_succeeded),
+            total_received: self.total_received.saturating_add(new.total_received),
+            total_succeeded: self.total_succeeded.saturating_add(new.total_succeeded),
             time_spent: self.time_spent,
-            facet_names: self.facet_names.union(&other.facet_names).cloned().collect(),
+            facet_names: self.facet_names.union(&new.facet_names).cloned().collect(),
             additional_search_parameters_provided: self.additional_search_parameters_provided
-                | other.additional_search_parameters_provided,
+                | new.additional_search_parameters_provided,
         })
     }
 

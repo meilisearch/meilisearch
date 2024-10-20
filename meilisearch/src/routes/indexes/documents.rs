@@ -158,13 +158,13 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
         Method::event_name()
     }
 
-    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
+    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
         Box::new(Self {
-            per_document_id: self.per_document_id | other.per_document_id,
-            per_filter: self.per_filter | other.per_filter,
-            retrieve_vectors: self.retrieve_vectors | other.retrieve_vectors,
-            max_limit: self.max_limit.max(other.max_limit),
-            max_offset: self.max_offset.max(other.max_offset),
+            per_document_id: self.per_document_id | new.per_document_id,
+            per_filter: self.per_filter | new.per_filter,
+            retrieve_vectors: self.retrieve_vectors | new.retrieve_vectors,
+            max_limit: self.max_limit.max(new.max_limit),
+            max_offset: self.max_offset.max(new.max_offset),
             marker: PhantomData,
         })
     }
@@ -223,12 +223,12 @@ impl Aggregate for DocumentsDeletionAggregator {
         "Documents Deleted"
     }
 
-    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
+    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
         Box::new(Self {
-            per_document_id: self.per_document_id | other.per_document_id,
-            clear_all: self.clear_all | other.clear_all,
-            per_batch: self.per_batch | other.per_batch,
-            per_filter: self.per_filter | other.per_filter,
+            per_document_id: self.per_document_id | new.per_document_id,
+            clear_all: self.clear_all | new.clear_all,
+            per_batch: self.per_batch | new.per_batch,
+            per_filter: self.per_filter | new.per_filter,
         })
     }
 
@@ -437,11 +437,11 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
         Method::event_name()
     }
 
-    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
+    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
         Box::new(Self {
-            payload_types: self.payload_types.union(&other.payload_types).cloned().collect(),
-            primary_key: self.primary_key.union(&other.primary_key).cloned().collect(),
-            index_creation: self.index_creation | other.index_creation,
+            payload_types: self.payload_types.union(&new.payload_types).cloned().collect(),
+            primary_key: self.primary_key.union(&new.primary_key).cloned().collect(),
+            index_creation: self.index_creation | new.index_creation,
             method: PhantomData,
         })
     }
@@ -815,11 +815,11 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
         "Documents Edited By Function"
     }
 
-    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
+    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
         Box::new(Self {
-            filtered: self.filtered | other.filtered,
-            with_context: self.with_context | other.with_context,
-            index_creation: self.index_creation | other.index_creation,
+            filtered: self.filtered | new.filtered,
+            with_context: self.with_context | new.with_context,
+            index_creation: self.index_creation | new.index_creation,
         })
     }
 

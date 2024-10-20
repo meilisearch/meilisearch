@@ -702,7 +702,7 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
         Method::event_name()
     }
 
-    fn aggregate(mut self: Box<Self>, other: Box<Self>) -> Box<Self> {
+    fn aggregate(mut self: Box<Self>, new: Box<Self>) -> Box<Self> {
         let Self {
             total_received,
             total_succeeded,
@@ -743,7 +743,7 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
             ranking_score_threshold,
             mut locales,
             marker: _,
-        } = *other;
+        } = *new;
 
         // request
         self.total_received = self.total_received.saturating_add(total_received);
@@ -1038,22 +1038,22 @@ impl Aggregate for MultiSearchAggregator {
     }
 
     /// Aggregate one [MultiSearchAggregator] into another.
-    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
+    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
         // write the aggregate in a way that will cause a compilation error if a field is added.
 
         // get ownership of self, replacing it by a default value.
         let this = *self;
 
-        let total_received = this.total_received.saturating_add(other.total_received);
-        let total_succeeded = this.total_succeeded.saturating_add(other.total_succeeded);
+        let total_received = this.total_received.saturating_add(new.total_received);
+        let total_succeeded = this.total_succeeded.saturating_add(new.total_succeeded);
         let total_distinct_index_count =
-            this.total_distinct_index_count.saturating_add(other.total_distinct_index_count);
-        let total_single_index = this.total_single_index.saturating_add(other.total_single_index);
-        let total_search_count = this.total_search_count.saturating_add(other.total_search_count);
-        let show_ranking_score = this.show_ranking_score || other.show_ranking_score;
+            this.total_distinct_index_count.saturating_add(new.total_distinct_index_count);
+        let total_single_index = this.total_single_index.saturating_add(new.total_single_index);
+        let total_search_count = this.total_search_count.saturating_add(new.total_search_count);
+        let show_ranking_score = this.show_ranking_score || new.show_ranking_score;
         let show_ranking_score_details =
-            this.show_ranking_score_details || other.show_ranking_score_details;
-        let use_federation = this.use_federation || other.use_federation;
+            this.show_ranking_score_details || new.show_ranking_score_details;
+        let use_federation = this.use_federation || new.use_federation;
 
         Box::new(Self {
             total_received,
@@ -1215,7 +1215,7 @@ impl<Method: AggregateMethod> Aggregate for SimilarAggregator<Method> {
     }
 
     /// Aggregate one [SimilarAggregator] into another.
-    fn aggregate(mut self: Box<Self>, other: Box<Self>) -> Box<Self> {
+    fn aggregate(mut self: Box<Self>, new: Box<Self>) -> Box<Self> {
         let Self {
             total_received,
             total_succeeded,
@@ -1233,7 +1233,7 @@ impl<Method: AggregateMethod> Aggregate for SimilarAggregator<Method> {
             ranking_score_threshold,
             retrieve_vectors,
             marker: _,
-        } = *other;
+        } = *new;
 
         // request
         self.total_received = self.total_received.saturating_add(total_received);

@@ -89,7 +89,7 @@ pub trait Aggregate: 'static + mopa::Any + Send {
     fn event_name(&self) -> &'static str;
 
     /// Will be called every time an event has been used twice before segment flushed its buffer.
-    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self>
+    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self>
     where
         Self: Sized;
 
@@ -97,16 +97,16 @@ pub trait Aggregate: 'static + mopa::Any + Send {
     /// This function should always be called on the same type. If `this` and `other`
     /// aren't the same type behind the function will do nothing and return `None`.
     fn downcast_aggregate(
-        this: Box<dyn Aggregate>,
-        other: Box<dyn Aggregate>,
+        old: Box<dyn Aggregate>,
+        new: Box<dyn Aggregate>,
     ) -> Option<Box<dyn Aggregate>>
     where
         Self: Sized,
     {
-        if this.is::<Self>() && other.is::<Self>() {
+        if old.is::<Self>() && new.is::<Self>() {
             // Both the two following lines cannot fail, but just to be sure we don't crash, we're still avoiding unwrapping
-            let this = this.downcast::<Self>().ok()?;
-            let other = other.downcast::<Self>().ok()?;
+            let this = old.downcast::<Self>().ok()?;
+            let other = new.downcast::<Self>().ok()?;
             Some(Self::aggregate(this, other))
         } else {
             None

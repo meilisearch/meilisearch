@@ -42,114 +42,108 @@ impl Aggregate for SettingsAnalytics {
         "Settings Updated"
     }
 
-    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
+    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
         Box::new(Self {
             ranking_rules: RankingRulesAnalytics {
                 words_position: self
                     .ranking_rules
                     .words_position
-                    .or(other.ranking_rules.words_position),
-                typo_position: self
-                    .ranking_rules
-                    .typo_position
-                    .or(other.ranking_rules.typo_position),
+                    .or(new.ranking_rules.words_position),
+                typo_position: self.ranking_rules.typo_position.or(new.ranking_rules.typo_position),
                 proximity_position: self
                     .ranking_rules
                     .proximity_position
-                    .or(other.ranking_rules.proximity_position),
+                    .or(new.ranking_rules.proximity_position),
                 attribute_position: self
                     .ranking_rules
                     .attribute_position
-                    .or(other.ranking_rules.attribute_position),
-                sort_position: self
-                    .ranking_rules
-                    .sort_position
-                    .or(other.ranking_rules.sort_position),
+                    .or(new.ranking_rules.attribute_position),
+                sort_position: self.ranking_rules.sort_position.or(new.ranking_rules.sort_position),
                 exactness_position: self
                     .ranking_rules
                     .exactness_position
-                    .or(other.ranking_rules.exactness_position),
-                values: self.ranking_rules.values.or(other.ranking_rules.values),
+                    .or(new.ranking_rules.exactness_position),
+                values: self.ranking_rules.values.or(new.ranking_rules.values),
             },
             searchable_attributes: SearchableAttributesAnalytics {
-                total: self.searchable_attributes.total.or(other.searchable_attributes.total),
+                total: self.searchable_attributes.total.or(new.searchable_attributes.total),
                 with_wildcard: self
                     .searchable_attributes
                     .with_wildcard
-                    .or(other.searchable_attributes.with_wildcard),
+                    .or(new.searchable_attributes.with_wildcard),
             },
             displayed_attributes: DisplayedAttributesAnalytics {
-                total: self.displayed_attributes.total.or(other.displayed_attributes.total),
+                total: self.displayed_attributes.total.or(new.displayed_attributes.total),
                 with_wildcard: self
                     .displayed_attributes
                     .with_wildcard
-                    .or(other.displayed_attributes.with_wildcard),
+                    .or(new.displayed_attributes.with_wildcard),
             },
             sortable_attributes: SortableAttributesAnalytics {
-                total: self.sortable_attributes.total.or(other.sortable_attributes.total),
-                has_geo: self.sortable_attributes.has_geo.or(other.sortable_attributes.has_geo),
+                total: self.sortable_attributes.total.or(new.sortable_attributes.total),
+                has_geo: self.sortable_attributes.has_geo.or(new.sortable_attributes.has_geo),
             },
             filterable_attributes: FilterableAttributesAnalytics {
-                total: self.filterable_attributes.total.or(other.filterable_attributes.total),
-                has_geo: self.filterable_attributes.has_geo.or(other.filterable_attributes.has_geo),
+                total: self.filterable_attributes.total.or(new.filterable_attributes.total),
+                has_geo: self.filterable_attributes.has_geo.or(new.filterable_attributes.has_geo),
             },
             distinct_attribute: DistinctAttributeAnalytics {
-                set: self.distinct_attribute.set | other.distinct_attribute.set,
+                set: self.distinct_attribute.set | new.distinct_attribute.set,
             },
             proximity_precision: ProximityPrecisionAnalytics {
-                set: self.proximity_precision.set | other.proximity_precision.set,
-                value: self.proximity_precision.value.or(other.proximity_precision.value),
+                set: self.proximity_precision.set | new.proximity_precision.set,
+                value: self.proximity_precision.value.or(new.proximity_precision.value),
             },
             typo_tolerance: TypoToleranceAnalytics {
-                enabled: self.typo_tolerance.enabled.or(other.typo_tolerance.enabled),
+                enabled: self.typo_tolerance.enabled.or(new.typo_tolerance.enabled),
                 disable_on_attributes: self
                     .typo_tolerance
                     .disable_on_attributes
-                    .or(other.typo_tolerance.disable_on_attributes),
+                    .or(new.typo_tolerance.disable_on_attributes),
                 disable_on_words: self
                     .typo_tolerance
                     .disable_on_words
-                    .or(other.typo_tolerance.disable_on_words),
+                    .or(new.typo_tolerance.disable_on_words),
                 min_word_size_for_one_typo: self
                     .typo_tolerance
                     .min_word_size_for_one_typo
-                    .or(other.typo_tolerance.min_word_size_for_one_typo),
+                    .or(new.typo_tolerance.min_word_size_for_one_typo),
                 min_word_size_for_two_typos: self
                     .typo_tolerance
                     .min_word_size_for_two_typos
-                    .or(other.typo_tolerance.min_word_size_for_two_typos),
+                    .or(new.typo_tolerance.min_word_size_for_two_typos),
             },
             faceting: FacetingAnalytics {
                 max_values_per_facet: self
                     .faceting
                     .max_values_per_facet
-                    .or(other.faceting.max_values_per_facet),
+                    .or(new.faceting.max_values_per_facet),
                 sort_facet_values_by_star_count: self
                     .faceting
                     .sort_facet_values_by_star_count
-                    .or(other.faceting.sort_facet_values_by_star_count),
+                    .or(new.faceting.sort_facet_values_by_star_count),
                 sort_facet_values_by_total: self
                     .faceting
                     .sort_facet_values_by_total
-                    .or(other.faceting.sort_facet_values_by_total),
+                    .or(new.faceting.sort_facet_values_by_total),
             },
             pagination: PaginationAnalytics {
-                max_total_hits: self.pagination.max_total_hits.or(other.pagination.max_total_hits),
+                max_total_hits: self.pagination.max_total_hits.or(new.pagination.max_total_hits),
             },
             stop_words: StopWordsAnalytics {
-                total: self.stop_words.total.or(other.stop_words.total),
+                total: self.stop_words.total.or(new.stop_words.total),
             },
-            synonyms: SynonymsAnalytics { total: self.synonyms.total.or(other.synonyms.total) },
+            synonyms: SynonymsAnalytics { total: self.synonyms.total.or(new.synonyms.total) },
             embedders: EmbeddersAnalytics {
-                total: self.embedders.total.or(other.embedders.total),
-                sources: match (self.embedders.sources, other.embedders.sources) {
+                total: self.embedders.total.or(new.embedders.total),
+                sources: match (self.embedders.sources, new.embedders.sources) {
                     (None, None) => None,
                     (Some(sources), None) | (None, Some(sources)) => Some(sources),
                     (Some(this), Some(other)) => Some(this.union(&other).cloned().collect()),
                 },
                 document_template_used: match (
                     self.embedders.document_template_used,
-                    other.embedders.document_template_used,
+                    new.embedders.document_template_used,
                 ) {
                     (None, None) => None,
                     (Some(used), None) | (None, Some(used)) => Some(used),
@@ -157,7 +151,7 @@ impl Aggregate for SettingsAnalytics {
                 },
                 document_template_max_bytes: match (
                     self.embedders.document_template_max_bytes,
-                    other.embedders.document_template_max_bytes,
+                    new.embedders.document_template_max_bytes,
                 ) {
                     (None, None) => None,
                     (Some(bytes), None) | (None, Some(bytes)) => Some(bytes),
@@ -165,7 +159,7 @@ impl Aggregate for SettingsAnalytics {
                 },
                 binary_quantization_used: match (
                     self.embedders.binary_quantization_used,
-                    other.embedders.binary_quantization_used,
+                    new.embedders.binary_quantization_used,
                 ) {
                     (None, None) => None,
                     (Some(bq), None) | (None, Some(bq)) => Some(bq),
@@ -176,17 +170,17 @@ impl Aggregate for SettingsAnalytics {
                 search_cutoff_ms: self
                     .search_cutoff_ms
                     .search_cutoff_ms
-                    .or(other.search_cutoff_ms.search_cutoff_ms),
+                    .or(new.search_cutoff_ms.search_cutoff_ms),
             },
-            locales: LocalesAnalytics { locales: self.locales.locales.or(other.locales.locales) },
+            locales: LocalesAnalytics { locales: self.locales.locales.or(new.locales.locales) },
             dictionary: DictionaryAnalytics {
-                total: self.dictionary.total.or(other.dictionary.total),
+                total: self.dictionary.total.or(new.dictionary.total),
             },
             separator_tokens: SeparatorTokensAnalytics {
-                total: self.separator_tokens.total.or(other.non_separator_tokens.total),
+                total: self.separator_tokens.total.or(new.non_separator_tokens.total),
             },
             non_separator_tokens: NonSeparatorTokensAnalytics {
-                total: self.non_separator_tokens.total.or(other.non_separator_tokens.total),
+                total: self.non_separator_tokens.total.or(new.non_separator_tokens.total),
             },
         })
     }

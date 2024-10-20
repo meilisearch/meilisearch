@@ -64,13 +64,13 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
         "Experimental features Updated"
     }
 
-    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
+    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
         Box::new(Self {
-            vector_store: other.vector_store,
-            metrics: other.metrics,
-            logs_route: other.logs_route,
-            edit_documents_by_function: other.edit_documents_by_function,
-            contains_filter: other.contains_filter,
+            vector_store: new.vector_store,
+            metrics: new.metrics,
+            logs_route: new.logs_route,
+            edit_documents_by_function: new.edit_documents_by_function,
+            contains_filter: new.contains_filter,
         })
     }
 

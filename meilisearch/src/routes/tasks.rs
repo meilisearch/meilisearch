@@ -185,25 +185,25 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
         Method::event_name()
     }
 
-    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
+    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
         Box::new(Self {
-            filtered_by_uid: self.filtered_by_uid | other.filtered_by_uid,
-            filtered_by_index_uid: self.filtered_by_index_uid | other.filtered_by_index_uid,
-            filtered_by_type: self.filtered_by_type | other.filtered_by_type,
-            filtered_by_status: self.filtered_by_status | other.filtered_by_status,
-            filtered_by_canceled_by: self.filtered_by_canceled_by | other.filtered_by_canceled_by,
+            filtered_by_uid: self.filtered_by_uid | new.filtered_by_uid,
+            filtered_by_index_uid: self.filtered_by_index_uid | new.filtered_by_index_uid,
+            filtered_by_type: self.filtered_by_type | new.filtered_by_type,
+            filtered_by_status: self.filtered_by_status | new.filtered_by_status,
+            filtered_by_canceled_by: self.filtered_by_canceled_by | new.filtered_by_canceled_by,
             filtered_by_before_enqueued_at: self.filtered_by_before_enqueued_at
-                | other.filtered_by_before_enqueued_at,
+                | new.filtered_by_before_enqueued_at,
             filtered_by_after_enqueued_at: self.filtered_by_after_enqueued_at
-                | other.filtered_by_after_enqueued_at,
+                | new.filtered_by_after_enqueued_at,
             filtered_by_before_started_at: self.filtered_by_before_started_at
-                | other.filtered_by_before_started_at,
+                | new.filtered_by_before_started_at,
             filtered_by_after_started_at: self.filtered_by_after_started_at
-                | other.filtered_by_after_started_at,
+                | new.filtered_by_after_started_at,
             filtered_by_before_finished_at: self.filtered_by_before_finished_at
-                | other.filtered_by_before_finished_at,
+                | new.filtered_by_before_finished_at,
             filtered_by_after_finished_at: self.filtered_by_after_finished_at
-                | other.filtered_by_after_finished_at,
+                | new.filtered_by_after_finished_at,
 
             marker: std::marker::PhantomData,
         })

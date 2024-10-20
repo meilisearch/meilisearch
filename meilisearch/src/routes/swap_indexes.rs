@@ -39,9 +39,9 @@ impl Aggregate for IndexSwappedAnalytics {
         "Indexes Swapped"
     }
 
-    fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
+    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
         Box::new(Self {
-            swap_operation_number: self.swap_operation_number.max(other.swap_operation_number),
+            swap_operation_number: self.swap_operation_number.max(new.swap_operation_number),
         })
     }
 
