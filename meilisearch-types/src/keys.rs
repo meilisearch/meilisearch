@@ -314,14 +314,14 @@ impl Action {
             SETTINGS_UPDATE => Some(Self::SettingsUpdate),
             SETTINGS_ALL => Some(Self::SettingsAll),
             STATS_GET => Some(Self::StatsGet),
-            // @TODO: Issue: Since stats has only one element, all is the same as the one single element
+            // TODO: Issue: Since stats has only one element, all is the same as the one single element
             //               so this will never match all, because it matches that one and only element first
             STATS_ALL => Some(Self::StatsAll),
             METRICS_GET => Some(Self::MetricsGet),
-            // @TODO: Same
+            // TODO: Same
             METRICS_ALL => Some(Self::MetricsAll),
             DUMPS_CREATE => Some(Self::DumpsCreate),
-            // @TODO: Same
+            // TODO: Same
             DUMPS_ALL => Some(Self::DumpsAll),
             SNAPSHOTS_CREATE => Some(Self::SnapshotsCreate),
             VERSION => Some(Self::Version),
@@ -332,7 +332,7 @@ impl Action {
             EXPERIMENTAL_FEATURES_GET => Some(Self::ExperimentalFeaturesGet),
             EXPERIMENTAL_FEATURES_UPDATE => Some(Self::ExperimentalFeaturesUpdate),
             ALL => Some(Self::All),
-            _otherwise => None,
+            _ => None,
         }
     }
 
