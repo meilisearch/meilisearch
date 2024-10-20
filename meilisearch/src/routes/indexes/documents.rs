@@ -107,11 +107,8 @@ aggregate_methods!(
     DocumentsPOST => "Documents Fetched POST",
 );
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 pub struct DocumentsFetchAggregator<Method: AggregateMethod> {
-    #[serde(rename = "requests.total_received")]
-    total_received: usize,
-
     // a call on ../documents/:doc_id
     per_document_id: bool,
     // if a filter was used
@@ -145,7 +142,6 @@ impl<Method: AggregateMethod> DocumentsFetchAggregator<Method> {
         };
 
         Self {
-            total_received: 1,
             per_document_id: matches!(query, DocumentFetchKind::PerDocumentId { .. }),
             per_filter: matches!(query, DocumentFetchKind::Normal { with_filter, .. } if *with_filter),
             max_limit: limit,
@@ -164,7 +160,6 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
 
     fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
         Box::new(Self {
-            total_received: self.total_received.saturating_add(other.total_received),
             per_document_id: self.per_document_id | other.per_document_id,
             per_filter: self.per_filter | other.per_filter,
             retrieve_vectors: self.retrieve_vectors | other.retrieve_vectors,
@@ -199,7 +194,11 @@ pub async fn get_document(
     analytics.publish(
         DocumentsFetchAggregator::<DocumentsGET> {
             retrieve_vectors: param_retrieve_vectors.0,
-            ..Default::default()
+            per_document_id: true,
+            per_filter: false,
+            max_limit: 0,
+            max_offset: 0,
+            marker: PhantomData,
         },
         &req,
     );
@@ -211,10 +210,8 @@ pub async fn get_document(
     Ok(HttpResponse::Ok().json(document))
 }
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 pub struct DocumentsDeletionAggregator {
-    #[serde(rename = "requests.total_received")]
-    total_received: usize,
     per_document_id: bool,
     clear_all: bool,
     per_batch: bool,
@@ -228,7 +225,6 @@ impl Aggregate for DocumentsDeletionAggregator {
 
     fn aggregate(self: Box<Self>, other: Box<Self>) -> Box<Self> {
         Box::new(Self {
-            total_received: self.total_received.saturating_add(other.total_received),
             per_document_id: self.per_document_id | other.per_document_id,
             clear_all: self.clear_all | other.clear_all,
             per_batch: self.per_batch | other.per_batch,
@@ -253,9 +249,10 @@ pub async fn delete_document(
 
     analytics.publish(
         DocumentsDeletionAggregator {
-            total_received: 1,
             per_document_id: true,
-            ..Default::default()
+            clear_all: false,
+            per_batch: false,
+            per_filter: false,
         },
         &req,
     );
@@ -316,12 +313,12 @@ pub async fn documents_by_query_post(
 
     analytics.publish(
         DocumentsFetchAggregator::<DocumentsPOST> {
-            total_received: 1,
             per_filter: body.filter.is_some(),
             retrieve_vectors: body.retrieve_vectors,
             max_limit: body.limit,
             max_offset: body.offset,
-            ..Default::default()
+            per_document_id: false,
+            marker: PhantomData,
         },
         &req,
     );
@@ -358,12 +355,12 @@ pub async fn get_documents(
 
     analytics.publish(
         DocumentsFetchAggregator::<DocumentsGET> {
-            total_received: 1,
             per_filter: query.filter.is_some(),
             retrieve_vectors: query.retrieve_vectors,
             max_limit: query.limit,
             max_offset: query.offset,
-            ..Default::default()
+            per_document_id: false,
+            marker: PhantomData,
         },
         &req,
     );
@@ -426,7 +423,7 @@ aggregate_methods!(
     Updated => "Documents Updated",
 );
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 pub struct DocumentsAggregator<T: AggregateMethod> {
     payload_types: HashSet<String>,
     primary_key: HashSet<String>,
@@ -718,7 +715,12 @@ pub async fn delete_documents_batch(
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     analytics.publish(
-        DocumentsDeletionAggregator { total_received: 1, per_batch: true, ..Default::default() },
+        DocumentsDeletionAggregator {
+            per_batch: true,
+            per_document_id: false,
+            clear_all: false,
+            per_filter: false,
+        },
         &req,
     );
 
@@ -761,7 +763,12 @@ pub async fn delete_documents_by_filter(
     let filter = body.into_inner().filter;
 
     analytics.publish(
-        DocumentsDeletionAggregator { total_received: 1, per_filter: true, ..Default::default() },
+        DocumentsDeletionAggregator {
+            per_filter: true,
+            per_document_id: false,
+            clear_all: false,
+            per_batch: false,
+        },
         &req,
     );
 
@@ -793,7 +800,7 @@ pub struct DocumentEditionByFunction {
     pub function: String,
 }
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 struct EditDocumentsByFunctionAggregator {
     // Set to true if at least one request was filtered
     filtered: bool,
@@ -899,7 +906,12 @@ pub async fn clear_all_documents(
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     analytics.publish(
-        DocumentsDeletionAggregator { total_received: 1, clear_all: true, ..Default::default() },
+        DocumentsDeletionAggregator {
+            clear_all: true,
+            per_document_id: false,
+            per_batch: false,
+            per_filter: false,
+        },
         &req,
     );
 
