@@ -13,10 +13,10 @@ use serde_json::Value;
 use tracing::debug;
 
 use super::ActionPolicy;
-use crate::analytics::segment_analytics::{SimilarGET, SimilarPOST};
-use crate::analytics::{Analytics, SimilarAggregator};
+use crate::analytics::Analytics;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::routes::indexes::similar_analytics::{SimilarAggregator, SimilarGET, SimilarPOST};
 use crate::search::{
     add_search_rules, perform_similar, RankingScoreThresholdSimilar, RetrieveVectors, SearchKind,
     SimilarQuery, SimilarResult, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,

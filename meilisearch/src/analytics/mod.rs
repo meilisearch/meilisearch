@@ -15,12 +15,8 @@ use platform_dirs::AppDirs;
 
 // if the feature analytics is enabled we use the real analytics
 pub type SegmentAnalytics = segment_analytics::SegmentAnalytics;
-pub use segment_analytics::SearchAggregator;
-pub use segment_analytics::SimilarAggregator;
 
 use crate::Opt;
-
-pub use self::segment_analytics::MultiSearchAggregator;
 
 /// A macro used to quickly define events that don't aggregate or send anything besides an empty event with its name.
 #[macro_export]

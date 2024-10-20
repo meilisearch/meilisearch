@@ -13,13 +13,13 @@ use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 use tracing::debug;
 
-use crate::analytics::segment_analytics::{SearchGET, SearchPOST};
-use crate::analytics::{Analytics, SearchAggregator};
+use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::metrics::MEILISEARCH_DEGRADED_SEARCH_REQUESTS;
+use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, SearchPOST};
 use crate::search::{
     add_search_rules, perform_search, HybridQuery, MatchingStrategy, RankingScoreThreshold,
     RetrieveVectors, SearchKind, SearchQuery, SemanticRatio, DEFAULT_CROP_LENGTH,

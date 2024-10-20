@@ -28,9 +28,11 @@ use crate::Opt;
 pub mod documents;
 pub mod facet_search;
 pub mod search;
+mod search_analytics;
 pub mod settings;
 mod settings_analytics;
 pub mod similar;
+mod similar_analytics;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(

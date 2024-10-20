@@ -9,7 +9,7 @@ use meilisearch_types::keys::actions;
 use serde::Serialize;
 use tracing::debug;
 
-use crate::analytics::{Analytics, MultiSearchAggregator};
+use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
@@ -20,6 +20,8 @@ use crate::search::{
     SearchQueryWithIndex, SearchResultWithIndex,
 };
 use crate::search_queue::SearchQueue;
+
+use super::multi_search_analytics::MultiSearchAggregator;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(SeqHandler(multi_search_with_post))));
