@@ -255,7 +255,7 @@ pub mod policies {
                 };
 
             // check that the indexes are allowed
-            let action = Action::from_repr(A).ok_or(AuthError::InternalInvalidAction(A))?;
+            let action = Action::from_bits(A).ok_or(AuthError::InternalInvalidAction(A))?;
             let auth_filter = auth
                 .get_key_filters(key_uuid, search_rules)
                 .map_err(|_e| AuthError::InvalidApiKey)?;
