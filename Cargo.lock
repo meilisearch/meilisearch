@@ -3486,6 +3486,7 @@ version = "1.11.0"
 dependencies = [
  "actix-web",
  "anyhow",
+ "bitflags 2.6.0",
  "convert_case 0.6.0",
  "csv",
  "deserr",
