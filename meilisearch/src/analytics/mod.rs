@@ -1,44 +1,45 @@
-mod mock_analytics;
-#[cfg(feature = "analytics")]
-mod segment_analytics;
+pub mod segment_analytics;
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::Arc;
 
 use actix_web::HttpRequest;
+use index_scheduler::IndexScheduler;
+use meilisearch_auth::AuthController;
 use meilisearch_types::InstanceUid;
-pub use mock_analytics::MockAnalytics;
+use mopa::mopafy;
 use once_cell::sync::Lazy;
 use platform_dirs::AppDirs;
-use serde_json::Value;
-
-use crate::routes::indexes::documents::{DocumentEditionByFunction, UpdateDocumentsQuery};
-
-// if the analytics feature is disabled
-// the `SegmentAnalytics` point to the mock instead of the real analytics
-#[cfg(not(feature = "analytics"))]
-pub type SegmentAnalytics = mock_analytics::MockAnalytics;
-#[cfg(not(feature = "analytics"))]
-pub type SearchAggregator = mock_analytics::SearchAggregator;
-#[cfg(not(feature = "analytics"))]
-pub type SimilarAggregator = mock_analytics::SimilarAggregator;
-#[cfg(not(feature = "analytics"))]
-pub type MultiSearchAggregator = mock_analytics::MultiSearchAggregator;
-#[cfg(not(feature = "analytics"))]
-pub type FacetSearchAggregator = mock_analytics::FacetSearchAggregator;
 
 // if the feature analytics is enabled we use the real analytics
-#[cfg(feature = "analytics")]
 pub type SegmentAnalytics = segment_analytics::SegmentAnalytics;
-#[cfg(feature = "analytics")]
-pub type SearchAggregator = segment_analytics::SearchAggregator;
-#[cfg(feature = "analytics")]
-pub type SimilarAggregator = segment_analytics::SimilarAggregator;
-#[cfg(feature = "analytics")]
-pub type MultiSearchAggregator = segment_analytics::MultiSearchAggregator;
-#[cfg(feature = "analytics")]
-pub type FacetSearchAggregator = segment_analytics::FacetSearchAggregator;
+
+use crate::Opt;
+
+/// A macro used to quickly define events that don't aggregate or send anything besides an empty event with its name.
+#[macro_export]
+macro_rules! empty_analytics {
+    ($struct_name:ident, $event_name:literal) => {
+        #[derive(Default)]
+        struct $struct_name {}
+
+        impl $crate::analytics::Aggregate for $struct_name {
+            fn event_name(&self) -> &'static str {
+                $event_name
+            }
+
+            fn aggregate(self: Box<Self>, _other: Box<Self>) -> Box<Self> {
+                self
+            }
+
+            fn into_event(self: Box<Self>) -> serde_json::Value {
+                serde_json::json!({})
+            }
+        }
+    };
+}
 
 /// The Meilisearch config dir:
 /// `~/.config/Meilisearch` on *NIX or *BSD.
@@ -78,60 +79,88 @@ pub enum DocumentFetchKind {
     Normal { with_filter: bool, limit: usize, offset: usize, retrieve_vectors: bool },
 }
 
-pub trait Analytics: Sync + Send {
-    fn instance_uid(&self) -> Option<&InstanceUid>;
+/// To send an event to segment, your event must be able to aggregate itself with another event of the same type.
+pub trait Aggregate: 'static + mopa::Any + Send {
+    /// The name of the event that will be sent to segment.
+    fn event_name(&self) -> &'static str;
+
+    /// Will be called every time an event has been used twice before segment flushed its buffer.
+    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self>
+    where
+        Self: Sized;
+
+    /// Converts your structure to the final event that'll be sent to segment.
+    fn into_event(self: Box<Self>) -> serde_json::Value;
+}
+
+mopafy!(Aggregate);
+
+/// Helper trait to define multiple aggregates with the same content but a different name.
+/// Commonly used when you must aggregate a search with POST or with GET, for example.
+pub trait AggregateMethod: 'static + Default + Send {
+    fn event_name() -> &'static str;
+}
+
+/// A macro used to quickly define multiple aggregate method with their name
+/// Usage:
+/// ```rust
+/// use meilisearch::aggregate_methods;
+///
+/// aggregate_methods!(
+///     SearchGET => "Documents Searched GET",
+///     SearchPOST => "Documents Searched POST",
+/// );
+/// ```
+#[macro_export]
+macro_rules! aggregate_methods {
+    ($method:ident => $event_name:literal) => {
+        #[derive(Default)]
+        pub struct $method {}
+
+        impl $crate::analytics::AggregateMethod for $method {
+            fn event_name() -> &'static str {
+                $event_name
+            }
+        }
+    };
+    ($($method:ident => $event_name:literal,)+) => {
+        $(
+            aggregate_methods!($method => $event_name);
+        )+
+
+    };
+}
+
+#[derive(Clone)]
+pub struct Analytics {
+    segment: Option<Arc<SegmentAnalytics>>,
+}
+
+impl Analytics {
+    pub async fn new(
+        opt: &Opt,
+        index_scheduler: Arc<IndexScheduler>,
+        auth_controller: Arc<AuthController>,
+    ) -> Self {
+        if opt.no_analytics {
+            Self { segment: None }
+        } else {
+            Self { segment: SegmentAnalytics::new(opt, index_scheduler, auth_controller).await }
+        }
+    }
+
+    pub fn no_analytics() -> Self {
+        Self { segment: None }
+    }
+
+    pub fn instance_uid(&self) -> Option<&InstanceUid> {
+        self.segment.as_ref().map(|segment| segment.instance_uid.as_ref())
+    }
 
     /// The method used to publish most analytics that do not need to be batched every hours
-    fn publish(&self, event_name: String, send: Value, request: Option<&HttpRequest>);
-
-    /// This method should be called to aggregate a get search
-    fn get_search(&self, aggregate: SearchAggregator);
-
-    /// This method should be called to aggregate a post search
-    fn post_search(&self, aggregate: SearchAggregator);
-
-    /// This method should be called to aggregate a get similar request
-    fn get_similar(&self, aggregate: SimilarAggregator);
-
-    /// This method should be called to aggregate a post similar request
-    fn post_similar(&self, aggregate: SimilarAggregator);
-
-    /// This method should be called to aggregate a post array of searches
-    fn post_multi_search(&self, aggregate: MultiSearchAggregator);
-
-    /// This method should be called to aggregate post facet values searches
-    fn post_facet_search(&self, aggregate: FacetSearchAggregator);
-
-    // this method should be called to aggregate an add documents request
-    fn add_documents(
-        &self,
-        documents_query: &UpdateDocumentsQuery,
-        index_creation: bool,
-        request: &HttpRequest,
-    );
-
-    // this method should be called to aggregate a fetch documents request
-    fn get_fetch_documents(&self, documents_query: &DocumentFetchKind, request: &HttpRequest);
-
-    // this method should be called to aggregate a fetch documents request
-    fn post_fetch_documents(&self, documents_query: &DocumentFetchKind, request: &HttpRequest);
-
-    // this method should be called to aggregate a add documents request
-    fn delete_documents(&self, kind: DocumentDeletionKind, request: &HttpRequest);
-
-    // this method should be called to batch an update documents request
-    fn update_documents(
-        &self,
-        documents_query: &UpdateDocumentsQuery,
-        index_creation: bool,
-        request: &HttpRequest,
-    );
-
-    // this method should be called to batch an update documents by function request
-    fn update_documents_by_function(
-        &self,
-        documents_query: &DocumentEditionByFunction,
-        index_creation: bool,
-        request: &HttpRequest,
-    );
+    pub fn publish<T: Aggregate>(&self, event: T, request: &HttpRequest) {
+        if let Some(ref segment) = self.segment {
+            let _ = segment.sender.try_send(segment_analytics::Message::new(event, request));
+        }
+    }
 }

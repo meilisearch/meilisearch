@@ -25,6 +25,7 @@ pub mod indexes;
 mod logs;
 mod metrics;
 mod multi_search;
+mod multi_search_analytics;
 mod snapshot;
 mod swap_indexes;
 pub mod tasks;

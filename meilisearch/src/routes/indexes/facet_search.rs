@@ -1,3 +1,5 @@
+use std::collections::{BinaryHeap, HashSet};
+
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
@@ -10,14 +12,15 @@ use meilisearch_types::locales::Locale;
 use serde_json::Value;
 use tracing::debug;
 
-use crate::analytics::{Analytics, FacetSearchAggregator};
+use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::routes::indexes::search::search_kind;
 use crate::search::{
-    add_search_rules, perform_facet_search, HybridQuery, MatchingStrategy, RankingScoreThreshold,
-    SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
-    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
+    add_search_rules, perform_facet_search, FacetSearchResult, HybridQuery, MatchingStrategy,
+    RankingScoreThreshold, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
+    DEFAULT_SEARCH_OFFSET,
 };
 use crate::search_queue::SearchQueue;
 
@@ -53,20 +56,122 @@ pub struct FacetSearchQuery {
     pub locales: Option<Vec<Locale>>,
 }
 
+#[derive(Default)]
+pub struct FacetSearchAggregator {
+    // requests
+    total_received: usize,
+    total_succeeded: usize,
+    time_spent: BinaryHeap<usize>,
+
+    // The set of all facetNames that were used
+    facet_names: HashSet<String>,
+
+    // As there been any other parameter than the facetName or facetQuery ones?
+    additional_search_parameters_provided: bool,
+}
+
+impl FacetSearchAggregator {
+    #[allow(clippy::field_reassign_with_default)]
+    pub fn from_query(query: &FacetSearchQuery) -> Self {
+        let FacetSearchQuery {
+            facet_query: _,
+            facet_name,
+            vector,
+            q,
+            filter,
+            matching_strategy,
+            attributes_to_search_on,
+            hybrid,
+            ranking_score_threshold,
+            locales,
+        } = query;
+
+        Self {
+            total_received: 1,
+            facet_names: Some(facet_name.clone()).into_iter().collect(),
+            additional_search_parameters_provided: q.is_some()
+                || vector.is_some()
+                || filter.is_some()
+                || *matching_strategy != MatchingStrategy::default()
+                || attributes_to_search_on.is_some()
+                || hybrid.is_some()
+                || ranking_score_threshold.is_some()
+                || locales.is_some(),
+            ..Default::default()
+        }
+    }
+
+    pub fn succeed(&mut self, result: &FacetSearchResult) {
+        let FacetSearchResult { facet_hits: _, facet_query: _, processing_time_ms } = result;
+        self.total_succeeded = 1;
+        self.time_spent.push(*processing_time_ms as usize);
+    }
+}
+
+impl Aggregate for FacetSearchAggregator {
+    fn event_name(&self) -> &'static str {
+        "Facet Searched POST"
+    }
+
+    fn aggregate(mut self: Box<Self>, new: Box<Self>) -> Box<Self> {
+        for time in new.time_spent {
+            self.time_spent.push(time);
+        }
+
+        Box::new(Self {
+            total_received: self.total_received.saturating_add(new.total_received),
+            total_succeeded: self.total_succeeded.saturating_add(new.total_succeeded),
+            time_spent: self.time_spent,
+            facet_names: self.facet_names.union(&new.facet_names).cloned().collect(),
+            additional_search_parameters_provided: self.additional_search_parameters_provided
+                | new.additional_search_parameters_provided,
+        })
+    }
+
+    fn into_event(self: Box<Self>) -> serde_json::Value {
+        let Self {
+            total_received,
+            total_succeeded,
+            time_spent,
+            facet_names,
+            additional_search_parameters_provided,
+        } = *self;
+        // the index of the 99th percentage of value
+        let percentile_99th = 0.99 * (total_succeeded as f64 - 1.) + 1.;
+        // we get all the values in a sorted manner
+        let time_spent = time_spent.into_sorted_vec();
+        // We are only interested by the slowest value of the 99th fastest results
+        let time_spent = time_spent.get(percentile_99th as usize);
+
+        serde_json::json!({
+            "requests": {
+                "99th_response_time":  time_spent.map(|t| format!("{:.2}", t)),
+                "total_succeeded": total_succeeded,
+                "total_failed": total_received.saturating_sub(total_succeeded), // just to be sure we never panics
+                "total_received": total_received,
+            },
+            "facets": {
+                "total_distinct_facet_count": facet_names.len(),
+                "additional_search_parameters_provided": additional_search_parameters_provided,
+            },
+        })
+    }
+}
+
 pub async fn search(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     search_queue: Data<SearchQueue>,
     index_uid: web::Path<String>,
     params: AwebJson<FacetSearchQuery, DeserrJsonError>,
     req: HttpRequest,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let query = params.into_inner();
     debug!(parameters = ?query, "Facet search");
 
-    let mut aggregate = FacetSearchAggregator::from_query(&query, &req);
+    let mut aggregate = FacetSearchAggregator::from_query(&query);
 
     let facet_query = query.facet_query.clone();
     let facet_name = query.facet_name.clone();
@@ -100,7 +205,7 @@ pub async fn search(
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
-    analytics.post_facet_search(aggregate);
+    analytics.publish(aggregate, &req);
 
     let search_result = search_result?;
 

@@ -1,4 +1,6 @@
+use std::collections::HashSet;
 use std::io::ErrorKind;
+use std::marker::PhantomData;
 
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
@@ -23,14 +25,14 @@ use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::{milli, Document, Index};
 use mime::Mime;
 use once_cell::sync::Lazy;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tempfile::tempfile;
 use tokio::fs::File;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
 use tracing::debug;
 
-use crate::analytics::{Analytics, DocumentDeletionKind, DocumentFetchKind};
+use crate::analytics::{Aggregate, AggregateMethod, Analytics};
 use crate::error::MeilisearchHttpError;
 use crate::error::PayloadError::ReceivePayload;
 use crate::extractors::authentication::policies::*;
@@ -41,7 +43,7 @@ use crate::routes::{
     get_task_id, is_dry_run, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
 };
 use crate::search::{parse_filter, RetrieveVectors};
-use crate::Opt;
+use crate::{aggregate_methods, Opt};
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
@@ -100,12 +102,84 @@ pub struct GetDocument {
     retrieve_vectors: Param<bool>,
 }
 
+aggregate_methods!(
+    DocumentsGET => "Documents Fetched GET",
+    DocumentsPOST => "Documents Fetched POST",
+);
+
+#[derive(Serialize)]
+pub struct DocumentsFetchAggregator<Method: AggregateMethod> {
+    // a call on ../documents/:doc_id
+    per_document_id: bool,
+    // if a filter was used
+    per_filter: bool,
+
+    #[serde(rename = "vector.retrieve_vectors")]
+    retrieve_vectors: bool,
+
+    // pagination
+    #[serde(rename = "pagination.max_limit")]
+    max_limit: usize,
+    #[serde(rename = "pagination.max_offset")]
+    max_offset: usize,
+
+    marker: std::marker::PhantomData<Method>,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum DocumentFetchKind {
+    PerDocumentId { retrieve_vectors: bool },
+    Normal { with_filter: bool, limit: usize, offset: usize, retrieve_vectors: bool },
+}
+
+impl<Method: AggregateMethod> DocumentsFetchAggregator<Method> {
+    pub fn from_query(query: &DocumentFetchKind) -> Self {
+        let (limit, offset, retrieve_vectors) = match query {
+            DocumentFetchKind::PerDocumentId { retrieve_vectors } => (1, 0, *retrieve_vectors),
+            DocumentFetchKind::Normal { limit, offset, retrieve_vectors, .. } => {
+                (*limit, *offset, *retrieve_vectors)
+            }
+        };
+
+        Self {
+            per_document_id: matches!(query, DocumentFetchKind::PerDocumentId { .. }),
+            per_filter: matches!(query, DocumentFetchKind::Normal { with_filter, .. } if *with_filter),
+            max_limit: limit,
+            max_offset: offset,
+            retrieve_vectors,
+
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
+    fn event_name(&self) -> &'static str {
+        Method::event_name()
+    }
+
+    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
+        Box::new(Self {
+            per_document_id: self.per_document_id | new.per_document_id,
+            per_filter: self.per_filter | new.per_filter,
+            retrieve_vectors: self.retrieve_vectors | new.retrieve_vectors,
+            max_limit: self.max_limit.max(new.max_limit),
+            max_offset: self.max_offset.max(new.max_offset),
+            marker: PhantomData,
+        })
+    }
+
+    fn into_event(self: Box<Self>) -> serde_json::Value {
+        serde_json::to_value(*self).unwrap_or_default()
+    }
+}
+
 pub async fn get_document(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     document_param: web::Path<DocumentParam>,
     params: AwebQueryParameter<GetDocument, DeserrQueryParamError>,
     req: HttpRequest,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let DocumentParam { index_uid, document_id } = document_param.into_inner();
     debug!(parameters = ?params, "Get document");
@@ -117,8 +191,15 @@ pub async fn get_document(
     let features = index_scheduler.features();
     let retrieve_vectors = RetrieveVectors::new(param_retrieve_vectors.0, features)?;
 
-    analytics.get_fetch_documents(
-        &DocumentFetchKind::PerDocumentId { retrieve_vectors: param_retrieve_vectors.0 },
+    analytics.publish(
+        DocumentsFetchAggregator::<DocumentsGET> {
+            retrieve_vectors: param_retrieve_vectors.0,
+            per_document_id: true,
+            per_filter: false,
+            max_limit: 0,
+            max_offset: 0,
+            marker: PhantomData,
+        },
         &req,
     );
 
@@ -129,17 +210,52 @@ pub async fn get_document(
     Ok(HttpResponse::Ok().json(document))
 }
 
+#[derive(Serialize)]
+pub struct DocumentsDeletionAggregator {
+    per_document_id: bool,
+    clear_all: bool,
+    per_batch: bool,
+    per_filter: bool,
+}
+
+impl Aggregate for DocumentsDeletionAggregator {
+    fn event_name(&self) -> &'static str {
+        "Documents Deleted"
+    }
+
+    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
+        Box::new(Self {
+            per_document_id: self.per_document_id | new.per_document_id,
+            clear_all: self.clear_all | new.clear_all,
+            per_batch: self.per_batch | new.per_batch,
+            per_filter: self.per_filter | new.per_filter,
+        })
+    }
+
+    fn into_event(self: Box<Self>) -> serde_json::Value {
+        serde_json::to_value(*self).unwrap_or_default()
+    }
+}
+
 pub async fn delete_document(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     path: web::Path<DocumentParam>,
     req: HttpRequest,
     opt: web::Data<Opt>,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let DocumentParam { index_uid, document_id } = path.into_inner();
     let index_uid = IndexUid::try_from(index_uid)?;
 
-    analytics.delete_documents(DocumentDeletionKind::PerDocumentId, &req);
+    analytics.publish(
+        DocumentsDeletionAggregator {
+            per_document_id: true,
+            clear_all: false,
+            per_batch: false,
+            per_filter: false,
+        },
+        &req,
+    );
 
     let task = KindWithContent::DocumentDeletion {
         index_uid: index_uid.to_string(),
@@ -190,17 +306,19 @@ pub async fn documents_by_query_post(
     index_uid: web::Path<String>,
     body: AwebJson<BrowseQuery, DeserrJsonError>,
     req: HttpRequest,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let body = body.into_inner();
     debug!(parameters = ?body, "Get documents POST");
 
-    analytics.post_fetch_documents(
-        &DocumentFetchKind::Normal {
-            with_filter: body.filter.is_some(),
-            limit: body.limit,
-            offset: body.offset,
+    analytics.publish(
+        DocumentsFetchAggregator::<DocumentsPOST> {
+            per_filter: body.filter.is_some(),
             retrieve_vectors: body.retrieve_vectors,
+            max_limit: body.limit,
+            max_offset: body.offset,
+            per_document_id: false,
+            marker: PhantomData,
         },
         &req,
     );
@@ -213,7 +331,7 @@ pub async fn get_documents(
     index_uid: web::Path<String>,
     params: AwebQueryParameter<BrowseQueryGet, DeserrQueryParamError>,
     req: HttpRequest,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?params, "Get documents GET");
 
@@ -235,12 +353,14 @@ pub async fn get_documents(
         filter,
     };
 
-    analytics.get_fetch_documents(
-        &DocumentFetchKind::Normal {
-            with_filter: query.filter.is_some(),
-            limit: query.limit,
-            offset: query.offset,
+    analytics.publish(
+        DocumentsFetchAggregator::<DocumentsGET> {
+            per_filter: query.filter.is_some(),
             retrieve_vectors: query.retrieve_vectors,
+            max_limit: query.limit,
+            max_offset: query.offset,
+            per_document_id: false,
+            marker: PhantomData,
         },
         &req,
     );
@@ -298,6 +418,39 @@ fn from_char_csv_delimiter(
     }
 }
 
+aggregate_methods!(
+    Replaced => "Documents Added",
+    Updated => "Documents Updated",
+);
+
+#[derive(Serialize)]
+pub struct DocumentsAggregator<T: AggregateMethod> {
+    payload_types: HashSet<String>,
+    primary_key: HashSet<String>,
+    index_creation: bool,
+    #[serde(skip)]
+    method: PhantomData<T>,
+}
+
+impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
+    fn event_name(&self) -> &'static str {
+        Method::event_name()
+    }
+
+    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
+        Box::new(Self {
+            payload_types: self.payload_types.union(&new.payload_types).cloned().collect(),
+            primary_key: self.primary_key.union(&new.primary_key).cloned().collect(),
+            index_creation: self.index_creation | new.index_creation,
+            method: PhantomData,
+        })
+    }
+
+    fn into_event(self: Box<Self>) -> serde_json::Value {
+        serde_json::to_value(self).unwrap_or_default()
+    }
+}
+
 pub async fn replace_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
@@ -305,16 +458,32 @@ pub async fn replace_documents(
     body: Payload,
     req: HttpRequest,
     opt: web::Data<Opt>,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     debug!(parameters = ?params, "Replace documents");
     let params = params.into_inner();
 
-    analytics.add_documents(
-        &params,
-        index_scheduler.index_exists(&index_uid).map_or(true, |x| !x),
+    let mut content_types = HashSet::new();
+    let content_type = req
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|s| s.to_str().ok())
+        .unwrap_or("unknown")
+        .to_string();
+    content_types.insert(content_type);
+    let mut primary_keys = HashSet::new();
+    if let Some(primary_key) = params.primary_key.clone() {
+        primary_keys.insert(primary_key);
+    }
+    analytics.publish(
+        DocumentsAggregator::<Replaced> {
+            payload_types: content_types,
+            primary_key: primary_keys,
+            index_creation: index_scheduler.index_exists(&index_uid).map_or(true, |x| !x),
+            method: PhantomData,
+        },
         &req,
     );
 
@@ -346,16 +515,32 @@ pub async fn update_documents(
     body: Payload,
     req: HttpRequest,
     opt: web::Data<Opt>,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let params = params.into_inner();
     debug!(parameters = ?params, "Update documents");
 
-    analytics.add_documents(
-        &params,
-        index_scheduler.index_exists(&index_uid).map_or(true, |x| !x),
+    let mut content_types = HashSet::new();
+    let content_type = req
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|s| s.to_str().ok())
+        .unwrap_or("unknown")
+        .to_string();
+    content_types.insert(content_type);
+    let mut primary_keys = HashSet::new();
+    if let Some(primary_key) = params.primary_key.clone() {
+        primary_keys.insert(primary_key);
+    }
+    analytics.publish(
+        DocumentsAggregator::<Updated> {
+            payload_types: content_types,
+            primary_key: primary_keys,
+            index_creation: index_scheduler.index_exists(&index_uid).map_or(true, |x| !x),
+            method: PhantomData,
+        },
         &req,
     );
 
@@ -524,12 +709,20 @@ pub async fn delete_documents_batch(
     body: web::Json<Vec<Value>>,
     req: HttpRequest,
     opt: web::Data<Opt>,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Delete documents by batch");
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
-    analytics.delete_documents(DocumentDeletionKind::PerBatch, &req);
+    analytics.publish(
+        DocumentsDeletionAggregator {
+            per_batch: true,
+            per_document_id: false,
+            clear_all: false,
+            per_filter: false,
+        },
+        &req,
+    );
 
     let ids = body
         .iter()
@@ -562,14 +755,22 @@ pub async fn delete_documents_by_filter(
     body: AwebJson<DocumentDeletionByFilter, DeserrJsonError>,
     req: HttpRequest,
     opt: web::Data<Opt>,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Delete documents by filter");
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let index_uid = index_uid.into_inner();
     let filter = body.into_inner().filter;
 
-    analytics.delete_documents(DocumentDeletionKind::PerFilter, &req);
+    analytics.publish(
+        DocumentsDeletionAggregator {
+            per_filter: true,
+            per_document_id: false,
+            clear_all: false,
+            per_batch: false,
+        },
+        &req,
+    );
 
     // we ensure the filter is well formed before enqueuing it
     crate::search::parse_filter(&filter, Code::InvalidDocumentFilter, index_scheduler.features())?
@@ -599,13 +800,41 @@ pub struct DocumentEditionByFunction {
     pub function: String,
 }
 
+#[derive(Serialize)]
+struct EditDocumentsByFunctionAggregator {
+    // Set to true if at least one request was filtered
+    filtered: bool,
+    // Set to true if at least one request contained a context
+    with_context: bool,
+
+    index_creation: bool,
+}
+
+impl Aggregate for EditDocumentsByFunctionAggregator {
+    fn event_name(&self) -> &'static str {
+        "Documents Edited By Function"
+    }
+
+    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
+        Box::new(Self {
+            filtered: self.filtered | new.filtered,
+            with_context: self.with_context | new.with_context,
+            index_creation: self.index_creation | new.index_creation,
+        })
+    }
+
+    fn into_event(self: Box<Self>) -> serde_json::Value {
+        serde_json::to_value(*self).unwrap_or_default()
+    }
+}
+
 pub async fn edit_documents_by_function(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ALL }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     params: AwebJson<DocumentEditionByFunction, DeserrJsonError>,
     req: HttpRequest,
     opt: web::Data<Opt>,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?params, "Edit documents by function");
 
@@ -617,9 +846,12 @@ pub async fn edit_documents_by_function(
     let index_uid = index_uid.into_inner();
     let params = params.into_inner();
 
-    analytics.update_documents_by_function(
-        &params,
-        index_scheduler.index(&index_uid).is_err(),
+    analytics.publish(
+        EditDocumentsByFunctionAggregator {
+            filtered: params.filter.is_some(),
+            with_context: params.context.is_some(),
+            index_creation: index_scheduler.index(&index_uid).is_err(),
+        },
         &req,
     );
 
@@ -670,10 +902,18 @@ pub async fn clear_all_documents(
     index_uid: web::Path<String>,
     req: HttpRequest,
     opt: web::Data<Opt>,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
-    analytics.delete_documents(DocumentDeletionKind::ClearAll, &req);
+    analytics.publish(
+        DocumentsDeletionAggregator {
+            clear_all: true,
+            per_document_id: false,
+            per_batch: false,
+            per_filter: false,
+        },
+        &req,
+    );
 
     let task = KindWithContent::DocumentClear { index_uid: index_uid.to_string() };
     let uid = get_task_id(&req, &opt)?;
