@@ -10,13 +10,17 @@ use roaring::RoaringBitmap;
 
 use super::channel::*;
 use super::extract::FacetKind;
+use super::facet_search_builder::FacetSearchBuilder;
 use super::word_fst_builder::{PrefixData, PrefixDelta};
 use super::{Deletion, DocumentChange, KvReaderDelAdd, KvReaderFieldId};
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::MergerOperation;
 use crate::update::new::word_fst_builder::WordFstBuilder;
 use crate::update::MergeDeladdCboRoaringBitmaps;
-use crate::{CboRoaringBitmapCodec, Error, FieldId, GeoPoint, GlobalFieldsIdsMap, Index, Result};
+use crate::{
+    localized_attributes_rules, CboRoaringBitmapCodec, Error, FieldId, GeoPoint,
+    GlobalFieldsIdsMap, Index, Result,
+};
 
 /// TODO We must return some infos/stats
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents", name = "merge")]
@@ -170,6 +174,12 @@ pub fn merge_grenad_entries(
                     tracing::trace_span!(target: "indexing::documents::merge", "facet_docids");
                 let _entered = span.enter();
                 let mut facet_field_ids_delta = FacetFieldIdsDelta::new();
+                let localized_attributes_rules =
+                    index.localized_attributes_rules(rtxn)?.unwrap_or_default();
+                let mut facet_search_builder = FacetSearchBuilder::new(
+                    global_fields_ids_map.clone(),
+                    localized_attributes_rules,
+                );
                 merge_and_send_facet_docids(
                     merger,
                     FacetDatabases::new(index),
@@ -177,9 +187,12 @@ pub fn merge_grenad_entries(
                     &mut buffer,
                     sender.facet_docids(),
                     &mut facet_field_ids_delta,
+                    &mut facet_search_builder,
                 )?;
 
                 merger_result.facet_field_ids_delta = Some(facet_field_ids_delta);
+                // merge and send the facet fst and the searchable facet values
+                facet_search_builder.merge_and_send(index, rtxn, sender.facet_searchable())?;
             }
         }
     }
@@ -294,6 +307,7 @@ fn merge_and_send_facet_docids(
     buffer: &mut Vec<u8>,
     docids_sender: impl DocidsSender,
     facet_field_ids_delta: &mut FacetFieldIdsDelta,
+    facet_search_builder: &mut FacetSearchBuilder,
 ) -> Result<()> {
     let mut merger_iter = merger.into_stream_merger_iter().unwrap();
     while let Some((key, deladd)) = merger_iter.next().unwrap() {
@@ -305,11 +319,13 @@ fn merge_and_send_facet_docids(
         match merge_cbo_bitmaps(current, del, add)? {
             Operation::Write(bitmap) => {
                 facet_field_ids_delta.register_from_key(key);
+                facet_search_builder.register_from_key(DelAdd::Addition, key)?;
                 let value = cbo_bitmap_serialize_into_vec(&bitmap, buffer);
                 docids_sender.write(key, value).unwrap();
             }
             Operation::Delete => {
                 facet_field_ids_delta.register_from_key(key);
+                facet_search_builder.register_from_key(DelAdd::Deletion, key)?;
                 docids_sender.delete(key).unwrap();
             }
             Operation::Ignore => (),

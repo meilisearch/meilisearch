@@ -1,4 +1,4 @@
-use std::{fs::File, io::BufWriter};
+use std::io::BufWriter;
 
 use fst::{Set, SetBuilder, Streamer};
 use memmap2::Mmap;
@@ -7,23 +7,19 @@ use tempfile::tempfile;
 
 use crate::{index::PrefixSettings, update::del_add::DelAdd, InternalError, Prefix, Result};
 
+use super::fst_merger_builder::FstMergerBuilder;
+
 pub struct WordFstBuilder<'a> {
-    stream: Option<fst::set::Stream<'a>>,
-    word_fst_builder: SetBuilder<BufWriter<File>>,
-    last_word: Option<Vec<u8>>,
+    word_fst_builder: FstMergerBuilder<'a>,
     prefix_fst_builder: Option<PrefixFstBuilder>,
-    inserted_words: usize,
     registered_words: usize,
 }
 
 impl<'a> WordFstBuilder<'a> {
     pub fn new(words_fst: &'a Set<std::borrow::Cow<'a, [u8]>>) -> Result<Self> {
         Ok(Self {
-            stream: Some(words_fst.stream()),
-            word_fst_builder: SetBuilder::new(BufWriter::new(tempfile()?))?,
+            word_fst_builder: FstMergerBuilder::new(Some(words_fst))?,
             prefix_fst_builder: None,
-            last_word: None,
-            inserted_words: 0,
             registered_words: 0,
         })
     }
@@ -38,100 +34,13 @@ impl<'a> WordFstBuilder<'a> {
             self.registered_words += 1;
         }
 
-        if let Some(left) = self.last_word.take() {
-            let (left_inserted, right_inserted) =
-                self.compare_and_insert(deladd, left.as_slice(), right)?;
-
-            // left was not inserted, so we keep it for the next iteration
-            if !left_inserted {
-                self.last_word = Some(left);
+        self.word_fst_builder.register(deladd, right, &mut |bytes, deladd, is_modified| {
+            if let Some(prefix_fst_builder) = &mut self.prefix_fst_builder {
+                prefix_fst_builder.insert_word(bytes, deladd, is_modified)
+            } else {
+                Ok(())
             }
-
-            // right was inserted, so we can stop
-            if right_inserted {
-                return Ok(());
-            }
-        }
-
-        if let Some(mut stream) = self.stream.take() {
-            while let Some(left) = stream.next() {
-                let (left_inserted, right_inserted) =
-                    self.compare_and_insert(deladd, left, right)?;
-
-                // left was not inserted, so we keep it for the next iteration
-                if !left_inserted {
-                    self.last_word = Some(left.to_vec());
-                }
-
-                // right was inserted, so we can stop
-                if right_inserted {
-                    self.stream = Some(stream);
-                    return Ok(());
-                }
-            }
-
-            // If we reach this point, it means that the stream is empty
-            // and we need to insert the incoming word
-            self.insert_word(right, deladd, true)?;
-
-            self.stream = Some(stream);
-        }
-
-        Ok(())
-    }
-
-    pub fn compare_and_insert(
-        &mut self,
-        deladd: DelAdd,
-        left: &[u8],
-        right: &[u8],
-    ) -> Result<(bool, bool)> {
-        let mut left_inserted = false;
-        let mut right_inserted = false;
-        match left.cmp(right) {
-            std::cmp::Ordering::Less => {
-                // We need to insert the last word from the current fst
-                self.insert_word(left, DelAdd::Addition, false)?;
-
-                left_inserted = true;
-            }
-            std::cmp::Ordering::Equal => {
-                self.insert_word(right, deladd, true)?;
-
-                left_inserted = true;
-                right_inserted = true;
-            }
-            std::cmp::Ordering::Greater => {
-                self.insert_word(right, deladd, true)?;
-
-                right_inserted = true;
-            }
-        }
-
-        Ok((left_inserted, right_inserted))
-    }
-
-    fn insert_word(&mut self, bytes: &[u8], deladd: DelAdd, is_modified: bool) -> Result<()> {
-        // Addition: We insert the word
-        // Deletion: We delete the word by not inserting it
-        if deladd == DelAdd::Addition {
-            self.inserted_words += 1;
-            self.word_fst_builder.insert(bytes)?;
-        }
-
-        if let Some(prefix_fst_builder) = self.prefix_fst_builder.as_mut() {
-            prefix_fst_builder.insert_word(bytes, deladd, is_modified)?;
-        }
-
-        Ok(())
-    }
-
-    fn drain_stream(&mut self) -> Result<()> {
-        if let Some(mut stream) = self.stream.take() {
-            while let Some(current) = stream.next() {
-                self.insert_word(current, DelAdd::Addition, false)?;
-            }
-        }
+        })?;
 
         Ok(())
     }
@@ -141,13 +50,13 @@ impl<'a> WordFstBuilder<'a> {
         index: &crate::Index,
         rtxn: &heed::RoTxn,
     ) -> Result<(Mmap, Option<PrefixData>)> {
-        self.drain_stream()?;
-
-        let words_fst_file =
-            self.word_fst_builder.into_inner()?.into_inner().map_err(|_| {
-                InternalError::IndexingMergingKeys { process: "building-words-fst" }
-            })?;
-        let words_fst_mmap = unsafe { Mmap::map(&words_fst_file)? };
+        let words_fst_mmap = self.word_fst_builder.build(&mut |bytes, deladd, is_modified| {
+            if let Some(prefix_fst_builder) = &mut self.prefix_fst_builder {
+                prefix_fst_builder.insert_word(bytes, deladd, is_modified)
+            } else {
+                Ok(())
+            }
+        })?;
 
         let prefix_data = self
             .prefix_fst_builder
