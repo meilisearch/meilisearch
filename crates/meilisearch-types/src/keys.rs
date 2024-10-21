@@ -206,18 +206,10 @@ bitflags! {
     const SettingsGet = 1 << 12;
     const SettingsUpdate = 1 << 13;
     const SettingsAll = Self::SettingsGet.bits() | Self::SettingsUpdate.bits();
-    // Stats
     const StatsGet = 1 << 14;
-    const StatsAll = Self::StatsGet.bits();
-    // Metrics
     const MetricsGet = 1 << 15;
-    const MetricsAll = Self::MetricsGet.bits();
-    // Dumps
     const DumpsCreate = 1 << 16;
-    const DumpsAll = Self::DumpsCreate.bits();
-    // Snapshots
     const SnapshotsCreate = 1 << 17;
-    const SnapshotsAll = Self::SnapshotsCreate.bits();
     const Version = 1 << 18;
     const KeysAdd = 1 << 19;
     const KeysGet = 1 << 20;
@@ -240,7 +232,7 @@ bitflags! {
 }
 
 impl Action {
-    const SERDE_MAP_ARR: [(&'static str, Self); 34] = [
+    const SERDE_MAP_ARR: [(&'static str, Self); 30] = [
         ("search", Self::Search),
         ("documents.add", Self::DocumentsAdd),
         ("documents.get", Self::DocumentsGet),
@@ -260,13 +252,9 @@ impl Action {
         ("settings.update", Self::SettingsUpdate),
         ("settings.*", Self::SettingsAll),
         ("stats.get", Self::StatsGet),
-        ("stats.*", Self::StatsAll),
         ("metrics.get", Self::MetricsGet),
-        ("metrics.*", Self::MetricsAll),
         ("dumps.create", Self::DumpsCreate),
-        ("dumps.*", Self::DumpsAll),
         ("snapshots.create", Self::SnapshotsCreate),
-        ("snapshots.*", Self::SnapshotsAll),
         ("version", Self::Version),
         ("keys.create", Self::KeysAdd),
         ("keys.get", Self::KeysGet),
@@ -315,11 +303,8 @@ pub mod actions {
     pub const SETTINGS_UPDATE: u32 = A::SettingsUpdate.bits();
     pub const SETTINGS_ALL: u32 = A::SettingsAll.bits();
     pub const STATS_GET: u32 = A::StatsGet.bits();
-    pub const STATS_ALL: u32 = A::StatsAll.bits();
     pub const METRICS_GET: u32 = A::MetricsGet.bits();
-    pub const METRICS_ALL: u32 = A::MetricsAll.bits();
     pub const DUMPS_CREATE: u32 = A::DumpsCreate.bits();
-    pub const DUMPS_ALL: u32 = A::DumpsAll.bits();
     pub const SNAPSHOTS_CREATE: u32 = A::SnapshotsCreate.bits();
     pub const VERSION: u32 = A::Version.bits();
     pub const KEYS_CREATE: u32 = A::KeysAdd.bits();
@@ -411,7 +396,7 @@ impl Sequence for Action {
             }
         }
 
-        Non
+        None
     }
 
     fn previous(&self) -> Option<Self> {

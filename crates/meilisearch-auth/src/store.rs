@@ -128,20 +128,8 @@ impl HeedAuthStore {
                 Action::SettingsAll => {
                     actions.extend([Action::SettingsGet, Action::SettingsUpdate].iter());
                 }
-                Action::DumpsAll => {
-                    actions.insert(Action::DumpsCreate);
-                }
-                Action::SnapshotsAll => {
-                    actions.insert(Action::SnapshotsCreate);
-                }
                 Action::TasksAll => {
                     actions.extend([Action::TasksGet, Action::TasksDelete, Action::TasksCancel]);
-                }
-                Action::StatsAll => {
-                    actions.insert(Action::StatsGet);
-                }
-                Action::MetricsAll => {
-                    actions.insert(Action::MetricsGet);
                 }
                 other => {
                     actions.insert(other);
@@ -294,8 +282,8 @@ impl HeedAuthStore {
 pub struct KeyIdActionCodec;
 
 impl KeyIdActionCodec {
-    fn action_parts_to_repr([p1, p2, p3, p4]: &[u8; 4]) -> u32 {
-        ((p1 << 24) | (p2 << 16) | (p3 << 8) | p4) as u32
+    fn action_parts_to_32bits([p1, p2, p3, p4]: &[u8; 4]) -> u32 {
+        ((*p1 as u32) << 24) | ((*p2 as u32) << 16) | ((*p3 as u32) << 8) | (*p4 as u32)
     }
 }
 
@@ -306,8 +294,8 @@ impl<'a> milli::heed::BytesDecode<'a> for KeyIdActionCodec {
         let (key_id_bytes, action_bytes) = try_split_array_at(bytes).ok_or(SliceTooShortError)?;
         let (action_bits, index) =
             match try_split_array_at::<u8, 4>(action_bytes).ok_or(SliceTooShortError)? {
-                (action_parts, []) => (Self::action_parts_to_repr(action_parts), None),
-                (action_parts, index) => (Self::action_parts_to_repr(action_parts), Some(index)),
+                (action_parts, []) => (Self::action_parts_to_32bits(action_parts), None),
+                (action_parts, index) => (Self::action_parts_to_32bits(action_parts), Some(index)),
             };
         let key_id = Uuid::from_bytes(*key_id_bytes);
         let action = Action::from_bits(action_bits).ok_or(InvalidActionError { action_bits })?;
