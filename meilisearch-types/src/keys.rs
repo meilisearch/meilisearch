@@ -382,7 +382,7 @@ impl<'de> Deserialize<'de> for Action {
 }
 
 impl Sequence for Action {
-    const CARDINALITY: usize = Self::SERDE_MAP_ARR.len();
+    const CARDINALITY: usize = Self::FLAGS.len();
 
     fn next(&self) -> Option<Self> {
         let mut iter = Self::FLAGS.iter();
