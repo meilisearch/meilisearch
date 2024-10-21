@@ -171,12 +171,12 @@ mod test {
     use bumpalo::Bump;
     use charabia::TokenizerBuilder;
     use meili_snap::snapshot;
-    
     use raw_collections::RawMap;
     use serde_json::json;
     use serde_json::value::RawValue;
 
     use super::*;
+    use crate::update::new::document::{DocumentFromVersions, Versions};
     use crate::FieldsIdsMap;
 
     #[test]
@@ -222,7 +222,8 @@ mod test {
         let bump = Bump::new();
         let document: &RawValue = serde_json::from_str(&document).unwrap();
         let document = RawMap::from_raw_value(document, &bump).unwrap();
-        let document = document.into_bump_slice();
+
+        let document = DocumentFromVersions::new(Versions::single(document));
 
         document_tokenizer
             .tokenize_document(

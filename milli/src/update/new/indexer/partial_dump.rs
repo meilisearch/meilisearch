@@ -1,15 +1,12 @@
 use std::ops::DerefMut;
 
 use rayon::iter::IndexedParallelIterator;
-use serde::Deserializer;
 use serde_json::value::RawValue;
 
-use super::de::FieldAndDocidExtractor;
 use super::document_changes::{DocumentChangeContext, DocumentChanges, MostlySend, RefCellExt};
-use crate::documents::{DocumentIdExtractionError, PrimaryKey};
+use crate::documents::PrimaryKey;
 use crate::update::concurrent_available_ids::ConcurrentAvailableIds;
-use crate::update::new::document::DocumentFromVersions;
-use crate::update::new::document_change::Versions;
+use crate::update::new::document::{DocumentFromVersions, Versions};
 use crate::update::new::{DocumentChange, Insertion};
 use crate::{Error, InternalError, Result, UserError};
 
@@ -79,8 +76,7 @@ where
         let document = raw_collections::RawMap::from_raw_value(document, doc_alloc)
             .map_err(InternalError::SerdeJson)?;
 
-        let document = document.into_bump_slice();
-        let document = DocumentFromVersions::new(Versions::Single(document));
+        let document = DocumentFromVersions::new(Versions::single(document));
 
         let insertion = Insertion::create(docid, external_document_id, document);
         Ok(Some(DocumentChange::Insertion(insertion)))

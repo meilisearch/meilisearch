@@ -9,8 +9,7 @@ use super::DocumentChanges;
 use crate::documents::Error::InvalidDocumentFormat;
 use crate::documents::PrimaryKey;
 use crate::error::{FieldIdMapMissingEntry, InternalError};
-use crate::update::new::document::DocumentFromVersions;
-use crate::update::new::document_change::Versions;
+use crate::update::new::document::{DocumentFromVersions, Versions};
 use crate::update::new::{Deletion, DocumentChange, KvReaderFieldId, Update};
 use crate::{all_obkv_to_json, Error, FieldsIdsMap, Object, Result, UserError};
 
@@ -161,9 +160,8 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
                         } else {
                             let raw_new_doc = RawMap::from_raw_value(raw_new_doc, doc_alloc)
                                 .map_err(InternalError::SerdeJson)?;
-                            let new_doc_version = DocumentFromVersions::new(Versions::Single(
-                                raw_new_doc.into_bump_slice(),
-                            ));
+                            let new_doc_version =
+                                DocumentFromVersions::new(Versions::single(raw_new_doc));
                             Ok(Some(DocumentChange::Update(Update::create(
                                 docid,
                                 new_document_id,
