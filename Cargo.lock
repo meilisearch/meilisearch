@@ -4434,7 +4434,7 @@ dependencies = [
 [[package]]
 name = "raw-collections"
 version = "0.1.0"
-source = "git+https://github.com/dureuill/raw-collections.git#0ecd143c1707d237e3c4d749bc685418da2fccc2"
+source = "git+https://github.com/dureuill/raw-collections.git#c82184f144aef3ef7cd3992868a97b586fc94cfd"
 dependencies = [
  "allocator-api2",
  "bumpalo",
