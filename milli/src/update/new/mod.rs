@@ -12,6 +12,7 @@ pub mod indexer;
 mod merger;
 mod parallel_iterator_ext;
 mod top_level_map;
+pub mod vector_document;
 mod word_fst_builder;
 mod words_prefix_docids;
 
