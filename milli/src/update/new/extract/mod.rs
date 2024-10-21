@@ -2,6 +2,7 @@ mod cache;
 mod faceted;
 mod lru;
 mod searchable;
+mod vectors;
 
 use std::cell::RefCell;
 use std::fs::File;

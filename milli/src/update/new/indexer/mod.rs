@@ -213,6 +213,19 @@ where
                         )?;
                     }
 
+                    'vectors: {
+                        let span = tracing::trace_span!(target: "indexing::documents::extract", "vectors");
+                        let _entered = span.enter();
+
+                        let index_embeddings = index.embedding_configs(&rtxn)?;
+                        if index_embeddings.is_empty() {
+                            break 'vectors;
+                        }
+                        for index_embedding in index_embeddings {
+
+                        }
+                    }
+
                     {
                         let span = tracing::trace_span!(target: "indexing::documents::extract", "FINISH");
                         let _entered = span.enter();
