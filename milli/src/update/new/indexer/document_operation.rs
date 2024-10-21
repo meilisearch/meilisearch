@@ -2,7 +2,6 @@ use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
 use heed::RoTxn;
 use memmap2::Mmap;
-use rayon::iter::IntoParallelIterator;
 use rayon::slice::ParallelSlice;
 use serde_json::value::RawValue;
 use IndexDocumentsMethod as Idm;
@@ -10,8 +9,7 @@ use IndexDocumentsMethod as Idm;
 use super::super::document_change::DocumentChange;
 use super::document_changes::{DocumentChangeContext, DocumentChanges, MostlySend};
 use crate::documents::PrimaryKey;
-use crate::update::new::document::DocumentFromVersions;
-use crate::update::new::document_change::Versions;
+use crate::update::new::document::{DocumentFromVersions, Versions};
 use crate::update::new::{Deletion, Insertion, Update};
 use crate::update::{AvailableIds, IndexDocumentsMethod};
 use crate::{DocumentId, Error, FieldsIdsMap, Index, Result, UserError};
@@ -291,8 +289,7 @@ impl MergeChanges for MergeDocumentForReplacement {
                 let document = raw_collections::RawMap::from_raw_value(document, doc_alloc)
                     .map_err(UserError::SerdeJson)?;
 
-                let document = document.into_bump_slice();
-                let document = DocumentFromVersions::new(Versions::Single(document));
+                let document = DocumentFromVersions::new(Versions::single(document));
 
                 if is_new {
                     Ok(Some(DocumentChange::Insertion(Insertion::create(
@@ -365,29 +362,39 @@ impl MergeChanges for MergeDocumentForUpdates {
             };
         }
 
-        let mut versions = bumpalo::collections::Vec::with_capacity_in(operations.len(), doc_alloc);
+        let versions = match operations {
+            [single] => {
+                let DocumentOffset { content } = match single {
+                    InnerDocOp::Addition(offset) => offset,
+                    InnerDocOp::Deletion => {
+                        unreachable!("Deletion in document operations")
+                    }
+                };
+                let document = serde_json::from_slice(content).unwrap();
+                let document = raw_collections::RawMap::from_raw_value(document, doc_alloc)
+                    .map_err(UserError::SerdeJson)?;
 
-        for operation in operations {
-            let DocumentOffset { content } = match operation {
-                InnerDocOp::Addition(offset) => offset,
-                InnerDocOp::Deletion => {
-                    unreachable!("Deletion in document operations")
-                }
-            };
+                Some(Versions::single(document))
+            }
+            operations => {
+                let versions = operations.iter().map(|operation| {
+                    let DocumentOffset { content } = match operation {
+                        InnerDocOp::Addition(offset) => offset,
+                        InnerDocOp::Deletion => {
+                            unreachable!("Deletion in document operations")
+                        }
+                    };
 
-            let document = serde_json::from_slice(content).unwrap();
-            let document = raw_collections::RawMap::from_raw_value(document, doc_alloc)
-                .map_err(UserError::SerdeJson)?;
-
-            let document = document.into_bump_slice();
-            versions.push(document);
-        }
-
-        let versions = versions.into_bump_slice();
-        let versions = match versions {
-            [single] => Versions::Single(single),
-            versions => Versions::Multiple(versions),
+                    let document = serde_json::from_slice(content).unwrap();
+                    let document = raw_collections::RawMap::from_raw_value(document, doc_alloc)
+                        .map_err(UserError::SerdeJson)?;
+                    Ok(document)
+                });
+                Versions::multiple(versions)?
+            }
         };
+
+        let Some(versions) = versions else { return Ok(None) };
 
         let document = DocumentFromVersions::new(versions);
 

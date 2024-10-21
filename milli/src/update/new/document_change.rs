@@ -1,5 +1,4 @@
 use heed::RoTxn;
-use serde_json::value::RawValue;
 
 use super::document::{DocumentFromDb, DocumentFromVersions, MergedDocument};
 use crate::documents::FieldIdMapper;
@@ -137,12 +136,4 @@ impl<'doc> Update<'doc> {
             MergedDocument::with_db(self.docid, rtxn, index, mapper, self.new)
         }
     }
-}
-
-pub type Entry<'doc> = (&'doc str, &'doc RawValue);
-
-#[derive(Clone, Copy)]
-pub enum Versions<'doc> {
-    Single(&'doc [Entry<'doc>]),
-    Multiple(&'doc [&'doc [Entry<'doc>]]),
 }
