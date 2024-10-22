@@ -1,6 +1,9 @@
 <p align="center">
-  <a href="https://www.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=logo" target="_blank">
-    <img src="assets/meilisearch-logo-kawaii.png">
+  <a href="https://www.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=logo#gh-light-mode-only" target="_blank">
+    <img src="assets/meilisearch-logo-light.svg?sanitize=true#gh-light-mode-only">
+  </a>
+  <a href="https://www.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=logo#gh-dark-mode-only" target="_blank">
+    <img src="assets/meilisearch-logo-dark.svg?sanitize=true#gh-dark-mode-only">
   </a>
 </p>
 
