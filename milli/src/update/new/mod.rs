@@ -8,6 +8,8 @@ mod channel;
 pub mod document;
 mod document_change;
 mod extract;
+mod facet_search_builder;
+mod fst_merger_builder;
 pub mod indexer;
 mod merger;
 mod parallel_iterator_ext;
