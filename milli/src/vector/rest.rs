@@ -3,13 +3,12 @@ use std::collections::BTreeMap;
 use deserr::Deserr;
 use rand::Rng;
 use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
+use rayon::slice::ParallelSlice as _;
 use serde::{Deserialize, Serialize};
 
 use super::error::EmbedErrorKind;
 use super::json_template::ValueTemplate;
-use super::{
-    DistributionShift, EmbedError, Embedding, Embeddings, NewEmbedderError, REQUEST_PARALLELISM,
-};
+use super::{DistributionShift, EmbedError, Embedding, NewEmbedderError, REQUEST_PARALLELISM};
 use crate::error::FaultSource;
 use crate::ThreadPoolNoAbort;
 
@@ -154,18 +153,18 @@ impl Embedder {
         Ok(Self { data, dimensions, distribution: options.distribution })
     }
 
-    pub fn embed(&self, texts: Vec<String>) -> Result<Vec<Embeddings<f32>>, EmbedError> {
+    pub fn embed(&self, texts: Vec<String>) -> Result<Vec<Embedding>, EmbedError> {
         embed(&self.data, texts.as_slice(), texts.len(), Some(self.dimensions))
     }
 
-    pub fn embed_ref<S>(&self, texts: &[S]) -> Result<Vec<Embeddings<f32>>, EmbedError>
+    pub fn embed_ref<S>(&self, texts: &[S]) -> Result<Vec<Embedding>, EmbedError>
     where
         S: AsRef<str> + Serialize,
     {
         embed(&self.data, texts, texts.len(), Some(self.dimensions))
     }
 
-    pub fn embed_tokens(&self, tokens: &[usize]) -> Result<Embeddings<f32>, EmbedError> {
+    pub fn embed_tokens(&self, tokens: &[usize]) -> Result<Embedding, EmbedError> {
         let mut embeddings = embed(&self.data, tokens, 1, Some(self.dimensions))?;
         // unwrap: guaranteed that embeddings.len() == 1, otherwise the previous line terminated in error
         Ok(embeddings.pop().unwrap())
@@ -175,10 +174,31 @@ impl Embedder {
         &self,
         text_chunks: Vec<Vec<String>>,
         threads: &ThreadPoolNoAbort,
-    ) -> Result<Vec<Vec<Embeddings<f32>>>, EmbedError> {
+    ) -> Result<Vec<Vec<Embedding>>, EmbedError> {
         threads
             .install(move || {
                 text_chunks.into_par_iter().map(move |chunk| self.embed(chunk)).collect()
+            })
+            .map_err(|error| EmbedError {
+                kind: EmbedErrorKind::PanicInThreadPool(error),
+                fault: FaultSource::Bug,
+            })?
+    }
+
+    pub(crate) fn embed_chunks_ref(
+        &self,
+        texts: &[&str],
+        threads: &ThreadPoolNoAbort,
+    ) -> Result<Vec<Embedding>, EmbedError> {
+        threads
+            .install(move || {
+                let embeddings: Result<Vec<Vec<Embedding>>, _> = texts
+                    .par_chunks(self.chunk_count_hint())
+                    .map(move |chunk| self.embed_ref(chunk))
+                    .collect();
+
+                let embeddings = embeddings?;
+                Ok(embeddings.into_iter().flatten().collect())
             })
             .map_err(|error| EmbedError {
                 kind: EmbedErrorKind::PanicInThreadPool(error),
@@ -210,7 +230,7 @@ fn infer_dimensions(data: &EmbedderData) -> Result<usize, NewEmbedderError> {
     let v = embed(data, ["test"].as_slice(), 1, None)
         .map_err(NewEmbedderError::could_not_determine_dimension)?;
     // unwrap: guaranteed that v.len() == 1, otherwise the previous line terminated in error
-    Ok(v.first().unwrap().dimension())
+    Ok(v.first().unwrap().len())
 }
 
 fn embed<S>(
@@ -218,7 +238,7 @@ fn embed<S>(
     inputs: &[S],
     expected_count: usize,
     expected_dimension: Option<usize>,
-) -> Result<Vec<Embeddings<f32>>, EmbedError>
+) -> Result<Vec<Embedding>, EmbedError>
 where
     S: Serialize,
 {
@@ -304,7 +324,7 @@ fn response_to_embedding(
     data: &EmbedderData,
     expected_count: usize,
     expected_dimensions: Option<usize>,
-) -> Result<Vec<Embeddings<f32>>, EmbedError> {
+) -> Result<Vec<Embedding>, EmbedError> {
     let response: serde_json::Value =
         response.into_json().map_err(EmbedError::rest_response_deserialization)?;
 
@@ -316,11 +336,8 @@ fn response_to_embedding(
 
     if let Some(dimensions) = expected_dimensions {
         for embedding in &embeddings {
-            if embedding.dimension() != dimensions {
-                return Err(EmbedError::rest_unexpected_dimension(
-                    dimensions,
-                    embedding.dimension(),
-                ));
+            if embedding.len() != dimensions {
+                return Err(EmbedError::rest_unexpected_dimension(dimensions, embedding.len()));
             }
         }
     }
@@ -394,7 +411,7 @@ impl Response {
     pub fn extract_embeddings(
         &self,
         response: serde_json::Value,
-    ) -> Result<Vec<Embeddings<f32>>, EmbedError> {
+    ) -> Result<Vec<Embedding>, EmbedError> {
         let extracted_values: Vec<Embedding> = match self.template.extract(response) {
             Ok(extracted_values) => extracted_values,
             Err(error) => {
@@ -403,8 +420,7 @@ impl Response {
                 return Err(EmbedError::rest_extraction_error(error_message));
             }
         };
-        let embeddings: Vec<Embeddings<f32>> =
-            extracted_values.into_iter().map(Embeddings::from_single_embedding).collect();
+        let embeddings: Vec<Embedding> = extracted_values.into_iter().collect();
 
         Ok(embeddings)
     }

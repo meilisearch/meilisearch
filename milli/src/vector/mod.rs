@@ -376,28 +376,20 @@ impl Embedder {
     /// Embed one or multiple texts.
     ///
     /// Each text can be embedded as one or multiple embeddings.
-    pub fn embed(
-        &self,
-        texts: Vec<String>,
-    ) -> std::result::Result<Vec<Embeddings<f32>>, EmbedError> {
+    pub fn embed(&self, texts: Vec<String>) -> std::result::Result<Vec<Embedding>, EmbedError> {
         match self {
             Embedder::HuggingFace(embedder) => embedder.embed(texts),
-            Embedder::OpenAi(embedder) => embedder.embed(texts),
-            Embedder::Ollama(embedder) => embedder.embed(texts),
-            Embedder::UserProvided(embedder) => embedder.embed(texts),
+            Embedder::OpenAi(embedder) => embedder.embed(&texts),
+            Embedder::Ollama(embedder) => embedder.embed(&texts),
+            Embedder::UserProvided(embedder) => embedder.embed(&texts),
             Embedder::Rest(embedder) => embedder.embed(texts),
         }
     }
 
     pub fn embed_one(&self, text: String) -> std::result::Result<Embedding, EmbedError> {
-        let mut embeddings = self.embed(vec![text])?;
-        let embeddings = embeddings.pop().ok_or_else(EmbedError::missing_embedding)?;
-        Ok(if embeddings.iter().nth(1).is_some() {
-            tracing::warn!("Ignoring embeddings past the first one in long search query");
-            embeddings.iter().next().unwrap().to_vec()
-        } else {
-            embeddings.into_inner()
-        })
+        let mut embedding = self.embed(vec![text])?;
+        let embedding = embedding.pop().ok_or_else(EmbedError::missing_embedding)?;
+        Ok(embedding)
     }
 
     /// Embed multiple chunks of texts.
@@ -407,13 +399,27 @@ impl Embedder {
         &self,
         text_chunks: Vec<Vec<String>>,
         threads: &ThreadPoolNoAbort,
-    ) -> std::result::Result<Vec<Vec<Embeddings<f32>>>, EmbedError> {
+    ) -> std::result::Result<Vec<Vec<Embedding>>, EmbedError> {
         match self {
             Embedder::HuggingFace(embedder) => embedder.embed_chunks(text_chunks),
             Embedder::OpenAi(embedder) => embedder.embed_chunks(text_chunks, threads),
             Embedder::Ollama(embedder) => embedder.embed_chunks(text_chunks, threads),
             Embedder::UserProvided(embedder) => embedder.embed_chunks(text_chunks),
             Embedder::Rest(embedder) => embedder.embed_chunks(text_chunks, threads),
+        }
+    }
+
+    pub fn embed_chunks_ref(
+        &self,
+        texts: &[&str],
+        threads: &ThreadPoolNoAbort,
+    ) -> std::result::Result<Vec<Embedding>, EmbedError> {
+        match self {
+            Embedder::HuggingFace(embedder) => embedder.embed_chunks_ref(texts),
+            Embedder::OpenAi(embedder) => embedder.embed_chunks_ref(texts, threads),
+            Embedder::Ollama(embedder) => embedder.embed_chunks_ref(texts, threads),
+            Embedder::UserProvided(embedder) => embedder.embed_chunks_ref(texts),
+            Embedder::Rest(embedder) => embedder.embed_chunks_ref(texts, threads),
         }
     }
 

@@ -7,7 +7,7 @@ use hf_hub::{Repo, RepoType};
 use tokenizers::{PaddingParams, Tokenizer};
 
 pub use super::error::{EmbedError, Error, NewEmbedderError};
-use super::{DistributionShift, Embedding, Embeddings};
+use super::{DistributionShift, Embedding};
 
 #[derive(
     Debug,
@@ -139,15 +139,12 @@ impl Embedder {
         let embeddings = this
             .embed(vec!["test".into()])
             .map_err(NewEmbedderError::could_not_determine_dimension)?;
-        this.dimensions = embeddings.first().unwrap().dimension();
+        this.dimensions = embeddings.first().unwrap().len();
 
         Ok(this)
     }
 
-    pub fn embed(
-        &self,
-        mut texts: Vec<String>,
-    ) -> std::result::Result<Vec<Embeddings<f32>>, EmbedError> {
+    pub fn embed(&self, mut texts: Vec<String>) -> std::result::Result<Vec<Embedding>, EmbedError> {
         let tokens = match texts.len() {
             1 => vec![self
                 .tokenizer
@@ -177,13 +174,31 @@ impl Embedder {
             .map_err(EmbedError::tensor_shape)?;
 
         let embeddings: Vec<Embedding> = embeddings.to_vec2().map_err(EmbedError::tensor_shape)?;
-        Ok(embeddings.into_iter().map(Embeddings::from_single_embedding).collect())
+        Ok(embeddings)
+    }
+
+    pub fn embed_one(&self, text: &str) -> std::result::Result<Embedding, EmbedError> {
+        let tokens = self.tokenizer.encode(text, true).map_err(EmbedError::tokenize)?;
+        let token_ids = tokens.get_ids();
+        let token_ids = if token_ids.len() > 512 { &token_ids[..512] } else { token_ids };
+        let token_ids =
+            Tensor::new(token_ids, &self.model.device).map_err(EmbedError::tensor_shape)?;
+        let token_type_ids = token_ids.zeros_like().map_err(EmbedError::tensor_shape)?;
+        let embeddings =
+            self.model.forward(&token_ids, &token_type_ids).map_err(EmbedError::model_forward)?;
+
+        // Apply some avg-pooling by taking the mean embedding value for all tokens (including padding)
+        let (n_tokens, _hidden_size) = embeddings.dims2().map_err(EmbedError::tensor_shape)?;
+        let embedding = (embeddings.sum(0).map_err(EmbedError::tensor_value)? / (n_tokens as f64))
+            .map_err(EmbedError::tensor_shape)?;
+        let embedding: Embedding = embedding.to_vec1().map_err(EmbedError::tensor_shape)?;
+        Ok(embedding)
     }
 
     pub fn embed_chunks(
         &self,
         text_chunks: Vec<Vec<String>>,
-    ) -> std::result::Result<Vec<Vec<Embeddings<f32>>>, EmbedError> {
+    ) -> std::result::Result<Vec<Vec<Embedding>>, EmbedError> {
         text_chunks.into_iter().map(|prompts| self.embed(prompts)).collect()
     }
 
@@ -210,5 +225,9 @@ impl Embedder {
                 None
             }
         })
+    }
+
+    pub(crate) fn embed_chunks_ref(&self, texts: &[&str]) -> Result<Vec<Embedding>, EmbedError> {
+        texts.iter().map(|text| self.embed_one(text)).collect()
     }
 }
