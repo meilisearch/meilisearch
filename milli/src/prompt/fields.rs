@@ -316,11 +316,3 @@ impl<'a, 'map, D: ObjectView> fmt::Display for ArrayRender<'a, 'map, D> {
         Ok(())
     }
 }
-
-fn convert_index(index: i64, max_size: i64) -> i64 {
-    if 0 <= index {
-        index
-    } else {
-        max_size + index
-    }
-}

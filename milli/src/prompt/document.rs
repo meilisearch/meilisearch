@@ -520,7 +520,7 @@ impl<'doc> ValueView for ParseableValue<'doc> {
             Value::Null => ValueView::to_kstr(&LiquidValue::Nil),
             Value::Bool(v) => ValueView::to_kstr(v),
             Value::Number(_number) => self.render().to_string().into(),
-            Value::String(s) => KStringCow::from_ref(*s),
+            Value::String(s) => KStringCow::from_ref(s),
             Value::Array(raw_vec) => ParseableArray::as_parseable(raw_vec).to_kstr(),
             Value::Object(raw_map) => ParseableMap::as_parseable(raw_map).to_kstr(),
         }
@@ -577,10 +577,7 @@ impl<'doc> ValueView for ParseableValue<'doc> {
 
     fn is_scalar(&self) -> bool {
         use raw_collections::Value;
-        match &self.value {
-            Value::Bool(_) | Value::Number(_) | Value::String(_) => true,
-            _ => false,
-        }
+        matches!(&self.value, Value::Bool(_) | Value::Number(_) | Value::String(_))
     }
 
     fn as_array(&self) -> Option<&dyn liquid::model::ArrayView> {

@@ -158,8 +158,7 @@ impl MetadataBuilder {
         let localized_attributes_rule_id = self
             .localized_attributes
             .iter()
-            .map(|v| v.iter())
-            .flatten()
+            .flat_map(|v| v.iter())
             .position(|rule| rule.match_str(field))
             .map(|id| NonZeroU16::new(id.saturating_add(1).try_into().unwrap()).unwrap());
 

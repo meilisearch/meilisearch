@@ -128,7 +128,7 @@ impl Prompt {
         let context = Context::new(&document, &fields);
         let mut rendered = bumpalo::collections::Vec::with_capacity_in(
             self.max_bytes.unwrap_or_else(default_max_bytes).get(),
-            &doc_alloc,
+            doc_alloc,
         );
         self.template
             .render_to(&mut rendered, &context)

@@ -62,10 +62,6 @@ impl LocalFieldsIdsMap {
     fn metadata(&self, id: FieldId) -> Option<Metadata> {
         self.metadata.get(&id).copied()
     }
-
-    fn iter(&self) -> impl Iterator<Item = (FieldId, &str, Metadata)> {
-        self.ids_names.iter().map(|(k, v)| (*k, v.as_str(), self.metadata.get(k).copied().unwrap()))
-    }
 }
 
 impl<'indexing> GlobalFieldsIdsMap<'indexing> {
