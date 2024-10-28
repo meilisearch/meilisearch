@@ -289,19 +289,17 @@ impl MergeChanges for MergeDocumentForReplacement {
                 let document = raw_collections::RawMap::from_raw_value(document, doc_alloc)
                     .map_err(UserError::SerdeJson)?;
 
-                let document = DocumentFromVersions::new(Versions::single(document));
-
                 if is_new {
                     Ok(Some(DocumentChange::Insertion(Insertion::create(
                         docid,
                         external_doc,
-                        document,
+                        Versions::single(document),
                     ))))
                 } else {
                     Ok(Some(DocumentChange::Update(Update::create(
                         docid,
                         external_doc,
-                        document,
+                        Versions::single(document),
                         true,
                     ))))
                 }
@@ -396,15 +394,13 @@ impl MergeChanges for MergeDocumentForUpdates {
 
         let Some(versions) = versions else { return Ok(None) };
 
-        let document = DocumentFromVersions::new(versions);
-
         if is_new {
-            Ok(Some(DocumentChange::Insertion(Insertion::create(docid, external_docid, document))))
+            Ok(Some(DocumentChange::Insertion(Insertion::create(docid, external_docid, versions))))
         } else {
             Ok(Some(DocumentChange::Update(Update::create(
                 docid,
                 external_docid,
-                document,
+                versions,
                 has_deletion,
             ))))
         }

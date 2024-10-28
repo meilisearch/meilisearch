@@ -76,9 +76,7 @@ where
         let document = raw_collections::RawMap::from_raw_value(document, doc_alloc)
             .map_err(InternalError::SerdeJson)?;
 
-        let document = DocumentFromVersions::new(Versions::single(document));
-
-        let insertion = Insertion::create(docid, external_document_id, document);
+        let insertion = Insertion::create(docid, external_document_id, Versions::single(document));
         Ok(Some(DocumentChange::Insertion(insertion)))
     }
 }

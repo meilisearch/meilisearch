@@ -7,6 +7,7 @@ use raw_collections::alloc::RefBump;
 use rayon::iter::IndexedParallelIterator;
 
 use super::super::document_change::DocumentChange;
+use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt as _;
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, Result};
 
@@ -278,7 +279,7 @@ impl<
     pub fn new<F>(
         index: &'indexer Index,
         db_fields_ids_map: &'indexer FieldsIdsMap,
-        new_fields_ids_map: &'fid RwLock<FieldsIdsMap>,
+        new_fields_ids_map: &'fid RwLock<FieldIdMapWithMetadata>,
         extractor_allocs: &'extractor ThreadLocal<FullySend<RefCell<Bump>>>,
         doc_allocs: &'doc ThreadLocal<FullySend<Cell<Bump>>>,
         datastore: &'data ThreadLocal<T>,
@@ -351,7 +352,7 @@ pub struct IndexingContext<
 > {
     pub index: &'index Index,
     pub db_fields_ids_map: &'indexer FieldsIdsMap,
-    pub new_fields_ids_map: &'fid RwLock<FieldsIdsMap>,
+    pub new_fields_ids_map: &'fid RwLock<FieldIdMapWithMetadata>,
     pub doc_allocs: &'indexer ThreadLocal<FullySend<Cell<Bump>>>,
     pub fields_ids_map_store: &'indexer ThreadLocal<FullySend<RefCell<GlobalFieldsIdsMap<'fid>>>>,
 }

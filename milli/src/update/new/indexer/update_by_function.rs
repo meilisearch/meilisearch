@@ -160,12 +160,11 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
                         } else {
                             let raw_new_doc = RawMap::from_raw_value(raw_new_doc, doc_alloc)
                                 .map_err(InternalError::SerdeJson)?;
-                            let new_doc_version =
-                                DocumentFromVersions::new(Versions::single(raw_new_doc));
+
                             Ok(Some(DocumentChange::Update(Update::create(
                                 docid,
                                 new_document_id,
-                                new_doc_version,
+                                Versions::single(raw_new_doc),
                                 true, // It is like document replacement
                             ))))
                         }

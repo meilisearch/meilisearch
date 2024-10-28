@@ -176,6 +176,7 @@ mod test {
     use serde_json::value::RawValue;
 
     use super::*;
+    use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
     use crate::update::new::document::{DocumentFromVersions, Versions};
     use crate::FieldsIdsMap;
 
@@ -212,6 +213,11 @@ mod test {
             max_positions_per_attributes: 1000,
         };
 
+        let fields_ids_map = FieldIdMapWithMetadata::new(
+            fields_ids_map,
+            MetadataBuilder::new(Default::default(), Default::default(), Default::default(), None),
+        );
+
         let fields_ids_map_lock = std::sync::RwLock::new(fields_ids_map);
         let mut global_fields_ids_map = GlobalFieldsIdsMap::new(&fields_ids_map_lock);
 
@@ -223,7 +229,8 @@ mod test {
         let document: &RawValue = serde_json::from_str(&document).unwrap();
         let document = RawMap::from_raw_value(document, &bump).unwrap();
 
-        let document = DocumentFromVersions::new(Versions::single(document));
+        let document = Versions::single(document);
+        let document = DocumentFromVersions::new(&document);
 
         document_tokenizer
             .tokenize_document(

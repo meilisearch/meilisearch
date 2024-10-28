@@ -86,6 +86,7 @@ mod test {
     use bumpalo::Bump;
     use raw_collections::alloc::RefBump;
 
+    use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
     use crate::index::tests::TempIndex;
     use crate::update::new::indexer::document_changes::{
         for_each_document_change, DocumentChangeContext, Extractor, IndexingContext, MostlySend,
@@ -144,7 +145,9 @@ mod test {
         let rtxn = index.read_txn().unwrap();
 
         let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
-        let fields_ids_map = RwLock::new(db_fields_ids_map.clone());
+        let metadata_builder = MetadataBuilder::from_index(&index, &rtxn).unwrap();
+        let fields_ids_map =
+            RwLock::new(FieldIdMapWithMetadata::new(db_fields_ids_map.clone(), metadata_builder));
 
         let fields_ids_map_store = ThreadLocal::new();
 

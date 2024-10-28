@@ -28,6 +28,7 @@ use super::words_prefix_docids::{
 use super::{StdResult, TopLevelMap};
 use crate::documents::{PrimaryKey, DEFAULT_PRIMARY_KEY};
 use crate::facet::FacetType;
+use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::proximity::ProximityPrecision;
 use crate::update::new::channel::ExtractorSender;
 use crate::update::new::words_prefix_docids::compute_exact_word_prefix_docids;
@@ -121,6 +122,10 @@ where
     let (merger_sender, writer_receiver) = merger_writer_channel(10_000);
     // This channel acts as a rendezvous point to ensure that we are one task ahead
     let (extractor_sender, merger_receiver) = extractors_merger_channels(4);
+
+    let metadata_builder = MetadataBuilder::from_index(index, wtxn)?;
+
+    let new_fields_ids_map = FieldIdMapWithMetadata::new(new_fields_ids_map, metadata_builder);
 
     let new_fields_ids_map = RwLock::new(new_fields_ids_map);
 
@@ -298,8 +303,8 @@ where
     // required to into_inner the new_fields_ids_map
     drop(fields_ids_map_store);
 
-    let fields_ids_map = new_fields_ids_map.into_inner().unwrap();
-    index.put_fields_ids_map(wtxn, &fields_ids_map)?;
+    let new_fields_ids_map = new_fields_ids_map.into_inner().unwrap();
+    index.put_fields_ids_map(wtxn, new_fields_ids_map.as_fields_ids_map())?;
 
     if let Some(new_primary_key) = new_primary_key {
         index.put_primary_key(wtxn, new_primary_key.name())?;
