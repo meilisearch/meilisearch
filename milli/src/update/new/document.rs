@@ -20,6 +20,14 @@ pub trait Document<'doc> {
     /// - The `_vectors` and `_geo` fields are **ignored** by this method, meaning  they are **not returned** by this method.
     fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'doc str, &'doc RawValue)>>;
 
+    fn len(&self) -> usize;
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    fn top_level_field(&self, k: &str) -> Result<Option<&'doc RawValue>>;
+
     /// Returns the unparsed value of the `_vectors` field from the document data.
     ///
     /// This field alone is insufficient to retrieve vectors, as they may be stored in a dedicated location in the database.
@@ -37,6 +45,7 @@ pub trait Document<'doc> {
     fn geo_field(&self) -> Result<Option<&'doc RawValue>>;
 }
 
+#[derive(Debug)]
 pub struct DocumentFromDb<'t, Mapper: FieldIdMapper>
 where
     Mapper: FieldIdMapper,
@@ -84,6 +93,14 @@ impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
     fn geo_field(&self) -> Result<Option<&'t RawValue>> {
         self.field("_geo")
     }
+
+    fn len(&self) -> usize {
+        self.content.iter().count()
+    }
+
+    fn top_level_field(&self, k: &str) -> Result<Option<&'t RawValue>> {
+        self.field(k)
+    }
 }
 
 impl<'t, Mapper: FieldIdMapper> DocumentFromDb<'t, Mapper> {
@@ -107,18 +124,18 @@ impl<'t, Mapper: FieldIdMapper> DocumentFromDb<'t, Mapper> {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct DocumentFromVersions<'doc> {
-    versions: Versions<'doc>,
+#[derive(Debug)]
+pub struct DocumentFromVersions<'a, 'doc> {
+    versions: &'a Versions<'doc>,
 }
 
-impl<'doc> DocumentFromVersions<'doc> {
-    pub fn new(versions: Versions<'doc>) -> Self {
+impl<'a, 'doc> DocumentFromVersions<'a, 'doc> {
+    pub fn new(versions: &'a Versions<'doc>) -> Self {
         Self { versions }
     }
 }
 
-impl<'doc> Document<'doc> for DocumentFromVersions<'doc> {
+impl<'a, 'doc> Document<'doc> for DocumentFromVersions<'a, 'doc> {
     fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'doc str, &'doc RawValue)>> {
         self.versions.iter_top_level_fields().map(Ok)
     }
@@ -130,16 +147,25 @@ impl<'doc> Document<'doc> for DocumentFromVersions<'doc> {
     fn geo_field(&self) -> Result<Option<&'doc RawValue>> {
         Ok(self.versions.geo_field())
     }
+
+    fn len(&self) -> usize {
+        self.versions.len()
+    }
+
+    fn top_level_field(&self, k: &str) -> Result<Option<&'doc RawValue>> {
+        Ok(self.versions.top_level_field(k))
+    }
 }
 
-pub struct MergedDocument<'doc, 't, Mapper: FieldIdMapper> {
-    new_doc: DocumentFromVersions<'doc>,
+#[derive(Debug)]
+pub struct MergedDocument<'a, 'doc, 't, Mapper: FieldIdMapper> {
+    new_doc: DocumentFromVersions<'a, 'doc>,
     db: Option<DocumentFromDb<'t, Mapper>>,
 }
 
-impl<'doc, 't, Mapper: FieldIdMapper> MergedDocument<'doc, 't, Mapper> {
+impl<'a, 'doc, 't, Mapper: FieldIdMapper> MergedDocument<'a, 'doc, 't, Mapper> {
     pub fn new(
-        new_doc: DocumentFromVersions<'doc>,
+        new_doc: DocumentFromVersions<'a, 'doc>,
         db: Option<DocumentFromDb<'t, Mapper>>,
     ) -> Self {
         Self { new_doc, db }
@@ -150,19 +176,19 @@ impl<'doc, 't, Mapper: FieldIdMapper> MergedDocument<'doc, 't, Mapper> {
         rtxn: &'t RoTxn,
         index: &'t Index,
         db_fields_ids_map: &'t Mapper,
-        new_doc: DocumentFromVersions<'doc>,
+        new_doc: DocumentFromVersions<'a, 'doc>,
     ) -> Result<Self> {
         let db = DocumentFromDb::new(docid, rtxn, index, db_fields_ids_map)?;
         Ok(Self { new_doc, db })
     }
 
-    pub fn without_db(new_doc: DocumentFromVersions<'doc>) -> Self {
+    pub fn without_db(new_doc: DocumentFromVersions<'a, 'doc>) -> Self {
         Self { new_doc, db: None }
     }
 }
 
 impl<'d, 'doc: 'd, 't: 'd, Mapper: FieldIdMapper> Document<'d>
-    for MergedDocument<'doc, 't, Mapper>
+    for MergedDocument<'d, 'doc, 't, Mapper>
 {
     fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'d str, &'d RawValue)>> {
         let mut new_doc_it = self.new_doc.iter_top_level_fields();
@@ -209,6 +235,20 @@ impl<'d, 'doc: 'd, 't: 'd, Mapper: FieldIdMapper> Document<'d>
 
         db.geo_field()
     }
+
+    fn len(&self) -> usize {
+        self.iter_top_level_fields().count()
+    }
+
+    fn top_level_field(&self, k: &str) -> Result<Option<&'d RawValue>> {
+        if let Some(f) = self.new_doc.top_level_field(k)? {
+            return Ok(Some(f));
+        }
+        if let Some(db) = self.db {
+            return db.field(k);
+        }
+        Ok(None)
+    }
 }
 
 impl<'doc, D> Document<'doc> for &D
@@ -225,6 +265,14 @@ where
 
     fn geo_field(&self) -> Result<Option<&'doc RawValue>> {
         D::geo_field(self)
+    }
+
+    fn len(&self) -> usize {
+        D::len(self)
+    }
+
+    fn top_level_field(&self, k: &str) -> Result<Option<&'doc RawValue>> {
+        D::top_level_field(self, k)
     }
 }
 
@@ -301,11 +349,9 @@ where
 
 pub type Entry<'doc> = (&'doc str, &'doc RawValue);
 
-#[derive(Clone, Copy)]
+#[derive(Debug)]
 pub struct Versions<'doc> {
-    data: &'doc [Entry<'doc>],
-    vectors: Option<&'doc RawValue>,
-    geo: Option<&'doc RawValue>,
+    data: RawMap<'doc>,
 }
 
 impl<'doc> Versions<'doc> {
@@ -324,26 +370,30 @@ impl<'doc> Versions<'doc> {
     }
 
     pub fn single(version: RawMap<'doc>) -> Self {
-        let vectors_id = version.get_index(RESERVED_VECTORS_FIELD_NAME);
-        let geo_id = version.get_index("_geo");
-        let mut data = version.into_vec();
-        let geo = geo_id.map(|geo_id| data.remove(geo_id).1);
-        let vectors = vectors_id.map(|vectors_id| data.remove(vectors_id).1);
-
-        let data = data.into_bump_slice();
-
-        Self { data, geo, vectors }
+        Self { data: version }
     }
 
-    pub fn iter_top_level_fields(&self) -> impl Iterator<Item = Entry<'doc>> {
-        self.data.iter().copied()
+    pub fn iter_top_level_fields(&self) -> raw_collections::map::iter::Iter<'doc, '_> {
+        /// FIXME: ignore vectors and _geo
+        self.data.iter()
     }
 
     pub fn vectors_field(&self) -> Option<&'doc RawValue> {
-        self.vectors
+        self.data.get(RESERVED_VECTORS_FIELD_NAME)
     }
 
     pub fn geo_field(&self) -> Option<&'doc RawValue> {
-        self.geo
+        self.data.get("_geo")
+    }
+
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+    pub fn top_level_field(&self, k: &str) -> Option<&'doc RawValue> {
+        self.data.get(k)
     }
 }

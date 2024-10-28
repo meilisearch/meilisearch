@@ -1,6 +1,8 @@
+use bumpalo::Bump;
 use heed::RoTxn;
 
-use super::document::{DocumentFromDb, DocumentFromVersions, MergedDocument};
+use super::document::{DocumentFromDb, DocumentFromVersions, MergedDocument, Versions};
+use super::vector_document::{VectorDocumentFromDb, VectorDocumentFromVersions};
 use crate::documents::FieldIdMapper;
 use crate::{DocumentId, Index, Result};
 
@@ -18,14 +20,14 @@ pub struct Deletion<'doc> {
 pub struct Update<'doc> {
     docid: DocumentId,
     external_document_id: &'doc str,
-    new: DocumentFromVersions<'doc>,
+    new: Versions<'doc>,
     has_deletion: bool,
 }
 
 pub struct Insertion<'doc> {
     docid: DocumentId,
     external_document_id: &'doc str,
-    new: DocumentFromVersions<'doc>,
+    new: Versions<'doc>,
 }
 
 impl<'doc> DocumentChange<'doc> {
@@ -72,11 +74,7 @@ impl<'doc> Deletion<'doc> {
 }
 
 impl<'doc> Insertion<'doc> {
-    pub fn create(
-        docid: DocumentId,
-        external_document_id: &'doc str,
-        new: DocumentFromVersions<'doc>,
-    ) -> Self {
+    pub fn create(docid: DocumentId, external_document_id: &'doc str, new: Versions<'doc>) -> Self {
         Insertion { docid, external_document_id, new }
     }
 
@@ -87,8 +85,15 @@ impl<'doc> Insertion<'doc> {
     pub fn external_document_id(&self) -> &'doc str {
         self.external_document_id
     }
-    pub fn new(&self) -> DocumentFromVersions<'doc> {
-        self.new
+    pub fn new(&self) -> DocumentFromVersions<'_, 'doc> {
+        DocumentFromVersions::new(&self.new)
+    }
+
+    pub fn inserted_vectors(
+        &self,
+        doc_alloc: &'doc Bump,
+    ) -> Result<Option<VectorDocumentFromVersions<'doc>>> {
+        VectorDocumentFromVersions::new(&self.new, doc_alloc)
     }
 }
 
@@ -96,7 +101,7 @@ impl<'doc> Update<'doc> {
     pub fn create(
         docid: DocumentId,
         external_document_id: &'doc str,
-        new: DocumentFromVersions<'doc>,
+        new: Versions<'doc>,
         has_deletion: bool,
     ) -> Self {
         Update { docid, new, external_document_id, has_deletion }
@@ -120,20 +125,45 @@ impl<'doc> Update<'doc> {
         )?)
     }
 
-    pub fn updated(&self) -> DocumentFromVersions<'doc> {
-        self.new
-    }
-
-    pub fn new<'a, Mapper: FieldIdMapper>(
+    pub fn current_vectors<'a, Mapper: FieldIdMapper>(
         &self,
         rtxn: &'a RoTxn,
         index: &'a Index,
         mapper: &'a Mapper,
-    ) -> Result<MergedDocument<'doc, 'a, Mapper>> {
+        doc_alloc: &'a Bump,
+    ) -> Result<VectorDocumentFromDb<'a>> {
+        Ok(VectorDocumentFromDb::new(self.docid, index, rtxn, mapper, doc_alloc)?.ok_or(
+            crate::error::UserError::UnknownInternalDocumentId { document_id: self.docid },
+        )?)
+    }
+
+    pub fn updated(&self) -> DocumentFromVersions<'_, 'doc> {
+        DocumentFromVersions::new(&self.new)
+    }
+
+    pub fn new<'t, Mapper: FieldIdMapper>(
+        &self,
+        rtxn: &'t RoTxn,
+        index: &'t Index,
+        mapper: &'t Mapper,
+    ) -> Result<MergedDocument<'_, 'doc, 't, Mapper>> {
         if self.has_deletion {
-            Ok(MergedDocument::without_db(self.new))
+            Ok(MergedDocument::without_db(DocumentFromVersions::new(&self.new)))
         } else {
-            MergedDocument::with_db(self.docid, rtxn, index, mapper, self.new)
+            MergedDocument::with_db(
+                self.docid,
+                rtxn,
+                index,
+                mapper,
+                DocumentFromVersions::new(&self.new),
+            )
         }
+    }
+
+    pub fn updated_vectors(
+        &self,
+        doc_alloc: &'doc Bump,
+    ) -> Result<Option<VectorDocumentFromVersions<'doc>>> {
+        VectorDocumentFromVersions::new(&self.new, doc_alloc)
     }
 }
