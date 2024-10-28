@@ -80,7 +80,7 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
                         del_word_pair_proximity.push(((w1, w2), prox));
                     },
                 )?;
-                let document = inner.new(rtxn, index, context.db_fields_ids_map)?;
+                let document = inner.merged(rtxn, index, context.db_fields_ids_map)?;
                 process_document_tokens(
                     document,
                     document_tokenizer,
@@ -92,7 +92,7 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
                 )?;
             }
             DocumentChange::Insertion(inner) => {
-                let document = inner.new();
+                let document = inner.inserted();
                 process_document_tokens(
                     document,
                     document_tokenizer,

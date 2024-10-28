@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use bumpalo::Bump;
 use heed::RoTxn;
 use raw_collections::RawMap;
@@ -106,14 +108,9 @@ impl<'t> VectorDocument<'t> for VectorDocumentFromDb<'t> {
                 let config_name = self.doc_alloc.alloc_str(config.name.as_str());
                 Ok((&*config_name, entry))
             })
-            .chain(self.vectors_field.iter().map(|map| map.iter()).flatten().map(
-                |(name, value)| {
-                    Ok((
-                        name.as_ref(),
-                        entry_from_raw_value(value).map_err(InternalError::SerdeJson)?,
-                    ))
-                },
-            ))
+            .chain(self.vectors_field.iter().flat_map(|map| map.iter()).map(|(name, value)| {
+                Ok((name, entry_from_raw_value(value).map_err(InternalError::SerdeJson)?))
+            }))
     }
 
     fn vectors_for_key(&self, key: &str) -> Result<Option<VectorEntry<'t>>> {
@@ -139,7 +136,7 @@ fn entry_from_raw_value(
     let value: RawVectors = serde_json::from_str(value.get())?;
     Ok(VectorEntry {
         has_configured_embedder: false,
-        embeddings: value.embeddings().map(|embeddings| Embeddings::FromJson(embeddings)),
+        embeddings: value.embeddings().map(Embeddings::FromJson),
         regenerate: value.must_regenerate(),
     })
 }
@@ -173,5 +170,71 @@ impl<'doc> VectorDocument<'doc> for VectorDocumentFromVersions<'doc> {
         let Some(vectors) = self.vectors.get(key) else { return Ok(None) };
         let vectors = entry_from_raw_value(vectors).map_err(UserError::SerdeJson)?;
         Ok(Some(vectors))
+    }
+}
+
+pub struct MergedVectorDocument<'doc> {
+    new_doc: Option<VectorDocumentFromVersions<'doc>>,
+    db: Option<VectorDocumentFromDb<'doc>>,
+}
+
+impl<'doc> MergedVectorDocument<'doc> {
+    pub fn with_db<Mapper: FieldIdMapper>(
+        docid: DocumentId,
+        index: &'doc Index,
+        rtxn: &'doc RoTxn,
+        db_fields_ids_map: &'doc Mapper,
+        versions: &Versions<'doc>,
+        doc_alloc: &'doc Bump,
+    ) -> Result<Option<Self>> {
+        let db = VectorDocumentFromDb::new(docid, index, rtxn, db_fields_ids_map, doc_alloc)?;
+        let new_doc = VectorDocumentFromVersions::new(versions, doc_alloc)?;
+        Ok(if db.is_none() && new_doc.is_none() { None } else { Some(Self { new_doc, db }) })
+    }
+
+    pub fn without_db(versions: &Versions<'doc>, doc_alloc: &'doc Bump) -> Result<Option<Self>> {
+        let Some(new_doc) = VectorDocumentFromVersions::new(versions, doc_alloc)? else {
+            return Ok(None);
+        };
+        Ok(Some(Self { new_doc: Some(new_doc), db: None }))
+    }
+}
+
+impl<'doc> VectorDocument<'doc> for MergedVectorDocument<'doc> {
+    fn iter_vectors(&self) -> impl Iterator<Item = Result<(&'doc str, VectorEntry<'doc>)>> {
+        let mut new_doc_it = self.new_doc.iter().flat_map(|new_doc| new_doc.iter_vectors());
+        let mut db_it = self.db.iter().flat_map(|db| db.iter_vectors());
+        let mut seen_fields = BTreeSet::new();
+
+        std::iter::from_fn(move || {
+            if let Some(next) = new_doc_it.next() {
+                if let Ok((name, _)) = next {
+                    seen_fields.insert(name);
+                }
+                return Some(next);
+            }
+            loop {
+                match db_it.next()? {
+                    Ok((name, value)) => {
+                        if seen_fields.contains(name) {
+                            continue;
+                        }
+                        return Some(Ok((name, value)));
+                    }
+                    Err(err) => return Some(Err(err)),
+                }
+            }
+        })
+    }
+
+    fn vectors_for_key(&self, key: &str) -> Result<Option<VectorEntry<'doc>>> {
+        if let Some(new_doc) = &self.new_doc {
+            if let Some(entry) = new_doc.vectors_for_key(key)? {
+                return Ok(Some(entry));
+            }
+        }
+
+        let Some(db) = self.db.as_ref() else { return Ok(None) };
+        db.vectors_for_key(key)
     }
 }

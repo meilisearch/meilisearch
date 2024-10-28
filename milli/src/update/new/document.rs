@@ -1,13 +1,14 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use heed::RoTxn;
 use raw_collections::RawMap;
 use serde_json::value::RawValue;
 
+use super::vector_document::{VectorDocument, VectorDocumentFromDb, VectorDocumentFromVersions};
 use super::{KvReaderFieldId, KvWriterFieldId};
 use crate::documents::FieldIdMapper;
 use crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME;
-use crate::{DocumentId, Index, InternalError, Result};
+use crate::{DocumentId, GlobalFieldsIdsMap, Index, InternalError, Result, UserError};
 
 /// A view into a document that can represent either the current version from the DB,
 /// the update data from payload or other means, or the merged updated version.
@@ -69,17 +70,22 @@ impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
         std::iter::from_fn(move || {
             let (fid, value) = it.next()?;
 
-            let res = (|| {
-                let value =
-                    serde_json::from_slice(value).map_err(crate::InternalError::SerdeJson)?;
-
+            let res = (|| loop {
                 let name = self.fields_ids_map.name(fid).ok_or(
                     InternalError::FieldIdMapMissingEntry(crate::FieldIdMapMissingEntry::FieldId {
                         field_id: fid,
                         process: "getting current document",
                     }),
                 )?;
-                Ok((name, value))
+
+                if name == RESERVED_VECTORS_FIELD_NAME || name == "_geo" {
+                    continue;
+                }
+
+                let value =
+                    serde_json::from_slice(value).map_err(crate::InternalError::SerdeJson)?;
+
+                return Ok((name, value));
             })();
 
             Some(res)
@@ -164,13 +170,6 @@ pub struct MergedDocument<'a, 'doc, 't, Mapper: FieldIdMapper> {
 }
 
 impl<'a, 'doc, 't, Mapper: FieldIdMapper> MergedDocument<'a, 'doc, 't, Mapper> {
-    pub fn new(
-        new_doc: DocumentFromVersions<'a, 'doc>,
-        db: Option<DocumentFromDb<'t, Mapper>>,
-    ) -> Self {
-        Self { new_doc, db }
-    }
-
     pub fn with_db(
         docid: DocumentId,
         rtxn: &'t RoTxn,
@@ -287,15 +286,14 @@ where
 ///
 /// - If the document contains a top-level field that is not present in `fields_ids_map`.
 ///
-pub fn write_to_obkv<'s, 'a, 'b>(
+pub fn write_to_obkv<'s, 'a, 'map>(
     document: &'s impl Document<'s>,
-    vector_document: Option<()>,
-    fields_ids_map: &'a impl FieldIdMapper,
+    vector_document: Option<&'s impl VectorDocument<'s>>,
+    fields_ids_map: &'a mut GlobalFieldsIdsMap<'map>,
     mut document_buffer: &'a mut Vec<u8>,
 ) -> Result<&'a KvReaderFieldId>
 where
     's: 'a,
-    's: 'b,
 {
     // will be used in 'inject_vectors
     let vectors_value: Box<RawValue>;
@@ -308,19 +306,21 @@ where
 
     for res in document.iter_top_level_fields() {
         let (field_name, value) = res?;
-        let field_id = fields_ids_map.id(field_name).unwrap();
+        let field_id =
+            fields_ids_map.id_or_insert(field_name).ok_or(UserError::AttributeLimitReached)?;
         unordered_field_buffer.push((field_id, value));
     }
 
     'inject_vectors: {
         let Some(vector_document) = vector_document else { break 'inject_vectors };
 
-        let Some(vectors_fid) = fields_ids_map.id(RESERVED_VECTORS_FIELD_NAME) else {
-            break 'inject_vectors;
-        };
-        /*
+        let vectors_fid = fields_ids_map
+            .id_or_insert(RESERVED_VECTORS_FIELD_NAME)
+            .ok_or(UserError::AttributeLimitReached)?;
+
         let mut vectors = BTreeMap::new();
-        for (name, entry) in vector_document.iter_vectors() {
+        for res in vector_document.iter_vectors() {
+            let (name, entry) = res?;
             if entry.has_configured_embedder {
                 continue; // we don't write vectors with configured embedder in documents
             }
@@ -335,7 +335,7 @@ where
         }
 
         vectors_value = serde_json::value::to_raw_value(&vectors).unwrap();
-        unordered_field_buffer.push((vectors_fid, &vectors_value));*/
+        unordered_field_buffer.push((vectors_fid, &vectors_value));
     }
 
     unordered_field_buffer.sort_by_key(|(fid, _)| *fid);
@@ -373,9 +373,8 @@ impl<'doc> Versions<'doc> {
         Self { data: version }
     }
 
-    pub fn iter_top_level_fields(&self) -> raw_collections::map::iter::Iter<'doc, '_> {
-        /// FIXME: ignore vectors and _geo
-        self.data.iter()
+    pub fn iter_top_level_fields(&self) -> impl Iterator<Item = (&'doc str, &'doc RawValue)> + '_ {
+        self.data.iter().filter(|(k, _)| *k != RESERVED_VECTORS_FIELD_NAME && *k != "_geo")
     }
 
     pub fn vectors_field(&self) -> Option<&'doc RawValue> {

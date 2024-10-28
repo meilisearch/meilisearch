@@ -2,7 +2,9 @@ use bumpalo::Bump;
 use heed::RoTxn;
 
 use super::document::{DocumentFromDb, DocumentFromVersions, MergedDocument, Versions};
-use super::vector_document::{VectorDocumentFromDb, VectorDocumentFromVersions};
+use super::vector_document::{
+    MergedVectorDocument, VectorDocumentFromDb, VectorDocumentFromVersions,
+};
 use crate::documents::FieldIdMapper;
 use crate::{DocumentId, Index, Result};
 
@@ -85,7 +87,7 @@ impl<'doc> Insertion<'doc> {
     pub fn external_document_id(&self) -> &'doc str {
         self.external_document_id
     }
-    pub fn new(&self) -> DocumentFromVersions<'_, 'doc> {
+    pub fn inserted(&self) -> DocumentFromVersions<'_, 'doc> {
         DocumentFromVersions::new(&self.new)
     }
 
@@ -141,7 +143,7 @@ impl<'doc> Update<'doc> {
         DocumentFromVersions::new(&self.new)
     }
 
-    pub fn new<'t, Mapper: FieldIdMapper>(
+    pub fn merged<'t, Mapper: FieldIdMapper>(
         &self,
         rtxn: &'t RoTxn,
         index: &'t Index,
@@ -165,5 +167,19 @@ impl<'doc> Update<'doc> {
         doc_alloc: &'doc Bump,
     ) -> Result<Option<VectorDocumentFromVersions<'doc>>> {
         VectorDocumentFromVersions::new(&self.new, doc_alloc)
+    }
+
+    pub fn merged_vectors<Mapper: FieldIdMapper>(
+        &self,
+        rtxn: &'doc RoTxn,
+        index: &'doc Index,
+        mapper: &'doc Mapper,
+        doc_alloc: &'doc Bump,
+    ) -> Result<Option<MergedVectorDocument<'doc>>> {
+        if self.has_deletion {
+            MergedVectorDocument::without_db(&self.new, doc_alloc)
+        } else {
+            MergedVectorDocument::with_db(self.docid, index, rtxn, mapper, &self.new, doc_alloc)
+        }
     }
 }

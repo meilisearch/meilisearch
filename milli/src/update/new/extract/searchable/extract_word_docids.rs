@@ -481,7 +481,7 @@ impl WordDocidsExtractors {
                         .map_err(crate::Error::from)
                 };
                 document_tokenizer.tokenize_document(
-                    inner.new(rtxn, index, context.db_fields_ids_map)?,
+                    inner.merged(rtxn, index, context.db_fields_ids_map)?,
                     new_fields_ids_map,
                     &mut token_fn,
                 )?;
@@ -500,7 +500,7 @@ impl WordDocidsExtractors {
                         .map_err(crate::Error::from)
                 };
                 document_tokenizer.tokenize_document(
-                    inner.new(),
+                    inner.inserted(),
                     new_fields_ids_map,
                     &mut token_fn,
                 )?;

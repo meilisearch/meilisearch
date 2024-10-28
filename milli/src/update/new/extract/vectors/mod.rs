@@ -100,7 +100,7 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                                 &context.doc_alloc,
                             )?;
                             let old_rendered = prompt.render_document(
-                                update.new(
+                                update.merged(
                                     &context.txn,
                                     context.index,
                                     context.db_fields_ids_map,
@@ -123,7 +123,11 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                             &context.doc_alloc,
                         )?;
                         let new_rendered = prompt.render_document(
-                            update.new(&context.txn, context.index, context.db_fields_ids_map)?,
+                            update.merged(
+                                &context.txn,
+                                context.index,
+                                context.db_fields_ids_map,
+                            )?,
                             context.new_fields_ids_map,
                             &context.doc_alloc,
                         )?;
@@ -156,7 +160,7 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                                 .unwrap();
                         } else if new_vectors.regenerate {
                             let rendered = prompt.render_document(
-                                insertion.new(),
+                                insertion.inserted(),
                                 context.new_fields_ids_map,
                                 &context.doc_alloc,
                             )?;
@@ -164,7 +168,7 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                         }
                     } else {
                         let rendered = prompt.render_document(
-                            insertion.new(),
+                            insertion.inserted(),
                             context.new_fields_ids_map,
                             &context.doc_alloc,
                         )?;

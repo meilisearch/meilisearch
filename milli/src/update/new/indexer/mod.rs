@@ -64,9 +64,7 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentExtractor<'a> {
     ) -> Result<()> {
         let mut document_buffer = Vec::new();
 
-        let new_fields_ids_map = context.new_fields_ids_map.borrow_or_yield();
-        let new_fields_ids_map = &*new_fields_ids_map;
-        let new_fields_ids_map = new_fields_ids_map.local_map();
+        let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut_or_yield();
 
         for change in changes {
             let change = change?;
@@ -78,20 +76,34 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentExtractor<'a> {
                     let docid = deletion.docid();
                     self.document_sender.delete(docid, external_docid).unwrap();
                 }
-                /// TODO: change NONE by SOME(vector) when implemented
                 DocumentChange::Update(update) => {
                     let docid = update.docid();
                     let content =
-                        update.new(&context.txn, context.index, &context.db_fields_ids_map)?;
-                    let content =
-                        write_to_obkv(&content, None, new_fields_ids_map, &mut document_buffer)?;
+                        update.merged(&context.txn, context.index, &context.db_fields_ids_map)?;
+                    let vector_content = update.merged_vectors(
+                        &context.txn,
+                        context.index,
+                        &context.db_fields_ids_map,
+                        &context.doc_alloc,
+                    )?;
+                    let content = write_to_obkv(
+                        &content,
+                        vector_content.as_ref(),
+                        &mut new_fields_ids_map,
+                        &mut document_buffer,
+                    )?;
                     self.document_sender.insert(docid, external_docid, content.boxed()).unwrap();
                 }
                 DocumentChange::Insertion(insertion) => {
                     let docid = insertion.docid();
-                    let content = insertion.new();
-                    let content =
-                        write_to_obkv(&content, None, new_fields_ids_map, &mut document_buffer)?;
+                    let content = insertion.inserted();
+                    let inserted_vectors = insertion.inserted_vectors(&context.doc_alloc)?;
+                    let content = write_to_obkv(
+                        &content,
+                        inserted_vectors.as_ref(),
+                        &mut new_fields_ids_map,
+                        &mut document_buffer,
+                    )?;
                     self.document_sender.insert(docid, external_docid, content.boxed()).unwrap();
                     // extracted_dictionary_sender.send(self, dictionary: &[u8]);
                 }

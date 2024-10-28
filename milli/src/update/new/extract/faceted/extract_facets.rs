@@ -120,7 +120,7 @@ impl FacetedDocidsExtractor {
 
                 extract_document_facets(
                     attributes_to_extract,
-                    inner.new(rtxn, index, context.db_fields_ids_map)?,
+                    inner.merged(rtxn, index, context.db_fields_ids_map)?,
                     new_fields_ids_map.deref_mut(),
                     &mut |fid, value| {
                         Self::facet_fn_with_options(
@@ -136,7 +136,7 @@ impl FacetedDocidsExtractor {
             }
             DocumentChange::Insertion(inner) => extract_document_facets(
                 attributes_to_extract,
-                inner.new(),
+                inner.inserted(),
                 new_fields_ids_map.deref_mut(),
                 &mut |fid, value| {
                     Self::facet_fn_with_options(
