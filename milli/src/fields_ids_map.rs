@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::FieldId;
 
 mod global;
+pub mod metadata;
 pub use global::GlobalFieldsIdsMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
