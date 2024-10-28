@@ -1,36 +1,23 @@
+use std::cell::RefCell;
+use std::fmt;
+
+use bumpalo::Bump;
 use liquid::model::{
     ArrayView, DisplayCow, KStringCow, ObjectRender, ObjectSource, State, Value as LiquidValue,
 };
 use liquid::{ObjectView, ValueView};
 
-use super::document::Document;
 use super::{FieldMetadata, FieldsIdsMapWithMetadata};
-#[derive(Debug, Clone)]
-pub struct Fields<'a>(Vec<FieldValue<'a>>);
-
-impl<'a> Fields<'a> {
-    pub fn new(document: &'a Document<'a>, field_id_map: &'a FieldsIdsMapWithMetadata<'a>) -> Self {
-        Self(
-            std::iter::repeat(document)
-                .zip(field_id_map.iter())
-                .map(|(document, (fid, name))| FieldValue {
-                    document,
-                    name,
-                    metadata: field_id_map.metadata(fid).unwrap_or_default(),
-                })
-                .collect(),
-        )
-    }
-}
+use crate::GlobalFieldsIdsMap;
 
 #[derive(Debug, Clone, Copy)]
-pub struct FieldValue<'a> {
+pub struct FieldValue<'a, D: ObjectView> {
     name: &'a str,
-    document: &'a Document<'a>,
+    document: &'a D,
     metadata: FieldMetadata,
 }
 
-impl<'a> ValueView for FieldValue<'a> {
+impl<'a, D: ObjectView> ValueView for FieldValue<'a, D> {
     fn as_debug(&self) -> &dyn std::fmt::Debug {
         self
     }
@@ -70,7 +57,7 @@ impl<'a> ValueView for FieldValue<'a> {
     }
 }
 
-impl<'a> FieldValue<'a> {
+impl<'a, D: ObjectView> FieldValue<'a, D> {
     pub fn name(&self) -> &&'a str {
         &self.name
     }
@@ -88,7 +75,7 @@ impl<'a> FieldValue<'a> {
     }
 }
 
-impl<'a> ObjectView for FieldValue<'a> {
+impl<'a, D: ObjectView> ObjectView for FieldValue<'a, D> {
     fn as_value(&self) -> &dyn ValueView {
         self
     }
@@ -127,7 +114,42 @@ impl<'a> ObjectView for FieldValue<'a> {
     }
 }
 
-impl<'a> ArrayView for Fields<'a> {
+#[derive(Debug, Clone)]
+pub struct OwnedFields<'a, D: ObjectView>(Vec<FieldValue<'a, D>>);
+
+#[derive(Debug)]
+pub struct BorrowedFields<'a, 'map, D: ObjectView> {
+    document: &'a D,
+    field_id_map: &'a RefCell<GlobalFieldsIdsMap<'map>>,
+    doc_alloc: &'a Bump,
+}
+
+impl<'a, D: ObjectView> OwnedFields<'a, D> {
+    pub fn new(document: &'a D, field_id_map: &'a FieldsIdsMapWithMetadata<'a>) -> Self {
+        Self(
+            std::iter::repeat(document)
+                .zip(field_id_map.iter())
+                .map(|(document, (fid, name))| FieldValue {
+                    document,
+                    name,
+                    metadata: field_id_map.metadata(fid).unwrap_or_default(),
+                })
+                .collect(),
+        )
+    }
+}
+
+impl<'a, 'map, D: ObjectView> BorrowedFields<'a, 'map, D> {
+    pub fn new(
+        document: &'a D,
+        field_id_map: &'a RefCell<GlobalFieldsIdsMap<'map>>,
+        doc_alloc: &'a Bump,
+    ) -> Self {
+        Self { document, field_id_map, doc_alloc }
+    }
+}
+
+impl<'a, D: ObjectView> ArrayView for OwnedFields<'a, D> {
     fn as_value(&self) -> &dyn ValueView {
         self.0.as_value()
     }
@@ -149,7 +171,91 @@ impl<'a> ArrayView for Fields<'a> {
     }
 }
 
-impl<'a> ValueView for Fields<'a> {
+impl<'a, 'map, D: ObjectView> ArrayView for BorrowedFields<'a, 'map, D> {
+    fn as_value(&self) -> &dyn ValueView {
+        self
+    }
+
+    fn size(&self) -> i64 {
+        self.document.size()
+    }
+
+    fn values<'k>(&'k self) -> Box<dyn Iterator<Item = &'k dyn ValueView> + 'k> {
+        Box::new(self.document.keys().map(|k| {
+            let mut field_id_map = self.field_id_map.borrow_mut();
+            let (_, metadata) = field_id_map.id_with_metadata_or_insert(&k).unwrap();
+            let fv = self.doc_alloc.alloc(FieldValue {
+                name: self.doc_alloc.alloc_str(&k),
+                document: self.document,
+                metadata: FieldMetadata { searchable: metadata.searchable },
+            });
+            fv as _
+        }))
+    }
+
+    fn contains_key(&self, index: i64) -> bool {
+        let index = if index >= 0 { index } else { self.size() + index };
+        index >= 0 && index < self.size()
+    }
+
+    fn get(&self, index: i64) -> Option<&dyn ValueView> {
+        let index = if index >= 0 { index } else { self.size() + index };
+        let index: usize = index.try_into().ok()?;
+        let key = self.document.keys().nth(index)?;
+        let mut field_id_map = self.field_id_map.borrow_mut();
+        let (_, metadata) = field_id_map.id_with_metadata_or_insert(&key)?;
+        let fv = self.doc_alloc.alloc(FieldValue {
+            name: self.doc_alloc.alloc_str(&key),
+            document: self.document,
+            metadata: FieldMetadata { searchable: metadata.searchable },
+        });
+        Some(fv as _)
+    }
+}
+
+impl<'a, 'map, D: ObjectView> ValueView for BorrowedFields<'a, 'map, D> {
+    fn as_debug(&self) -> &dyn std::fmt::Debug {
+        self
+    }
+
+    fn render(&self) -> liquid::model::DisplayCow<'_> {
+        DisplayCow::Owned(Box::new(ArrayRender { s: self }))
+    }
+
+    fn source(&self) -> liquid::model::DisplayCow<'_> {
+        DisplayCow::Owned(Box::new(ArraySource { s: self }))
+    }
+
+    fn type_name(&self) -> &'static str {
+        "array"
+    }
+
+    fn query_state(&self, state: liquid::model::State) -> bool {
+        match state {
+            State::Truthy => true,
+            State::DefaultValue | State::Empty | State::Blank => self.document.size() == 0,
+        }
+    }
+
+    fn to_kstr(&self) -> liquid::model::KStringCow<'_> {
+        let s = ArrayRender { s: self }.to_string();
+        KStringCow::from_string(s)
+    }
+
+    fn to_value(&self) -> LiquidValue {
+        LiquidValue::Array(self.values().map(|v| v.to_value()).collect())
+    }
+
+    fn as_array(&self) -> Option<&dyn ArrayView> {
+        Some(self)
+    }
+
+    fn is_array(&self) -> bool {
+        true
+    }
+}
+
+impl<'a, D: ObjectView> ValueView for OwnedFields<'a, D> {
     fn as_debug(&self) -> &dyn std::fmt::Debug {
         self
     }
@@ -180,5 +286,41 @@ impl<'a> ValueView for Fields<'a> {
 
     fn as_array(&self) -> Option<&dyn ArrayView> {
         Some(self)
+    }
+}
+
+struct ArraySource<'a, 'map, D: ObjectView> {
+    s: &'a BorrowedFields<'a, 'map, D>,
+}
+
+impl<'a, 'map, D: ObjectView> fmt::Display for ArraySource<'a, 'map, D> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[")?;
+        for item in self.s.values() {
+            write!(f, "{}, ", item.render())?;
+        }
+        write!(f, "]")?;
+        Ok(())
+    }
+}
+
+struct ArrayRender<'a, 'map, D: ObjectView> {
+    s: &'a BorrowedFields<'a, 'map, D>,
+}
+
+impl<'a, 'map, D: ObjectView> fmt::Display for ArrayRender<'a, 'map, D> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for item in self.s.values() {
+            write!(f, "{}", item.render())?;
+        }
+        Ok(())
+    }
+}
+
+fn convert_index(index: i64, max_size: i64) -> i64 {
+    if 0 <= index {
+        index
+    } else {
+        max_size + index
     }
 }
