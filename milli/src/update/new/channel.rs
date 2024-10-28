@@ -12,7 +12,7 @@ use super::StdResult;
 use crate::index::main_key::{DOCUMENTS_IDS_KEY, WORDS_FST_KEY, WORDS_PREFIXES_FST_KEY};
 use crate::update::new::KvReaderFieldId;
 use crate::update::MergeDeladdCboRoaringBitmaps;
-use crate::vector::Embeddings;
+use crate::vector::Embedding;
 use crate::{DocumentId, Index};
 
 /// The capacity of the channel is currently in number of messages.
@@ -493,19 +493,38 @@ impl DocumentsSender<'_> {
 pub struct EmbeddingSender<'a>(Option<&'a Sender<MergerOperation>>);
 
 impl EmbeddingSender<'_> {
-    pub fn delete_embeddings(docid: DocumentId, embedder_id: u8) -> StdResult<(), SendError<()>> {
+    pub fn delete(&self, docid: DocumentId, embedder_id: u8) -> StdResult<(), SendError<()>> {
         todo!()
     }
 
-    pub fn set_embeddings(
+    pub fn set_vectors(
+        &self,
         docid: DocumentId,
         embedder_id: u8,
-        embeddings: Embeddings<f32>,
+        embeddings: Vec<Embedding>,
     ) -> StdResult<(), SendError<()>> {
         todo!()
     }
 
-    pub fn finish_embedder(embedder_id: u8) {}
+    pub fn set_vector(
+        &self,
+        docid: DocumentId,
+        embedder_id: u8,
+        embedding: Embedding,
+    ) -> StdResult<(), SendError<()>> {
+        todo!()
+    }
+
+    pub fn set_user_provided(
+        &self,
+        docid: DocumentId,
+        embedder_id: u8,
+        regenerate: bool,
+    ) -> StdResult<(), SendError<()>> {
+        todo!()
+    }
+
+    pub fn finish(self, embedder_id: u8) {}
 }
 pub enum MergerOperation {
     ExactWordDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),
