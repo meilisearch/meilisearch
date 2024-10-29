@@ -11,17 +11,18 @@ use crate::json;
 // transplant
 #[actix_rt::test]
 async fn get_unexisting_index_single_document() {
-    let server = Server::new().await;
-    let (_response, code) = server.index("test").get_document(1, None).await;
+    let server = Server::new_shared();
+    let (_response, code) = server.unique_index().get_document(1, None).await;
     assert_eq!(code, 404);
 }
 
 #[actix_rt::test]
 async fn error_get_unexisting_document() {
-    let server = Server::new().await;
-    let index = server.index("test");
-    index.create(None).await;
-    index.wait_task(0).await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (task, _code) = index.create(None).await;
+    index.wait_task(task.uid()).await.succeeded();
+
     let (response, code) = index.get_document(1, None).await;
 
     let expected_response = json!({
@@ -37,18 +38,19 @@ async fn error_get_unexisting_document() {
 
 #[actix_rt::test]
 async fn get_document() {
-    let server = Server::new().await;
-    let index = server.index("test");
-    index.create(None).await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (task, _code) = index.create(None).await;
+    index.wait_task(task.uid()).await.succeeded();
     let documents = json!([
         {
             "id": 0,
             "nested": { "content": "foobar" },
         }
     ]);
-    let (_, code) = index.add_documents(documents, None).await;
+    let (task, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
-    index.wait_task(1).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_document(0, None).await;
     assert_eq!(code, 200);
     assert_eq!(
@@ -81,12 +83,12 @@ async fn get_document() {
 
 #[actix_rt::test]
 async fn error_get_unexisting_index_all_documents() {
-    let server = Server::new().await;
-    let (response, code) =
-        server.index("test").get_all_documents(GetAllDocumentsOptions::default()).await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
 
     let expected_response = json!({
-        "message": "Index `test` not found.",
+        "message": format!("Index `{}` not found.", index.uid),
         "code": "index_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#index_not_found"
@@ -98,12 +100,12 @@ async fn error_get_unexisting_index_all_documents() {
 
 #[actix_rt::test]
 async fn get_no_document() {
-    let server = Server::new().await;
-    let index = server.index("test");
-    let (_, code) = index.create(None).await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (task, code) = index.create(None).await;
     assert_eq!(code, 202);
 
-    index.wait_task(0).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
     assert_eq!(code, 200);
@@ -112,8 +114,8 @@ async fn get_no_document() {
 
 #[actix_rt::test]
 async fn get_all_documents_no_options() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     index.load_test_set().await;
 
     let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
@@ -143,14 +145,13 @@ async fn get_all_documents_no_options() {
 
 #[actix_rt::test]
 async fn get_all_documents_no_options_with_response_compression() {
-    let server = Server::new().await;
-    let index_uid = "test";
-    let index = server.index(index_uid);
+    let server = Server::new_shared();
+    let index = server.unique_index();
     index.load_test_set().await;
 
     let app = server.init_web_app().await;
     let req = test::TestRequest::get()
-        .uri(&format!("/indexes/{}/documents?", urlencode(index_uid)))
+        .uri(&format!("/indexes/{}/documents?", urlencode(&index.uid)))
         .insert_header((ACCEPT_ENCODING, "gzip"))
         .to_request();
 
@@ -169,8 +170,8 @@ async fn get_all_documents_no_options_with_response_compression() {
 
 #[actix_rt::test]
 async fn test_get_all_documents_limit() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     index.load_test_set().await;
 
     let (response, code) = index
@@ -186,8 +187,8 @@ async fn test_get_all_documents_limit() {
 
 #[actix_rt::test]
 async fn test_get_all_documents_offset() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     index.load_test_set().await;
 
     let (response, code) = index
@@ -203,8 +204,8 @@ async fn test_get_all_documents_offset() {
 
 #[actix_rt::test]
 async fn test_get_all_documents_attributes_to_retrieve() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     index.load_test_set().await;
 
     let (response, code) = index
@@ -286,9 +287,11 @@ async fn test_get_all_documents_attributes_to_retrieve() {
 
 #[actix_rt::test]
 async fn get_document_s_nested_attributes_to_retrieve() {
-    let server = Server::new().await;
-    let index = server.index("test");
-    index.create(None).await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (task, _code) = index.create(None).await;
+    index.wait_task(task.uid()).await.succeeded();
+
     let documents = json!([
         {
             "id": 0,
@@ -302,9 +305,9 @@ async fn get_document_s_nested_attributes_to_retrieve() {
             },
         },
     ]);
-    let (_, code) = index.add_documents(documents, None).await;
+    let (task, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
-    index.wait_task(1).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.get_document(0, Some(json!({ "fields": ["content"] }))).await;
     assert_eq!(code, 200);
@@ -343,8 +346,8 @@ async fn get_document_s_nested_attributes_to_retrieve() {
 
 #[actix_rt::test]
 async fn get_documents_displayed_attributes_is_ignored() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     index.update_settings(json!({"displayedAttributes": ["gender"]})).await;
     index.load_test_set().await;
 
@@ -366,10 +369,10 @@ async fn get_documents_displayed_attributes_is_ignored() {
 
 #[actix_rt::test]
 async fn get_document_by_filter() {
-    let server = Server::new().await;
-    let index = server.index("doggo");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     index.update_settings_filterable_attributes(json!(["color"])).await;
-    index
+    let (task, _code) = index
         .add_documents(
             json!([
                 { "id": 0, "color": "red" },
@@ -380,7 +383,7 @@ async fn get_document_by_filter() {
             Some("id"),
         )
         .await;
-    index.wait_task(1).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.get_document_by_filter(json!({})).await;
     let (response2, code2) = index.get_all_documents_raw("").await;
@@ -552,7 +555,7 @@ async fn get_document_with_vectors() {
         }))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = json!([
       {"id": 0, "name": "kefir", "_vectors": { "manual": [0, 0, 0] }},
@@ -560,7 +563,7 @@ async fn get_document_with_vectors() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     // by default you shouldn't see the `_vectors` object
     let (documents, _code) = index.get_all_documents(Default::default()).await;
