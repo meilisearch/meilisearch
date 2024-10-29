@@ -405,6 +405,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "arroy"
+version = "0.5.0"
+source = "git+https://github.com/meilisearch/arroy/?rev=3908c9e#3908c9edfba77ba18cc50bda41c88166ba5ebd37"
+dependencies = [
+ "bytemuck",
+ "byteorder",
+ "heed",
+ "log",
+ "memmap2",
+ "nohash",
+ "ordered-float",
+ "rand",
+ "rayon",
+ "roaring",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "assert-json-diff"
 version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -707,9 +726,9 @@ checksum = "2c676a478f63e9fa2dd5368a42f28bba0d6c560b775f38583c8bbaa7fcd67c9c"
 
 [[package]]
 name = "bytemuck"
-version = "1.16.1"
+version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b236fc92302c97ed75b38da1f4917b5cdda4984745740f153a5d3059e48d725e"
+checksum = "8334215b81e418a0a7bdb8ef0849474f40bb10c8b71f1c4ed315cff49f32494d"
 dependencies = [
  "bytemuck_derive",
 ]
@@ -2556,7 +2575,7 @@ name = "index-scheduler"
 version = "1.11.0"
 dependencies = [
  "anyhow",
- "arroy",
+ "arroy 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "big_s",
  "bincode",
  "crossbeam",
@@ -3517,6 +3536,7 @@ name = "meilitool"
 version = "1.11.0"
 dependencies = [
  "anyhow",
+ "arroy 0.5.0 (git+https://github.com/meilisearch/arroy/?rev=3908c9e)",
  "clap",
  "dump",
  "file-store",
@@ -3547,7 +3567,7 @@ dependencies = [
 name = "milli"
 version = "1.11.0"
 dependencies = [
- "arroy",
+ "arroy 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "big_s",
  "bimap",
  "bincode",

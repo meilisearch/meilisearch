@@ -79,7 +79,8 @@ fn update_index_stats(
     let stats: Option<v1_9::IndexStats> = index_stats
         .remap_data_type::<SerdeJson<v1_9::IndexStats>>()
         .get(sched_wtxn, &index_uuid)
-        .with_context(ctx)?;
+        .with_context(ctx)
+        .with_context(|| "While reading value")?;
 
     if let Some(stats) = stats {
         let stats: self::IndexStats = stats.into();
@@ -87,7 +88,8 @@ fn update_index_stats(
         index_stats
             .remap_data_type::<SerdeJson<self::IndexStats>>()
             .put(sched_wtxn, &index_uuid, &stats)
-            .with_context(ctx)?;
+            .with_context(ctx)
+            .with_context(|| "While writing value")?;
     }
 
     Ok(())
@@ -155,6 +157,7 @@ fn date_round_trip(
 }
 
 pub fn v1_9_to_v1_10(db_path: &Path) -> anyhow::Result<()> {
+    println!("Upgrading from v1.9.0 to v1.10.0");
     // 2 changes here
 
     // 1. date format. needs to be done before opening the Index
