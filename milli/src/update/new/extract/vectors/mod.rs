@@ -1,3 +1,10 @@
+use std::cell::RefCell;
+
+use bumpalo::collections::Vec as BVec;
+use bumpalo::Bump;
+use hashbrown::HashMap;
+
+use super::cache::DelAddRoaringBitmap;
 use crate::error::FaultSource;
 use crate::prompt::Prompt;
 use crate::update::new::channel::EmbeddingSender;
@@ -5,26 +12,34 @@ use crate::update::new::indexer::document_changes::{Extractor, FullySend};
 use crate::update::new::vector_document::VectorDocument;
 use crate::update::new::DocumentChange;
 use crate::vector::error::EmbedErrorKind;
-use crate::vector::Embedder;
-use crate::{DocumentId, Result, ThreadPoolNoAbort, UserError};
+use crate::vector::{Embedder, Embedding, EmbeddingConfigs};
+use crate::{DocumentId, InternalError, Result, ThreadPoolNoAbort, UserError};
 
 pub struct EmbeddingExtractor<'a> {
-    embedder: &'a Embedder,
-    prompt: &'a Prompt,
-    embedder_id: u8,
-    embedder_name: &'a str,
+    embedders: &'a EmbeddingConfigs,
     sender: &'a EmbeddingSender<'a>,
     threads: &'a ThreadPoolNoAbort,
 }
 
+impl<'a> EmbeddingExtractor<'a> {
+    pub fn new(
+        embedders: &'a EmbeddingConfigs,
+        sender: &'a EmbeddingSender<'a>,
+        threads: &'a ThreadPoolNoAbort,
+    ) -> Self {
+        Self { embedders, sender, threads }
+    }
+}
+
 impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
-    type Data = FullySend<()>;
+    type Data = FullySend<RefCell<HashMap<String, DelAddRoaringBitmap>>>;
 
     fn init_data<'doc>(
         &'doc self,
         _extractor_alloc: raw_collections::alloc::RefBump<'extractor>,
     ) -> crate::Result<Self::Data> {
-        Ok(FullySend(()))
+        /// TODO: use the extractor_alloc in the hashbrown once you merge the branch where it is no longer a RefBump
+        Ok(FullySend(Default::default()))
     }
 
     fn process<'doc>(
@@ -34,63 +49,90 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
             Self::Data,
         >,
     ) -> crate::Result<()> {
-        let embedder_name: &str = self.embedder_name;
-        let embedder: &Embedder = self.embedder;
-        let prompt: &Prompt = self.prompt;
+        let embedders = self.embedders.inner_as_ref();
 
-        let mut chunks = Chunks::new(
-            embedder,
-            self.embedder_id,
-            embedder_name,
-            self.threads,
-            self.sender,
-            &context.doc_alloc,
-        );
+        let mut all_chunks = BVec::with_capacity_in(embedders.len(), &context.doc_alloc);
+        for (embedder_name, (embedder, prompt, _is_quantized)) in embedders {
+            let embedder_id =
+                context.index.embedder_category_id.get(&context.txn, embedder_name)?.ok_or_else(
+                    || InternalError::DatabaseMissingEntry {
+                        db_name: "embedder_category_id",
+                        key: None,
+                    },
+                )?;
+            all_chunks.push(Chunks::new(
+                embedder,
+                embedder_id,
+                embedder_name,
+                prompt,
+                &context.data.0,
+                self.threads,
+                self.sender,
+                &context.doc_alloc,
+            ))
+        }
 
         for change in changes {
             let change = change?;
             match change {
-                DocumentChange::Deletion(deletion) => {
-                    self.sender.delete(deletion.docid(), self.embedder_id).unwrap();
+                DocumentChange::Deletion(_deletion) => {
+                    // handled by document sender
                 }
                 DocumentChange::Update(update) => {
-                    /// FIXME: this will force the parsing/retrieval of VectorDocument once per embedder
-                    /// consider doing all embedders at once?
                     let old_vectors = update.current_vectors(
                         &context.txn,
                         context.index,
                         context.db_fields_ids_map,
                         &context.doc_alloc,
                     )?;
-                    let old_vectors = old_vectors.vectors_for_key(embedder_name)?.unwrap();
                     let new_vectors = update.updated_vectors(&context.doc_alloc)?;
-                    if let Some(new_vectors) = new_vectors.as_ref().and_then(|new_vectors| {
-                        new_vectors.vectors_for_key(embedder_name).transpose()
-                    }) {
-                        let new_vectors = new_vectors?;
-                        match (old_vectors.regenerate, new_vectors.regenerate) {
-                            (true, true) | (false, false) => todo!(),
-                            _ => {
-                                self.sender
-                                    .set_user_provided(
-                                        update.docid(),
-                                        self.embedder_id,
-                                        !new_vectors.regenerate,
-                                    )
-                                    .unwrap();
+
+                    for chunks in &mut all_chunks {
+                        let embedder_name = chunks.embedder_name();
+                        let prompt = chunks.prompt();
+
+                        let old_vectors = old_vectors.vectors_for_key(embedder_name)?.unwrap();
+                        if let Some(new_vectors) = new_vectors.as_ref().and_then(|new_vectors| {
+                            new_vectors.vectors_for_key(embedder_name).transpose()
+                        }) {
+                            let new_vectors = new_vectors?;
+                            match (old_vectors.regenerate, new_vectors.regenerate) {
+                                (true, true) | (false, false) => todo!(),
+                                _ => {
+                                    chunks.set_regenerate(update.docid(), new_vectors.regenerate);
+                                }
                             }
-                        }
-                        // do we have set embeddings?
-                        if let Some(embeddings) = new_vectors.embeddings {
-                            self.sender
-                                .set_vectors(
+                            // do we have set embeddings?
+                            if let Some(embeddings) = new_vectors.embeddings {
+                                chunks.set_vectors(
                                     update.docid(),
-                                    self.embedder_id,
                                     embeddings.into_vec().map_err(UserError::SerdeJson)?,
-                                )
-                                .unwrap();
-                        } else if new_vectors.regenerate {
-                            let new_rendered = prompt.render_document(
+                                );
+                            } else if new_vectors.regenerate {
+                                let new_rendered = prompt.render_document(
+                                    update.current(
+                                        &context.txn,
+                                        context.index,
+                                        context.db_fields_ids_map,
+                                    )?,
+                                    context.new_fields_ids_map,
+                                    &context.doc_alloc,
+                                )?;
+                                let old_rendered = prompt.render_document(
+                                    update.merged(
+                                        &context.txn,
+                                        context.index,
+                                        context.db_fields_ids_map,
+                                    )?,
+                                    context.new_fields_ids_map,
+                                    &context.doc_alloc,
+                                )?;
+                                if new_rendered != old_rendered {
+                                    chunks.set_autogenerated(update.docid(), new_rendered)?;
+                                }
+                            }
+                        } else if old_vectors.regenerate {
+                            let old_rendered = prompt.render_document(
                                 update.current(
                                     &context.txn,
                                     context.index,
@@ -99,7 +141,7 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                                 context.new_fields_ids_map,
                                 &context.doc_alloc,
                             )?;
-                            let old_rendered = prompt.render_document(
+                            let new_rendered = prompt.render_document(
                                 update.merged(
                                     &context.txn,
                                     context.index,
@@ -109,81 +151,54 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                                 &context.doc_alloc,
                             )?;
                             if new_rendered != old_rendered {
-                                chunks.push(update.docid(), new_rendered)?;
+                                chunks.set_autogenerated(update.docid(), new_rendered)?;
                             }
-                        }
-                    } else if old_vectors.regenerate {
-                        let old_rendered = prompt.render_document(
-                            update.current(
-                                &context.txn,
-                                context.index,
-                                context.db_fields_ids_map,
-                            )?,
-                            context.new_fields_ids_map,
-                            &context.doc_alloc,
-                        )?;
-                        let new_rendered = prompt.render_document(
-                            update.merged(
-                                &context.txn,
-                                context.index,
-                                context.db_fields_ids_map,
-                            )?,
-                            context.new_fields_ids_map,
-                            &context.doc_alloc,
-                        )?;
-                        if new_rendered != old_rendered {
-                            chunks.push(update.docid(), new_rendered)?;
                         }
                     }
                 }
                 DocumentChange::Insertion(insertion) => {
-                    // if no inserted vectors, then regenerate: true + no embeddings => autogenerate
-                    let new_vectors = insertion.inserted_vectors(&context.doc_alloc)?;
-                    if let Some(new_vectors) = new_vectors.as_ref().and_then(|new_vectors| {
-                        new_vectors.vectors_for_key(embedder_name).transpose()
-                    }) {
-                        let new_vectors = new_vectors?;
-                        self.sender
-                            .set_user_provided(
-                                insertion.docid(),
-                                self.embedder_id,
-                                !new_vectors.regenerate,
-                            )
-                            .unwrap();
-                        if let Some(embeddings) = new_vectors.embeddings {
-                            self.sender
-                                .set_vectors(
+                    for chunks in &mut all_chunks {
+                        let embedder_name = chunks.embedder_name();
+                        let prompt = chunks.prompt();
+                        // if no inserted vectors, then regenerate: true + no embeddings => autogenerate
+                        let new_vectors = insertion.inserted_vectors(&context.doc_alloc)?;
+                        if let Some(new_vectors) = new_vectors.as_ref().and_then(|new_vectors| {
+                            new_vectors.vectors_for_key(embedder_name).transpose()
+                        }) {
+                            let new_vectors = new_vectors?;
+                            chunks.set_regenerate(insertion.docid(), new_vectors.regenerate);
+                            if let Some(embeddings) = new_vectors.embeddings {
+                                chunks.set_vectors(
                                     insertion.docid(),
-                                    self.embedder_id,
                                     embeddings.into_vec().map_err(UserError::SerdeJson)?,
-                                )
-                                .unwrap();
-                        } else if new_vectors.regenerate {
+                                );
+                            } else if new_vectors.regenerate {
+                                let rendered = prompt.render_document(
+                                    insertion.inserted(),
+                                    context.new_fields_ids_map,
+                                    &context.doc_alloc,
+                                )?;
+                                chunks.set_autogenerated(insertion.docid(), rendered)?;
+                            }
+                        } else {
                             let rendered = prompt.render_document(
                                 insertion.inserted(),
                                 context.new_fields_ids_map,
                                 &context.doc_alloc,
                             )?;
-                            chunks.push(insertion.docid(), rendered)?;
+                            chunks.set_autogenerated(insertion.docid(), rendered)?;
                         }
-                    } else {
-                        let rendered = prompt.render_document(
-                            insertion.inserted(),
-                            context.new_fields_ids_map,
-                            &context.doc_alloc,
-                        )?;
-                        chunks.push(insertion.docid(), rendered)?;
                     }
                 }
             }
         }
 
-        chunks.drain()
+        for chunk in all_chunks {
+            chunk.drain()?;
+        }
+        Ok(())
     }
 }
-
-use bumpalo::collections::Vec as BVec;
-use bumpalo::Bump;
 
 // **Warning**: the destructor of this struct is not normally run, make sure that all its fields:
 // 1. don't have side effects tied to they destructors
@@ -199,15 +214,21 @@ struct Chunks<'a> {
     embedder: &'a Embedder,
     embedder_id: u8,
     embedder_name: &'a str,
+    prompt: &'a Prompt,
+
+    user_provided: &'a RefCell<HashMap<String, DelAddRoaringBitmap>>,
     threads: &'a ThreadPoolNoAbort,
     sender: &'a EmbeddingSender<'a>,
 }
 
 impl<'a> Chunks<'a> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         embedder: &'a Embedder,
         embedder_id: u8,
         embedder_name: &'a str,
+        prompt: &'a Prompt,
+        user_provided: &'a RefCell<HashMap<String, DelAddRoaringBitmap>>,
         threads: &'a ThreadPoolNoAbort,
         sender: &'a EmbeddingSender<'a>,
         doc_alloc: &'a Bump,
@@ -215,10 +236,20 @@ impl<'a> Chunks<'a> {
         let capacity = embedder.prompt_count_in_chunk_hint() * embedder.chunk_count_hint();
         let texts = BVec::with_capacity_in(capacity, doc_alloc);
         let ids = BVec::with_capacity_in(capacity, doc_alloc);
-        Self { texts, ids, embedder, threads, sender, embedder_id, embedder_name }
+        Self {
+            texts,
+            ids,
+            embedder,
+            prompt,
+            threads,
+            sender,
+            embedder_id,
+            embedder_name,
+            user_provided,
+        }
     }
 
-    pub fn push(&mut self, docid: DocumentId, rendered: &'a str) -> Result<()> {
+    pub fn set_autogenerated(&mut self, docid: DocumentId, rendered: &'a str) -> Result<()> {
         if self.texts.len() < self.texts.capacity() {
             self.texts.push(rendered);
             self.ids.push(docid);
@@ -315,5 +346,29 @@ impl<'a> Chunks<'a> {
         texts.clear();
         ids.clear();
         res
+    }
+
+    pub fn prompt(&self) -> &'a Prompt {
+        self.prompt
+    }
+
+    pub fn embedder_name(&self) -> &'a str {
+        self.embedder_name
+    }
+
+    fn set_regenerate(&self, docid: DocumentId, regenerate: bool) {
+        let mut user_provided = self.user_provided.borrow_mut();
+        let user_provided =
+            user_provided.entry_ref(self.embedder_name).or_insert(Default::default());
+        if regenerate {
+            // regenerate == !user_provided
+            user_provided.del.get_or_insert(Default::default()).insert(docid);
+        } else {
+            user_provided.add.get_or_insert(Default::default()).insert(docid);
+        }
+    }
+
+    fn set_vectors(&self, docid: DocumentId, embeddings: Vec<Embedding>) {
+        self.sender.set_vectors(docid, self.embedder_id, embeddings).unwrap();
     }
 }

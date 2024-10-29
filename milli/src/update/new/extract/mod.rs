@@ -11,6 +11,7 @@ use bumpalo::Bump;
 pub use faceted::*;
 use grenad::Merger;
 pub use searchable::*;
+pub use vectors::EmbeddingExtractor;
 
 use super::indexer::document_changes::{DocumentChanges, FullySend, IndexingContext, ThreadLocal};
 use crate::update::{GrenadParameters, MergeDeladdCboRoaringBitmaps};

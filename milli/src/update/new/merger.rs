@@ -149,6 +149,7 @@ pub fn merge_grenad_entries(
                 }
             }
             MergerOperation::DeleteDocument { docid, external_id } => {
+                /// TODO: delete vectors
                 let span =
                     tracing::trace_span!(target: "indexing::documents::merge", "delete_document");
                 let _entered = span.enter();

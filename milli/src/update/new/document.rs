@@ -4,7 +4,7 @@ use heed::RoTxn;
 use raw_collections::RawMap;
 use serde_json::value::RawValue;
 
-use super::vector_document::{VectorDocument, VectorDocumentFromDb, VectorDocumentFromVersions};
+use super::vector_document::VectorDocument;
 use super::{KvReaderFieldId, KvWriterFieldId};
 use crate::documents::FieldIdMapper;
 use crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME;

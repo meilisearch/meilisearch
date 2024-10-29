@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 
 use crossbeam_channel::{IntoIter, Receiver, SendError, Sender};
 use grenad::Merger;
+use hashbrown::HashMap;
 use heed::types::Bytes;
 use memmap2::Mmap;
 use roaring::RoaringBitmap;
@@ -124,7 +125,32 @@ impl DocumentDeletionEntry {
     }
 }
 
-pub struct WriterOperation {
+pub enum WriterOperation {
+    DbOperation(DbOperation),
+    ArroyOperation(ArroyOperation),
+}
+
+pub enum ArroyOperation {
+    /// TODO: call when deleting regular documents
+    DeleteVectors {
+        docid: DocumentId,
+    },
+    SetVectors {
+        docid: DocumentId,
+        embedder_id: u8,
+        embeddings: Vec<Embedding>,
+    },
+    SetVector {
+        docid: DocumentId,
+        embedder_id: u8,
+        embedding: Embedding,
+    },
+    Finish {
+        user_provided: HashMap<String, RoaringBitmap>,
+    },
+}
+
+pub struct DbOperation {
     database: Database,
     entry: EntryOperation,
 }
@@ -180,7 +206,7 @@ impl From<FacetKind> for Database {
     }
 }
 
-impl WriterOperation {
+impl DbOperation {
     pub fn database(&self, index: &Index) -> heed::Database<Bytes, Bytes> {
         self.database.database(index)
     }
@@ -246,13 +272,13 @@ impl MergerSender {
             DOCUMENTS_IDS_KEY.as_bytes(),
             documents_ids,
         ));
-        match self.send(WriterOperation { database: Database::Main, entry }) {
+        match self.send_db_operation(DbOperation { database: Database::Main, entry }) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
     }
 
-    fn send(&self, op: WriterOperation) -> StdResult<(), SendError<()>> {
+    fn send_db_operation(&self, op: DbOperation) -> StdResult<(), SendError<()>> {
         if self.sender.is_full() {
             self.writer_contentious_count.set(self.writer_contentious_count.get() + 1);
         }
@@ -260,7 +286,7 @@ impl MergerSender {
             self.merger_contentious_count.set(self.merger_contentious_count.get() + 1);
         }
         self.send_count.set(self.send_count.get() + 1);
-        match self.sender.send(op) {
+        match self.sender.send(WriterOperation::DbOperation(op)) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
@@ -275,7 +301,7 @@ impl MainSender<'_> {
             WORDS_FST_KEY.as_bytes(),
             value,
         ));
-        match self.0.send(WriterOperation { database: Database::Main, entry }) {
+        match self.0.send_db_operation(DbOperation { database: Database::Main, entry }) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
@@ -286,7 +312,7 @@ impl MainSender<'_> {
             WORDS_PREFIXES_FST_KEY.as_bytes(),
             value,
         ));
-        match self.0.send(WriterOperation { database: Database::Main, entry }) {
+        match self.0.send_db_operation(DbOperation { database: Database::Main, entry }) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
@@ -294,7 +320,7 @@ impl MainSender<'_> {
 
     pub fn delete(&self, key: &[u8]) -> StdResult<(), SendError<()>> {
         let entry = EntryOperation::Delete(KeyEntry::from_key(key));
-        match self.0.send(WriterOperation { database: Database::Main, entry }) {
+        match self.0.send_db_operation(DbOperation { database: Database::Main, entry }) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
@@ -396,7 +422,7 @@ pub struct WordDocidsSender<'a, D> {
 impl<D: DatabaseType> DocidsSender for WordDocidsSender<'_, D> {
     fn write(&self, key: &[u8], value: &[u8]) -> StdResult<(), SendError<()>> {
         let entry = EntryOperation::Write(KeyValueEntry::from_small_key_value(key, value));
-        match self.sender.send(WriterOperation { database: D::DATABASE, entry }) {
+        match self.sender.send_db_operation(DbOperation { database: D::DATABASE, entry }) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
@@ -404,7 +430,7 @@ impl<D: DatabaseType> DocidsSender for WordDocidsSender<'_, D> {
 
     fn delete(&self, key: &[u8]) -> StdResult<(), SendError<()>> {
         let entry = EntryOperation::Delete(KeyEntry::from_key(key));
-        match self.sender.send(WriterOperation { database: D::DATABASE, entry }) {
+        match self.sender.send_db_operation(DbOperation { database: D::DATABASE, entry }) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
@@ -429,7 +455,7 @@ impl DocidsSender for FacetDocidsSender<'_> {
             }
             _ => EntryOperation::Write(KeyValueEntry::from_small_key_value(key, value)),
         };
-        match self.sender.send(WriterOperation { database, entry }) {
+        match self.sender.send_db_operation(DbOperation { database, entry }) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
@@ -439,7 +465,7 @@ impl DocidsSender for FacetDocidsSender<'_> {
         let (facet_kind, key) = FacetKind::extract_from_key(key);
         let database = Database::from(facet_kind);
         let entry = EntryOperation::Delete(KeyEntry::from_key(key));
-        match self.sender.send(WriterOperation { database, entry }) {
+        match self.sender.send_db_operation(DbOperation { database, entry }) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
@@ -460,7 +486,7 @@ impl DocumentsSender<'_> {
             &docid.to_be_bytes(),
             document.as_bytes(),
         ));
-        match self.0.send(WriterOperation { database: Database::Documents, entry }) {
+        match self.0.send_db_operation(DbOperation { database: Database::Documents, entry }) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }?;
@@ -469,7 +495,10 @@ impl DocumentsSender<'_> {
             external_id.as_bytes(),
             &docid.to_be_bytes(),
         ));
-        match self.0.send(WriterOperation { database: Database::ExternalDocumentsIds, entry }) {
+        match self
+            .0
+            .send_db_operation(DbOperation { database: Database::ExternalDocumentsIds, entry })
+        {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
@@ -477,33 +506,38 @@ impl DocumentsSender<'_> {
 
     pub fn delete(&self, docid: DocumentId, external_id: String) -> StdResult<(), SendError<()>> {
         let entry = EntryOperation::Delete(KeyEntry::from_key(&docid.to_be_bytes()));
-        match self.0.send(WriterOperation { database: Database::Documents, entry }) {
+        match self.0.send_db_operation(DbOperation { database: Database::Documents, entry }) {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }?;
 
         let entry = EntryOperation::Delete(KeyEntry::from_key(external_id.as_bytes()));
-        match self.0.send(WriterOperation { database: Database::ExternalDocumentsIds, entry }) {
+        match self
+            .0
+            .send_db_operation(DbOperation { database: Database::ExternalDocumentsIds, entry })
+        {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
     }
 }
 
-pub struct EmbeddingSender<'a>(Option<&'a Sender<MergerOperation>>);
+pub struct EmbeddingSender<'a>(&'a Sender<WriterOperation>);
 
 impl EmbeddingSender<'_> {
-    pub fn delete(&self, docid: DocumentId, embedder_id: u8) -> StdResult<(), SendError<()>> {
-        todo!()
-    }
-
     pub fn set_vectors(
         &self,
         docid: DocumentId,
         embedder_id: u8,
         embeddings: Vec<Embedding>,
     ) -> StdResult<(), SendError<()>> {
-        todo!()
+        self.0
+            .send(WriterOperation::ArroyOperation(ArroyOperation::SetVectors {
+                docid,
+                embedder_id,
+                embeddings,
+            }))
+            .map_err(|_| SendError(()))
     }
 
     pub fn set_vector(
@@ -512,19 +546,24 @@ impl EmbeddingSender<'_> {
         embedder_id: u8,
         embedding: Embedding,
     ) -> StdResult<(), SendError<()>> {
-        todo!()
+        self.0
+            .send(WriterOperation::ArroyOperation(ArroyOperation::SetVector {
+                docid,
+                embedder_id,
+                embedding,
+            }))
+            .map_err(|_| SendError(()))
     }
 
-    pub fn set_user_provided(
-        &self,
-        docid: DocumentId,
-        embedder_id: u8,
-        regenerate: bool,
+    /// Marks all embedders as "to be built"
+    pub fn finish(
+        self,
+        user_provided: HashMap<String, RoaringBitmap>,
     ) -> StdResult<(), SendError<()>> {
-        todo!()
+        self.0
+            .send(WriterOperation::ArroyOperation(ArroyOperation::Finish { user_provided }))
+            .map_err(|_| SendError(()))
     }
-
-    pub fn finish(self, embedder_id: u8) {}
 }
 pub enum MergerOperation {
     ExactWordDocidsMerger(Merger<File, MergeDeladdCboRoaringBitmaps>),

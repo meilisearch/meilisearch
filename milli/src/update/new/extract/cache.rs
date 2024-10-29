@@ -267,7 +267,7 @@ impl Stats {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DelAddRoaringBitmap {
     pub(crate) del: Option<RoaringBitmap>,
     pub(crate) add: Option<RoaringBitmap>,

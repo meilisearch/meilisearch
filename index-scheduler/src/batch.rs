@@ -1300,6 +1300,8 @@ impl IndexScheduler {
 
                 let mut content_files_iter = content_files.iter();
                 let mut indexer = indexer::DocumentOperation::new(method);
+                let embedders = index.embedding_configs(index_wtxn)?;
+                let embedders = self.embedders(embedders)?;
                 for (operation, task) in operations.into_iter().zip(tasks.iter_mut()) {
                     match operation {
                         DocumentOperation::Add(_content_uuid) => {
@@ -1374,6 +1376,7 @@ impl IndexScheduler {
                         primary_key_has_been_set.then_some(primary_key),
                         &pool,
                         &document_changes,
+                        embedders,
                     )?;
 
                     // tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
@@ -1460,6 +1463,8 @@ impl IndexScheduler {
 
                     let indexer = UpdateByFunction::new(candidates, context.clone(), code.clone());
                     let document_changes = indexer.into_changes(&primary_key)?;
+                    let embedders = index.embedding_configs(index_wtxn)?;
+                    let embedders = self.embedders(embedders)?;
 
                     indexer::index(
                         index_wtxn,
@@ -1469,6 +1474,7 @@ impl IndexScheduler {
                         None, // cannot change primary key in DocumentEdition
                         &pool,
                         &document_changes,
+                        embedders,
                     )?;
 
                     // tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
@@ -1596,6 +1602,8 @@ impl IndexScheduler {
                     let mut indexer = indexer::DocumentDeletion::new();
                     indexer.delete_documents_by_docids(to_delete);
                     let document_changes = indexer.into_changes(&indexer_alloc, primary_key);
+                    let embedders = index.embedding_configs(index_wtxn)?;
+                    let embedders = self.embedders(embedders)?;
 
                     indexer::index(
                         index_wtxn,
@@ -1605,6 +1613,7 @@ impl IndexScheduler {
                         None, // document deletion never changes primary key
                         &pool,
                         &document_changes,
+                        embedders,
                     )?;
 
                     // tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");

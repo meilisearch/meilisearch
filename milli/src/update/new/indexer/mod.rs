@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::sync::RwLock;
+use std::sync::{OnceLock, RwLock};
 use std::thread::{self, Builder};
 
 use big_s::S;
@@ -10,9 +10,13 @@ use document_changes::{
 };
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::DocumentOperation;
+use hashbrown::HashMap;
 use heed::{RoTxn, RwTxn};
+use itertools::{EitherOrBoth, Itertools};
 pub use partial_dump::PartialDump;
+use rand::SeedableRng as _;
 use rayon::ThreadPool;
+use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 pub use update_by_function::UpdateByFunction;
 
@@ -31,10 +35,15 @@ use crate::facet::FacetType;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::proximity::ProximityPrecision;
 use crate::update::new::channel::ExtractorSender;
+use crate::update::new::extract::EmbeddingExtractor;
 use crate::update::new::words_prefix_docids::compute_exact_word_prefix_docids;
 use crate::update::settings::InnerIndexSettings;
 use crate::update::{FacetsUpdateBulk, GrenadParameters};
-use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
+use crate::vector::{ArroyWrapper, EmbeddingConfigs};
+use crate::{
+    FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort,
+    ThreadPoolNoAbortBuilder, UserError,
+};
 
 pub(crate) mod de;
 pub mod document_changes;
@@ -119,6 +128,7 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentExtractor<'a> {
 /// Give it the output of the [`Indexer::document_changes`] method and it will execute it in the [`rayon::ThreadPool`].
 ///
 /// TODO return stats
+#[allow(clippy::too_many_arguments)] // clippy: 😝
 pub fn index<'pl, 'indexer, 'index, DC>(
     wtxn: &mut RwTxn,
     index: &'index Index,
@@ -127,6 +137,7 @@ pub fn index<'pl, 'indexer, 'index, DC>(
     new_primary_key: Option<PrimaryKey<'pl>>,
     pool: &ThreadPool,
     document_changes: &DC,
+    embedders: EmbeddingConfigs,
 ) -> Result<()>
 where
     DC: DocumentChanges<'pl>,
@@ -153,8 +164,9 @@ where
         fields_ids_map_store: &fields_ids_map_store,
     };
 
-    thread::scope(|s| {
+    thread::scope(|s| -> Result<()> {
         let indexer_span = tracing::Span::current();
+        let embedders = &embedders;
         // TODO manage the errors correctly
         let handle = Builder::new().name(S("indexer-extractors")).spawn_scoped(s, move || {
             pool.in_place_scope(|_s| {
@@ -238,9 +250,29 @@ where
                         if index_embeddings.is_empty() {
                             break 'vectors;
                         }
-                        for index_embedding in index_embeddings {
+                        /// FIXME: need access to `merger_sender`
+                        let embedding_sender = todo!();
+                        let extractor = EmbeddingExtractor::new(&embedders, &embedding_sender, request_threads());
+                        let datastore = ThreadLocal::with_capacity(pool.current_num_threads());
 
+                        for_each_document_change(document_changes, &extractor, indexing_context, &mut extractor_allocs, &datastore)?;
+
+
+                        let mut user_provided = HashMap::new();
+                        for data in datastore {
+                            let data = data.0.into_inner();
+                            for (embedder, deladd) in data.into_iter() {
+                                let user_provided = user_provided.entry(embedder).or_insert(Default::default());
+                                if let Some(del) = deladd.del {
+                                    *user_provided -= del;
+                                }
+                                if let Some(add) = deladd.add {
+                                    *user_provided |= add;
+                                }
+                            }
                         }
+
+                        embedding_sender.finish(user_provided).unwrap();
                     }
 
                     {
@@ -285,15 +317,137 @@ where
             )
         })?;
 
+        let vector_arroy = index.vector_arroy;
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        let indexer_span = tracing::Span::current();
+        let arroy_writers: Result<HashMap<_, _>> = embedders
+            .inner_as_ref()
+            .iter()
+            .map(|(embedder_name, (embedder, _, was_quantized))| {
+                let embedder_index = index.embedder_category_id.get(wtxn, &embedder_name)?.ok_or(
+                    InternalError::DatabaseMissingEntry {
+                        db_name: "embedder_category_id",
+                        key: None,
+                    },
+                )?;
+
+                let dimensions = embedder.dimensions();
+
+                let writers: Vec<_> = crate::vector::arroy_db_range_for_embedder(embedder_index)
+                    .map(|k| ArroyWrapper::new(vector_arroy, k, *was_quantized))
+                    .collect();
+
+                Ok((
+                    embedder_index,
+                    (embedder_name.as_str(), embedder.as_ref(), writers, dimensions),
+                ))
+            })
+            .collect();
+
+        let mut arroy_writers = arroy_writers?;
         for operation in writer_receiver {
-            let database = operation.database(index);
-            match operation.entry() {
-                EntryOperation::Delete(e) => {
-                    if !database.delete(wtxn, e.entry())? {
-                        unreachable!("We tried to delete an unknown key")
+            match operation {
+                WriterOperation::DbOperation(db_operation) => {
+                    let database = db_operation.database(index);
+                    match db_operation.entry() {
+                        EntryOperation::Delete(e) => {
+                            if !database.delete(wtxn, e.entry())? {
+                                unreachable!("We tried to delete an unknown key")
+                            }
+                        }
+                        EntryOperation::Write(e) => database.put(wtxn, e.key(), e.value())?,
                     }
                 }
-                EntryOperation::Write(e) => database.put(wtxn, e.key(), e.value())?,
+                WriterOperation::ArroyOperation(arroy_operation) => match arroy_operation {
+                    ArroyOperation::DeleteVectors { docid } => {
+                        for (_embedder_index, (_embedder_name, _embedder, writers, dimensions)) in
+                            &mut arroy_writers
+                        {
+                            let dimensions = *dimensions;
+                            for writer in writers {
+                                // Uses invariant: vectors are packed in the first writers.
+                                if !writer.del_item(wtxn, dimensions, docid)? {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    ArroyOperation::SetVectors { docid, embedder_id, embeddings } => {
+                        let (_, _, writers, dimensions) =
+                            arroy_writers.get(&embedder_id).expect("requested a missing embedder");
+                        for res in writers.iter().zip_longest(&embeddings) {
+                            match res {
+                                EitherOrBoth::Both(writer, embedding) => {
+                                    writer.add_item(wtxn, *dimensions, docid, embedding)?;
+                                }
+                                EitherOrBoth::Left(writer) => {
+                                    let deleted = writer.del_item(wtxn, *dimensions, docid)?;
+                                    if !deleted {
+                                        break;
+                                    }
+                                }
+                                EitherOrBoth::Right(_embedding) => {
+                                    let external_document_id = index
+                                        .external_id_of(wtxn, std::iter::once(docid))?
+                                        .into_iter()
+                                        .next()
+                                        .unwrap()?;
+                                    return Err(UserError::TooManyVectors(
+                                        external_document_id,
+                                        embeddings.len(),
+                                    )
+                                    .into());
+                                }
+                            }
+                        }
+                    }
+                    ArroyOperation::SetVector { docid, embedder_id, embedding } => {
+                        let (_, _, writers, dimensions) =
+                            arroy_writers.get(&embedder_id).expect("requested a missing embedder");
+                        for res in writers.iter().zip_longest(std::iter::once(&embedding)) {
+                            match res {
+                                EitherOrBoth::Both(writer, embedding) => {
+                                    writer.add_item(wtxn, *dimensions, docid, embedding)?;
+                                }
+                                EitherOrBoth::Left(writer) => {
+                                    let deleted = writer.del_item(wtxn, *dimensions, docid)?;
+                                    if !deleted {
+                                        break;
+                                    }
+                                }
+                                EitherOrBoth::Right(_embedding) => {
+                                    unreachable!("1 vs 256 vectors")
+                                }
+                            }
+                        }
+                    }
+                    ArroyOperation::Finish { mut user_provided } => {
+                        let span = tracing::trace_span!(target: "indexing::vectors", parent: &indexer_span, "build");
+                        let _entered = span.enter();
+                        for (_embedder_index, (_embedder_name, _embedder, writers, dimensions)) in
+                            &mut arroy_writers
+                        {
+                            let dimensions = *dimensions;
+                            for writer in writers {
+                                if writer.need_build(wtxn, dimensions)? {
+                                    writer.build(wtxn, &mut rng, dimensions)?;
+                                } else if writer.is_empty(wtxn, dimensions)? {
+                                    break;
+                                }
+                            }
+                        }
+
+                        let mut configs = index.embedding_configs(wtxn)?;
+
+                        for config in &mut configs {
+                            if let Some(user_provided) = user_provided.remove(&config.name) {
+                                config.user_provided = user_provided;
+                            }
+                        }
+
+                        index.put_embedding_configs(wtxn, configs)?;
+                    }
+                },
             }
         }
 
@@ -482,4 +636,16 @@ pub fn retrieve_or_guess_primary_key<'a>(
         Ok(primary_key) => Ok(Ok((primary_key, has_changed))),
         Err(err) => Ok(Err(err)),
     }
+}
+
+fn request_threads() -> &'static ThreadPoolNoAbort {
+    static REQUEST_THREADS: OnceLock<ThreadPoolNoAbort> = OnceLock::new();
+
+    REQUEST_THREADS.get_or_init(|| {
+        ThreadPoolNoAbortBuilder::new()
+            .num_threads(crate::vector::REQUEST_PARALLELISM)
+            .thread_name(|index| format!("embedding-request-{index}"))
+            .build()
+            .unwrap()
+    })
 }
