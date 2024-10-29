@@ -41,8 +41,11 @@ impl OfflineUpgrade {
         let (target_major, target_minor, target_patch) = &self.target_version;
 
         let ends_at = match (target_major.as_str(), target_minor.as_str(), target_patch.as_str()) {
-            ("v1", "10", _) => 0,
-            ("v1", "11", _) => 1,
+            ("1", "10", _) => 0,
+            ("1", "11", _) => 1,
+            (major, _, _) if major.starts_with('v') => {
+                bail!("Target version must not starts with a `v`. Instead of writing `v1.9.0` write `1.9.0` for example.")
+            }
             _ => {
                 bail!("Unsupported target version {target_major}.{target_minor}.{target_patch}. Can only upgrade to v1.11")
             }
