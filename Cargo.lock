@@ -407,7 +407,7 @@ dependencies = [
 [[package]]
 name = "arroy"
 version = "0.5.0"
-source = "git+https://github.com/meilisearch/arroy/?rev=3908c9e#3908c9edfba77ba18cc50bda41c88166ba5ebd37"
+source = "git+https://github.com/meilisearch/arroy/?rev=32670e7dd8b93640fcb53261ace89bda1c06497b#32670e7dd8b93640fcb53261ace89bda1c06497b"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -3536,7 +3536,7 @@ name = "meilitool"
 version = "1.11.0"
 dependencies = [
  "anyhow",
- "arroy 0.5.0 (git+https://github.com/meilisearch/arroy/?rev=3908c9e)",
+ "arroy 0.5.0 (git+https://github.com/meilisearch/arroy/?rev=32670e7dd8b93640fcb53261ace89bda1c06497b)",
  "clap",
  "dump",
  "file-store",

@@ -57,6 +57,10 @@ pub fn v1_10_to_v1_11(db_path: &Path) -> anyhow::Result<()> {
                 index_path.display()
             )
         })?;
+        let index_read_database =
+            try_opening_poly_database(&index_env, &index_rtxn, db_name::VECTOR_ARROY)
+                .with_context(|| format!("while updating date format for index `{uid}`"))?;
+
         let mut index_wtxn = index_env.write_txn().with_context(|| {
             format!(
                 "while obtaining a write transaction for index {uid} at {}",
@@ -64,10 +68,16 @@ pub fn v1_10_to_v1_11(db_path: &Path) -> anyhow::Result<()> {
             )
         })?;
 
-        let database = try_opening_poly_database(&index_env, &index_rtxn, db_name::VECTOR_ARROY)
-            .with_context(|| format!("while updating date format for index `{uid}`"))?;
+        let index_write_database =
+            try_opening_poly_database(&index_env, &index_wtxn, db_name::VECTOR_ARROY)
+                .with_context(|| format!("while updating date format for index `{uid}`"))?;
 
-        arroy_v04_to_v05::ugrade_from_prev_version(&index_rtxn, &mut index_wtxn, database)?;
+        arroy_v04_to_v05::ugrade_from_prev_version(
+            &index_rtxn,
+            index_read_database,
+            &mut index_wtxn,
+            index_write_database,
+        )?;
 
         index_wtxn.commit()?;
     }
