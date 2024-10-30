@@ -53,6 +53,7 @@ mod update_by_function;
 
 struct DocumentExtractor<'a> {
     document_sender: &'a DocumentSender<'a>,
+    embedders: &'a EmbeddingConfigs,
 }
 
 impl<'a, 'extractor> Extractor<'extractor> for DocumentExtractor<'a> {
@@ -118,6 +119,7 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentExtractor<'a> {
                         context.index,
                         &context.db_fields_ids_map,
                         &context.doc_alloc,
+                        self.embedders,
                     )?;
                     let content = write_to_obkv(
                         &content,
@@ -135,7 +137,8 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentExtractor<'a> {
                         let entry = field_distribution_delta.entry_ref(f).or_default();
                         *entry += 1;
                     }
-                    let inserted_vectors = insertion.inserted_vectors(&context.doc_alloc)?;
+                    let inserted_vectors =
+                        insertion.inserted_vectors(&context.doc_alloc, self.embedders)?;
                     let content = write_to_obkv(
                         &content,
                         inserted_vectors.as_ref(),
@@ -208,7 +211,7 @@ where
 
                     // document but we need to create a function that collects and compresses documents.
                     let document_sender = extractor_sender.document_sender();
-                    let document_extractor = DocumentExtractor { document_sender: &document_sender};
+                    let document_extractor = DocumentExtractor { document_sender: &document_sender, embedders };
                     let datastore = ThreadLocal::with_capacity(pool.current_num_threads());
                     for_each_document_change(document_changes, &document_extractor, indexing_context, &mut extractor_allocs, &datastore)?;
 
