@@ -6,6 +6,7 @@ use super::vector_document::{
     MergedVectorDocument, VectorDocumentFromDb, VectorDocumentFromVersions,
 };
 use crate::documents::FieldIdMapper;
+use crate::vector::EmbeddingConfigs;
 use crate::{DocumentId, Index, Result};
 
 pub enum DocumentChange<'doc> {
@@ -94,8 +95,9 @@ impl<'doc> Insertion<'doc> {
     pub fn inserted_vectors(
         &self,
         doc_alloc: &'doc Bump,
+        embedders: &'doc EmbeddingConfigs,
     ) -> Result<Option<VectorDocumentFromVersions<'doc>>> {
-        VectorDocumentFromVersions::new(&self.new, doc_alloc)
+        VectorDocumentFromVersions::new(&self.new, doc_alloc, embedders)
     }
 }
 
@@ -165,8 +167,9 @@ impl<'doc> Update<'doc> {
     pub fn updated_vectors(
         &self,
         doc_alloc: &'doc Bump,
+        embedders: &'doc EmbeddingConfigs,
     ) -> Result<Option<VectorDocumentFromVersions<'doc>>> {
-        VectorDocumentFromVersions::new(&self.new, doc_alloc)
+        VectorDocumentFromVersions::new(&self.new, doc_alloc, embedders)
     }
 
     pub fn merged_vectors<Mapper: FieldIdMapper>(
@@ -175,11 +178,14 @@ impl<'doc> Update<'doc> {
         index: &'doc Index,
         mapper: &'doc Mapper,
         doc_alloc: &'doc Bump,
+        embedders: &'doc EmbeddingConfigs,
     ) -> Result<Option<MergedVectorDocument<'doc>>> {
         if self.has_deletion {
-            MergedVectorDocument::without_db(&self.new, doc_alloc)
+            MergedVectorDocument::without_db(&self.new, doc_alloc, embedders)
         } else {
-            MergedVectorDocument::with_db(self.docid, index, rtxn, mapper, &self.new, doc_alloc)
+            MergedVectorDocument::with_db(
+                self.docid, index, rtxn, mapper, &self.new, doc_alloc, embedders,
+            )
         }
     }
 }

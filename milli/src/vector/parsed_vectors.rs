@@ -84,7 +84,6 @@ impl<'doc> RawVectors<'doc> {
             RawVectors::Explicit(RawExplicitVectors { regenerate, .. }) => *regenerate,
         }
     }
-
     pub fn embeddings(&self) -> Option<&'doc RawValue> {
         match self {
             RawVectors::ImplicitlyUserProvided(embeddings) => Some(embeddings),

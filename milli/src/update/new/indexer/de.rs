@@ -326,3 +326,294 @@ pub fn match_component<'de, 'indexer: 'de>(
     }
     ControlFlow::Continue(())
 }
+
+pub struct DeserrRawValue<'a> {
+    value: &'a RawValue,
+    alloc: &'a Bump,
+}
+
+impl<'a> DeserrRawValue<'a> {
+    pub fn new_in(value: &'a RawValue, alloc: &'a Bump) -> Self {
+        Self { value, alloc }
+    }
+}
+
+pub struct DeserrRawVec<'a> {
+    vec: raw_collections::RawVec<'a>,
+    alloc: &'a Bump,
+}
+
+impl<'a> deserr::Sequence for DeserrRawVec<'a> {
+    type Value = DeserrRawValue<'a>;
+
+    type Iter = DeserrRawVecIter<'a>;
+
+    fn len(&self) -> usize {
+        self.vec.len()
+    }
+
+    fn into_iter(self) -> Self::Iter {
+        DeserrRawVecIter { it: self.vec.into_iter(), alloc: self.alloc }
+    }
+}
+
+pub struct DeserrRawVecIter<'a> {
+    it: raw_collections::vec::iter::IntoIter<'a>,
+    alloc: &'a Bump,
+}
+
+impl<'a> Iterator for DeserrRawVecIter<'a> {
+    type Item = DeserrRawValue<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = self.it.next()?;
+        Some(DeserrRawValue { value: next, alloc: self.alloc })
+    }
+}
+
+pub struct DeserrRawMap<'a> {
+    map: raw_collections::RawMap<'a>,
+    alloc: &'a Bump,
+}
+
+impl<'a> deserr::Map for DeserrRawMap<'a> {
+    type Value = DeserrRawValue<'a>;
+
+    type Iter = DeserrRawMapIter<'a>;
+
+    fn len(&self) -> usize {
+        self.map.len()
+    }
+
+    fn remove(&mut self, _key: &str) -> Option<Self::Value> {
+        unimplemented!()
+    }
+
+    fn into_iter(self) -> Self::Iter {
+        DeserrRawMapIter { it: self.map.into_iter(), alloc: self.alloc }
+    }
+}
+
+pub struct DeserrRawMapIter<'a> {
+    it: raw_collections::map::iter::IntoIter<'a>,
+    alloc: &'a Bump,
+}
+
+impl<'a> Iterator for DeserrRawMapIter<'a> {
+    type Item = (String, DeserrRawValue<'a>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (name, value) = self.it.next()?;
+        Some((name.to_string(), DeserrRawValue { value, alloc: self.alloc }))
+    }
+}
+
+impl<'a> deserr::IntoValue for DeserrRawValue<'a> {
+    type Sequence = DeserrRawVec<'a>;
+
+    type Map = DeserrRawMap<'a>;
+
+    fn kind(&self) -> deserr::ValueKind {
+        self.value.deserialize_any(DeserrKindVisitor).unwrap()
+    }
+
+    fn into_value(self) -> deserr::Value<Self> {
+        self.value.deserialize_any(DeserrRawValueVisitor { alloc: self.alloc }).unwrap()
+    }
+}
+
+pub struct DeserrKindVisitor;
+
+impl<'de> Visitor<'de> for DeserrKindVisitor {
+    type Value = deserr::ValueKind;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "any value")
+    }
+
+    fn visit_bool<E>(self, _v: bool) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(deserr::ValueKind::Boolean)
+    }
+
+    fn visit_i64<E>(self, _v: i64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(deserr::ValueKind::NegativeInteger)
+    }
+
+    fn visit_u64<E>(self, _v: u64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(deserr::ValueKind::Integer)
+    }
+
+    fn visit_f64<E>(self, _v: f64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(deserr::ValueKind::Float)
+    }
+
+    fn visit_str<E>(self, _v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(deserr::ValueKind::String)
+    }
+
+    fn visit_none<E>(self) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(deserr::ValueKind::Null)
+    }
+
+    fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_any(self)
+    }
+
+    fn visit_unit<E>(self) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(deserr::ValueKind::Null)
+    }
+
+    fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_any(self)
+    }
+
+    fn visit_seq<A>(self, _seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::SeqAccess<'de>,
+    {
+        Ok(deserr::ValueKind::Sequence)
+    }
+
+    fn visit_map<A>(self, _map: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::MapAccess<'de>,
+    {
+        Ok(deserr::ValueKind::Map)
+    }
+}
+
+pub struct DeserrRawValueVisitor<'a> {
+    alloc: &'a Bump,
+}
+
+impl<'de> Visitor<'de> for DeserrRawValueVisitor<'de> {
+    type Value = deserr::Value<DeserrRawValue<'de>>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "any value")
+    }
+
+    fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(deserr::Value::Boolean(v))
+    }
+
+    fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(deserr::Value::NegativeInteger(v))
+    }
+
+    fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(deserr::Value::Integer(v))
+    }
+
+    fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(deserr::Value::Float(v))
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(deserr::Value::String(v.to_string()))
+    }
+
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(deserr::Value::String(v))
+    }
+
+    fn visit_none<E>(self) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(deserr::Value::Null)
+    }
+
+    fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_any(self)
+    }
+
+    fn visit_unit<E>(self) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(deserr::Value::Null)
+    }
+
+    fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_any(self)
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::SeqAccess<'de>,
+    {
+        let mut raw_vec = raw_collections::RawVec::new_in(&self.alloc);
+        while let Some(next) = seq.next_element()? {
+            raw_vec.push(next);
+        }
+        Ok(deserr::Value::Sequence(DeserrRawVec { vec: raw_vec, alloc: self.alloc }))
+    }
+
+    fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::MapAccess<'de>,
+    {
+        let _ = map;
+        Err(serde::de::Error::invalid_type(serde::de::Unexpected::Map, &self))
+    }
+
+    fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::EnumAccess<'de>,
+    {
+        let _ = data;
+        Err(serde::de::Error::invalid_type(serde::de::Unexpected::Enum, &self))
+    }
+}

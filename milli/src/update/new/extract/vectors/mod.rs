@@ -93,7 +93,7 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                         context.db_fields_ids_map,
                         &context.doc_alloc,
                     )?;
-                    let new_vectors = update.updated_vectors(&context.doc_alloc)?;
+                    let new_vectors = update.updated_vectors(&context.doc_alloc, self.embedders)?;
 
                     if let Some(new_vectors) = &new_vectors {
                         unused_vectors_distribution.append(new_vectors);
@@ -118,7 +118,12 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                             if let Some(embeddings) = new_vectors.embeddings {
                                 chunks.set_vectors(
                                     update.docid(),
-                                    embeddings.into_vec().map_err(UserError::SerdeJson)?,
+                                    embeddings
+                                        .into_vec(&context.doc_alloc, embedder_name)
+                                        .map_err(|error| UserError::InvalidVectorsEmbedderConf {
+                                            document_id: update.external_document_id().to_string(),
+                                            error,
+                                        })?,
                                 );
                             } else if new_vectors.regenerate {
                                 let new_rendered = prompt.render_document(
@@ -177,7 +182,8 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                     }
                 }
                 DocumentChange::Insertion(insertion) => {
-                    let new_vectors = insertion.inserted_vectors(&context.doc_alloc)?;
+                    let new_vectors =
+                        insertion.inserted_vectors(&context.doc_alloc, self.embedders)?;
                     if let Some(new_vectors) = &new_vectors {
                         unused_vectors_distribution.append(new_vectors);
                     }
@@ -194,7 +200,14 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                             if let Some(embeddings) = new_vectors.embeddings {
                                 chunks.set_vectors(
                                     insertion.docid(),
-                                    embeddings.into_vec().map_err(UserError::SerdeJson)?,
+                                    embeddings
+                                        .into_vec(&context.doc_alloc, embedder_name)
+                                        .map_err(|error| UserError::InvalidVectorsEmbedderConf {
+                                            document_id: insertion
+                                                .external_document_id()
+                                                .to_string(),
+                                            error,
+                                        })?,
                                 );
                             } else if new_vectors.regenerate {
                                 let rendered = prompt.render_document(

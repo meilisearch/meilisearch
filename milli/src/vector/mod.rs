@@ -316,6 +316,10 @@ impl EmbeddingConfigs {
         Self(data)
     }
 
+    pub fn contains(&self, name: &str) -> bool {
+        self.0.contains_key(name)
+    }
+
     /// Get an embedder configuration and template from its name.
     pub fn get(&self, name: &str) -> Option<(Arc<Embedder>, Arc<Prompt>, bool)> {
         self.0.get(name).cloned()

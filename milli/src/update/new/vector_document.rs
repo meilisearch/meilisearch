@@ -1,29 +1,67 @@
 use std::collections::BTreeSet;
 
 use bumpalo::Bump;
+use deserr::{Deserr, IntoValue};
 use heed::RoTxn;
 use raw_collections::RawMap;
 use serde::Serialize;
 use serde_json::value::RawValue;
 
 use super::document::{Document, DocumentFromDb, DocumentFromVersions, Versions};
+use super::indexer::de::DeserrRawValue;
 use crate::documents::FieldIdMapper;
 use crate::index::IndexEmbeddingConfig;
-use crate::vector::parsed_vectors::RawVectors;
-use crate::vector::Embedding;
+use crate::vector::parsed_vectors::{
+    RawVectors, VectorOrArrayOfVectors, RESERVED_VECTORS_FIELD_NAME,
+};
+use crate::vector::{Embedding, EmbeddingConfigs};
 use crate::{DocumentId, Index, InternalError, Result, UserError};
 
 #[derive(Serialize)]
 #[serde(untagged)]
 pub enum Embeddings<'doc> {
-    FromJson(&'doc RawValue),
+    FromJsonExplicit(&'doc RawValue),
+    FromJsonImplicityUserProvided(&'doc RawValue),
     FromDb(Vec<Embedding>),
 }
 impl<'doc> Embeddings<'doc> {
-    pub fn into_vec(self) -> std::result::Result<Vec<Embedding>, serde_json::Error> {
+    pub fn into_vec(
+        self,
+        doc_alloc: &'doc Bump,
+        embedder_name: &str,
+    ) -> std::result::Result<Vec<Embedding>, deserr::errors::JsonError> {
         match self {
-            /// FIXME: this should be a VecOrArrayOfVec
-            Embeddings::FromJson(value) => serde_json::from_str(value.get()),
+            Embeddings::FromJsonExplicit(value) => {
+                let vectors_ref = deserr::ValuePointerRef::Key {
+                    key: RESERVED_VECTORS_FIELD_NAME,
+                    prev: &deserr::ValuePointerRef::Origin,
+                };
+                let embedders_ref =
+                    deserr::ValuePointerRef::Key { key: embedder_name, prev: &vectors_ref };
+
+                let embeddings_ref =
+                    deserr::ValuePointerRef::Key { key: "embeddings", prev: &embedders_ref };
+
+                let v: VectorOrArrayOfVectors = VectorOrArrayOfVectors::deserialize_from_value(
+                    DeserrRawValue::new_in(value, doc_alloc).into_value(),
+                    embeddings_ref,
+                )?;
+                Ok(v.into_array_of_vectors().unwrap_or_default())
+            }
+            Embeddings::FromJsonImplicityUserProvided(value) => {
+                let vectors_ref = deserr::ValuePointerRef::Key {
+                    key: RESERVED_VECTORS_FIELD_NAME,
+                    prev: &deserr::ValuePointerRef::Origin,
+                };
+                let embedders_ref =
+                    deserr::ValuePointerRef::Key { key: embedder_name, prev: &vectors_ref };
+
+                let v: VectorOrArrayOfVectors = VectorOrArrayOfVectors::deserialize_from_value(
+                    DeserrRawValue::new_in(value, doc_alloc).into_value(),
+                    embedders_ref,
+                )?;
+                Ok(v.into_array_of_vectors().unwrap_or_default())
+            }
             Embeddings::FromDb(vec) => Ok(vec),
         }
     }
@@ -109,7 +147,7 @@ impl<'t> VectorDocument<'t> for VectorDocumentFromDb<'t> {
                 Ok((&*config_name, entry))
             })
             .chain(self.vectors_field.iter().flat_map(|map| map.iter()).map(|(name, value)| {
-                Ok((name, entry_from_raw_value(value).map_err(InternalError::SerdeJson)?))
+                Ok((name, entry_from_raw_value(value, false).map_err(InternalError::SerdeJson)?))
             }))
     }
 
@@ -122,7 +160,8 @@ impl<'t> VectorDocument<'t> for VectorDocumentFromDb<'t> {
             }
             None => match self.vectors_field.as_ref().and_then(|obkv| obkv.get(key)) {
                 Some(embedding_from_doc) => Some(
-                    entry_from_raw_value(embedding_from_doc).map_err(InternalError::SerdeJson)?,
+                    entry_from_raw_value(embedding_from_doc, false)
+                        .map_err(InternalError::SerdeJson)?,
                 ),
                 None => None,
             },
@@ -132,26 +171,40 @@ impl<'t> VectorDocument<'t> for VectorDocumentFromDb<'t> {
 
 fn entry_from_raw_value(
     value: &RawValue,
+    has_configured_embedder: bool,
 ) -> std::result::Result<VectorEntry<'_>, serde_json::Error> {
     let value: RawVectors = serde_json::from_str(value.get())?;
-    Ok(VectorEntry {
-        has_configured_embedder: false,
-        embeddings: value.embeddings().map(Embeddings::FromJson),
-        regenerate: value.must_regenerate(),
+
+    Ok(match value {
+        RawVectors::Explicit(raw_explicit_vectors) => VectorEntry {
+            has_configured_embedder,
+            embeddings: raw_explicit_vectors.embeddings.map(Embeddings::FromJsonExplicit),
+            regenerate: raw_explicit_vectors.regenerate,
+        },
+        RawVectors::ImplicitlyUserProvided(value) => VectorEntry {
+            has_configured_embedder,
+            embeddings: Some(Embeddings::FromJsonImplicityUserProvided(value)),
+            regenerate: false,
+        },
     })
 }
 
 pub struct VectorDocumentFromVersions<'doc> {
     vectors: RawMap<'doc>,
+    embedders: &'doc EmbeddingConfigs,
 }
 
 impl<'doc> VectorDocumentFromVersions<'doc> {
-    pub fn new(versions: &Versions<'doc>, bump: &'doc Bump) -> Result<Option<Self>> {
+    pub fn new(
+        versions: &Versions<'doc>,
+        bump: &'doc Bump,
+        embedders: &'doc EmbeddingConfigs,
+    ) -> Result<Option<Self>> {
         let document = DocumentFromVersions::new(versions);
         if let Some(vectors_field) = document.vectors_field()? {
             let vectors =
                 RawMap::from_raw_value(vectors_field, bump).map_err(UserError::SerdeJson)?;
-            Ok(Some(Self { vectors }))
+            Ok(Some(Self { vectors, embedders }))
         } else {
             Ok(None)
         }
@@ -161,14 +214,16 @@ impl<'doc> VectorDocumentFromVersions<'doc> {
 impl<'doc> VectorDocument<'doc> for VectorDocumentFromVersions<'doc> {
     fn iter_vectors(&self) -> impl Iterator<Item = Result<(&'doc str, VectorEntry<'doc>)>> {
         self.vectors.iter().map(|(embedder, vectors)| {
-            let vectors = entry_from_raw_value(vectors).map_err(UserError::SerdeJson)?;
+            let vectors = entry_from_raw_value(vectors, self.embedders.contains(embedder))
+                .map_err(UserError::SerdeJson)?;
             Ok((embedder, vectors))
         })
     }
 
     fn vectors_for_key(&self, key: &str) -> Result<Option<VectorEntry<'doc>>> {
         let Some(vectors) = self.vectors.get(key) else { return Ok(None) };
-        let vectors = entry_from_raw_value(vectors).map_err(UserError::SerdeJson)?;
+        let vectors = entry_from_raw_value(vectors, self.embedders.contains(key))
+            .map_err(UserError::SerdeJson)?;
         Ok(Some(vectors))
     }
 }
@@ -186,14 +241,19 @@ impl<'doc> MergedVectorDocument<'doc> {
         db_fields_ids_map: &'doc Mapper,
         versions: &Versions<'doc>,
         doc_alloc: &'doc Bump,
+        embedders: &'doc EmbeddingConfigs,
     ) -> Result<Option<Self>> {
         let db = VectorDocumentFromDb::new(docid, index, rtxn, db_fields_ids_map, doc_alloc)?;
-        let new_doc = VectorDocumentFromVersions::new(versions, doc_alloc)?;
+        let new_doc = VectorDocumentFromVersions::new(versions, doc_alloc, embedders)?;
         Ok(if db.is_none() && new_doc.is_none() { None } else { Some(Self { new_doc, db }) })
     }
 
-    pub fn without_db(versions: &Versions<'doc>, doc_alloc: &'doc Bump) -> Result<Option<Self>> {
-        let Some(new_doc) = VectorDocumentFromVersions::new(versions, doc_alloc)? else {
+    pub fn without_db(
+        versions: &Versions<'doc>,
+        doc_alloc: &'doc Bump,
+        embedders: &'doc EmbeddingConfigs,
+    ) -> Result<Option<Self>> {
+        let Some(new_doc) = VectorDocumentFromVersions::new(versions, doc_alloc, embedders)? else {
             return Ok(None);
         };
         Ok(Some(Self { new_doc: Some(new_doc), db: None }))
