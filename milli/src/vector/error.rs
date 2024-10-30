@@ -1,11 +1,13 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use bumpalo::Bump;
 use hf_hub::api::sync::ApiError;
 
 use super::parsed_vectors::ParsedVectorsDiff;
 use super::rest::ConfigurationSource;
 use crate::error::FaultSource;
+use crate::update::new::vector_document::VectorDocument;
 use crate::{FieldDistribution, PanicCatched};
 
 #[derive(Debug, thiserror::Error)]
@@ -417,6 +419,23 @@ impl PossibleEmbeddingMistakes {
             }
         })
     }
+
+    pub fn embedder_mistakes_bump<'a, 'doc: 'a>(
+        &'a self,
+        embedder_name: &'a str,
+        unused_vectors_distribution: &'a UnusedVectorsDistributionBump<'doc>,
+    ) -> impl Iterator<Item = (&'a str, u64)> + 'a {
+        let builder = levenshtein_automata::LevenshteinAutomatonBuilder::new(2, true);
+        let automata = builder.build_dfa(embedder_name);
+
+        unused_vectors_distribution.0.iter().filter_map(move |(field, count)| {
+            match automata.eval(field) {
+                levenshtein_automata::Distance::Exact(0) => None,
+                levenshtein_automata::Distance::Exact(_) => Some((*field, *count)),
+                levenshtein_automata::Distance::AtLeast(_) => None,
+            }
+        })
+    }
 }
 
 #[derive(Default)]
@@ -431,5 +450,25 @@ impl UnusedVectorsDistribution {
         for name in parsed_vectors_diff.into_new_vectors_keys_iter() {
             *self.0.entry(name).or_default() += 1;
         }
+    }
+}
+
+pub struct UnusedVectorsDistributionBump<'doc>(
+    hashbrown::HashMap<&'doc str, u64, hashbrown::hash_map::DefaultHashBuilder, &'doc Bump>,
+);
+
+impl<'doc> UnusedVectorsDistributionBump<'doc> {
+    pub fn new_in(doc_alloc: &'doc Bump) -> Self {
+        Self(hashbrown::HashMap::new_in(doc_alloc))
+    }
+
+    pub fn append(&mut self, vectors: &impl VectorDocument<'doc>) -> Result<(), crate::Error> {
+        for res in vectors.iter_vectors() {
+            let (embedder_name, entry) = res?;
+            if !entry.has_configured_embedder {
+                *self.0.entry(embedder_name).or_default() += 1;
+            }
+        }
+        Ok(())
     }
 }

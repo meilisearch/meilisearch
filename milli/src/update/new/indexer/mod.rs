@@ -296,7 +296,7 @@ where
                         }
                         /// FIXME: need access to `merger_sender`
                         let embedding_sender = todo!();
-                        let extractor = EmbeddingExtractor::new(embedders, &embedding_sender, request_threads());
+                        let extractor = EmbeddingExtractor::new(embedders, &embedding_sender, &field_distribution, request_threads());
                         let datastore = ThreadLocal::with_capacity(pool.current_num_threads());
 
                         for_each_document_change(document_changes, &extractor, indexing_context, &mut extractor_allocs, &datastore)?;
