@@ -49,7 +49,7 @@ impl<'de, 'p, 'indexer: 'de, Mapper: MutFieldIdMapper> Visitor<'de>
                 visitor: MutFieldIdMapVisitor(self.fields_ids_map),
             })?
         {
-            let Some(fid) = fid else {
+            let Some(_fid) = fid else {
                 return Ok(Err(crate::UserError::AttributeLimitReached));
             };
             self.fields_ids_map = fields_ids_map;

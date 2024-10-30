@@ -16,12 +16,11 @@ use itertools::{EitherOrBoth, Itertools};
 pub use partial_dump::PartialDump;
 use rand::SeedableRng as _;
 use rayon::ThreadPool;
-use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 pub use update_by_function::UpdateByFunction;
 
 use super::channel::*;
-use super::document::write_to_obkv;
+use super::document::{write_to_obkv, Document};
 use super::document_change::DocumentChange;
 use super::extract::*;
 use super::merger::{merge_grenad_entries, FacetFieldIdsDelta};
@@ -252,7 +251,7 @@ where
                         }
                         /// FIXME: need access to `merger_sender`
                         let embedding_sender = todo!();
-                        let extractor = EmbeddingExtractor::new(&embedders, &embedding_sender, request_threads());
+                        let extractor = EmbeddingExtractor::new(embedders, &embedding_sender, request_threads());
                         let datastore = ThreadLocal::with_capacity(pool.current_num_threads());
 
                         for_each_document_change(document_changes, &extractor, indexing_context, &mut extractor_allocs, &datastore)?;
@@ -324,7 +323,7 @@ where
             .inner_as_ref()
             .iter()
             .map(|(embedder_name, (embedder, _, was_quantized))| {
-                let embedder_index = index.embedder_category_id.get(wtxn, &embedder_name)?.ok_or(
+                let embedder_index = index.embedder_category_id.get(wtxn, embedder_name)?.ok_or(
                     InternalError::DatabaseMissingEntry {
                         db_name: "embedder_category_id",
                         key: None,

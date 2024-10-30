@@ -358,8 +358,7 @@ impl<'a> Chunks<'a> {
 
     fn set_regenerate(&self, docid: DocumentId, regenerate: bool) {
         let mut user_provided = self.user_provided.borrow_mut();
-        let user_provided =
-            user_provided.entry_ref(self.embedder_name).or_insert(Default::default());
+        let user_provided = user_provided.entry_ref(self.embedder_name).or_default();
         if regenerate {
             // regenerate == !user_provided
             user_provided.del.get_or_insert(Default::default()).insert(docid);

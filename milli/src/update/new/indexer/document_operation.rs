@@ -9,7 +9,7 @@ use IndexDocumentsMethod as Idm;
 use super::super::document_change::DocumentChange;
 use super::document_changes::{DocumentChangeContext, DocumentChanges, MostlySend};
 use crate::documents::PrimaryKey;
-use crate::update::new::document::{DocumentFromVersions, Versions};
+use crate::update::new::document::Versions;
 use crate::update::new::{Deletion, Insertion, Update};
 use crate::update::{AvailableIds, IndexDocumentsMethod};
 use crate::{DocumentId, Error, FieldsIdsMap, Index, Result, UserError};
