@@ -120,8 +120,8 @@ async fn get_all_documents_no_options() {
 
     let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
     assert_eq!(code, 200);
-    let arr = response["results"].as_array().unwrap();
-    assert_eq!(arr.len(), 20);
+    let results = response["results"].as_array().unwrap();
+    assert_eq!(results.len(), 20);
     let first = json!({
         "id":0,
         "isActive":false,
@@ -140,7 +140,7 @@ async fn get_all_documents_no_options() {
         "longitude":-145.725388,
         "tags":["bug"
             ,"bug"]});
-    assert_eq!(first, arr[0]);
+    assert_eq!(first, results[0]);
 }
 
 #[actix_rt::test]
