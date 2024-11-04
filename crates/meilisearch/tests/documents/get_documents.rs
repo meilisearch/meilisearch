@@ -4,15 +4,14 @@ use meili_snap::*;
 use urlencoding::encode as urlencode;
 
 use crate::common::encoder::Encoder;
-use crate::common::{GetAllDocumentsOptions, Server, Value};
+use crate::common::{shared_does_not_exists_index, shared_empty_index, shared_index_with_test_set, GetAllDocumentsOptions, Server, Value};
 use crate::json;
 
 // TODO: partial test since we are testing error, amd error is not yet fully implemented in
 // transplant
 #[actix_rt::test]
 async fn get_unexisting_index_single_document() {
-    let server = Server::new_shared();
-    let (_response, code) = server.unique_index().get_document(1, None).await;
+    let (_response, code) = shared_does_not_exists_index().await.get_document(1, None).await;
     assert_eq!(code, 404);
 }
 
@@ -83,12 +82,11 @@ async fn get_document() {
 
 #[actix_rt::test]
 async fn error_get_unexisting_index_all_documents() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
+    let index = shared_does_not_exists_index().await;
     let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
 
     let expected_response = json!({
-        "message": format!("Index `{}` not found.", index.uid),
+        "message": "Index `DOES_NOT_EXISTS` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#index_not_found"
@@ -100,12 +98,7 @@ async fn error_get_unexisting_index_all_documents() {
 
 #[actix_rt::test]
 async fn get_no_document() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-    let (task, code) = index.create(None).await;
-    assert_eq!(code, 202);
-
-    index.wait_task(task.uid()).await.succeeded();
+    let index = shared_empty_index().await;
 
     let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
     assert_eq!(code, 200);
@@ -114,9 +107,7 @@ async fn get_no_document() {
 
 #[actix_rt::test]
 async fn get_all_documents_no_options() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-    index.load_test_set().await;
+    let index = shared_index_with_test_set().await;
 
     let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
     assert_eq!(code, 200);
@@ -145,11 +136,9 @@ async fn get_all_documents_no_options() {
 
 #[actix_rt::test]
 async fn get_all_documents_no_options_with_response_compression() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-    index.load_test_set().await;
+    let index = shared_index_with_test_set().await;
 
-    let app = server.init_web_app().await;
+    let app = Server::new_shared().init_web_app().await;
     let req = test::TestRequest::get()
         .uri(&format!("/indexes/{}/documents?", urlencode(&index.uid)))
         .insert_header((ACCEPT_ENCODING, "gzip"))
@@ -170,9 +159,7 @@ async fn get_all_documents_no_options_with_response_compression() {
 
 #[actix_rt::test]
 async fn test_get_all_documents_limit() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-    index.load_test_set().await;
+  let index = shared_index_with_test_set().await;
 
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions { limit: Some(5), ..Default::default() })
@@ -187,9 +174,7 @@ async fn test_get_all_documents_limit() {
 
 #[actix_rt::test]
 async fn test_get_all_documents_offset() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-    index.load_test_set().await;
+    let index = shared_index_with_test_set().await;
 
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions { offset: Some(5), ..Default::default() })
@@ -204,9 +189,8 @@ async fn test_get_all_documents_offset() {
 
 #[actix_rt::test]
 async fn test_get_all_documents_attributes_to_retrieve() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-    index.load_test_set().await;
+    let index = shared_index_with_test_set().await;
+
 
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions {
@@ -348,8 +332,8 @@ async fn get_document_s_nested_attributes_to_retrieve() {
 async fn get_documents_displayed_attributes_is_ignored() {
     let server = Server::new_shared();
     let index = server.unique_index();
-    index.update_settings(json!({"displayedAttributes": ["gender"]})).await;
     index.load_test_set().await;
+    index.update_settings(json!({"displayedAttributes": ["gender"]})).await;
 
     let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
     assert_eq!(code, 200);
