@@ -2,7 +2,7 @@ use std::env::VarError;
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::io::{BufReader, Read};
-use std::num::ParseIntError;
+use std::num::{NonZeroUsize, ParseIntError};
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -29,7 +29,6 @@ const MEILI_MASTER_KEY: &str = "MEILI_MASTER_KEY";
 const MEILI_ENV: &str = "MEILI_ENV";
 const MEILI_TASK_WEBHOOK_URL: &str = "MEILI_TASK_WEBHOOK_URL";
 const MEILI_TASK_WEBHOOK_AUTHORIZATION_HEADER: &str = "MEILI_TASK_WEBHOOK_AUTHORIZATION_HEADER";
-#[cfg(feature = "analytics")]
 const MEILI_NO_ANALYTICS: &str = "MEILI_NO_ANALYTICS";
 const MEILI_HTTP_PAYLOAD_SIZE_LIMIT: &str = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT";
 const MEILI_SSL_CERT_PATH: &str = "MEILI_SSL_CERT_PATH";
@@ -55,6 +54,8 @@ const MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE: &str = "MEILI_EXPERIMENTAL_ENABLE_LO
 const MEILI_EXPERIMENTAL_CONTAINS_FILTER: &str = "MEILI_EXPERIMENTAL_CONTAINS_FILTER";
 const MEILI_EXPERIMENTAL_ENABLE_METRICS: &str = "MEILI_EXPERIMENTAL_ENABLE_METRICS";
 const MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE: &str = "MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE";
+const MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER: &str = "MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER";
+const MEILI_EXPERIMENTAL_NB_SEARCHES_PER_CORE: &str = "MEILI_EXPERIMENTAL_NB_SEARCHES_PER_CORE";
 const MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE: &str =
     "MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE";
 const MEILI_EXPERIMENTAL_MAX_NUMBER_OF_BATCHED_TASKS: &str =
@@ -208,7 +209,6 @@ pub struct Opt {
     /// Meilisearch automatically collects data from all instances that do not opt out using this flag.
     /// All gathered data is used solely for the purpose of improving Meilisearch, and can be deleted
     /// at any time.
-    #[cfg(feature = "analytics")]
     #[serde(default)] // we can't send true
     #[clap(long, env = MEILI_NO_ANALYTICS)]
     pub no_analytics: bool,
@@ -357,9 +357,25 @@ pub struct Opt {
     /// Lets you customize the size of the search queue. Meilisearch processes your search requests as fast as possible but once the
     /// queue is full it starts returning HTTP 503, Service Unavailable.
     /// The default value is 1000.
-    #[clap(long, env = MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE, default_value_t = 1000)]
-    #[serde(default)]
+    #[clap(long, env = MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE, default_value_t = default_experimental_search_queue_size())]
+    #[serde(default = "default_experimental_search_queue_size")]
     pub experimental_search_queue_size: usize,
+
+    /// Experimental drop search after. For more information, see: <https://github.com/orgs/meilisearch/discussions/783>
+    ///
+    /// Let you customize after how many seconds Meilisearch should consider a search request irrelevant and drop it.
+    /// The default value is 60.
+    #[clap(long, env = MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER, default_value_t = default_drop_search_after())]
+    #[serde(default = "default_drop_search_after")]
+    pub experimental_drop_search_after: NonZeroUsize,
+
+    /// Experimental number of searches per core. For more information, see: <https://github.com/orgs/meilisearch/discussions/784>
+    ///
+    /// Lets you customize how many search requests can run on each core concurrently.
+    /// The default value is 4.
+    #[clap(long, env = MEILI_EXPERIMENTAL_NB_SEARCHES_PER_CORE, default_value_t = default_nb_searches_per_core())]
+    #[serde(default = "default_nb_searches_per_core")]
+    pub experimental_nb_searches_per_core: NonZeroUsize,
 
     /// Experimental logs mode feature. For more information, see: <https://github.com/orgs/meilisearch/discussions/723>
     ///
@@ -407,7 +423,6 @@ pub struct Opt {
 
 impl Opt {
     /// Whether analytics should be enabled or not.
-    #[cfg(all(not(debug_assertions), feature = "analytics"))]
     pub fn analytics(&self) -> bool {
         !self.no_analytics
     }
@@ -487,11 +502,12 @@ impl Opt {
             ignore_missing_dump: _,
             ignore_dump_if_db_exists: _,
             config_file_path: _,
-            #[cfg(feature = "analytics")]
             no_analytics,
             experimental_contains_filter,
             experimental_enable_metrics,
             experimental_search_queue_size,
+            experimental_drop_search_after,
+            experimental_nb_searches_per_core,
             experimental_logs_mode,
             experimental_enable_logs_route,
             experimental_replication_parameters,
@@ -513,10 +529,7 @@ impl Opt {
             );
         }
 
-        #[cfg(feature = "analytics")]
-        {
-            export_to_env_if_not_present(MEILI_NO_ANALYTICS, no_analytics.to_string());
-        }
+        export_to_env_if_not_present(MEILI_NO_ANALYTICS, no_analytics.to_string());
         export_to_env_if_not_present(
             MEILI_HTTP_PAYLOAD_SIZE_LIMIT,
             http_payload_size_limit.to_string(),
@@ -558,6 +571,14 @@ impl Opt {
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE,
             experimental_search_queue_size.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER,
+            experimental_drop_search_after.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_NB_SEARCHES_PER_CORE,
+            experimental_nb_searches_per_core.to_string(),
         );
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_LOGS_MODE,
@@ -888,6 +909,18 @@ fn default_snapshot_interval_sec() -> &'static str {
 
 fn default_dump_dir() -> PathBuf {
     PathBuf::from(DEFAULT_DUMP_DIR)
+}
+
+fn default_experimental_search_queue_size() -> usize {
+    1000
+}
+
+fn default_drop_search_after() -> NonZeroUsize {
+    NonZeroUsize::new(60).unwrap()
+}
+
+fn default_nb_searches_per_core() -> NonZeroUsize {
+    NonZeroUsize::new(4).unwrap()
 }
 
 /// Indicates if a snapshot was scheduled, and if yes with which interval.

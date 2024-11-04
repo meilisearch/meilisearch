@@ -9,7 +9,7 @@ use meilisearch_types::keys::actions;
 use serde::Serialize;
 use tracing::debug;
 
-use crate::analytics::{Analytics, MultiSearchAggregator};
+use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
@@ -20,6 +20,8 @@ use crate::search::{
     SearchQueryWithIndex, SearchResultWithIndex,
 };
 use crate::search_queue::SearchQueue;
+
+use super::multi_search_analytics::MultiSearchAggregator;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(SeqHandler(multi_search_with_post))));
@@ -35,7 +37,7 @@ pub async fn multi_search_with_post(
     search_queue: Data<SearchQueue>,
     params: AwebJson<FederatedSearch, DeserrJsonError>,
     req: HttpRequest,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     // Since we don't want to process half of the search requests and then get a permit refused
     // we're going to get one permit for the whole duration of the multi-search request.
@@ -43,7 +45,7 @@ pub async fn multi_search_with_post(
 
     let federated_search = params.into_inner();
 
-    let mut multi_aggregate = MultiSearchAggregator::from_federated_search(&federated_search, &req);
+    let mut multi_aggregate = MultiSearchAggregator::from_federated_search(&federated_search);
 
     let FederatedSearch { mut queries, federation } = federated_search;
 
@@ -87,7 +89,7 @@ pub async fn multi_search_with_post(
                 multi_aggregate.succeed();
             }
 
-            analytics.post_multi_search(multi_aggregate);
+            analytics.publish(multi_aggregate, &req);
             HttpResponse::Ok().json(search_result??)
         }
         None => {
@@ -149,7 +151,7 @@ pub async fn multi_search_with_post(
             if search_results.is_ok() {
                 multi_aggregate.succeed();
             }
-            analytics.post_multi_search(multi_aggregate);
+            analytics.publish(multi_aggregate, &req);
 
             let search_results = search_results.map_err(|(mut err, query_index)| {
                 // Add the query index that failed as context for the error message.

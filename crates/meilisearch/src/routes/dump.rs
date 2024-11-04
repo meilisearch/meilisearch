@@ -4,7 +4,6 @@ use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::tasks::KindWithContent;
-use serde_json::json;
 use tracing::debug;
 
 use crate::analytics::Analytics;
@@ -18,14 +17,16 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(SeqHandler(create_dump))));
 }
 
+crate::empty_analytics!(DumpAnalytics, "Dump Created");
+
 pub async fn create_dump(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DUMPS_CREATE }>, Data<IndexScheduler>>,
     auth_controller: GuardedData<ActionPolicy<{ actions::DUMPS_CREATE }>, Data<AuthController>>,
     req: HttpRequest,
     opt: web::Data<Opt>,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    analytics.publish("Dump Created".to_string(), json!({}), Some(&req));
+    analytics.publish(DumpAnalytics::default(), &req);
 
     let task = KindWithContent::DumpCreation {
         keys: auth_controller.list_keys()?,

@@ -77,7 +77,8 @@
           "q": "puppy cute comforting movie",
           "limit": 100,
           "hybrid": {
-            "semanticRatio": 0.1
+            "semanticRatio": 0.1,
+            "embedder": "default"
           }
         }
       },
@@ -91,7 +92,8 @@
           "q": "puppy cute comforting movie",
           "limit": 100,
           "hybrid": {
-            "semanticRatio": 0.5
+            "semanticRatio": 0.5,
+            "embedder": "default"
           }
         }
       },
@@ -105,7 +107,8 @@
           "q": "puppy cute comforting movie",
           "limit": 100,
           "hybrid": {
-            "semanticRatio": 0.9
+            "semanticRatio": 0.9,
+            "embedder": "default"
           }
         }
       },
@@ -119,7 +122,8 @@
           "q": "puppy cute comforting movie",
           "limit": 100,
           "hybrid": {
-            "semanticRatio": 1.0
+            "semanticRatio": 1.0,
+            "embedder": "default"
           }
         }
       },
@@ -133,7 +137,8 @@
           "q": "shrek",
           "limit": 100,
           "hybrid": {
-            "semanticRatio": 1.0
+            "semanticRatio": 1.0,
+            "embedder": "default"
           }
         }
       },
@@ -147,7 +152,8 @@
           "q": "shrek",
           "limit": 100,
           "hybrid": {
-            "semanticRatio": 0.5
+            "semanticRatio": 0.5,
+            "embedder": "default"
           }
         }
       },
@@ -161,7 +167,8 @@
           "q": "shrek",
           "limit": 100,
           "hybrid": {
-            "semanticRatio": 0.1
+            "semanticRatio": 0.1,
+            "embedder": "default"
           }
         }
       },

@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::convert::Infallible;
 
 use actix_web::web::Data;
@@ -13,12 +14,11 @@ use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::{self, FieldDistribution, Index};
 use meilisearch_types::tasks::KindWithContent;
 use serde::Serialize;
-use serde_json::json;
 use time::OffsetDateTime;
 use tracing::debug;
 
 use super::{get_task_id, Pagination, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
-use crate::analytics::Analytics;
+use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
@@ -28,8 +28,11 @@ use crate::Opt;
 pub mod documents;
 pub mod facet_search;
 pub mod search;
+mod search_analytics;
 pub mod settings;
+mod settings_analytics;
 pub mod similar;
+mod similar_analytics;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -123,12 +126,31 @@ pub struct IndexCreateRequest {
     primary_key: Option<String>,
 }
 
+#[derive(Serialize)]
+struct IndexCreatedAggregate {
+    primary_key: BTreeSet<String>,
+}
+
+impl Aggregate for IndexCreatedAggregate {
+    fn event_name(&self) -> &'static str {
+        "Index Created"
+    }
+
+    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
+        Box::new(Self { primary_key: self.primary_key.union(&new.primary_key).cloned().collect() })
+    }
+
+    fn into_event(self: Box<Self>) -> serde_json::Value {
+        serde_json::to_value(*self).unwrap_or_default()
+    }
+}
+
 pub async fn create_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_CREATE }>, Data<IndexScheduler>>,
     body: AwebJson<IndexCreateRequest, DeserrJsonError>,
     req: HttpRequest,
     opt: web::Data<Opt>,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Create index");
     let IndexCreateRequest { primary_key, uid } = body.into_inner();
@@ -136,9 +158,8 @@ pub async fn create_index(
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&uid);
     if allow_index_creation {
         analytics.publish(
-            "Index Created".to_string(),
-            json!({ "primary_key": primary_key }),
-            Some(&req),
+            IndexCreatedAggregate { primary_key: primary_key.iter().cloned().collect() },
+            &req,
         );
 
         let task = KindWithContent::IndexCreation { index_uid: uid.to_string(), primary_key };
@@ -194,21 +215,38 @@ pub async fn get_index(
     Ok(HttpResponse::Ok().json(index_view))
 }
 
+#[derive(Serialize)]
+struct IndexUpdatedAggregate {
+    primary_key: BTreeSet<String>,
+}
+
+impl Aggregate for IndexUpdatedAggregate {
+    fn event_name(&self) -> &'static str {
+        "Index Updated"
+    }
+
+    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
+        Box::new(Self { primary_key: self.primary_key.union(&new.primary_key).cloned().collect() })
+    }
+
+    fn into_event(self: Box<Self>) -> serde_json::Value {
+        serde_json::to_value(*self).unwrap_or_default()
+    }
+}
 pub async fn update_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     body: AwebJson<UpdateIndexRequest, DeserrJsonError>,
     req: HttpRequest,
     opt: web::Data<Opt>,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Update index");
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let body = body.into_inner();
     analytics.publish(
-        "Index Updated".to_string(),
-        json!({ "primary_key": body.primary_key }),
-        Some(&req),
+        IndexUpdatedAggregate { primary_key: body.primary_key.iter().cloned().collect() },
+        &req,
     );
 
     let task = KindWithContent::IndexUpdate {

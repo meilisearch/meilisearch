@@ -1,15 +1,14 @@
+use super::settings_analytics::*;
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
-use meilisearch_types::facet_values_sort::FacetValuesSort;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::update::Setting;
-use meilisearch_types::settings::{settings, RankingRuleView, SecretPolicy, Settings, Unchecked};
+use meilisearch_types::settings::{settings, SecretPolicy, Settings, Unchecked};
 use meilisearch_types::tasks::KindWithContent;
-use serde_json::json;
 use tracing::debug;
 
 use crate::analytics::Analytics;
@@ -20,7 +19,7 @@ use crate::Opt;
 
 #[macro_export]
 macro_rules! make_setting_route {
-    ($route:literal, $update_verb:ident, $type:ty, $err_ty:ty, $attr:ident, $camelcase_attr:literal, $analytics_var:ident, $analytics:expr) => {
+    ($route:literal, $update_verb:ident, $type:ty, $err_ty:ty, $attr:ident, $camelcase_attr:literal, $analytics:ident) => {
         pub mod $attr {
             use actix_web::web::Data;
             use actix_web::{web, HttpRequest, HttpResponse, Resource};
@@ -80,7 +79,7 @@ macro_rules! make_setting_route {
                 body: deserr::actix_web::AwebJson<Option<$type>, $err_ty>,
                 req: HttpRequest,
                 opt: web::Data<Opt>,
-                $analytics_var: web::Data<dyn Analytics>,
+                analytics: web::Data<Analytics>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
                 let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
@@ -88,7 +87,10 @@ macro_rules! make_setting_route {
                 debug!(parameters = ?body, "Update settings");
 
                 #[allow(clippy::redundant_closure_call)]
-                $analytics(&body, &req);
+                analytics.publish(
+                    $crate::routes::indexes::settings_analytics::$analytics::new(body.as_ref()).into_settings(),
+                    &req,
+                );
 
                 let new_settings = Settings {
                     $attr: match body {
@@ -160,21 +162,7 @@ make_setting_route!(
     >,
     filterable_attributes,
     "filterableAttributes",
-    analytics,
-    |setting: &Option<std::collections::BTreeSet<String>>, req: &HttpRequest| {
-        use serde_json::json;
-
-        analytics.publish(
-            "FilterableAttributes Updated".to_string(),
-            json!({
-                "filterable_attributes": {
-                    "total": setting.as_ref().map(|filter| filter.len()).unwrap_or(0),
-                    "has_geo": setting.as_ref().map(|filter| filter.contains("_geo")).unwrap_or(false),
-                }
-            }),
-            Some(req),
-        );
-    }
+    FilterableAttributesAnalytics
 );
 
 make_setting_route!(
@@ -186,21 +174,7 @@ make_setting_route!(
     >,
     sortable_attributes,
     "sortableAttributes",
-    analytics,
-    |setting: &Option<std::collections::BTreeSet<String>>, req: &HttpRequest| {
-        use serde_json::json;
-
-        analytics.publish(
-            "SortableAttributes Updated".to_string(),
-            json!({
-                "sortable_attributes": {
-                    "total": setting.as_ref().map(|sort| sort.len()),
-                    "has_geo": setting.as_ref().map(|sort| sort.contains("_geo")),
-                },
-            }),
-            Some(req),
-        );
-    }
+    SortableAttributesAnalytics
 );
 
 make_setting_route!(
@@ -212,21 +186,7 @@ make_setting_route!(
     >,
     displayed_attributes,
     "displayedAttributes",
-    analytics,
-    |displayed: &Option<Vec<String>>, req: &HttpRequest| {
-        use serde_json::json;
-
-        analytics.publish(
-            "DisplayedAttributes Updated".to_string(),
-            json!({
-                "displayed_attributes": {
-                    "total": displayed.as_ref().map(|displayed| displayed.len()),
-                    "with_wildcard": displayed.as_ref().map(|displayed| displayed.iter().any(|displayed| displayed == "*")),
-                },
-            }),
-            Some(req),
-        );
-    }
+    DisplayedAttributesAnalytics
 );
 
 make_setting_route!(
@@ -238,40 +198,7 @@ make_setting_route!(
     >,
     typo_tolerance,
     "typoTolerance",
-    analytics,
-    |setting: &Option<meilisearch_types::settings::TypoSettings>, req: &HttpRequest| {
-        use serde_json::json;
-
-        analytics.publish(
-            "TypoTolerance Updated".to_string(),
-            json!({
-                "typo_tolerance": {
-                    "enabled": setting.as_ref().map(|s| !matches!(s.enabled, Setting::Set(false))),
-                    "disable_on_attributes": setting
-                        .as_ref()
-                        .and_then(|s| s.disable_on_attributes.as_ref().set().map(|m| !m.is_empty())),
-                    "disable_on_words": setting
-                        .as_ref()
-                        .and_then(|s| s.disable_on_words.as_ref().set().map(|m| !m.is_empty())),
-                    "min_word_size_for_one_typo": setting
-                        .as_ref()
-                        .and_then(|s| s.min_word_size_for_typos
-                            .as_ref()
-                            .set()
-                            .map(|s| s.one_typo.set()))
-                        .flatten(),
-                    "min_word_size_for_two_typos": setting
-                        .as_ref()
-                        .and_then(|s| s.min_word_size_for_typos
-                            .as_ref()
-                            .set()
-                            .map(|s| s.two_typos.set()))
-                        .flatten(),
-                },
-            }),
-            Some(req),
-        );
-    }
+    TypoToleranceAnalytics
 );
 
 make_setting_route!(
@@ -283,21 +210,7 @@ make_setting_route!(
     >,
     searchable_attributes,
     "searchableAttributes",
-    analytics,
-    |setting: &Option<Vec<String>>, req: &HttpRequest| {
-        use serde_json::json;
-
-        analytics.publish(
-            "SearchableAttributes Updated".to_string(),
-            json!({
-                "searchable_attributes": {
-                    "total": setting.as_ref().map(|searchable| searchable.len()),
-                    "with_wildcard": setting.as_ref().map(|searchable| searchable.iter().any(|searchable| searchable == "*")),
-                },
-            }),
-            Some(req),
-        );
-    }
+    SearchableAttributesAnalytics
 );
 
 make_setting_route!(
@@ -309,20 +222,7 @@ make_setting_route!(
     >,
     stop_words,
     "stopWords",
-    analytics,
-    |stop_words: &Option<std::collections::BTreeSet<String>>, req: &HttpRequest| {
-        use serde_json::json;
-
-        analytics.publish(
-            "StopWords Updated".to_string(),
-            json!({
-                "stop_words": {
-                    "total": stop_words.as_ref().map(|stop_words| stop_words.len()),
-                },
-            }),
-            Some(req),
-        );
-    }
+    StopWordsAnalytics
 );
 
 make_setting_route!(
@@ -334,20 +234,7 @@ make_setting_route!(
     >,
     non_separator_tokens,
     "nonSeparatorTokens",
-    analytics,
-    |non_separator_tokens: &Option<std::collections::BTreeSet<String>>, req: &HttpRequest| {
-        use serde_json::json;
-
-        analytics.publish(
-            "nonSeparatorTokens Updated".to_string(),
-            json!({
-                "non_separator_tokens": {
-                    "total": non_separator_tokens.as_ref().map(|non_separator_tokens| non_separator_tokens.len()),
-                },
-            }),
-            Some(req),
-        );
-    }
+    NonSeparatorTokensAnalytics
 );
 
 make_setting_route!(
@@ -359,20 +246,7 @@ make_setting_route!(
     >,
     separator_tokens,
     "separatorTokens",
-    analytics,
-    |separator_tokens: &Option<std::collections::BTreeSet<String>>, req: &HttpRequest| {
-        use serde_json::json;
-
-        analytics.publish(
-            "separatorTokens Updated".to_string(),
-            json!({
-                "separator_tokens": {
-                    "total": separator_tokens.as_ref().map(|separator_tokens| separator_tokens.len()),
-                },
-            }),
-            Some(req),
-        );
-    }
+    SeparatorTokensAnalytics
 );
 
 make_setting_route!(
@@ -384,20 +258,7 @@ make_setting_route!(
     >,
     dictionary,
     "dictionary",
-    analytics,
-    |dictionary: &Option<std::collections::BTreeSet<String>>, req: &HttpRequest| {
-        use serde_json::json;
-
-        analytics.publish(
-            "dictionary Updated".to_string(),
-            json!({
-                "dictionary": {
-                    "total": dictionary.as_ref().map(|dictionary| dictionary.len()),
-                },
-            }),
-            Some(req),
-        );
-    }
+    DictionaryAnalytics
 );
 
 make_setting_route!(
@@ -409,20 +270,7 @@ make_setting_route!(
     >,
     synonyms,
     "synonyms",
-    analytics,
-    |synonyms: &Option<std::collections::BTreeMap<String, Vec<String>>>, req: &HttpRequest| {
-        use serde_json::json;
-
-        analytics.publish(
-            "Synonyms Updated".to_string(),
-            json!({
-                "synonyms": {
-                    "total": synonyms.as_ref().map(|synonyms| synonyms.len()),
-                },
-            }),
-            Some(req),
-        );
-    }
+    SynonymsAnalytics
 );
 
 make_setting_route!(
@@ -434,19 +282,7 @@ make_setting_route!(
     >,
     distinct_attribute,
     "distinctAttribute",
-    analytics,
-    |distinct: &Option<String>, req: &HttpRequest| {
-        use serde_json::json;
-        analytics.publish(
-            "DistinctAttribute Updated".to_string(),
-            json!({
-                "distinct_attribute": {
-                    "set": distinct.is_some(),
-                }
-            }),
-            Some(req),
-        );
-    }
+    DistinctAttributeAnalytics
 );
 
 make_setting_route!(
@@ -458,20 +294,7 @@ make_setting_route!(
     >,
     proximity_precision,
     "proximityPrecision",
-    analytics,
-    |precision: &Option<meilisearch_types::settings::ProximityPrecisionView>, req: &HttpRequest| {
-        use serde_json::json;
-        analytics.publish(
-            "ProximityPrecision Updated".to_string(),
-            json!({
-                "proximity_precision": {
-                    "set": precision.is_some(),
-                    "value": precision.unwrap_or_default(),
-                }
-            }),
-            Some(req),
-        );
-    }
+    ProximityPrecisionAnalytics
 );
 
 make_setting_route!(
@@ -483,17 +306,7 @@ make_setting_route!(
     >,
     localized_attributes,
     "localizedAttributes",
-    analytics,
-    |rules: &Option<Vec<meilisearch_types::locales::LocalizedAttributesRuleView>>, req: &HttpRequest| {
-        use serde_json::json;
-        analytics.publish(
-            "LocalizedAttributesRules Updated".to_string(),
-            json!({
-                "locales": rules.as_ref().map(|rules| rules.iter().flat_map(|rule| rule.locales.iter().cloned()).collect::<std::collections::BTreeSet<_>>())
-            }),
-            Some(req),
-        );
-    }
+    LocalesAnalytics
 );
 
 make_setting_route!(
@@ -505,26 +318,7 @@ make_setting_route!(
     >,
     ranking_rules,
     "rankingRules",
-    analytics,
-    |setting: &Option<Vec<meilisearch_types::settings::RankingRuleView>>, req: &HttpRequest| {
-        use serde_json::json;
-
-        analytics.publish(
-            "RankingRules Updated".to_string(),
-            json!({
-                "ranking_rules": {
-                    "words_position": setting.as_ref().map(|rr| rr.iter().position(|s| matches!(s, meilisearch_types::settings::RankingRuleView::Words))),
-                    "typo_position": setting.as_ref().map(|rr| rr.iter().position(|s| matches!(s, meilisearch_types::settings::RankingRuleView::Typo))),
-                    "proximity_position": setting.as_ref().map(|rr| rr.iter().position(|s| matches!(s, meilisearch_types::settings::RankingRuleView::Proximity))),
-                    "attribute_position": setting.as_ref().map(|rr| rr.iter().position(|s| matches!(s, meilisearch_types::settings::RankingRuleView::Attribute))),
-                    "sort_position": setting.as_ref().map(|rr| rr.iter().position(|s| matches!(s, meilisearch_types::settings::RankingRuleView::Sort))),
-                    "exactness_position": setting.as_ref().map(|rr| rr.iter().position(|s| matches!(s, meilisearch_types::settings::RankingRuleView::Exactness))),
-                    "values": setting.as_ref().map(|rr| rr.iter().filter(|s| matches!(s, meilisearch_types::settings::RankingRuleView::Asc(_) | meilisearch_types::settings::RankingRuleView::Desc(_)) ).map(|x| x.to_string()).collect::<Vec<_>>().join(", ")),
-                }
-            }),
-            Some(req),
-        );
-    }
+    RankingRulesAnalytics
 );
 
 make_setting_route!(
@@ -536,25 +330,7 @@ make_setting_route!(
     >,
     faceting,
     "faceting",
-    analytics,
-    |setting: &Option<meilisearch_types::settings::FacetingSettings>, req: &HttpRequest| {
-        use serde_json::json;
-        use meilisearch_types::facet_values_sort::FacetValuesSort;
-
-        analytics.publish(
-            "Faceting Updated".to_string(),
-            json!({
-                "faceting": {
-                    "max_values_per_facet": setting.as_ref().and_then(|s| s.max_values_per_facet.set()),
-                    "sort_facet_values_by_star_count": setting.as_ref().and_then(|s| {
-                        s.sort_facet_values_by.as_ref().set().map(|s| s.iter().any(|(k, v)| k == "*" && v == &FacetValuesSort::Count))
-                    }),
-                    "sort_facet_values_by_total": setting.as_ref().and_then(|s| s.sort_facet_values_by.as_ref().set().map(|s| s.len())),
-                },
-            }),
-            Some(req),
-        );
-    }
+    FacetingAnalytics
 );
 
 make_setting_route!(
@@ -566,20 +342,7 @@ make_setting_route!(
     >,
     pagination,
     "pagination",
-    analytics,
-    |setting: &Option<meilisearch_types::settings::PaginationSettings>, req: &HttpRequest| {
-        use serde_json::json;
-
-        analytics.publish(
-            "Pagination Updated".to_string(),
-            json!({
-                "pagination": {
-                    "max_total_hits": setting.as_ref().and_then(|s| s.max_total_hits.set()),
-                },
-            }),
-            Some(req),
-        );
-    }
+    PaginationAnalytics
 );
 
 make_setting_route!(
@@ -591,74 +354,8 @@ make_setting_route!(
     >,
     embedders,
     "embedders",
-    analytics,
-    |setting: &Option<std::collections::BTreeMap<String, Setting<meilisearch_types::milli::vector::settings::EmbeddingSettings>>>, req: &HttpRequest| {
-
-
-        analytics.publish(
-            "Embedders Updated".to_string(),
-            serde_json::json!({"embedders": crate::routes::indexes::settings::embedder_analytics(setting.as_ref())}),
-            Some(req),
-        );
-    }
+    EmbeddersAnalytics
 );
-
-fn embedder_analytics(
-    setting: Option<
-        &std::collections::BTreeMap<
-            String,
-            Setting<meilisearch_types::milli::vector::settings::EmbeddingSettings>,
-        >,
-    >,
-) -> serde_json::Value {
-    let mut sources = std::collections::HashSet::new();
-
-    if let Some(s) = &setting {
-        for source in s
-            .values()
-            .filter_map(|config| config.clone().set())
-            .filter_map(|config| config.source.set())
-        {
-            use meilisearch_types::milli::vector::settings::EmbedderSource;
-            match source {
-                EmbedderSource::OpenAi => sources.insert("openAi"),
-                EmbedderSource::HuggingFace => sources.insert("huggingFace"),
-                EmbedderSource::UserProvided => sources.insert("userProvided"),
-                EmbedderSource::Ollama => sources.insert("ollama"),
-                EmbedderSource::Rest => sources.insert("rest"),
-            };
-        }
-    };
-
-    let document_template_used = setting.as_ref().map(|map| {
-        map.values()
-            .filter_map(|config| config.clone().set())
-            .any(|config| config.document_template.set().is_some())
-    });
-
-    let document_template_max_bytes = setting.as_ref().and_then(|map| {
-        map.values()
-            .filter_map(|config| config.clone().set())
-            .filter_map(|config| config.document_template_max_bytes.set())
-            .max()
-    });
-
-    let binary_quantization_used = setting.as_ref().map(|map| {
-        map.values()
-            .filter_map(|config| config.clone().set())
-            .any(|config| config.binary_quantized.set().is_some())
-    });
-
-    json!(
-        {
-            "total": setting.as_ref().map(|s| s.len()),
-            "sources": sources,
-            "document_template_used": document_template_used,
-            "document_template_max_bytes": document_template_max_bytes,
-            "binary_quantization_used": binary_quantization_used,
-        }
-    )
-}
 
 make_setting_route!(
     "/search-cutoff-ms",
@@ -669,14 +366,7 @@ make_setting_route!(
     >,
     search_cutoff_ms,
     "searchCutoffMs",
-    analytics,
-    |setting: &Option<u64>, req: &HttpRequest| {
-        analytics.publish(
-            "Search Cutoff Updated".to_string(),
-            serde_json::json!({"search_cutoff_ms": setting }),
-            Some(req),
-        );
-    }
+    SearchCutoffMsAnalytics
 );
 
 macro_rules! generate_configure {
@@ -720,7 +410,7 @@ pub async fn update_all(
     body: AwebJson<Settings<Unchecked>, DeserrJsonError>,
     req: HttpRequest,
     opt: web::Data<Opt>,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
@@ -729,104 +419,45 @@ pub async fn update_all(
     let new_settings = validate_settings(new_settings, &index_scheduler)?;
 
     analytics.publish(
-        "Settings Updated".to_string(),
-        json!({
-           "ranking_rules": {
-                "words_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| matches!(s, RankingRuleView::Words))),
-                "typo_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| matches!(s, RankingRuleView::Typo))),
-                "proximity_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| matches!(s, RankingRuleView::Proximity))),
-                "attribute_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| matches!(s, RankingRuleView::Attribute))),
-                "sort_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| matches!(s, RankingRuleView::Sort))),
-                "exactness_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| matches!(s, RankingRuleView::Exactness))),
-                "values": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().filter(|s| !matches!(s, RankingRuleView::Asc(_) | RankingRuleView::Desc(_)) ).map(|x| x.to_string()).collect::<Vec<_>>().join(", ")),
-            },
-            "searchable_attributes": {
-                "total": new_settings.searchable_attributes.as_ref().set().map(|searchable| searchable.len()),
-                "with_wildcard": new_settings.searchable_attributes.as_ref().set().map(|searchable| searchable.iter().any(|searchable| searchable == "*")),
-            },
-            "displayed_attributes": {
-                "total": new_settings.displayed_attributes.as_ref().set().map(|displayed| displayed.len()),
-                "with_wildcard": new_settings.displayed_attributes.as_ref().set().map(|displayed| displayed.iter().any(|displayed| displayed == "*")),
-            },
-           "sortable_attributes": {
-                "total": new_settings.sortable_attributes.as_ref().set().map(|sort| sort.len()),
-                "has_geo": new_settings.sortable_attributes.as_ref().set().map(|sort| sort.iter().any(|s| s == "_geo")),
-            },
-           "filterable_attributes": {
-                "total": new_settings.filterable_attributes.as_ref().set().map(|filter| filter.len()),
-                "has_geo": new_settings.filterable_attributes.as_ref().set().map(|filter| filter.iter().any(|s| s == "_geo")),
-            },
-            "distinct_attribute": {
-                "set": new_settings.distinct_attribute.as_ref().set().is_some()
-            },
-            "proximity_precision": {
-                "set": new_settings.proximity_precision.as_ref().set().is_some(),
-                "value": new_settings.proximity_precision.as_ref().set().copied().unwrap_or_default()
-            },
-            "typo_tolerance": {
-                "enabled": new_settings.typo_tolerance
-                    .as_ref()
-                    .set()
-                    .and_then(|s| s.enabled.as_ref().set())
-                    .copied(),
-                "disable_on_attributes": new_settings.typo_tolerance
-                    .as_ref()
-                    .set()
-                    .and_then(|s| s.disable_on_attributes.as_ref().set().map(|m| !m.is_empty())),
-                "disable_on_words": new_settings.typo_tolerance
-                    .as_ref()
-                    .set()
-                    .and_then(|s| s.disable_on_words.as_ref().set().map(|m| !m.is_empty())),
-                "min_word_size_for_one_typo": new_settings.typo_tolerance
-                    .as_ref()
-                    .set()
-                    .and_then(|s| s.min_word_size_for_typos
-                        .as_ref()
-                        .set()
-                        .map(|s| s.one_typo.set()))
-                    .flatten(),
-                "min_word_size_for_two_typos": new_settings.typo_tolerance
-                    .as_ref()
-                    .set()
-                    .and_then(|s| s.min_word_size_for_typos
-                        .as_ref()
-                        .set()
-                        .map(|s| s.two_typos.set()))
-                    .flatten(),
-            },
-            "faceting": {
-                "max_values_per_facet": new_settings.faceting
-                    .as_ref()
-                    .set()
-                    .and_then(|s| s.max_values_per_facet.as_ref().set()),
-                "sort_facet_values_by_star_count": new_settings.faceting
-                    .as_ref()
-                    .set()
-                    .and_then(|s| {
-                        s.sort_facet_values_by.as_ref().set().map(|s| s.iter().any(|(k, v)| k == "*" && v == &FacetValuesSort::Count))
-                    }),
-                "sort_facet_values_by_total": new_settings.faceting
-                    .as_ref()
-                    .set()
-                    .and_then(|s| s.sort_facet_values_by.as_ref().set().map(|s| s.len())),
-            },
-            "pagination": {
-                "max_total_hits": new_settings.pagination
-                    .as_ref()
-                    .set()
-                    .and_then(|s| s.max_total_hits.as_ref().set()),
-            },
-            "stop_words": {
-                "total": new_settings.stop_words.as_ref().set().map(|stop_words| stop_words.len()),
-            },
-            "synonyms": {
-                "total": new_settings.synonyms.as_ref().set().map(|synonyms| synonyms.len()),
-            },
-            "embedders": crate::routes::indexes::settings::embedder_analytics(new_settings.embedders.as_ref().set()),
-            "search_cutoff_ms": new_settings.search_cutoff_ms.as_ref().set(),
-            "locales": new_settings.localized_attributes.as_ref().set().map(|rules| rules.iter().flat_map(|rule| rule.locales.iter().cloned()).collect::<std::collections::BTreeSet<_>>()),
-        }),
-        Some(&req),
+        SettingsAnalytics {
+            ranking_rules: RankingRulesAnalytics::new(new_settings.ranking_rules.as_ref().set()),
+            searchable_attributes: SearchableAttributesAnalytics::new(
+                new_settings.searchable_attributes.as_ref().set(),
+            ),
+            displayed_attributes: DisplayedAttributesAnalytics::new(
+                new_settings.displayed_attributes.as_ref().set(),
+            ),
+            sortable_attributes: SortableAttributesAnalytics::new(
+                new_settings.sortable_attributes.as_ref().set(),
+            ),
+            filterable_attributes: FilterableAttributesAnalytics::new(
+                new_settings.filterable_attributes.as_ref().set(),
+            ),
+            distinct_attribute: DistinctAttributeAnalytics::new(
+                new_settings.distinct_attribute.as_ref().set(),
+            ),
+            proximity_precision: ProximityPrecisionAnalytics::new(
+                new_settings.proximity_precision.as_ref().set(),
+            ),
+            typo_tolerance: TypoToleranceAnalytics::new(new_settings.typo_tolerance.as_ref().set()),
+            faceting: FacetingAnalytics::new(new_settings.faceting.as_ref().set()),
+            pagination: PaginationAnalytics::new(new_settings.pagination.as_ref().set()),
+            stop_words: StopWordsAnalytics::new(new_settings.stop_words.as_ref().set()),
+            synonyms: SynonymsAnalytics::new(new_settings.synonyms.as_ref().set()),
+            embedders: EmbeddersAnalytics::new(new_settings.embedders.as_ref().set()),
+            search_cutoff_ms: SearchCutoffMsAnalytics::new(
+                new_settings.search_cutoff_ms.as_ref().set(),
+            ),
+            locales: LocalesAnalytics::new(new_settings.localized_attributes.as_ref().set()),
+            dictionary: DictionaryAnalytics::new(new_settings.dictionary.as_ref().set()),
+            separator_tokens: SeparatorTokensAnalytics::new(
+                new_settings.separator_tokens.as_ref().set(),
+            ),
+            non_separator_tokens: NonSeparatorTokensAnalytics::new(
+                new_settings.non_separator_tokens.as_ref().set(),
+            ),
+        },
+        &req,
     );
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);

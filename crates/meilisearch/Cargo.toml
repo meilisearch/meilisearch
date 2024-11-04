@@ -75,7 +75,7 @@ reqwest = { version = "0.12.5", features = [
 rustls = { version = "0.23.11", features = ["ring"], default-features = false }
 rustls-pki-types = { version = "1.7.0", features = ["alloc"] }
 rustls-pemfile = "2.1.2"
-segment = { version = "0.2.4", optional = true }
+segment = { version = "0.2.4" }
 serde = { version = "1.0.204", features = ["derive"] }
 serde_json = { version = "1.0.120", features = ["preserve_order"] }
 sha2 = "0.10.8"
@@ -104,6 +104,7 @@ tracing-trace = { version = "0.1.0", path = "../tracing-trace" }
 tracing-actix-web = "0.7.11"
 build-info = { version = "1.7.0", path = "../build-info" }
 roaring = "0.10.2"
+mopa-maintained = "0.2.3"
 
 [dev-dependencies]
 actix-rt = "2.10.0"
@@ -131,8 +132,7 @@ tempfile = { version = "3.10.1", optional = true }
 zip = { version = "2.1.3", optional = true }
 
 [features]
-default = ["analytics", "meilisearch-types/all-tokenizations", "mini-dashboard"]
-analytics = ["segment"]
+default = ["meilisearch-types/all-tokenizations", "mini-dashboard"]
 mini-dashboard = [
     "static-files",
     "anyhow",
@@ -154,7 +154,8 @@ khmer = ["meilisearch-types/khmer"]
 vietnamese = ["meilisearch-types/vietnamese"]
 swedish-recomposition = ["meilisearch-types/swedish-recomposition"]
 german = ["meilisearch-types/german"]
+turkish = ["meilisearch-types/turkish"]
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.14/build.zip"
-sha1 = "592d1b5a3459d621d0aae1dded8fe3154f5c38fe"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.15/build.zip"
+sha1 = "d057600b4a839a2e0c0be7a372cd1b2683f3ca7e"

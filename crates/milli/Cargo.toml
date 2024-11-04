@@ -79,8 +79,8 @@ hf-hub = { git = "https://github.com/dureuill/hf-hub.git", branch = "rust_tls", 
 ] }
 tiktoken-rs = "0.5.9"
 liquid = "0.26.6"
-rhai = { version = "1.19.0", features = ["serde", "no_module", "no_custom_syntax", "no_time", "sync"] }
-arroy = { git = "https://github.com/meilisearch/arroy/", rev = "2386594dfb009ce08821a925ccc89fb8e30bf73d" }
+rhai = { git = "https://github.com/rhaiscript/rhai", rev = "ef3df63121d27aacd838f366f2b83fd65f20a1e4", features = ["serde", "no_module", "no_custom_syntax", "no_time", "sync"] }
+arroy = "0.5.0"
 rand = "0.8.5"
 tracing = "0.1.40"
 ureq = { version = "2.10.0", features = ["json"] }
@@ -98,16 +98,7 @@ rand = { version = "0.8.5", features = ["small_rng"] }
 
 [features]
 all-tokenizations = [
-    "charabia/chinese",
-    "charabia/hebrew",
-    "charabia/japanese",
-    "charabia/thai",
-    "charabia/korean",
-    "charabia/greek",
-    "charabia/khmer",
-    "charabia/vietnamese",
-    "charabia/swedish-recomposition",
-    "charabia/german-segmentation",
+    "charabia/default",
 ]
 
 # Use POSIX semaphores instead of SysV semaphores in LMDB
@@ -145,6 +136,9 @@ german = ["charabia/german-segmentation"]
 
 # force swedish character recomposition
 swedish-recomposition = ["charabia/swedish-recomposition"]
+
+# allow turkish specialized tokenization
+turkish = ["charabia/turkish"]
 
 # allow CUDA support, see <https://github.com/meilisearch/meilisearch/issues/4306>
 cuda = ["candle-core/cuda"]

@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::thread::available_parallelism;
+use std::time::Duration;
 
 use actix_web::http::KeepAlive;
 use actix_web::web::Data;
@@ -123,19 +124,12 @@ async fn try_main() -> anyhow::Result<()> {
 
     let (index_scheduler, auth_controller) = setup_meilisearch(&opt)?;
 
-    #[cfg(all(not(debug_assertions), feature = "analytics"))]
-    let analytics = if !opt.no_analytics {
-        analytics::SegmentAnalytics::new(&opt, index_scheduler.clone(), auth_controller.clone())
-            .await
-    } else {
-        analytics::MockAnalytics::new(&opt)
-    };
-    #[cfg(any(debug_assertions, not(feature = "analytics")))]
-    let analytics = analytics::MockAnalytics::new(&opt);
+    let analytics =
+        analytics::Analytics::new(&opt, index_scheduler.clone(), auth_controller.clone()).await;
 
     print_launch_resume(&opt, analytics.clone(), config_read_from);
 
-    run_http(index_scheduler, auth_controller, opt, log_handle, analytics).await?;
+    run_http(index_scheduler, auth_controller, opt, log_handle, Arc::new(analytics)).await?;
 
     Ok(())
 }
@@ -145,16 +139,23 @@ async fn run_http(
     auth_controller: Arc<AuthController>,
     opt: Opt,
     logs: (LogRouteHandle, LogStderrHandle),
-    analytics: Arc<dyn Analytics>,
+    analytics: Arc<Analytics>,
 ) -> anyhow::Result<()> {
     let enable_dashboard = &opt.env == "development";
     let opt_clone = opt.clone();
     let index_scheduler = Data::from(index_scheduler);
     let auth_controller = Data::from(auth_controller);
+    let analytics = Data::from(analytics);
     let search_queue = SearchQueue::new(
         opt.experimental_search_queue_size,
-        available_parallelism().unwrap_or(NonZeroUsize::new(2).unwrap()),
-    );
+        available_parallelism()
+            .unwrap_or(NonZeroUsize::new(2).unwrap())
+            .checked_mul(opt.experimental_nb_searches_per_core)
+            .unwrap_or(NonZeroUsize::MAX),
+    )
+    .with_time_to_abort(Duration::from_secs(
+        usize::from(opt.experimental_drop_search_after) as u64
+    ));
     let search_queue = Data::new(search_queue);
 
     let http_server = HttpServer::new(move || {
@@ -180,11 +181,7 @@ async fn run_http(
     Ok(())
 }
 
-pub fn print_launch_resume(
-    opt: &Opt,
-    analytics: Arc<dyn Analytics>,
-    config_read_from: Option<PathBuf>,
-) {
+pub fn print_launch_resume(opt: &Opt, analytics: Analytics, config_read_from: Option<PathBuf>) {
     let build_info = build_info::BuildInfo::from_build();
 
     let protocol =
@@ -226,7 +223,6 @@ pub fn print_launch_resume(
         eprintln!("Prototype:\t\t{:?}", prototype);
     }
 
-    #[cfg(all(not(debug_assertions), feature = "analytics"))]
     {
         if !opt.no_analytics {
             eprintln!(

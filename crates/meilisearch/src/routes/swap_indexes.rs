@@ -8,10 +8,10 @@ use meilisearch_types::error::deserr_codes::InvalidSwapIndexes;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
-use serde_json::json;
+use serde::Serialize;
 
 use super::{get_task_id, is_dry_run, SummarizedTaskView};
-use crate::analytics::Analytics;
+use crate::analytics::{Aggregate, Analytics};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
@@ -29,21 +29,36 @@ pub struct SwapIndexesPayload {
     indexes: Vec<IndexUid>,
 }
 
+#[derive(Serialize)]
+struct IndexSwappedAnalytics {
+    swap_operation_number: usize,
+}
+
+impl Aggregate for IndexSwappedAnalytics {
+    fn event_name(&self) -> &'static str {
+        "Indexes Swapped"
+    }
+
+    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
+        Box::new(Self {
+            swap_operation_number: self.swap_operation_number.max(new.swap_operation_number),
+        })
+    }
+
+    fn into_event(self: Box<Self>) -> serde_json::Value {
+        serde_json::to_value(*self).unwrap_or_default()
+    }
+}
+
 pub async fn swap_indexes(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_SWAP }>, Data<IndexScheduler>>,
     params: AwebJson<Vec<SwapIndexesPayload>, DeserrJsonError>,
     req: HttpRequest,
     opt: web::Data<Opt>,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = params.into_inner();
-    analytics.publish(
-        "Indexes Swapped".to_string(),
-        json!({
-            "swap_operation_number": params.len(),
-        }),
-        Some(&req),
-    );
+    analytics.publish(IndexSwappedAnalytics { swap_operation_number: params.len() }, &req);
     let filters = index_scheduler.filters();
 
     let mut swaps = vec![];

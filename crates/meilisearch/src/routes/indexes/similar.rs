@@ -13,9 +13,10 @@ use serde_json::Value;
 use tracing::debug;
 
 use super::ActionPolicy;
-use crate::analytics::{Analytics, SimilarAggregator};
+use crate::analytics::Analytics;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::routes::indexes::similar_analytics::{SimilarAggregator, SimilarGET, SimilarPOST};
 use crate::search::{
     add_search_rules, perform_similar, RankingScoreThresholdSimilar, RetrieveVectors, SearchKind,
     SimilarQuery, SimilarResult, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
@@ -34,13 +35,13 @@ pub async fn similar_get(
     index_uid: web::Path<String>,
     params: AwebQueryParameter<SimilarQueryGet, DeserrQueryParamError>,
     req: HttpRequest,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let query = params.0.try_into()?;
 
-    let mut aggregate = SimilarAggregator::from_query(&query, &req);
+    let mut aggregate = SimilarAggregator::<SimilarGET>::from_query(&query);
 
     debug!(parameters = ?query, "Similar get");
 
@@ -49,7 +50,7 @@ pub async fn similar_get(
     if let Ok(similar) = &similar {
         aggregate.succeed(similar);
     }
-    analytics.get_similar(aggregate);
+    analytics.publish(aggregate, &req);
 
     let similar = similar?;
 
@@ -62,21 +63,21 @@ pub async fn similar_post(
     index_uid: web::Path<String>,
     params: AwebJson<SimilarQuery, DeserrJsonError>,
     req: HttpRequest,
-    analytics: web::Data<dyn Analytics>,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let query = params.into_inner();
     debug!(parameters = ?query, "Similar post");
 
-    let mut aggregate = SimilarAggregator::from_query(&query, &req);
+    let mut aggregate = SimilarAggregator::<SimilarPOST>::from_query(&query);
 
     let similar = similar(index_scheduler, index_uid, query).await;
 
     if let Ok(similar) = &similar {
         aggregate.succeed(similar);
     }
-    analytics.post_similar(aggregate);
+    analytics.publish(aggregate, &req);
 
     let similar = similar?;
 

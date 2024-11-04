@@ -6,10 +6,10 @@ use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
-use serde_json::json;
+use serde::Serialize;
 use tracing::debug;
 
-use crate::analytics::Analytics;
+use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
@@ -17,7 +17,7 @@ use crate::extractors::sequential_extractor::SeqHandler;
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
-            .route(web::get().to(SeqHandler(get_features)))
+            .route(web::get().to(get_features))
             .route(web::patch().to(SeqHandler(patch_features))),
     );
 }
@@ -27,12 +27,9 @@ async fn get_features(
         ActionPolicy<{ actions::EXPERIMENTAL_FEATURES_GET }>,
         Data<IndexScheduler>,
     >,
-    req: HttpRequest,
-    analytics: Data<dyn Analytics>,
 ) -> HttpResponse {
     let features = index_scheduler.features();
 
-    analytics.publish("Experimental features Seen".to_string(), json!(null), Some(&req));
     let features = features.runtime_features();
     debug!(returns = ?features, "Get features");
     HttpResponse::Ok().json(features)
@@ -53,6 +50,35 @@ pub struct RuntimeTogglableFeatures {
     pub contains_filter: Option<bool>,
 }
 
+#[derive(Serialize)]
+pub struct PatchExperimentalFeatureAnalytics {
+    vector_store: bool,
+    metrics: bool,
+    logs_route: bool,
+    edit_documents_by_function: bool,
+    contains_filter: bool,
+}
+
+impl Aggregate for PatchExperimentalFeatureAnalytics {
+    fn event_name(&self) -> &'static str {
+        "Experimental features Updated"
+    }
+
+    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
+        Box::new(Self {
+            vector_store: new.vector_store,
+            metrics: new.metrics,
+            logs_route: new.logs_route,
+            edit_documents_by_function: new.edit_documents_by_function,
+            contains_filter: new.contains_filter,
+        })
+    }
+
+    fn into_event(self: Box<Self>) -> serde_json::Value {
+        serde_json::to_value(*self).unwrap_or_default()
+    }
+}
+
 async fn patch_features(
     index_scheduler: GuardedData<
         ActionPolicy<{ actions::EXPERIMENTAL_FEATURES_UPDATE }>,
@@ -60,7 +86,7 @@ async fn patch_features(
     >,
     new_features: AwebJson<RuntimeTogglableFeatures, DeserrJsonError>,
     req: HttpRequest,
-    analytics: Data<dyn Analytics>,
+    analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let features = index_scheduler.features();
     debug!(parameters = ?new_features, "Patch features");
@@ -89,15 +115,14 @@ async fn patch_features(
     } = new_features;
 
     analytics.publish(
-        "Experimental features Updated".to_string(),
-        json!({
-            "vector_store": vector_store,
-            "metrics": metrics,
-            "logs_route": logs_route,
-            "edit_documents_by_function": edit_documents_by_function,
-            "contains_filter": contains_filter,
-        }),
-        Some(&req),
+        PatchExperimentalFeatureAnalytics {
+            vector_store,
+            metrics,
+            logs_route,
+            edit_documents_by_function,
+            contains_filter,
+        },
+        &req,
     );
     index_scheduler.put_runtime_features(new_features)?;
     debug!(returns = ?new_features, "Patch features");

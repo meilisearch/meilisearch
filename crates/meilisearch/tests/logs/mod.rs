@@ -7,8 +7,9 @@ use std::str::FromStr;
 use actix_web::http::header::ContentType;
 use actix_web::web::Data;
 use meili_snap::snapshot;
+use meilisearch::analytics::Analytics;
 use meilisearch::search_queue::SearchQueue;
-use meilisearch::{analytics, create_app, Opt, SubscriberForSecondLayer};
+use meilisearch::{create_app, Opt, SubscriberForSecondLayer};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Layer;
@@ -54,7 +55,7 @@ async fn basic_test_log_stream_route() {
         Data::new(search_queue),
         server.service.options.clone(),
         (route_layer_handle, stderr_layer_handle),
-        analytics::MockAnalytics::new(&server.service.options),
+        Data::new(Analytics::no_analytics()),
         true,
     ))
     .await;

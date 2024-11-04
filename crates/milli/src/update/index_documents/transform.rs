@@ -990,27 +990,24 @@ impl<'a, 'i> Transform<'a, 'i> {
             None
         };
 
-        let readers: Result<BTreeMap<&str, (Vec<ArroyWrapper>, &RoaringBitmap)>> = settings_diff
+        let readers: BTreeMap<&str, (ArroyWrapper, &RoaringBitmap)> = settings_diff
             .embedding_config_updates
             .iter()
             .filter_map(|(name, action)| {
                 if let Some(WriteBackToDocuments { embedder_id, user_provided }) =
                     action.write_back()
                 {
-                    let readers: Result<Vec<_>> = self
-                        .index
-                        .arroy_readers(wtxn, *embedder_id, action.was_quantized)
-                        .collect();
-                    match readers {
-                        Ok(readers) => Some(Ok((name.as_str(), (readers, user_provided)))),
-                        Err(error) => Some(Err(error)),
-                    }
+                    let reader = ArroyWrapper::new(
+                        self.index.vector_arroy,
+                        *embedder_id,
+                        action.was_quantized,
+                    );
+                    Some((name.as_str(), (reader, user_provided)))
                 } else {
                     None
                 }
             })
             .collect();
-        let readers = readers?;
 
         let old_vectors_fid = settings_diff
             .old
@@ -1048,34 +1045,24 @@ impl<'a, 'i> Transform<'a, 'i> {
                     arroy::Error,
                 > = readers
                     .iter()
-                    .filter_map(|(name, (readers, user_provided))| {
+                    .filter_map(|(name, (reader, user_provided))| {
                         if !user_provided.contains(docid) {
                             return None;
                         }
-                        let mut vectors = Vec::new();
-                        for reader in readers {
-                            let Some(vector) = reader.item_vector(wtxn, docid).transpose() else {
-                                break;
-                            };
-
-                            match vector {
-                                Ok(vector) => vectors.push(vector),
-                                Err(error) => return Some(Err(error)),
-                            }
+                        match reader.item_vectors(wtxn, docid) {
+                            Ok(vectors) if vectors.is_empty() => None,
+                            Ok(vectors) => Some(Ok((
+                                name.to_string(),
+                                serde_json::to_value(ExplicitVectors {
+                                    embeddings: Some(
+                                        VectorOrArrayOfVectors::from_array_of_vectors(vectors),
+                                    ),
+                                    regenerate: false,
+                                })
+                                .unwrap(),
+                            ))),
+                            Err(e) => Some(Err(e)),
                         }
-                        if vectors.is_empty() {
-                            return None;
-                        }
-                        Some(Ok((
-                            name.to_string(),
-                            serde_json::to_value(ExplicitVectors {
-                                embeddings: Some(VectorOrArrayOfVectors::from_array_of_vectors(
-                                    vectors,
-                                )),
-                                regenerate: false,
-                            })
-                            .unwrap(),
-                        )))
                     })
                     .collect();
 
@@ -1104,11 +1091,9 @@ impl<'a, 'i> Transform<'a, 'i> {
         }
 
         // delete all vectors from the embedders that need removal
-        for (_, (readers, _)) in readers {
-            for reader in readers {
-                let dimensions = reader.dimensions(wtxn)?;
-                reader.clear(wtxn, dimensions)?;
-            }
+        for (_, (reader, _)) in readers {
+            let dimensions = reader.dimensions(wtxn)?;
+            reader.clear(wtxn, dimensions)?;
         }
 
         let grenad_params = GrenadParameters {

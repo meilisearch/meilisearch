@@ -1610,24 +1610,6 @@ impl Index {
             .unwrap_or_default())
     }
 
-    pub fn arroy_readers<'a>(
-        &'a self,
-        rtxn: &'a RoTxn<'a>,
-        embedder_id: u8,
-        quantized: bool,
-    ) -> impl Iterator<Item = Result<ArroyWrapper>> + 'a {
-        crate::vector::arroy_db_range_for_embedder(embedder_id).map_while(move |k| {
-            let reader = ArroyWrapper::new(self.vector_arroy, k, quantized);
-            // Here we don't care about the dimensions, but we want to know if we can read
-            // in the database or if its metadata are missing because there is no document with that many vectors.
-            match reader.dimensions(rtxn) {
-                Ok(_) => Some(Ok(reader)),
-                Err(arroy::Error::MissingMetadata(_)) => None,
-                Err(e) => Some(Err(e.into())),
-            }
-        })
-    }
-
     pub(crate) fn put_search_cutoff(&self, wtxn: &mut RwTxn<'_>, cutoff: u64) -> heed::Result<()> {
         self.main.remap_types::<Str, BEU64>().put(wtxn, main_key::SEARCH_CUTOFF, &cutoff)
     }
@@ -1649,14 +1631,9 @@ impl Index {
         let embedding_configs = self.embedding_configs(rtxn)?;
         for config in embedding_configs {
             let embedder_id = self.embedder_category_id.get(rtxn, &config.name)?.unwrap();
-            let embeddings = self
-                .arroy_readers(rtxn, embedder_id, config.config.quantized())
-                .map_while(|reader| {
-                    reader
-                        .and_then(|r| r.item_vector(rtxn, docid).map_err(|e| e.into()))
-                        .transpose()
-                })
-                .collect::<Result<Vec<_>>>()?;
+            let reader =
+                ArroyWrapper::new(self.vector_arroy, embedder_id, config.config.quantized());
+            let embeddings = reader.item_vectors(rtxn, docid)?;
             res.insert(config.name.to_owned(), embeddings);
         }
         Ok(res)
