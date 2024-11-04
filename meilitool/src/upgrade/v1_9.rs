@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 
 pub type FieldDistribution = std::collections::BTreeMap<String, u64>;
 
@@ -21,9 +22,9 @@ pub struct IndexStats {
     /// Association of every field name with the number of times it occurs in the documents.
     pub field_distribution: FieldDistribution,
     /// Creation date of the index.
-    pub created_at: time::OffsetDateTime,
+    pub created_at: LegacyTime,
     /// Date of the last update of the index.
-    pub updated_at: time::OffsetDateTime,
+    pub updated_at: LegacyTime,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -97,4 +98,9 @@ mod rest {
     }
 }
 
-pub type OffsetDateTime = time::OffsetDateTime;
+// 2024-11-04 13:32:08.48368 +00:00:00
+time::serde::format_description!(legacy_datetime, OffsetDateTime, "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond] [offset_hour sign:mandatory]:[offset_minute]:[offset_second]");
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
+pub struct LegacyTime(#[serde(with = "legacy_datetime")] pub OffsetDateTime);

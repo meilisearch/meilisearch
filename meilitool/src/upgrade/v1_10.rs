@@ -58,8 +58,8 @@ impl From<v1_9::IndexStats> for IndexStats {
             database_size,
             used_database_size,
             field_distribution,
-            created_at,
-            updated_at,
+            created_at: created_at.0,
+            updated_at: updated_at.0,
         }
     }
 }
@@ -75,6 +75,13 @@ fn update_index_stats(
     sched_wtxn: &mut RwTxn,
 ) -> anyhow::Result<()> {
     let ctx = || format!("while updating index stats for index `{index_uid}`");
+
+    let stats: Option<&str> = index_stats
+        .remap_data_type::<Str>()
+        .get(sched_wtxn, &index_uuid)
+        .with_context(ctx)
+        .with_context(|| "While reading value")?;
+    dbg!(stats);
 
     let stats: Option<v1_9::IndexStats> = index_stats
         .remap_data_type::<SerdeJson<v1_9::IndexStats>>()
@@ -139,13 +146,13 @@ fn date_round_trip(
     key: &str,
 ) -> anyhow::Result<()> {
     let datetime =
-        db.remap_types::<Str, SerdeJson<v1_9::OffsetDateTime>>().get(wtxn, key).with_context(
-            || format!("could not read `{key}` while updating date format for index `{index_uid}`"),
-        )?;
+        db.remap_types::<Str, SerdeJson<v1_9::LegacyTime>>().get(wtxn, key).with_context(|| {
+            format!("could not read `{key}` while updating date format for index `{index_uid}`")
+        })?;
 
     if let Some(datetime) = datetime {
         db.remap_types::<Str, SerdeJson<self::OffsetDateTime>>()
-            .put(wtxn, key, &self::OffsetDateTime(datetime))
+            .put(wtxn, key, &self::OffsetDateTime(datetime.0))
             .with_context(|| {
                 format!(
                     "could not write `{key}` while updating date format for index `{index_uid}`"
