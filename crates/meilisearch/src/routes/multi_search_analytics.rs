@@ -2,10 +2,8 @@ use std::collections::HashSet;
 
 use serde_json::json;
 
-use crate::{
-    analytics::Aggregate,
-    search::{FederatedSearch, SearchQueryWithIndex},
-};
+use crate::analytics::Aggregate;
+use crate::search::{FederatedSearch, SearchQueryWithIndex};
 
 #[derive(Default)]
 pub struct MultiSearchAggregator {

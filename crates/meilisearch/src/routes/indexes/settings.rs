@@ -1,4 +1,3 @@
-use super::settings_analytics::*;
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
@@ -11,6 +10,7 @@ use meilisearch_types::settings::{settings, SecretPolicy, Settings, Unchecked};
 use meilisearch_types::tasks::KindWithContent;
 use tracing::debug;
 
+use super::settings_analytics::*;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;

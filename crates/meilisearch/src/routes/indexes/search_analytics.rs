@@ -1,18 +1,16 @@
-use once_cell::sync::Lazy;
-use regex::Regex;
-use serde_json::{json, Value};
 use std::collections::{BTreeSet, BinaryHeap, HashMap};
 
 use meilisearch_types::locales::Locale;
+use once_cell::sync::Lazy;
+use regex::Regex;
+use serde_json::{json, Value};
 
-use crate::{
-    aggregate_methods,
-    analytics::{Aggregate, AggregateMethod},
-    search::{
-        SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
-        DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
-        DEFAULT_SEMANTIC_RATIO,
-    },
+use crate::aggregate_methods;
+use crate::analytics::{Aggregate, AggregateMethod};
+use crate::search::{
+    SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
+    DEFAULT_SEMANTIC_RATIO,
 };
 
 aggregate_methods!(
