@@ -12,8 +12,8 @@ use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use crate::update::new::extract::cache::CboCachedSorter;
 use crate::update::new::extract::perm_json_p::contained_in;
 use crate::update::new::indexer::document_changes::{
-    for_each_document_change, DocumentChangeContext, DocumentChanges, Extractor, FullySend,
-    IndexingContext, RefCellExt, ThreadLocal,
+    extract, DocumentChangeContext, DocumentChanges, Extractor, FullySend, IndexingContext,
+    Progress, RefCellExt, ThreadLocal,
 };
 use crate::update::new::DocumentChange;
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
@@ -341,12 +341,19 @@ impl<'extractor> Extractor<'extractor> for WordDocidsExtractorData<'extractor> {
 pub struct WordDocidsExtractors;
 
 impl WordDocidsExtractors {
-    pub fn run_extraction<'pl, 'fid, 'indexer, 'index, DC: DocumentChanges<'pl>>(
+    pub fn run_extraction<'pl, 'fid, 'indexer, 'index, DC: DocumentChanges<'pl>, MSP, SP>(
         grenad_parameters: GrenadParameters,
         document_changes: &DC,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP, SP>,
         extractor_allocs: &mut ThreadLocal<FullySend<RefCell<Bump>>>,
-    ) -> Result<WordDocidsMergers> {
+        finished_steps: u16,
+        total_steps: u16,
+        step_name: &'static str,
+    ) -> Result<WordDocidsMergers>
+    where
+        MSP: Fn() -> bool + Sync,
+        SP: Fn(Progress) + Sync,
+    {
         let max_memory = grenad_parameters.max_memory_by_thread();
         let index = indexing_context.index;
 
@@ -391,12 +398,15 @@ impl WordDocidsExtractors {
                 max_memory,
             };
 
-            for_each_document_change(
+            extract(
                 document_changes,
                 &extractor,
                 indexing_context,
                 extractor_allocs,
                 &datastore,
+                finished_steps,
+                total_steps,
+                step_name,
             )?;
         }
 

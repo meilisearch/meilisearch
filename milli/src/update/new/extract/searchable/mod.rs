@@ -17,8 +17,8 @@ use tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use super::cache::CboCachedSorter;
 use super::DocidsExtractor;
 use crate::update::new::indexer::document_changes::{
-    for_each_document_change, DocumentChangeContext, DocumentChanges, Extractor, FullySend,
-    IndexingContext, ThreadLocal,
+    extract, DocumentChangeContext, DocumentChanges, Extractor, FullySend, IndexingContext,
+    Progress, ThreadLocal,
 };
 use crate::update::new::DocumentChange;
 use crate::update::{create_sorter, GrenadParameters, MergeDeladdCboRoaringBitmaps};
@@ -69,12 +69,19 @@ impl<'extractor, EX: SearchableExtractor + Sync> Extractor<'extractor>
 }
 
 pub trait SearchableExtractor: Sized + Sync {
-    fn run_extraction<'pl, 'fid, 'indexer, 'index, DC: DocumentChanges<'pl>>(
+    fn run_extraction<'pl, 'fid, 'indexer, 'index, DC: DocumentChanges<'pl>, MSP, SP>(
         grenad_parameters: GrenadParameters,
         document_changes: &DC,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP, SP>,
         extractor_allocs: &mut ThreadLocal<FullySend<RefCell<Bump>>>,
-    ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>> {
+        finished_steps: u16,
+        total_steps: u16,
+        step_name: &'static str,
+    ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>>
+    where
+        MSP: Fn() -> bool + Sync,
+        SP: Fn(Progress) + Sync,
+    {
         let max_memory = grenad_parameters.max_memory_by_thread();
 
         let rtxn = indexing_context.index.read_txn()?;
@@ -118,12 +125,15 @@ pub trait SearchableExtractor: Sized + Sync {
             let span =
                 tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
             let _entered = span.enter();
-            for_each_document_change(
+            extract(
                 document_changes,
                 &extractor_data,
                 indexing_context,
                 extractor_allocs,
                 &datastore,
+                finished_steps,
+                total_steps,
+                step_name,
             )?;
         }
         {
@@ -168,17 +178,27 @@ pub trait SearchableExtractor: Sized + Sync {
 }
 
 impl<T: SearchableExtractor> DocidsExtractor for T {
-    fn run_extraction<'pl, 'fid, 'indexer, 'index, DC: DocumentChanges<'pl>>(
+    fn run_extraction<'pl, 'fid, 'indexer, 'index, DC: DocumentChanges<'pl>, MSP, SP>(
         grenad_parameters: GrenadParameters,
         document_changes: &DC,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP, SP>,
         extractor_allocs: &mut ThreadLocal<FullySend<RefCell<Bump>>>,
-    ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>> {
+        finished_steps: u16,
+        total_steps: u16,
+        step_name: &'static str,
+    ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>>
+    where
+        MSP: Fn() -> bool + Sync,
+        SP: Fn(Progress) + Sync,
+    {
         Self::run_extraction(
             grenad_parameters,
             document_changes,
             indexing_context,
             extractor_allocs,
+            finished_steps,
+            total_steps,
+            step_name,
         )
     }
 }

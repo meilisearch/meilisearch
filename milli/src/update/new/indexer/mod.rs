@@ -5,8 +5,8 @@ use std::thread::{self, Builder};
 use big_s::S;
 use bumpalo::Bump;
 use document_changes::{
-    for_each_document_change, DocumentChangeContext, DocumentChanges, Extractor, FullySend,
-    IndexingContext, RefCellExt, ThreadLocal,
+    extract, DocumentChangeContext, DocumentChanges, Extractor, FullySend, IndexingContext,
+    Progress, RefCellExt, ThreadLocal,
 };
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::DocumentOperation;
@@ -72,7 +72,7 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentExtractor<'a> {
         context: &DocumentChangeContext<Self::Data>,
     ) -> Result<()> {
         let mut document_buffer = Vec::new();
-        let mut field_distribution_delta = context.data.0.borrow_mut();
+        let mut field_distribution_delta = context.data.0.borrow_mut_or_yield();
 
         let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut_or_yield();
 
@@ -155,13 +155,70 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentExtractor<'a> {
     }
 }
 
+mod steps {
+    pub const STEPS: &[&str] = &[
+        "extracting documents",
+        "extracting facets",
+        "extracting words",
+        "extracting word proximity",
+        "extracting embeddings",
+        "writing to database",
+        "post-processing facets",
+        "post-processing words",
+        "finalizing",
+    ];
+
+    const fn step(step: u16) -> (u16, &'static str) {
+        (step, STEPS[step as usize])
+    }
+
+    pub const fn total_steps() -> u16 {
+        STEPS.len() as u16
+    }
+
+    pub const fn extract_documents() -> (u16, &'static str) {
+        step(0)
+    }
+
+    pub const fn extract_facets() -> (u16, &'static str) {
+        step(1)
+    }
+
+    pub const fn extract_words() -> (u16, &'static str) {
+        step(2)
+    }
+
+    pub const fn extract_word_proximity() -> (u16, &'static str) {
+        step(3)
+    }
+
+    pub const fn extract_embeddings() -> (u16, &'static str) {
+        step(4)
+    }
+
+    pub const fn write_db() -> (u16, &'static str) {
+        step(5)
+    }
+
+    pub const fn post_processing_facets() -> (u16, &'static str) {
+        step(6)
+    }
+    pub const fn post_processing_words() -> (u16, &'static str) {
+        step(7)
+    }
+
+    pub const fn finalizing() -> (u16, &'static str) {
+        step(8)
+    }
+}
+
 /// This is the main function of this crate.
 ///
 /// Give it the output of the [`Indexer::document_changes`] method and it will execute it in the [`rayon::ThreadPool`].
 ///
 /// TODO return stats
 #[allow(clippy::too_many_arguments)] // clippy: 😝
-pub fn index<'pl, 'indexer, 'index, DC>(
+pub fn index<'pl, 'indexer, 'index, DC, MSP, SP>(
     wtxn: &mut RwTxn,
     index: &'index Index,
     db_fields_ids_map: &'indexer FieldsIdsMap,
@@ -170,9 +227,13 @@ pub fn index<'pl, 'indexer, 'index, DC>(
     pool: &ThreadPool,
     document_changes: &DC,
     embedders: EmbeddingConfigs,
+    must_stop_processing: &'indexer MSP,
+    send_progress: &'indexer SP,
 ) -> Result<()>
 where
     DC: DocumentChanges<'pl>,
+    MSP: Fn() -> bool + Sync,
+    SP: Fn(Progress) + Sync,
 {
     let (merger_sender, writer_receiver) = merger_writer_channel(10_000);
     // This channel acts as a rendezvous point to ensure that we are one task ahead
@@ -194,7 +255,11 @@ where
         new_fields_ids_map: &new_fields_ids_map,
         doc_allocs: &doc_allocs,
         fields_ids_map_store: &fields_ids_map_store,
+        must_stop_processing,
+        send_progress,
     };
+
+    let total_steps = steps::total_steps();
 
     let mut field_distribution = index.field_distribution(wtxn)?;
 
@@ -213,7 +278,8 @@ where
                     let document_sender = extractor_sender.document_sender();
                     let document_extractor = DocumentExtractor { document_sender: &document_sender, embedders };
                     let datastore = ThreadLocal::with_capacity(pool.current_num_threads());
-                    for_each_document_change(document_changes, &document_extractor, indexing_context, &mut extractor_allocs, &datastore)?;
+                    let (finished_steps, step_name) = steps::extract_documents();
+                    extract(document_changes, &document_extractor, indexing_context, &mut extractor_allocs, &datastore, finished_steps, total_steps, step_name)?;
 
                     for field_distribution_delta in datastore {
                         let field_distribution_delta = field_distribution_delta.0.into_inner();
@@ -238,22 +304,29 @@ where
                     {
                         let span = tracing::trace_span!(target: "indexing::documents::extract", "faceted");
                         let _entered = span.enter();
+                        let (finished_steps, step_name) = steps::extract_facets();
                         extract_and_send_docids::<
                             _,
                             FacetedDocidsExtractor,
                             FacetDocids,
+                            _,
+                            _
                         >(
                             grenad_parameters,
                             document_changes,
                             indexing_context,
                             &mut extractor_allocs,
                             &extractor_sender,
+                            finished_steps,
+                            total_steps,
+                            step_name
                         )?;
                     }
 
                     {
                         let span = tracing::trace_span!(target: "indexing::documents::extract", "word_docids");
                         let _entered = span.enter();
+                        let (finished_steps, step_name) = steps::extract_words();
 
                         let WordDocidsMergers {
                             word_fid_docids,
@@ -261,7 +334,7 @@ where
                             exact_word_docids,
                             word_position_docids,
                             fid_word_count_docids,
-                        } = WordDocidsExtractors::run_extraction(grenad_parameters, document_changes, indexing_context, &mut extractor_allocs)?;
+                        } = WordDocidsExtractors::run_extraction(grenad_parameters, document_changes, indexing_context, &mut extractor_allocs, finished_steps, total_steps, step_name)?;
                         extractor_sender.send_searchable::<WordDocids>(word_docids).unwrap();
                         extractor_sender.send_searchable::<WordFidDocids>(word_fid_docids).unwrap();
                         extractor_sender.send_searchable::<ExactWordDocids>(exact_word_docids).unwrap();
@@ -276,16 +349,24 @@ where
                     if proximity_precision == ProximityPrecision::ByWord {
                         let span = tracing::trace_span!(target: "indexing::documents::extract", "word_pair_proximity_docids");
                         let _entered = span.enter();
+                        let (finished_steps, step_name) = steps::extract_word_proximity();
+
+
                         extract_and_send_docids::<
                             _,
                             WordPairProximityDocidsExtractor,
                             WordPairProximityDocids,
+                            _,
+                            _
                         >(
                             grenad_parameters,
                             document_changes,
                             indexing_context,
                       &mut extractor_allocs,
                             &extractor_sender,
+                            finished_steps,
+                            total_steps,
+                            step_name,
                         )?;
                     }
 
@@ -301,8 +382,10 @@ where
                         let embedding_sender = todo!();
                         let extractor = EmbeddingExtractor::new(embedders, &embedding_sender, &field_distribution, request_threads());
                         let datastore = ThreadLocal::with_capacity(pool.current_num_threads());
+                        let (finished_steps, step_name) = steps::extract_embeddings();
 
-                        for_each_document_change(document_changes, &extractor, indexing_context, &mut extractor_allocs, &datastore)?;
+
+                        extract(document_changes, &extractor, indexing_context, &mut extractor_allocs, &datastore, finished_steps, total_steps, step_name)?;
 
 
                         let mut user_provided = HashMap::new();
@@ -325,6 +408,8 @@ where
                     {
                         let span = tracing::trace_span!(target: "indexing::documents::extract", "FINISH");
                         let _entered = span.enter();
+                        let (finished_steps, step_name) = steps::write_db();
+                        (indexing_context.send_progress)(Progress { finished_steps, total_steps, step_name, finished_total_documents: None });
                     }
 
                     // TODO THIS IS TOO MUCH
@@ -501,14 +586,37 @@ where
         /// TODO handle the panicking threads
         handle.join().unwrap()?;
         let merger_result = merger_thread.join().unwrap()?;
+        let (finished_steps, step_name) = steps::post_processing_facets();
+        (indexing_context.send_progress)(Progress {
+            finished_steps,
+            total_steps,
+            step_name,
+            finished_total_documents: None,
+        });
 
         if let Some(facet_field_ids_delta) = merger_result.facet_field_ids_delta {
             compute_facet_level_database(index, wtxn, facet_field_ids_delta)?;
         }
 
+        let (finished_steps, step_name) = steps::post_processing_words();
+        (indexing_context.send_progress)(Progress {
+            finished_steps,
+            total_steps,
+            step_name,
+            finished_total_documents: None,
+        });
+
         if let Some(prefix_delta) = merger_result.prefix_delta {
             compute_prefix_database(index, wtxn, prefix_delta)?;
         }
+
+        let (finished_steps, step_name) = steps::finalizing();
+        (indexing_context.send_progress)(Progress {
+            finished_steps,
+            total_steps,
+            step_name,
+            finished_total_documents: None,
+        });
 
         Ok(()) as Result<_>
     })?;
@@ -585,6 +693,7 @@ fn compute_facet_level_database(
 /// TODO: GrenadParameters::default() should be removed in favor a passed parameter
 /// TODO: manage the errors correctly
 /// TODO: we must have a single trait that also gives the extractor type
+#[allow(clippy::too_many_arguments)]
 fn extract_and_send_docids<
     'pl,
     'fid,
@@ -593,15 +702,31 @@ fn extract_and_send_docids<
     DC: DocumentChanges<'pl>,
     E: DocidsExtractor,
     D: MergerOperationType,
+    MSP,
+    SP,
 >(
     grenad_parameters: GrenadParameters,
     document_changes: &DC,
-    indexing_context: IndexingContext<'fid, 'indexer, 'index>,
+    indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP, SP>,
     extractor_allocs: &mut ThreadLocal<FullySend<RefCell<Bump>>>,
     sender: &ExtractorSender,
-) -> Result<()> {
-    let merger =
-        E::run_extraction(grenad_parameters, document_changes, indexing_context, extractor_allocs)?;
+    finished_steps: u16,
+    total_steps: u16,
+    step_name: &'static str,
+) -> Result<()>
+where
+    MSP: Fn() -> bool + Sync,
+    SP: Fn(Progress) + Sync,
+{
+    let merger = E::run_extraction(
+        grenad_parameters,
+        document_changes,
+        indexing_context,
+        extractor_allocs,
+        finished_steps,
+        total_steps,
+        step_name,
+    )?;
     sender.send_searchable::<D>(merger).unwrap();
     Ok(())
 }

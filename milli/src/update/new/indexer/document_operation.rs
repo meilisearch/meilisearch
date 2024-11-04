@@ -241,6 +241,10 @@ impl<'pl> DocumentChanges<'pl> for DocumentOperationChanges<'pl> {
         )?;
         Ok(change)
     }
+
+    fn len(&self) -> usize {
+        self.docids_version_offsets.len()
+    }
 }
 
 trait MergeChanges {

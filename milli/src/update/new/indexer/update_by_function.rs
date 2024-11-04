@@ -9,7 +9,7 @@ use super::DocumentChanges;
 use crate::documents::Error::InvalidDocumentFormat;
 use crate::documents::PrimaryKey;
 use crate::error::{FieldIdMapMissingEntry, InternalError};
-use crate::update::new::document::{DocumentFromVersions, Versions};
+use crate::update::new::document::Versions;
 use crate::update::new::{Deletion, DocumentChange, KvReaderFieldId, Update};
 use crate::{all_obkv_to_json, Error, FieldsIdsMap, Object, Result, UserError};
 
@@ -175,6 +175,10 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
                 None => Err(Error::UserError(UserError::DocumentEditionDocumentMustBeObject)),
             },
         }
+    }
+
+    fn len(&self) -> usize {
+        self.documents.len()
     }
 }
 

@@ -79,4 +79,8 @@ where
         let insertion = Insertion::create(docid, external_document_id, Versions::single(document));
         Ok(Some(DocumentChange::Insertion(insertion)))
     }
+
+    fn len(&self) -> usize {
+        self.iter.len()
+    }
 }

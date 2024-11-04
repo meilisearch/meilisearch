@@ -75,6 +75,10 @@ impl<'pl> DocumentChanges<'pl> for DocumentDeletionChanges<'pl> {
 
         Ok(Some(DocumentChange::Deletion(Deletion::create(*docid, external_document_id))))
     }
+
+    fn len(&self) -> usize {
+        self.to_delete.len()
+    }
 }
 
 #[cfg(test)]
@@ -89,8 +93,7 @@ mod test {
     use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
     use crate::index::tests::TempIndex;
     use crate::update::new::indexer::document_changes::{
-        for_each_document_change, DocumentChangeContext, Extractor, IndexingContext, MostlySend,
-        ThreadLocal,
+        extract, DocumentChangeContext, Extractor, IndexingContext, MostlySend, ThreadLocal,
     };
     use crate::update::new::indexer::DocumentDeletion;
     use crate::update::new::DocumentChange;
@@ -165,17 +168,22 @@ mod test {
             new_fields_ids_map: &fields_ids_map,
             doc_allocs: &doc_allocs,
             fields_ids_map_store: &fields_ids_map_store,
+            must_stop_processing: &(|| false),
+            send_progress: &(|_progress| {}),
         };
 
         for _ in 0..3 {
             let datastore = ThreadLocal::new();
 
-            for_each_document_change(
+            extract(
                 &changes,
                 &deletion_tracker,
                 context,
                 &mut extractor_allocs,
                 &datastore,
+                0,
+                1,
+                "test",
             )
             .unwrap();
 

@@ -22,6 +22,7 @@ use std::ffi::OsStr;
 use std::fmt;
 use std::fs::{self, File};
 use std::io::BufWriter;
+use std::sync::atomic::{self, AtomicU16, AtomicU32};
 
 use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
@@ -30,6 +31,7 @@ use meilisearch_types::error::Code;
 use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader, PrimaryKey};
 use meilisearch_types::milli::heed::CompactionOption;
+use meilisearch_types::milli::update::new::indexer::document_changes::Progress;
 use meilisearch_types::milli::update::new::indexer::{
     self, retrieve_or_guess_primary_key, UpdateByFunction,
 };
@@ -1221,6 +1223,40 @@ impl IndexScheduler {
     ) -> Result<Vec<Task>> {
         let indexer_alloc = Bump::new();
 
+        let last_finished_steps = AtomicU16::new(0);
+        let last_finished_documents = AtomicU32::new(0);
+
+        let send_progress =
+            |Progress { finished_steps, total_steps, step_name, finished_total_documents }| {
+                /*
+                let current = rayon::current_thread_index();
+
+                let last_finished_steps =
+                    last_finished_steps.fetch_max(finished_steps, atomic::Ordering::Relaxed);
+
+                if last_finished_steps > finished_steps {
+                    return;
+                }
+
+                if let Some((finished_documents, total_documents)) = finished_total_documents {
+                    if last_finished_steps < finished_steps {
+                        last_finished_documents.store(finished_documents, atomic::Ordering::Relaxed);
+                    } else {
+                        let last_finished_documents = last_finished_documents
+                            .fetch_max(finished_documents, atomic::Ordering::Relaxed);
+                        if last_finished_documents > finished_documents {
+                            return;
+                        }
+                    }
+                    tracing::warn!("Progress from {current:?}: {step_name} ({finished_steps}/{total_steps}), document {finished_documents}/{total_documents}")
+                } else {
+                    tracing::warn!(
+                        "Progress from {current:?}: {step_name} ({finished_steps}/{total_steps})"
+                    )
+                }
+                */
+            };
+
         match operation {
             IndexOperation::DocumentClear { mut tasks, .. } => {
                 let count = milli::update::ClearDocuments::new(index_wtxn, index).execute()?;
@@ -1377,6 +1413,8 @@ impl IndexScheduler {
                         &pool,
                         &document_changes,
                         embedders,
+                        &|| must_stop_processing.get(),
+                        &send_progress,
                     )?;
 
                     // tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
@@ -1465,6 +1503,7 @@ impl IndexScheduler {
                     let document_changes = indexer.into_changes(&primary_key)?;
                     let embedders = index.embedding_configs(index_wtxn)?;
                     let embedders = self.embedders(embedders)?;
+                    let must_stop_processing = &self.must_stop_processing;
 
                     indexer::index(
                         index_wtxn,
@@ -1475,6 +1514,8 @@ impl IndexScheduler {
                         &pool,
                         &document_changes,
                         embedders,
+                        &|| must_stop_processing.get(),
+                        &send_progress,
                     )?;
 
                     // tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
@@ -1604,6 +1645,7 @@ impl IndexScheduler {
                     let document_changes = indexer.into_changes(&indexer_alloc, primary_key);
                     let embedders = index.embedding_configs(index_wtxn)?;
                     let embedders = self.embedders(embedders)?;
+                    let must_stop_processing = &self.must_stop_processing;
 
                     indexer::index(
                         index_wtxn,
@@ -1614,6 +1656,8 @@ impl IndexScheduler {
                         &pool,
                         &document_changes,
                         embedders,
+                        &|| must_stop_processing.get(),
+                        &send_progress,
                     )?;
 
                     // tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");

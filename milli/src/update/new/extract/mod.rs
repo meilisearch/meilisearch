@@ -13,17 +13,25 @@ use grenad::Merger;
 pub use searchable::*;
 pub use vectors::EmbeddingExtractor;
 
-use super::indexer::document_changes::{DocumentChanges, FullySend, IndexingContext, ThreadLocal};
+use super::indexer::document_changes::{
+    DocumentChanges, FullySend, IndexingContext, Progress, ThreadLocal,
+};
 use crate::update::{GrenadParameters, MergeDeladdCboRoaringBitmaps};
 use crate::Result;
 
 pub trait DocidsExtractor {
-    fn run_extraction<'pl, 'fid, 'indexer, 'index, DC: DocumentChanges<'pl>>(
+    fn run_extraction<'pl, 'fid, 'indexer, 'index, DC: DocumentChanges<'pl>, MSP, SP>(
         grenad_parameters: GrenadParameters,
         document_changes: &DC,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP, SP>,
         extractor_allocs: &mut ThreadLocal<FullySend<RefCell<Bump>>>,
-    ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>>;
+        finished_steps: u16,
+        total_steps: u16,
+        step_name: &'static str,
+    ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>>
+    where
+        MSP: Fn() -> bool + Sync,
+        SP: Fn(Progress) + Sync;
 }
 
 /// TODO move in permissive json pointer

@@ -9,7 +9,7 @@ use rayon::iter::IndexedParallelIterator;
 use super::super::document_change::DocumentChange;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt as _;
-use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, Result};
+use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result};
 
 pub trait RefCellExt<T: ?Sized> {
     fn try_borrow_or_yield(&self) -> std::result::Result<Ref<'_, T>, std::cell::BorrowError>;
@@ -335,6 +335,12 @@ pub trait DocumentChanges<'pl // lifetime of the underlying payload
 
     fn iter(&self, chunk_size: usize) -> impl IndexedParallelIterator<Item = impl AsRef<[Self::Item]>>;
 
+    fn len(&self) -> usize;
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     fn item_to_document_change<'doc, // lifetime of a single `process` call
      T: MostlySend>(
         &'doc self,
@@ -344,22 +350,72 @@ pub trait DocumentChanges<'pl // lifetime of the underlying payload
     ;
 }
 
-#[derive(Clone, Copy)]
 pub struct IndexingContext<
     'fid,     // invariant lifetime of fields ids map
     'indexer, // covariant lifetime of objects that are borrowed  during the entire indexing operation
     'index,   // covariant lifetime of the index
-> {
+    MSP,
+    SP,
+> where
+    MSP: Fn() -> bool + Sync,
+    SP: Fn(Progress) + Sync,
+{
     pub index: &'index Index,
     pub db_fields_ids_map: &'indexer FieldsIdsMap,
     pub new_fields_ids_map: &'fid RwLock<FieldIdMapWithMetadata>,
     pub doc_allocs: &'indexer ThreadLocal<FullySend<Cell<Bump>>>,
     pub fields_ids_map_store: &'indexer ThreadLocal<FullySend<RefCell<GlobalFieldsIdsMap<'fid>>>>,
+    pub must_stop_processing: &'indexer MSP,
+    pub send_progress: &'indexer SP,
+}
+
+impl<
+        'fid,     // invariant lifetime of fields ids map
+        'indexer, // covariant lifetime of objects that are borrowed  during the entire indexing operation
+        'index,   // covariant lifetime of the index
+        MSP,
+        SP,
+    > Copy
+    for IndexingContext<
+        'fid,     // invariant lifetime of fields ids map
+        'indexer, // covariant lifetime of objects that are borrowed  during the entire indexing operation
+        'index,   // covariant lifetime of the index
+        MSP,
+        SP,
+    >
+where
+    MSP: Fn() -> bool + Sync,
+    SP: Fn(Progress) + Sync,
+{
+}
+
+impl<
+        'fid,     // invariant lifetime of fields ids map
+        'indexer, // covariant lifetime of objects that are borrowed  during the entire indexing operation
+        'index,   // covariant lifetime of the index
+        MSP,
+        SP,
+    > Clone
+    for IndexingContext<
+        'fid,     // invariant lifetime of fields ids map
+        'indexer, // covariant lifetime of objects that are borrowed  during the entire indexing operation
+        'index,   // covariant lifetime of the index
+        MSP,
+        SP,
+    >
+where
+    MSP: Fn() -> bool + Sync,
+    SP: Fn(Progress) + Sync,
+{
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 
 const CHUNK_SIZE: usize = 100;
 
-pub fn for_each_document_change<
+#[allow(clippy::too_many_arguments)]
+pub fn extract<
     'pl,        // covariant lifetime of the underlying payload
     'extractor, // invariant lifetime of extractor_alloc
     'fid,       // invariant lifetime of fields ids map
@@ -368,6 +424,8 @@ pub fn for_each_document_change<
     'index,     // covariant lifetime of the index
     EX,
     DC: DocumentChanges<'pl>,
+    MSP,
+    SP,
 >(
     document_changes: &DC,
     extractor: &EX,
@@ -377,20 +435,29 @@ pub fn for_each_document_change<
         new_fields_ids_map,
         doc_allocs,
         fields_ids_map_store,
-    }: IndexingContext<'fid, 'indexer, 'index>,
+        must_stop_processing,
+        send_progress,
+    }: IndexingContext<'fid, 'indexer, 'index, MSP, SP>,
     extractor_allocs: &'extractor mut ThreadLocal<FullySend<RefCell<Bump>>>,
     datastore: &'data ThreadLocal<EX::Data>,
+    finished_steps: u16,
+    total_steps: u16,
+    step_name: &'static str,
 ) -> Result<()>
 where
     EX: Extractor<'extractor>,
+    MSP: Fn() -> bool + Sync,
+    SP: Fn(Progress) + Sync,
 {
     // Clean up and reuse the extractor allocs
     for extractor_alloc in extractor_allocs.iter_mut() {
         extractor_alloc.0.get_mut().reset();
     }
 
+    let total_documents = document_changes.len();
+
     let pi = document_changes.iter(CHUNK_SIZE);
-    pi.try_arc_for_each_try_init(
+    pi.enumerate().try_arc_for_each_try_init(
         || {
             DocumentChangeContext::new(
                 index,
@@ -403,7 +470,19 @@ where
                 move |index_alloc| extractor.init_data(index_alloc),
             )
         },
-        |context, items| {
+        |context, (finished_documents, items)| {
+            if (must_stop_processing)() {
+                return Err(Arc::new(InternalError::AbortedIndexation.into()));
+            }
+            let finished_documents = finished_documents * CHUNK_SIZE;
+
+            (send_progress)(Progress {
+                finished_steps,
+                total_steps,
+                step_name,
+                finished_total_documents: Some((finished_documents as u32, total_documents as u32)),
+            });
+
             // Clean up and reuse the document-specific allocator
             context.doc_alloc.reset();
 
@@ -419,5 +498,21 @@ where
 
             res
         },
-    )
+    )?;
+
+    (send_progress)(Progress {
+        finished_steps,
+        total_steps,
+        step_name,
+        finished_total_documents: Some((total_documents as u32, total_documents as u32)),
+    });
+
+    Ok(())
+}
+
+pub struct Progress {
+    pub finished_steps: u16,
+    pub total_steps: u16,
+    pub step_name: &'static str,
+    pub finished_total_documents: Option<(u32, u32)>,
 }
