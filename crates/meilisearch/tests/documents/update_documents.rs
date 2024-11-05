@@ -23,8 +23,8 @@ async fn error_document_update_create_index_bad_uid() {
 
 #[actix_rt::test]
 async fn document_update_with_primary_key() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = json!([
         {
@@ -32,15 +32,14 @@ async fn document_update_with_primary_key() {
             "content": "foo",
         }
     ]);
-    let (_response, code) = index.update_documents(documents, Some("primary")).await;
+    let (response, code) = index.update_documents(documents, Some("primary")).await;
     assert_eq!(code, 202);
 
-    index.wait_task(0).await;
+    index.wait_task(response.uid()).await.succeeded();
 
-    let (response, code) = index.get_task(0).await;
+    let (response, code) = index.get_task(response.uid()).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "succeeded");
-    assert_eq!(response["uid"], 0);
     assert_eq!(response["type"], "documentAdditionOrUpdate");
     assert_eq!(response["details"]["indexedDocuments"], 1);
     assert_eq!(response["details"]["receivedDocuments"], 1);
@@ -52,8 +51,8 @@ async fn document_update_with_primary_key() {
 
 #[actix_rt::test]
 async fn update_document() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = json!([
         {
@@ -62,10 +61,10 @@ async fn update_document() {
         }
     ]);
 
-    let (_response, code) = index.add_documents(documents, None).await;
+    let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
 
-    index.wait_task(0).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let documents = json!([
         {
@@ -77,9 +76,9 @@ async fn update_document() {
     let (response, code) = index.update_documents(documents, None).await;
     assert_eq!(code, 202, "response: {}", response);
 
-    index.wait_task(1).await;
+    index.wait_task(response.uid()).await.succeeded();
 
-    let (response, code) = index.get_task(1).await;
+    let (response, code) = index.get_task(response.uid()).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "succeeded");
 
@@ -96,8 +95,8 @@ async fn update_document() {
 
 #[actix_rt::test]
 async fn update_document_gzip_encoded() {
-    let server = Server::new().await;
-    let index = server.index_with_encoder("test", Encoder::Gzip);
+    let server = Server::new_shared();
+    let index = server.unique_index_with_encoder(Encoder::Gzip);
 
     let documents = json!([
         {
@@ -106,10 +105,10 @@ async fn update_document_gzip_encoded() {
         }
     ]);
 
-    let (_response, code) = index.add_documents(documents, None).await;
+    let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
 
-    index.wait_task(0).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let documents = json!([
         {
@@ -121,9 +120,9 @@ async fn update_document_gzip_encoded() {
     let (response, code) = index.update_documents(documents, None).await;
     assert_eq!(code, 202, "response: {}", response);
 
-    index.wait_task(1).await;
+    index.wait_task(response.uid()).await.succeeded();
 
-    let (response, code) = index.get_task(1).await;
+    let (response, code) = index.get_task(response.uid()).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "succeeded");
 
@@ -140,12 +139,12 @@ async fn update_document_gzip_encoded() {
 
 #[actix_rt::test]
 async fn update_larger_dataset() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let documents = serde_json::from_str(include_str!("../assets/test_set.json")).unwrap();
-    index.update_documents(documents, None).await;
-    index.wait_task(0).await;
-    let (response, code) = index.get_task(0).await;
+    let (task, _code) = index.update_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
+    let (response, code) = index.get_task(task.uid()).await;
     assert_eq!(code, 200);
     assert_eq!(response["type"], "documentAdditionOrUpdate");
     assert_eq!(response["details"]["indexedDocuments"], 77);
@@ -158,8 +157,8 @@ async fn update_larger_dataset() {
 
 #[actix_rt::test]
 async fn error_update_documents_bad_document_id() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     index.create(Some("docid")).await;
     let documents = json!([
         {
@@ -167,8 +166,8 @@ async fn error_update_documents_bad_document_id() {
             "content": "foobar"
         }
     ]);
-    index.update_documents(documents, None).await;
-    let response = index.wait_task(1).await;
+    let (task, _code) = index.update_documents(documents, None).await;
+    let response = index.wait_task(task.uid()).await;
     assert_eq!(response["status"], json!("failed"));
     assert_eq!(
         response["error"]["message"],
@@ -186,8 +185,8 @@ async fn error_update_documents_bad_document_id() {
 
 #[actix_rt::test]
 async fn error_update_documents_missing_document_id() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     index.create(Some("docid")).await;
     let documents = json!([
         {
@@ -195,8 +194,8 @@ async fn error_update_documents_missing_document_id() {
             "content": "foobar"
         }
     ]);
-    index.update_documents(documents, None).await;
-    let response = index.wait_task(1).await;
+    let (task, _code) = index.update_documents(documents, None).await;
+    let response = index.wait_task(task.uid()).await;
     assert_eq!(response["status"], "failed");
     assert_eq!(
         response["error"]["message"],
@@ -212,8 +211,8 @@ async fn error_update_documents_missing_document_id() {
 
 #[actix_rt::test]
 async fn update_faceted_document() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -221,7 +220,7 @@ async fn update_faceted_document() {
         }))
         .await;
     assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(0).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let documents: Vec<_> = (0..1000)
         .map(|id| {
@@ -232,10 +231,10 @@ async fn update_faceted_document() {
         })
         .collect();
 
-    let (_response, code) = index.add_documents(documents.into(), None).await;
+    let (response, code) = index.add_documents(documents.into(), None).await;
     assert_eq!(code, 202);
 
-    index.wait_task(1).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let documents = json!([
         {
@@ -247,7 +246,7 @@ async fn update_faceted_document() {
     let (response, code) = index.update_documents(documents, None).await;
     assert_eq!(code, 202, "response: {}", response);
 
-    index.wait_task(2).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     index
         .search(json!({"limit": 10}), |response, code| {
