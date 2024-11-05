@@ -18,4 +18,4 @@ meilisearch-types = { path = "../meilisearch-types" }
 serde = { version = "1.0.209", features = ["derive"] }
 time = { version = "0.3.36", features = ["formatting", "parsing", "alloc"] }
 uuid = { version = "1.10.0", features = ["v4"], default-features = false }
-arroy_v04_to_v05 = { package = "arroy", git = "https://github.com/meilisearch/arroy/", rev = "053807bf38dc079f25b003f19fc30fbf3613f6e7" }
+arroy_v04_to_v05 = { package = "arroy", git = "https://github.com/meilisearch/arroy/", tag = "DO-NOT-DELETE-upgrade-v04-to-v05" }
