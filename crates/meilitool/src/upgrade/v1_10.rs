@@ -146,9 +146,9 @@ fn date_round_trip(
     key: &str,
 ) -> anyhow::Result<()> {
     let datetime =
-        db.remap_types::<Str, SerdeJson<v1_9::LegacyTime>>().get(wtxn, key).with_context(|| {
-            format!("could not read `{key}` while updating date format for index `{index_uid}`")
-        })?;
+        db.remap_types::<Str, SerdeJson<v1_9::LegacyDateTime>>().get(wtxn, key).with_context(
+            || format!("could not read `{key}` while updating date format for index `{index_uid}`"),
+        )?;
 
     if let Some(datetime) = datetime {
         db.remap_types::<Str, SerdeJson<self::OffsetDateTime>>()

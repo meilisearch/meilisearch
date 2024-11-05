@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
+use time::{Date, OffsetDateTime, Time, UtcOffset};
 
 pub type FieldDistribution = std::collections::BTreeMap<String, u64>;
 
 /// The statistics that can be computed from an `Index` object.
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Deserialize, Debug)]
 pub struct IndexStats {
     /// Number of documents in the index.
     pub number_of_documents: u64,
@@ -22,9 +22,9 @@ pub struct IndexStats {
     /// Association of every field name with the number of times it occurs in the documents.
     pub field_distribution: FieldDistribution,
     /// Creation date of the index.
-    pub created_at: LegacyTime,
+    pub created_at: LegacyDateTime,
     /// Date of the last update of the index.
-    pub updated_at: LegacyTime,
+    pub updated_at: LegacyDateTime,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -98,9 +98,61 @@ mod rest {
     }
 }
 
-// 2024-11-04 13:32:08.48368 +00:00:00
-time::serde::format_description!(legacy_datetime, OffsetDateTime, "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond] [offset_hour sign:mandatory]:[offset_minute]:[offset_second]");
+/// A datetime from Meilisearch v1.9 with an unspecified format.
+#[derive(Debug)]
+pub struct LegacyDateTime(pub OffsetDateTime);
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-#[serde(transparent)]
-pub struct LegacyTime(#[serde(with = "legacy_datetime")] pub OffsetDateTime);
+impl<'de> Deserialize<'de> for LegacyDateTime {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct Visitor;
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = OffsetDateTime;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(formatter, "a valid datetime")
+            }
+
+            // Comes from a binary. The legacy format is:
+            // 2024-11-04 13:32:08.48368 +00:00:00
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                let format = time::macros::format_description!("[year]-[month]-[day] [hour]:[minute]:[second].[subsecond] [offset_hour sign:mandatory]:[offset_minute]:[offset_second]");
+                OffsetDateTime::parse(v, format).map_err(E::custom)
+            }
+
+            // Comes from the docker image, the legacy format is:
+            // [2024,        309,     17,     15,   1, 698184971, 0,0,0]
+            // year,  day in year,  hour, minute, sec, subsec   , offset stuff
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let mut vec = Vec::new();
+                // We must deserialize the value as `i64` because the largest values are `u32` and `i32`
+                while let Some(el) = seq.next_element::<i64>()? {
+                    vec.push(el);
+                }
+                if vec.len() != 9 {
+                    return Err(serde::de::Error::custom(format!(
+                        "Invalid datetime, received an array of {} elements instead of 9",
+                        vec.len()
+                    )));
+                }
+                Ok(OffsetDateTime::new_in_offset(
+                    Date::from_ordinal_date(vec[0] as i32, vec[1] as u16)
+                        .map_err(serde::de::Error::custom)?,
+                    Time::from_hms_nano(vec[2] as u8, vec[3] as u8, vec[4] as u8, vec[5] as u32)
+                        .map_err(serde::de::Error::custom)?,
+                    UtcOffset::from_hms(vec[6] as i8, vec[7] as i8, vec[8] as i8)
+                        .map_err(serde::de::Error::custom)?,
+                ))
+            }
+        }
+        deserializer.deserialize_any(Visitor).map(LegacyDateTime)
+    }
+}
