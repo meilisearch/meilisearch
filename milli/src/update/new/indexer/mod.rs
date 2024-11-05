@@ -18,6 +18,7 @@ pub use update_by_function::UpdateByFunction;
 
 use super::channel::*;
 use super::extract::*;
+use super::facet_search_builder::FacetSearchBuilder;
 use super::merger::{FacetDatabases, FacetFieldIdsDelta};
 use super::word_fst_builder::PrefixDelta;
 use super::words_prefix_docids::{
@@ -114,7 +115,6 @@ where
                     let span = tracing::trace_span!(target: "indexing::documents::extract", "faceted");
                     let _entered = span.enter();
                     facet_field_ids_delta = merge_and_send_facet_docids(
-                        global_fields_ids_map,
                         FacetedDocidsExtractor::run_extraction(grenad_parameters, document_changes, indexing_context, &mut extractor_allocs)?,
                         FacetDatabases::new(index),
                         index,
@@ -240,9 +240,6 @@ where
             })
         })?;
 
-        let global_fields_ids_map = GlobalFieldsIdsMap::new(&new_fields_ids_map);
-        let indexer_span = tracing::Span::current();
-
         for operation in writer_receiver {
             let database = operation.database(index);
             match operation.entry() {
@@ -258,64 +255,13 @@ where
         /// TODO handle the panicking threads
         let facet_field_ids_delta = extractor_handle.join().unwrap()?;
 
-        let prefix_delta = {
-            let rtxn = index.read_txn()?;
-            let words_fst = index.words_fst(&rtxn)?;
-            let mut word_fst_builder = WordFstBuilder::new(&words_fst)?;
-            let prefix_settings = index.prefix_settings(&rtxn)?;
-            word_fst_builder.with_prefix_settings(prefix_settings);
-
-            let previous_words = index.word_docids.iter(&rtxn)?.remap_data_type::<Bytes>();
-            let current_words = index.word_docids.iter(wtxn)?.remap_data_type::<Bytes>();
-            for eob in merge_join_by(previous_words, current_words, |lhs, rhs| match (lhs, rhs) {
-                (Ok((l, _)), Ok((r, _))) => l.cmp(r),
-                (Err(_), _) | (_, Err(_)) => Ordering::Equal,
-            }) {
-                match eob {
-                    EitherOrBoth::Both(lhs, rhs) => {
-                        let (word, lhs_bytes) = lhs?;
-                        let (_, rhs_bytes) = rhs?;
-                        if lhs_bytes != rhs_bytes {
-                            word_fst_builder.register_word(DelAdd::Addition, word.as_ref())?;
-                        }
-                    }
-                    EitherOrBoth::Left(result) => {
-                        let (word, _) = result?;
-                        word_fst_builder.register_word(DelAdd::Deletion, word.as_ref())?;
-                    }
-                    EitherOrBoth::Right(result) => {
-                        let (word, _) = result?;
-                        word_fst_builder.register_word(DelAdd::Addition, word.as_ref())?;
-                    }
-                }
-            }
-
-            let span = tracing::trace_span!(target: "indexing::documents::merge", "words_fst");
-            let _entered = span.enter();
-
-            let (word_fst_mmap, prefix_data) = word_fst_builder.build(index, &rtxn)?;
-            // extractor_sender.main().write_words_fst(word_fst_mmap).unwrap();
-            index.main.remap_types::<Str, Bytes>().put(wtxn, WORDS_FST_KEY, &word_fst_mmap)?;
-            if let Some(PrefixData { prefixes_fst_mmap, prefix_delta }) = prefix_data {
-                // extractor_sender.main().write_words_prefixes_fst(prefixes_fst_mmap).unwrap();
-                index.main.remap_types::<Str, Bytes>().put(
-                    wtxn,
-                    WORDS_PREFIXES_FST_KEY,
-                    &prefixes_fst_mmap,
-                )?;
-                Some(prefix_delta)
-            } else {
-                None
-            }
-        };
-
-        // if let Some(facet_field_ids_delta) = merger_result.facet_field_ids_delta {
-        //     compute_facet_level_database(index, wtxn, facet_field_ids_delta)?;
-        // }
-
-        if let Some(prefix_delta) = prefix_delta {
+        if let Some(prefix_delta) = compute_word_fst(index, wtxn)? {
             compute_prefix_database(index, wtxn, prefix_delta)?;
         }
+
+        compute_facet_search_database(index, wtxn, global_fields_ids_map)?;
+
+        compute_facet_level_database(index, wtxn, facet_field_ids_delta)?;
 
         Result::Ok(())
     })?;
@@ -356,6 +302,110 @@ fn compute_prefix_database(
     compute_word_prefix_fid_docids(wtxn, index, &modified, &deleted)?;
     // Compute word prefix position docids
     compute_word_prefix_position_docids(wtxn, index, &modified, &deleted)
+}
+
+#[tracing::instrument(level = "trace", skip_all, target = "indexing")]
+fn compute_word_fst(index: &Index, wtxn: &mut RwTxn) -> Result<Option<PrefixDelta>> {
+    let rtxn = index.read_txn()?;
+    let words_fst = index.words_fst(&rtxn)?;
+    let mut word_fst_builder = WordFstBuilder::new(&words_fst)?;
+    let prefix_settings = index.prefix_settings(&rtxn)?;
+    word_fst_builder.with_prefix_settings(prefix_settings);
+
+    let previous_words = index.word_docids.iter(&rtxn)?.remap_data_type::<Bytes>();
+    let current_words = index.word_docids.iter(wtxn)?.remap_data_type::<Bytes>();
+    for eob in merge_join_by(previous_words, current_words, |lhs, rhs| match (lhs, rhs) {
+        (Ok((l, _)), Ok((r, _))) => l.cmp(r),
+        (Err(_), _) | (_, Err(_)) => Ordering::Equal,
+    }) {
+        match eob {
+            EitherOrBoth::Both(lhs, rhs) => {
+                let (word, lhs_bytes) = lhs?;
+                let (_, rhs_bytes) = rhs?;
+                if lhs_bytes != rhs_bytes {
+                    word_fst_builder.register_word(DelAdd::Addition, word.as_ref())?;
+                }
+            }
+            EitherOrBoth::Left(result) => {
+                let (word, _) = result?;
+                word_fst_builder.register_word(DelAdd::Deletion, word.as_ref())?;
+            }
+            EitherOrBoth::Right(result) => {
+                let (word, _) = result?;
+                word_fst_builder.register_word(DelAdd::Addition, word.as_ref())?;
+            }
+        }
+    }
+
+    let span = tracing::trace_span!(target: "indexing::documents::merge", "words_fst");
+    let _entered = span.enter();
+
+    let (word_fst_mmap, prefix_data) = word_fst_builder.build(index, &rtxn)?;
+    // extractor_sender.main().write_words_fst(word_fst_mmap).unwrap();
+    index.main.remap_types::<Str, Bytes>().put(wtxn, WORDS_FST_KEY, &word_fst_mmap)?;
+    if let Some(PrefixData { prefixes_fst_mmap, prefix_delta }) = prefix_data {
+        // extractor_sender.main().write_words_prefixes_fst(prefixes_fst_mmap).unwrap();
+        index.main.remap_types::<Str, Bytes>().put(
+            wtxn,
+            WORDS_PREFIXES_FST_KEY,
+            &prefixes_fst_mmap,
+        )?;
+        Ok(Some(prefix_delta))
+    } else {
+        Ok(None)
+    }
+}
+
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::facet_search")]
+fn compute_facet_search_database(
+    index: &Index,
+    wtxn: &mut RwTxn,
+    global_fields_ids_map: GlobalFieldsIdsMap,
+) -> Result<()> {
+    let rtxn = index.read_txn()?;
+    let localized_attributes_rules = index.localized_attributes_rules(&rtxn)?;
+    let mut facet_search_builder = FacetSearchBuilder::new(
+        global_fields_ids_map,
+        localized_attributes_rules.unwrap_or_default(),
+    );
+
+    let previous_facet_id_string_docids = index
+        .facet_id_string_docids
+        .iter(&rtxn)?
+        .remap_data_type::<DecodeIgnore>()
+        .filter(|r| r.as_ref().map_or(true, |(k, _)| k.level == 0));
+    let current_facet_id_string_docids = index
+        .facet_id_string_docids
+        .iter(wtxn)?
+        .remap_data_type::<DecodeIgnore>()
+        .filter(|r| r.as_ref().map_or(true, |(k, _)| k.level == 0));
+    for eob in merge_join_by(
+        previous_facet_id_string_docids,
+        current_facet_id_string_docids,
+        |lhs, rhs| match (lhs, rhs) {
+            (Ok((l, _)), Ok((r, _))) => l.cmp(r),
+            (Err(_), _) | (_, Err(_)) => Ordering::Equal,
+        },
+    ) {
+        match eob {
+            EitherOrBoth::Both(lhs, rhs) => {
+                let (_, _) = lhs?;
+                let (_, _) = rhs?;
+            }
+            EitherOrBoth::Left(result) => {
+                let (key, _) = result?;
+                facet_search_builder
+                    .register_from_key(DelAdd::Deletion, key.left_bound.as_ref())?;
+            }
+            EitherOrBoth::Right(result) => {
+                let (key, _) = result?;
+                facet_search_builder
+                    .register_from_key(DelAdd::Addition, key.left_bound.as_ref())?;
+            }
+        }
+    }
+
+    facet_search_builder.merge_and_write(index, wtxn, &rtxn)
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::facet_field_ids")]

@@ -11,9 +11,7 @@ use super::channel::*;
 use super::extract::{
     merge_caches, transpose_and_freeze_caches, BalancedCaches, DelAddRoaringBitmap, FacetKind,
 };
-use super::facet_search_builder::FacetSearchBuilder;
 use super::DocumentChange;
-use crate::update::del_add::DelAdd;
 use crate::{CboRoaringBitmapCodec, Error, FieldId, GeoPoint, GlobalFieldsIdsMap, Index, Result};
 
 pub struct GeoExtractor {
@@ -93,37 +91,29 @@ pub fn merge_and_send_docids<'extractor>(
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
-pub fn merge_and_send_facet_docids<'indexer, 'extractor>(
-    global_fields_ids_map: GlobalFieldsIdsMap<'indexer>,
+pub fn merge_and_send_facet_docids<'extractor>(
     mut caches: Vec<BalancedCaches<'extractor>>,
     database: FacetDatabases,
     index: &Index,
     docids_sender: impl DocidsSender + Sync,
-) -> Result<(FacetFieldIdsDelta, FacetSearchBuilder<'indexer>)> {
+) -> Result<FacetFieldIdsDelta> {
     transpose_and_freeze_caches(&mut caches)?
         .into_par_iter()
         .map(|frozen| {
             let mut facet_field_ids_delta = FacetFieldIdsDelta::default();
             let rtxn = index.read_txn()?;
-            let localized_attributes_rules = index.localized_attributes_rules(&rtxn)?;
-            let mut facet_search_builder = FacetSearchBuilder::new(
-                global_fields_ids_map.clone(),
-                localized_attributes_rules.unwrap_or_default(),
-            );
             let mut buffer = Vec::new();
             merge_caches(frozen, |key, DelAddRoaringBitmap { del, add }| {
                 let current = database.get_cbo_roaring_bytes_value(&rtxn, key)?;
                 match merge_cbo_bitmaps(current, del, add)? {
                     Operation::Write(bitmap) => {
                         facet_field_ids_delta.register_from_key(key);
-                        facet_search_builder.register_from_key(DelAdd::Addition, key)?;
                         let value = cbo_bitmap_serialize_into_vec(&bitmap, &mut buffer);
                         docids_sender.write(key, value).unwrap();
                         Ok(())
                     }
                     Operation::Delete => {
                         facet_field_ids_delta.register_from_key(key);
-                        facet_search_builder.register_from_key(DelAdd::Deletion, key)?;
                         docids_sender.delete(key).unwrap();
                         Ok(())
                     }
@@ -131,18 +121,9 @@ pub fn merge_and_send_facet_docids<'indexer, 'extractor>(
                 }
             })?;
 
-            Ok((facet_field_ids_delta, facet_search_builder))
+            Ok(facet_field_ids_delta)
         })
-        .reduce(
-            || Ok((FacetFieldIdsDelta::default(), todo!())),
-            |lhs, rhs| {
-                let (lhs_ffid, lhs_fsb) = lhs?;
-                let (rhs_ffid, rhs_fsb) = rhs?;
-                let ffid_merged = lhs_ffid.merge(rhs_ffid);
-                let fsb_merged = todo!();
-                Ok((ffid_merged, fsb_merged))
-            },
-        )
+        .reduce(|| Ok(FacetFieldIdsDelta::default()), |lhs, rhs| Ok(lhs?.merge(rhs?)))
 }
 
 pub struct FacetDatabases<'a> {

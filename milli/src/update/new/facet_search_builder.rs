@@ -6,7 +6,6 @@ use grenad::Sorter;
 use heed::types::{Bytes, SerdeJson};
 use heed::{BytesDecode, BytesEncode, RoTxn, RwTxn};
 
-use super::channel::FacetSearchableSender;
 use super::extract::FacetKind;
 use super::fst_merger_builder::FstMergerBuilder;
 use super::KvReaderDelAdd;
@@ -42,7 +41,7 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
             None,
             None,
             Some(0),
-            false,
+            true,
         );
 
         Self {
@@ -115,13 +114,7 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
     }
 
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::facet_fst")]
-    pub fn merge_and_send(
-        self,
-        index: &Index,
-        wtxn: &mut RwTxn,
-        rtxn: &RoTxn,
-        sender: FacetSearchableSender,
-    ) -> Result<()> {
+    pub fn merge_and_write(self, index: &Index, wtxn: &mut RwTxn, rtxn: &RoTxn) -> Result<()> {
         let reader = self.normalized_facet_string_docids_sorter.into_reader_cursors()?;
         let mut builder = grenad::MergerBuilder::new(MergeDeladdBtreesetString);
         builder.extend(reader);
@@ -138,24 +131,24 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
 
             if current_field_id != Some(field_id) {
                 if let Some(fst_merger_builder) = fst_merger_builder {
-                    // send the previous fst to the channel
                     let mmap = fst_merger_builder.build(&mut callback)?;
-                    // sender.write_fst(&field_id.to_be_bytes(), mmap).unwrap();
-                    todo!("What to do");
+                    index
+                        .facet_id_string_fst
+                        .remap_data_type::<Bytes>()
+                        .put(wtxn, &field_id, &mmap)?;
                 }
 
-                println!("getting fst for field_id: {}", field_id);
                 fst = index.facet_id_string_fst.get(rtxn, &field_id)?;
                 fst_merger_builder = Some(FstMergerBuilder::new(fst.as_ref())?);
                 current_field_id = Some(field_id);
             }
 
-            let current = database.get(rtxn, key)?;
+            let previous = database.get(rtxn, key)?;
             let deladd: &KvReaderDelAdd = deladd.into();
             let del = deladd.get(DelAdd::Deletion);
             let add = deladd.get(DelAdd::Addition);
 
-            match merge_btreesets(current, del, add)? {
+            match merge_btreesets(previous, del, add)? {
                 Operation::Write(value) => {
                     match fst_merger_builder.as_mut() {
                         Some(fst_merger_builder) => {
@@ -170,7 +163,7 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
                     let key = (field_id, normalized_facet_string);
                     let key_bytes =
                         BEU16StrCodec::bytes_encode(&key).map_err(heed::Error::Encoding)?;
-                    sender.write_facet(&key_bytes, &value).unwrap();
+                    database.put(wtxn, &key_bytes, &value)?;
                 }
                 Operation::Delete => {
                     match fst_merger_builder.as_mut() {
@@ -186,7 +179,7 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
                     let key = (field_id, normalized_facet_string);
                     let key_bytes =
                         BEU16StrCodec::bytes_encode(&key).map_err(heed::Error::Encoding)?;
-                    sender.delete_facet(&key_bytes).unwrap();
+                    database.delete(wtxn, &key_bytes)?;
                 }
                 Operation::Ignore => (),
             }
@@ -194,8 +187,7 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
 
         if let (Some(field_id), Some(fst_merger_builder)) = (current_field_id, fst_merger_builder) {
             let mmap = fst_merger_builder.build(&mut callback)?;
-            // sender.write_fst(&field_id.to_be_bytes(), mmap).unwrap();
-            todo!("What to do");
+            index.facet_id_string_fst.remap_data_type::<Bytes>().put(wtxn, &field_id, &mmap)?;
         }
 
         Ok(())

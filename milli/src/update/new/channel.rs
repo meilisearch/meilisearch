@@ -94,8 +94,6 @@ pub enum Database {
     FacetIdExistsDocids,
     FacetIdF64NumberDocids,
     FacetIdStringDocids,
-    FacetIdNormalizedStringStrings,
-    FacetIdStringFst,
 }
 
 impl Database {
@@ -115,10 +113,6 @@ impl Database {
             Database::FacetIdExistsDocids => index.facet_id_exists_docids.remap_types(),
             Database::FacetIdF64NumberDocids => index.facet_id_f64_docids.remap_types(),
             Database::FacetIdStringDocids => index.facet_id_string_docids.remap_types(),
-            Database::FacetIdNormalizedStringStrings => {
-                index.facet_id_normalized_string_strings.remap_types()
-            }
-            Database::FacetIdStringFst => index.facet_id_string_fst.remap_types(),
         }
     }
 }
@@ -192,10 +186,6 @@ impl ExtractorSender {
 
     pub fn documents(&self) -> DocumentsSender<'_> {
         DocumentsSender(self)
-    }
-
-    pub fn facet_searchable(&self) -> FacetSearchableSender<'_> {
-        FacetSearchableSender { sender: self }
     }
 
     pub fn send_documents_ids(&self, documents_ids: RoaringBitmap) -> StdResult<(), SendError<()>> {
@@ -316,34 +306,6 @@ impl DocidsSender for FacetDocidsSender<'_> {
         let database = Database::from(facet_kind);
         let entry = EntryOperation::Delete(KeyEntry::from_key(key));
         match self.sender.send(WriterOperation { database, entry }) {
-            Ok(()) => Ok(()),
-            Err(SendError(_)) => Err(SendError(())),
-        }
-    }
-}
-
-pub struct FacetSearchableSender<'a> {
-    sender: &'a ExtractorSender,
-}
-
-impl FacetSearchableSender<'_> {
-    pub fn write_facet(&self, key: &[u8], value: &[u8]) -> StdResult<(), SendError<()>> {
-        let entry = EntryOperation::Write(KeyValueEntry::from_small_key_value(key, value));
-        match self
-            .sender
-            .send(WriterOperation { database: Database::FacetIdNormalizedStringStrings, entry })
-        {
-            Ok(()) => Ok(()),
-            Err(SendError(_)) => Err(SendError(())),
-        }
-    }
-
-    pub fn delete_facet(&self, key: &[u8]) -> StdResult<(), SendError<()>> {
-        let entry = EntryOperation::Delete(KeyEntry::from_key(key));
-        match self
-            .sender
-            .send(WriterOperation { database: Database::FacetIdNormalizedStringStrings, entry })
-        {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
