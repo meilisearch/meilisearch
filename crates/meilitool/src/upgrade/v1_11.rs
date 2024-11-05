@@ -39,7 +39,7 @@ pub fn v1_10_to_v1_11(db_path: &Path) -> anyhow::Result<()> {
         let index_path = db_path.join("indexes").join(uuid.to_string());
 
         println!(
-            "[{}/{index_count}]Checking that update can take place for  `{uid}` at `{}`",
+            "[{}/{index_count}]Updating embeddings for `{uid}` at `{}`",
             index_index + 1,
             index_path.display()
         );
