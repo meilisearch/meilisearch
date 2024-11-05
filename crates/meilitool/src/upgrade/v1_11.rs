@@ -34,7 +34,6 @@ pub fn v1_10_to_v1_11(db_path: &Path) -> anyhow::Result<()> {
         .map(|res| res.map(|(uid, uuid)| (uid.to_owned(), uuid)))
         .collect();
 
-    // check that update can take place
     for (index_index, result) in indexes.into_iter().enumerate() {
         let (uid, uuid) = result?;
         let index_path = db_path.join("indexes").join(uuid.to_string());
