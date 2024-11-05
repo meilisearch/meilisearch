@@ -22,7 +22,8 @@ use std::ffi::OsStr;
 use std::fmt;
 use std::fs::{self, File};
 use std::io::BufWriter;
-use std::sync::atomic::{self, AtomicU16, AtomicU32};
+use std::sync::atomic::{self, AtomicU64};
+use std::time::Duration;
 
 use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
@@ -31,7 +32,6 @@ use meilisearch_types::error::Code;
 use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader, PrimaryKey};
 use meilisearch_types::milli::heed::CompactionOption;
-use meilisearch_types::milli::update::new::indexer::document_changes::Progress;
 use meilisearch_types::milli::update::new::indexer::{
     self, retrieve_or_guess_primary_key, UpdateByFunction,
 };
@@ -531,7 +531,7 @@ impl IndexScheduler {
         if let Some(task_id) = to_cancel.max() {
             // We retrieve the tasks that were processing before this tasks cancelation started.
             // We must *not* reset the processing tasks before calling this method.
-            let ProcessingTasks { started_at, processing } =
+            let ProcessingTasks { started_at, processing, progress: _ } =
                 &*self.processing_tasks.read().unwrap();
             return Ok(Some(Batch::TaskCancelation {
                 task: self.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?,
@@ -1223,39 +1223,29 @@ impl IndexScheduler {
     ) -> Result<Vec<Task>> {
         let indexer_alloc = Bump::new();
 
-        let last_finished_steps = AtomicU16::new(0);
-        let last_finished_documents = AtomicU32::new(0);
+        let started_processing_at = std::time::Instant::now();
+        let secs_since_started_processing_at = AtomicU64::new(0);
+        const PRINT_SECS_DELTA: u64 = 1;
 
-        let send_progress =
-            |Progress { finished_steps, total_steps, step_name, finished_total_documents }| {
-                /*
-                let current = rayon::current_thread_index();
+        let processing_tasks = self.processing_tasks.clone();
 
-                let last_finished_steps =
-                    last_finished_steps.fetch_max(finished_steps, atomic::Ordering::Relaxed);
+        let must_stop_processing = self.must_stop_processing.clone();
 
-                if last_finished_steps > finished_steps {
-                    return;
-                }
+        let send_progress = |progress| {
+            let now = std::time::Instant::now();
+            let elapsed = secs_since_started_processing_at.load(atomic::Ordering::Relaxed);
+            let previous = started_processing_at + Duration::from_secs(elapsed);
+            let elapsed = now - previous;
 
-                if let Some((finished_documents, total_documents)) = finished_total_documents {
-                    if last_finished_steps < finished_steps {
-                        last_finished_documents.store(finished_documents, atomic::Ordering::Relaxed);
-                    } else {
-                        let last_finished_documents = last_finished_documents
-                            .fetch_max(finished_documents, atomic::Ordering::Relaxed);
-                        if last_finished_documents > finished_documents {
-                            return;
-                        }
-                    }
-                    tracing::warn!("Progress from {current:?}: {step_name} ({finished_steps}/{total_steps}), document {finished_documents}/{total_documents}")
-                } else {
-                    tracing::warn!(
-                        "Progress from {current:?}: {step_name} ({finished_steps}/{total_steps})"
-                    )
-                }
-                */
-            };
+            if elapsed.as_secs() < PRINT_SECS_DELTA {
+                return;
+            }
+
+            secs_since_started_processing_at
+                .store((now - started_processing_at).as_secs(), atomic::Ordering::Relaxed);
+
+            processing_tasks.write().unwrap().update_progress(progress);
+        };
 
         match operation {
             IndexOperation::DocumentClear { mut tasks, .. } => {
@@ -1286,8 +1276,6 @@ impl IndexScheduler {
                 operations,
                 mut tasks,
             } => {
-                let started_processing_at = std::time::Instant::now();
-                let must_stop_processing = self.must_stop_processing.clone();
                 let indexer_config = self.index_mapper.indexer_config();
                 // TODO: at some point, for better efficiency we might want to reuse the bumpalo for successive batches.
                 // this is made difficult by the fact we're doing private clones of the index scheduler and sending it
@@ -1503,7 +1491,6 @@ impl IndexScheduler {
                     let document_changes = indexer.into_changes(&primary_key)?;
                     let embedders = index.embedding_configs(index_wtxn)?;
                     let embedders = self.embedders(embedders)?;
-                    let must_stop_processing = &self.must_stop_processing;
 
                     indexer::index(
                         index_wtxn,
@@ -1645,7 +1632,6 @@ impl IndexScheduler {
                     let document_changes = indexer.into_changes(&indexer_alloc, primary_key);
                     let embedders = index.embedding_configs(index_wtxn)?;
                     let embedders = self.embedders(embedders)?;
-                    let must_stop_processing = &self.must_stop_processing;
 
                     indexer::index(
                         index_wtxn,
@@ -1679,7 +1665,6 @@ impl IndexScheduler {
                     task.status = Status::Succeeded;
                 }
 
-                let must_stop_processing = self.must_stop_processing.clone();
                 builder.execute(
                     |indexing_step| tracing::debug!(update = ?indexing_step),
                     || must_stop_processing.get(),

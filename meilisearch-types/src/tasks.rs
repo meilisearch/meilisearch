@@ -4,6 +4,7 @@ use std::fmt::{Display, Write};
 use std::str::FromStr;
 
 use enum_iterator::Sequence;
+use milli::update::new::indexer::document_changes::Progress;
 use milli::update::IndexDocumentsMethod;
 use milli::Object;
 use roaring::RoaringBitmap;
@@ -30,12 +31,67 @@ pub struct Task {
     #[serde(with = "time::serde::rfc3339::option")]
     pub finished_at: Option<OffsetDateTime>,
 
+    pub progress: Option<TaskProgress>,
+
     pub error: Option<ResponseError>,
     pub canceled_by: Option<TaskId>,
     pub details: Option<Details>,
 
     pub status: Status,
     pub kind: KindWithContent,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskProgress {
+    pub current_step: String,
+    pub finished_steps: u16,
+    pub total_steps: u16,
+    pub finished_documents: Option<u32>,
+    pub total_documents: Option<u32>,
+}
+
+impl Default for TaskProgress {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TaskProgress {
+    pub fn new() -> Self {
+        Self {
+            current_step: String::new(),
+            finished_steps: 0,
+            total_steps: 1,
+            finished_documents: None,
+            total_documents: None,
+        }
+    }
+
+    pub fn update(&mut self, progress: Progress) {
+        if self.current_step != progress.step_name {
+            self.current_step.clear();
+            self.current_step.push_str(progress.step_name);
+        }
+        self.total_steps = progress.total_steps;
+        if self.finished_steps > progress.finished_steps {
+            return;
+        }
+        if self.finished_steps < progress.finished_steps {
+            self.finished_documents = None;
+            self.total_documents = None;
+        }
+        self.finished_steps = progress.finished_steps;
+        if let Some((finished_documents, total_documents)) = progress.finished_total_documents {
+            if let Some(task_finished_documents) = self.finished_documents {
+                if task_finished_documents > finished_documents {
+                    return;
+                }
+            }
+            self.finished_documents = Some(finished_documents);
+            self.total_documents = Some(total_documents);
+        }
+    }
 }
 
 impl Task {

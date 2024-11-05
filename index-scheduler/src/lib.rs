@@ -55,11 +55,12 @@ use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str, I128};
 use meilisearch_types::heed::{self, Database, Env, PutFlags, RoTxn, RwTxn};
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
+use meilisearch_types::milli::update::new::indexer::document_changes::Progress;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
 use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
 use meilisearch_types::task_view::TaskView;
-use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
+use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task, TaskProgress};
 use rayon::current_num_threads;
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use roaring::RoaringBitmap;
@@ -161,12 +162,18 @@ struct ProcessingTasks {
     started_at: OffsetDateTime,
     /// The list of tasks ids that are currently running.
     processing: RoaringBitmap,
+    /// The progress on processing tasks
+    progress: Option<TaskProgress>,
 }
 
 impl ProcessingTasks {
     /// Creates an empty `ProcessingAt` struct.
     fn new() -> ProcessingTasks {
-        ProcessingTasks { started_at: OffsetDateTime::now_utc(), processing: RoaringBitmap::new() }
+        ProcessingTasks {
+            started_at: OffsetDateTime::now_utc(),
+            processing: RoaringBitmap::new(),
+            progress: None,
+        }
     }
 
     /// Stores the currently processing tasks, and the date time at which it started.
@@ -175,8 +182,13 @@ impl ProcessingTasks {
         self.processing = processing;
     }
 
+    fn update_progress(&mut self, progress: Progress) {
+        self.progress.get_or_insert_with(TaskProgress::default).update(progress);
+    }
+
     /// Set the processing tasks to an empty list
     fn stop_processing(&mut self) -> RoaringBitmap {
+        self.progress = None;
         std::mem::take(&mut self.processing)
     }
 
@@ -956,7 +968,7 @@ impl IndexScheduler {
             tasks.into_iter().rev().take(query.limit.unwrap_or(u32::MAX) as usize),
         )?;
 
-        let ProcessingTasks { started_at, processing, .. } =
+        let ProcessingTasks { started_at, processing, progress, .. } =
             self.processing_tasks.read().map_err(|_| Error::CorruptedTaskQueue)?.clone();
 
         let ret = tasks.into_iter();
@@ -966,7 +978,12 @@ impl IndexScheduler {
             Ok((
                 ret.map(|task| {
                     if processing.contains(task.uid) {
-                        Task { status: Status::Processing, started_at: Some(started_at), ..task }
+                        Task {
+                            status: Status::Processing,
+                            progress: progress.clone(),
+                            started_at: Some(started_at),
+                            ..task
+                        }
                     } else {
                         task
                     }
@@ -1008,6 +1025,7 @@ impl IndexScheduler {
             enqueued_at: OffsetDateTime::now_utc(),
             started_at: None,
             finished_at: None,
+            progress: None,
             error: None,
             canceled_by: None,
             details: kind.default_details(),
@@ -1588,6 +1606,8 @@ impl<'a> Dump<'a> {
             enqueued_at: task.enqueued_at,
             started_at: task.started_at,
             finished_at: task.finished_at,
+            /// FIXME: should we update dump to contain progress information? 🤔
+            progress: None,
             error: task.error,
             canceled_by: task.canceled_by,
             details: task.details,
