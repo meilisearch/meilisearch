@@ -34,7 +34,7 @@ impl OfflineUpgrade {
             ("1", "9", _) => 0,
             ("1", "10", _) => 1,
             _ => {
-                bail!("Unsupported current version {current_major}.{current_minor}.{current_patch}. Can only upgrade from v1.9")
+                bail!("Unsupported current version {current_major}.{current_minor}.{current_patch}. Can only upgrade from v1.9 and v1.10")
             }
         };
 
