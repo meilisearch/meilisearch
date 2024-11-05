@@ -3,15 +3,16 @@
 //! through the sub-settings route directly without any manipulation.
 //! This is why we often use a `Option<&Vec<_>>` instead of a `Option<&[_]>`.
 
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+
+use meilisearch_types::facet_values_sort::FacetValuesSort;
 use meilisearch_types::locales::{Locale, LocalizedAttributesRuleView};
 use meilisearch_types::milli::update::Setting;
 use meilisearch_types::milli::vector::settings::EmbeddingSettings;
 use meilisearch_types::settings::{
-    FacetingSettings, PaginationSettings, ProximityPrecisionView, TypoSettings,
+    FacetingSettings, PaginationSettings, ProximityPrecisionView, RankingRuleView, TypoSettings,
 };
-use meilisearch_types::{facet_values_sort::FacetValuesSort, settings::RankingRuleView};
 use serde::Serialize;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use crate::analytics::Aggregate;
 

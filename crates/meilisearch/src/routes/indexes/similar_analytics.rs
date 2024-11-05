@@ -4,11 +4,9 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::{json, Value};
 
-use crate::{
-    aggregate_methods,
-    analytics::{Aggregate, AggregateMethod},
-    search::{SimilarQuery, SimilarResult},
-};
+use crate::aggregate_methods;
+use crate::analytics::{Aggregate, AggregateMethod};
+use crate::search::{SimilarQuery, SimilarResult};
 
 aggregate_methods!(
     SimilarPOST => "Similar POST",
