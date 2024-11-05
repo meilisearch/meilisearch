@@ -73,7 +73,7 @@ enum Command {
     ///
     /// Supported upgrade paths:
     ///
-    /// - v1.9.0 -> v1.10.0 -> v1.11.0
+    /// - v1.9.x -> v1.10.x -> v1.11.x
     OfflineUpgrade {
         #[arg(long)]
         target_version: String,
