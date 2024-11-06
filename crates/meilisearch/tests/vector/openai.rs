@@ -137,13 +137,14 @@ fn long_text() -> &'static str {
 }
 
 async fn create_mock_tokenized() -> (MockServer, Value) {
-    create_mock_with_template("{{doc.text}}", ModelDimensions::Large, false).await
+    create_mock_with_template("{{doc.text}}", ModelDimensions::Large, false, false).await
 }
 
 async fn create_mock_with_template(
     document_template: &str,
     model_dimensions: ModelDimensions,
     fallible: bool,
+    slow: bool,
 ) -> (MockServer, Value) {
     let mock_server = MockServer::start().await;
     const API_KEY: &str = "my-api-key";
@@ -154,7 +155,11 @@ async fn create_mock_with_template(
     Mock::given(method("POST"))
         .and(path("/"))
         .respond_with(move |req: &Request| {
-            // 0. maybe return 500
+            // 0. wait for a long time
+            if slow {
+              std::thread::sleep(std::time::Duration::from_secs(1));
+            }
+            // 1. maybe return 500
             if fallible {
              let attempt = attempt.fetch_add(1, Ordering::Relaxed);
              let failed = matches!(attempt % 4, 0 | 1 | 3);
@@ -167,7 +172,7 @@ async fn create_mock_with_template(
                 }))
              }
             }
-            // 1. check API key
+            // 3. check API key
             match req.headers.get("Authorization") {
                 Some(api_key) if api_key == API_KEY_BEARER => {
                     {}
@@ -202,7 +207,7 @@ async fn create_mock_with_template(
                     )
                 }
             }
-            // 2. parse text inputs
+            // 3. parse text inputs
             let query: serde_json::Value = match req.body_json() {
                 Ok(query) => query,
                 Err(_error) => return ResponseTemplate::new(400).set_body_json(
@@ -223,7 +228,7 @@ async fn create_mock_with_template(
                 panic!("Expected {model_dimensions:?}, got {query_model_dimensions:?}")
             }
 
-            // 3. for each text, find embedding in responses
+            // 4. for each text, find embedding in responses
             let serde_json::Value::Array(inputs) = &query["input"] else {
                 panic!("Unexpected `input` value")
             };
@@ -283,7 +288,7 @@ async fn create_mock_with_template(
                 "embedding": embedding,
             })).collect();
 
-            // 4. produce output from embeddings
+            // 5. produce output from embeddings
             ResponseTemplate::new(200).set_body_json(json!({
                 "object": "list",
                 "data": data,
@@ -317,23 +322,27 @@ const DOGGO_TEMPLATE: &str = r#"{%- if doc.gender == "F" -%}Une chienne nommée 
         {%- endif %}, de race {{doc.breed}}."#;
 
 async fn create_mock() -> (MockServer, Value) {
-    create_mock_with_template(DOGGO_TEMPLATE, ModelDimensions::Large, false).await
+    create_mock_with_template(DOGGO_TEMPLATE, ModelDimensions::Large, false, false).await
 }
 
 async fn create_mock_dimensions() -> (MockServer, Value) {
-    create_mock_with_template(DOGGO_TEMPLATE, ModelDimensions::Large512, false).await
+    create_mock_with_template(DOGGO_TEMPLATE, ModelDimensions::Large512, false, false).await
 }
 
 async fn create_mock_small_embedding_model() -> (MockServer, Value) {
-    create_mock_with_template(DOGGO_TEMPLATE, ModelDimensions::Small, false).await
+    create_mock_with_template(DOGGO_TEMPLATE, ModelDimensions::Small, false, false).await
 }
 
 async fn create_mock_legacy_embedding_model() -> (MockServer, Value) {
-    create_mock_with_template(DOGGO_TEMPLATE, ModelDimensions::Ada, false).await
+    create_mock_with_template(DOGGO_TEMPLATE, ModelDimensions::Ada, false, false).await
 }
 
 async fn create_fallible_mock() -> (MockServer, Value) {
-    create_mock_with_template(DOGGO_TEMPLATE, ModelDimensions::Large, true).await
+    create_mock_with_template(DOGGO_TEMPLATE, ModelDimensions::Large, true, false).await
+}
+
+async fn create_slow_mock() -> (MockServer, Value) {
+    create_mock_with_template(DOGGO_TEMPLATE, ModelDimensions::Large, true, true).await
 }
 
 // basic test "it works"
@@ -1873,4 +1882,114 @@ async fn it_still_works() {
     ]
     "###);
 }
+
+// test with a server that responds 500 on 3 out of 4 calls
+#[actix_rt::test]
+async fn timeout() {
+    let (_mock, setting) = create_slow_mock().await;
+    let server = get_server_vector().await;
+    let index = server.index("doggo");
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+              "default": setting,
+          },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task["status"], @r###""succeeded""###);
+    let documents = json!([
+      {"id": 0, "name": "kefir", "gender": "M", "birthyear": 2023, "breed": "Patou"},
+    ]);
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let (documents, _code) = index
+        .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
+        .await;
+    snapshot!(json_string!(documents, {".results.*._vectors.default.embeddings" => "[vector]"}), @r###"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name": "kefir",
+          "gender": "M",
+          "birthyear": 2023,
+          "breed": "Patou",
+          "_vectors": {
+            "default": {
+              "embeddings": "[vector]",
+              "regenerate": true
+            }
+          }
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "###);
+
+    let (response, code) = index
+        .search_post(json!({
+            "q": "grand chien de berger des montagnes",
+            "hybrid": {"semanticRatio": 0.99, "embedder": "default"}
+        }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["semanticHitCount"]), @"0");
+    snapshot!(json_string!(response["hits"]), @"[]");
+
+    let (response, code) = index
+        .search_post(json!({
+            "q": "grand chien de berger des montagnes",
+            "hybrid": {"semanticRatio": 0.99, "embedder": "default"}
+        }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["semanticHitCount"]), @"1");
+    snapshot!(json_string!(response["hits"]), @r###"
+    [
+      {
+        "id": 0,
+        "name": "kefir",
+        "gender": "M",
+        "birthyear": 2023,
+        "breed": "Patou"
+      }
+    ]
+    "###);
+
+    let (response, code) = index
+        .search_post(json!({
+            "q": "grand chien de berger des montagnes",
+            "hybrid": {"semanticRatio": 0.99, "embedder": "default"}
+        }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["semanticHitCount"]), @"0");
+    snapshot!(json_string!(response["hits"]), @"[]");
+}
+
 // test with a server that wrongly responds 400
