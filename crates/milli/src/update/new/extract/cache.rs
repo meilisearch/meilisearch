@@ -526,7 +526,7 @@ where
         for (map_index, map) in maps.iter_mut().enumerate() {
             if first_entry.source_index != map_index {
                 if let Some(new) = map.get_mut(first_key) {
-                    output.append_and_clear_bbbul(new);
+                    output.union_and_clear_bbbul(new);
                 }
             }
         }
@@ -543,20 +543,22 @@ where
     // Then manage the content on the HashMap entries that weren't taken (mem::take).
     while let Some(mut map) = maps.pop() {
         for (key, bbbul) in map.iter_mut() {
-            let mut output = DelAddRoaringBitmap::empty();
-            output.append_and_clear_bbbul(bbbul);
-
             // Make sure we don't try to work with entries already managed by the spilled
-            if !bbbul.is_empty() {
-                for rhs in maps.iter_mut() {
-                    if let Some(new) = rhs.get_mut(key) {
-                        output.append_and_clear_bbbul(new);
-                    }
-                }
-
-                // We send the merged entry outside.
-                (f)(key, output)?;
+            if bbbul.is_empty() {
+                continue;
             }
+
+            let mut output = DelAddRoaringBitmap::empty();
+            output.union_and_clear_bbbul(bbbul);
+
+            for rhs in maps.iter_mut() {
+                if let Some(new) = rhs.get_mut(key) {
+                    output.union_and_clear_bbbul(new);
+                }
+            }
+
+            // We send the merged entry outside.
+            (f)(key, output)?;
         }
     }
 
@@ -596,14 +598,6 @@ pub struct DelAddBbbul<'bump, B> {
 }
 
 impl<'bump, B: BitPacker> DelAddBbbul<'bump, B> {
-    pub fn insert_del_u32_in(&mut self, n: u32, bump: &'bump Bump) {
-        self.del.get_or_insert_with(|| Bbbul::new_in(bump)).insert(n);
-    }
-
-    pub fn insert_add_u32_in(&mut self, n: u32, bump: &'bump Bump) {
-        self.add.get_or_insert_with(|| Bbbul::new_in(bump)).insert(n);
-    }
-
     pub fn new_del_u32_in(n: u32, bump: &'bump Bump) -> Self {
         let mut bbbul = Bbbul::new_in(bump);
         bbbul.insert(n);
@@ -655,11 +649,6 @@ impl DelAddRoaringBitmap {
         DelAddRoaringBitmap { del: None, add: None }
     }
 
-    pub fn is_empty(&self) -> bool {
-        let DelAddRoaringBitmap { del, add } = self;
-        del.is_none() && add.is_none()
-    }
-
     pub fn insert_del_u32(&mut self, n: u32) {
         self.del.get_or_insert_with(RoaringBitmap::new).insert(n);
     }
@@ -676,14 +665,16 @@ impl DelAddRoaringBitmap {
         DelAddRoaringBitmap { del: None, add: Some(RoaringBitmap::from([n])) }
     }
 
-    pub fn append_and_clear_bbbul<B: BitPacker>(&mut self, bbbul: &mut FrozenDelAddBbbul<'_, B>) {
+    pub fn union_and_clear_bbbul<B: BitPacker>(&mut self, bbbul: &mut FrozenDelAddBbbul<'_, B>) {
         let FrozenDelAddBbbul { del, add } = bbbul;
 
         if let Some(ref mut bbbul) = del.take() {
             let del = self.del.get_or_insert_with(RoaringBitmap::new);
             let mut iter = bbbul.iter_and_clear();
             while let Some(block) = iter.next_block() {
-                del.append(block.iter().copied());
+                let iter = block.iter().copied();
+                let block = RoaringBitmap::from_sorted_iter(iter).unwrap();
+                *del |= block;
             }
         }
 
@@ -691,7 +682,9 @@ impl DelAddRoaringBitmap {
             let add = self.add.get_or_insert_with(RoaringBitmap::new);
             let mut iter = bbbul.iter_and_clear();
             while let Some(block) = iter.next_block() {
-                add.append(block.iter().copied());
+                let iter = block.iter().copied();
+                let block = RoaringBitmap::from_sorted_iter(iter).unwrap();
+                *add |= block;
             }
         }
     }

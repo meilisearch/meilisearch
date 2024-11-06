@@ -589,10 +589,8 @@ fn compute_word_fst(index: &Index, wtxn: &mut RwTxn) -> Result<Option<PrefixDelt
     let _entered = span.enter();
 
     let (word_fst_mmap, prefix_data) = word_fst_builder.build(index, &rtxn)?;
-    // extractor_sender.main().write_words_fst(word_fst_mmap).unwrap();
     index.main.remap_types::<Str, Bytes>().put(wtxn, WORDS_FST_KEY, &word_fst_mmap)?;
     if let Some(PrefixData { prefixes_fst_mmap, prefix_delta }) = prefix_data {
-        // extractor_sender.main().write_words_prefixes_fst(prefixes_fst_mmap).unwrap();
         index.main.remap_types::<Str, Bytes>().put(
             wtxn,
             WORDS_PREFIXES_FST_KEY,
