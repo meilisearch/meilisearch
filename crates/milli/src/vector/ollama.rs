@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
 use rayon::slice::ParallelSlice as _;
 
@@ -80,8 +82,9 @@ impl Embedder {
     pub fn embed<S: AsRef<str> + serde::Serialize>(
         &self,
         texts: &[S],
+        deadline: Option<Instant>,
     ) -> Result<Vec<Embedding>, EmbedError> {
-        match self.rest_embedder.embed_ref(texts) {
+        match self.rest_embedder.embed_ref(texts, deadline) {
             Ok(embeddings) => Ok(embeddings),
             Err(EmbedError { kind: EmbedErrorKind::RestOtherStatusCode(404, error), fault: _ }) => {
                 Err(EmbedError::ollama_model_not_found(error))
@@ -97,7 +100,7 @@ impl Embedder {
     ) -> Result<Vec<Vec<Embedding>>, EmbedError> {
         threads
             .install(move || {
-                text_chunks.into_par_iter().map(move |chunk| self.embed(&chunk)).collect()
+                text_chunks.into_par_iter().map(move |chunk| self.embed(&chunk, None)).collect()
             })
             .map_err(|error| EmbedError {
                 kind: EmbedErrorKind::PanicInThreadPool(error),
@@ -114,7 +117,7 @@ impl Embedder {
             .install(move || {
                 let embeddings: Result<Vec<Vec<Embedding>>, _> = texts
                     .par_chunks(self.prompt_count_in_chunk_hint())
-                    .map(move |chunk| self.embed(chunk))
+                    .map(move |chunk| self.embed(chunk, None))
                     .collect();
 
                 let embeddings = embeddings?;

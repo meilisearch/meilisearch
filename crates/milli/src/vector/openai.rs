@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use ordered_float::OrderedFloat;
 use rayon::iter::{IntoParallelIterator, ParallelIterator as _};
 use rayon::slice::ParallelSlice as _;
@@ -211,18 +213,23 @@ impl Embedder {
     pub fn embed<S: AsRef<str> + serde::Serialize>(
         &self,
         texts: &[S],
+        deadline: Option<Instant>,
     ) -> Result<Vec<Embedding>, EmbedError> {
-        match self.rest_embedder.embed_ref(texts) {
+        match self.rest_embedder.embed_ref(texts, deadline) {
             Ok(embeddings) => Ok(embeddings),
             Err(EmbedError { kind: EmbedErrorKind::RestBadRequest(error, _), fault: _ }) => {
                 tracing::warn!(error=?error, "OpenAI: received `BAD_REQUEST`. Input was maybe too long, retrying on tokenized version. For best performance, limit the size of your document template.");
-                self.try_embed_tokenized(texts)
+                self.try_embed_tokenized(texts, deadline)
             }
             Err(error) => Err(error),
         }
     }
 
-    fn try_embed_tokenized<S: AsRef<str>>(&self, text: &[S]) -> Result<Vec<Embedding>, EmbedError> {
+    fn try_embed_tokenized<S: AsRef<str>>(
+        &self,
+        text: &[S],
+        deadline: Option<Instant>,
+    ) -> Result<Vec<Embedding>, EmbedError> {
         let mut all_embeddings = Vec::with_capacity(text.len());
         for text in text {
             let text = text.as_ref();
@@ -230,13 +237,13 @@ impl Embedder {
             let encoded = self.tokenizer.encode_ordinary(text);
             let len = encoded.len();
             if len < max_token_count {
-                all_embeddings.append(&mut self.rest_embedder.embed_ref(&[text])?);
+                all_embeddings.append(&mut self.rest_embedder.embed_ref(&[text], deadline)?);
                 continue;
             }
 
             let tokens = &encoded.as_slice()[0..max_token_count];
 
-            let embedding = self.rest_embedder.embed_tokens(tokens)?;
+            let embedding = self.rest_embedder.embed_tokens(tokens, deadline)?;
 
             all_embeddings.push(embedding);
         }
@@ -250,7 +257,7 @@ impl Embedder {
     ) -> Result<Vec<Vec<Embedding>>, EmbedError> {
         threads
             .install(move || {
-                text_chunks.into_par_iter().map(move |chunk| self.embed(&chunk)).collect()
+                text_chunks.into_par_iter().map(move |chunk| self.embed(&chunk, None)).collect()
             })
             .map_err(|error| EmbedError {
                 kind: EmbedErrorKind::PanicInThreadPool(error),
@@ -267,7 +274,7 @@ impl Embedder {
             .install(move || {
                 let embeddings: Result<Vec<Vec<Embedding>>, _> = texts
                     .par_chunks(self.prompt_count_in_chunk_hint())
-                    .map(move |chunk| self.embed(chunk))
+                    .map(move |chunk| self.embed(chunk, None))
                     .collect();
 
                 let embeddings = embeddings?;

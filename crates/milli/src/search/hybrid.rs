@@ -201,7 +201,9 @@ impl<'a> Search<'a> {
                 let span = tracing::trace_span!(target: "search::hybrid", "embed_one");
                 let _entered = span.enter();
 
-                match embedder.embed_one(query) {
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+
+                match embedder.embed_one(query, Some(deadline)) {
                     Ok(embedding) => embedding,
                     Err(error) => {
                         tracing::error!(error=%error, "Embedding failed");

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 use arroy::distances::{BinaryQuantizedCosine, Cosine};
 use arroy::ItemId;
@@ -595,18 +596,26 @@ impl Embedder {
     /// Embed one or multiple texts.
     ///
     /// Each text can be embedded as one or multiple embeddings.
-    pub fn embed(&self, texts: Vec<String>) -> std::result::Result<Vec<Embedding>, EmbedError> {
+    pub fn embed(
+        &self,
+        texts: Vec<String>,
+        deadline: Option<Instant>,
+    ) -> std::result::Result<Vec<Embedding>, EmbedError> {
         match self {
             Embedder::HuggingFace(embedder) => embedder.embed(texts),
-            Embedder::OpenAi(embedder) => embedder.embed(&texts),
-            Embedder::Ollama(embedder) => embedder.embed(&texts),
+            Embedder::OpenAi(embedder) => embedder.embed(&texts, deadline),
+            Embedder::Ollama(embedder) => embedder.embed(&texts, deadline),
             Embedder::UserProvided(embedder) => embedder.embed(&texts),
-            Embedder::Rest(embedder) => embedder.embed(texts),
+            Embedder::Rest(embedder) => embedder.embed(texts, deadline),
         }
     }
 
-    pub fn embed_one(&self, text: String) -> std::result::Result<Embedding, EmbedError> {
-        let mut embedding = self.embed(vec![text])?;
+    pub fn embed_one(
+        &self,
+        text: String,
+        deadline: Option<Instant>,
+    ) -> std::result::Result<Embedding, EmbedError> {
+        let mut embedding = self.embed(vec![text], deadline)?;
         let embedding = embedding.pop().ok_or_else(EmbedError::missing_embedding)?;
         Ok(embedding)
     }
