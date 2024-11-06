@@ -9,8 +9,7 @@ use urlencoding::encode as urlencode;
 
 use super::encoder::Encoder;
 use super::service::Service;
-use super::Value;
-use super::{Owned, Shared};
+use super::{Owned, Shared, Value};
 use crate::json;
 
 pub struct Index<'a, State = Owned> {
