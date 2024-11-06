@@ -4,7 +4,10 @@ use meili_snap::*;
 use urlencoding::encode as urlencode;
 
 use crate::common::encoder::Encoder;
-use crate::common::{shared_does_not_exists_index, shared_empty_index, shared_index_with_test_set, GetAllDocumentsOptions, Server, Value};
+use crate::common::{
+    shared_does_not_exists_index, shared_empty_index, shared_index_with_test_set,
+    GetAllDocumentsOptions, Server, Value,
+};
 use crate::json;
 
 // TODO: partial test since we are testing error, amd error is not yet fully implemented in
@@ -159,7 +162,7 @@ async fn get_all_documents_no_options_with_response_compression() {
 
 #[actix_rt::test]
 async fn test_get_all_documents_limit() {
-  let index = shared_index_with_test_set().await;
+    let index = shared_index_with_test_set().await;
 
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions { limit: Some(5), ..Default::default() })
@@ -190,7 +193,6 @@ async fn test_get_all_documents_offset() {
 #[actix_rt::test]
 async fn test_get_all_documents_attributes_to_retrieve() {
     let index = shared_index_with_test_set().await;
-
 
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions {
