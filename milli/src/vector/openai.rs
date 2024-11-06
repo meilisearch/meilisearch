@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use ordered_float::OrderedFloat;
 use rayon::iter::{IntoParallelIterator, ParallelIterator as _};
 
@@ -206,32 +208,40 @@ impl Embedder {
         Ok(Self { options, rest_embedder, tokenizer })
     }
 
-    pub fn embed(&self, texts: Vec<String>) -> Result<Vec<Embeddings<f32>>, EmbedError> {
-        match self.rest_embedder.embed_ref(&texts) {
+    pub fn embed(
+        &self,
+        texts: Vec<String>,
+        deadline: Option<Instant>,
+    ) -> Result<Vec<Embeddings<f32>>, EmbedError> {
+        match self.rest_embedder.embed_ref(&texts, deadline) {
             Ok(embeddings) => Ok(embeddings),
             Err(EmbedError { kind: EmbedErrorKind::RestBadRequest(error, _), fault: _ }) => {
                 tracing::warn!(error=?error, "OpenAI: received `BAD_REQUEST`. Input was maybe too long, retrying on tokenized version. For best performance, limit the size of your document template.");
-                self.try_embed_tokenized(&texts)
+                self.try_embed_tokenized(&texts, deadline)
             }
             Err(error) => Err(error),
         }
     }
 
-    fn try_embed_tokenized(&self, text: &[String]) -> Result<Vec<Embeddings<f32>>, EmbedError> {
+    fn try_embed_tokenized(
+        &self,
+        text: &[String],
+        deadline: Option<Instant>,
+    ) -> Result<Vec<Embeddings<f32>>, EmbedError> {
         let mut all_embeddings = Vec::with_capacity(text.len());
         for text in text {
             let max_token_count = self.options.embedding_model.max_token();
             let encoded = self.tokenizer.encode_ordinary(text.as_str());
             let len = encoded.len();
             if len < max_token_count {
-                all_embeddings.append(&mut self.rest_embedder.embed_ref(&[text])?);
+                all_embeddings.append(&mut self.rest_embedder.embed_ref(&[text], deadline)?);
                 continue;
             }
 
             let tokens = &encoded.as_slice()[0..max_token_count];
             let mut embeddings_for_prompt = Embeddings::new(self.dimensions());
 
-            let embedding = self.rest_embedder.embed_tokens(tokens)?;
+            let embedding = self.rest_embedder.embed_tokens(tokens, deadline)?;
             embeddings_for_prompt.append(embedding.into_inner()).map_err(|got| {
                 EmbedError::rest_unexpected_dimension(self.dimensions(), got.len())
             })?;
@@ -248,7 +258,7 @@ impl Embedder {
     ) -> Result<Vec<Vec<Embeddings<f32>>>, EmbedError> {
         threads
             .install(move || {
-                text_chunks.into_par_iter().map(move |chunk| self.embed(chunk)).collect()
+                text_chunks.into_par_iter().map(move |chunk| self.embed(chunk, None)).collect()
             })
             .map_err(|error| EmbedError {
                 kind: EmbedErrorKind::PanicInThreadPool(error),

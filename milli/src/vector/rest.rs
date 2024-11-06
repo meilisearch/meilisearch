@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::time::Instant;
 
 use deserr::Deserr;
 use rand::Rng;
@@ -154,19 +155,31 @@ impl Embedder {
         Ok(Self { data, dimensions, distribution: options.distribution })
     }
 
-    pub fn embed(&self, texts: Vec<String>) -> Result<Vec<Embeddings<f32>>, EmbedError> {
-        embed(&self.data, texts.as_slice(), texts.len(), Some(self.dimensions))
+    pub fn embed(
+        &self,
+        texts: Vec<String>,
+        deadline: Option<Instant>,
+    ) -> Result<Vec<Embeddings<f32>>, EmbedError> {
+        embed(&self.data, texts.as_slice(), texts.len(), Some(self.dimensions), deadline)
     }
 
-    pub fn embed_ref<S>(&self, texts: &[S]) -> Result<Vec<Embeddings<f32>>, EmbedError>
+    pub fn embed_ref<S>(
+        &self,
+        texts: &[S],
+        deadline: Option<Instant>,
+    ) -> Result<Vec<Embeddings<f32>>, EmbedError>
     where
         S: AsRef<str> + Serialize,
     {
-        embed(&self.data, texts, texts.len(), Some(self.dimensions))
+        embed(&self.data, texts, texts.len(), Some(self.dimensions), deadline)
     }
 
-    pub fn embed_tokens(&self, tokens: &[usize]) -> Result<Embeddings<f32>, EmbedError> {
-        let mut embeddings = embed(&self.data, tokens, 1, Some(self.dimensions))?;
+    pub fn embed_tokens(
+        &self,
+        tokens: &[usize],
+        deadline: Option<Instant>,
+    ) -> Result<Embeddings<f32>, EmbedError> {
+        let mut embeddings = embed(&self.data, tokens, 1, Some(self.dimensions), deadline)?;
         // unwrap: guaranteed that embeddings.len() == 1, otherwise the previous line terminated in error
         Ok(embeddings.pop().unwrap())
     }
@@ -178,7 +191,7 @@ impl Embedder {
     ) -> Result<Vec<Vec<Embeddings<f32>>>, EmbedError> {
         threads
             .install(move || {
-                text_chunks.into_par_iter().map(move |chunk| self.embed(chunk)).collect()
+                text_chunks.into_par_iter().map(move |chunk| self.embed(chunk, None)).collect()
             })
             .map_err(|error| EmbedError {
                 kind: EmbedErrorKind::PanicInThreadPool(error),
@@ -207,7 +220,7 @@ impl Embedder {
 }
 
 fn infer_dimensions(data: &EmbedderData) -> Result<usize, NewEmbedderError> {
-    let v = embed(data, ["test"].as_slice(), 1, None)
+    let v = embed(data, ["test"].as_slice(), 1, None, None)
         .map_err(NewEmbedderError::could_not_determine_dimension)?;
     // unwrap: guaranteed that v.len() == 1, otherwise the previous line terminated in error
     Ok(v.first().unwrap().dimension())
@@ -218,6 +231,7 @@ fn embed<S>(
     inputs: &[S],
     expected_count: usize,
     expected_dimension: Option<usize>,
+    deadline: Option<Instant>,
 ) -> Result<Vec<Embeddings<f32>>, EmbedError>
 where
     S: Serialize,
@@ -245,7 +259,18 @@ where
             }
             Err(retry) => {
                 tracing::warn!("Failed: {}", retry.error);
-                retry.into_duration(attempt)
+                if let Some(deadline) = deadline {
+                    let now = std::time::Instant::now();
+                    if now > deadline {
+                        tracing::warn!("Could not embed due to deadline");
+                        return Err(retry.into_error());
+                    }
+
+                    let duration_to_deadline = deadline - now;
+                    retry.into_duration(attempt).map(|duration| duration.min(duration_to_deadline))
+                } else {
+                    retry.into_duration(attempt)
+                }
             }
         }?;
 
