@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
 
 use super::error::{EmbedError, EmbedErrorKind, NewEmbedderError, NewEmbedderErrorKind};
@@ -75,8 +77,12 @@ impl Embedder {
         Ok(Self { rest_embedder })
     }
 
-    pub fn embed(&self, texts: Vec<String>) -> Result<Vec<Embeddings<f32>>, EmbedError> {
-        match self.rest_embedder.embed(texts) {
+    pub fn embed(
+        &self,
+        texts: Vec<String>,
+        deadline: Option<Instant>,
+    ) -> Result<Vec<Embeddings<f32>>, EmbedError> {
+        match self.rest_embedder.embed(texts, deadline) {
             Ok(embeddings) => Ok(embeddings),
             Err(EmbedError { kind: EmbedErrorKind::RestOtherStatusCode(404, error), fault: _ }) => {
                 Err(EmbedError::ollama_model_not_found(error))
@@ -92,7 +98,7 @@ impl Embedder {
     ) -> Result<Vec<Vec<Embeddings<f32>>>, EmbedError> {
         threads
             .install(move || {
-                text_chunks.into_par_iter().map(move |chunk| self.embed(chunk)).collect()
+                text_chunks.into_par_iter().map(move |chunk| self.embed(chunk, None)).collect()
             })
             .map_err(|error| EmbedError {
                 kind: EmbedErrorKind::PanicInThreadPool(error),

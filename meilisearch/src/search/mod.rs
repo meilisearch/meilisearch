@@ -796,8 +796,10 @@ fn prepare_search<'t>(
                     let span = tracing::trace_span!(target: "search::vector", "embed_one");
                     let _entered = span.enter();
 
+                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+
                     embedder
-                        .embed_one(query.q.clone().unwrap())
+                        .embed_one(query.q.clone().unwrap(), Some(deadline))
                         .map_err(milli::vector::Error::from)
                         .map_err(milli::Error::from)?
                 }
