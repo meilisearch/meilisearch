@@ -1,0 +1,21 @@
+[package]
+name = "meilitool"
+description = "A CLI to edit a Meilisearch database from the command line"
+version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+readme.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = "1.0.86"
+clap = { version = "4.5.9", features = ["derive"] }
+dump = { path = "../dump" }
+file-store = { path = "../file-store" }
+meilisearch-auth = { path = "../meilisearch-auth" }
+meilisearch-types = { path = "../meilisearch-types" }
+serde = { version = "1.0.209", features = ["derive"] }
+time = { version = "0.3.36", features = ["formatting", "parsing", "alloc"] }
+uuid = { version = "1.10.0", features = ["v4"], default-features = false }
+arroy_v04_to_v05 = { package = "arroy", git = "https://github.com/meilisearch/arroy/", tag = "DO-NOT-DELETE-upgrade-v04-to-v05" }

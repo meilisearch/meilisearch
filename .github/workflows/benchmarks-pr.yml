@@ -88,7 +88,7 @@ jobs:
       # Run benchmarks
       - name: Run benchmarks - Dataset ${{ steps.command.outputs.command-arguments }} - Branch ${{ steps.current_branch.outputs.name }} - Commit ${{ steps.commit_sha.outputs.short }}
         run: |
-          cd benchmarks
+          cd crates/benchmarks
           cargo bench --bench ${{ steps.command.outputs.command-arguments }} -- --save-baseline ${{ steps.file.outputs.basename }}
 
       # Generate critcmp files

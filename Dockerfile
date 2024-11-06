@@ -21,6 +21,7 @@ RUN     set -eux; \
 
 # Run
 FROM    alpine:3.20
+LABEL   org.opencontainers.image.source="https://github.com/meilisearch/meilisearch"
 
 ENV     MEILI_HTTP_ADDR 0.0.0.0:7700
 ENV     MEILI_SERVER_PROVIDER docker
