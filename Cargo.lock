@@ -573,6 +573,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bitpacking"
+version = "0.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c1d3e2bfd8d06048a179f7b17afc3188effa10385e7b00dc65af6aae732ea92"
+dependencies = [
+ "crunchy",
+]
+
+[[package]]
 name = "bitvec"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4430,9 +4439,10 @@ dependencies = [
 [[package]]
 name = "raw-collections"
 version = "0.1.0"
-source = "git+https://github.com/dureuill/raw-collections.git#4ab9619207632c20f4e0c2e126d9d909cc58ef65"
+source = "git+https://github.com/dureuill/raw-collections.git#48801130cb16d758ba9c610b0fe25747e4d85534"
 dependencies = [
  "allocator-api2",
+ "bitpacking",
  "bumpalo",
  "hashbrown 0.15.0",
  "serde",
