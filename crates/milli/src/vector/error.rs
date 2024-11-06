@@ -454,7 +454,7 @@ impl UnusedVectorsDistribution {
 }
 
 pub struct UnusedVectorsDistributionBump<'doc>(
-    hashbrown::HashMap<&'doc str, u64, hashbrown::hash_map::DefaultHashBuilder, &'doc Bump>,
+    hashbrown::HashMap<&'doc str, u64, hashbrown::DefaultHashBuilder, &'doc Bump>,
 );
 
 impl<'doc> UnusedVectorsDistributionBump<'doc> {

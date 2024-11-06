@@ -228,7 +228,7 @@ impl DocidsExtractor for FacetedDocidsExtractor {
         grenad_parameters: GrenadParameters,
         document_changes: &DC,
         indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP, SP>,
-        extractor_allocs: &mut ThreadLocal<FullySend<Bump>>,
+        extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
         finished_steps: u16,
         total_steps: u16,
         step_name: &'static str,

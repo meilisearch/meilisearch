@@ -11,8 +11,8 @@ use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use crate::update::new::extract::cache::BalancedCaches;
 use crate::update::new::extract::perm_json_p::contained_in;
 use crate::update::new::indexer::document_changes::{
-    for_each_document_change, DocumentChangeContext, DocumentChanges, Extractor, FullySend,
-    IndexingContext, MostlySend, RefCellExt, ThreadLocal,
+    extract, DocumentChangeContext, DocumentChanges, Extractor, FullySend, IndexingContext,
+    MostlySend, Progress, RefCellExt, ThreadLocal,
 };
 use crate::update::new::DocumentChange;
 use crate::update::GrenadParameters;
@@ -218,24 +218,44 @@ impl<'a, 'extractor> Extractor<'extractor> for WordDocidsExtractorData<'a> {
         ))))
     }
 
-    fn process(
+    fn process<'doc>(
         &self,
-        change: DocumentChange,
+        changes: impl Iterator<Item = Result<DocumentChange<'doc>>>,
         context: &DocumentChangeContext<Self::Data>,
     ) -> Result<()> {
-        WordDocidsExtractors::extract_document_change(context, self.tokenizer, change)
+        for change in changes {
+            let change = change?;
+            WordDocidsExtractors::extract_document_change(context, self.tokenizer, change)?;
+        }
+        Ok(())
     }
 }
 
 pub struct WordDocidsExtractors;
 
 impl WordDocidsExtractors {
-    pub fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>>(
+    pub fn run_extraction<
+        'pl,
+        'fid,
+        'indexer,
+        'index,
+        'extractor,
+        DC: DocumentChanges<'pl>,
+        MSP,
+        SP,
+    >(
         grenad_parameters: GrenadParameters,
         document_changes: &DC,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP, SP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
-    ) -> Result<WordDocidsCaches<'extractor>> {
+        finished_steps: u16,
+        total_steps: u16,
+        step_name: &'static str,
+    ) -> Result<WordDocidsCaches<'extractor>>
+    where
+        MSP: Fn() -> bool + Sync,
+        SP: Fn(Progress) + Sync,
+    {
         let index = indexing_context.index;
         let rtxn = index.read_txn()?;
 
@@ -279,12 +299,15 @@ impl WordDocidsExtractors {
                 buckets: rayon::current_num_threads(),
             };
 
-            for_each_document_change(
+            extract(
                 document_changes,
                 &extractor,
                 indexing_context,
                 extractor_allocs,
                 &datastore,
+                finished_steps,
+                total_steps,
+                step_name,
             )?;
         }
 
@@ -358,7 +381,7 @@ impl WordDocidsExtractors {
                     )
                 };
                 document_tokenizer.tokenize_document(
-                    inner.new(rtxn, index, context.db_fields_ids_map)?,
+                    inner.merged(rtxn, index, context.db_fields_ids_map)?,
                     new_fields_ids_map,
                     &mut token_fn,
                 )?;
@@ -375,7 +398,7 @@ impl WordDocidsExtractors {
                     )
                 };
                 document_tokenizer.tokenize_document(
-                    inner.new(),
+                    inner.inserted(),
                     new_fields_ids_map,
                     &mut token_fn,
                 )?;

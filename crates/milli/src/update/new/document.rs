@@ -286,11 +286,11 @@ where
 ///
 /// - If the document contains a top-level field that is not present in `fields_ids_map`.
 ///
-pub fn write_to_obkv<'s, 'a, 'map>(
+pub fn write_to_obkv<'s, 'a, 'map, 'buffer>(
     document: &'s impl Document<'s>,
     vector_document: Option<&'s impl VectorDocument<'s>>,
     fields_ids_map: &'a mut GlobalFieldsIdsMap<'map>,
-    mut document_buffer: &'a mut Vec<u8>,
+    mut document_buffer: &'a mut bumpalo::collections::Vec<'buffer, u8>,
 ) -> Result<&'a KvReaderFieldId>
 where
     's: 'a,

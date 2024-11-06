@@ -8,7 +8,7 @@ use super::cache::DelAddRoaringBitmap;
 use crate::error::FaultSource;
 use crate::prompt::Prompt;
 use crate::update::new::channel::EmbeddingSender;
-use crate::update::new::indexer::document_changes::{Extractor, FullySend};
+use crate::update::new::indexer::document_changes::{Extractor, MostlySend};
 use crate::update::new::vector_document::VectorDocument;
 use crate::update::new::DocumentChange;
 use crate::vector::error::{
@@ -36,15 +36,17 @@ impl<'a> EmbeddingExtractor<'a> {
     }
 }
 
-impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
-    type Data = FullySend<RefCell<HashMap<String, DelAddRoaringBitmap>>>;
+pub struct EmbeddingExtractorData<'extractor>(
+    pub HashMap<String, DelAddRoaringBitmap, hashbrown::DefaultHashBuilder, &'extractor Bump>,
+);
 
-    fn init_data<'doc>(
-        &'doc self,
-        _extractor_alloc: raw_collections::alloc::RefBump<'extractor>,
-    ) -> crate::Result<Self::Data> {
-        /// TODO: use the extractor_alloc in the hashbrown once you merge the branch where it is no longer a RefBump
-        Ok(FullySend(Default::default()))
+unsafe impl MostlySend for EmbeddingExtractorData<'_> {}
+
+impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
+    type Data = RefCell<EmbeddingExtractorData<'extractor>>;
+
+    fn init_data<'doc>(&'doc self, extractor_alloc: &'extractor Bump) -> crate::Result<Self::Data> {
+        Ok(RefCell::new(EmbeddingExtractorData(HashMap::new_in(extractor_alloc))))
     }
 
     fn process<'doc>(
@@ -72,7 +74,7 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                 embedder_id,
                 embedder_name,
                 prompt,
-                &context.data.0,
+                context.data,
                 &self.possible_embedding_mistakes,
                 self.threads,
                 self.sender,
@@ -252,7 +254,7 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
 // Currently this is the case as:
 // 1. BVec are inside of the bumaplo
 // 2. All other fields are either trivial (u8) or references.
-struct Chunks<'a> {
+struct Chunks<'a, 'extractor> {
     texts: BVec<'a, &'a str>,
     ids: BVec<'a, DocumentId>,
 
@@ -261,19 +263,19 @@ struct Chunks<'a> {
     embedder_name: &'a str,
     prompt: &'a Prompt,
     possible_embedding_mistakes: &'a PossibleEmbeddingMistakes,
-    user_provided: &'a RefCell<HashMap<String, DelAddRoaringBitmap>>,
+    user_provided: &'a RefCell<EmbeddingExtractorData<'extractor>>,
     threads: &'a ThreadPoolNoAbort,
     sender: &'a EmbeddingSender<'a>,
 }
 
-impl<'a> Chunks<'a> {
+impl<'a, 'extractor> Chunks<'a, 'extractor> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         embedder: &'a Embedder,
         embedder_id: u8,
         embedder_name: &'a str,
         prompt: &'a Prompt,
-        user_provided: &'a RefCell<HashMap<String, DelAddRoaringBitmap>>,
+        user_provided: &'a RefCell<EmbeddingExtractorData<'extractor>>,
         possible_embedding_mistakes: &'a PossibleEmbeddingMistakes,
         threads: &'a ThreadPoolNoAbort,
         sender: &'a EmbeddingSender<'a>,
@@ -417,7 +419,7 @@ impl<'a> Chunks<'a> {
 
     fn set_regenerate(&self, docid: DocumentId, regenerate: bool) {
         let mut user_provided = self.user_provided.borrow_mut();
-        let user_provided = user_provided.entry_ref(self.embedder_name).or_default();
+        let user_provided = user_provided.0.entry_ref(self.embedder_name).or_default();
         if regenerate {
             // regenerate == !user_provided
             user_provided.del.get_or_insert(Default::default()).insert(docid);

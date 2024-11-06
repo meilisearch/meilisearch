@@ -2,16 +2,13 @@ use std::marker::PhantomData;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crossbeam_channel::{IntoIter, Receiver, SendError, Sender};
-use grenad::Merger;
 use hashbrown::HashMap;
 use heed::types::Bytes;
 use roaring::RoaringBitmap;
 
 use super::extract::FacetKind;
 use super::StdResult;
-use crate::index::main_key::DOCUMENTS_IDS_KEY;
 use crate::update::new::KvReaderFieldId;
-use crate::update::MergeDeladdCboRoaringBitmaps;
 use crate::vector::Embedding;
 use crate::{DocumentId, Index};
 
@@ -41,14 +38,6 @@ impl KeyValueEntry {
         data.extend_from_slice(value);
         KeyValueEntry { key_length: key.len(), data: data.into_boxed_slice() }
     }
-
-    pub fn from_small_key_bitmap(key: &[u8], bitmap: RoaringBitmap) -> Self {
-        let mut data = Vec::with_capacity(key.len() + bitmap.serialized_size());
-        data.extend_from_slice(key);
-        bitmap.serialize_into(&mut data).unwrap();
-        KeyValueEntry { key_length: key.len(), data: data.into_boxed_slice() }
-    }
-
     pub fn key(&self) -> &[u8] {
         &self.data[..self.key_length]
     }
@@ -113,7 +102,6 @@ pub enum Database {
     ExternalDocumentsIds,
     ExactWordDocids,
     FidWordCountDocids,
-    Main,
     WordDocids,
     WordFidDocids,
     WordPairProximityDocids,
@@ -131,7 +119,6 @@ impl Database {
             Database::Documents => index.documents.remap_types(),
             Database::ExternalDocumentsIds => index.external_documents_ids.remap_types(),
             Database::ExactWordDocids => index.exact_word_docids.remap_types(),
-            Database::Main => index.main.remap_types(),
             Database::WordDocids => index.word_docids.remap_types(),
             Database::WordFidDocids => index.word_fid_docids.remap_types(),
             Database::WordPositionDocids => index.word_position_docids.remap_types(),
@@ -217,12 +204,15 @@ impl ExtractorSender {
         DocumentsSender(self)
     }
 
-    pub fn send_documents_ids(&self, documents_ids: RoaringBitmap) -> StdResult<(), SendError<()>> {
-        let entry = EntryOperation::Write(KeyValueEntry::from_small_key_bitmap(
-            DOCUMENTS_IDS_KEY.as_bytes(),
-            documents_ids,
-        ));
-        match self.send_db_operation(DbOperation { database: Database::Main, entry }) {
+    pub fn embeddings(&self) -> EmbeddingSender<'_> {
+        EmbeddingSender(&self.sender)
+    }
+
+    fn send_delete_vector(&self, docid: DocumentId) -> StdResult<(), SendError<()>> {
+        match self
+            .sender
+            .send(WriterOperation::ArroyOperation(ArroyOperation::DeleteVectors { docid }))
+        {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
@@ -380,6 +370,8 @@ impl DocumentsSender<'_> {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }?;
+
+        self.0.send_delete_vector(docid)?;
 
         let entry = EntryOperation::Delete(KeyEntry::from_key(external_id.as_bytes()));
         match self

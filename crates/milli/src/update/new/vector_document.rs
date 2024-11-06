@@ -14,7 +14,7 @@ use crate::index::IndexEmbeddingConfig;
 use crate::vector::parsed_vectors::{
     RawVectors, VectorOrArrayOfVectors, RESERVED_VECTORS_FIELD_NAME,
 };
-use crate::vector::{Embedding, EmbeddingConfigs};
+use crate::vector::{ArroyWrapper, Embedding, EmbeddingConfigs};
 use crate::{DocumentId, Index, InternalError, Result, UserError};
 
 #[derive(Serialize)]
@@ -117,16 +117,10 @@ impl<'t> VectorDocumentFromDb<'t> {
         embedder_id: u8,
         config: &IndexEmbeddingConfig,
     ) -> Result<VectorEntry<'t>> {
-        let readers = self.index.arroy_readers(self.rtxn, embedder_id, config.config.quantized());
-        let mut vectors = Vec::new();
-        for reader in readers {
-            let reader = reader?;
-            let Some(vector) = reader.item_vector(self.rtxn, self.docid)? else {
-                break;
-            };
+        let reader =
+            ArroyWrapper::new(self.index.vector_arroy, embedder_id, config.config.quantized());
+        let vectors = reader.item_vectors(self.rtxn, self.docid)?;
 
-            vectors.push(vector);
-        }
         Ok(VectorEntry {
             has_configured_embedder: true,
             embeddings: Some(Embeddings::FromDb(vectors)),

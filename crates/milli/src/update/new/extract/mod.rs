@@ -14,7 +14,7 @@ pub use vectors::EmbeddingExtractor;
 use super::indexer::document_changes::{
     DocumentChanges, FullySend, IndexingContext, Progress, ThreadLocal,
 };
-use crate::update::{GrenadParameters, MergeDeladdCboRoaringBitmaps};
+use crate::update::GrenadParameters;
 use crate::Result;
 
 pub trait DocidsExtractor {
@@ -26,7 +26,7 @@ pub trait DocidsExtractor {
         finished_steps: u16,
         total_steps: u16,
         step_name: &'static str,
-    ) -> Result<Merger<File, MergeDeladdCboRoaringBitmaps>>
+    ) -> Result<Vec<BalancedCaches<'extractor>>>
     where
         MSP: Fn() -> bool + Sync,
         SP: Fn(Progress) + Sync;
