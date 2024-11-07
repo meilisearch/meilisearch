@@ -71,6 +71,7 @@ pub struct VectorEntry<'doc> {
     pub has_configured_embedder: bool,
     pub embeddings: Option<Embeddings<'doc>>,
     pub regenerate: bool,
+    pub implicit: bool,
 }
 
 pub trait VectorDocument<'doc> {
@@ -125,6 +126,7 @@ impl<'t> VectorDocumentFromDb<'t> {
             has_configured_embedder: true,
             embeddings: Some(Embeddings::FromDb(vectors)),
             regenerate: !config.user_provided.contains(self.docid),
+            implicit: false,
         })
     }
 }
@@ -174,11 +176,13 @@ fn entry_from_raw_value(
             has_configured_embedder,
             embeddings: raw_explicit_vectors.embeddings.map(Embeddings::FromJsonExplicit),
             regenerate: raw_explicit_vectors.regenerate,
+            implicit: false,
         },
         RawVectors::ImplicitlyUserProvided(value) => VectorEntry {
             has_configured_embedder,
             embeddings: value.map(Embeddings::FromJsonImplicityUserProvided),
             regenerate: false,
+            implicit: true,
         },
     })
 }

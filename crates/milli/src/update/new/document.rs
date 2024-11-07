@@ -332,12 +332,20 @@ where
             }
             vectors.insert(
                 name,
-                serde_json::json!({
-                    "regenerate": entry.regenerate,
-                    // TODO: consider optimizing the shape of embedders here to store an array of f32 rather than a JSON object
-                    "embeddings": entry.embeddings,
-                }),
+                if entry.implicit {
+                    serde_json::json!(entry.embeddings)
+                } else {
+                    serde_json::json!({
+                        "regenerate": entry.regenerate,
+                        // TODO: consider optimizing the shape of embedders here to store an array of f32 rather than a JSON object
+                        "embeddings": entry.embeddings,
+                    })
+                },
             );
+        }
+
+        if vectors.is_empty() {
+            break 'inject_vectors;
         }
 
         vectors_value = serde_json::value::to_raw_value(&vectors).unwrap();
