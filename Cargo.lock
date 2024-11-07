@@ -2623,6 +2623,7 @@ dependencies = [
  "meilisearch-types",
  "memmap2",
  "page_size",
+ "raw-collections",
  "rayon",
  "roaring",
  "serde",

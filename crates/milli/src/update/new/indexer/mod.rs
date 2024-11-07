@@ -12,6 +12,7 @@ use heed::{RoTxn, RwTxn};
 use itertools::{merge_join_by, EitherOrBoth};
 pub use partial_dump::PartialDump;
 use rand::SeedableRng as _;
+use raw_collections::RawMap;
 use rayon::ThreadPool;
 use time::OffsetDateTime;
 pub use update_by_function::UpdateByFunction;
@@ -24,7 +25,7 @@ use super::word_fst_builder::{PrefixData, PrefixDelta, WordFstBuilder};
 use super::words_prefix_docids::{
     compute_word_prefix_docids, compute_word_prefix_fid_docids, compute_word_prefix_position_docids,
 };
-use super::{StdResult, TopLevelMap};
+use super::StdResult;
 use crate::documents::{PrimaryKey, DEFAULT_PRIMARY_KEY};
 use crate::facet::FacetType;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
@@ -733,7 +734,7 @@ pub fn retrieve_or_guess_primary_key<'a>(
     index: &Index,
     new_fields_ids_map: &mut FieldsIdsMap,
     primary_key_from_op: Option<&'a str>,
-    first_document: Option<&'a TopLevelMap<'a>>,
+    first_document: Option<RawMap<'a>>,
 ) -> Result<StdResult<(PrimaryKey<'a>, bool), UserError>> {
     // make sure that we have a declared primary key, either fetching it from the index or attempting to guess it.
 
@@ -769,11 +770,17 @@ pub fn retrieve_or_guess_primary_key<'a>(
                 None => return Ok(Err(UserError::NoPrimaryKeyCandidateFound)),
             };
 
-            let mut guesses: Vec<&str> = first_document
+            let guesses: Result<Vec<&str>> = first_document
                 .keys()
-                .map(AsRef::as_ref)
-                .filter(|name| name.to_lowercase().ends_with(DEFAULT_PRIMARY_KEY))
+                .filter_map(|name| {
+                    let Some(_) = new_fields_ids_map.insert(name) else {
+                        return Some(Err(UserError::AttributeLimitReached.into()));
+                    };
+                    name.to_lowercase().ends_with(DEFAULT_PRIMARY_KEY).then_some(Ok(name))
+                })
                 .collect();
+
+            let mut guesses = guesses?;
 
             // sort the keys in lexicographical order, so that fields are always in the same order.
             guesses.sort_unstable();

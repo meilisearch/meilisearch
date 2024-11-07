@@ -43,6 +43,7 @@ use meilisearch_types::milli::{self, Filter};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::{compression, Index, VERSION_FILE_NAME};
+use raw_collections::RawMap;
 use roaring::RoaringBitmap;
 use time::macros::format_description;
 use time::OffsetDateTime;
@@ -1318,7 +1319,12 @@ impl IndexScheduler {
                     index,
                     &mut new_fields_ids_map,
                     primary_key.as_deref(),
-                    first_document.as_ref(),
+                    first_document
+                        .map(|raw| RawMap::from_raw_value(raw, &indexer_alloc))
+                        .transpose()
+                        .map_err(|error| {
+                            milli::Error::UserError(milli::UserError::SerdeJson(error))
+                        })?,
                 )?
                 .map_err(milli::Error::from)?;
 
