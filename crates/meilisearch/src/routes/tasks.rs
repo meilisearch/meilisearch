@@ -42,6 +42,8 @@ pub struct TasksFilterQuery {
     pub limit: Param<u32>,
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskFrom>)]
     pub from: Option<Param<TaskId>>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskReverse>)]
+    pub reverse: Option<Param<bool>>,
 
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskUids>)]
     pub uids: OptionStarOrList<u32>,
@@ -73,6 +75,7 @@ impl TasksFilterQuery {
         Query {
             limit: Some(self.limit.0),
             from: self.from.as_deref().copied(),
+            reverse: self.reverse.as_deref().copied(),
             statuses: self.statuses.merge_star_and_none(),
             types: self.types.merge_star_and_none(),
             index_uids: self.index_uids.map(|x| x.to_string()).merge_star_and_none(),
@@ -142,6 +145,7 @@ impl TaskDeletionOrCancelationQuery {
         Query {
             limit: None,
             from: None,
+            reverse: None,
             statuses: self.statuses.merge_star_and_none(),
             types: self.types.merge_star_and_none(),
             index_uids: self.index_uids.map(|x| x.to_string()).merge_star_and_none(),
@@ -701,14 +705,14 @@ mod tests {
         {
             let params = "from=12&limit=15&indexUids=toto,tata-78&statuses=succeeded,enqueued&afterEnqueuedAt=2012-04-23&uids=1,2,3";
             let query = deserr_query_params::<TasksFilterQuery>(params).unwrap();
-            snapshot!(format!("{:?}", query), @r###"TasksFilterQuery { limit: Param(15), from: Some(Param(12)), uids: List([1, 2, 3]), canceled_by: None, types: None, statuses: List([Succeeded, Enqueued]), index_uids: List([IndexUid("toto"), IndexUid("tata-78")]), after_enqueued_at: Other(2012-04-24 0:00:00.0 +00:00:00), before_enqueued_at: None, after_started_at: None, before_started_at: None, after_finished_at: None, before_finished_at: None }"###);
+            snapshot!(format!("{:?}", query), @r###"TasksFilterQuery { limit: Param(15), from: Some(Param(12)), reverse: None, uids: List([1, 2, 3]), canceled_by: None, types: None, statuses: List([Succeeded, Enqueued]), index_uids: List([IndexUid("toto"), IndexUid("tata-78")]), after_enqueued_at: Other(2012-04-24 0:00:00.0 +00:00:00), before_enqueued_at: None, after_started_at: None, before_started_at: None, after_finished_at: None, before_finished_at: None }"###);
         }
         {
             // Stars should translate to `None` in the query
             // Verify value of the default limit
             let params = "indexUids=*&statuses=succeeded,*&afterEnqueuedAt=2012-04-23&uids=1,2,3";
             let query = deserr_query_params::<TasksFilterQuery>(params).unwrap();
-            snapshot!(format!("{:?}", query), @"TasksFilterQuery { limit: Param(20), from: None, uids: List([1, 2, 3]), canceled_by: None, types: None, statuses: Star, index_uids: Star, after_enqueued_at: Other(2012-04-24 0:00:00.0 +00:00:00), before_enqueued_at: None, after_started_at: None, before_started_at: None, after_finished_at: None, before_finished_at: None }");
+            snapshot!(format!("{:?}", query), @"TasksFilterQuery { limit: Param(20), from: None, reverse: None, uids: List([1, 2, 3]), canceled_by: None, types: None, statuses: Star, index_uids: Star, after_enqueued_at: Other(2012-04-24 0:00:00.0 +00:00:00), before_enqueued_at: None, after_started_at: None, before_started_at: None, after_finished_at: None, before_finished_at: None }");
         }
         {
             // Stars should also translate to `None` in task deletion/cancelation queries

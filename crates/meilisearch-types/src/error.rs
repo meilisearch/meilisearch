@@ -318,6 +318,7 @@ InvalidTaskBeforeStartedAt            , InvalidRequest       , BAD_REQUEST ;
 InvalidTaskCanceledBy                 , InvalidRequest       , BAD_REQUEST ;
 InvalidTaskFrom                       , InvalidRequest       , BAD_REQUEST ;
 InvalidTaskLimit                      , InvalidRequest       , BAD_REQUEST ;
+InvalidTaskReverse                    , InvalidRequest       , BAD_REQUEST ;
 InvalidTaskStatuses                   , InvalidRequest       , BAD_REQUEST ;
 InvalidTaskTypes                      , InvalidRequest       , BAD_REQUEST ;
 InvalidTaskUids                       , InvalidRequest       , BAD_REQUEST  ;

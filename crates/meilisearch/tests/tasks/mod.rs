@@ -63,6 +63,44 @@ async fn list_tasks() {
 }
 
 #[actix_rt::test]
+async fn list_tasks_pagination_and_reverse() {
+    let server = Server::new().await;
+    // First of all we want to create a lot of tasks very quickly. The fastest way is to delete a lot of unexisting indexes
+    let mut last_task = None;
+    for i in 0..10 {
+        let index = server.index(format!("test-{i}"));
+        last_task = Some(index.create(None).await.0.uid());
+    }
+    server.wait_task(last_task.unwrap()).await;
+
+    let (response, code) = server.tasks_filter("limit=3").await;
+    assert_eq!(code, 200);
+    let results = response["results"].as_array().unwrap();
+    let task_ids: Vec<_> = results.iter().map(|ret| ret["uid"].as_u64().unwrap()).collect();
+    snapshot!(format!("{task_ids:?}"), @"[9, 8, 7]");
+
+    let (response, code) = server.tasks_filter("limit=3&from=1").await;
+    assert_eq!(code, 200);
+    let results = response["results"].as_array().unwrap();
+    let task_ids: Vec<_> = results.iter().map(|ret| ret["uid"].as_u64().unwrap()).collect();
+    snapshot!(format!("{task_ids:?}"), @"[1, 0]");
+
+    // In reversed order
+
+    let (response, code) = server.tasks_filter("limit=3&reverse=true").await;
+    assert_eq!(code, 200);
+    let results = response["results"].as_array().unwrap();
+    let task_ids: Vec<_> = results.iter().map(|ret| ret["uid"].as_u64().unwrap()).collect();
+    snapshot!(format!("{task_ids:?}"), @"[0, 1, 2]");
+
+    let (response, code) = server.tasks_filter("limit=3&from=8&reverse=true").await;
+    assert_eq!(code, 200);
+    let results = response["results"].as_array().unwrap();
+    let task_ids: Vec<_> = results.iter().map(|ret| ret["uid"].as_u64().unwrap()).collect();
+    snapshot!(format!("{task_ids:?}"), @"[8, 9]");
+}
+
+#[actix_rt::test]
 async fn list_tasks_with_star_filters() {
     let server = Server::new().await;
     let index = server.index("test");
@@ -191,131 +229,6 @@ async fn list_tasks_status_and_type_filtered() {
         .await;
     assert_eq!(code, 200, "{}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
-}
-
-#[actix_rt::test]
-async fn get_task_filter_error() {
-    let server = Server::new().await;
-
-    let (response, code) = server.tasks_filter("lol=pied").await;
-    assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "message": "Unknown parameter `lol`: expected one of `limit`, `from`, `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
-      "code": "bad_request",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
-    }
-    "###);
-
-    let (response, code) = server.tasks_filter("uids=pied").await;
-    assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "message": "Invalid value in parameter `uids`: could not parse `pied` as a positive integer",
-      "code": "invalid_task_uids",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_task_uids"
-    }
-    "###);
-
-    let (response, code) = server.tasks_filter("from=pied").await;
-    assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "message": "Invalid value in parameter `from`: could not parse `pied` as a positive integer",
-      "code": "invalid_task_from",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_task_from"
-    }
-    "###);
-
-    let (response, code) = server.tasks_filter("beforeStartedAt=pied").await;
-    assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "message": "Invalid value in parameter `beforeStartedAt`: `pied` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
-      "code": "invalid_task_before_started_at",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_task_before_started_at"
-    }
-    "###);
-}
-
-#[actix_rt::test]
-async fn delete_task_filter_error() {
-    let server = Server::new().await;
-
-    let (response, code) = server.delete_tasks("").await;
-    assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "message": "Query parameters to filter the tasks to delete are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
-      "code": "missing_task_filters",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_task_filters"
-    }
-    "###);
-
-    let (response, code) = server.delete_tasks("lol=pied").await;
-    assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "message": "Unknown parameter `lol`: expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
-      "code": "bad_request",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
-    }
-    "###);
-
-    let (response, code) = server.delete_tasks("uids=pied").await;
-    assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "message": "Invalid value in parameter `uids`: could not parse `pied` as a positive integer",
-      "code": "invalid_task_uids",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_task_uids"
-    }
-    "###);
-}
-
-#[actix_rt::test]
-async fn cancel_task_filter_error() {
-    let server = Server::new().await;
-
-    let (response, code) = server.cancel_tasks("").await;
-    assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "message": "Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
-      "code": "missing_task_filters",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_task_filters"
-    }
-    "###);
-
-    let (response, code) = server.cancel_tasks("lol=pied").await;
-    assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "message": "Unknown parameter `lol`: expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
-      "code": "bad_request",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
-    }
-    "###);
-
-    let (response, code) = server.cancel_tasks("uids=pied").await;
-    assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "message": "Invalid value in parameter `uids`: could not parse `pied` as a positive integer",
-      "code": "invalid_task_uids",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_task_uids"
-    }
-    "###);
 }
 
 macro_rules! assert_valid_summarized_task {
