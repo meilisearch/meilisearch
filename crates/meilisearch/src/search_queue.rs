@@ -18,6 +18,8 @@
 //!                         And should drop the Permit only once you have freed all the RAM consumed by the method.
 
 use std::num::NonZeroUsize;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use rand::rngs::StdRng;
@@ -33,6 +35,8 @@ pub struct SearchQueue {
     /// If we have waited longer than this to get a permit, we should abort the search request entirely.
     /// The client probably already closed the connection, but we have no way to find out.
     time_to_abort: Duration,
+    searches_running: Arc<AtomicUsize>,
+    searches_waiting_to_be_processed: Arc<AtomicUsize>,
 }
 
 /// You should only run search requests while holding this permit.
@@ -68,12 +72,39 @@ impl SearchQueue {
         // so let's not allocate any RAM and keep a capacity of 1.
         let (sender, receiver) = mpsc::channel(1);
 
-        tokio::task::spawn(Self::run(capacity, paralellism, receiver));
-        Self { sender, capacity, time_to_abort: Duration::from_secs(60) }
+        let instance = Self {
+            sender,
+            capacity,
+            time_to_abort: Duration::from_secs(60),
+            searches_running: Default::default(),
+            searches_waiting_to_be_processed: Default::default(),
+        };
+
+        tokio::task::spawn(Self::run(
+            capacity,
+            paralellism,
+            receiver,
+            Arc::clone(&instance.searches_running),
+            Arc::clone(&instance.searches_waiting_to_be_processed),
+        ));
+
+        instance
     }
 
     pub fn with_time_to_abort(self, time_to_abort: Duration) -> Self {
         Self { time_to_abort, ..self }
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+
+    pub fn searches_running(&self) -> usize {
+        self.searches_running.load(Ordering::Relaxed)
+    }
+
+    pub fn searches_waiting(&self) -> usize {
+        self.searches_waiting_to_be_processed.load(Ordering::Relaxed)
     }
 
     /// This function is the main loop, it's in charge on scheduling which search request should execute first and
@@ -84,6 +115,8 @@ impl SearchQueue {
         capacity: usize,
         parallelism: NonZeroUsize,
         mut receive_new_searches: mpsc::Receiver<oneshot::Sender<Permit>>,
+        metric_searches_running: Arc<AtomicUsize>,
+        metric_searches_waiting: Arc<AtomicUsize>,
     ) {
         let mut queue: Vec<oneshot::Sender<Permit>> = Default::default();
         let mut rng: StdRng = StdRng::from_entropy();
@@ -133,6 +166,9 @@ impl SearchQueue {
                     queue.push(search_request);
                 },
             }
+
+            metric_searches_running.store(searches_running, Ordering::Relaxed);
+            metric_searches_waiting.store(queue.len(), Ordering::Relaxed);
         }
     }
 
