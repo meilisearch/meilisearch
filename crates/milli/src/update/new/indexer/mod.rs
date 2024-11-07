@@ -198,7 +198,7 @@ where
                     document_extractor_data.docids_delta.apply_to(document_ids);
                 }
 
-                field_distribution.retain(|_, v| *v == 0);
+                field_distribution.retain(|_, v| *v != 0);
 
                 const TEN_GIB: usize = 10 * 1024 * 1024 * 1024;
                 let current_num_threads = rayon::current_num_threads();

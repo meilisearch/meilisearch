@@ -3538,6 +3538,7 @@ version = "1.11.0"
 dependencies = [
  "actix-web",
  "anyhow",
+ "bumpalo",
  "convert_case 0.6.0",
  "csv",
  "deserr",
@@ -3550,6 +3551,7 @@ dependencies = [
  "meili-snap",
  "memmap2",
  "milli",
+ "raw-collections",
  "roaring",
  "serde",
  "serde-cs",

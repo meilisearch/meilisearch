@@ -3,13 +3,16 @@ use std::fs::File;
 use std::io::{self, BufWriter};
 use std::marker::PhantomData;
 
+use bumpalo::Bump;
 use memmap2::Mmap;
 use milli::documents::Error;
 use milli::update::new::TopLevelMap;
 use milli::Object;
+use raw_collections::RawMap;
 use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_json::error::Category;
+use serde_json::value::RawValue;
 use serde_json::{to_writer, Map, Value};
 
 use crate::error::{Code, ErrorCode};
@@ -213,10 +216,15 @@ pub fn read_json(input: &File, output: impl io::Write) -> Result<u64> {
     // We memory map to be able to deserailize into a TopLevelMap<'pl> that
     // does not allocate when possible and only materialize the first/top level.
     let input = unsafe { Mmap::map(input).map_err(DocumentFormatError::Io)? };
+    let mut doc_alloc = Bump::with_capacity(1024 * 1024 * 1024); // 1MiB
 
     let mut out = BufWriter::new(output);
     let mut deserializer = serde_json::Deserializer::from_slice(&input);
-    let count = match array_each(&mut deserializer, |obj: TopLevelMap| to_writer(&mut out, &obj)) {
+    let count = match array_each(&mut deserializer, |obj: &RawValue| {
+        doc_alloc.reset();
+        let map = RawMap::from_raw_value(obj, &doc_alloc)?;
+        to_writer(&mut out, &map)
+    }) {
         // The json data has been deserialized and does not need to be processed again.
         // The data has been transferred to the writer during the deserialization process.
         Ok(Ok(count)) => count,
