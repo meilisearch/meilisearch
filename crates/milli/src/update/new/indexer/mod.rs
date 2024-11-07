@@ -58,6 +58,7 @@ mod steps {
         "extracting embeddings",
         "writing to database",
         "writing embeddings to database",
+        "waiting for extractors",
         "post-processing facets",
         "post-processing words",
         "finalizing",
@@ -99,15 +100,20 @@ mod steps {
         step(6)
     }
 
-    pub const fn post_processing_facets() -> (u16, &'static str) {
+    pub const fn waiting_extractors() -> (u16, &'static str) {
         step(7)
     }
-    pub const fn post_processing_words() -> (u16, &'static str) {
+
+    pub const fn post_processing_facets() -> (u16, &'static str) {
         step(8)
     }
 
-    pub const fn finalizing() -> (u16, &'static str) {
+    pub const fn post_processing_words() -> (u16, &'static str) {
         step(9)
+    }
+
+    pub const fn finalizing() -> (u16, &'static str) {
+        step(10)
     }
 }
 
@@ -169,7 +175,7 @@ where
         let document_ids = &mut document_ids;
         // TODO manage the errors correctly
         let extractor_handle = Builder::new().name(S("indexer-extractors")).spawn_scoped(s, move || {
-            pool.in_place_scope(|_s| {
+            let result = pool.in_place_scope(|_s| {
                 let span = tracing::trace_span!(target: "indexing::documents", parent: &indexer_span, "extract");
                 let _entered = span.enter();
 
@@ -231,7 +237,15 @@ where
                         exact_word_docids,
                         word_position_docids,
                         fid_word_count_docids,
-                    } = WordDocidsExtractors::run_extraction(grenad_parameters, document_changes, indexing_context, &mut extractor_allocs, finished_steps, total_steps, step_name)?;
+                    } = WordDocidsExtractors::run_extraction(
+                        grenad_parameters,
+                        document_changes,
+                        indexing_context,
+                        &mut extractor_allocs,
+                        finished_steps,
+                        total_steps,
+                        step_name,
+                    )?;
 
                     // TODO Word Docids Merger
                     // extractor_sender.send_searchable::<WordDocids>(word_docids).unwrap();
@@ -358,13 +372,6 @@ where
                     embedding_sender.finish(user_provided).unwrap();
                 }
 
-                {
-                    let span = tracing::trace_span!(target: "indexing::documents::extract", "FINISH");
-                    let _entered = span.enter();
-                    let (finished_steps, step_name) = steps::write_db();
-                    (indexing_context.send_progress)(Progress { finished_steps, total_steps, step_name, finished_total_documents: None });
-                }
-
                 // TODO THIS IS TOO MUCH
                 // - [ ] Extract fieldid docid facet number
                 // - [ ] Extract fieldid docid facet string
@@ -381,7 +388,16 @@ where
                 // - [x] Extract fieldid facet string docids
 
                 Result::Ok(facet_field_ids_delta)
-            })
+            });
+
+            {
+                let span = tracing::trace_span!(target: "indexing::documents::extract", "FINISH");
+                let _entered = span.enter();
+                let (finished_steps, step_name) = steps::write_db();
+                (indexing_context.send_progress)(Progress { finished_steps, total_steps, step_name, finished_total_documents: None });
+            }
+
+            result
         })?;
 
         let global_fields_ids_map = GlobalFieldsIdsMap::new(&new_fields_ids_map);
@@ -493,6 +509,14 @@ where
                 },
             }
         }
+
+        let (finished_steps, step_name) = steps::waiting_extractors();
+        (indexing_context.send_progress)(Progress {
+            finished_steps,
+            total_steps,
+            step_name,
+            finished_total_documents: None,
+        });
 
         let facet_field_ids_delta = extractor_handle.join().unwrap()?;
 
