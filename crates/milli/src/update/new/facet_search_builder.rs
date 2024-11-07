@@ -54,23 +54,12 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
         }
     }
 
-    fn extract_key_data<'k>(&self, key: &'k [u8]) -> Result<Option<FacetGroupKey<&'k str>>> {
-        match FacetKind::from(key[0]) {
-            // Only strings are searchable
-            FacetKind::String => Ok(Some(
-                FacetGroupKeyCodec::<StrRefCodec>::bytes_decode(&key[1..])
-                    .map_err(heed::Error::Encoding)?,
-            )),
-            _ => Ok(None),
-        }
-    }
-
-    pub fn register_from_key(&mut self, deladd: DelAdd, facet_key: &[u8]) -> Result<()> {
-        let Some(FacetGroupKey { field_id, level: _level, left_bound }) =
-            self.extract_key_data(facet_key)?
-        else {
-            return Ok(());
-        };
+    pub fn register_from_key(
+        &mut self,
+        deladd: DelAdd,
+        facet_key: FacetGroupKey<&str>,
+    ) -> Result<()> {
+        let FacetGroupKey { field_id, level: _level, left_bound } = facet_key;
 
         if deladd == DelAdd::Addition {
             self.registered_facets.entry(field_id).and_modify(|count| *count += 1).or_insert(1);

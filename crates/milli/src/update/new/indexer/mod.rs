@@ -681,13 +681,11 @@ fn compute_facet_search_database(
             }
             EitherOrBoth::Left(result) => {
                 let (key, _) = result?;
-                facet_search_builder
-                    .register_from_key(DelAdd::Deletion, key.left_bound.as_ref())?;
+                facet_search_builder.register_from_key(DelAdd::Deletion, key)?;
             }
             EitherOrBoth::Right(result) => {
                 let (key, _) = result?;
-                facet_search_builder
-                    .register_from_key(DelAdd::Addition, key.left_bound.as_ref())?;
+                facet_search_builder.register_from_key(DelAdd::Addition, key)?;
             }
         }
     }
