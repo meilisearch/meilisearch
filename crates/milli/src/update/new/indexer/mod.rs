@@ -487,9 +487,8 @@ where
             finished_total_documents: None,
         });
 
-        compute_facet_level_database(index, wtxn, facet_field_ids_delta)?;
-
         compute_facet_search_database(index, wtxn, global_fields_ids_map)?;
+        compute_facet_level_database(index, wtxn, facet_field_ids_delta)?;
 
         let (finished_steps, step_name) = steps::post_processing_words();
         (indexing_context.send_progress)(Progress {
