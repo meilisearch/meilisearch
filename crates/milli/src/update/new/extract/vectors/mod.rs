@@ -98,7 +98,7 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                     let new_vectors = update.updated_vectors(&context.doc_alloc, self.embedders)?;
 
                     if let Some(new_vectors) = &new_vectors {
-                        unused_vectors_distribution.append(new_vectors);
+                        unused_vectors_distribution.append(new_vectors)?;
                     }
 
                     for chunks in &mut all_chunks {
@@ -187,7 +187,7 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                     let new_vectors =
                         insertion.inserted_vectors(&context.doc_alloc, self.embedders)?;
                     if let Some(new_vectors) = &new_vectors {
-                        unused_vectors_distribution.append(new_vectors);
+                        unused_vectors_distribution.append(new_vectors)?;
                     }
 
                     for chunks in &mut all_chunks {
@@ -343,6 +343,7 @@ impl<'a, 'extractor> Chunks<'a, 'extractor> {
         res
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn embed_chunks(
         texts: &mut BVec<'a, &'a str>,
         ids: &mut BVec<'a, DocumentId>,

@@ -594,7 +594,7 @@ impl<'de> Visitor<'de> for DeserrRawValueVisitor<'de> {
     where
         A: serde::de::SeqAccess<'de>,
     {
-        let mut raw_vec = raw_collections::RawVec::new_in(&self.alloc);
+        let mut raw_vec = raw_collections::RawVec::new_in(self.alloc);
         while let Some(next) = seq.next_element()? {
             raw_vec.push(next);
         }
