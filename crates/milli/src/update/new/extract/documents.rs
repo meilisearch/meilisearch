@@ -6,9 +6,8 @@ use hashbrown::HashMap;
 use super::DelAddRoaringBitmap;
 use crate::update::new::channel::DocumentsSender;
 use crate::update::new::document::{write_to_obkv, Document as _};
-use crate::update::new::indexer::document_changes::{
-    DocumentChangeContext, Extractor, FullySend, RefCellExt as _,
-};
+use crate::update::new::indexer::document_changes::{DocumentChangeContext, Extractor, FullySend};
+use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::DocumentChange;
 use crate::vector::EmbeddingConfigs;
 use crate::Result;

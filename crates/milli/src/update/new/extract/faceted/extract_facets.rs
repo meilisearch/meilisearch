@@ -13,8 +13,9 @@ use crate::facet::value_encoding::f64_into_bytes;
 use crate::update::new::extract::DocidsExtractor;
 use crate::update::new::indexer::document_changes::{
     extract, DocumentChangeContext, DocumentChanges, Extractor, FullySend, IndexingContext,
-    Progress, RefCellExt, ThreadLocal,
+    Progress, ThreadLocal,
 };
+use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::DocumentChange;
 use crate::update::GrenadParameters;
 use crate::{DocumentId, FieldId, Index, Result, MAX_FACET_VALUE_LENGTH};

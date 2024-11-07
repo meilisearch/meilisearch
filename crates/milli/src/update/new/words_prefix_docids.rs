@@ -10,7 +10,7 @@ use roaring::MultiOps;
 use tempfile::tempfile;
 use thread_local::ThreadLocal;
 
-use super::indexer::document_changes::RefCellExt;
+use super::ref_cell_ext::RefCellExt as _;
 use crate::heed_codec::StrBEU16Codec;
 use crate::{CboRoaringBitmapCodec, Index, Prefix, Result};
 

@@ -16,6 +16,7 @@ mod fst_merger_builder;
 pub mod indexer;
 mod merger;
 mod parallel_iterator_ext;
+mod ref_cell_ext;
 mod top_level_map;
 pub mod vector_document;
 mod word_fst_builder;

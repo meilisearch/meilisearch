@@ -12,8 +12,9 @@ use crate::update::new::extract::cache::BalancedCaches;
 use crate::update::new::extract::perm_json_p::contained_in;
 use crate::update::new::indexer::document_changes::{
     extract, DocumentChangeContext, DocumentChanges, Extractor, FullySend, IndexingContext,
-    MostlySend, Progress, RefCellExt, ThreadLocal,
+    MostlySend, Progress, ThreadLocal,
 };
+use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::DocumentChange;
 use crate::update::GrenadParameters;
 use crate::{bucketed_position, DocumentId, FieldId, Index, Result, MAX_POSITION_PER_ATTRIBUTE};

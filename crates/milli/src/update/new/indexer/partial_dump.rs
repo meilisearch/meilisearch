@@ -3,10 +3,11 @@ use std::ops::DerefMut;
 use rayon::iter::IndexedParallelIterator;
 use serde_json::value::RawValue;
 
-use super::document_changes::{DocumentChangeContext, DocumentChanges, MostlySend, RefCellExt};
+use super::document_changes::{DocumentChangeContext, DocumentChanges, MostlySend};
 use crate::documents::PrimaryKey;
 use crate::update::concurrent_available_ids::ConcurrentAvailableIds;
 use crate::update::new::document::Versions;
+use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::{DocumentChange, Insertion};
 use crate::{Error, InternalError, Result, UserError};
 

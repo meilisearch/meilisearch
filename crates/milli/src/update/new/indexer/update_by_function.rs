@@ -4,12 +4,13 @@ use rayon::slice::ParallelSlice as _;
 use rhai::{Dynamic, Engine, OptimizationLevel, Scope, AST};
 use roaring::RoaringBitmap;
 
-use super::document_changes::{DocumentChangeContext, MostlySend, RefCellExt};
+use super::document_changes::{DocumentChangeContext, MostlySend};
 use super::DocumentChanges;
 use crate::documents::Error::InvalidDocumentFormat;
 use crate::documents::PrimaryKey;
 use crate::error::{FieldIdMapMissingEntry, InternalError};
 use crate::update::new::document::Versions;
+use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::{Deletion, DocumentChange, KvReaderFieldId, Update};
 use crate::{all_obkv_to_json, Error, FieldsIdsMap, Object, Result, UserError};
 

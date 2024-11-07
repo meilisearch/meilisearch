@@ -9,7 +9,8 @@ use super::SearchableExtractor;
 use crate::proximity::{index_proximity, MAX_DISTANCE};
 use crate::update::new::document::Document;
 use crate::update::new::extract::cache::BalancedCaches;
-use crate::update::new::indexer::document_changes::{DocumentChangeContext, RefCellExt};
+use crate::update::new::indexer::document_changes::DocumentChangeContext;
+use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::DocumentChange;
 use crate::{FieldId, GlobalFieldsIdsMap, Index, Result};
 
