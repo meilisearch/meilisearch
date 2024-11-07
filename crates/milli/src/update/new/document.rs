@@ -27,6 +27,9 @@ pub trait Document<'doc> {
         self.len() == 0
     }
 
+    /// Get the **top-level** with the specified name, if exists.
+    ///
+    /// - The `_vectors` and `_geo` fields are **ignored** by this method, meaning e.g. `top_level_field("_vectors")` will return `Ok(None)`
     fn top_level_field(&self, k: &str) -> Result<Option<&'doc RawValue>>;
 
     /// Returns the unparsed value of the `_vectors` field from the document data.
@@ -105,6 +108,9 @@ impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
     }
 
     fn top_level_field(&self, k: &str) -> Result<Option<&'t RawValue>> {
+        if k == RESERVED_VECTORS_FIELD_NAME || k == "_geo" {
+            return Ok(None);
+        }
         self.field(k)
     }
 }
@@ -393,6 +399,9 @@ impl<'doc> Versions<'doc> {
         self.data.is_empty()
     }
     pub fn top_level_field(&self, k: &str) -> Option<&'doc RawValue> {
+        if k == RESERVED_VECTORS_FIELD_NAME || k == "_geo" {
+            return None;
+        }
         self.data.get(k)
     }
 }
