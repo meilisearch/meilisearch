@@ -197,7 +197,7 @@ pub struct DocumentChangeContext<
     /// inside of the DB.
     pub db_fields_ids_map: &'indexer FieldsIdsMap,
     /// A transaction providing data from the DB before all indexing operations
-    pub txn: RoTxn<'indexer>,
+    pub rtxn: RoTxn<'indexer>,
 
     /// Global field id map that is up to date with the current state of the indexing process.
     ///
@@ -255,7 +255,7 @@ impl<
         let txn = index.read_txn()?;
         Ok(DocumentChangeContext {
             index,
-            txn,
+            rtxn: txn,
             db_fields_ids_map,
             new_fields_ids_map: fields_ids_map,
             doc_alloc,

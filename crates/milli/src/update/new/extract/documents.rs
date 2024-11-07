@@ -54,7 +54,7 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a> {
                 DocumentChange::Deletion(deletion) => {
                     let docid = deletion.docid();
                     let content = deletion.current(
-                        &context.txn,
+                        &context.rtxn,
                         context.index,
                         &context.db_fields_ids_map,
                     )?;
@@ -72,7 +72,7 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a> {
                 DocumentChange::Update(update) => {
                     let docid = update.docid();
                     let content =
-                        update.current(&context.txn, context.index, &context.db_fields_ids_map)?;
+                        update.current(&context.rtxn, context.index, &context.db_fields_ids_map)?;
                     for res in content.iter_top_level_fields() {
                         let (f, _) = res?;
                         let entry = document_extractor_data
@@ -92,9 +92,9 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a> {
                     }
 
                     let content =
-                        update.merged(&context.txn, context.index, &context.db_fields_ids_map)?;
+                        update.merged(&context.rtxn, context.index, &context.db_fields_ids_map)?;
                     let vector_content = update.merged_vectors(
-                        &context.txn,
+                        &context.rtxn,
                         context.index,
                         &context.db_fields_ids_map,
                         &context.doc_alloc,

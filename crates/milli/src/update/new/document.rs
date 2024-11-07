@@ -352,6 +352,11 @@ where
         unordered_field_buffer.push((vectors_fid, &vectors_value));
     }
 
+    if let Some(geo_value) = document.geo_field()? {
+        let fid = fields_ids_map.id_or_insert("_geo").ok_or(UserError::AttributeLimitReached)?;
+        unordered_field_buffer.push((fid, geo_value));
+    }
+
     unordered_field_buffer.sort_by_key(|(fid, _)| *fid);
     for (fid, value) in unordered_field_buffer.iter() {
         writer.insert(*fid, value.get().as_bytes()).unwrap();
@@ -406,6 +411,7 @@ impl<'doc> Versions<'doc> {
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
+
     pub fn top_level_field(&self, k: &str) -> Option<&'doc RawValue> {
         if k == RESERVED_VECTORS_FIELD_NAME || k == "_geo" {
             return None;

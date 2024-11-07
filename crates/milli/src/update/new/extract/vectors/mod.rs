@@ -2,13 +2,13 @@ use std::cell::RefCell;
 
 use bumpalo::collections::Vec as BVec;
 use bumpalo::Bump;
-use hashbrown::HashMap;
+use hashbrown::{DefaultHashBuilder, HashMap};
 
 use super::cache::DelAddRoaringBitmap;
 use crate::error::FaultSource;
 use crate::prompt::Prompt;
 use crate::update::new::channel::EmbeddingSender;
-use crate::update::new::indexer::document_changes::{Extractor, MostlySend};
+use crate::update::new::indexer::document_changes::{DocumentChangeContext, Extractor, MostlySend};
 use crate::update::new::vector_document::VectorDocument;
 use crate::update::new::DocumentChange;
 use crate::vector::error::{
@@ -37,7 +37,7 @@ impl<'a> EmbeddingExtractor<'a> {
 }
 
 pub struct EmbeddingExtractorData<'extractor>(
-    pub HashMap<String, DelAddRoaringBitmap, hashbrown::DefaultHashBuilder, &'extractor Bump>,
+    pub HashMap<String, DelAddRoaringBitmap, DefaultHashBuilder, &'extractor Bump>,
 );
 
 unsafe impl MostlySend for EmbeddingExtractorData<'_> {}
@@ -52,9 +52,7 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
     fn process<'doc>(
         &'doc self,
         changes: impl Iterator<Item = crate::Result<DocumentChange<'doc>>>,
-        context: &'doc crate::update::new::indexer::document_changes::DocumentChangeContext<
-            Self::Data,
-        >,
+        context: &'doc DocumentChangeContext<Self::Data>,
     ) -> crate::Result<()> {
         let embedders = self.embedders.inner_as_ref();
         let mut unused_vectors_distribution =
@@ -63,7 +61,7 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
         let mut all_chunks = BVec::with_capacity_in(embedders.len(), &context.doc_alloc);
         for (embedder_name, (embedder, prompt, _is_quantized)) in embedders {
             let embedder_id =
-                context.index.embedder_category_id.get(&context.txn, embedder_name)?.ok_or_else(
+                context.index.embedder_category_id.get(&context.rtxn, embedder_name)?.ok_or_else(
                     || InternalError::DatabaseMissingEntry {
                         db_name: "embedder_category_id",
                         key: None,
@@ -95,7 +93,7 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                 }
                 DocumentChange::Update(update) => {
                     let old_vectors = update.current_vectors(
-                        &context.txn,
+                        &context.rtxn,
                         context.index,
                         context.db_fields_ids_map,
                         &context.doc_alloc,
@@ -132,7 +130,7 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                             } else if new_vectors.regenerate {
                                 let new_rendered = prompt.render_document(
                                     update.current(
-                                        &context.txn,
+                                        &context.rtxn,
                                         context.index,
                                         context.db_fields_ids_map,
                                     )?,
@@ -141,7 +139,7 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                                 )?;
                                 let old_rendered = prompt.render_document(
                                     update.merged(
-                                        &context.txn,
+                                        &context.rtxn,
                                         context.index,
                                         context.db_fields_ids_map,
                                     )?,
@@ -160,7 +158,7 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                         } else if old_vectors.regenerate {
                             let old_rendered = prompt.render_document(
                                 update.current(
-                                    &context.txn,
+                                    &context.rtxn,
                                     context.index,
                                     context.db_fields_ids_map,
                                 )?,
@@ -169,7 +167,7 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                             )?;
                             let new_rendered = prompt.render_document(
                                 update.merged(
-                                    &context.txn,
+                                    &context.rtxn,
                                     context.index,
                                     context.db_fields_ids_map,
                                 )?,

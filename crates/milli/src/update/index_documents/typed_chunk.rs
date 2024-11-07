@@ -737,7 +737,7 @@ pub(crate) fn write_typed_chunk_into_index(
 }
 
 /// Converts the latitude and longitude back to an xyz GeoPoint.
-fn extract_geo_point(value: &[u8], docid: DocumentId) -> GeoPoint {
+pub fn extract_geo_point(value: &[u8], docid: DocumentId) -> GeoPoint {
     let (lat, tail) = helpers::try_split_array_at::<u8, 8>(value).unwrap();
     let (lng, _) = helpers::try_split_array_at::<u8, 8>(tail).unwrap();
     let point = [f64::from_ne_bytes(lat), f64::from_ne_bytes(lng)];

@@ -2201,7 +2201,7 @@ async fn add_invalid_geo_and_then_settings() {
     let index = server.index("test");
     index.create(Some("id")).await;
 
-    // _geo is not an object
+    // _geo is not a correct object
     let documents = json!([
         {
             "id": "11",
@@ -2230,7 +2230,7 @@ async fn add_invalid_geo_and_then_settings() {
     }
     "###);
 
-    let (ret, code) = index.update_settings(json!({"sortableAttributes": ["_geo"]})).await;
+    let (ret, code) = index.update_settings(json!({ "sortableAttributes": ["_geo"] })).await;
     snapshot!(code, @"202 Accepted");
     let ret = index.wait_task(ret.uid()).await;
     snapshot!(ret, @r###"

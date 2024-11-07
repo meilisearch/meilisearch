@@ -10,7 +10,8 @@ pub fn extract_document_facets<'doc>(
     field_id_map: &mut GlobalFieldsIdsMap,
     facet_fn: &mut impl FnMut(FieldId, &Value) -> Result<()>,
 ) -> Result<()> {
-    for res in document.iter_top_level_fields() {
+    let geo = document.geo_field().transpose().map(|res|  res.map(|rval| ("_geo", rval)));
+    for res in document.iter_top_level_fields().chain(geo) {
         let (field_name, value) = res?;
 
         let mut tokenize_field = |name: &str, value: &Value| match field_id_map.id_or_insert(name) {

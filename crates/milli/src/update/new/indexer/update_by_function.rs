@@ -93,7 +93,7 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
         let DocumentChangeContext {
             index,
             db_fields_ids_map,
-            txn,
+            rtxn: txn,
             new_fields_ids_map,
             doc_alloc,
             ..

@@ -1,68 +1,63 @@
-use std::io::{self};
+use std::cell::RefCell;
+use std::io;
 
-use bincode::ErrorKind;
 use hashbrown::HashSet;
 use heed::types::Bytes;
 use heed::{Database, RoTxn};
+use memmap2::Mmap;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use roaring::RoaringBitmap;
 
 use super::channel::*;
 use super::extract::{
     merge_caches, transpose_and_freeze_caches, BalancedCaches, DelAddRoaringBitmap, FacetKind,
+    GeoExtractorData,
 };
-use super::DocumentChange;
-use crate::{
-    CboRoaringBitmapCodec, Error, FieldId, GeoPoint, GlobalFieldsIdsMap, Index, InternalError,
-    Result,
-};
+use crate::{CboRoaringBitmapCodec, FieldId, GeoPoint, Index, InternalError, Result};
 
-pub struct GeoExtractor {
-    rtree: Option<rstar::RTree<GeoPoint>>,
-}
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
+pub fn merge_and_send_rtree<'extractor, MSP>(
+    datastore: impl IntoIterator<Item = RefCell<GeoExtractorData<'extractor>>>,
+    rtxn: &RoTxn,
+    index: &Index,
+    geo_sender: GeoSender<'_>,
+    must_stop_processing: &MSP,
+) -> Result<()>
+where
+    MSP: Fn() -> bool + Sync,
+{
+    let mut rtree = index.geo_rtree(rtxn)?.unwrap_or_default();
+    let mut faceted = index.geo_faceted_documents_ids(rtxn)?;
 
-impl GeoExtractor {
-    pub fn new(rtxn: &RoTxn, index: &Index) -> Result<Option<Self>> {
-        let is_sortable = index.sortable_fields(rtxn)?.contains("_geo");
-        let is_filterable = index.filterable_fields(rtxn)?.contains("_geo");
-        if is_sortable || is_filterable {
-            Ok(Some(GeoExtractor { rtree: index.geo_rtree(rtxn)? }))
-        } else {
-            Ok(None)
+    for data in datastore {
+        if must_stop_processing() {
+            return Err(InternalError::AbortedIndexation.into());
+        }
+
+        let mut frozen = data.into_inner().freeze()?;
+        for result in frozen.iter_and_clear_removed() {
+            let extracted_geo_point = result?;
+            debug_assert!(rtree.remove(&GeoPoint::from(extracted_geo_point)).is_some());
+            debug_assert!(faceted.remove(extracted_geo_point.docid));
+        }
+
+        for result in frozen.iter_and_clear_inserted() {
+            let extracted_geo_point = result?;
+            rtree.insert(GeoPoint::from(extracted_geo_point));
+            debug_assert!(faceted.insert(extracted_geo_point.docid));
         }
     }
 
-    pub fn manage_change(
-        &mut self,
-        fidmap: &mut GlobalFieldsIdsMap,
-        change: &DocumentChange,
-    ) -> Result<()> {
-        match change {
-            DocumentChange::Deletion(_) => todo!(),
-            DocumentChange::Update(_) => todo!(),
-            DocumentChange::Insertion(_) => todo!(),
-        }
-    }
+    let mut file = tempfile::tempfile()?;
+    /// manage error
+    bincode::serialize_into(&mut file, dbg!(&rtree)).unwrap();
+    file.sync_all()?;
 
-    pub fn serialize_rtree<W: io::Write>(self, writer: &mut W) -> Result<bool> {
-        match self.rtree {
-            Some(rtree) => {
-                // TODO What should I do?
-                bincode::serialize_into(writer, &rtree).map(|_| true).map_err(|e| match *e {
-                    ErrorKind::Io(e) => Error::IoError(e),
-                    ErrorKind::InvalidUtf8Encoding(_) => todo!(),
-                    ErrorKind::InvalidBoolEncoding(_) => todo!(),
-                    ErrorKind::InvalidCharEncoding => todo!(),
-                    ErrorKind::InvalidTagEncoding(_) => todo!(),
-                    ErrorKind::DeserializeAnyNotSupported => todo!(),
-                    ErrorKind::SizeLimit => todo!(),
-                    ErrorKind::SequenceMustHaveLength => todo!(),
-                    ErrorKind::Custom(_) => todo!(),
-                })
-            }
-            None => Ok(false),
-        }
-    }
+    let rtree_mmap = unsafe { Mmap::map(&file)? };
+    geo_sender.set_rtree(rtree_mmap).unwrap();
+    geo_sender.set_geo_faceted(&faceted).unwrap();
+
+    Ok(())
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]

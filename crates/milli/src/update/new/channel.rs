@@ -3,9 +3,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crossbeam_channel::{IntoIter, Receiver, SendError, Sender};
 use heed::types::Bytes;
+use memmap2::Mmap;
+use roaring::RoaringBitmap;
 
 use super::extract::FacetKind;
 use super::StdResult;
+use crate::index::main_key::{GEO_FACETED_DOCUMENTS_IDS_KEY, GEO_RTREE_KEY};
 use crate::index::IndexEmbeddingConfig;
 use crate::update::new::KvReaderFieldId;
 use crate::vector::Embedding;
@@ -25,9 +28,9 @@ pub fn extractor_writer_channel(cap: usize) -> (ExtractorSender, WriterReceiver)
     )
 }
 
-pub struct KeyValueEntry {
-    pub key_length: usize,
-    pub data: Box<[u8]>,
+pub enum KeyValueEntry {
+    Small { key_length: usize, data: Box<[u8]> },
+    Large { key_entry: KeyEntry, data: Mmap },
 }
 
 impl KeyValueEntry {
@@ -35,14 +38,25 @@ impl KeyValueEntry {
         let mut data = Vec::with_capacity(key.len() + value.len());
         data.extend_from_slice(key);
         data.extend_from_slice(value);
-        KeyValueEntry { key_length: key.len(), data: data.into_boxed_slice() }
+        KeyValueEntry::Small { key_length: key.len(), data: data.into_boxed_slice() }
     }
+
+    fn from_large_key_value(key: &[u8], value: Mmap) -> Self {
+        KeyValueEntry::Large { key_entry: KeyEntry::from_key(key), data: value }
+    }
+
     pub fn key(&self) -> &[u8] {
-        &self.data[..self.key_length]
+        match self {
+            KeyValueEntry::Small { key_length, data } => &data[..*key_length],
+            KeyValueEntry::Large { key_entry, data: _ } => key_entry.entry(),
+        }
     }
 
     pub fn value(&self) -> &[u8] {
-        &self.data[self.key_length..]
+        match self {
+            KeyValueEntry::Small { key_length, data } => &data[*key_length..],
+            KeyValueEntry::Large { key_entry: _, data } => &data[..],
+        }
     }
 }
 
@@ -97,6 +111,7 @@ pub struct DbOperation {
 
 #[derive(Debug)]
 pub enum Database {
+    Main,
     Documents,
     ExternalDocumentsIds,
     ExactWordDocids,
@@ -115,6 +130,7 @@ pub enum Database {
 impl Database {
     pub fn database(&self, index: &Index) -> heed::Database<Bytes, Bytes> {
         match self {
+            Database::Main => index.main.remap_types(),
             Database::Documents => index.documents.remap_types(),
             Database::ExternalDocumentsIds => index.external_documents_ids.remap_types(),
             Database::ExactWordDocids => index.exact_word_docids.remap_types(),
@@ -205,6 +221,10 @@ impl ExtractorSender {
 
     pub fn embeddings(&self) -> EmbeddingSender<'_> {
         EmbeddingSender(&self.sender)
+    }
+
+    pub fn geo(&self) -> GeoSender<'_> {
+        GeoSender(&self.sender)
     }
 
     fn send_delete_vector(&self, docid: DocumentId) -> StdResult<(), SendError<()>> {
@@ -420,6 +440,37 @@ impl EmbeddingSender<'_> {
     pub fn finish(self, configs: Vec<IndexEmbeddingConfig>) -> StdResult<(), SendError<()>> {
         self.0
             .send(WriterOperation::ArroyOperation(ArroyOperation::Finish { configs }))
+            .map_err(|_| SendError(()))
+    }
+}
+
+pub struct GeoSender<'a>(&'a Sender<WriterOperation>);
+
+impl GeoSender<'_> {
+    pub fn set_rtree(&self, value: Mmap) -> StdResult<(), SendError<()>> {
+        self.0
+            .send(WriterOperation::DbOperation(DbOperation {
+                database: Database::Main,
+                entry: EntryOperation::Write(KeyValueEntry::from_large_key_value(
+                    GEO_RTREE_KEY.as_bytes(),
+                    value,
+                )),
+            }))
+            .map_err(|_| SendError(()))
+    }
+
+    pub fn set_geo_faceted(&self, bitmap: &RoaringBitmap) -> StdResult<(), SendError<()>> {
+        let mut buffer = Vec::new();
+        bitmap.serialize_into(&mut buffer).unwrap();
+
+        self.0
+            .send(WriterOperation::DbOperation(DbOperation {
+                database: Database::Main,
+                entry: EntryOperation::Write(KeyValueEntry::from_small_key_value(
+                    GEO_FACETED_DOCUMENTS_IDS_KEY.as_bytes(),
+                    &buffer,
+                )),
+            }))
             .map_err(|_| SendError(()))
     }
 }

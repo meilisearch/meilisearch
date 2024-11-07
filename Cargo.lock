@@ -3664,6 +3664,7 @@ dependencies = [
  "time",
  "tokenizers",
  "tracing",
+ "uell",
  "ureq",
  "url",
  "uuid",
@@ -5791,6 +5792,15 @@ name = "ucd-trie"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed646292ffc8188ef8ea4d1e0e0150fb15a5c2e12ad9b8fc191ae7a8a7f3c4b9"
+
+[[package]]
+name = "uell"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40de5982e28612e20330e77d81f1559b74f66caf3c7fc10b19ada4843f4b4fd7"
+dependencies = [
+ "bumpalo",
+]
 
 [[package]]
 name = "unescaper"

@@ -33,6 +33,7 @@ use crate::index::main_key::{WORDS_FST_KEY, WORDS_PREFIXES_FST_KEY};
 use crate::proximity::ProximityPrecision;
 use crate::update::del_add::DelAdd;
 use crate::update::new::extract::EmbeddingExtractor;
+use crate::update::new::merger::merge_and_send_rtree;
 use crate::update::new::words_prefix_docids::compute_exact_word_prefix_docids;
 use crate::update::new::{merge_and_send_docids, merge_and_send_facet_docids, FacetDatabases};
 use crate::update::settings::InnerIndexSettings;
@@ -57,6 +58,7 @@ mod steps {
         "extracting words",
         "extracting word proximity",
         "extracting embeddings",
+        "writing geo points",
         "writing to database",
         "writing embeddings to database",
         "waiting for extractors",
@@ -93,28 +95,32 @@ mod steps {
         step(4)
     }
 
-    pub const fn write_db() -> (u16, &'static str) {
+    pub const fn extract_geo_points() -> (u16, &'static str) {
         step(5)
     }
 
-    pub const fn write_embedding_db() -> (u16, &'static str) {
+    pub const fn write_db() -> (u16, &'static str) {
         step(6)
     }
 
-    pub const fn waiting_extractors() -> (u16, &'static str) {
+    pub const fn write_embedding_db() -> (u16, &'static str) {
         step(7)
     }
 
-    pub const fn post_processing_facets() -> (u16, &'static str) {
+    pub const fn waiting_extractors() -> (u16, &'static str) {
         step(8)
     }
 
-    pub const fn post_processing_words() -> (u16, &'static str) {
+    pub const fn post_processing_facets() -> (u16, &'static str) {
         step(9)
     }
 
-    pub const fn finalizing() -> (u16, &'static str) {
+    pub const fn post_processing_words() -> (u16, &'static str) {
         step(10)
+    }
+
+    pub const fn finalizing() -> (u16, &'static str) {
+        step(11)
     }
 }
 
@@ -144,11 +150,8 @@ where
     let (extractor_sender, writer_receiver) = extractor_writer_channel(10_000);
 
     let metadata_builder = MetadataBuilder::from_index(index, wtxn)?;
-
     let new_fields_ids_map = FieldIdMapWithMetadata::new(new_fields_ids_map, metadata_builder);
-
     let new_fields_ids_map = RwLock::new(new_fields_ids_map);
-
     let fields_ids_map_store = ThreadLocal::with_capacity(pool.current_num_threads());
     let mut extractor_allocs = ThreadLocal::with_capacity(pool.current_num_threads());
     let doc_allocs = ThreadLocal::with_capacity(pool.current_num_threads());
@@ -328,7 +331,15 @@ where
 
                     let (finished_steps, step_name) = steps::extract_word_proximity();
 
-                    let caches = <WordPairProximityDocidsExtractor as DocidsExtractor>::run_extraction(grenad_parameters, document_changes, indexing_context, &mut extractor_allocs, finished_steps, total_steps, step_name)?;
+                    let caches = <WordPairProximityDocidsExtractor as DocidsExtractor>::run_extraction(grenad_parameters,
+                        document_changes,
+                        indexing_context,
+                        &mut extractor_allocs,
+                        finished_steps,
+                        total_steps,
+                        step_name,
+                    )?;
+
                     merge_and_send_docids(
                         caches,
                         index.word_pair_proximity_docids.remap_types(),
@@ -351,8 +362,6 @@ where
                     let extractor = EmbeddingExtractor::new(embedders, &embedding_sender, field_distribution, request_threads());
                     let mut datastore = ThreadLocal::with_capacity(pool.current_num_threads());
                     let (finished_steps, step_name) = steps::extract_embeddings();
-
-
                     extract(document_changes, &extractor, indexing_context, &mut extractor_allocs, &datastore, finished_steps, total_steps, step_name)?;
 
                     for config in &mut index_embeddings {
@@ -364,6 +373,35 @@ where
                     }
 
                     embedding_sender.finish(index_embeddings).unwrap();
+                }
+
+                'geo: {
+                    let span = tracing::trace_span!(target: "indexing::documents::extract", "geo");
+                    let _entered = span.enter();
+
+                    // let geo_sender = extractor_sender.geo_points();
+                    let Some(extractor) = GeoExtractor::new(&rtxn, index, grenad_parameters)? else {
+                        break 'geo;
+                    };
+                    let datastore = ThreadLocal::with_capacity(pool.current_num_threads());
+                    let (finished_steps, step_name) = steps::extract_geo_points();
+                    extract(document_changes,
+                        &extractor,
+                        indexing_context,
+                        &mut extractor_allocs,
+                        &datastore,
+                        finished_steps,
+                        total_steps,
+                        step_name,
+                    )?;
+
+                    merge_and_send_rtree(
+                        datastore,
+                        &rtxn,
+                        index,
+                        extractor_sender.geo(),
+                        &indexing_context.must_stop_processing,
+                    )?;
                 }
 
                 // TODO THIS IS TOO MUCH

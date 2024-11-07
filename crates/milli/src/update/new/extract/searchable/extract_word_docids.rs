@@ -326,7 +326,7 @@ impl WordDocidsExtractors {
         document_change: DocumentChange,
     ) -> Result<()> {
         let index = &context.index;
-        let rtxn = &context.txn;
+        let rtxn = &context.rtxn;
         let mut cached_sorter_ref = context.data.borrow_mut_or_yield();
         let cached_sorter = cached_sorter_ref.as_mut().unwrap();
         let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut_or_yield();

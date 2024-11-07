@@ -63,7 +63,7 @@ impl<'pl> DocumentChanges<'pl> for DocumentDeletionChanges<'pl> {
     where
         'pl: 'doc, // the payload must survive the process calls
     {
-        let current = context.index.document(&context.txn, *docid)?;
+        let current = context.index.document(&context.rtxn, *docid)?;
 
         let external_document_id = self.primary_key.extract_docid_from_db(
             current,

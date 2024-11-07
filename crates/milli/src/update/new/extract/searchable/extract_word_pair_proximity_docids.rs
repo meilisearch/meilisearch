@@ -39,7 +39,7 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
         let doc_alloc = &context.doc_alloc;
 
         let index = context.index;
-        let rtxn = &context.txn;
+        let rtxn = &context.rtxn;
 
         let mut key_buffer = bumpalo::collections::Vec::new_in(doc_alloc);
         let mut del_word_pair_proximity = bumpalo::collections::Vec::new_in(doc_alloc);

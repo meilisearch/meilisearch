@@ -1,6 +1,7 @@
 mod cache;
 mod documents;
 mod faceted;
+mod geo;
 mod searchable;
 mod vectors;
 
@@ -8,6 +9,7 @@ use bumpalo::Bump;
 pub use cache::{merge_caches, transpose_and_freeze_caches, BalancedCaches, DelAddRoaringBitmap};
 pub use documents::*;
 pub use faceted::*;
+pub use geo::*;
 pub use searchable::*;
 pub use vectors::EmbeddingExtractor;
 
