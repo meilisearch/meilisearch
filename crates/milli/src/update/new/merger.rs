@@ -12,7 +12,10 @@ use super::extract::{
     merge_caches, transpose_and_freeze_caches, BalancedCaches, DelAddRoaringBitmap, FacetKind,
 };
 use super::DocumentChange;
-use crate::{CboRoaringBitmapCodec, Error, FieldId, GeoPoint, GlobalFieldsIdsMap, Index, Result};
+use crate::{
+    CboRoaringBitmapCodec, Error, FieldId, GeoPoint, GlobalFieldsIdsMap, Index, InternalError,
+    Result,
+};
 
 pub struct GeoExtractor {
     rtree: Option<rstar::RTree<GeoPoint>>,
@@ -63,15 +66,22 @@ impl GeoExtractor {
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
-pub fn merge_and_send_docids<'extractor>(
+pub fn merge_and_send_docids<'extractor, MSP>(
     mut caches: Vec<BalancedCaches<'extractor>>,
     database: Database<Bytes, Bytes>,
     index: &Index,
     docids_sender: impl DocidsSender + Sync,
-) -> Result<()> {
+    must_stop_processing: &MSP,
+) -> Result<()>
+where
+    MSP: Fn() -> bool + Sync,
+{
     transpose_and_freeze_caches(&mut caches)?.into_par_iter().try_for_each(|frozen| {
         let rtxn = index.read_txn()?;
         let mut buffer = Vec::new();
+        if must_stop_processing() {
+            return Err(InternalError::AbortedIndexation.into());
+        }
         merge_caches(frozen, |key, DelAddRoaringBitmap { del, add }| {
             let current = database.get(&rtxn, key)?;
             match merge_cbo_bitmaps(current, del, add)? {
