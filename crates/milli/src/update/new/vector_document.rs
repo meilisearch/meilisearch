@@ -167,7 +167,7 @@ fn entry_from_raw_value(
     value: &RawValue,
     has_configured_embedder: bool,
 ) -> std::result::Result<VectorEntry<'_>, serde_json::Error> {
-    let value: RawVectors = serde_json::from_str(value.get())?;
+    let value: RawVectors = RawVectors::from_raw_value(value)?;
 
     Ok(match value {
         RawVectors::Explicit(raw_explicit_vectors) => VectorEntry {
@@ -177,7 +177,7 @@ fn entry_from_raw_value(
         },
         RawVectors::ImplicitlyUserProvided(value) => VectorEntry {
             has_configured_embedder,
-            embeddings: Some(Embeddings::FromJsonImplicityUserProvided(value)),
+            embeddings: value.map(Embeddings::FromJsonImplicityUserProvided),
             regenerate: false,
         },
     })
