@@ -750,9 +750,9 @@ async fn test_score_details() {
                     ],
                     "_vectors": {
                       "manual": [
-                        -100.0,
-                        231.0,
-                        32.0
+                        -100,
+                        231,
+                        32
                       ]
                     },
                     "_rankingScoreDetails": {
@@ -1543,9 +1543,9 @@ async fn simple_search_with_strange_synonyms() {
                 ],
                 "_vectors": {
                   "manual": [
-                    -100.0,
-                    231.0,
-                    32.0
+                    -100,
+                    231,
+                    32
                   ]
                 }
               }
@@ -1568,9 +1568,9 @@ async fn simple_search_with_strange_synonyms() {
                 ],
                 "_vectors": {
                   "manual": [
-                    -100.0,
-                    231.0,
-                    32.0
+                    -100,
+                    231,
+                    32
                   ]
                 }
               }
@@ -1593,9 +1593,9 @@ async fn simple_search_with_strange_synonyms() {
                 ],
                 "_vectors": {
                   "manual": [
-                    -100.0,
-                    231.0,
-                    32.0
+                    -100,
+                    231,
+                    32
                   ]
                 }
               }

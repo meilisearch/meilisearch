@@ -113,9 +113,9 @@ async fn simple_search_single_index() {
             ],
             "_vectors": {
               "manual": [
-                -100.0,
-                340.0,
-                90.0
+                -100,
+                340,
+                90
               ]
             }
           }
@@ -138,9 +138,9 @@ async fn simple_search_single_index() {
             ],
             "_vectors": {
               "manual": [
-                1.0,
-                2.0,
-                54.0
+                1,
+                2,
+                54
               ]
             }
           }
@@ -182,9 +182,9 @@ async fn federation_single_search_single_index() {
           ],
           "_vectors": {
             "manual": [
-              -100.0,
-              340.0,
-              90.0
+              -100,
+              340,
+              90
             ]
           },
           "_federation": {
@@ -305,9 +305,9 @@ async fn federation_two_search_single_index() {
           ],
           "_vectors": {
             "manual": [
-              -100.0,
-              340.0,
-              90.0
+              -100,
+              340,
+              90
             ]
           },
           "_federation": {
@@ -325,9 +325,9 @@ async fn federation_two_search_single_index() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
@@ -480,9 +480,9 @@ async fn simple_search_two_indexes() {
             ],
             "_vectors": {
               "manual": [
-                -100.0,
-                340.0,
-                90.0
+                -100,
+                340,
+                90
               ]
             }
           }
@@ -513,9 +513,9 @@ async fn simple_search_two_indexes() {
             "cattos": "pésti",
             "_vectors": {
               "manual": [
-                1.0,
-                2.0,
-                3.0
+                1,
+                2,
+                3
               ]
             }
           },
@@ -535,9 +535,9 @@ async fn simple_search_two_indexes() {
             ],
             "_vectors": {
               "manual": [
-                1.0,
-                2.0,
-                54.0
+                1,
+                2,
+                54
               ]
             }
           }
@@ -1393,9 +1393,9 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
           "cattos": "pésti",
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              3.0
+              1,
+              2,
+              3
             ]
           },
           "_federation": {
@@ -1414,9 +1414,9 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              10.0,
-              23.0,
-              32.0
+              10,
+              23,
+              32
             ]
           },
           "_federation": {
@@ -1442,9 +1442,9 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
@@ -1474,9 +1474,9 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              10.0,
-              23.0,
-              32.0
+              10,
+              23,
+              32
             ]
           },
           "_federation": {
@@ -1716,9 +1716,9 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
           "cattos": "pésti",
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              3.0
+              1,
+              2,
+              3
             ]
           },
           "_federation": {
@@ -1748,9 +1748,9 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              10.0,
-              23.0,
-              32.0
+              10,
+              23,
+              32
             ]
           },
           "_federation": {
@@ -1769,9 +1769,9 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              10.0,
-              23.0,
-              32.0
+              10,
+              23,
+              32
             ]
           },
           "_federation": {
@@ -1797,9 +1797,9 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
@@ -2103,9 +2103,9 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
@@ -2124,9 +2124,9 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              10.0,
-              -23.0,
-              32.0
+              10,
+              -23,
+              32
             ]
           },
           "_federation": {
@@ -2145,9 +2145,9 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              -100.0,
-              340.0,
-              90.0
+              -100,
+              340,
+              90
             ]
           },
           "_federation": {
@@ -2166,9 +2166,9 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              -100.0,
-              231.0,
-              32.0
+              -100,
+              231,
+              32
             ]
           },
           "_federation": {
@@ -2187,9 +2187,9 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              3.0
+              1,
+              2,
+              3
             ]
           },
           "_federation": {
@@ -2228,9 +2228,9 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
@@ -2415,9 +2415,9 @@ async fn federation_sort_different_ranking_rules() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
@@ -2436,9 +2436,9 @@ async fn federation_sort_different_ranking_rules() {
           ],
           "_vectors": {
             "manual": [
-              10.0,
-              -23.0,
-              32.0
+              10,
+              -23,
+              32
             ]
           },
           "_federation": {
@@ -2457,9 +2457,9 @@ async fn federation_sort_different_ranking_rules() {
           ],
           "_vectors": {
             "manual": [
-              -100.0,
-              340.0,
-              90.0
+              -100,
+              340,
+              90
             ]
           },
           "_federation": {
@@ -2478,9 +2478,9 @@ async fn federation_sort_different_ranking_rules() {
           ],
           "_vectors": {
             "manual": [
-              -100.0,
-              231.0,
-              32.0
+              -100,
+              231,
+              32
             ]
           },
           "_federation": {
@@ -2499,9 +2499,9 @@ async fn federation_sort_different_ranking_rules() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              3.0
+              1,
+              2,
+              3
             ]
           },
           "_federation": {
@@ -2716,9 +2716,9 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
@@ -2757,9 +2757,9 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
           ],
           "_vectors": {
             "manual": [
-              10.0,
-              -23.0,
-              32.0
+              10,
+              -23,
+              32
             ]
           },
           "_federation": {
@@ -2778,9 +2778,9 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
           ],
           "_vectors": {
             "manual": [
-              -100.0,
-              340.0,
-              90.0
+              -100,
+              340,
+              90
             ]
           },
           "_federation": {
@@ -2799,9 +2799,9 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
           ],
           "_vectors": {
             "manual": [
-              -100.0,
-              231.0,
-              32.0
+              -100,
+              231,
+              32
             ]
           },
           "_federation": {
@@ -2820,9 +2820,9 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              3.0
+              1,
+              2,
+              3
             ]
           },
           "_federation": {
@@ -2881,9 +2881,9 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
