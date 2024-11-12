@@ -193,7 +193,7 @@ impl Embedder {
         threads
             .install(move || {
                 let embeddings: Result<Vec<Vec<Embedding>>, _> = texts
-                    .par_chunks(self.chunk_count_hint())
+                    .par_chunks(self.prompt_count_in_chunk_hint())
                     .map(move |chunk| self.embed_ref(chunk))
                     .collect();
 

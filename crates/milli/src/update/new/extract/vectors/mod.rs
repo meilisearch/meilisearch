@@ -115,11 +115,8 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                             new_vectors.vectors_for_key(embedder_name).transpose()
                         }) {
                             let new_vectors = new_vectors?;
-                            match (old_vectors.regenerate, new_vectors.regenerate) {
-                                (true, true) | (false, false) => todo!(),
-                                _ => {
-                                    chunks.set_regenerate(update.docid(), new_vectors.regenerate);
-                                }
+                            if old_vectors.regenerate != new_vectors.regenerate {
+                                chunks.set_regenerate(update.docid(), new_vectors.regenerate);
                             }
                             // do we have set embeddings?
                             if let Some(embeddings) = new_vectors.embeddings {

@@ -180,7 +180,13 @@ fn entry_from_raw_value(
         },
         RawVectors::ImplicitlyUserProvided(value) => VectorEntry {
             has_configured_embedder,
-            embeddings: value.map(Embeddings::FromJsonImplicityUserProvided),
+            // implicitly user provided always provide embeddings
+            // `None` here means that there are no embeddings
+            embeddings: Some(
+                value
+                    .map(Embeddings::FromJsonImplicityUserProvided)
+                    .unwrap_or(Embeddings::FromDb(Default::default())),
+            ),
             regenerate: false,
             implicit: true,
         },
