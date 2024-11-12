@@ -648,7 +648,7 @@ impl Embedder {
             Embedder::HuggingFace(embedder) => embedder.chunk_count_hint(),
             Embedder::OpenAi(embedder) => embedder.chunk_count_hint(),
             Embedder::Ollama(embedder) => embedder.chunk_count_hint(),
-            Embedder::UserProvided(_) => 1,
+            Embedder::UserProvided(_) => 100,
             Embedder::Rest(embedder) => embedder.chunk_count_hint(),
         }
     }
