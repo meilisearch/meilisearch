@@ -46,12 +46,12 @@ impl RawVectorsError {
                 "Could not parse `._vectors.{embedder_name}.embeddings`: {error}"
             ),
             RawVectorsError::UnknownField { field } => format!(
-                "Unexpected field `._vectors.{embedder_name}.{field}`\n \
-                \t - note: the allowed fields are `regenerate` and `embeddings`"
+                "Unexpected field `._vectors.{embedder_name}.{field}`\n  \
+                  - note: the allowed fields are `regenerate` and `embeddings`"
             ),
             RawVectorsError::MissingRegenerate => format!(
-                "Missing field `._vectors.{embedder_name}.regenerate`\n \
-                \t - note: `._vectors.{embedder_name}` must be an array of floats, an array of arrays of floats, or an object with field `regenerate`"
+                "Missing field `._vectors.{embedder_name}.regenerate`\n  \
+                - note: `._vectors.{embedder_name}` must be an array of floats, an array of arrays of floats, or an object with field `regenerate`"
             ),
             RawVectorsError::WrongKind { kind, value } => format!(
                 "Expected `._vectors.{embedder_name}` to be an array of floats, an array of arrays of floats, or an object with at least the field `regenerate`, but got the {kind} `{value}`"
