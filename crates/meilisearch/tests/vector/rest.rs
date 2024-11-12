@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use meili_snap::{json_string, snapshot};
 use reqwest::IntoUrl;
@@ -13,13 +12,22 @@ use crate::vector::{get_server_vector, GetAllDocumentsOptions};
 async fn create_mock() -> (MockServer, Value) {
     let mock_server = MockServer::start().await;
 
-    let counter = AtomicUsize::new(0);
+    let text_to_embedding: BTreeMap<_, _> = vec![
+        // text -> embedding
+        ("kefir", [0.0, 0.0, 0.0]),
+        ("intel", [1.0, 1.0, 1.0]),
+    ]
+    // turn into btree
+    .into_iter()
+    .collect();
 
     Mock::given(method("POST"))
         .and(path("/"))
-        .respond_with(move |_req: &Request| {
-            let counter = counter.fetch_add(1, Ordering::Relaxed);
-            ResponseTemplate::new(200).set_body_json(json!({ "data": vec![counter; 3] }))
+        .respond_with(move |req: &Request| {
+            let text: String = req.body_json().unwrap();
+            ResponseTemplate::new(200).set_body_json(
+                json!({ "data": text_to_embedding.get(text.as_str()).unwrap_or(&[99., 99., 99.]) }),
+            )
         })
         .mount(&mock_server)
         .await;
@@ -32,13 +40,14 @@ async fn create_mock() -> (MockServer, Value) {
         "request": "{{text}}",
         "response": {
           "data": "{{embedding}}"
-        }
+        },
+        "documentTemplate": "{{doc.name}}",
     });
 
     (mock_server, embedder_settings)
 }
 
-async fn create_mock_map() -> (MockServer, Value) {
+async fn create_mock_default_template() -> (MockServer, Value) {
     let mock_server = MockServer::start().await;
 
     let text_to_embedding: BTreeMap<_, _> = vec![
@@ -97,7 +106,14 @@ struct SingleResponse {
 async fn create_mock_multiple() -> (MockServer, Value) {
     let mock_server = MockServer::start().await;
 
-    let counter = AtomicUsize::new(0);
+    let text_to_embedding: BTreeMap<_, _> = vec![
+        // text -> embedding
+        ("kefir", [0.0, 0.0, 0.0]),
+        ("intel", [1.0, 1.0, 1.0]),
+    ]
+    // turn into btree
+    .into_iter()
+    .collect();
 
     Mock::given(method("POST"))
         .and(path("/"))
@@ -115,8 +131,11 @@ async fn create_mock_multiple() -> (MockServer, Value) {
                 .input
                 .into_iter()
                 .map(|text| SingleResponse {
+                    embedding: text_to_embedding
+                        .get(text.as_str())
+                        .unwrap_or(&[99., 99., 99.])
+                        .to_vec(),
                     text,
-                    embedding: vec![counter.fetch_add(1, Ordering::Relaxed) as f32; 3],
                 })
                 .collect();
 
@@ -142,7 +161,8 @@ async fn create_mock_multiple() -> (MockServer, Value) {
             },
             "{{..}}"
           ]
-        }
+        },
+        "documentTemplate": "{{doc.name}}"
     });
 
     (mock_server, embedder_settings)
@@ -156,7 +176,14 @@ struct SingleRequest {
 async fn create_mock_single_response_in_array() -> (MockServer, Value) {
     let mock_server = MockServer::start().await;
 
-    let counter = AtomicUsize::new(0);
+    let text_to_embedding: BTreeMap<_, _> = vec![
+        // text -> embedding
+        ("kefir", [0.0, 0.0, 0.0]),
+        ("intel", [1.0, 1.0, 1.0]),
+    ]
+    // turn into btree
+    .into_iter()
+    .collect();
 
     Mock::given(method("POST"))
         .and(path("/"))
@@ -171,8 +198,11 @@ async fn create_mock_single_response_in_array() -> (MockServer, Value) {
             };
 
             let output = vec![SingleResponse {
+                embedding: text_to_embedding
+                    .get(req.input.as_str())
+                    .unwrap_or(&[99., 99., 99.])
+                    .to_vec(),
                 text: req.input,
-                embedding: vec![counter.fetch_add(1, Ordering::Relaxed) as f32; 3],
             }];
 
             let response = MultipleResponse { output };
@@ -196,7 +226,8 @@ async fn create_mock_single_response_in_array() -> (MockServer, Value) {
               "embedding": "{{embedding}}"
             }
           ]
-        }
+        },
+        "documentTemplate": "{{doc.name}}"
     });
 
     (mock_server, embedder_settings)
@@ -205,7 +236,14 @@ async fn create_mock_single_response_in_array() -> (MockServer, Value) {
 async fn create_mock_raw_with_custom_header() -> (MockServer, Value) {
     let mock_server = MockServer::start().await;
 
-    let counter = AtomicUsize::new(0);
+    let text_to_embedding: BTreeMap<_, _> = vec![
+        // text -> embedding
+        ("kefir", [0.0, 0.0, 0.0]),
+        ("intel", [1.0, 1.0, 1.0]),
+    ]
+    // turn into btree
+    .into_iter()
+    .collect();
 
     Mock::given(method("POST"))
         .and(path("/"))
@@ -223,7 +261,7 @@ async fn create_mock_raw_with_custom_header() -> (MockServer, Value) {
                 }
             }
 
-            let _req: String = match req.body_json() {
+            let req: String = match req.body_json() {
                 Ok(req) => req,
                 Err(error) => {
                     return ResponseTemplate::new(400).set_body_json(json!({
@@ -232,7 +270,7 @@ async fn create_mock_raw_with_custom_header() -> (MockServer, Value) {
                 }
             };
 
-            let output = vec![counter.fetch_add(1, Ordering::Relaxed) as f32; 3];
+            let output = text_to_embedding.get(req.as_str()).unwrap_or(&[99., 99., 99.]).to_vec();
 
             ResponseTemplate::new(200).set_body_json(output)
         })
@@ -245,7 +283,8 @@ async fn create_mock_raw_with_custom_header() -> (MockServer, Value) {
         "url": url,
         "request": "{{text}}",
         "response": "{{embedding}}",
-        "headers": {"my-nonstandard-auth": "bearer of the ring"}
+        "headers": {"my-nonstandard-auth": "bearer of the ring"},
+        "documentTemplate": "{{doc.name}}"
     });
 
     (mock_server, embedder_settings)
@@ -254,12 +293,19 @@ async fn create_mock_raw_with_custom_header() -> (MockServer, Value) {
 async fn create_mock_raw() -> (MockServer, Value) {
     let mock_server = MockServer::start().await;
 
-    let counter = AtomicUsize::new(0);
+    let text_to_embedding: BTreeMap<_, _> = vec![
+        // text -> embedding
+        ("kefir", [0.0, 0.0, 0.0]),
+        ("intel", [1.0, 1.0, 1.0]),
+    ]
+    // turn into btree
+    .into_iter()
+    .collect();
 
     Mock::given(method("POST"))
         .and(path("/"))
         .respond_with(move |req: &Request| {
-            let _req: String = match req.body_json() {
+            let req: String = match req.body_json() {
                 Ok(req) => req,
                 Err(error) => {
                     return ResponseTemplate::new(400).set_body_json(json!({
@@ -268,7 +314,7 @@ async fn create_mock_raw() -> (MockServer, Value) {
                 }
             };
 
-            let output = vec![counter.fetch_add(1, Ordering::Relaxed) as f32; 3];
+            let output = text_to_embedding.get(req.as_str()).unwrap_or(&[99., 99., 99.]).to_vec();
 
             ResponseTemplate::new(200).set_body_json(output)
         })
@@ -281,29 +327,30 @@ async fn create_mock_raw() -> (MockServer, Value) {
         "url": url,
         "dimensions": 3,
         "request": "{{text}}",
-        "response": "{{embedding}}"
+        "response": "{{embedding}}",
+        "documentTemplate": "{{doc.name}}"
     });
 
     (mock_server, embedder_settings)
 }
 
-pub async fn post<T: IntoUrl>(url: T) -> reqwest::Result<reqwest::Response> {
-    reqwest::Client::builder().build()?.post(url).send().await
+pub async fn post<T: IntoUrl>(url: T, text: &str) -> reqwest::Result<reqwest::Response> {
+    reqwest::Client::builder().build()?.post(url).json(&json!(text)).send().await
 }
 
 #[actix_rt::test]
 async fn dummy_testing_the_mock() {
     let (mock, _setting) = create_mock().await;
-    let body = post(&mock.uri()).await.unwrap().text().await.unwrap();
-    snapshot!(body, @r###"{"data":[0,0,0]}"###);
-    let body = post(&mock.uri()).await.unwrap().text().await.unwrap();
-    snapshot!(body, @r###"{"data":[1,1,1]}"###);
-    let body = post(&mock.uri()).await.unwrap().text().await.unwrap();
-    snapshot!(body, @r###"{"data":[2,2,2]}"###);
-    let body = post(&mock.uri()).await.unwrap().text().await.unwrap();
-    snapshot!(body, @r###"{"data":[3,3,3]}"###);
-    let body = post(&mock.uri()).await.unwrap().text().await.unwrap();
-    snapshot!(body, @r###"{"data":[4,4,4]}"###);
+    let body = post(&mock.uri(), "kefir").await.unwrap().text().await.unwrap();
+    snapshot!(body, @r###"{"data":[0.0,0.0,0.0]}"###);
+    let body = post(&mock.uri(), "intel").await.unwrap().text().await.unwrap();
+    snapshot!(body, @r###"{"data":[1.0,1.0,1.0]}"###);
+    let body = post(&mock.uri(), "kefir").await.unwrap().text().await.unwrap();
+    snapshot!(body, @r###"{"data":[0.0,0.0,0.0]}"###);
+    let body = post(&mock.uri(), "kefir").await.unwrap().text().await.unwrap();
+    snapshot!(body, @r###"{"data":[0.0,0.0,0.0]}"###);
+    let body = post(&mock.uri(), "intel").await.unwrap().text().await.unwrap();
+    snapshot!(body, @r###"{"data":[1.0,1.0,1.0]}"###);
 }
 
 #[actix_rt::test]
@@ -953,7 +1000,7 @@ async fn bad_settings() {
     let (response, code) = index
         .update_settings(json!({
           "embedders": {
-              "rest": json!({ "source": "rest", "url": mock.uri(), "request": "{{text}}", "response": { "data": "{{embedding}}" }, "dimensions": 2 }),
+              "rest": json!({ "source": "rest", "url": mock.uri(), "request": "{{text}}", "response": { "data": "{{embedding}}" }, "dimensions": 2, "documentTemplate": "{{doc.name}}" }),
           },
         }))
         .await;
@@ -1920,6 +1967,7 @@ async fn server_custom_header() {
         "embedders": {
           "rest": {
             "source": "rest",
+            "documentTemplate": "{{doc.name}}",
             "url": "[url]",
             "request": "{{text}}",
             "response": "{{embedding}}",
@@ -1940,7 +1988,7 @@ async fn server_custom_header() {
 
 #[actix_rt::test]
 async fn searchable_reindex() {
-    let (_mock, setting) = create_mock_map().await;
+    let (_mock, setting) = create_mock_default_template().await;
     let server = get_server_vector().await;
     let index = server.index("doggo");
 
