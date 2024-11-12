@@ -342,35 +342,28 @@ where
                     let span = tracing::trace_span!(target: "indexing::documents::extract", "vectors");
                     let _entered = span.enter();
 
-                    let index_embeddings = index.embedding_configs(&rtxn)?;
+                    let mut index_embeddings = index.embedding_configs(&rtxn)?;
                     if index_embeddings.is_empty() {
                         break 'vectors;
                     }
 
                     let embedding_sender = extractor_sender.embeddings();
                     let extractor = EmbeddingExtractor::new(embedders, &embedding_sender, field_distribution, request_threads());
-                    let datastore = ThreadLocal::with_capacity(pool.current_num_threads());
+                    let mut datastore = ThreadLocal::with_capacity(pool.current_num_threads());
                     let (finished_steps, step_name) = steps::extract_embeddings();
 
 
                     extract(document_changes, &extractor, indexing_context, &mut extractor_allocs, &datastore, finished_steps, total_steps, step_name)?;
 
-
-                    let mut user_provided = HashMap::new();
-                    for data in datastore {
-                        let data = data.into_inner().0;
-                        for (embedder, deladd) in data.into_iter() {
-                            let user_provided = user_provided.entry(embedder).or_insert(Default::default());
-                            if let Some(del) = deladd.del {
-                                *user_provided -= del;
-                            }
-                            if let Some(add) = deladd.add {
-                                *user_provided |= add;
-                            }
+                    for config in &mut index_embeddings {
+                        'data: for data in datastore.iter_mut() {
+                            let data = &mut data.get_mut().0;
+                            let Some(deladd) = data.remove(&config.name) else { continue 'data; };
+                            deladd.apply_to(&mut config.user_provided);
                         }
                     }
 
-                    embedding_sender.finish(user_provided).unwrap();
+                    embedding_sender.finish(index_embeddings).unwrap();
                 }
 
                 // TODO THIS IS TOO MUCH
@@ -472,7 +465,7 @@ where
                         writer.del_items(wtxn, *dimensions, docid)?;
                         writer.add_item(wtxn, docid, &embedding)?;
                     }
-                    ArroyOperation::Finish { mut user_provided } => {
+                    ArroyOperation::Finish { configs } => {
                         let span = tracing::trace_span!(target: "indexing::vectors", parent: &indexer_span, "build");
                         let _entered = span.enter();
 
@@ -495,14 +488,6 @@ where
                                 false,
                                 &indexing_context.must_stop_processing,
                             )?;
-                        }
-
-                        let mut configs = index.embedding_configs(wtxn)?;
-
-                        for config in &mut configs {
-                            if let Some(user_provided) = user_provided.remove(&config.name) {
-                                config.user_provided = user_provided;
-                            }
                         }
 
                         index.put_embedding_configs(wtxn, configs)?;

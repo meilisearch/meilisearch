@@ -2,12 +2,11 @@ use std::marker::PhantomData;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crossbeam_channel::{IntoIter, Receiver, SendError, Sender};
-use hashbrown::HashMap;
 use heed::types::Bytes;
-use roaring::RoaringBitmap;
 
 use super::extract::FacetKind;
 use super::StdResult;
+use crate::index::IndexEmbeddingConfig;
 use crate::update::new::KvReaderFieldId;
 use crate::vector::Embedding;
 use crate::{DocumentId, Index};
@@ -87,7 +86,7 @@ pub enum ArroyOperation {
         embedding: Embedding,
     },
     Finish {
-        user_provided: HashMap<String, RoaringBitmap>,
+        configs: Vec<IndexEmbeddingConfig>,
     },
 }
 
@@ -418,12 +417,9 @@ impl EmbeddingSender<'_> {
     }
 
     /// Marks all embedders as "to be built"
-    pub fn finish(
-        self,
-        user_provided: HashMap<String, RoaringBitmap>,
-    ) -> StdResult<(), SendError<()>> {
+    pub fn finish(self, configs: Vec<IndexEmbeddingConfig>) -> StdResult<(), SendError<()>> {
         self.0
-            .send(WriterOperation::ArroyOperation(ArroyOperation::Finish { user_provided }))
+            .send(WriterOperation::ArroyOperation(ArroyOperation::Finish { configs }))
             .map_err(|_| SendError(()))
     }
 }

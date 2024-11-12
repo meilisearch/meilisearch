@@ -85,8 +85,13 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
         for change in changes {
             let change = change?;
             match change {
-                DocumentChange::Deletion(_deletion) => {
-                    // handled by document sender
+                DocumentChange::Deletion(deletion) => {
+                    // vector deletion is handled by document sender,
+                    // we still need to accomodate deletion from user_provided
+                    for chunks in &mut all_chunks {
+                        // regenerate: true means we delete from user_provided
+                        chunks.set_regenerate(deletion.docid(), true);
+                    }
                 }
                 DocumentChange::Update(update) => {
                     let old_vectors = update.current_vectors(
@@ -423,9 +428,9 @@ impl<'a, 'extractor> Chunks<'a, 'extractor> {
         let user_provided = user_provided.0.entry_ref(self.embedder_name).or_default();
         if regenerate {
             // regenerate == !user_provided
-            user_provided.del.get_or_insert(Default::default()).insert(docid);
+            user_provided.insert_del_u32(docid);
         } else {
-            user_provided.add.get_or_insert(Default::default()).insert(docid);
+            user_provided.insert_add_u32(docid);
         }
     }
 
