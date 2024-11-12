@@ -529,7 +529,7 @@ async fn user_provided_vectors_error() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "While embedding documents for embedder `manual`: no vectors provided for document \"40\" and at least 4 other document(s)\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: opt-out for a document with `_vectors.manual: null`",
+        "message": "While embedding documents for embedder `manual`: no vectors provided for document `40` and at least 4 other document(s)\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: opt-out for a document with `_vectors.manual: null`",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -558,7 +558,7 @@ async fn user_provided_vectors_error() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "While embedding documents for embedder `manual`: no vectors provided for document \"42\"\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: try replacing `_vector` by `_vectors` in 1 document(s).",
+        "message": "While embedding documents for embedder `manual`: no vectors provided for document `42`\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: try replacing `_vector` by `_vectors` in 1 document(s).",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -587,7 +587,7 @@ async fn user_provided_vectors_error() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "While embedding documents for embedder `manual`: no vectors provided for document \"42\"\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: try replacing `_vectors.manaul` by `_vectors.manual` in 1 document(s).",
+        "message": "While embedding documents for embedder `manual`: no vectors provided for document `42`\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: try replacing `_vectors.manaul` by `_vectors.manual` in 1 document(s).",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
