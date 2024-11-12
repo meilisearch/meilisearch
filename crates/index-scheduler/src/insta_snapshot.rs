@@ -148,7 +148,6 @@ pub fn snapshot_task(task: &Task) -> String {
         enqueued_at: _,
         started_at: _,
         finished_at: _,
-        progress: _,
         error,
         canceled_by,
         details,

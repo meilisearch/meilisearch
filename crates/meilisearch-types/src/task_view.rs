@@ -4,9 +4,7 @@ use time::{Duration, OffsetDateTime};
 
 use crate::error::ResponseError;
 use crate::settings::{Settings, Unchecked};
-use crate::tasks::{
-    serialize_duration, Details, IndexSwap, Kind, Status, Task, TaskId, TaskProgress,
-};
+use crate::tasks::{serialize_duration, Details, IndexSwap, Kind, Status, Task, TaskId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,8 +27,6 @@ pub struct TaskView {
     pub started_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339::option", default)]
     pub finished_at: Option<OffsetDateTime>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub progress: Option<TaskProgress>,
 }
 
 impl TaskView {
@@ -47,7 +43,6 @@ impl TaskView {
             enqueued_at: task.enqueued_at,
             started_at: task.started_at,
             finished_at: task.finished_at,
-            progress: task.progress.clone(),
         }
     }
 }

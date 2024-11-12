@@ -31,8 +31,6 @@ pub struct Task {
     #[serde(with = "time::serde::rfc3339::option")]
     pub finished_at: Option<OffsetDateTime>,
 
-    pub progress: Option<TaskProgress>,
-
     pub error: Option<ResponseError>,
     pub canceled_by: Option<TaskId>,
     pub details: Option<Details>,

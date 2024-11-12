@@ -345,8 +345,6 @@ impl IndexScheduler {
                 enqueued_at,
                 started_at,
                 finished_at,
-                /// FIXME: assert something here? ask tamo 🤔
-                    progress: _,
                 error: _,
                 canceled_by,
                 details,

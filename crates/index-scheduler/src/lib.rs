@@ -978,12 +978,7 @@ impl IndexScheduler {
             Ok((
                 ret.map(|task| {
                     if processing.contains(task.uid) {
-                        Task {
-                            status: Status::Processing,
-                            progress: progress.clone(),
-                            started_at: Some(started_at),
-                            ..task
-                        }
+                        Task { status: Status::Processing, started_at: Some(started_at), ..task }
                     } else {
                         task
                     }
@@ -1025,7 +1020,6 @@ impl IndexScheduler {
             enqueued_at: OffsetDateTime::now_utc(),
             started_at: None,
             finished_at: None,
-            progress: None,
             error: None,
             canceled_by: None,
             details: kind.default_details(),
@@ -1606,8 +1600,6 @@ impl<'a> Dump<'a> {
             enqueued_at: task.enqueued_at,
             started_at: task.started_at,
             finished_at: task.finished_at,
-            /// FIXME: should we update dump to contain progress information? 🤔
-            progress: None,
             error: task.error,
             canceled_by: task.canceled_by,
             details: task.details,
