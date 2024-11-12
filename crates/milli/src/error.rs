@@ -122,7 +122,7 @@ and can not be more than 512 bytes.", .document_id.to_string()
     #[error("The `_vectors` field in the document with id: `{document_id}` is not an object. Was expecting an object with a key for each embedder with manually provided vectors, but instead got `{value}`")]
     InvalidVectorsMapType { document_id: String, value: Value },
     #[error("Bad embedder configuration in the document with id: `{document_id}`. {error}")]
-    InvalidVectorsEmbedderConf { document_id: String, error: deserr::errors::JsonError },
+    InvalidVectorsEmbedderConf { document_id: String, error: String },
     #[error("{0}")]
     InvalidFilter(String),
     #[error("Invalid type for filter subexpression: expected: {}, found: {1}.", .0.join(", "))]

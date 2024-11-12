@@ -343,7 +343,7 @@ impl Error {
             Error::InvalidEmbedderConf { error } => {
                 crate::Error::UserError(UserError::InvalidVectorsEmbedderConf {
                     document_id,
-                    error,
+                    error: error.to_string(),
                 })
             }
             Error::InternalSerdeJson(error) => {
