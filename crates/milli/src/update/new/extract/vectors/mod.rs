@@ -126,7 +126,7 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                                         .into_vec(&context.doc_alloc, embedder_name)
                                         .map_err(|error| UserError::InvalidVectorsEmbedderConf {
                                             document_id: update.external_document_id().to_string(),
-                                            error,
+                                            error: error.to_string(),
                                         })?,
                                 );
                             } else if new_vectors.regenerate {
@@ -210,7 +210,7 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                                             document_id: insertion
                                                 .external_document_id()
                                                 .to_string(),
-                                            error,
+                                            error: error.to_string(),
                                         })?,
                                 );
                             } else if new_vectors.regenerate {

@@ -97,7 +97,7 @@ impl<'doc> Insertion<'doc> {
         doc_alloc: &'doc Bump,
         embedders: &'doc EmbeddingConfigs,
     ) -> Result<Option<VectorDocumentFromVersions<'doc>>> {
-        VectorDocumentFromVersions::new(&self.new, doc_alloc, embedders)
+        VectorDocumentFromVersions::new(self.external_document_id, &self.new, doc_alloc, embedders)
     }
 }
 
@@ -169,7 +169,7 @@ impl<'doc> Update<'doc> {
         doc_alloc: &'doc Bump,
         embedders: &'doc EmbeddingConfigs,
     ) -> Result<Option<VectorDocumentFromVersions<'doc>>> {
-        VectorDocumentFromVersions::new(&self.new, doc_alloc, embedders)
+        VectorDocumentFromVersions::new(self.external_document_id, &self.new, doc_alloc, embedders)
     }
 
     pub fn merged_vectors<Mapper: FieldIdMapper>(
@@ -181,10 +181,22 @@ impl<'doc> Update<'doc> {
         embedders: &'doc EmbeddingConfigs,
     ) -> Result<Option<MergedVectorDocument<'doc>>> {
         if self.has_deletion {
-            MergedVectorDocument::without_db(&self.new, doc_alloc, embedders)
+            MergedVectorDocument::without_db(
+                self.external_document_id,
+                &self.new,
+                doc_alloc,
+                embedders,
+            )
         } else {
             MergedVectorDocument::with_db(
-                self.docid, index, rtxn, mapper, &self.new, doc_alloc, embedders,
+                self.docid,
+                self.external_document_id,
+                index,
+                rtxn,
+                mapper,
+                &self.new,
+                doc_alloc,
+                embedders,
             )
         }
     }

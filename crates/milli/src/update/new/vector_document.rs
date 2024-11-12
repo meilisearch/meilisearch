@@ -12,7 +12,7 @@ use super::indexer::de::DeserrRawValue;
 use crate::documents::FieldIdMapper;
 use crate::index::IndexEmbeddingConfig;
 use crate::vector::parsed_vectors::{
-    RawVectors, VectorOrArrayOfVectors, RESERVED_VECTORS_FIELD_NAME,
+    RawVectors, RawVectorsError, VectorOrArrayOfVectors, RESERVED_VECTORS_FIELD_NAME,
 };
 use crate::vector::{ArroyWrapper, Embedding, EmbeddingConfigs};
 use crate::{DocumentId, Index, InternalError, Result, UserError};
@@ -143,7 +143,14 @@ impl<'t> VectorDocument<'t> for VectorDocumentFromDb<'t> {
                 Ok((&*config_name, entry))
             })
             .chain(self.vectors_field.iter().flat_map(|map| map.iter()).map(|(name, value)| {
-                Ok((name, entry_from_raw_value(value, false).map_err(InternalError::SerdeJson)?))
+                Ok((
+                    name,
+                    entry_from_raw_value(value, false).map_err(|_| {
+                        InternalError::Serialization(crate::SerializationError::Decoding {
+                            db_name: Some(crate::index::db_name::VECTOR_ARROY),
+                        })
+                    })?,
+                ))
             }))
     }
 
@@ -155,20 +162,38 @@ impl<'t> VectorDocument<'t> for VectorDocumentFromDb<'t> {
                 Some(self.entry_from_db(embedder_id, config)?)
             }
             None => match self.vectors_field.as_ref().and_then(|obkv| obkv.get(key)) {
-                Some(embedding_from_doc) => Some(
-                    entry_from_raw_value(embedding_from_doc, false)
-                        .map_err(InternalError::SerdeJson)?,
-                ),
+                Some(embedding_from_doc) => {
+                    Some(entry_from_raw_value(embedding_from_doc, false).map_err(|_| {
+                        InternalError::Serialization(crate::SerializationError::Decoding {
+                            db_name: Some(crate::index::db_name::VECTOR_ARROY),
+                        })
+                    })?)
+                }
                 None => None,
             },
         })
     }
 }
 
+fn entry_from_raw_value_user<'doc>(
+    external_docid: &str,
+    embedder_name: &str,
+    value: &'doc RawValue,
+    has_configured_embedder: bool,
+) -> Result<VectorEntry<'doc>> {
+    entry_from_raw_value(value, has_configured_embedder).map_err(|error| {
+        UserError::InvalidVectorsEmbedderConf {
+            document_id: external_docid.to_string(),
+            error: error.msg(embedder_name),
+        }
+        .into()
+    })
+}
+
 fn entry_from_raw_value(
     value: &RawValue,
     has_configured_embedder: bool,
-) -> std::result::Result<VectorEntry<'_>, serde_json::Error> {
+) -> std::result::Result<VectorEntry<'_>, RawVectorsError> {
     let value: RawVectors = RawVectors::from_raw_value(value)?;
 
     Ok(match value {
@@ -194,12 +219,14 @@ fn entry_from_raw_value(
 }
 
 pub struct VectorDocumentFromVersions<'doc> {
+    external_document_id: &'doc str,
     vectors: RawMap<'doc>,
     embedders: &'doc EmbeddingConfigs,
 }
 
 impl<'doc> VectorDocumentFromVersions<'doc> {
     pub fn new(
+        external_document_id: &'doc str,
         versions: &Versions<'doc>,
         bump: &'doc Bump,
         embedders: &'doc EmbeddingConfigs,
@@ -208,7 +235,7 @@ impl<'doc> VectorDocumentFromVersions<'doc> {
         if let Some(vectors_field) = document.vectors_field()? {
             let vectors =
                 RawMap::from_raw_value(vectors_field, bump).map_err(UserError::SerdeJson)?;
-            Ok(Some(Self { vectors, embedders }))
+            Ok(Some(Self { external_document_id, vectors, embedders }))
         } else {
             Ok(None)
         }
@@ -218,16 +245,24 @@ impl<'doc> VectorDocumentFromVersions<'doc> {
 impl<'doc> VectorDocument<'doc> for VectorDocumentFromVersions<'doc> {
     fn iter_vectors(&self) -> impl Iterator<Item = Result<(&'doc str, VectorEntry<'doc>)>> {
         self.vectors.iter().map(|(embedder, vectors)| {
-            let vectors = entry_from_raw_value(vectors, self.embedders.contains(embedder))
-                .map_err(UserError::SerdeJson)?;
+            let vectors = entry_from_raw_value_user(
+                self.external_document_id,
+                embedder,
+                vectors,
+                self.embedders.contains(embedder),
+            )?;
             Ok((embedder, vectors))
         })
     }
 
     fn vectors_for_key(&self, key: &str) -> Result<Option<VectorEntry<'doc>>> {
         let Some(vectors) = self.vectors.get(key) else { return Ok(None) };
-        let vectors = entry_from_raw_value(vectors, self.embedders.contains(key))
-            .map_err(UserError::SerdeJson)?;
+        let vectors = entry_from_raw_value_user(
+            self.external_document_id,
+            key,
+            vectors,
+            self.embedders.contains(key),
+        )?;
         Ok(Some(vectors))
     }
 }
@@ -238,8 +273,10 @@ pub struct MergedVectorDocument<'doc> {
 }
 
 impl<'doc> MergedVectorDocument<'doc> {
+    #[allow(clippy::too_many_arguments)]
     pub fn with_db<Mapper: FieldIdMapper>(
         docid: DocumentId,
+        external_document_id: &'doc str,
         index: &'doc Index,
         rtxn: &'doc RoTxn,
         db_fields_ids_map: &'doc Mapper,
@@ -248,16 +285,20 @@ impl<'doc> MergedVectorDocument<'doc> {
         embedders: &'doc EmbeddingConfigs,
     ) -> Result<Option<Self>> {
         let db = VectorDocumentFromDb::new(docid, index, rtxn, db_fields_ids_map, doc_alloc)?;
-        let new_doc = VectorDocumentFromVersions::new(versions, doc_alloc, embedders)?;
+        let new_doc =
+            VectorDocumentFromVersions::new(&external_document_id, versions, doc_alloc, embedders)?;
         Ok(if db.is_none() && new_doc.is_none() { None } else { Some(Self { new_doc, db }) })
     }
 
     pub fn without_db(
+        external_document_id: &'doc str,
         versions: &Versions<'doc>,
         doc_alloc: &'doc Bump,
         embedders: &'doc EmbeddingConfigs,
     ) -> Result<Option<Self>> {
-        let Some(new_doc) = VectorDocumentFromVersions::new(versions, doc_alloc, embedders)? else {
+        let Some(new_doc) =
+            VectorDocumentFromVersions::new(external_document_id, versions, doc_alloc, embedders)?
+        else {
             return Ok(None);
         };
         Ok(Some(Self { new_doc: Some(new_doc), db: None }))
