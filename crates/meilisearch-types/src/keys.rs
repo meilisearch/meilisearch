@@ -448,7 +448,7 @@ impl Sequence for Action {
                 previous_item = Some(*next_flag);
                 potential_previous_index += 1;
             } else {
-                return None;
+                return pre_previous_item;
             }
         }
     }
