@@ -354,6 +354,8 @@ where
 
     if let Some(geo_value) = document.geo_field()? {
         let fid = fields_ids_map.id_or_insert("_geo").ok_or(UserError::AttributeLimitReached)?;
+        fields_ids_map.id_or_insert("_geo.lat").ok_or(UserError::AttributeLimitReached)?;
+        fields_ids_map.id_or_insert("_geo.lng").ok_or(UserError::AttributeLimitReached)?;
         unordered_field_buffer.push((fid, geo_value));
     }
 

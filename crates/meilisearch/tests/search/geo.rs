@@ -70,8 +70,8 @@ async fn geo_bounding_box_with_string_and_number() {
     let documents = DOCUMENTS.clone();
     index.update_settings_filterable_attributes(json!(["_geo"])).await;
     index.update_settings_sortable_attributes(json!(["_geo"])).await;
-    index.add_documents(documents, None).await;
-    index.wait_task(2).await;
+    let (ret, _code) = index.add_documents(documents, None).await;
+    index.wait_task(ret.uid()).await.succeeded();
 
     index
         .search(

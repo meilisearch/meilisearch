@@ -50,7 +50,7 @@ where
 
     let mut file = tempfile::tempfile()?;
     /// manage error
-    bincode::serialize_into(&mut file, dbg!(&rtree)).unwrap();
+    bincode::serialize_into(&mut file, &rtree).unwrap();
     file.sync_all()?;
 
     let rtree_mmap = unsafe { Mmap::map(&file)? };

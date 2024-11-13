@@ -58,7 +58,8 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a> {
                         context.index,
                         &context.db_fields_ids_map,
                     )?;
-                    for res in content.iter_top_level_fields() {
+                    let geo_iter = content.geo_field().transpose().map(|res| res.map(|rv| ("_geo", rv)));
+                    for res in content.iter_top_level_fields().chain(geo_iter) {
                         let (f, _) = res?;
                         let entry = document_extractor_data
                             .field_distribution_delta
@@ -73,7 +74,8 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a> {
                     let docid = update.docid();
                     let content =
                         update.current(&context.rtxn, context.index, &context.db_fields_ids_map)?;
-                    for res in content.iter_top_level_fields() {
+                        let geo_iter = content.geo_field().transpose().map(|res| res.map(|rv| ("_geo", rv)));
+                    for res in content.iter_top_level_fields().chain(geo_iter) {
                         let (f, _) = res?;
                         let entry = document_extractor_data
                             .field_distribution_delta
@@ -82,7 +84,8 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a> {
                         *entry -= 1;
                     }
                     let content = update.updated();
-                    for res in content.iter_top_level_fields() {
+                    let geo_iter = content.geo_field().transpose().map(|res| res.map(|rv| ("_geo", rv)));
+                    for res in content.iter_top_level_fields().chain(geo_iter) {
                         let (f, _) = res?;
                         let entry = document_extractor_data
                             .field_distribution_delta
@@ -111,7 +114,8 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a> {
                 DocumentChange::Insertion(insertion) => {
                     let docid = insertion.docid();
                     let content = insertion.inserted();
-                    for res in content.iter_top_level_fields() {
+                    let geo_iter = content.geo_field().transpose().map(|res| res.map(|rv| ("_geo", rv)));
+                    for res in content.iter_top_level_fields().chain(geo_iter) {
                         let (f, _) = res?;
                         let entry = document_extractor_data
                             .field_distribution_delta

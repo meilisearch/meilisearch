@@ -1,18 +1,16 @@
 use std::cell::RefCell;
 use std::collections::HashSet;
-use std::mem::size_of;
 use std::ops::DerefMut as _;
 
 use bumpalo::collections::Vec as BVec;
 use bumpalo::Bump;
 use hashbrown::HashMap;
-use heed::{BytesDecode, RoTxn};
+use heed::RoTxn;
 use serde_json::Value;
 
 use super::super::cache::BalancedCaches;
 use super::facet_document::extract_document_facets;
 use super::FacetKind;
-use crate::facet::value_encoding::f64_into_bytes;
 use crate::heed_codec::facet::OrderedF64Codec;
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::FieldIdDocidFacetSender;
@@ -80,6 +78,7 @@ impl FacetedDocidsExtractor {
             DocumentChange::Deletion(inner) => extract_document_facets(
                 attributes_to_extract,
                 inner.current(rtxn, index, context.db_fields_ids_map)?,
+                inner.external_document_id(),
                 new_fields_ids_map.deref_mut(),
                 &mut |fid, value| {
                     Self::facet_fn_with_options(
@@ -98,6 +97,7 @@ impl FacetedDocidsExtractor {
                 extract_document_facets(
                     attributes_to_extract,
                     inner.current(rtxn, index, context.db_fields_ids_map)?,
+                    inner.external_document_id(),
                     new_fields_ids_map.deref_mut(),
                     &mut |fid, value| {
                         Self::facet_fn_with_options(
@@ -116,6 +116,7 @@ impl FacetedDocidsExtractor {
                 extract_document_facets(
                     attributes_to_extract,
                     inner.merged(rtxn, index, context.db_fields_ids_map)?,
+                    inner.external_document_id(),
                     new_fields_ids_map.deref_mut(),
                     &mut |fid, value| {
                         Self::facet_fn_with_options(
@@ -134,6 +135,7 @@ impl FacetedDocidsExtractor {
             DocumentChange::Insertion(inner) => extract_document_facets(
                 attributes_to_extract,
                 inner.inserted(),
+                inner.external_document_id(),
                 new_fields_ids_map.deref_mut(),
                 &mut |fid, value| {
                     Self::facet_fn_with_options(
