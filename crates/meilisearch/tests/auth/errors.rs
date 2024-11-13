@@ -93,7 +93,7 @@ async fn create_api_key_bad_actions() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Unknown value `doggo` at `.actions[0]`: expected one of `search`, `documents.add`, `documents.get`, `documents.delete`, `documents.*`, `indexes.create`, `indexes.get`, `indexes.update`, `indexes.delete`, `indexes.swap`, `indexes.*`, `tasks.cancel`, `tasks.delete`, `tasks.get`, `tasks.*`, `settings.get`, `settings.update`, `settings.*`, `stats.get`, `metrics.get`, `dumps.create`, `snapshots.create`, `version`, `keys.create`, `keys.get`, `keys.update`, `keys.delete`, `experimental.get`, `experimental.update`, `*`",
+      "message": "Unknown value `doggo` at `.actions[0]`: expected one of `search`, `documents.add`, `documents.get`, `documents.delete`, `documents.*`, `indexes.create`, `indexes.get`, `indexes.update`, `indexes.delete`, `indexes.swap`, `indexes.*`, `tasks.cancel`, `tasks.delete`, `tasks.get`, `tasks.*`, `settings.get`, `settings.update`, `settings.*`, `stats.get`, `stats.*`, `metrics.get`, `metrics.*`, `dumps.create`, `dumps.*`, `snapshots.create`, `snapshots.*`, `version`, `keys.create`, `keys.get`, `keys.update`, `keys.delete`, `experimental.get`, `experimental.update`, `*`",
       "code": "invalid_api_key_actions",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_api_key_actions"
