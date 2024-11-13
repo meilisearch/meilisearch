@@ -24,6 +24,7 @@ async fn swap_indexes() {
       "results": [
         {
           "uid": 1,
+          "batchUid": 1,
           "indexUid": "b",
           "status": "succeeded",
           "type": "documentAdditionOrUpdate",
@@ -40,6 +41,7 @@ async fn swap_indexes() {
         },
         {
           "uid": 0,
+          "batchUid": 0,
           "indexUid": "a",
           "status": "succeeded",
           "type": "documentAdditionOrUpdate",
@@ -76,6 +78,7 @@ async fn swap_indexes() {
       "results": [
         {
           "uid": 2,
+          "batchUid": 2,
           "indexUid": null,
           "status": "succeeded",
           "type": "indexSwap",
@@ -98,6 +101,7 @@ async fn swap_indexes() {
         },
         {
           "uid": 1,
+          "batchUid": 1,
           "indexUid": "a",
           "status": "succeeded",
           "type": "documentAdditionOrUpdate",
@@ -114,6 +118,7 @@ async fn swap_indexes() {
         },
         {
           "uid": 0,
+          "batchUid": 0,
           "indexUid": "b",
           "status": "succeeded",
           "type": "documentAdditionOrUpdate",
@@ -164,6 +169,7 @@ async fn swap_indexes() {
       "results": [
         {
           "uid": 4,
+          "batchUid": 4,
           "indexUid": "d",
           "status": "succeeded",
           "type": "documentAdditionOrUpdate",
@@ -180,6 +186,7 @@ async fn swap_indexes() {
         },
         {
           "uid": 3,
+          "batchUid": 3,
           "indexUid": "c",
           "status": "succeeded",
           "type": "documentAdditionOrUpdate",
@@ -226,6 +233,7 @@ async fn swap_indexes() {
       "results": [
         {
           "uid": 5,
+          "batchUid": 5,
           "indexUid": null,
           "status": "succeeded",
           "type": "indexSwap",
@@ -254,6 +262,7 @@ async fn swap_indexes() {
         },
         {
           "uid": 4,
+          "batchUid": 4,
           "indexUid": "c",
           "status": "succeeded",
           "type": "documentAdditionOrUpdate",
@@ -270,6 +279,7 @@ async fn swap_indexes() {
         },
         {
           "uid": 3,
+          "batchUid": 3,
           "indexUid": "d",
           "status": "succeeded",
           "type": "documentAdditionOrUpdate",
@@ -286,6 +296,7 @@ async fn swap_indexes() {
         },
         {
           "uid": 2,
+          "batchUid": 2,
           "indexUid": null,
           "status": "succeeded",
           "type": "indexSwap",
@@ -308,6 +319,7 @@ async fn swap_indexes() {
         },
         {
           "uid": 1,
+          "batchUid": 1,
           "indexUid": "b",
           "status": "succeeded",
           "type": "documentAdditionOrUpdate",
@@ -324,6 +336,7 @@ async fn swap_indexes() {
         },
         {
           "uid": 0,
+          "batchUid": 0,
           "indexUid": "a",
           "status": "succeeded",
           "type": "documentAdditionOrUpdate",

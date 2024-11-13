@@ -286,6 +286,7 @@ async fn test_summarized_document_addition_or_update() {
         @r###"
     {
       "uid": 0,
+      "batchUid": 0,
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -310,6 +311,7 @@ async fn test_summarized_document_addition_or_update() {
         @r###"
     {
       "uid": 1,
+      "batchUid": 1,
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -339,6 +341,7 @@ async fn test_summarized_delete_documents_by_batch() {
         @r###"
     {
       "uid": 0,
+      "batchUid": 0,
       "indexUid": "test",
       "status": "failed",
       "type": "documentDeletion",
@@ -370,6 +373,7 @@ async fn test_summarized_delete_documents_by_batch() {
         @r###"
     {
       "uid": 2,
+      "batchUid": 2,
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentDeletion",
@@ -401,6 +405,7 @@ async fn test_summarized_delete_documents_by_filter() {
         @r###"
     {
       "uid": 0,
+      "batchUid": 0,
       "indexUid": "test",
       "status": "failed",
       "type": "documentDeletion",
@@ -432,6 +437,7 @@ async fn test_summarized_delete_documents_by_filter() {
         @r###"
     {
       "uid": 2,
+      "batchUid": 2,
       "indexUid": "test",
       "status": "failed",
       "type": "documentDeletion",
@@ -463,6 +469,7 @@ async fn test_summarized_delete_documents_by_filter() {
         @r###"
     {
       "uid": 4,
+      "batchUid": 4,
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentDeletion",
@@ -493,6 +500,7 @@ async fn test_summarized_delete_document_by_id() {
         @r###"
     {
       "uid": 0,
+      "batchUid": 0,
       "indexUid": "test",
       "status": "failed",
       "type": "documentDeletion",
@@ -524,6 +532,7 @@ async fn test_summarized_delete_document_by_id() {
         @r###"
     {
       "uid": 2,
+      "batchUid": 2,
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentDeletion",
@@ -566,6 +575,7 @@ async fn test_summarized_settings_update() {
         @r###"
     {
       "uid": 0,
+      "batchUid": 0,
       "indexUid": "test",
       "status": "succeeded",
       "type": "settingsUpdate",
@@ -604,6 +614,7 @@ async fn test_summarized_index_creation() {
         @r###"
     {
       "uid": 0,
+      "batchUid": 0,
       "indexUid": "test",
       "status": "succeeded",
       "type": "indexCreation",
@@ -627,6 +638,7 @@ async fn test_summarized_index_creation() {
         @r###"
     {
       "uid": 1,
+      "batchUid": 1,
       "indexUid": "test",
       "status": "failed",
       "type": "indexCreation",
@@ -658,6 +670,7 @@ async fn test_summarized_index_deletion() {
         @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "test",
       "status": "failed",
       "type": "indexDeletion",
@@ -688,6 +701,7 @@ async fn test_summarized_index_deletion() {
         @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -710,6 +724,7 @@ async fn test_summarized_index_deletion() {
         @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "test",
       "status": "succeeded",
       "type": "indexDeletion",
@@ -732,6 +747,7 @@ async fn test_summarized_index_deletion() {
         @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "test",
       "status": "failed",
       "type": "indexDeletion",
@@ -766,6 +782,7 @@ async fn test_summarized_index_update() {
         @r###"
     {
       "uid": 0,
+      "batchUid": 0,
       "indexUid": "test",
       "status": "failed",
       "type": "indexUpdate",
@@ -794,6 +811,7 @@ async fn test_summarized_index_update() {
         @r###"
     {
       "uid": 1,
+      "batchUid": 1,
       "indexUid": "test",
       "status": "failed",
       "type": "indexUpdate",
@@ -825,6 +843,7 @@ async fn test_summarized_index_update() {
         @r###"
     {
       "uid": 3,
+      "batchUid": 3,
       "indexUid": "test",
       "status": "succeeded",
       "type": "indexUpdate",
@@ -848,6 +867,7 @@ async fn test_summarized_index_update() {
         @r###"
     {
       "uid": 4,
+      "batchUid": 4,
       "indexUid": "test",
       "status": "succeeded",
       "type": "indexUpdate",
@@ -879,6 +899,7 @@ async fn test_summarized_index_swap() {
         @r###"
     {
       "uid": 0,
+      "batchUid": 0,
       "indexUid": null,
       "status": "failed",
       "type": "indexSwap",
@@ -920,6 +941,7 @@ async fn test_summarized_index_swap() {
         @r###"
     {
       "uid": 3,
+      "batchUid": 3,
       "indexUid": null,
       "status": "succeeded",
       "type": "indexSwap",
@@ -958,6 +980,7 @@ async fn test_summarized_task_cancelation() {
         @r###"
     {
       "uid": 1,
+      "batchUid": 1,
       "indexUid": null,
       "status": "succeeded",
       "type": "taskCancelation",
@@ -991,6 +1014,7 @@ async fn test_summarized_task_deletion() {
         @r###"
     {
       "uid": 1,
+      "batchUid": 1,
       "indexUid": null,
       "status": "succeeded",
       "type": "taskDeletion",
@@ -1020,6 +1044,7 @@ async fn test_summarized_dump_creation() {
         @r###"
     {
       "uid": 0,
+      "batchUid": 0,
       "indexUid": null,
       "status": "succeeded",
       "type": "dumpCreation",

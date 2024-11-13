@@ -3,6 +3,7 @@
 use std::collections::{BTreeSet, HashSet};
 use std::ops::Bound;
 
+use meilisearch_types::batches::BatchId;
 use meilisearch_types::heed::types::DecodeIgnore;
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
 use meilisearch_types::milli::CboRoaringBitmapCodec;
@@ -25,8 +26,35 @@ impl IndexScheduler {
         Ok(self.last_task_id(rtxn)?.unwrap_or_default())
     }
 
+    pub(crate) fn next_batch_id(&self, rtxn: &RoTxn) -> Result<BatchId> {
+        Ok(self
+            .all_batches
+            .remap_data_type::<DecodeIgnore>()
+            .last(rtxn)?
+            .map(|(k, _)| k + 1)
+            .unwrap_or_default())
+    }
+
     pub(crate) fn get_task(&self, rtxn: &RoTxn, task_id: TaskId) -> Result<Option<Task>> {
         Ok(self.all_tasks.get(rtxn, &task_id)?)
+    }
+
+    /// Convert an iterator to a `Vec` of tasks. The tasks MUST exist or a
+    /// `CorruptedTaskQueue` error will be throwed.
+    pub(crate) fn get_existing_tasks_with_batch_id(
+        &self,
+        rtxn: &RoTxn,
+        batch_id: BatchId,
+        tasks: impl IntoIterator<Item = TaskId>,
+    ) -> Result<Vec<Task>> {
+        tasks
+            .into_iter()
+            .map(|task_id| {
+                self.get_task(rtxn, task_id)
+                    .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))
+                    .map(|task| task.with_batch_id(batch_id))
+            })
+            .collect::<Result<_>>()
     }
 
     /// Convert an iterator to a `Vec` of tasks. The tasks MUST exist or a
@@ -342,6 +370,8 @@ impl IndexScheduler {
 
             let Task {
                 uid,
+                /// We should iterate over the list of batch to ensure this task is effectively in the right batch
+                batch_uid,
                 enqueued_at,
                 started_at,
                 finished_at,

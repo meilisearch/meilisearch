@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
+use crate::batches::BatchId;
 use crate::error::ResponseError;
 use crate::keys::Key;
 use crate::settings::{Settings, Unchecked};
@@ -22,6 +23,7 @@ pub type TaskId = u32;
 #[serde(rename_all = "camelCase")]
 pub struct Task {
     pub uid: TaskId,
+    pub batch_uid: Option<BatchId>,
 
     #[serde(with = "time::serde::rfc3339")]
     pub enqueued_at: OffsetDateTime,
@@ -58,6 +60,11 @@ impl Task {
             | IndexUpdate { index_uid, .. }
             | IndexDeletion { index_uid } => Some(index_uid),
         }
+    }
+
+    pub fn with_batch_id(mut self, batch_id: TaskId) -> Self {
+        self.batch_uid = Some(batch_id);
+        self
     }
 
     /// Return the list of indexes updated by this tasks.

@@ -70,6 +70,7 @@ impl CompatV5ToV6 {
 
                 let task = v6::Task {
                     uid: task_view.uid,
+                    batch_uid: None,
                     index_uid: task_view.index_uid,
                     status: match task_view.status {
                         v5::Status::Enqueued => v6::Status::Enqueued,

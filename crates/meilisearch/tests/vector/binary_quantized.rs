@@ -303,6 +303,7 @@ async fn try_to_disable_binary_quantization() {
     snapshot!(ret, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",

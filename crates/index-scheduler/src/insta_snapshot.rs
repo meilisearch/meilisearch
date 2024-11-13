@@ -24,6 +24,8 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         file_store,
         env,
         all_tasks,
+        all_batches,
+        // task reverse index
         status,
         kind,
         index_tasks,
@@ -31,6 +33,16 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         enqueued_at,
         started_at,
         finished_at,
+
+        // batch reverse index
+        batch_status,
+        batch_kind,
+        batch_index_tasks,
+        batch_canceled_by,
+        batch_enqueued_at,
+        batch_started_at,
+        batch_finished_at,
+
         index_mapper,
         features: _,
         max_number_of_tasks: _,
@@ -145,6 +157,7 @@ pub fn snapshot_task(task: &Task) -> String {
     let mut snap = String::new();
     let Task {
         uid,
+        batch_uid,
         enqueued_at: _,
         started_at: _,
         finished_at: _,
@@ -156,6 +169,9 @@ pub fn snapshot_task(task: &Task) -> String {
     } = task;
     snap.push('{');
     snap.push_str(&format!("uid: {uid}, "));
+    if let Some(batch_uid) = batch_uid {
+        snap.push_str(&format!("batch_uid: {batch_uid}, "));
+    }
     snap.push_str(&format!("status: {status}, "));
     if let Some(canceled_by) = canceled_by {
         snap.push_str(&format!("canceled_by: {canceled_by}, "));

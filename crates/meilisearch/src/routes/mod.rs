@@ -19,6 +19,7 @@ use crate::Opt;
 const PAGINATION_DEFAULT_LIMIT: usize = 20;
 
 mod api_key;
+pub mod batches;
 mod dump;
 pub mod features;
 pub mod indexes;

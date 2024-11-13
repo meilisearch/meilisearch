@@ -1,8 +1,9 @@
 ---
-source: meilisearch/tests/search/distinct.rs
+source: crates/meilisearch/tests/search/distinct.rs
 ---
 {
   "uid": "[uid]",
+  "batchUid": "[batch_uid]",
   "indexUid": "tamo",
   "status": "succeeded",
   "type": "settingsUpdate",

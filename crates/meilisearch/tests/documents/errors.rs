@@ -563,6 +563,7 @@ async fn delete_document_by_filter() {
     snapshot!(response, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "DOES_NOT_EXISTS",
       "status": "failed",
       "type": "documentDeletion",
@@ -592,6 +593,7 @@ async fn delete_document_by_filter() {
     snapshot!(response, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "EMPTY_INDEX",
       "status": "failed",
       "type": "documentDeletion",
@@ -623,6 +625,7 @@ async fn delete_document_by_filter() {
     snapshot!(response, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "SHARED_DOCUMENTS",
       "status": "failed",
       "type": "documentDeletion",

@@ -79,7 +79,9 @@ pub enum Error {
     )]
     InvalidTaskDate { field: DateField, date: String },
     #[error("Task uid `{task_uid}` is invalid. It should only contain numeric characters.")]
-    InvalidTaskUids { task_uid: String },
+    InvalidTaskUid { task_uid: String },
+    #[error("Batch uid `{batch_uid}` is invalid. It should only contain numeric characters.")]
+    InvalidBatchUid { batch_uid: String },
     #[error(
         "Task status `{status}` is invalid. Available task statuses are {}.",
             enum_iterator::all::<Status>()
@@ -172,7 +174,8 @@ impl Error {
             | Error::SwapIndexesNotFound(_)
             | Error::CorruptedDump
             | Error::InvalidTaskDate { .. }
-            | Error::InvalidTaskUids { .. }
+            | Error::InvalidTaskUid { .. }
+            | Error::InvalidBatchUid { .. }
             | Error::InvalidTaskStatuses { .. }
             | Error::InvalidTaskTypes { .. }
             | Error::InvalidTaskCanceledBy { .. }
@@ -216,7 +219,8 @@ impl ErrorCode for Error {
             Error::SwapIndexNotFound(_) => Code::IndexNotFound,
             Error::SwapIndexesNotFound(_) => Code::IndexNotFound,
             Error::InvalidTaskDate { field, .. } => (*field).into(),
-            Error::InvalidTaskUids { .. } => Code::InvalidTaskUids,
+            Error::InvalidTaskUid { .. } => Code::InvalidTaskUids,
+            Error::InvalidBatchUid { .. } => Code::InvalidBatchUids,
             Error::InvalidTaskStatuses { .. } => Code::InvalidTaskStatuses,
             Error::InvalidTaskTypes { .. } => Code::InvalidTaskTypes,
             Error::InvalidTaskCanceledBy { .. } => Code::InvalidTaskCanceledBy,

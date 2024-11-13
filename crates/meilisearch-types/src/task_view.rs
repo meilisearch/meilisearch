@@ -2,6 +2,7 @@ use milli::Object;
 use serde::Serialize;
 use time::{Duration, OffsetDateTime};
 
+use crate::batches::BatchId;
 use crate::error::ResponseError;
 use crate::settings::{Settings, Unchecked};
 use crate::tasks::{serialize_duration, Details, IndexSwap, Kind, Status, Task, TaskId};
@@ -10,6 +11,7 @@ use crate::tasks::{serialize_duration, Details, IndexSwap, Kind, Status, Task, T
 #[serde(rename_all = "camelCase")]
 pub struct TaskView {
     pub uid: TaskId,
+    pub batch_uid: Option<BatchId>,
     #[serde(default)]
     pub index_uid: Option<String>,
     pub status: Status,
@@ -33,6 +35,7 @@ impl TaskView {
     pub fn from_task(task: &Task) -> TaskView {
         TaskView {
             uid: task.uid,
+            batch_uid: task.batch_uid,
             index_uid: task.index_uid().map(ToOwned::to_owned),
             status: task.status,
             kind: task.kind.as_kind(),

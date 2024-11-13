@@ -8,12 +8,12 @@ use actix_http::body::MessageBody;
 use actix_web::dev::{ServiceFactory, ServiceResponse};
 use actix_web::web::{Bytes, Data};
 use actix_web::{post, App, HttpRequest, HttpResponse, HttpServer};
-use meili_snap::{json_string, snapshot};
+use meili_snap::snapshot;
 use meilisearch::Opt;
 use tokio::sync::mpsc;
 use url::Url;
 
-use crate::common::{default_settings, Server};
+use crate::common::{self, default_settings, Server};
 use crate::json;
 
 #[post("/")]
@@ -97,11 +97,11 @@ async fn test_basic_webhook() {
             }
             nb_tasks += 1;
             let json: serde_json::Value = serde_json::from_str(json).unwrap();
-            snapshot!(
-                json_string!(json, { ".uid" => "[uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+            snapshot!(common::Value(json),
             @r###"
             {
               "uid": "[uid]",
+              "batchUid": "[batch_uid]",
               "indexUid": "tamo",
               "status": "succeeded",
               "type": "documentAdditionOrUpdate",

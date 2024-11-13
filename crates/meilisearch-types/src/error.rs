@@ -322,6 +322,7 @@ InvalidTaskReverse                    , InvalidRequest       , BAD_REQUEST ;
 InvalidTaskStatuses                   , InvalidRequest       , BAD_REQUEST ;
 InvalidTaskTypes                      , InvalidRequest       , BAD_REQUEST ;
 InvalidTaskUids                       , InvalidRequest       , BAD_REQUEST  ;
+InvalidBatchUids                      , InvalidRequest       , BAD_REQUEST  ;
 IoError                               , System               , UNPROCESSABLE_ENTITY;
 FeatureNotEnabled                     , InvalidRequest       , BAD_REQUEST ;
 MalformedPayload                      , InvalidRequest       , BAD_REQUEST ;
