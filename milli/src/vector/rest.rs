@@ -131,6 +131,7 @@ impl Embedder {
         let client = ureq::AgentBuilder::new()
             .max_idle_connections(REQUEST_PARALLELISM * 2)
             .max_idle_connections_per_host(REQUEST_PARALLELISM * 2)
+            .timeout(std::time::Duration::from_secs(30))
             .build();
 
         let request = Request::new(options.request)?;
