@@ -1335,7 +1335,6 @@ async fn error_add_documents_missing_document_id() {
 }
 
 #[actix_rt::test]
-#[should_panic]
 async fn error_document_field_limit_reached_in_one_document() {
     let server = Server::new().await;
     let index = server.index("test");
@@ -1352,7 +1351,7 @@ async fn error_document_field_limit_reached_in_one_document() {
     let documents = json!([big_object]);
 
     let (response, code) = index.update_documents(documents, Some("id")).await;
-    snapshot!(code, @"500 Internal Server Error");
+    snapshot!(code, @"202 Accepted");
 
     let response = index.wait_task(response.uid()).await;
     snapshot!(code, @"202 Accepted");
@@ -1360,16 +1359,21 @@ async fn error_document_field_limit_reached_in_one_document() {
     snapshot!(response,
         @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "indexUid": "test",
-      "status": "succeeded",
+      "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
-        "indexedDocuments": 1
+        "indexedDocuments": 0
       },
-      "error": null,
+      "error": {
+        "message": "A document cannot contain more than 65,535 fields.",
+        "code": "max_fields_limit_exceeded",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#max_fields_limit_exceeded"
+      },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
