@@ -41,6 +41,11 @@ impl<'de, 'p, 'indexer: 'de, Mapper: MutFieldIdMapper> Visitor<'de>
     where
         A: serde::de::MapAccess<'de>,
     {
+        // We need to remember if we encountered a semantic error, because raw values don't like to be parsed partially
+        // (trying to do so results in parsing errors).
+        // So we'll exhaust all keys and values even if we encounter an error, and we'll then return any error we detected.
+        let mut attribute_limit_reached = false;
+        let mut document_id_extraction_error = None;
         let mut docid = None;
 
         while let Some(((level_name, right), (fid, fields_ids_map))) =
@@ -49,18 +54,34 @@ impl<'de, 'p, 'indexer: 'de, Mapper: MutFieldIdMapper> Visitor<'de>
                 visitor: MutFieldIdMapVisitor(self.fields_ids_map),
             })?
         {
-            let Some(_fid) = fid else {
-                return Ok(Err(crate::UserError::AttributeLimitReached));
-            };
             self.fields_ids_map = fields_ids_map;
 
             let value: &'de RawValue = map.next_value()?;
+            if attribute_limit_reached || document_id_extraction_error.is_some() {
+                continue;
+            }
+
+            let Some(_fid) = fid else {
+                attribute_limit_reached = true;
+                continue;
+            };
 
             match match_component(level_name, right, value, self.indexer, &mut docid) {
                 ControlFlow::Continue(()) => continue,
                 ControlFlow::Break(Err(err)) => return Err(serde::de::Error::custom(err)),
-                ControlFlow::Break(Ok(err)) => return Ok(Ok(Err(err))),
+                ControlFlow::Break(Ok(err)) => {
+                    document_id_extraction_error = Some(err);
+                    continue;
+                }
             }
+        }
+
+        // return previously detected errors
+        if attribute_limit_reached {
+            return Ok(Err(UserError::AttributeLimitReached));
+        }
+        if let Some(document_id_extraction_error) = document_id_extraction_error {
+            return Ok(Ok(Err(document_id_extraction_error)));
         }
 
         Ok(Ok(match docid {
