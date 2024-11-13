@@ -364,9 +364,9 @@ impl DocidsSender for FacetDocidsSender<'_> {
 pub struct FieldIdDocidFacetSender<'a>(&'a ExtractorSender);
 
 impl FieldIdDocidFacetSender<'_> {
-    pub fn write_facet_string(&self, key: &[u8]) -> StdResult<(), SendError<()>> {
+    pub fn write_facet_string(&self, key: &[u8], value: &[u8]) -> StdResult<(), SendError<()>> {
         debug_assert!(FieldDocIdFacetStringCodec::bytes_decode(key).is_ok());
-        let entry = EntryOperation::Write(KeyValueEntry::from_small_key_value(&key, &[]));
+        let entry = EntryOperation::Write(KeyValueEntry::from_small_key_value(&key, &value));
         self.0
             .send_db_operation(DbOperation { database: Database::FieldIdDocidFacetStrings, entry })
     }

@@ -290,22 +290,22 @@ impl<'doc> DelAddFacetValue<'doc> {
         sender: &FieldIdDocidFacetSender,
         doc_alloc: &Bump,
     ) -> std::result::Result<(), crossbeam_channel::SendError<()>> {
-        println!("sending FieldIdDocidFacet data");
-        let mut count = 0;
         let mut buffer = bumpalo::collections::Vec::new_in(doc_alloc);
         for ((fid, value), deladd) in self.strings {
-            buffer.clear();
-            buffer.extend_from_slice(&fid.to_be_bytes());
-            buffer.extend_from_slice(&docid.to_be_bytes());
-            buffer.extend_from_slice(&value);
-            match deladd {
-                DelAdd::Deletion => sender.delete_facet_string(&buffer)?,
-                DelAdd::Addition => sender.write_facet_string(&buffer)?,
+            if let Ok(s) = std::str::from_utf8(&value) {
+                buffer.clear();
+                buffer.extend_from_slice(&fid.to_be_bytes());
+                buffer.extend_from_slice(&docid.to_be_bytes());
+                let normalized = crate::normalize_facet(s);
+                let truncated = truncate_str(&normalized);
+                buffer.extend_from_slice(truncated.as_bytes());
+                match deladd {
+                    DelAdd::Deletion => sender.delete_facet_string(&buffer)?,
+                    DelAdd::Addition => sender.write_facet_string(&buffer, &value)?,
+                }
             }
-            count += 1;
         }
 
-        count = 0;
         for ((fid, value), deladd) in self.f64s {
             buffer.clear();
             buffer.extend_from_slice(&fid.to_be_bytes());
@@ -315,7 +315,6 @@ impl<'doc> DelAddFacetValue<'doc> {
                 DelAdd::Deletion => sender.delete_facet_f64(&buffer)?,
                 DelAdd::Addition => sender.write_facet_f64(&buffer)?,
             }
-            count += 1;
         }
 
         Ok(())
