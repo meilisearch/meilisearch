@@ -413,11 +413,9 @@ impl Sequence for Action {
         let mut potential_next_index = self.get_potential_index() + 1;
 
         loop {
-            if let Some(next_flag) = Self::FLAGS.get(potential_next_index) {
-                let next_flag_value = next_flag.value();
-
-                if next_flag_value > self {
-                    return Some(*next_flag_value);
+            if let Some(next_flag) = Self::FLAGS.get(potential_next_index).map(|v| v.value()) {
+                if next_flag > self {
+                    return Some(*next_flag);
                 }
 
                 potential_next_index += 1;
@@ -429,18 +427,25 @@ impl Sequence for Action {
 
     fn previous(&self) -> Option<Self> {
         // -2 because of "all" type flags that represent a single flag, otherwise -1 would suffice
-        let mut potential_previous_index = self.get_potential_index() - 2;
+        let initial_potential_index = self.get_potential_index();
+        if initial_potential_index == 0 {
+            return None;
+        }
+
+        let mut potential_previous_index: usize =
+            if initial_potential_index == 1 { 0 } else { initial_potential_index - 2 };
+
         let mut previous_item: Option<Self> = None;
+        let mut pre_previous_item: Option<Self> = None;
 
         loop {
-            if let Some(next_flag) = Self::FLAGS.get(potential_previous_index) {
-                let next_flag_value = next_flag.value();
-
-                if next_flag_value > self {
-                    return previous_item;
+            if let Some(next_flag) = Self::FLAGS.get(potential_previous_index).map(|v| v.value()) {
+                if next_flag > self {
+                    return pre_previous_item;
                 }
 
-                previous_item = Some(*next_flag_value);
+                pre_previous_item = previous_item;
+                previous_item = Some(*next_flag);
                 potential_previous_index += 1;
             } else {
                 return None;
