@@ -27,15 +27,32 @@ impl heed::BytesEncode<'_> for OrderedF64Codec {
     fn bytes_encode(f: &Self::EItem) -> Result<Cow<'_, [u8]>, BoxedError> {
         let mut buffer = [0u8; 16];
 
-        // write the globally ordered float
-        let bytes = f64_into_bytes(*f).ok_or(InvalidGloballyOrderedFloatError { float: *f })?;
-        buffer[..8].copy_from_slice(&bytes[..]);
-        // Then the f64 value just to be able to read it back
-        let bytes = f.to_be_bytes();
-        buffer[8..16].copy_from_slice(&bytes[..]);
+        encode_f64_into_ordered_bytes(*f, &mut buffer)?;
 
         Ok(Cow::Owned(buffer.to_vec()))
     }
+}
+
+impl OrderedF64Codec {
+    pub fn serialize_into(
+        f: f64,
+        buffer: &mut [u8; 16],
+    ) -> Result<(), InvalidGloballyOrderedFloatError> {
+        encode_f64_into_ordered_bytes(f, buffer)
+    }
+}
+
+fn encode_f64_into_ordered_bytes(
+    f: f64,
+    buffer: &mut [u8; 16],
+) -> Result<(), InvalidGloballyOrderedFloatError> {
+    let bytes = f64_into_bytes(f).ok_or(InvalidGloballyOrderedFloatError { float: f })?;
+    buffer[..8].copy_from_slice(&bytes[..]);
+    // Then the f64 value just to be able to read it back
+    let bytes = f.to_be_bytes();
+    buffer[8..16].copy_from_slice(&bytes[..]);
+
+    Ok(())
 }
 
 #[derive(Error, Debug)]

@@ -223,7 +223,7 @@ where
                     let (finished_steps, step_name) = steps::extract_facets();
 
                     facet_field_ids_delta = merge_and_send_facet_docids(
-                        FacetedDocidsExtractor::run_extraction(grenad_parameters, document_changes, indexing_context, &mut extractor_allocs, finished_steps, total_steps, step_name)?,
+                        FacetedDocidsExtractor::run_extraction(grenad_parameters, document_changes, indexing_context, &mut extractor_allocs, &extractor_sender.field_id_docid_facet_sender(), finished_steps, total_steps, step_name)?,
                         FacetDatabases::new(index),
                         index,
                         extractor_sender.facet_docids(),

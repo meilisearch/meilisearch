@@ -3,11 +3,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crossbeam_channel::{IntoIter, Receiver, SendError, Sender};
 use heed::types::Bytes;
+use heed::BytesDecode;
 use memmap2::Mmap;
 use roaring::RoaringBitmap;
 
 use super::extract::FacetKind;
 use super::StdResult;
+use crate::heed_codec::facet::{FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec};
 use crate::index::main_key::{GEO_FACETED_DOCUMENTS_IDS_KEY, GEO_RTREE_KEY};
 use crate::index::IndexEmbeddingConfig;
 use crate::update::new::KvReaderFieldId;
@@ -125,6 +127,8 @@ pub enum Database {
     FacetIdExistsDocids,
     FacetIdF64NumberDocids,
     FacetIdStringDocids,
+    FieldIdDocidFacetStrings,
+    FieldIdDocidFacetF64s,
 }
 
 impl Database {
@@ -144,6 +148,8 @@ impl Database {
             Database::FacetIdExistsDocids => index.facet_id_exists_docids.remap_types(),
             Database::FacetIdF64NumberDocids => index.facet_id_f64_docids.remap_types(),
             Database::FacetIdStringDocids => index.facet_id_string_docids.remap_types(),
+            Database::FieldIdDocidFacetStrings => index.field_id_docid_facet_strings.remap_types(),
+            Database::FieldIdDocidFacetF64s => index.field_id_docid_facet_f64s.remap_types(),
         }
     }
 }
@@ -213,6 +219,10 @@ impl ExtractorSender {
 
     pub fn facet_docids(&self) -> FacetDocidsSender<'_> {
         FacetDocidsSender { sender: self }
+    }
+
+    pub fn field_id_docid_facet_sender(&self) -> FieldIdDocidFacetSender<'_> {
+        FieldIdDocidFacetSender(self)
     }
 
     pub fn documents(&self) -> DocumentsSender<'_> {
@@ -348,6 +358,36 @@ impl DocidsSender for FacetDocidsSender<'_> {
             Ok(()) => Ok(()),
             Err(SendError(_)) => Err(SendError(())),
         }
+    }
+}
+
+pub struct FieldIdDocidFacetSender<'a>(&'a ExtractorSender);
+
+impl FieldIdDocidFacetSender<'_> {
+    pub fn write_facet_string(&self, key: &[u8]) -> StdResult<(), SendError<()>> {
+        debug_assert!(FieldDocIdFacetStringCodec::bytes_decode(key).is_ok());
+        let entry = EntryOperation::Write(KeyValueEntry::from_small_key_value(&key, &[]));
+        self.0
+            .send_db_operation(DbOperation { database: Database::FieldIdDocidFacetStrings, entry })
+    }
+
+    pub fn write_facet_f64(&self, key: &[u8]) -> StdResult<(), SendError<()>> {
+        debug_assert!(FieldDocIdFacetF64Codec::bytes_decode(key).is_ok());
+        let entry = EntryOperation::Write(KeyValueEntry::from_small_key_value(&key, &[]));
+        self.0.send_db_operation(DbOperation { database: Database::FieldIdDocidFacetF64s, entry })
+    }
+
+    pub fn delete_facet_string(&self, key: &[u8]) -> StdResult<(), SendError<()>> {
+        debug_assert!(FieldDocIdFacetStringCodec::bytes_decode(key).is_ok());
+        let entry = EntryOperation::Delete(KeyEntry::from_key(key));
+        self.0
+            .send_db_operation(DbOperation { database: Database::FieldIdDocidFacetStrings, entry })
+    }
+
+    pub fn delete_facet_f64(&self, key: &[u8]) -> StdResult<(), SendError<()>> {
+        debug_assert!(FieldDocIdFacetF64Codec::bytes_decode(key).is_ok());
+        let entry = EntryOperation::Delete(KeyEntry::from_key(key));
+        self.0.send_db_operation(DbOperation { database: Database::FieldIdDocidFacetF64s, entry })
     }
 }
 
