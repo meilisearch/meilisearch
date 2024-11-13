@@ -310,10 +310,10 @@ impl MergeChanges for MergeDocumentForReplacement {
             }
             Some(InnerDocOp::Deletion) => {
                 return if is_new {
+                    Ok(None)
+                } else {
                     let deletion = Deletion::create(docid, external_doc);
                     Ok(Some(DocumentChange::Deletion(deletion)))
-                } else {
-                    Ok(None)
                 };
             }
             None => unreachable!("We must not have empty set of operations on a document"),
