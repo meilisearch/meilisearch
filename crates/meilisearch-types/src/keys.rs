@@ -183,56 +183,57 @@ fn parse_expiration_date(
 bitflags! {
     #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
     #[repr(transparent)]
+    // NOTE: For `Sequence` impl to work, the values of these must be in ascending order
     pub struct Action: u32 {
-    const Search = 1;
-    // Documents
-    const DocumentsAdd = 1 << 1;
-    const DocumentsGet = 1 << 2;
-    const DocumentsDelete = 1 << 3;
-    const DocumentsAll = Self::DocumentsAdd.bits() | Self::DocumentsGet.bits() | Self::DocumentsDelete.bits();
-    // Indexes
-    const IndexesAdd = 1 << 4;
-    const IndexesGet = 1 << 5;
-    const IndexesUpdate = 1 << 6;
-    const IndexesDelete = 1 << 7;
-    const IndexesSwap = 1 << 8;
-    const IndexesAll = Self::IndexesAdd.bits() | Self::IndexesGet.bits() | Self::IndexesUpdate.bits() | Self::IndexesDelete.bits() | Self::IndexesSwap.bits();
-    // Tasks
-    const TasksCancel = 1 << 9;
-    const TasksDelete = 1 << 10;
-    const TasksGet = 1 << 11;
-    const TasksAll = Self::TasksCancel.bits() | Self::TasksDelete.bits() | Self::TasksGet.bits();
-    // Settings
-    const SettingsGet = 1 << 12;
-    const SettingsUpdate = 1 << 13;
-    const SettingsAll = Self::SettingsGet.bits() | Self::SettingsUpdate.bits();
-    const StatsGet = 1 << 14;
-    const MetricsGet = 1 << 15;
-    const DumpsCreate = 1 << 16;
-    const SnapshotsCreate = 1 << 17;
-    const Version = 1 << 18;
-    const KeysAdd = 1 << 19;
-    const KeysGet = 1 << 20;
-    const KeysUpdate = 1 << 21;
-    const KeysDelete = 1 << 22;
-    const ExperimentalFeaturesGet = 1 << 23;
-    const ExperimentalFeaturesUpdate = 1 << 24;
-    const All = {
-        let mut all = 0;
-
-        let mut exp = 0;
-        while exp <= 24 {
-            all = (all << 1) + 1;
-            exp += 1;
-        }
-
-        all
-    };
-}
+        const Search = 1;
+        // Documents
+        const DocumentsAdd = 1 << 1;
+        const DocumentsGet = 1 << 2;
+        const DocumentsDelete = 1 << 3;
+        const DocumentsAll = Self::DocumentsAdd.bits() | Self::DocumentsGet.bits() | Self::DocumentsDelete.bits();
+        // Indexes
+        const IndexesAdd = 1 << 4;
+        const IndexesGet = 1 << 5;
+        const IndexesUpdate = 1 << 6;
+        const IndexesDelete = 1 << 7;
+        const IndexesSwap = 1 << 8;
+        const IndexesAll = Self::IndexesAdd.bits() | Self::IndexesGet.bits() | Self::IndexesUpdate.bits() | Self::IndexesDelete.bits() | Self::IndexesSwap.bits();
+        // Tasks
+        const TasksCancel = 1 << 9;
+        const TasksDelete = 1 << 10;
+        const TasksGet = 1 << 11;
+        const TasksAll = Self::TasksCancel.bits() | Self::TasksDelete.bits() | Self::TasksGet.bits();
+        // Settings
+        const SettingsGet = 1 << 12;
+        const SettingsUpdate = 1 << 13;
+        const SettingsAll = Self::SettingsGet.bits() | Self::SettingsUpdate.bits();
+        // Stats
+        const StatsGet = 1 << 14;
+        const StatsAll = Self::StatsGet.bits();
+        // Metrics
+        const MetricsGet = 1 << 15;
+        const MetricsAll = Self::MetricsGet.bits();
+        // Dumps
+        const DumpsCreate = 1 << 16;
+        const DumpsAll = Self::DumpsCreate.bits();
+        // Snapshots
+        const SnapshotsCreate = 1 << 17;
+        const SnapshotsAll = Self::SnapshotsCreate.bits();
+        // Keys without an "all" version
+        const Version = 1 << 18;
+        const KeysAdd = 1 << 19;
+        const KeysGet = 1 << 20;
+        const KeysUpdate = 1 << 21;
+        const KeysDelete = 1 << 22;
+        const ExperimentalFeaturesGet = 1 << 23;
+        const ExperimentalFeaturesUpdate = 1 << 24;
+        // All
+        const All = 0xFFFFFFFF >> (32 - 1 - 24);
+    }
 }
 
 impl Action {
-    const SERDE_MAP_ARR: [(&'static str, Self); 30] = [
+    const SERDE_MAP_ARR: [(&'static str, Self); 34] = [
         ("search", Self::Search),
         ("documents.add", Self::DocumentsAdd),
         ("documents.get", Self::DocumentsGet),
@@ -252,9 +253,13 @@ impl Action {
         ("settings.update", Self::SettingsUpdate),
         ("settings.*", Self::SettingsAll),
         ("stats.get", Self::StatsGet),
+        ("stats.*", Self::StatsAll),
         ("metrics.get", Self::MetricsGet),
+        ("metrics.*", Self::MetricsAll),
         ("dumps.create", Self::DumpsCreate),
+        ("dumps.*", Self::DumpsAll),
         ("snapshots.create", Self::SnapshotsCreate),
+        ("snapshots.*", Self::SnapshotsAll),
         ("version", Self::Version),
         ("keys.create", Self::KeysAdd),
         ("keys.get", Self::KeysGet),
@@ -278,6 +283,19 @@ impl Action {
             .find(|(_, action)| v == action)
             .map(|(serde_name, _)| serde_name)
             .expect("an action is missing a matching serialized value")
+    }
+
+    // when we remove "all" flags, this will give us the exact index
+    fn get_potential_index(&self) -> usize {
+        if self.is_empty() {
+            return 0;
+        }
+
+        // most significant bit for u32
+        let msb = 1u32 << (31 - self.bits().leading_zeros());
+
+        // index of the single set bit
+        msb.trailing_zeros() as usize
     }
 }
 
@@ -303,9 +321,13 @@ pub mod actions {
     pub const SETTINGS_UPDATE: u32 = A::SettingsUpdate.bits();
     pub const SETTINGS_ALL: u32 = A::SettingsAll.bits();
     pub const STATS_GET: u32 = A::StatsGet.bits();
+    pub const STATS_ALL: u32 = A::StatsAll.bits();
     pub const METRICS_GET: u32 = A::MetricsGet.bits();
+    pub const METRICS_ALL: u32 = A::MetricsAll.bits();
     pub const DUMPS_CREATE: u32 = A::DumpsCreate.bits();
+    pub const DUMPS_ALL: u32 = A::DumpsAll.bits();
     pub const SNAPSHOTS_CREATE: u32 = A::SnapshotsCreate.bits();
+    pub const SNAPSHOTS_ALL: u32 = A::SnapshotsAll.bits();
     pub const VERSION: u32 = A::Version.bits();
     pub const KEYS_CREATE: u32 = A::KeysAdd.bits();
     pub const KEYS_GET: u32 = A::KeysGet.bits();
@@ -313,6 +335,7 @@ pub mod actions {
     pub const KEYS_DELETE: u32 = A::KeysDelete.bits();
     pub const EXPERIMENTAL_FEATURES_GET: u32 = A::ExperimentalFeaturesGet.bits();
     pub const EXPERIMENTAL_FEATURES_UPDATE: u32 = A::ExperimentalFeaturesUpdate.bits();
+    pub const ALL: u32 = A::All.bits();
 }
 
 impl<E: DeserializeError> Deserr<E> for Action {
@@ -381,48 +404,48 @@ impl<'de> Deserialize<'de> for Action {
     }
 }
 
+// TODO: Once "all" type flags are removed, simplify
+//       Essentially `get_potential_index` will give the exact index, +1 the exact next, -1 the exact previous
 impl Sequence for Action {
     const CARDINALITY: usize = Self::FLAGS.len();
 
     fn next(&self) -> Option<Self> {
-        let mut iter = Self::FLAGS.iter();
-        while let Some(action) = iter.next() {
-            if action.value() == self {
-                if let Some(action) = iter.next() {
-                    return Some(*action.value());
+        let mut potential_next_index = self.get_potential_index() + 1;
+
+        loop {
+            if let Some(next_flag) = Self::FLAGS.get(potential_next_index) {
+                let next_flag_value = next_flag.value();
+
+                if next_flag_value > self {
+                    return Some(*next_flag_value);
                 }
 
-                break;
+                potential_next_index += 1;
+            } else {
+                return None;
             }
         }
-
-        None
     }
 
     fn previous(&self) -> Option<Self> {
-        let mut iter = Self::FLAGS.iter().peekable();
+        // -2 because of "all" type flags that represent a single flag, otherwise -1 would suffice
+        let mut potential_previous_index = self.get_potential_index() - 2;
+        let mut previous_item: Option<Self> = None;
 
-        if let Some(action) = iter.next() {
-            if action.value() == self {
+        loop {
+            if let Some(next_flag) = Self::FLAGS.get(potential_previous_index) {
+                let next_flag_value = next_flag.value();
+
+                if next_flag_value > self {
+                    return previous_item;
+                }
+
+                previous_item = Some(*next_flag_value);
+                potential_previous_index += 1;
+            } else {
                 return None;
             }
-
-            if let Some(next_action) = iter.peek() {
-                if next_action.value() == self {
-                    return Some(*action.value());
-                }
-            }
         }
-
-        while let Some(action) = iter.next() {
-            if let Some(next_action) = iter.peek() {
-                if next_action.value() == self {
-                    return Some(*action.value());
-                }
-            }
-        }
-
-        None
     }
 
     fn first() -> Option<Self> {
