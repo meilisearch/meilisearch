@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use charabia::{SeparatorKind, Token, TokenKind, Tokenizer, TokenizerBuilder};
 use serde_json::Value;
 
-use crate::proximity::MAX_DISTANCE;
 use crate::update::new::document::Document;
 use crate::update::new::extract::perm_json_p::{
     seek_leaf_values_in_array, seek_leaf_values_in_object, select_field,
@@ -12,6 +11,9 @@ use crate::{
     FieldId, GlobalFieldsIdsMap, InternalError, LocalizedAttributesRule, Result, UserError,
     MAX_WORD_LENGTH,
 };
+
+// todo: should be crate::proximity::MAX_DISTANCE but it has been forgotten
+const MAX_DISTANCE: u32 = 8;
 
 pub struct DocumentTokenizer<'a> {
     pub tokenizer: &'a Tokenizer<'a>,
@@ -251,22 +253,22 @@ mod test {
             ]: "doggo",
             [
                 2,
-                MAX_DISTANCE,
+                8,
             ]: "doggo",
             [
                 2,
                 16,
             ]: "catto",
             [
-                3,
+                5,
                 0,
             ]: "10",
             [
-                4,
+                6,
                 0,
             ]: "pesti",
             [
-                5,
+                7,
                 0,
             ]: "23",
         }
