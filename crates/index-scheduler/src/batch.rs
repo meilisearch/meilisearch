@@ -32,9 +32,7 @@ use meilisearch_types::error::Code;
 use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader, PrimaryKey};
 use meilisearch_types::milli::heed::CompactionOption;
-use meilisearch_types::milli::update::new::indexer::{
-    self, retrieve_or_guess_primary_key, UpdateByFunction,
-};
+use meilisearch_types::milli::update::new::indexer::{self, UpdateByFunction};
 use meilisearch_types::milli::update::{IndexDocumentsMethod, Settings as MilliSettings};
 use meilisearch_types::milli::vector::parsed_vectors::{
     ExplicitVectors, VectorOrArrayOfVectors, RESERVED_VECTORS_FIELD_NAME,
@@ -43,7 +41,6 @@ use meilisearch_types::milli::{self, Filter, ThreadPoolNoAbortBuilder};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::{compression, Index, VERSION_FILE_NAME};
-use raw_collections::RawMap;
 use roaring::RoaringBitmap;
 use time::macros::format_description;
 use time::OffsetDateTime;
@@ -1278,16 +1275,6 @@ impl IndexScheduler {
                 // TODO: at some point, for better efficiency we might want to reuse the bumpalo for successive batches.
                 // this is made difficult by the fact we're doing private clones of the index scheduler and sending it
                 // to a fresh thread.
-
-                /// TODO manage errors correctly
-                let first_addition_uuid = operations
-                    .iter()
-                    .find_map(|op| match op {
-                        DocumentOperation::Add(content_uuid) => Some(content_uuid),
-                        _ => None,
-                    })
-                    .unwrap();
-
                 let mut content_files = Vec::new();
                 for operation in &operations {
                     if let DocumentOperation::Add(content_uuid) = operation {
@@ -1302,28 +1289,6 @@ impl IndexScheduler {
                 let rtxn = index.read_txn()?;
                 let db_fields_ids_map = index.fields_ids_map(&rtxn)?;
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
-
-                let first_document = match content_files.first() {
-                    Some(mmap) => {
-                        let mut iter = serde_json::Deserializer::from_slice(mmap).into_iter();
-                        iter.next().transpose().map_err(|e| e.into()).map_err(Error::IoError)?
-                    }
-                    None => None,
-                };
-
-                let (primary_key, primary_key_has_been_set) = retrieve_or_guess_primary_key(
-                    &rtxn,
-                    index,
-                    &mut new_fields_ids_map,
-                    primary_key.as_deref(),
-                    first_document
-                        .map(|raw| RawMap::from_raw_value(raw, &indexer_alloc))
-                        .transpose()
-                        .map_err(|error| {
-                            milli::Error::UserError(milli::UserError::SerdeJson(error))
-                        })?,
-                )?
-                .map_err(milli::Error::from)?;
 
                 let indexer_config = self.index_mapper.indexer_config();
                 let mut content_files_iter = content_files.iter();
@@ -1356,11 +1321,11 @@ impl IndexScheduler {
                     }
                 };
 
-                let (document_changes, operation_stats) = indexer.into_changes(
+                let (document_changes, operation_stats, primary_key) = indexer.into_changes(
                     &indexer_alloc,
                     index,
                     &rtxn,
-                    &primary_key,
+                    primary_key.as_deref(),
                     &mut new_fields_ids_map,
                 )?;
 
@@ -1403,7 +1368,7 @@ impl IndexScheduler {
                             index,
                             &db_fields_ids_map,
                             new_fields_ids_map,
-                            primary_key_has_been_set.then_some(primary_key),
+                            primary_key,
                             &document_changes,
                             embedders,
                             &|| must_stop_processing.get(),

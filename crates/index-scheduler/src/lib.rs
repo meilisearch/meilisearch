@@ -4296,11 +4296,11 @@ mod tests {
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "only_first_task_succeed");
 
         // The second batch should fail.
-        handle.advance_one_failed_batch();
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_task_fails");
 
         // The second batch should fail.
-        handle.advance_one_failed_batch();
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "third_task_fails");
 
         // Is the primary key still what we expect?
@@ -4361,7 +4361,7 @@ mod tests {
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "only_first_task_succeed");
 
         // The second batch should fail and contains two tasks.
-        handle.advance_one_failed_batch();
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_and_third_tasks_fails");
 
         // Is the primary key still what we expect?
@@ -4440,7 +4440,8 @@ mod tests {
         snapshot!(primary_key, @"id");
 
         // We're trying to `bork` again, but now there is already a primary key set for this index.
-        handle.advance_one_failed_batch();
+        // NOTE: it's marked as successful because the batch didn't fails, it's the individual tasks that failed.
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "fourth_task_fails");
 
         // Finally the last task should succeed since its primary key is the same as the valid one.

@@ -3,12 +3,14 @@ use bumpalo::Bump;
 use hashbrown::hash_map::Entry;
 use heed::RoTxn;
 use memmap2::Mmap;
+use raw_collections::RawMap;
 use rayon::slice::ParallelSlice;
 use serde_json::value::RawValue;
 use serde_json::Deserializer;
 
 use super::super::document_change::DocumentChange;
 use super::document_changes::{DocumentChangeContext, DocumentChanges, MostlySend};
+use super::retrieve_or_guess_primary_key;
 use crate::documents::PrimaryKey;
 use crate::update::new::document::Versions;
 use crate::update::new::{Deletion, Insertion, Update};
@@ -41,16 +43,17 @@ impl<'pl> DocumentOperation<'pl> {
         self,
         indexer: &'pl Bump,
         index: &Index,
-        rtxn: &RoTxn,
-        primary_key: &PrimaryKey,
+        rtxn: &'pl RoTxn<'pl>,
+        primary_key_from_op: Option<&'pl str>,
         new_fields_ids_map: &mut FieldsIdsMap,
-    ) -> Result<(DocumentOperationChanges<'pl>, Vec<PayloadStats>)> {
+    ) -> Result<(DocumentOperationChanges<'pl>, Vec<PayloadStats>, Option<PrimaryKey<'pl>>)> {
         let Self { operations, method } = self;
 
         let documents_ids = index.documents_ids(rtxn)?;
         let mut operations_stats = Vec::new();
         let mut available_docids = AvailableIds::new(&documents_ids);
         let mut docids_version_offsets = hashbrown::HashMap::new();
+        let mut primary_key = None;
 
         for operation in operations {
             let (bytes, document_count, result) = match operation {
@@ -58,7 +61,8 @@ impl<'pl> DocumentOperation<'pl> {
                     indexer,
                     index,
                     rtxn,
-                    primary_key,
+                    primary_key_from_op,
+                    &mut primary_key,
                     new_fields_ids_map,
                     &mut available_docids,
                     &docids_version_offsets,
@@ -98,30 +102,30 @@ impl<'pl> DocumentOperation<'pl> {
         docids_version_offsets.sort_unstable_by_key(|(_, po)| method.sort_key(&po.operations));
 
         let docids_version_offsets = docids_version_offsets.into_bump_slice();
-        Ok((DocumentOperationChanges { docids_version_offsets }, operations_stats))
+        Ok((DocumentOperationChanges { docids_version_offsets }, operations_stats, primary_key))
     }
 }
 
-fn extract_addition_payload_changes<'s, 'pl: 's>(
+fn extract_addition_payload_changes<'r, 'pl: 'r>(
     indexer: &'pl Bump,
     index: &Index,
-    rtxn: &RoTxn,
-    primary_key: &PrimaryKey,
-    fields_ids_map: &mut FieldsIdsMap,
+    rtxn: &'r RoTxn<'r>,
+    primary_key_from_op: Option<&'r str>,
+    primary_key: &mut Option<PrimaryKey<'r>>,
+    new_fields_ids_map: &mut FieldsIdsMap,
     available_docids: &mut AvailableIds,
-    main_docids_version_offsets: &hashbrown::HashMap<&'s str, PayloadOperations<'pl>>,
+    main_docids_version_offsets: &hashbrown::HashMap<&'pl str, PayloadOperations<'pl>>,
     method: MergeMethod,
     payload: &'pl [u8],
-) -> (u64, u64, Result<hashbrown::HashMap<&'s str, PayloadOperations<'pl>>>) {
+) -> (u64, u64, Result<hashbrown::HashMap<&'pl str, PayloadOperations<'pl>>>) {
     let mut new_docids_version_offsets = hashbrown::HashMap::<&str, PayloadOperations<'pl>>::new();
 
     /// TODO manage the error
     let mut previous_offset = 0;
     let mut iter = Deserializer::from_slice(payload).into_iter::<&RawValue>();
     loop {
-        let doc = match iter.next().transpose() {
-            Ok(Some(doc)) => doc,
-            Ok(None) => break,
+        let optdoc = match iter.next().transpose() {
+            Ok(optdoc) => optdoc,
             Err(e) => {
                 return (
                     payload.len() as u64,
@@ -131,7 +135,63 @@ fn extract_addition_payload_changes<'s, 'pl: 's>(
             }
         };
 
-        let external_id = match primary_key.extract_fields_and_docid(doc, fields_ids_map, indexer) {
+        // Only guess the primary key if it is the first document
+        let retrieved_primary_key = if previous_offset == 0 {
+            let optdoc = match optdoc {
+                Some(doc) => match RawMap::from_raw_value(doc, indexer) {
+                    Ok(docmap) => Some(docmap),
+                    Err(error) => {
+                        return (
+                            payload.len() as u64,
+                            new_docids_version_offsets.len() as u64,
+                            Err(Error::UserError(UserError::SerdeJson(error))),
+                        )
+                    }
+                },
+                None => None,
+            };
+
+            let result = retrieve_or_guess_primary_key(
+                rtxn,
+                index,
+                new_fields_ids_map,
+                primary_key_from_op,
+                optdoc,
+            );
+
+            let (pk, _has_been_changed) = match result {
+                Ok(Ok(pk)) => pk,
+                Ok(Err(user_error)) => {
+                    return (
+                        payload.len() as u64,
+                        new_docids_version_offsets.len() as u64,
+                        Err(Error::UserError(user_error)),
+                    )
+                }
+                Err(error) => {
+                    return (
+                        payload.len() as u64,
+                        new_docids_version_offsets.len() as u64,
+                        Err(error),
+                    )
+                }
+            };
+
+            primary_key.get_or_insert(pk)
+        } else {
+            primary_key.as_ref().unwrap()
+        };
+
+        let doc = match optdoc {
+            Some(doc) => doc,
+            None => break,
+        };
+
+        let external_id = match retrieved_primary_key.extract_fields_and_docid(
+            doc,
+            new_fields_ids_map,
+            indexer,
+        ) {
             Ok(edi) => edi,
             Err(e) => {
                 return (payload.len() as u64, new_docids_version_offsets.len() as u64, Err(e))
