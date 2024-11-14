@@ -356,11 +356,11 @@ impl MergeChanges for MergeDocumentForUpdates {
         let has_deletion = last_deletion.is_some();
 
         if operations.is_empty() {
-            return if !is_new {
+            return if is_new {
+                Ok(None)
+            } else {
                 let deletion = Deletion::create(docid, external_docid);
                 Ok(Some(DocumentChange::Deletion(deletion)))
-            } else {
-                Ok(None)
             };
         }
 
