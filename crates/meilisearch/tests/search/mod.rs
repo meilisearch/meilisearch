@@ -15,6 +15,7 @@ mod pagination;
 mod restrict_searchable;
 mod search_queue;
 
+use meili_snap::{json_string, snapshot};
 use meilisearch::Opt;
 use tempfile::TempDir;
 
@@ -60,6 +61,79 @@ async fn simple_search() {
             assert_eq!(response["hits"].as_array().unwrap().len(), 2);
         })
         .await;
+}
+
+#[actix_rt::test]
+async fn search_with_stop_word() {
+    // related to https://github.com/meilisearch/meilisearch/issues/4984
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (_, code) =
+        index.update_settings(json!({"stopWords": ["the", "a", "an", "to", "in", "of"]})).await;
+    meili_snap::snapshot!(code, @"202 Accepted");
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(1).await;
+
+    // prefix search
+    index
+        .search(json!({"q": "to the", "attributesToHighlight": ["title"], "attributesToRetrieve": ["title"] }), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "title": "How to Train Your Dragon: The Hidden World",
+                "_formatted": {
+                  "title": "How to Train Your Dragon: <em>The</em> Hidden World"
+                }
+              }
+            ]
+            "###);
+        })
+        .await;
+
+    // non-prefix search
+    index
+          .search(json!({"q": "to the ", "attributesToHighlight": ["title"], "attributesToRetrieve": ["title"] }), |response, code| {
+              assert_eq!(code, 200, "{}", response);
+              snapshot!(json_string!(response["hits"]), @r###"
+              [
+                {
+                  "title": "Shazam!",
+                  "_formatted": {
+                    "title": "Shazam!"
+                  }
+                },
+                {
+                  "title": "Captain Marvel",
+                  "_formatted": {
+                    "title": "Captain Marvel"
+                  }
+                },
+                {
+                  "title": "Escape Room",
+                  "_formatted": {
+                    "title": "Escape Room"
+                  }
+                },
+                {
+                  "title": "How to Train Your Dragon: The Hidden World",
+                  "_formatted": {
+                    "title": "How to Train Your Dragon: The Hidden World"
+                  }
+                },
+                {
+                  "title": "Gläss",
+                  "_formatted": {
+                    "title": "Gläss"
+                  }
+                }
+              ]
+              "###);
+          })
+          .await;
 }
 
 #[actix_rt::test]
