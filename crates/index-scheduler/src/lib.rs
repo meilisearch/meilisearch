@@ -71,7 +71,7 @@ use utils::{filter_out_references_to_newer_tasks, keep_tasks_within_datetimes, m
 use uuid::Uuid;
 
 use crate::index_mapper::IndexMapper;
-use crate::utils::{check_index_swap_validity, clamp_to_page_size};
+use crate::utils::{check_index_swap_validity, clamp_to_page_size, CachedBatch};
 
 pub(crate) type BEI128 = I128<BE>;
 
@@ -192,9 +192,12 @@ impl ProcessingTasks {
     }
 
     /// Set the processing tasks to an empty list
-    fn stop_processing(&mut self) -> RoaringBitmap {
-        self.batch_id = None;
-        std::mem::take(&mut self.processing)
+    fn stop_processing(&mut self) -> Self {
+        Self {
+            started_at: self.started_at,
+            batch_id: self.batch_id.take(),
+            processing: std::mem::take(&mut self.processing),
+        }
     }
 
     /// Returns `true` if there, at least, is one task that is currently processing that we must stop.
@@ -532,13 +535,13 @@ impl IndexScheduler {
         let started_at = env.create_database(&mut wtxn, Some(db_name::STARTED_AT))?;
         let finished_at = env.create_database(&mut wtxn, Some(db_name::FINISHED_AT))?;
 
-        let batch_status = env.create_database(&mut wtxn, Some(db_name::STATUS))?;
-        let batch_kind = env.create_database(&mut wtxn, Some(db_name::KIND))?;
-        let batch_index_tasks = env.create_database(&mut wtxn, Some(db_name::INDEX_TASKS))?;
-        let batch_canceled_by = env.create_database(&mut wtxn, Some(db_name::CANCELED_BY))?;
-        let batch_enqueued_at = env.create_database(&mut wtxn, Some(db_name::ENQUEUED_AT))?;
-        let batch_started_at = env.create_database(&mut wtxn, Some(db_name::STARTED_AT))?;
-        let batch_finished_at = env.create_database(&mut wtxn, Some(db_name::FINISHED_AT))?;
+        let batch_status = env.create_database(&mut wtxn, Some(db_name::BATCH_STATUS))?;
+        let batch_kind = env.create_database(&mut wtxn, Some(db_name::BATCH_KIND))?;
+        let batch_index_tasks = env.create_database(&mut wtxn, Some(db_name::BATCH_INDEX_TASKS))?;
+        let batch_canceled_by = env.create_database(&mut wtxn, Some(db_name::BATCH_CANCELED_BY))?;
+        let batch_enqueued_at = env.create_database(&mut wtxn, Some(db_name::BATCH_ENQUEUED_AT))?;
+        let batch_started_at = env.create_database(&mut wtxn, Some(db_name::BATCH_STARTED_AT))?;
+        let batch_finished_at = env.create_database(&mut wtxn, Some(db_name::BATCH_FINISHED_AT))?;
         wtxn.commit()?;
 
         // allow unreachable_code to get rids of the warning in the case of a test build.
@@ -923,6 +926,147 @@ impl IndexScheduler {
         Ok(tasks)
     }
 
+    /// Return the batch ids matched by the given query from the index scheduler's point of view.
+    pub(crate) fn get_batch_ids(&self, rtxn: &RoTxn, query: &Query) -> Result<RoaringBitmap> {
+        let ProcessingTasks {
+            started_at: started_at_processing,
+            processing: processing_batches,
+            batch_id,
+        } = self.processing_tasks.read().unwrap().clone();
+
+        let mut batches = self.all_batch_ids(rtxn)?;
+
+        if let Some(from) = &query.from {
+            batches.remove_range(from.saturating_add(1)..);
+        }
+
+        if let Some(status) = &query.statuses {
+            let mut status_batches = RoaringBitmap::new();
+            for status in status {
+                // TODO: We can't retrieve anything around processing batches so we can get rid of a lot of code here
+                match status {
+                    // special case for Processing batches
+                    Status::Processing => {
+                        if let Some(batch_id) = batch_id {
+                            status_batches.insert(batch_id);
+                        }
+                    }
+                    status => status_batches |= &self.get_batch_status(rtxn, *status)?,
+                };
+            }
+            if !status.contains(&Status::Processing) {
+                batches -= &processing_batches;
+            }
+            batches &= status_batches;
+        }
+
+        if let Some(uids) = &query.uids {
+            let uids = RoaringBitmap::from_iter(uids);
+            batches &= &uids;
+        }
+
+        if let Some(canceled_by) = &query.canceled_by {
+            let mut all_canceled_batches = RoaringBitmap::new();
+            for cancel_uid in canceled_by {
+                if let Some(canceled_by_uid) = self.batch_canceled_by.get(rtxn, cancel_uid)? {
+                    all_canceled_batches |= canceled_by_uid;
+                }
+            }
+
+            // if the canceled_by has been specified but no batch
+            // matches then we prefer matching zero than all tasks.
+            if all_canceled_batches.is_empty() {
+                return Ok(RoaringBitmap::new());
+            } else {
+                batches &= all_canceled_batches;
+            }
+        }
+
+        if let Some(kind) = &query.types {
+            let mut kind_batches = RoaringBitmap::new();
+            for kind in kind {
+                kind_batches |= self.get_batch_kind(rtxn, *kind)?;
+            }
+            batches &= &kind_batches;
+        }
+
+        if let Some(index) = &query.index_uids {
+            let mut index_batches = RoaringBitmap::new();
+            for index in index {
+                index_batches |= self.index_batches(rtxn, index)?;
+            }
+            batches &= &index_batches;
+        }
+
+        // For the started_at filter, we need to treat the part of the batches that are processing from the part of the
+        // batches that are not processing. The non-processing ones are filtered normally while the processing ones
+        // are entirely removed unless the in-memory startedAt variable falls within the date filter.
+        // Once we have filtered the two subsets, we put them back together and assign it back to `batches`.
+        batches = {
+            let (mut filtered_non_processing_batches, mut filtered_processing_batches) =
+                (&batches - &processing_batches, &batches & &processing_batches);
+
+            // special case for Processing batches
+            // A closure that clears the filtered_processing_batches if their started_at date falls outside the given bounds
+            let mut clear_filtered_processing_batches =
+                |start: Bound<OffsetDateTime>, end: Bound<OffsetDateTime>| {
+                    let start = map_bound(start, |b| b.unix_timestamp_nanos());
+                    let end = map_bound(end, |b| b.unix_timestamp_nanos());
+                    let is_within_dates = RangeBounds::contains(
+                        &(start, end),
+                        &started_at_processing.unix_timestamp_nanos(),
+                    );
+                    if !is_within_dates {
+                        filtered_processing_batches.clear();
+                    }
+                };
+            match (query.after_started_at, query.before_started_at) {
+                (None, None) => (),
+                (None, Some(before)) => {
+                    clear_filtered_processing_batches(Bound::Unbounded, Bound::Excluded(before))
+                }
+                (Some(after), None) => {
+                    clear_filtered_processing_batches(Bound::Excluded(after), Bound::Unbounded)
+                }
+                (Some(after), Some(before)) => clear_filtered_processing_batches(
+                    Bound::Excluded(after),
+                    Bound::Excluded(before),
+                ),
+            };
+
+            keep_tasks_within_datetimes(
+                rtxn,
+                &mut filtered_non_processing_batches,
+                self.batch_started_at,
+                query.after_started_at,
+                query.before_started_at,
+            )?;
+            filtered_non_processing_batches | filtered_processing_batches
+        };
+
+        keep_tasks_within_datetimes(
+            rtxn,
+            &mut batches,
+            self.batch_enqueued_at,
+            query.after_enqueued_at,
+            query.before_enqueued_at,
+        )?;
+
+        keep_tasks_within_datetimes(
+            rtxn,
+            &mut batches,
+            self.batch_finished_at,
+            query.after_finished_at,
+            query.before_finished_at,
+        )?;
+
+        if let Some(limit) = query.limit {
+            batches = batches.into_iter().rev().take(limit as usize).collect();
+        }
+
+        Ok(batches)
+    }
+
     /// The returned structure contains:
     /// 1. The name of the property being observed can be `statuses`, `types`, or `indexes`.
     /// 2. The name of the specific data related to the property can be `enqueued` for the `statuses`, `settingsUpdate` for the `types`, or the name of the index for the `indexes`, for example.
@@ -1034,7 +1178,7 @@ impl IndexScheduler {
     /// 1. IndexSwap tasks are not publicly associated with any index, but they are associated
     /// with many indexes internally.
     /// 2. The user may not have the rights to access the tasks (internally) associated with all indexes.
-    pub fn get_task_ids_from_authorized_indexes(
+    pub fn get_batch_ids_from_authorized_indexes(
         &self,
         rtxn: &RoTxn,
         query: &Query,
@@ -1063,12 +1207,12 @@ impl IndexScheduler {
             for result in all_indexes_iter {
                 let (index, index_tasks) = result?;
                 if !filters.is_index_authorized(index) {
-                    tasks -= index_tasks;
+                    batches -= index_tasks;
                 }
             }
         }
 
-        Ok((tasks, total_tasks.len()))
+        Ok((batches, total_batches.len()))
     }
 
     /// Return the tasks matching the query from the user's point of view along
@@ -1151,17 +1295,13 @@ impl IndexScheduler {
         if processing.is_empty() {
             Ok((ret.collect(), total))
         } else {
+            // TODO: We must re-insert the current processing batch somewhere in some way
             Ok((
-                ret.map(|task| {
-                    if processing.contains(task.uid) {
-                        Task {
-                            status: Status::Processing,
-                            batch_uid: batch_id,
-                            started_at: Some(started_at),
-                            ..task
-                        }
+                ret.map(|batch| {
+                    if processing.contains(batch.uid) {
+                        Batch { started_at, ..batch }
                     } else {
-                        task
+                        batch
                     }
                 })
                 .collect(),
@@ -1374,6 +1514,7 @@ impl IndexScheduler {
         let mut wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
 
         let finished_at = OffsetDateTime::now_utc();
+        let mut current_batch = CachedBatch::new(batch_id, started_at, finished_at);
         match res {
             Ok(tasks) => {
                 #[cfg(test)]
@@ -1401,6 +1542,7 @@ impl IndexScheduler {
 
                     self.update_task(&mut wtxn, &task)
                         .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?;
+                    current_batch.update(&task);
                 }
                 tracing::info!("A batch of tasks was successfully completed with {success} successful tasks and {failure} failed tasks.");
             }
@@ -1463,17 +1605,14 @@ impl IndexScheduler {
 
                     self.update_task(&mut wtxn, &task)
                         .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?;
+                    current_batch.update(&task);
                 }
             }
         }
 
-        self.all_batches.put(
-            &mut wtxn,
-            &batch_id,
-            &Batch { uid: batch_id, started_at, finished_at: Some(finished_at) },
-        )?;
-
         let processed = self.processing_tasks.write().unwrap().stop_processing();
+
+        self.write_batch(&mut wtxn, current_batch)?;
 
         #[cfg(test)]
         self.maybe_fail(tests::FailureLocation::CommittingWtxn)?;
@@ -1503,7 +1642,7 @@ impl IndexScheduler {
         })?;
 
         // We shouldn't crash the tick function if we can't send data to the webhook.
-        let _ = self.notify_webhook(&processed);
+        let _ = self.notify_webhook(&processed.processing);
 
         #[cfg(test)]
         self.breakpoint(Breakpoint::AfterProcessing);
@@ -5256,7 +5395,7 @@ mod tests {
         snapshot!(task.uid, @"0");
         snapshot!(snapshot_index_scheduler(&index_scheduler), @r###"
         ### Autobatching Enabled = true
-        ### Processing Tasks:
+        ### Processing batch None:
         []
         ----------------------------------------------------------------------
         ### All Tasks:
@@ -5278,6 +5417,23 @@ mod tests {
         ### Started At:
         ----------------------------------------------------------------------
         ### Finished At:
+        ----------------------------------------------------------------------
+        ### All Batches:
+        ----------------------------------------------------------------------
+        ### Batches Status:
+        ----------------------------------------------------------------------
+        ### Batches Kind:
+        ----------------------------------------------------------------------
+        ### Batches Index Tasks:
+        ----------------------------------------------------------------------
+        ### Batches Canceled By:
+
+        ----------------------------------------------------------------------
+        ### Batches Enqueued At:
+        ----------------------------------------------------------------------
+        ### Batches Started At:
+        ----------------------------------------------------------------------
+        ### Batches Finished At:
         ----------------------------------------------------------------------
         ### File Store:
 
@@ -5289,7 +5445,7 @@ mod tests {
         snapshot!(task.uid, @"12");
         snapshot!(snapshot_index_scheduler(&index_scheduler), @r###"
         ### Autobatching Enabled = true
-        ### Processing Tasks:
+        ### Processing batch None:
         []
         ----------------------------------------------------------------------
         ### All Tasks:
@@ -5311,6 +5467,23 @@ mod tests {
         ### Started At:
         ----------------------------------------------------------------------
         ### Finished At:
+        ----------------------------------------------------------------------
+        ### All Batches:
+        ----------------------------------------------------------------------
+        ### Batches Status:
+        ----------------------------------------------------------------------
+        ### Batches Kind:
+        ----------------------------------------------------------------------
+        ### Batches Index Tasks:
+        ----------------------------------------------------------------------
+        ### Batches Canceled By:
+
+        ----------------------------------------------------------------------
+        ### Batches Enqueued At:
+        ----------------------------------------------------------------------
+        ### Batches Started At:
+        ----------------------------------------------------------------------
+        ### Batches Finished At:
         ----------------------------------------------------------------------
         ### File Store:
 

@@ -1,3 +1,4 @@
+pub mod batch_view;
 pub mod batches;
 pub mod compression;
 pub mod deserr;

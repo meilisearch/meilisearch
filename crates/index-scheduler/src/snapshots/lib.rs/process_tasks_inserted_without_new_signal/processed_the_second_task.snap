@@ -1,13 +1,13 @@
 ---
-source: index-scheduler/src/lib.rs
+source: crates/index-scheduler/src/lib.rs
 ---
 ### Autobatching Enabled = true
-### Processing Tasks:
+### Processing batch None:
 []
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, status: succeeded, details: { primary_key: None }, kind: IndexCreation { index_uid: "doggos", primary_key: None }}
-1 {uid: 1, status: succeeded, details: { primary_key: None }, kind: IndexCreation { index_uid: "cattos", primary_key: None }}
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: None }, kind: IndexCreation { index_uid: "doggos", primary_key: None }}
+1 {uid: 1, batch_uid: 1, status: succeeded, details: { primary_key: None }, kind: IndexCreation { index_uid: "cattos", primary_key: None }}
 2 {uid: 2, status: enqueued, details: { deleted_documents: None }, kind: IndexDeletion { index_uid: "doggos" }}
 ----------------------------------------------------------------------
 ### Status:
@@ -43,7 +43,35 @@ doggos: { number_of_documents: 0, field_distribution: {} }
 [timestamp] [0,]
 [timestamp] [1,]
 ----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, }
+1 {uid: 1, }
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,1,]
+----------------------------------------------------------------------
+### Batches Kind:
+"indexCreation" [0,1,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+cattos [1,]
+doggos [0,]
+----------------------------------------------------------------------
+### Batches Canceled By:
+
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
 ### File Store:
 
 ----------------------------------------------------------------------
-

@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
 
+use meilisearch_types::batches::Batch;
 use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, RoTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
@@ -64,10 +65,10 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
 
     let mut snap = String::new();
 
-    let processing_tasks = processing_tasks.read().unwrap().processing.clone();
+    let processing = processing_tasks.read().unwrap().clone();
     snap.push_str(&format!("### Autobatching Enabled = {autobatching_enabled}\n"));
-    snap.push_str("### Processing Tasks:\n");
-    snap.push_str(&snapshot_bitmap(&processing_tasks));
+    snap.push_str(&format!("### Processing batch {:?}:\n", processing.batch_id));
+    snap.push_str(&snapshot_bitmap(&processing.processing));
     snap.push_str("\n----------------------------------------------------------------------\n");
 
     snap.push_str("### All Tasks:\n");
@@ -106,6 +107,38 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     snap.push_str(&snapshot_date_db(&rtxn, *finished_at));
     snap.push_str("----------------------------------------------------------------------\n");
 
+    snap.push_str("### All Batches:\n");
+    snap.push_str(&snapshot_all_batches(&rtxn, *all_batches));
+    snap.push_str("----------------------------------------------------------------------\n");
+
+    snap.push_str("### Batches Status:\n");
+    snap.push_str(&snapshot_status(&rtxn, *batch_status));
+    snap.push_str("----------------------------------------------------------------------\n");
+
+    snap.push_str("### Batches Kind:\n");
+    snap.push_str(&snapshot_kind(&rtxn, *batch_kind));
+    snap.push_str("----------------------------------------------------------------------\n");
+
+    snap.push_str("### Batches Index Tasks:\n");
+    snap.push_str(&snapshot_index_tasks(&rtxn, *batch_index_tasks));
+    snap.push_str("----------------------------------------------------------------------\n");
+
+    snap.push_str("### Batches Canceled By:\n");
+    snap.push_str(&snapshot_canceled_by(&rtxn, *batch_canceled_by));
+    snap.push_str("\n----------------------------------------------------------------------\n");
+
+    snap.push_str("### Batches Enqueued At:\n");
+    snap.push_str(&snapshot_date_db(&rtxn, *batch_enqueued_at));
+    snap.push_str("----------------------------------------------------------------------\n");
+
+    snap.push_str("### Batches Started At:\n");
+    snap.push_str(&snapshot_date_db(&rtxn, *batch_started_at));
+    snap.push_str("----------------------------------------------------------------------\n");
+
+    snap.push_str("### Batches Finished At:\n");
+    snap.push_str(&snapshot_date_db(&rtxn, *batch_finished_at));
+    snap.push_str("----------------------------------------------------------------------\n");
+
     snap.push_str("### File Store:\n");
     snap.push_str(&snapshot_file_store(file_store));
     snap.push_str("\n----------------------------------------------------------------------\n");
@@ -139,6 +172,16 @@ pub fn snapshot_all_tasks(rtxn: &RoTxn, db: Database<BEU32, SerdeJson<Task>>) ->
     for next in iter {
         let (task_id, task) = next.unwrap();
         snap.push_str(&format!("{task_id} {}\n", snapshot_task(&task)));
+    }
+    snap
+}
+
+pub fn snapshot_all_batches(rtxn: &RoTxn, db: Database<BEU32, SerdeJson<Batch>>) -> String {
+    let mut snap = String::new();
+    let iter = db.iter(rtxn).unwrap();
+    for next in iter {
+        let (batch_id, batch) = next.unwrap();
+        snap.push_str(&format!("{batch_id} {}\n", snapshot_batch(&batch)));
     }
     snap
 }
@@ -287,6 +330,19 @@ pub fn snapshot_canceled_by(rtxn: &RoTxn, db: Database<BEU32, RoaringBitmapCodec
     }
     snap
 }
+
+pub fn snapshot_batch(batch: &Batch) -> String {
+    let mut snap = String::new();
+    let Batch { uid, started_at, finished_at } = batch;
+    if let Some(finished_at) = finished_at {
+        assert!(finished_at > started_at);
+    }
+    snap.push('{');
+    snap.push_str(&format!("uid: {uid}, "));
+    snap.push('}');
+    snap
+}
+
 pub fn snapshot_index_mapper(rtxn: &RoTxn, mapper: &IndexMapper) -> String {
     let mut s = String::new();
     let names = mapper.index_names(rtxn).unwrap();

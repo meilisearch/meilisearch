@@ -70,7 +70,7 @@ pub struct TasksFilterQuery {
 }
 
 impl TasksFilterQuery {
-    fn into_query(self) -> Query {
+    pub(crate) fn into_query(self) -> Query {
         Query {
             limit: Some(self.limit.0),
             from: self.from.as_deref().copied(),

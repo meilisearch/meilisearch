@@ -1,12 +1,12 @@
 ---
-source: index-scheduler/src/lib.rs
+source: crates/index-scheduler/src/lib.rs
 ---
 ### Autobatching Enabled = true
-### Processing Tasks:
+### Processing batch None:
 []
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "a", primary_key: Some("id") }}
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "a", primary_key: Some("id") }}
 1 {uid: 1, status: enqueued, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "b", primary_key: Some("id") }}
 2 {uid: 2, status: enqueued, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "c", primary_key: Some("id") }}
 3 {uid: 3, status: enqueued, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "d", primary_key: Some("id") }}
@@ -43,7 +43,30 @@ a: { number_of_documents: 0, field_distribution: {} }
 ### Finished At:
 [timestamp] [0,]
 ----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, }
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,]
+----------------------------------------------------------------------
+### Batches Kind:
+"indexCreation" [0,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+a [0,]
+----------------------------------------------------------------------
+### Batches Canceled By:
+
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+----------------------------------------------------------------------
 ### File Store:
 
 ----------------------------------------------------------------------
-

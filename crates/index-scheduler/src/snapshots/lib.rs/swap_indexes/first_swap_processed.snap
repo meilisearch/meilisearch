@@ -1,16 +1,16 @@
 ---
-source: index-scheduler/src/lib.rs
+source: crates/index-scheduler/src/lib.rs
 ---
 ### Autobatching Enabled = true
-### Processing Tasks:
+### Processing batch None:
 []
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "b", primary_key: Some("id") }}
-1 {uid: 1, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "a", primary_key: Some("id") }}
-2 {uid: 2, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "d", primary_key: Some("id") }}
-3 {uid: 3, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "c", primary_key: Some("id") }}
-4 {uid: 4, status: succeeded, details: { swaps: [IndexSwap { indexes: ("a", "b") }, IndexSwap { indexes: ("c", "d") }] }, kind: IndexSwap { swaps: [IndexSwap { indexes: ("a", "b") }, IndexSwap { indexes: ("c", "d") }] }}
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "b", primary_key: Some("id") }}
+1 {uid: 1, batch_uid: 1, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "a", primary_key: Some("id") }}
+2 {uid: 2, batch_uid: 2, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "d", primary_key: Some("id") }}
+3 {uid: 3, batch_uid: 3, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "c", primary_key: Some("id") }}
+4 {uid: 4, batch_uid: 4, status: succeeded, details: { swaps: [IndexSwap { indexes: ("a", "b") }, IndexSwap { indexes: ("c", "d") }] }, kind: IndexSwap { swaps: [IndexSwap { indexes: ("a", "b") }, IndexSwap { indexes: ("c", "d") }] }}
 5 {uid: 5, status: enqueued, details: { swaps: [IndexSwap { indexes: ("a", "c") }] }, kind: IndexSwap { swaps: [IndexSwap { indexes: ("a", "c") }] }}
 ----------------------------------------------------------------------
 ### Status:
@@ -59,7 +59,50 @@ d: { number_of_documents: 0, field_distribution: {} }
 [timestamp] [3,]
 [timestamp] [4,]
 ----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, }
+1 {uid: 1, }
+2 {uid: 2, }
+3 {uid: 3, }
+4 {uid: 4, }
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,1,2,3,4,]
+----------------------------------------------------------------------
+### Batches Kind:
+"indexCreation" [0,1,2,3,]
+"indexSwap" [4,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+a [0,4,]
+b [1,4,]
+c [2,4,]
+d [3,4,]
+----------------------------------------------------------------------
+### Batches Canceled By:
+
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+----------------------------------------------------------------------
 ### File Store:
 
 ----------------------------------------------------------------------
-
