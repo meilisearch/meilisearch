@@ -472,7 +472,7 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "benchmarks"
-version = "1.11.1"
+version = "1.11.2"
 dependencies = [
  "anyhow",
  "bytes",
@@ -653,7 +653,7 @@ dependencies = [
 
 [[package]]
 name = "build-info"
-version = "1.11.1"
+version = "1.11.2"
 dependencies = [
  "anyhow",
  "time",
@@ -1623,7 +1623,7 @@ dependencies = [
 
 [[package]]
 name = "dump"
-version = "1.11.1"
+version = "1.11.2"
 dependencies = [
  "anyhow",
  "big_s",
@@ -1835,7 +1835,7 @@ checksum = "9fc0510504f03c51ada170672ac806f1f105a88aa97a5281117e1ddc3368e51a"
 
 [[package]]
 name = "file-store"
-version = "1.11.1"
+version = "1.11.2"
 dependencies = [
  "tempfile",
  "thiserror",
@@ -1857,7 +1857,7 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "1.11.1"
+version = "1.11.2"
 dependencies = [
  "insta",
  "nom",
@@ -1877,7 +1877,7 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "1.11.1"
+version = "1.11.2"
 dependencies = [
  "criterion",
  "serde_json",
@@ -2001,7 +2001,7 @@ dependencies = [
 
 [[package]]
 name = "fuzzers"
-version = "1.11.1"
+version = "1.11.2"
 dependencies = [
  "arbitrary",
  "clap",
@@ -2553,7 +2553,7 @@ checksum = "206ca75c9c03ba3d4ace2460e57b189f39f43de612c2f85836e65c929701bb2d"
 
 [[package]]
 name = "index-scheduler"
-version = "1.11.1"
+version = "1.11.2"
 dependencies = [
  "anyhow",
  "arroy",
@@ -2747,7 +2747,7 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "1.11.1"
+version = "1.11.2"
 dependencies = [
  "criterion",
  "serde_json",
@@ -3366,7 +3366,7 @@ checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
 
 [[package]]
 name = "meili-snap"
-version = "1.11.1"
+version = "1.11.2"
 dependencies = [
  "insta",
  "md5",
@@ -3375,7 +3375,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch"
-version = "1.11.1"
+version = "1.11.2"
 dependencies = [
  "actix-cors",
  "actix-http",
@@ -3465,7 +3465,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-auth"
-version = "1.11.1"
+version = "1.11.2"
 dependencies = [
  "base64 0.22.1",
  "enum-iterator",
@@ -3484,7 +3484,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-types"
-version = "1.11.1"
+version = "1.11.2"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -3514,7 +3514,7 @@ dependencies = [
 
 [[package]]
 name = "meilitool"
-version = "1.11.1"
+version = "1.11.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -3545,7 +3545,7 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "1.11.1"
+version = "1.11.2"
 dependencies = [
  "arroy",
  "big_s",
@@ -3991,7 +3991,7 @@ checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 
 [[package]]
 name = "permissive-json-pointer"
-version = "1.11.1"
+version = "1.11.2"
 dependencies = [
  "big_s",
  "serde_json",
@@ -6380,7 +6380,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "1.11.1"
+version = "1.11.2"
 dependencies = [
  "anyhow",
  "build-info",
