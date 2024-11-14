@@ -252,12 +252,13 @@ where
 
     for attempt in 0..10 {
         let response = request.clone().send_json(&body);
-        let result = check_response(response, data.configuration_source);
+        let result = check_response(response, data.configuration_source).and_then(|response| {
+            response_to_embedding(response, data, expected_count, expected_dimension)
+                .map_err(Retry::retry_later)
+        });
 
         let retry_duration = match result {
-            Ok(response) => {
-                return response_to_embedding(response, data, expected_count, expected_dimension)
-            }
+            Ok(response) => return Ok(response),
             Err(retry) => {
                 tracing::warn!("Failed: {}", retry.error);
                 if let Some(deadline) = deadline {
