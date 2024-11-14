@@ -1,10 +1,12 @@
-use std::{fs::File, io::BufWriter};
+use std::fs::File;
+use std::io::BufWriter;
 
 use fst::{Set, SetBuilder, Streamer};
 use memmap2::Mmap;
 use tempfile::tempfile;
 
-use crate::{update::del_add::DelAdd, InternalError, Result};
+use crate::update::del_add::DelAdd;
+use crate::{InternalError, Result};
 
 pub struct FstMergerBuilder<'a> {
     stream: Option<fst::set::Stream<'a>>,

@@ -13,7 +13,6 @@ use itertools::{merge_join_by, EitherOrBoth};
 pub use partial_dump::PartialDump;
 use rand::SeedableRng as _;
 use raw_collections::RawMap;
-use rayon::ThreadPool;
 use time::OffsetDateTime;
 pub use update_by_function::UpdateByFunction;
 
@@ -136,7 +135,6 @@ pub fn index<'pl, 'indexer, 'index, DC, MSP, SP>(
     db_fields_ids_map: &'indexer FieldsIdsMap,
     new_fields_ids_map: FieldsIdsMap,
     new_primary_key: Option<PrimaryKey<'pl>>,
-    pool: &ThreadPool,
     document_changes: &DC,
     embedders: EmbeddingConfigs,
     must_stop_processing: &'indexer MSP,
@@ -152,9 +150,9 @@ where
     let metadata_builder = MetadataBuilder::from_index(index, wtxn)?;
     let new_fields_ids_map = FieldIdMapWithMetadata::new(new_fields_ids_map, metadata_builder);
     let new_fields_ids_map = RwLock::new(new_fields_ids_map);
-    let fields_ids_map_store = ThreadLocal::with_capacity(pool.current_num_threads());
-    let mut extractor_allocs = ThreadLocal::with_capacity(pool.current_num_threads());
-    let doc_allocs = ThreadLocal::with_capacity(pool.current_num_threads());
+    let fields_ids_map_store = ThreadLocal::with_capacity(rayon::current_num_threads());
+    let mut extractor_allocs = ThreadLocal::with_capacity(rayon::current_num_threads());
+    let doc_allocs = ThreadLocal::with_capacity(rayon::current_num_threads());
 
     let indexing_context = IndexingContext {
         index,
@@ -179,248 +177,260 @@ where
         let document_ids = &mut document_ids;
         // TODO manage the errors correctly
         let extractor_handle = Builder::new().name(S("indexer-extractors")).spawn_scoped(s, move || {
-            let result = pool.in_place_scope(|_s| {
-                let span = tracing::trace_span!(target: "indexing::documents", parent: &indexer_span, "extract");
+            let span = tracing::trace_span!(target: "indexing::documents", parent: &indexer_span, "extract");
+            let _entered = span.enter();
+
+            let rtxn = index.read_txn()?;
+
+            // document but we need to create a function that collects and compresses documents.
+            let document_sender = extractor_sender.documents();
+            let document_extractor = DocumentsExtractor::new(&document_sender, embedders);
+            let datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
+            let (finished_steps, step_name) = steps::extract_documents();
+            extract(document_changes,
+                &document_extractor,
+                indexing_context,
+                &mut extractor_allocs,
+                &datastore,
+                finished_steps,
+                total_steps,
+                step_name,
+            )?;
+
+            for document_extractor_data in datastore {
+                let document_extractor_data = document_extractor_data.0.into_inner();
+                for (field, delta) in document_extractor_data.field_distribution_delta {
+                    let current = field_distribution.entry(field).or_default();
+                    // adding the delta should never cause a negative result, as we are removing fields that previously existed.
+                    *current = current.saturating_add_signed(delta);
+                }
+                document_extractor_data.docids_delta.apply_to(document_ids);
+            }
+
+            field_distribution.retain(|_, v| *v != 0);
+
+            const TEN_GIB: usize = 10 * 1024 * 1024 * 1024;
+            let current_num_threads = rayon::current_num_threads();
+            let max_memory = TEN_GIB / current_num_threads;
+            eprintln!("A maximum of {max_memory} bytes will be used for each of the {current_num_threads} threads");
+
+            let grenad_parameters = GrenadParameters {
+                max_memory: Some(max_memory),
+                ..GrenadParameters::default()
+            };
+
+            let facet_field_ids_delta;
+
+            {
+                let span = tracing::trace_span!(target: "indexing::documents::extract", "faceted");
                 let _entered = span.enter();
 
-                let rtxn = index.read_txn()?;
+                let (finished_steps, step_name) = steps::extract_facets();
 
-                // document but we need to create a function that collects and compresses documents.
-                let document_sender = extractor_sender.documents();
-                let document_extractor = DocumentsExtractor::new(&document_sender, embedders);
-                let datastore = ThreadLocal::with_capacity(pool.current_num_threads());
-                let (finished_steps, step_name) = steps::extract_documents();
-                extract(document_changes, &document_extractor, indexing_context, &mut extractor_allocs, &datastore, finished_steps, total_steps, step_name)?;
-
-                for document_extractor_data in datastore {
-                    let document_extractor_data = document_extractor_data.0.into_inner();
-                    for (field, delta) in document_extractor_data.field_distribution_delta {
-                        let current = field_distribution.entry(field).or_default();
-                        // adding the delta should never cause a negative result, as we are removing fields that previously existed.
-                        *current = current.saturating_add_signed(delta);
-                    }
-                    document_extractor_data.docids_delta.apply_to(document_ids);
-                }
-
-                field_distribution.retain(|_, v| *v != 0);
-
-                const TEN_GIB: usize = 10 * 1024 * 1024 * 1024;
-                let current_num_threads = rayon::current_num_threads();
-                let max_memory = TEN_GIB / current_num_threads;
-                eprintln!("A maximum of {max_memory} bytes will be used for each of the {current_num_threads} threads");
-
-                let grenad_parameters = GrenadParameters {
-                    max_memory: Some(max_memory),
-                    ..GrenadParameters::default()
-                };
-
-                let facet_field_ids_delta;
-
-                {
-                    let span = tracing::trace_span!(target: "indexing::documents::extract", "faceted");
-                    let _entered = span.enter();
-
-                    let (finished_steps, step_name) = steps::extract_facets();
-
-                    facet_field_ids_delta = merge_and_send_facet_docids(
-                        FacetedDocidsExtractor::run_extraction(grenad_parameters, document_changes, indexing_context, &mut extractor_allocs, &extractor_sender.field_id_docid_facet_sender(), finished_steps, total_steps, step_name)?,
-                        FacetDatabases::new(index),
-                        index,
-                        extractor_sender.facet_docids(),
-                    )?;
-                }
-
-                {
-                    let span = tracing::trace_span!(target: "indexing::documents::extract", "word_docids");
-                    let _entered = span.enter();
-                    let (finished_steps, step_name) = steps::extract_words();
-
-                    let WordDocidsCaches {
-                        word_docids,
-                        word_fid_docids,
-                        exact_word_docids,
-                        word_position_docids,
-                        fid_word_count_docids,
-                    } = WordDocidsExtractors::run_extraction(
-                        grenad_parameters,
+                facet_field_ids_delta = merge_and_send_facet_docids(
+                    FacetedDocidsExtractor::run_extraction(grenad_parameters,
                         document_changes,
                         indexing_context,
                         &mut extractor_allocs,
+                        &extractor_sender.field_id_docid_facet_sender(),
                         finished_steps,
                         total_steps,
                         step_name,
-                    )?;
+                    )?,
+                    FacetDatabases::new(index),
+                    index,
+                    extractor_sender.facet_docids(),
+                )?;
+            }
 
-                    // TODO Word Docids Merger
-                    // extractor_sender.send_searchable::<WordDocids>(word_docids).unwrap();
-                    {
-                        let span = tracing::trace_span!(target: "indexing::documents::merge", "word_docids");
-                        let _entered = span.enter();
-                        merge_and_send_docids(
-                            word_docids,
-                            index.word_docids.remap_types(),
-                            index,
-                            extractor_sender.docids::<WordDocids>(),
-                            &indexing_context.must_stop_processing,
-                        )?;
-                    }
+            {
+                let span = tracing::trace_span!(target: "indexing::documents::extract", "word_docids");
+                let _entered = span.enter();
+                let (finished_steps, step_name) = steps::extract_words();
 
-                    // Word Fid Docids Merging
-                    // extractor_sender.send_searchable::<WordFidDocids>(word_fid_docids).unwrap();
-                    {
-                        let span = tracing::trace_span!(target: "indexing::documents::merge", "word_fid_docids");
-                        let _entered = span.enter();
-                        merge_and_send_docids(
-                            word_fid_docids,
-                            index.word_fid_docids.remap_types(),
-                            index,
-                            extractor_sender.docids::<WordFidDocids>(),
-                            &indexing_context.must_stop_processing,
-                        )?;
-                    }
+                let WordDocidsCaches {
+                    word_docids,
+                    word_fid_docids,
+                    exact_word_docids,
+                    word_position_docids,
+                    fid_word_count_docids,
+                } = WordDocidsExtractors::run_extraction(
+                    grenad_parameters,
+                    document_changes,
+                    indexing_context,
+                    &mut extractor_allocs,
+                    finished_steps,
+                    total_steps,
+                    step_name,
+                )?;
 
-                    // Exact Word Docids Merging
-                    // extractor_sender.send_searchable::<ExactWordDocids>(exact_word_docids).unwrap();
-                    {
-                        let span = tracing::trace_span!(target: "indexing::documents::merge", "exact_word_docids");
-                        let _entered = span.enter();
-                        merge_and_send_docids(
-                            exact_word_docids,
-                            index.exact_word_docids.remap_types(),
-                            index,
-                            extractor_sender.docids::<ExactWordDocids>(),
-                            &indexing_context.must_stop_processing,
-                        )?;
-                    }
-
-                    // Word Position Docids Merging
-                    // extractor_sender.send_searchable::<WordPositionDocids>(word_position_docids).unwrap();
-                    {
-                        let span = tracing::trace_span!(target: "indexing::documents::merge", "word_position_docids");
-                        let _entered = span.enter();
-                        merge_and_send_docids(
-                            word_position_docids,
-                            index.word_position_docids.remap_types(),
-                            index,
-                            extractor_sender.docids::<WordPositionDocids>(),
-                            &indexing_context.must_stop_processing,
-                        )?;
-                    }
-
-                    // Fid Word Count Docids Merging
-                    // extractor_sender.send_searchable::<FidWordCountDocids>(fid_word_count_docids).unwrap();
-                    {
-                        let span = tracing::trace_span!(target: "indexing::documents::merge", "fid_word_count_docids");
-                        let _entered = span.enter();
-                        merge_and_send_docids(
-                            fid_word_count_docids,
-                            index.field_id_word_count_docids.remap_types(),
-                            index,
-                            extractor_sender.docids::<FidWordCountDocids>(),
-                            &indexing_context.must_stop_processing,
-                        )?;
-                    }
-                }
-
-                // run the proximity extraction only if the precision is by word
-                // this works only if the settings didn't change during this transaction.
-                let proximity_precision = index.proximity_precision(&rtxn)?.unwrap_or_default();
-                if proximity_precision == ProximityPrecision::ByWord {
-                    let span = tracing::trace_span!(target: "indexing::documents::extract", "word_pair_proximity_docids");
+                // TODO Word Docids Merger
+                // extractor_sender.send_searchable::<WordDocids>(word_docids).unwrap();
+                {
+                    let span = tracing::trace_span!(target: "indexing::documents::merge", "word_docids");
                     let _entered = span.enter();
-
-                    let (finished_steps, step_name) = steps::extract_word_proximity();
-
-                    let caches = <WordPairProximityDocidsExtractor as DocidsExtractor>::run_extraction(grenad_parameters,
-                        document_changes,
-                        indexing_context,
-                        &mut extractor_allocs,
-                        finished_steps,
-                        total_steps,
-                        step_name,
-                    )?;
-
                     merge_and_send_docids(
-                        caches,
-                        index.word_pair_proximity_docids.remap_types(),
+                        word_docids,
+                        index.word_docids.remap_types(),
                         index,
-                        extractor_sender.docids::<WordPairProximityDocids>(),
+                        extractor_sender.docids::<WordDocids>(),
                         &indexing_context.must_stop_processing,
                     )?;
                 }
 
-                'vectors: {
-                    let span = tracing::trace_span!(target: "indexing::documents::extract", "vectors");
+                // Word Fid Docids Merging
+                // extractor_sender.send_searchable::<WordFidDocids>(word_fid_docids).unwrap();
+                {
+                    let span = tracing::trace_span!(target: "indexing::documents::merge", "word_fid_docids");
                     let _entered = span.enter();
-
-                    let mut index_embeddings = index.embedding_configs(&rtxn)?;
-                    if index_embeddings.is_empty() {
-                        break 'vectors;
-                    }
-
-                    let embedding_sender = extractor_sender.embeddings();
-                    let extractor = EmbeddingExtractor::new(embedders, &embedding_sender, field_distribution, request_threads());
-                    let mut datastore = ThreadLocal::with_capacity(pool.current_num_threads());
-                    let (finished_steps, step_name) = steps::extract_embeddings();
-                    extract(document_changes, &extractor, indexing_context, &mut extractor_allocs, &datastore, finished_steps, total_steps, step_name)?;
-
-                    for config in &mut index_embeddings {
-                        'data: for data in datastore.iter_mut() {
-                            let data = &mut data.get_mut().0;
-                            let Some(deladd) = data.remove(&config.name) else { continue 'data; };
-                            deladd.apply_to(&mut config.user_provided);
-                        }
-                    }
-
-                    embedding_sender.finish(index_embeddings).unwrap();
-                }
-
-                'geo: {
-                    let span = tracing::trace_span!(target: "indexing::documents::extract", "geo");
-                    let _entered = span.enter();
-
-                    // let geo_sender = extractor_sender.geo_points();
-                    let Some(extractor) = GeoExtractor::new(&rtxn, index, grenad_parameters)? else {
-                        break 'geo;
-                    };
-                    let datastore = ThreadLocal::with_capacity(pool.current_num_threads());
-                    let (finished_steps, step_name) = steps::extract_geo_points();
-                    extract(document_changes,
-                        &extractor,
-                        indexing_context,
-                        &mut extractor_allocs,
-                        &datastore,
-                        finished_steps,
-                        total_steps,
-                        step_name,
-                    )?;
-
-                    merge_and_send_rtree(
-                        datastore,
-                        &rtxn,
+                    merge_and_send_docids(
+                        word_fid_docids,
+                        index.word_fid_docids.remap_types(),
                         index,
-                        extractor_sender.geo(),
+                        extractor_sender.docids::<WordFidDocids>(),
                         &indexing_context.must_stop_processing,
                     )?;
                 }
 
-                // TODO THIS IS TOO MUCH
-                // - [ ] Extract fieldid docid facet number
-                // - [ ] Extract fieldid docid facet string
-                // - [ ] Extract facetid string fst
-                // - [ ] Extract facetid normalized string strings
+                // Exact Word Docids Merging
+                // extractor_sender.send_searchable::<ExactWordDocids>(exact_word_docids).unwrap();
+                {
+                    let span = tracing::trace_span!(target: "indexing::documents::merge", "exact_word_docids");
+                    let _entered = span.enter();
+                    merge_and_send_docids(
+                        exact_word_docids,
+                        index.exact_word_docids.remap_types(),
+                        index,
+                        extractor_sender.docids::<ExactWordDocids>(),
+                        &indexing_context.must_stop_processing,
+                    )?;
+                }
 
-                // TODO Inverted Indexes again
-                // - [x] Extract fieldid facet isempty docids
-                // - [x] Extract fieldid facet isnull docids
-                // - [x] Extract fieldid facet exists docids
+                // Word Position Docids Merging
+                // extractor_sender.send_searchable::<WordPositionDocids>(word_position_docids).unwrap();
+                {
+                    let span = tracing::trace_span!(target: "indexing::documents::merge", "word_position_docids");
+                    let _entered = span.enter();
+                    merge_and_send_docids(
+                        word_position_docids,
+                        index.word_position_docids.remap_types(),
+                        index,
+                        extractor_sender.docids::<WordPositionDocids>(),
+                        &indexing_context.must_stop_processing,
+                    )?;
+                }
 
-                // TODO This is the normal system
-                // - [x] Extract fieldid facet number docids
-                // - [x] Extract fieldid facet string docids
+                // Fid Word Count Docids Merging
+                // extractor_sender.send_searchable::<FidWordCountDocids>(fid_word_count_docids).unwrap();
+                {
+                    let span = tracing::trace_span!(target: "indexing::documents::merge", "fid_word_count_docids");
+                    let _entered = span.enter();
+                    merge_and_send_docids(
+                        fid_word_count_docids,
+                        index.field_id_word_count_docids.remap_types(),
+                        index,
+                        extractor_sender.docids::<FidWordCountDocids>(),
+                        &indexing_context.must_stop_processing,
+                    )?;
+                }
+            }
 
-                Result::Ok(facet_field_ids_delta)
-            });
+            // run the proximity extraction only if the precision is by word
+            // this works only if the settings didn't change during this transaction.
+            let proximity_precision = index.proximity_precision(&rtxn)?.unwrap_or_default();
+            if proximity_precision == ProximityPrecision::ByWord {
+                let span = tracing::trace_span!(target: "indexing::documents::extract", "word_pair_proximity_docids");
+                let _entered = span.enter();
+
+                let (finished_steps, step_name) = steps::extract_word_proximity();
+
+                let caches = <WordPairProximityDocidsExtractor as DocidsExtractor>::run_extraction(grenad_parameters,
+                    document_changes,
+                    indexing_context,
+                    &mut extractor_allocs,
+                    finished_steps,
+                    total_steps,
+                    step_name,
+                )?;
+
+                merge_and_send_docids(
+                    caches,
+                    index.word_pair_proximity_docids.remap_types(),
+                    index,
+                    extractor_sender.docids::<WordPairProximityDocids>(),
+                    &indexing_context.must_stop_processing,
+                )?;
+            }
+
+            'vectors: {
+                let span = tracing::trace_span!(target: "indexing::documents::extract", "vectors");
+                let _entered = span.enter();
+
+                let mut index_embeddings = index.embedding_configs(&rtxn)?;
+                if index_embeddings.is_empty() {
+                    break 'vectors;
+                }
+
+                let embedding_sender = extractor_sender.embeddings();
+                let extractor = EmbeddingExtractor::new(embedders, &embedding_sender, field_distribution, request_threads());
+                let mut datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
+                let (finished_steps, step_name) = steps::extract_embeddings();
+                extract(document_changes, &extractor, indexing_context, &mut extractor_allocs, &datastore, finished_steps, total_steps, step_name)?;
+
+                for config in &mut index_embeddings {
+                    'data: for data in datastore.iter_mut() {
+                        let data = &mut data.get_mut().0;
+                        let Some(deladd) = data.remove(&config.name) else { continue 'data; };
+                        deladd.apply_to(&mut config.user_provided);
+                    }
+                }
+
+                embedding_sender.finish(index_embeddings).unwrap();
+            }
+
+            'geo: {
+                let span = tracing::trace_span!(target: "indexing::documents::extract", "geo");
+                let _entered = span.enter();
+
+                // let geo_sender = extractor_sender.geo_points();
+                let Some(extractor) = GeoExtractor::new(&rtxn, index, grenad_parameters)? else {
+                    break 'geo;
+                };
+                let datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
+                let (finished_steps, step_name) = steps::extract_geo_points();
+                extract(document_changes,
+                    &extractor,
+                    indexing_context,
+                    &mut extractor_allocs,
+                    &datastore,
+                    finished_steps,
+                    total_steps,
+                    step_name,
+                )?;
+
+                merge_and_send_rtree(
+                    datastore,
+                    &rtxn,
+                    index,
+                    extractor_sender.geo(),
+                    &indexing_context.must_stop_processing,
+                )?;
+            }
+
+            // TODO THIS IS TOO MUCH
+            // - [ ] Extract fieldid docid facet number
+            // - [ ] Extract fieldid docid facet string
+            // - [ ] Extract facetid string fst
+            // - [ ] Extract facetid normalized string strings
+
+            // TODO Inverted Indexes again
+            // - [x] Extract fieldid facet isempty docids
+            // - [x] Extract fieldid facet isnull docids
+            // - [x] Extract fieldid facet exists docids
+
+            // TODO This is the normal system
+            // - [x] Extract fieldid facet number docids
+            // - [x] Extract fieldid facet string docids
 
             {
                 let span = tracing::trace_span!(target: "indexing::documents::extract", "FINISH");
@@ -429,7 +439,7 @@ where
                 (indexing_context.send_progress)(Progress { finished_steps, total_steps, step_name, finished_total_documents: None });
             }
 
-            result
+            Result::Ok(facet_field_ids_delta)
         })?;
 
         let global_fields_ids_map = GlobalFieldsIdsMap::new(&new_fields_ids_map);

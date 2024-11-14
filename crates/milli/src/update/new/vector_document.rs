@@ -286,7 +286,7 @@ impl<'doc> MergedVectorDocument<'doc> {
     ) -> Result<Option<Self>> {
         let db = VectorDocumentFromDb::new(docid, index, rtxn, db_fields_ids_map, doc_alloc)?;
         let new_doc =
-            VectorDocumentFromVersions::new(&external_document_id, versions, doc_alloc, embedders)?;
+            VectorDocumentFromVersions::new(external_document_id, versions, doc_alloc, embedders)?;
         Ok(if db.is_none() && new_doc.is_none() { None } else { Some(Self { new_doc, db }) })
     }
 

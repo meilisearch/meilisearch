@@ -3,6 +3,9 @@ mod r#match;
 mod matching_words;
 mod simple_token_kind;
 
+use std::borrow::Cow;
+use std::cmp::{max, min};
+
 use charabia::{Language, SeparatorKind, Token, Tokenizer};
 use either::Either;
 pub use matching_words::MatchingWords;
@@ -10,10 +13,6 @@ use matching_words::{MatchType, PartialMatch};
 use r#match::{Match, MatchPosition};
 use serde::Serialize;
 use simple_token_kind::SimpleTokenKind;
-use std::{
-    borrow::Cow,
-    cmp::{max, min},
-};
 
 const DEFAULT_CROP_MARKER: &str = "…";
 const DEFAULT_HIGHLIGHT_PREFIX: &str = "<em>";

@@ -1,13 +1,14 @@
+use std::collections::HashSet;
 use std::io::BufWriter;
 
 use fst::{Set, SetBuilder, Streamer};
 use memmap2::Mmap;
-use std::collections::HashSet;
 use tempfile::tempfile;
 
-use crate::{index::PrefixSettings, update::del_add::DelAdd, InternalError, Prefix, Result};
-
 use super::fst_merger_builder::FstMergerBuilder;
+use crate::index::PrefixSettings;
+use crate::update::del_add::DelAdd;
+use crate::{InternalError, Prefix, Result};
 
 pub struct WordFstBuilder<'a> {
     word_fst_builder: FstMergerBuilder<'a>,

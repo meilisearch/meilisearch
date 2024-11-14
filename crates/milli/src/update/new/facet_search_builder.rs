@@ -6,11 +6,9 @@ use grenad::Sorter;
 use heed::types::{Bytes, SerdeJson};
 use heed::{BytesDecode, BytesEncode, RoTxn, RwTxn};
 
-use super::extract::FacetKind;
 use super::fst_merger_builder::FstMergerBuilder;
 use super::KvReaderDelAdd;
-use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
-use crate::heed_codec::StrRefCodec;
+use crate::heed_codec::facet::FacetGroupKey;
 use crate::update::del_add::{DelAdd, KvWriterDelAdd};
 use crate::update::{create_sorter, MergeDeladdBtreesetString};
 use crate::{
