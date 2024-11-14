@@ -132,7 +132,7 @@ mod test {
         }
 
         let mut deletions = DocumentDeletion::new();
-        deletions.delete_documents_by_docids(vec![0, 2, 42].into_iter().collect());
+        deletions.delete_documents_by_docids(Vec::<u32>::new().into_iter().collect());
         let indexer = Bump::new();
 
         let index = TempIndex::new();
