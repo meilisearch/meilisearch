@@ -35,8 +35,8 @@ impl<'a> DocumentTokenizer<'a> {
         for entry in document.iter_top_level_fields() {
             let (field_name, value) = entry?;
 
-            let mut tokenize_field = |name: &str, value: &Value| {
-                let Some(field_id) = field_id_map.id_or_insert(name) else {
+            let mut tokenize_field = |field_name: &str, value: &Value| {
+                let Some(field_id) = field_id_map.id_or_insert(field_name) else {
                     return Err(UserError::AttributeLimitReached.into());
                 };
 
@@ -52,7 +52,7 @@ impl<'a> DocumentTokenizer<'a> {
                     Value::Number(n) => {
                         let token = n.to_string();
                         if let Ok(position) = (*position).try_into() {
-                            token_fn(name, field_id, position, token.as_str())?;
+                            token_fn(field_name, field_id, position, token.as_str())?;
                         }
 
                         Ok(())
@@ -76,7 +76,7 @@ impl<'a> DocumentTokenizer<'a> {
                             if !token.is_empty() && token.len() <= MAX_WORD_LENGTH {
                                 *position = index;
                                 if let Ok(position) = (*position).try_into() {
-                                    token_fn(name, field_id, position, token)?;
+                                    token_fn(field_name, field_id, position, token)?;
                                 }
                             }
                         }
