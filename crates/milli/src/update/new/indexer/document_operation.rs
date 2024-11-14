@@ -1,10 +1,11 @@
 use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
+use hashbrown::hash_map::Entry;
 use heed::RoTxn;
 use memmap2::Mmap;
 use rayon::slice::ParallelSlice;
 use serde_json::value::RawValue;
-use IndexDocumentsMethod as Idm;
+use serde_json::Deserializer;
 
 use super::super::document_change::DocumentChange;
 use super::document_changes::{DocumentChangeContext, DocumentChanges, MostlySend};
@@ -12,55 +13,24 @@ use crate::documents::PrimaryKey;
 use crate::update::new::document::Versions;
 use crate::update::new::{Deletion, Insertion, Update};
 use crate::update::{AvailableIds, IndexDocumentsMethod};
-use crate::{DocumentId, Error, FieldsIdsMap, Index, Result, UserError};
+use crate::{DocumentId, Error, FieldsIdsMap, Index, InternalError, Result, UserError};
 
 pub struct DocumentOperation<'pl> {
     operations: Vec<Payload<'pl>>,
-    index_documents_method: IndexDocumentsMethod,
-}
-
-pub struct DocumentOperationChanges<'pl> {
-    docids_version_offsets: &'pl [(&'pl str, ((u32, bool), &'pl [InnerDocOp<'pl>]))],
-    index_documents_method: IndexDocumentsMethod,
-}
-
-pub enum Payload<'pl> {
-    Addition(&'pl [u8]),
-    Deletion(&'pl [&'pl str]),
-}
-
-pub struct PayloadStats {
-    pub document_count: usize,
-    pub bytes: u64,
-}
-
-#[derive(Clone)]
-pub enum InnerDocOp<'pl> {
-    Addition(DocumentOffset<'pl>),
-    Deletion,
-}
-
-/// Represents an offset where a document lives
-/// in an mmapped grenad reader file.
-#[derive(Clone)]
-pub struct DocumentOffset<'pl> {
-    /// The mmapped payload files.
-    pub content: &'pl [u8],
+    method: MergeMethod,
 }
 
 impl<'pl> DocumentOperation<'pl> {
     pub fn new(method: IndexDocumentsMethod) -> Self {
-        Self { operations: Default::default(), index_documents_method: method }
+        Self { operations: Default::default(), method: MergeMethod::from(method) }
     }
 
     /// TODO please give me a type
     /// The payload is expected to be in the grenad format
-    pub fn add_documents(&mut self, payload: &'pl Mmap) -> Result<PayloadStats> {
+    pub fn add_documents(&mut self, payload: &'pl Mmap) -> Result<()> {
         payload.advise(memmap2::Advice::Sequential)?;
-        let document_count =
-            memchr::memmem::find_iter(&payload[..], "}{").count().saturating_add(1);
         self.operations.push(Payload::Addition(&payload[..]));
-        Ok(PayloadStats { bytes: payload.len() as u64, document_count })
+        Ok(())
     }
 
     pub fn delete_documents(&mut self, to_delete: &'pl [&'pl str]) {
@@ -74,141 +44,239 @@ impl<'pl> DocumentOperation<'pl> {
         rtxn: &RoTxn,
         primary_key: &PrimaryKey,
         new_fields_ids_map: &mut FieldsIdsMap,
-    ) -> Result<DocumentOperationChanges<'pl>> {
-        // will contain nodes from the intermediate hashmap
-        let document_changes_alloc = Bump::with_capacity(1024 * 1024 * 1024); // 1 MiB
+    ) -> Result<(DocumentOperationChanges<'pl>, Vec<PayloadStats>)> {
+        let Self { operations, method } = self;
 
         let documents_ids = index.documents_ids(rtxn)?;
+        let mut operations_stats = Vec::new();
         let mut available_docids = AvailableIds::new(&documents_ids);
-        let mut docids_version_offsets =
-            hashbrown::HashMap::<&'pl str, _, _, _>::new_in(&document_changes_alloc);
+        let mut docids_version_offsets = hashbrown::HashMap::new();
 
-        for operation in self.operations {
-            match operation {
-                Payload::Addition(payload) => {
-                    let mut iter =
-                        serde_json::Deserializer::from_slice(payload).into_iter::<&RawValue>();
+        for operation in operations {
+            let (bytes, document_count, result) = match operation {
+                Payload::Addition(payload) => extract_addition_payload_changes(
+                    indexer,
+                    index,
+                    rtxn,
+                    primary_key,
+                    new_fields_ids_map,
+                    &mut available_docids,
+                    &docids_version_offsets,
+                    method,
+                    payload,
+                ),
+                Payload::Deletion(to_delete) => extract_deletion_payload_changes(
+                    index,
+                    rtxn,
+                    &mut available_docids,
+                    &docids_version_offsets,
+                    method,
+                    to_delete,
+                ),
+            };
 
-                    /// TODO manage the error
-                    let mut previous_offset = 0;
-                    while let Some(document) =
-                        iter.next().transpose().map_err(UserError::SerdeJson)?
-                    {
-                        let external_document_id = primary_key.extract_fields_and_docid(
-                            document,
-                            new_fields_ids_map,
-                            indexer,
-                        )?;
-
-                        let external_document_id = external_document_id.to_de();
-
-                        let current_offset = iter.byte_offset();
-                        let document_operation = InnerDocOp::Addition(DocumentOffset {
-                            content: &payload[previous_offset..current_offset],
-                        });
-
-                        match docids_version_offsets.get_mut(external_document_id) {
-                            None => {
-                                let (docid, is_new) = match index
-                                    .external_documents_ids()
-                                    .get(rtxn, external_document_id)?
-                                {
-                                    Some(docid) => (docid, false),
-                                    None => (
-                                        available_docids.next().ok_or(Error::UserError(
-                                            UserError::DocumentLimitReached,
-                                        ))?,
-                                        true,
-                                    ),
-                                };
-
-                                docids_version_offsets.insert(
-                                    external_document_id,
-                                    (
-                                        (docid, is_new),
-                                        bumpalo::vec![in indexer; document_operation],
-                                    ),
-                                );
-                            }
-                            Some((_, offsets)) => {
-                                let useless_previous_addition = match self.index_documents_method {
-                                    IndexDocumentsMethod::ReplaceDocuments => {
-                                        MergeDocumentForReplacement::USELESS_PREVIOUS_CHANGES
-                                    }
-                                    IndexDocumentsMethod::UpdateDocuments => {
-                                        MergeDocumentForUpdates::USELESS_PREVIOUS_CHANGES
-                                    }
-                                };
-
-                                if useless_previous_addition {
-                                    offsets.clear();
-                                }
-
-                                offsets.push(document_operation);
-                            }
-                        }
-
-                        previous_offset = iter.byte_offset();
-                    }
+            let error = match result {
+                Ok(new_docids_version_offsets) => {
+                    // If we don't have any error then we can merge the content of this payload
+                    // into to main payload. Else we just drop this payload extraction.
+                    merge_version_offsets(&mut docids_version_offsets, new_docids_version_offsets);
+                    None
                 }
-                Payload::Deletion(to_delete) => {
-                    for external_document_id in to_delete {
-                        match docids_version_offsets.get_mut(external_document_id) {
-                            None => {
-                                let (docid, is_new) = match index
-                                    .external_documents_ids()
-                                    .get(rtxn, external_document_id)?
-                                {
-                                    Some(docid) => (docid, false),
-                                    None => (
-                                        available_docids.next().ok_or(Error::UserError(
-                                            UserError::DocumentLimitReached,
-                                        ))?,
-                                        true,
-                                    ),
-                                };
+                Err(Error::UserError(user_error)) => Some(user_error),
+                Err(e) => return Err(e),
+            };
 
-                                docids_version_offsets.insert(
-                                    external_document_id,
-                                    (
-                                        (docid, is_new),
-                                        bumpalo::vec![in indexer; InnerDocOp::Deletion],
-                                    ),
-                                );
-                            }
-                            Some((_, offsets)) => {
-                                offsets.clear();
-                                offsets.push(InnerDocOp::Deletion);
-                            }
-                        }
-                    }
-                }
-            }
+            operations_stats.push(PayloadStats { document_count, bytes, error });
         }
 
         // TODO We must drain the HashMap into a Vec because rayon::hash_map::IntoIter: !Clone
-        let mut docids_version_offsets: bumpalo::collections::vec::Vec<_> = docids_version_offsets
-            .drain()
-            .map(|(item, (docid, v))| (item, (docid, v.into_bump_slice())))
-            .collect_in(indexer);
+        let mut docids_version_offsets: bumpalo::collections::vec::Vec<_> =
+            docids_version_offsets.drain().collect_in(indexer);
+
         // Reorder the offsets to make sure we iterate on the file sequentially
-        let sort_function_key = match self.index_documents_method {
-            Idm::ReplaceDocuments => MergeDocumentForReplacement::sort_key,
-            Idm::UpdateDocuments => MergeDocumentForUpdates::sort_key,
+        // And finally sort them
+        docids_version_offsets.sort_unstable_by_key(|(_, po)| method.sort_key(&po.operations));
+
+        let docids_version_offsets = docids_version_offsets.into_bump_slice();
+        Ok((DocumentOperationChanges { docids_version_offsets }, operations_stats))
+    }
+}
+
+fn extract_addition_payload_changes<'s, 'pl: 's>(
+    indexer: &'pl Bump,
+    index: &Index,
+    rtxn: &RoTxn,
+    primary_key: &PrimaryKey,
+    fields_ids_map: &mut FieldsIdsMap,
+    available_docids: &mut AvailableIds,
+    main_docids_version_offsets: &hashbrown::HashMap<&'s str, PayloadOperations<'pl>>,
+    method: MergeMethod,
+    payload: &'pl [u8],
+) -> (u64, u64, Result<hashbrown::HashMap<&'s str, PayloadOperations<'pl>>>) {
+    let mut new_docids_version_offsets = hashbrown::HashMap::<&str, PayloadOperations<'pl>>::new();
+
+    /// TODO manage the error
+    let mut previous_offset = 0;
+    let mut iter = Deserializer::from_slice(payload).into_iter::<&RawValue>();
+    loop {
+        let doc = match iter.next().transpose() {
+            Ok(Some(doc)) => doc,
+            Ok(None) => break,
+            Err(e) => {
+                return (
+                    payload.len() as u64,
+                    new_docids_version_offsets.len() as u64,
+                    Err(InternalError::SerdeJson(e).into()),
+                )
+            }
         };
 
-        // And finally sort them
-        docids_version_offsets.sort_unstable_by_key(|(_, (_, docops))| sort_function_key(docops));
-        let docids_version_offsets = docids_version_offsets.into_bump_slice();
-        Ok(DocumentOperationChanges {
-            docids_version_offsets,
-            index_documents_method: self.index_documents_method,
-        })
+        let external_id = match primary_key.extract_fields_and_docid(doc, fields_ids_map, indexer) {
+            Ok(edi) => edi,
+            Err(e) => {
+                return (payload.len() as u64, new_docids_version_offsets.len() as u64, Err(e))
+            }
+        };
+
+        let external_id = external_id.to_de();
+        let current_offset = iter.byte_offset();
+        let document_offset = DocumentOffset { content: &payload[previous_offset..current_offset] };
+
+        match main_docids_version_offsets.get(external_id) {
+            None => {
+                let (docid, is_new) = match index.external_documents_ids().get(rtxn, external_id) {
+                    Ok(Some(docid)) => (docid, false),
+                    Ok(None) => (
+                        match available_docids.next() {
+                            Some(docid) => docid,
+                            None => {
+                                return (
+                                    payload.len() as u64,
+                                    new_docids_version_offsets.len() as u64,
+                                    Err(UserError::DocumentLimitReached.into()),
+                                )
+                            }
+                        },
+                        true,
+                    ),
+                    Err(e) => {
+                        return (
+                            payload.len() as u64,
+                            new_docids_version_offsets.len() as u64,
+                            Err(e.into()),
+                        )
+                    }
+                };
+
+                match new_docids_version_offsets.entry(external_id) {
+                    Entry::Occupied(mut entry) => entry.get_mut().push_addition(document_offset),
+                    Entry::Vacant(entry) => {
+                        entry.insert(PayloadOperations::new_addition(
+                            method,
+                            docid,
+                            is_new,
+                            document_offset,
+                        ));
+                    }
+                }
+            }
+            Some(payload_operations) => match new_docids_version_offsets.entry(external_id) {
+                Entry::Occupied(mut entry) => entry.get_mut().push_addition(document_offset),
+                Entry::Vacant(entry) => {
+                    entry.insert(PayloadOperations::new_addition(
+                        method,
+                        payload_operations.docid,
+                        payload_operations.is_new,
+                        document_offset,
+                    ));
+                }
+            },
+        }
+
+        previous_offset = iter.byte_offset();
+    }
+
+    (payload.len() as u64, new_docids_version_offsets.len() as u64, Ok(new_docids_version_offsets))
+}
+
+fn extract_deletion_payload_changes<'s, 'pl: 's>(
+    index: &Index,
+    rtxn: &RoTxn,
+    available_docids: &mut AvailableIds,
+    main_docids_version_offsets: &hashbrown::HashMap<&'s str, PayloadOperations<'pl>>,
+    method: MergeMethod,
+    to_delete: &'pl [&'pl str],
+) -> (u64, u64, Result<hashbrown::HashMap<&'s str, PayloadOperations<'pl>>>) {
+    let mut new_docids_version_offsets = hashbrown::HashMap::<&str, PayloadOperations<'pl>>::new();
+    let mut document_count = 0;
+
+    for external_id in to_delete {
+        match main_docids_version_offsets.get(external_id) {
+            None => {
+                let (docid, is_new) = match index.external_documents_ids().get(rtxn, external_id) {
+                    Ok(Some(docid)) => (docid, false),
+                    Ok(None) => (
+                        match available_docids.next() {
+                            Some(docid) => docid,
+                            None => {
+                                return (
+                                    0,
+                                    new_docids_version_offsets.len() as u64,
+                                    Err(UserError::DocumentLimitReached.into()),
+                                )
+                            }
+                        },
+                        true,
+                    ),
+                    Err(e) => return (0, new_docids_version_offsets.len() as u64, Err(e.into())),
+                };
+
+                match new_docids_version_offsets.entry(external_id) {
+                    Entry::Occupied(mut entry) => entry.get_mut().push_deletion(),
+                    Entry::Vacant(entry) => {
+                        entry.insert(PayloadOperations::new_deletion(method, docid, is_new));
+                    }
+                }
+            }
+            Some(payload_operations) => match new_docids_version_offsets.entry(external_id) {
+                Entry::Occupied(mut entry) => entry.get_mut().push_deletion(),
+                Entry::Vacant(entry) => {
+                    entry.insert(PayloadOperations::new_deletion(
+                        method,
+                        payload_operations.docid,
+                        payload_operations.is_new,
+                    ));
+                }
+            },
+        }
+        document_count += 1;
+    }
+
+    (0, document_count, Ok(new_docids_version_offsets))
+}
+
+fn merge_version_offsets<'s, 'pl>(
+    main: &mut hashbrown::HashMap<&'s str, PayloadOperations<'pl>>,
+    new: hashbrown::HashMap<&'s str, PayloadOperations<'pl>>,
+) {
+    // We cannot swap like nothing because documents
+    // operations must be in the right order.
+    if main.is_empty() {
+        return *main = new;
+    }
+
+    for (key, new_payload) in new {
+        match main.entry(key) {
+            Entry::Occupied(mut entry) => entry.get_mut().append_operations(new_payload.operations),
+            Entry::Vacant(entry) => {
+                entry.insert(new_payload);
+            }
+        }
     }
 }
 
 impl<'pl> DocumentChanges<'pl> for DocumentOperationChanges<'pl> {
-    type Item = (&'pl str, ((u32, bool), &'pl [InnerDocOp<'pl>]));
+    type Item = (&'pl str, PayloadOperations<'pl>);
 
     fn iter(
         &self,
@@ -225,21 +293,14 @@ impl<'pl> DocumentChanges<'pl> for DocumentOperationChanges<'pl> {
     where
         'pl: 'doc,
     {
-        let document_merge_function = match self.index_documents_method {
-            Idm::ReplaceDocuments => MergeDocumentForReplacement::merge,
-            Idm::UpdateDocuments => MergeDocumentForUpdates::merge,
-        };
-
-        let (external_doc, ((internal_docid, is_new), operations)) = *item;
-
-        let change = document_merge_function(
-            internal_docid,
+        let (external_doc, payload_operations) = item;
+        payload_operations.merge_method.merge(
+            payload_operations.docid,
             external_doc,
-            is_new,
+            payload_operations.is_new,
             &context.doc_alloc,
-            operations,
-        )?;
-        Ok(change)
+            &payload_operations.operations[..],
+        )
     }
 
     fn len(&self) -> usize {
@@ -247,14 +308,92 @@ impl<'pl> DocumentChanges<'pl> for DocumentOperationChanges<'pl> {
     }
 }
 
+pub struct DocumentOperationChanges<'pl> {
+    docids_version_offsets: &'pl [(&'pl str, PayloadOperations<'pl>)],
+}
+
+pub enum Payload<'pl> {
+    Addition(&'pl [u8]),
+    Deletion(&'pl [&'pl str]),
+}
+
+pub struct PayloadStats {
+    pub bytes: u64,
+    pub document_count: u64,
+    pub error: Option<UserError>,
+}
+
+pub struct PayloadOperations<'pl> {
+    /// The internal document id of the document.
+    pub docid: DocumentId,
+    /// Wether this document is not in the current database (visible by the rtxn).
+    pub is_new: bool,
+    /// The operations to perform, in order, on this document.
+    pub operations: Vec<InnerDocOp<'pl>>,
+    /// The merge method we are using to merge payloads and documents.
+    merge_method: MergeMethod,
+}
+
+impl<'pl> PayloadOperations<'pl> {
+    fn new_deletion(merge_method: MergeMethod, docid: DocumentId, is_new: bool) -> Self {
+        Self { docid, is_new, operations: vec![InnerDocOp::Deletion], merge_method }
+    }
+
+    fn new_addition(
+        merge_method: MergeMethod,
+        docid: DocumentId,
+        is_new: bool,
+        offset: DocumentOffset<'pl>,
+    ) -> Self {
+        Self { docid, is_new, operations: vec![InnerDocOp::Addition(offset)], merge_method }
+    }
+}
+
+impl<'pl> PayloadOperations<'pl> {
+    fn push_addition(&mut self, offset: DocumentOffset<'pl>) {
+        if self.merge_method.useless_previous_changes() {
+            self.operations.clear();
+        }
+        self.operations.push(InnerDocOp::Addition(offset))
+    }
+
+    fn push_deletion(&mut self) {
+        self.operations.clear();
+        self.operations.push(InnerDocOp::Deletion);
+    }
+
+    fn append_operations(&mut self, mut operations: Vec<InnerDocOp<'pl>>) {
+        debug_assert!(!operations.is_empty());
+        if self.merge_method.useless_previous_changes() {
+            self.operations.clear();
+        }
+        self.operations.append(&mut operations);
+    }
+}
+
+#[derive(Clone)]
+pub enum InnerDocOp<'pl> {
+    Addition(DocumentOffset<'pl>),
+    Deletion,
+}
+
+/// Represents an offset where a document lives
+/// in an mmapped grenad reader file.
+#[derive(Clone)]
+pub struct DocumentOffset<'pl> {
+    /// The mmapped payload files.
+    pub content: &'pl [u8],
+}
+
 trait MergeChanges {
     /// Whether the payloads in the list of operations are useless or not.
-    const USELESS_PREVIOUS_CHANGES: bool;
+    fn useless_previous_changes(&self) -> bool;
 
     /// Returns a key that is used to order the payloads the right way.
-    fn sort_key(docops: &[InnerDocOp]) -> usize;
+    fn sort_key(&self, docops: &[InnerDocOp]) -> usize;
 
     fn merge<'doc>(
+        &self,
         docid: DocumentId,
         external_docid: &'doc str,
         is_new: bool,
@@ -263,13 +402,69 @@ trait MergeChanges {
     ) -> Result<Option<DocumentChange<'doc>>>;
 }
 
+#[derive(Debug, Clone, Copy)]
+enum MergeMethod {
+    ForReplacement(MergeDocumentForReplacement),
+    ForUpdates(MergeDocumentForUpdates),
+}
+
+impl MergeChanges for MergeMethod {
+    fn useless_previous_changes(&self) -> bool {
+        match self {
+            MergeMethod::ForReplacement(merge) => merge.useless_previous_changes(),
+            MergeMethod::ForUpdates(merge) => merge.useless_previous_changes(),
+        }
+    }
+
+    fn sort_key(&self, docops: &[InnerDocOp]) -> usize {
+        match self {
+            MergeMethod::ForReplacement(merge) => merge.sort_key(docops),
+            MergeMethod::ForUpdates(merge) => merge.sort_key(docops),
+        }
+    }
+
+    fn merge<'doc>(
+        &self,
+        docid: DocumentId,
+        external_docid: &'doc str,
+        is_new: bool,
+        doc_alloc: &'doc Bump,
+        operations: &'doc [InnerDocOp],
+    ) -> Result<Option<DocumentChange<'doc>>> {
+        match self {
+            MergeMethod::ForReplacement(merge) => {
+                merge.merge(docid, external_docid, is_new, doc_alloc, operations)
+            }
+            MergeMethod::ForUpdates(merge) => {
+                merge.merge(docid, external_docid, is_new, doc_alloc, operations)
+            }
+        }
+    }
+}
+
+impl From<IndexDocumentsMethod> for MergeMethod {
+    fn from(method: IndexDocumentsMethod) -> Self {
+        match method {
+            IndexDocumentsMethod::ReplaceDocuments => {
+                MergeMethod::ForReplacement(MergeDocumentForReplacement)
+            }
+            IndexDocumentsMethod::UpdateDocuments => {
+                MergeMethod::ForUpdates(MergeDocumentForUpdates)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 struct MergeDocumentForReplacement;
 
 impl MergeChanges for MergeDocumentForReplacement {
-    const USELESS_PREVIOUS_CHANGES: bool = true;
+    fn useless_previous_changes(&self) -> bool {
+        true
+    }
 
     /// Reorders to read only the last change.
-    fn sort_key(docops: &[InnerDocOp]) -> usize {
+    fn sort_key(&self, docops: &[InnerDocOp]) -> usize {
         let f = |ido: &_| match ido {
             InnerDocOp::Addition(add) => Some(add.content.as_ptr() as usize),
             InnerDocOp::Deletion => None,
@@ -281,6 +476,7 @@ impl MergeChanges for MergeDocumentForReplacement {
     ///
     /// This function is only meant to be used when doing a replacement and not an update.
     fn merge<'doc>(
+        &self,
         docid: DocumentId,
         external_doc: &'doc str,
         is_new: bool,
@@ -321,13 +517,16 @@ impl MergeChanges for MergeDocumentForReplacement {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 struct MergeDocumentForUpdates;
 
 impl MergeChanges for MergeDocumentForUpdates {
-    const USELESS_PREVIOUS_CHANGES: bool = false;
+    fn useless_previous_changes(&self) -> bool {
+        false
+    }
 
     /// Reorders to read the first changes first so that it's faster to read the first one and then the rest.
-    fn sort_key(docops: &[InnerDocOp]) -> usize {
+    fn sort_key(&self, docops: &[InnerDocOp]) -> usize {
         let f = |ido: &_| match ido {
             InnerDocOp::Addition(add) => Some(add.content.as_ptr() as usize),
             InnerDocOp::Deletion => None,
@@ -340,6 +539,7 @@ impl MergeChanges for MergeDocumentForUpdates {
     ///
     /// This function is only meant to be used when doing an update and not a replacement.
     fn merge<'doc>(
+        &self,
         docid: DocumentId,
         external_docid: &'doc str,
         is_new: bool,

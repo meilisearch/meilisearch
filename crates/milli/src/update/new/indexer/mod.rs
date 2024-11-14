@@ -5,7 +5,7 @@ use std::thread::{self, Builder};
 use big_s::S;
 use document_changes::{extract, DocumentChanges, IndexingContext, Progress, ThreadLocal};
 pub use document_deletion::DocumentDeletion;
-pub use document_operation::DocumentOperation;
+pub use document_operation::{DocumentOperation, PayloadStats};
 use hashbrown::HashMap;
 use heed::types::{Bytes, DecodeIgnore, Str};
 use heed::{RoTxn, RwTxn};
