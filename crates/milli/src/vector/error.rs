@@ -60,7 +60,7 @@ pub enum EmbedErrorKind {
     ManualEmbed(String),
     #[error("model not found. Meilisearch will not automatically download models from the Ollama library, please pull the model manually{}", option_info(.0.as_deref(), "server replied with "))]
     OllamaModelNotFoundError(Option<String>),
-    #[error("error deserialization the response body as JSON:\n  - {0}")]
+    #[error("error deserializing the response body as JSON:\n  - {0}")]
     RestResponseDeserialization(std::io::Error),
     #[error("expected a response containing {0} embeddings, got only {1}")]
     RestResponseEmbeddingCount(usize, usize),
