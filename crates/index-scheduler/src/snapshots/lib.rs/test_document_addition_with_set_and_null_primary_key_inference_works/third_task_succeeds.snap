@@ -54,6 +54,11 @@ doggos: { number_of_documents: 2, field_distribution: {"doggo": 2, "doggoid": 2}
 1 {uid: 1, }
 2 {uid: 2, }
 ----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,]
+1 [1,]
+2 [2,]
+----------------------------------------------------------------------
 ### Batches Status:
 succeeded [0,2,]
 failed [1,]

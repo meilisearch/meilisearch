@@ -87,6 +87,10 @@ pub struct Query {
     pub from: Option<u32>,
     /// The order used to return the tasks. By default the newest tasks are returned first and the boolean is `false`.
     pub reverse: Option<bool>,
+    /// The [task ids](`meilisearch_types::tasks::Task::uid`) to be matched
+    pub uids: Option<Vec<TaskId>>,
+    /// The [batch ids](`meilisearch_types::batches::Batch::uid`) to be matched
+    pub batch_uids: Option<Vec<BatchId>>,
     /// The allowed [statuses](`meilisearch_types::tasks::Task::status`) of the matched tasls
     pub statuses: Option<Vec<Status>>,
     /// The allowed [kinds](meilisearch_types::tasks::Kind) of the matched tasks.
@@ -101,8 +105,6 @@ pub struct Query {
     pub types: Option<Vec<Kind>>,
     /// The allowed [index ids](meilisearch_types::tasks::Task::index_uid) of the matched tasks
     pub index_uids: Option<Vec<String>>,
-    /// The [task ids](`meilisearch_types::tasks::Task::uid`) to be matched
-    pub uids: Option<Vec<TaskId>>,
     /// The [task ids](`meilisearch_types::tasks::Task::uid`) of the [`TaskCancelation`](meilisearch_types::tasks::Task::Kind::TaskCancelation) tasks
     /// that canceled the matched tasks.
     pub canceled_by: Option<Vec<TaskId>>,
@@ -130,10 +132,11 @@ impl Query {
                 limit: None,
                 from: None,
                 reverse: None,
+                uids: None,
+                batch_uids: None,
                 statuses: None,
                 types: None,
                 index_uids: None,
-                uids: None,
                 canceled_by: None,
                 before_enqueued_at: None,
                 after_enqueued_at: None,
@@ -227,6 +230,7 @@ impl MustStopProcessing {
 mod db_name {
     pub const ALL_TASKS: &str = "all-tasks";
     pub const ALL_BATCHES: &str = "all-batches";
+    pub const BATCH_TO_TASKS_MAPPING: &str = "batch-to-tasks-mapping";
     pub const STATUS: &str = "status";
     pub const KIND: &str = "kind";
     pub const INDEX_TASKS: &str = "index-tasks";
@@ -323,30 +327,14 @@ pub struct IndexScheduler {
     /// The list of files referenced by the tasks
     pub(crate) file_store: FileStore,
 
-    // The main database, it contains all the tasks accessible by their Id.
+    /// The main database, it contains all the tasks accessible by their Id.
     pub(crate) all_tasks: Database<BEU32, SerdeJson<Task>>,
 
-    // Contains all the batches accessible by their Id.
+    /// Contains all the batches accessible by their Id.
     pub(crate) all_batches: Database<BEU32, SerdeJson<Batch>>,
 
-    /// All the batches containing a task matching the selected status.
-    pub(crate) batch_status: Database<SerdeBincode<Status>, RoaringBitmapCodec>,
-    /// All the batches ids grouped by the kind of their task.
-    pub(crate) batch_kind: Database<SerdeBincode<Kind>, RoaringBitmapCodec>,
-    /// Store the batches associated to an index.
-    pub(crate) batch_index_tasks: Database<Str, RoaringBitmapCodec>,
-
-    /// Store the batches containing a task canceled by a task uid
-    pub(crate) batch_canceled_by: Database<BEU32, RoaringBitmapCodec>,
-
-    /// Store the batches containing tasks which were enqueued at a specific date
-    pub(crate) batch_enqueued_at: Database<BEI128, CboRoaringBitmapCodec>,
-
-    /// Store the batches containing finished tasks started at a specific date
-    pub(crate) batch_started_at: Database<BEI128, CboRoaringBitmapCodec>,
-
-    /// Store the batches containing tasks finished at a specific date
-    pub(crate) batch_finished_at: Database<BEI128, CboRoaringBitmapCodec>,
+    /// Matches a batch id with the associated task ids.
+    pub(crate) batch_to_tasks_mapping: Database<BEU32, CboRoaringBitmapCodec>,
 
     /// All the tasks ids grouped by their status.
     // TODO we should not be able to serialize a `Status::Processing` in this database.
@@ -355,18 +343,29 @@ pub struct IndexScheduler {
     pub(crate) kind: Database<SerdeBincode<Kind>, RoaringBitmapCodec>,
     /// Store the tasks associated to an index.
     pub(crate) index_tasks: Database<Str, RoaringBitmapCodec>,
-
     /// Store the tasks that were canceled by a task uid
     pub(crate) canceled_by: Database<BEU32, RoaringBitmapCodec>,
-
     /// Store the task ids of tasks which were enqueued at a specific date
     pub(crate) enqueued_at: Database<BEI128, CboRoaringBitmapCodec>,
-
     /// Store the task ids of finished tasks which started being processed at a specific date
     pub(crate) started_at: Database<BEI128, CboRoaringBitmapCodec>,
-
     /// Store the task ids of tasks which finished at a specific date
     pub(crate) finished_at: Database<BEI128, CboRoaringBitmapCodec>,
+
+    /// All the batches containing a task matching the selected status.
+    pub(crate) batch_status: Database<SerdeBincode<Status>, RoaringBitmapCodec>,
+    /// All the batches ids grouped by the kind of their task.
+    pub(crate) batch_kind: Database<SerdeBincode<Kind>, RoaringBitmapCodec>,
+    /// Store the batches associated to an index.
+    pub(crate) batch_index_tasks: Database<Str, RoaringBitmapCodec>,
+    /// Store the batches containing a task canceled by a task uid
+    pub(crate) batch_canceled_by: Database<BEU32, RoaringBitmapCodec>,
+    /// Store the batches containing tasks which were enqueued at a specific date
+    pub(crate) batch_enqueued_at: Database<BEI128, CboRoaringBitmapCodec>,
+    /// Store the batches containing finished tasks started at a specific date
+    pub(crate) batch_started_at: Database<BEI128, CboRoaringBitmapCodec>,
+    /// Store the batches containing tasks finished at a specific date
+    pub(crate) batch_finished_at: Database<BEI128, CboRoaringBitmapCodec>,
 
     /// In charge of creating, opening, storing and returning indexes.
     pub(crate) index_mapper: IndexMapper,
@@ -437,6 +436,7 @@ impl IndexScheduler {
             file_store: self.file_store.clone(),
             all_tasks: self.all_tasks,
             all_batches: self.all_batches,
+            batch_to_tasks_mapping: self.batch_to_tasks_mapping,
 
             // Tasks reverse index
             status: self.status,
@@ -515,7 +515,7 @@ impl IndexScheduler {
 
         let env = unsafe {
             heed::EnvOpenOptions::new()
-                .max_dbs(19)
+                .max_dbs(20)
                 .map_size(budget.task_db_size)
                 .open(options.tasks_path)
         }?;
@@ -527,6 +527,9 @@ impl IndexScheduler {
         let mut wtxn = env.write_txn()?;
         let all_tasks = env.create_database(&mut wtxn, Some(db_name::ALL_TASKS))?;
         let all_batches = env.create_database(&mut wtxn, Some(db_name::ALL_BATCHES))?;
+        let batch_to_tasks_mapping =
+            env.create_database(&mut wtxn, Some(db_name::BATCH_TO_TASKS_MAPPING))?;
+
         let status = env.create_database(&mut wtxn, Some(db_name::STATUS))?;
         let kind = env.create_database(&mut wtxn, Some(db_name::KIND))?;
         let index_tasks = env.create_database(&mut wtxn, Some(db_name::INDEX_TASKS))?;
@@ -551,6 +554,7 @@ impl IndexScheduler {
             file_store,
             all_tasks,
             all_batches,
+            batch_to_tasks_mapping,
             // Task reverse indexes
             status,
             kind,
@@ -785,13 +789,32 @@ impl IndexScheduler {
     /// Return the task ids matched by the given query from the index scheduler's point of view.
     pub(crate) fn get_task_ids(&self, rtxn: &RoTxn, query: &Query) -> Result<RoaringBitmap> {
         let ProcessingTasks {
-            started_at: started_at_processing, processing: processing_tasks, ..
+            started_at: started_at_processing,
+            processing: processing_tasks,
+            batch_id: current_batch_processing,
         } = self.processing_tasks.read().unwrap().clone();
+        let Query {
+            limit,
+            from,
+            reverse,
+            uids,
+            batch_uids,
+            statuses,
+            types,
+            index_uids,
+            canceled_by,
+            before_enqueued_at,
+            after_enqueued_at,
+            before_started_at,
+            after_started_at,
+            before_finished_at,
+            after_finished_at,
+        } = query;
 
         let mut tasks = self.all_task_ids(rtxn)?;
 
-        if let Some(from) = &query.from {
-            let range = if query.reverse.unwrap_or_default() {
+        if let Some(from) = from {
+            let range = if reverse.unwrap_or_default() {
                 u32::MIN..*from
             } else {
                 from.saturating_add(1)..u32::MAX
@@ -799,7 +822,19 @@ impl IndexScheduler {
             tasks.remove_range(range);
         }
 
-        if let Some(status) = &query.statuses {
+        if let Some(batch_uids) = batch_uids {
+            let mut batch_tasks = RoaringBitmap::new();
+            for batch_uid in batch_uids {
+                if Some(*batch_uid) == current_batch_processing {
+                    batch_tasks |= &processing_tasks;
+                } else {
+                    batch_tasks |= self.tasks_in_batch(rtxn, *batch_uid)?;
+                }
+            }
+            tasks &= batch_tasks;
+        }
+
+        if let Some(status) = statuses {
             let mut status_tasks = RoaringBitmap::new();
             for status in status {
                 match status {
@@ -816,12 +851,12 @@ impl IndexScheduler {
             tasks &= status_tasks;
         }
 
-        if let Some(uids) = &query.uids {
+        if let Some(uids) = uids {
             let uids = RoaringBitmap::from_iter(uids);
             tasks &= &uids;
         }
 
-        if let Some(canceled_by) = &query.canceled_by {
+        if let Some(canceled_by) = canceled_by {
             let mut all_canceled_tasks = RoaringBitmap::new();
             for cancel_task_uid in canceled_by {
                 if let Some(canceled_by_uid) = self.canceled_by.get(rtxn, cancel_task_uid)? {
@@ -838,7 +873,7 @@ impl IndexScheduler {
             }
         }
 
-        if let Some(kind) = &query.types {
+        if let Some(kind) = types {
             let mut kind_tasks = RoaringBitmap::new();
             for kind in kind {
                 kind_tasks |= self.get_kind(rtxn, *kind)?;
@@ -846,7 +881,7 @@ impl IndexScheduler {
             tasks &= &kind_tasks;
         }
 
-        if let Some(index) = &query.index_uids {
+        if let Some(index) = index_uids {
             let mut index_tasks = RoaringBitmap::new();
             for index in index {
                 index_tasks |= self.index_tasks(rtxn, index)?;
@@ -876,25 +911,26 @@ impl IndexScheduler {
                         filtered_processing_tasks.clear();
                     }
                 };
-            match (query.after_started_at, query.before_started_at) {
+            match (after_started_at, before_started_at) {
                 (None, None) => (),
                 (None, Some(before)) => {
-                    clear_filtered_processing_tasks(Bound::Unbounded, Bound::Excluded(before))
+                    clear_filtered_processing_tasks(Bound::Unbounded, Bound::Excluded(*before))
                 }
                 (Some(after), None) => {
-                    clear_filtered_processing_tasks(Bound::Excluded(after), Bound::Unbounded)
+                    clear_filtered_processing_tasks(Bound::Excluded(*after), Bound::Unbounded)
                 }
-                (Some(after), Some(before)) => {
-                    clear_filtered_processing_tasks(Bound::Excluded(after), Bound::Excluded(before))
-                }
+                (Some(after), Some(before)) => clear_filtered_processing_tasks(
+                    Bound::Excluded(*after),
+                    Bound::Excluded(*before),
+                ),
             };
 
             keep_tasks_within_datetimes(
                 rtxn,
                 &mut filtered_non_processing_tasks,
                 self.started_at,
-                query.after_started_at,
-                query.before_started_at,
+                *after_started_at,
+                *before_started_at,
             )?;
             filtered_non_processing_tasks | filtered_processing_tasks
         };
@@ -903,23 +939,23 @@ impl IndexScheduler {
             rtxn,
             &mut tasks,
             self.enqueued_at,
-            query.after_enqueued_at,
-            query.before_enqueued_at,
+            *after_enqueued_at,
+            *before_enqueued_at,
         )?;
 
         keep_tasks_within_datetimes(
             rtxn,
             &mut tasks,
             self.finished_at,
-            query.after_finished_at,
-            query.before_finished_at,
+            *after_finished_at,
+            *before_finished_at,
         )?;
 
-        if let Some(limit) = query.limit {
+        if let Some(limit) = limit {
             tasks = if query.reverse.unwrap_or_default() {
-                tasks.into_iter().take(limit as usize).collect()
+                tasks.into_iter().take(*limit as usize).collect()
             } else {
-                tasks.into_iter().rev().take(limit as usize).collect()
+                tasks.into_iter().rev().take(*limit as usize).collect()
             };
         }
 
@@ -1295,7 +1331,6 @@ impl IndexScheduler {
         if processing.is_empty() {
             Ok((ret.collect(), total))
         } else {
-            // TODO: We must re-insert the current processing batch somewhere in some way
             Ok((
                 ret.map(|batch| {
                     if processing.contains(batch.uid) {
@@ -1612,7 +1647,7 @@ impl IndexScheduler {
 
         let processed = self.processing_tasks.write().unwrap().stop_processing();
 
-        self.write_batch(&mut wtxn, current_batch)?;
+        self.write_batch(&mut wtxn, current_batch, &processed.processing)?;
 
         #[cfg(test)]
         self.maybe_fail(tests::FailureLocation::CommittingWtxn)?;
@@ -5420,6 +5455,8 @@ mod tests {
         ----------------------------------------------------------------------
         ### All Batches:
         ----------------------------------------------------------------------
+        ### Batch to tasks mapping:
+        ----------------------------------------------------------------------
         ### Batches Status:
         ----------------------------------------------------------------------
         ### Batches Kind:
@@ -5469,6 +5506,8 @@ mod tests {
         ### Finished At:
         ----------------------------------------------------------------------
         ### All Batches:
+        ----------------------------------------------------------------------
+        ### Batch to tasks mapping:
         ----------------------------------------------------------------------
         ### Batches Status:
         ----------------------------------------------------------------------

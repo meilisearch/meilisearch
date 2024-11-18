@@ -94,7 +94,12 @@ impl IndexScheduler {
         Ok(self.all_batches.get(rtxn, &batch_id)?)
     }
 
-    pub(crate) fn write_batch(&self, wtxn: &mut RwTxn, batch: CachedBatch) -> Result<()> {
+    pub(crate) fn write_batch(
+        &self,
+        wtxn: &mut RwTxn,
+        batch: CachedBatch,
+        tasks: &RoaringBitmap,
+    ) -> Result<()> {
         self.all_batches.put(
             wtxn,
             &batch.uid,
@@ -104,6 +109,7 @@ impl IndexScheduler {
                 finished_at: Some(batch.finished_at),
             },
         )?;
+        self.batch_to_tasks_mapping.put(wtxn, &batch.uid, tasks)?;
 
         for status in batch.statuses {
             self.update_batch_status(wtxn, status, |bitmap| {
@@ -231,6 +237,11 @@ impl IndexScheduler {
 
         self.all_tasks.put(wtxn, &task.uid, task)?;
         Ok(())
+    }
+
+    /// Returns the whole set of tasks that belongs to this batch.
+    pub(crate) fn tasks_in_batch(&self, rtxn: &RoTxn, batch_id: BatchId) -> Result<RoaringBitmap> {
+        Ok(self.batch_to_tasks_mapping.get(rtxn, &batch_id)?.unwrap_or_default())
     }
 
     /// Returns the whole set of tasks that belongs to this index.
@@ -558,7 +569,6 @@ impl IndexScheduler {
 
             let Task {
                 uid,
-                /// We should iterate over the list of batch to ensure this task is effectively in the right batch
                 batch_uid,
                 enqueued_at,
                 started_at,
@@ -570,6 +580,14 @@ impl IndexScheduler {
                 kind,
             } = task;
             assert_eq!(uid, task.uid);
+            if let Some(ref batch) = batch_uid {
+                assert!(self
+                    .batch_to_tasks_mapping
+                    .get(&rtxn, batch)
+                    .unwrap()
+                    .unwrap()
+                    .contains(uid));
+            }
             if let Some(task_index_uid) = &task_index_uid {
                 assert!(self
                     .index_tasks

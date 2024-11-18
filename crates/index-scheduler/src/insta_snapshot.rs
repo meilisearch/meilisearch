@@ -26,6 +26,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         env,
         all_tasks,
         all_batches,
+        batch_to_tasks_mapping,
         // task reverse index
         status,
         kind,
@@ -111,6 +112,10 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     snap.push_str(&snapshot_all_batches(&rtxn, *all_batches));
     snap.push_str("----------------------------------------------------------------------\n");
 
+    snap.push_str("### Batch to tasks mapping:\n");
+    snap.push_str(&snapshot_batches_to_tasks_mappings(&rtxn, *batch_to_tasks_mapping));
+    snap.push_str("----------------------------------------------------------------------\n");
+
     snap.push_str("### Batches Status:\n");
     snap.push_str(&snapshot_status(&rtxn, *batch_status));
     snap.push_str("----------------------------------------------------------------------\n");
@@ -182,6 +187,19 @@ pub fn snapshot_all_batches(rtxn: &RoTxn, db: Database<BEU32, SerdeJson<Batch>>)
     for next in iter {
         let (batch_id, batch) = next.unwrap();
         snap.push_str(&format!("{batch_id} {}\n", snapshot_batch(&batch)));
+    }
+    snap
+}
+
+pub fn snapshot_batches_to_tasks_mappings(
+    rtxn: &RoTxn,
+    db: Database<BEU32, CboRoaringBitmapCodec>,
+) -> String {
+    let mut snap = String::new();
+    let iter = db.iter(rtxn).unwrap();
+    for next in iter {
+        let (batch_id, tasks) = next.unwrap();
+        snap.push_str(&format!("{batch_id} {}\n", snapshot_bitmap(&tasks)));
     }
     snap
 }
