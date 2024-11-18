@@ -205,7 +205,11 @@ impl<'a> Search<'a> {
                     Ok(embedding) => embedding,
                     Err(error) => {
                         tracing::error!(error=%error, "Embedding failed");
-                        return Ok((keyword_results, Some(0)));
+                        return Ok(return_keyword_results(
+                            self.limit,
+                            self.offset,
+                            keyword_results,
+                        ));
                     }
                 }
             }
