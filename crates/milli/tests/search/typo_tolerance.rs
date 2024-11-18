@@ -1,10 +1,15 @@
 use std::collections::BTreeSet;
 
+use bumpalo::Bump;
 use heed::EnvOpenOptions;
-use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
-use milli::{Criterion, Index, Search, TermsMatchingStrategy};
-use serde_json::json;
+use milli::documents::mmap_from_objects;
+use milli::update::new::indexer;
+use milli::update::{IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings};
+use milli::vector::EmbeddingConfigs;
+use milli::{Criterion, Index, Object, Search, TermsMatchingStrategy};
+use serde_json::from_value;
 use tempfile::tempdir;
+use ureq::json;
 use Criterion::*;
 
 #[test]
@@ -106,34 +111,40 @@ fn test_typo_disabled_on_word() {
     options.map_size(4096 * 100);
     let index = Index::new(options, tmp.path()).unwrap();
 
-    let mut builder = milli::documents::DocumentsBatchBuilder::new(Vec::new());
-    let doc1 = json!({
-        "id": 1usize,
-        "data": "zealand",
-    });
+    let doc1: Object = from_value(json!({ "id": 1usize, "data": "zealand" })).unwrap();
+    let doc2: Object = from_value(json!({ "id": 2usize, "data": "zearand" })).unwrap();
+    let documents = mmap_from_objects(vec![doc1, doc2]);
 
-    let doc2 = json!({
-        "id": 2usize,
-        "data": "zearand",
-    });
-
-    builder.append_json_object(doc1.as_object().unwrap()).unwrap();
-    builder.append_json_object(doc2.as_object().unwrap()).unwrap();
-    let vector = builder.into_inner().unwrap();
-
-    let documents =
-        milli::documents::DocumentsBatchReader::from_reader(std::io::Cursor::new(vector)).unwrap();
-
-    let mut txn = index.write_txn().unwrap();
+    let mut wtxn = index.write_txn().unwrap();
+    let rtxn = index.read_txn().unwrap();
     let config = IndexerConfig::default();
-    let indexing_config = IndexDocumentsConfig::default();
-    let builder =
-        IndexDocuments::new(&mut txn, &index, &config, indexing_config, |_| (), || false).unwrap();
 
-    let (builder, user_error) = builder.add_documents(documents).unwrap();
-    user_error.unwrap();
-    builder.execute().unwrap();
-    txn.commit().unwrap();
+    let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let mut new_fields_ids_map = db_fields_ids_map.clone();
+    let embedders = EmbeddingConfigs::default();
+    let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+
+    indexer.add_documents(&documents).unwrap();
+
+    let indexer_alloc = Bump::new();
+    let (document_changes, _operation_stats, primary_key) =
+        indexer.into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map).unwrap();
+
+    indexer::index(
+        &mut wtxn,
+        &index,
+        config.grenad_parameters(),
+        &db_fields_ids_map,
+        new_fields_ids_map,
+        primary_key,
+        &document_changes,
+        embedders,
+        &|| false,
+        &|_| (),
+    )
+    .unwrap();
+
+    wtxn.commit().unwrap();
 
     // basic typo search with default typo settings
     {

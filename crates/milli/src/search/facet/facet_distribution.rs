@@ -407,7 +407,7 @@ mod tests {
     use big_s::S;
     use maplit::hashset;
 
-    use crate::documents::documents_batch_reader_from_objects;
+    use crate::documents::mmap_from_objects;
     use crate::index::tests::TempIndex;
     use crate::{milli_snap, FacetDistribution, OrderBy};
 
@@ -508,8 +508,7 @@ mod tests {
             documents.push(document);
         }
 
-        let documents = documents_batch_reader_from_objects(documents);
-
+        let documents = mmap_from_objects(documents);
         index.add_documents(documents).unwrap();
 
         let txn = index.read_txn().unwrap();
@@ -594,8 +593,7 @@ mod tests {
             documents.push(document);
         }
 
-        let documents = documents_batch_reader_from_objects(documents);
-
+        let documents = mmap_from_objects(documents);
         index.add_documents(documents).unwrap();
 
         let txn = index.read_txn().unwrap();
@@ -654,8 +652,7 @@ mod tests {
             documents.push(document);
         }
 
-        let documents = documents_batch_reader_from_objects(documents);
-
+        let documents = mmap_from_objects(documents);
         index.add_documents(documents).unwrap();
 
         let txn = index.read_txn().unwrap();
@@ -706,8 +703,7 @@ mod tests {
             documents.push(document);
         }
 
-        let documents = documents_batch_reader_from_objects(documents);
-
+        let documents = mmap_from_objects(documents);
         index.add_documents(documents).unwrap();
 
         let txn = index.read_txn().unwrap();
@@ -758,8 +754,7 @@ mod tests {
             documents.push(document);
         }
 
-        let documents = documents_batch_reader_from_objects(documents);
-
+        let documents = mmap_from_objects(documents);
         index.add_documents(documents).unwrap();
 
         let txn = index.read_txn().unwrap();
@@ -814,8 +809,7 @@ mod tests {
             documents.push(document);
         }
 
-        let documents = documents_batch_reader_from_objects(documents);
-
+        let documents = mmap_from_objects(documents);
         index.add_documents(documents).unwrap();
 
         let txn = index.read_txn().unwrap();

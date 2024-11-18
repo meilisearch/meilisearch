@@ -369,7 +369,7 @@ mod tests {
     use maplit::hashset;
     use roaring::RoaringBitmap;
 
-    use crate::documents::documents_batch_reader_from_objects;
+    use crate::documents::{documents_batch_reader_from_objects, mmap_from_objects};
     use crate::heed_codec::facet::OrderedF64Codec;
     use crate::heed_codec::StrRefCodec;
     use crate::index::tests::TempIndex;
@@ -492,8 +492,8 @@ mod tests {
             );
         }
 
-        let documents = documents_batch_reader_from_objects(documents);
-        index.add_documents(documents).unwrap();
+        let documents = mmap_from_objects(documents);
+        index.add_documents(documents);
 
         db_snap!(index, facet_id_f64_docids, "initial", @"c34f499261f3510d862fa0283bbe843a");
     }

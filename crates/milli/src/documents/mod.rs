@@ -150,9 +150,22 @@ pub fn objects_from_json_value(json: serde_json::Value) -> Vec<crate::Object> {
 macro_rules! documents {
     ($data:tt) => {{
         let documents = serde_json::json!($data);
-        let documents = $crate::documents::objects_from_json_value(documents);
-        $crate::documents::documents_batch_reader_from_objects(documents)
+        let mut file = tempfile::tempfile().unwrap();
+        for document in documents.as_array().unwrap() {
+            serde_json::to_writer(&mut file, &document).unwrap();
+        }
+        file.sync_all().unwrap();
+        unsafe { memmap2::Mmap::map(&file).unwrap() }
     }};
+}
+
+pub fn mmap_from_objects(objects: impl IntoIterator<Item = Object>) -> memmap2::Mmap {
+    let mut writer = tempfile::tempfile().map(std::io::BufWriter::new).unwrap();
+    for object in objects {
+        serde_json::to_writer(&mut writer, &object).unwrap();
+    }
+    let file = writer.into_inner().unwrap();
+    unsafe { memmap2::Mmap::map(&file).unwrap() }
 }
 
 pub fn documents_batch_reader_from_objects(
@@ -222,20 +235,6 @@ mod test {
         assert_eq!(reader.iter().count(), 1);
         assert!(documents.next_document().unwrap().is_some());
         assert!(documents.next_document().unwrap().is_none());
-    }
-
-    #[test]
-    fn test_nested() {
-        let docs_reader = documents!([{
-            "hello": {
-                "toto": ["hello"]
-            }
-        }]);
-
-        let (mut cursor, _) = docs_reader.into_cursor_and_fields_index();
-        let doc = cursor.next_document().unwrap().unwrap();
-        let nested: Value = serde_json::from_slice(doc.get(0).unwrap()).unwrap();
-        assert_eq!(nested, json!({ "toto": ["hello"] }));
     }
 
     #[test]

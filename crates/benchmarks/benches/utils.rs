@@ -140,7 +140,7 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
     }
 }
 
-pub fn documents_from(filename: &str, filetype: &str) -> DocumentsBatchReader<impl BufRead + Seek> {
+pub fn documents_from(filename: &str, filetype: &str) -> Mmap {
     let reader = File::open(filename)
         .unwrap_or_else(|_| panic!("could not find the dataset in: {}", filename));
     let reader = BufReader::new(reader);

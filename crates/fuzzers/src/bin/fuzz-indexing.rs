@@ -4,11 +4,17 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use arbitrary::{Arbitrary, Unstructured};
+use bumpalo::Bump;
 use clap::Parser;
+use either::Either;
 use fuzzers::Operation;
+use milli::documents::mmap_from_objects;
 use milli::heed::EnvOpenOptions;
-use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig};
+use milli::update::new::indexer;
+use milli::update::{IndexDocumentsMethod, IndexerConfig};
+use milli::vector::EmbeddingConfigs;
 use milli::Index;
+use serde_json::Value;
 use tempfile::TempDir;
 
 #[derive(Debug, Arbitrary)]
@@ -58,7 +64,6 @@ fn main() {
             };
             let index = Index::new(options, tempdir.path()).unwrap();
             let indexer_config = IndexerConfig::default();
-            let index_documents_config = IndexDocumentsConfig::default();
 
             std::thread::scope(|s| {
                 loop {
@@ -75,38 +80,69 @@ fn main() {
 
                     let handle = s.spawn(|| {
                         let mut wtxn = index.write_txn().unwrap();
+                        let rtxn = index.read_txn().unwrap();
 
                         for batch in batches {
-                            let mut builder = IndexDocuments::new(
-                                &mut wtxn,
-                                &index,
-                                &indexer_config,
-                                index_documents_config.clone(),
-                                |_| (),
-                                || false,
-                            )
-                            .unwrap();
+                            let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                            let mut new_fields_ids_map = db_fields_ids_map.clone();
 
+                            let indexer_alloc = Bump::new();
+                            let embedders = EmbeddingConfigs::default();
+                            let mut indexer = indexer::DocumentOperation::new(
+                                IndexDocumentsMethod::ReplaceDocuments,
+                            );
+
+                            let mut operations = Vec::new();
                             for op in batch.0 {
                                 match op {
                                     Operation::AddDoc(doc) => {
-                                        let documents =
-                                            milli::documents::objects_from_json_value(doc.to_d());
-                                        let documents =
-                                            milli::documents::documents_batch_reader_from_objects(
-                                                documents,
-                                            );
-                                        let (b, _added) = builder.add_documents(documents).unwrap();
-                                        builder = b;
+                                        let object = match doc.to_d() {
+                                            Value::Object(object) => object,
+                                            _ => unreachable!(),
+                                        };
+                                        let documents = mmap_from_objects(vec![object]);
+                                        operations.push(Either::Left(documents));
                                     }
                                     Operation::DeleteDoc(id) => {
-                                        let (b, _removed) =
-                                            builder.remove_documents(vec![id.to_s()]).unwrap();
-                                        builder = b;
+                                        let id = indexer_alloc.alloc_str(&id.to_s());
+                                        let ids = indexer_alloc.alloc_slice_copy(&[&*id]);
+                                        operations.push(Either::Right(ids));
                                     }
                                 }
                             }
-                            builder.execute().unwrap();
+
+                            for op in &operations {
+                                match op {
+                                    Either::Left(documents) => {
+                                        indexer.add_documents(documents).unwrap()
+                                    }
+                                    Either::Right(ids) => indexer.delete_documents(ids),
+                                }
+                            }
+
+                            let (document_changes, _operation_stats, primary_key) = indexer
+                                .into_changes(
+                                    &indexer_alloc,
+                                    &index,
+                                    &rtxn,
+                                    None,
+                                    &mut new_fields_ids_map,
+                                )
+                                .unwrap();
+
+                            indexer::index(
+                                &mut wtxn,
+                                &index,
+                                indexer_config.grenad_parameters(),
+                                &db_fields_ids_map,
+                                new_fields_ids_map,
+                                primary_key,
+                                &document_changes,
+                                embedders,
+                                &|| false,
+                                &|_| (),
+                            )
+                            .unwrap();
 
                             // after executing a batch we check if the database is corrupted
                             let res = index.search(&wtxn).execute().unwrap();

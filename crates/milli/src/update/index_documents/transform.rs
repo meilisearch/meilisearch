@@ -48,23 +48,8 @@ pub struct TransformOutput {
 /// containing all those documents.
 pub struct Transform<'a, 'i> {
     pub index: &'i Index,
-    fields_ids_map: FieldsIdsMap,
-
     indexer_settings: &'a IndexerConfig,
     pub index_documents_method: IndexDocumentsMethod,
-    available_documents_ids: AvailableIds,
-
-    // Both grenad follows the same format:
-    // key | value
-    // u32 | 1 byte for the Operation byte, the rest is the obkv of the document stored
-    original_sorter: grenad::Sorter<EitherObkvMerge>,
-    flattened_sorter: grenad::Sorter<EitherObkvMerge>,
-
-    replaced_documents_ids: RoaringBitmap,
-    new_documents_ids: RoaringBitmap,
-    // To increase the cache locality and decrease the heap usage we use compact smartstring.
-    new_external_documents_ids_builder: FxHashMap<SmartString<smartstring::Compact>, u64>,
-    documents_count: usize,
 }
 
 /// This enum is specific to the grenad sorter stored in the transform.
@@ -73,29 +58,6 @@ pub struct Transform<'a, 'i> {
 pub enum Operation {
     Addition,
     Deletion,
-}
-
-/// Create a mapping between the field ids found in the document batch and the one that were
-/// already present in the index.
-///
-/// If new fields are present in the addition, they are added to the index field ids map.
-fn create_fields_mapping(
-    index_field_map: &mut FieldsIdsMap,
-    batch_field_map: &DocumentsBatchIndex,
-) -> Result<HashMap<FieldId, FieldId>> {
-    batch_field_map
-        .iter()
-        // we sort by id here to ensure a deterministic mapping of the fields, that preserves
-        // the original ordering.
-        .sorted_by_key(|(&id, _)| id)
-        .map(|(field, name)| match index_field_map.id(name) {
-            Some(id) => Ok((*field, id)),
-            None => index_field_map
-                .insert(name)
-                .ok_or(Error::UserError(UserError::AttributeLimitReached))
-                .map(|id| (*field, id)),
-        })
-        .collect()
 }
 
 impl<'a, 'i> Transform<'a, 'i> {
@@ -138,19 +100,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         );
         let documents_ids = index.documents_ids(wtxn)?;
 
-        Ok(Transform {
-            index,
-            fields_ids_map: index.fields_ids_map(wtxn)?,
-            indexer_settings,
-            available_documents_ids: AvailableIds::new(&documents_ids),
-            original_sorter,
-            flattened_sorter,
-            index_documents_method,
-            replaced_documents_ids: RoaringBitmap::new(),
-            new_documents_ids: RoaringBitmap::new(),
-            new_external_documents_ids_builder: FxHashMap::default(),
-            documents_count: 0,
-        })
+        Ok(Transform { index, indexer_settings, index_documents_method })
     }
 
     // Flatten a document from the fields ids map contained in self and insert the new

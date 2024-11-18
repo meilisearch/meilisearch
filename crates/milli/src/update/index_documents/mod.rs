@@ -1,33 +1,38 @@
 mod enrich;
 mod extract;
 mod helpers;
-mod parallel;
 mod transform;
 mod typed_chunk;
 
 use std::collections::HashSet;
+use std::iter;
 use std::num::NonZeroU32;
+use std::sync::Arc;
 
-use grenad::Merger;
+use crossbeam_channel::{Receiver, Sender};
+use grenad::{Merger, MergerBuilder};
+use hashbrown::HashMap;
 use heed::types::Str;
 use heed::Database;
+use rand::SeedableRng as _;
+use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use slice_group_by::GroupBy;
-use typed_chunk::TypedChunk;
+use tracing::debug;
+use typed_chunk::{write_typed_chunk_into_index, ChunkAccumulator, TypedChunk};
 
 pub use self::enrich::{extract_finite_float_from_value, DocumentId};
 pub use self::helpers::*;
 pub use self::transform::{Transform, TransformOutput};
-use crate::documents::{obkv_to_object, DocumentsBatchBuilder, DocumentsBatchReader};
-use crate::error::{Error, InternalError, UserError};
+use crate::documents::obkv_to_object;
+use crate::error::{Error, InternalError};
 use crate::thread_pool_no_abort::ThreadPoolNoAbortBuilder;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
-use crate::update::index_documents::parallel::ImmutableObkvs;
 use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
 use crate::vector::{ArroyWrapper, EmbeddingConfigs};
-use crate::{CboRoaringBitmapCodec, Index, Object, Result};
+use crate::{CboRoaringBitmapCodec, Index, Result};
 
 static MERGED_DATABASE_COUNT: usize = 7;
 static PREFIX_DATABASE_COUNT: usize = 4;
@@ -120,6 +125,338 @@ where
     pub fn with_embedders(mut self, embedders: EmbeddingConfigs) -> Self {
         self.embedders = embedders;
         self
+    }
+
+    /// Returns the total number of documents in the index after the update.
+    #[tracing::instrument(
+        level = "trace",
+        skip_all,
+        target = "indexing::details",
+        name = "index_documents_raw"
+    )]
+    pub fn execute_raw(self, output: TransformOutput) -> Result<u64>
+    where
+        FP: Fn(UpdateIndexingStep) + Sync,
+        FA: Fn() -> bool + Sync,
+    {
+        let TransformOutput {
+            primary_key,
+            mut settings_diff,
+            field_distribution,
+            documents_count,
+            original_documents,
+            flattened_documents,
+        } = output;
+
+        // update the internal facet and searchable list,
+        // because they might have changed due to the nested documents flattening.
+        settings_diff.new.recompute_facets(self.wtxn, self.index)?;
+        settings_diff.new.recompute_searchables(self.wtxn, self.index)?;
+
+        let settings_diff = Arc::new(settings_diff);
+        let embedders_configs = Arc::new(self.index.embedding_configs(self.wtxn)?);
+
+        let possible_embedding_mistakes =
+            crate::vector::error::PossibleEmbeddingMistakes::new(&field_distribution);
+
+        let backup_pool;
+        let pool = match self.indexer_config.thread_pool {
+            Some(ref pool) => pool,
+            None => {
+                // We initialize a backup pool with the default
+                // settings if none have already been set.
+                #[allow(unused_mut)]
+                let mut pool_builder = ThreadPoolNoAbortBuilder::new();
+
+                #[cfg(test)]
+                {
+                    pool_builder = pool_builder.num_threads(1);
+                }
+
+                backup_pool = pool_builder.build()?;
+                &backup_pool
+            }
+        };
+
+        // create LMDB writer channel
+        let (lmdb_writer_sx, lmdb_writer_rx): (
+            Sender<Result<TypedChunk>>,
+            Receiver<Result<TypedChunk>>,
+        ) = crossbeam_channel::unbounded();
+
+        // get the primary key field id
+        let primary_key_id = settings_diff.new.fields_ids_map.id(&primary_key).unwrap();
+
+        let pool_params = GrenadParameters {
+            chunk_compression_type: self.indexer_config.chunk_compression_type,
+            chunk_compression_level: self.indexer_config.chunk_compression_level,
+            max_memory: self.indexer_config.max_memory,
+            max_nb_chunks: self.indexer_config.max_nb_chunks, // default value, may be chosen.
+        };
+        let documents_chunk_size = match self.indexer_config.documents_chunk_size {
+            Some(chunk_size) => chunk_size,
+            None => {
+                let default_chunk_size = 1024 * 1024 * 4; // 4MiB
+                let min_chunk_size = 1024 * 512; // 512KiB
+
+                // compute the chunk size from the number of available threads and the inputed data size.
+                let total_size = match flattened_documents.as_ref() {
+                    Some(flattened_documents) => flattened_documents.metadata().map(|m| m.len()),
+                    None => Ok(default_chunk_size as u64),
+                };
+                let current_num_threads = pool.current_num_threads();
+                // if we have more than 2 thread, create a number of chunk equal to 3/4 threads count
+                let chunk_count = if current_num_threads > 2 {
+                    (current_num_threads * 3 / 4).max(2)
+                } else {
+                    current_num_threads
+                };
+                total_size
+                    .map_or(default_chunk_size, |size| (size as usize) / chunk_count)
+                    .max(min_chunk_size)
+            }
+        };
+
+        let original_documents = match original_documents {
+            Some(original_documents) => Some(grenad::Reader::new(original_documents)?),
+            None => None,
+        };
+        let flattened_documents = match flattened_documents {
+            Some(flattened_documents) => Some(grenad::Reader::new(flattened_documents)?),
+            None => None,
+        };
+
+        let max_positions_per_attributes = self.indexer_config.max_positions_per_attributes;
+
+        let mut final_documents_ids = RoaringBitmap::new();
+        let mut databases_seen = 0;
+        let mut word_position_docids = None;
+        let mut word_fid_docids = None;
+        let mut word_docids = None;
+        let mut exact_word_docids = None;
+        let mut chunk_accumulator = ChunkAccumulator::default();
+        let mut dimension = HashMap::new();
+
+        let current_span = tracing::Span::current();
+
+        // Run extraction pipeline in parallel.
+        pool.install(|| {
+                let settings_diff_cloned = settings_diff.clone();
+                rayon::spawn(move || {
+                    let child_span = tracing::trace_span!(target: "indexing::details", parent: &current_span, "extract_and_send_grenad_chunks");
+                    let _enter = child_span.enter();
+
+                    // split obkv file into several chunks
+                    let original_chunk_iter = match original_documents {
+                        Some(original_documents) => {
+                            grenad_obkv_into_chunks(original_documents,pool_params,documents_chunk_size).map(either::Left)
+                        },
+                        None => Ok(either::Right(iter::empty())),
+                    };
+
+                    // split obkv file into several chunks
+                    let flattened_chunk_iter = match flattened_documents {
+                        Some(flattened_documents) => {
+                            grenad_obkv_into_chunks(flattened_documents, pool_params, documents_chunk_size).map(either::Left)
+                        },
+                        None => Ok(either::Right(iter::empty())),
+                    };
+
+                    let result = original_chunk_iter.and_then(|original_chunk| {
+                        let flattened_chunk = flattened_chunk_iter?;
+                        // extract all databases from the chunked obkv douments
+                        extract::data_from_obkv_documents(
+                            original_chunk,
+                            flattened_chunk,
+                            pool_params,
+                            lmdb_writer_sx.clone(),
+                            primary_key_id,
+                            embedders_configs.clone(),
+                            settings_diff_cloned,
+                            max_positions_per_attributes,
+                            Arc::new(possible_embedding_mistakes)
+                        )
+                    });
+
+                    if let Err(e) = result {
+                        let _ = lmdb_writer_sx.send(Err(e));
+                    }
+
+                    // needs to be dropped to avoid channel waiting lock.
+                    drop(lmdb_writer_sx);
+                });
+
+                (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
+                    databases_seen,
+                    total_databases: TOTAL_POSTING_DATABASE_COUNT,
+                });
+
+                loop {
+                    if (self.should_abort)() {
+                        return Err(Error::InternalError(InternalError::AbortedIndexation));
+                    }
+
+                    match lmdb_writer_rx.clone().recv_timeout(std::time::Duration::from_millis(500)) {
+                        Err(status) => {
+                            if let Some(typed_chunks) = chunk_accumulator.pop_longest() {
+                                let (docids, is_merged_database) =
+                                    write_typed_chunk_into_index(self.wtxn, self.index, &settings_diff, typed_chunks)?;
+                                if !docids.is_empty() {
+                                    final_documents_ids |= docids;
+                                    let documents_seen_count = final_documents_ids.len();
+                                    (self.progress)(UpdateIndexingStep::IndexDocuments {
+                                        documents_seen: documents_seen_count as usize,
+                                        total_documents: documents_count,
+                                    });
+                                    debug!(documents = documents_seen_count, total = documents_count, "Seen");
+                                }
+                                if is_merged_database {
+                                    databases_seen += 1;
+                                    (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
+                                        databases_seen,
+                                        total_databases: TOTAL_POSTING_DATABASE_COUNT,
+                                    });
+                                }
+                            // If no more chunk remains in the chunk accumulator and the channel is disconected, break.
+                            } else if status == crossbeam_channel::RecvTimeoutError::Disconnected {
+                                break;
+                            } else {
+                                rayon::yield_now();
+                            }
+                        }
+                        Ok(result) => {
+                            let typed_chunk = match result? {
+                                TypedChunk::WordDocids {
+                                    word_docids_reader,
+                                    exact_word_docids_reader,
+                                    word_fid_docids_reader,
+                                } => {
+                                    let cloneable_chunk =
+                                        unsafe { as_cloneable_grenad(&word_docids_reader)? };
+                                    let word_docids = word_docids.get_or_insert_with(|| {
+                                        MergerBuilder::new(MergeDeladdCboRoaringBitmaps)
+                                    });
+                                    word_docids.push(cloneable_chunk.into_cursor()?);
+                                    let cloneable_chunk =
+                                        unsafe { as_cloneable_grenad(&exact_word_docids_reader)? };
+                                    let exact_word_docids =
+                                        exact_word_docids.get_or_insert_with(|| {
+                                            MergerBuilder::new(
+                                                MergeDeladdCboRoaringBitmaps,
+                                            )
+                                        });
+                                    exact_word_docids.push(cloneable_chunk.into_cursor()?);
+                                    let cloneable_chunk =
+                                        unsafe { as_cloneable_grenad(&word_fid_docids_reader)? };
+                                    let word_fid_docids = word_fid_docids.get_or_insert_with(|| {
+                                        MergerBuilder::new(MergeDeladdCboRoaringBitmaps)
+                                    });
+                                    word_fid_docids.push(cloneable_chunk.into_cursor()?);
+                                    TypedChunk::WordDocids {
+                                        word_docids_reader,
+                                        exact_word_docids_reader,
+                                        word_fid_docids_reader,
+                                    }
+                                }
+                                TypedChunk::WordPositionDocids(chunk) => {
+                                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
+                                    let word_position_docids =
+                                        word_position_docids.get_or_insert_with(|| {
+                                            MergerBuilder::new(
+                                                MergeDeladdCboRoaringBitmaps,
+                                            )
+                                        });
+                                    word_position_docids.push(cloneable_chunk.into_cursor()?);
+                                    TypedChunk::WordPositionDocids(chunk)
+                                }
+                                TypedChunk::VectorPoints {
+                                    expected_dimension,
+                                    remove_vectors,
+                                    embeddings,
+                                    manual_vectors,
+                                    embedder_name,
+                                    add_to_user_provided,
+                                    remove_from_user_provided,
+                                } => {
+                                    dimension.insert(embedder_name.clone(), expected_dimension);
+                                    TypedChunk::VectorPoints {
+                                        remove_vectors,
+                                        embeddings,
+                                        expected_dimension,
+                                        manual_vectors,
+                                        embedder_name,
+                                        add_to_user_provided,
+                                        remove_from_user_provided,
+                                    }
+                                }
+                                otherwise => otherwise,
+                            };
+
+                            chunk_accumulator.insert(typed_chunk);
+                        }
+                    }
+                }
+
+                Ok(())
+            }).map_err(InternalError::from)??;
+
+        // We write the field distribution into the main database
+        self.index.put_field_distribution(self.wtxn, &field_distribution)?;
+
+        // We write the primary key field id into the main database
+        self.index.put_primary_key(self.wtxn, &primary_key)?;
+        let number_of_documents = self.index.number_of_documents(self.wtxn)?;
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+
+        // If an embedder wasn't used in the typedchunk but must be binary quantized
+        // we should insert it in `dimension`
+        for (name, action) in settings_diff.embedding_config_updates.iter() {
+            if action.is_being_quantized && !dimension.contains_key(name.as_str()) {
+                let index = self.index.embedder_category_id.get(self.wtxn, name)?.ok_or(
+                    InternalError::DatabaseMissingEntry {
+                        db_name: "embedder_category_id",
+                        key: None,
+                    },
+                )?;
+                let reader =
+                    ArroyWrapper::new(self.index.vector_arroy, index, action.was_quantized);
+                let dim = reader.dimensions(self.wtxn)?;
+                dimension.insert(name.to_string(), dim);
+            }
+        }
+
+        for (embedder_name, dimension) in dimension {
+            let wtxn = &mut *self.wtxn;
+            let vector_arroy = self.index.vector_arroy;
+            let cancel = &self.should_abort;
+
+            let embedder_index = self.index.embedder_category_id.get(wtxn, &embedder_name)?.ok_or(
+                InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },
+            )?;
+            let embedder_config = settings_diff.embedding_config_updates.get(&embedder_name);
+            let was_quantized = settings_diff
+                .old
+                .embedding_configs
+                .get(&embedder_name)
+                .map_or(false, |conf| conf.2);
+            let is_quantizing = embedder_config.map_or(false, |action| action.is_being_quantized);
+
+            pool.install(|| {
+                let mut writer = ArroyWrapper::new(vector_arroy, embedder_index, was_quantized);
+                writer.build_and_quantize(wtxn, &mut rng, dimension, is_quantizing, cancel)?;
+                Result::Ok(())
+            })
+            .map_err(InternalError::from)??;
+        }
+
+        self.execute_prefix_databases(
+            word_docids.map(MergerBuilder::build),
+            exact_word_docids.map(MergerBuilder::build),
+            word_position_docids.map(MergerBuilder::build),
+            word_fid_docids.map(MergerBuilder::build),
+        )?;
+
+        Ok(number_of_documents)
     }
 
     #[tracing::instrument(
@@ -335,17 +672,19 @@ mod tests {
     use std::collections::BTreeMap;
 
     use big_s::S;
+    use bumpalo::Bump;
     use fst::IntoStreamer;
     use heed::RwTxn;
     use maplit::hashset;
 
     use super::*;
-    use crate::documents::documents_batch_reader_from_objects;
+    use crate::documents::{documents_batch_reader_from_objects, mmap_from_objects};
     use crate::index::tests::TempIndex;
     use crate::index::IndexEmbeddingConfig;
     use crate::search::TermsMatchingStrategy;
+    use crate::update::new::indexer;
     use crate::update::Setting;
-    use crate::{db_snap, Filter, Search};
+    use crate::{db_snap, Filter, Search, UserError};
 
     #[test]
     fn simple_document_replacement() {
@@ -787,7 +1126,7 @@ mod tests {
             big_object.insert(key, serde_json::Value::from("I am a text!"));
         }
 
-        let documents = documents_batch_reader_from_objects([big_object]);
+        let documents = mmap_from_objects([big_object]);
         index.add_documents(documents).unwrap();
     }
 
@@ -1280,7 +1619,7 @@ mod tests {
                     serde_json::Value::Object(object) => Some(object),
                     _ => None,
                 });
-            documents_batch_reader_from_objects(documents_iter)
+            mmap_from_objects(documents_iter)
         };
         // Index those 200 long documents
         index.add_documents(content).unwrap();
@@ -1326,9 +1665,9 @@ mod tests {
         index.add_documents(doc1).unwrap();
         index.add_documents(doc2).unwrap();
 
-        let wtxn = index.read_txn().unwrap();
+        let rtxn = index.read_txn().unwrap();
 
-        let map = index.external_documents_ids().to_hash_map(&wtxn).unwrap();
+        let map = index.external_documents_ids().to_hash_map(&rtxn).unwrap();
         let ids = map.values().collect::<HashSet<_>>();
 
         assert_eq!(ids.len(), map.len());
@@ -1609,10 +1948,23 @@ mod tests {
             "title": "something",
         }]};
 
-        index.add_documents(doc1).unwrap();
-        index.add_documents(doc2).unwrap_err();
-        index.add_documents(doc3).unwrap_err();
-        index.add_documents(doc4).unwrap_err();
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+        indexer.add_documents(&doc1).unwrap();
+        indexer.add_documents(&doc2).unwrap();
+        indexer.add_documents(&doc3).unwrap();
+        indexer.add_documents(&doc4).unwrap();
+
+        let indexer_alloc = Bump::new();
+        let (_document_changes, operation_stats, _primary_key) = indexer
+            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .unwrap();
+
+        assert_eq!(operation_stats.iter().filter(|ps| ps.error.is_none()).count(), 1);
+        assert_eq!(operation_stats.iter().filter(|ps| ps.error.is_some()).count(), 3);
     }
 
     #[test]
@@ -1767,34 +2119,51 @@ mod tests {
         index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         let mut wtxn = index.write_txn().unwrap();
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let local_pool;
+        let indexer_config = &index.indexer_config;
+        let pool = match &indexer_config.thread_pool {
+            Some(pool) => pool,
+            None => {
+                local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
+                &local_pool
+            }
+        };
+
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let documents = documents!([
             { "id": 1, "doggo": "kevin" },
             { "id": 2, "doggo": { "name": "bob", "age": 20 } },
             { "id": 3, "name": "jean", "age": 25 },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"3");
 
-        let (builder, removed) = builder.remove_documents(vec![S("2")]).unwrap();
-        insta::assert_snapshot!(removed.unwrap(), @"1");
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+        indexer.add_documents(&documents);
+        indexer.delete_documents(&["2"]);
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .unwrap();
 
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 3,
-            number_of_documents: 2,
-        }
-        "###);
+        pool.install(|| {
+            indexer::index(
+                &mut wtxn,
+                &index.inner,
+                indexer_config.grenad_parameters(),
+                &db_fields_ids_map,
+                new_fields_ids_map,
+                primary_key,
+                &document_changes,
+                embedders,
+                &|| false,
+                &|_| (),
+            )
+        })
+        .unwrap()
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -1809,41 +2178,57 @@ mod tests {
         index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         let mut wtxn = index.write_txn().unwrap();
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let local_pool;
+        let indexer_config = &index.indexer_config;
+        let pool = match &indexer_config.thread_pool {
+            Some(pool) => pool,
+            None => {
+                local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
+                &local_pool
+            }
+        };
+
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let documents = documents!([
             { "id": 1, "doggo": "kevin" },
             { "id": 2, "doggo": { "name": "bob", "age": 20 } },
             { "id": 3, "name": "jean", "age": 25 },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"3");
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
+        indexer.add_documents(&documents).unwrap();
 
         let documents = documents!([
             { "id": 2, "catto": "jorts" },
             { "id": 3, "legs": 4 },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"2");
+        indexer.add_documents(&documents).unwrap();
+        indexer.delete_documents(&["1", "2"]);
 
-        let (builder, removed) = builder.remove_documents(vec![S("1"), S("2")]).unwrap();
-        insta::assert_snapshot!(removed.unwrap(), @"2");
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .unwrap();
 
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 5,
-            number_of_documents: 1,
-        }
-        "###);
+        pool.install(|| {
+            indexer::index(
+                &mut wtxn,
+                &index.inner,
+                indexer_config.grenad_parameters(),
+                &db_fields_ids_map,
+                new_fields_ids_map,
+                primary_key,
+                &document_changes,
+                embedders,
+                &|| false,
+                &|_| (),
+            )
+        })
+        .unwrap()
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -1854,34 +2239,52 @@ mod tests {
     #[test]
     fn add_document_and_in_another_transform_update_and_delete_documents() {
         let mut index = TempIndex::new();
-        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         let mut wtxn = index.write_txn().unwrap();
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let local_pool;
+        let indexer_config = &index.indexer_config;
+        let pool = match &indexer_config.thread_pool {
+            Some(pool) => pool,
+            None => {
+                local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
+                &local_pool
+            }
+        };
+
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let documents = documents!([
             { "id": 1, "doggo": "kevin" },
             { "id": 2, "doggo": { "name": "bob", "age": 20 } },
             { "id": 3, "name": "jean", "age": 25 },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"3");
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
+        indexer.add_documents(&documents);
 
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 3,
-            number_of_documents: 3,
-        }
-        "###);
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .unwrap();
+
+        pool.install(|| {
+            indexer::index(
+                &mut wtxn,
+                &index.inner,
+                indexer_config.grenad_parameters(),
+                &db_fields_ids_map,
+                new_fields_ids_map,
+                primary_key,
+                &document_changes,
+                embedders,
+                &|| false,
+                &|_| (),
+            )
+        })
+        .unwrap()
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -1893,33 +2296,50 @@ mod tests {
         // A first batch of documents has been inserted
 
         let mut wtxn = index.write_txn().unwrap();
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let local_pool;
+        let indexer_config = &index.indexer_config;
+        let pool = match &indexer_config.thread_pool {
+            Some(pool) => pool,
+            None => {
+                local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
+                &local_pool
+            }
+        };
+
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let documents = documents!([
             { "id": 2, "catto": "jorts" },
             { "id": 3, "legs": 4 },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"2");
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
+        indexer.add_documents(&documents);
+        indexer.delete_documents(&["1", "2"]);
 
-        let (builder, removed) = builder.remove_documents(vec![S("1"), S("2")]).unwrap();
-        insta::assert_snapshot!(removed.unwrap(), @"2");
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .unwrap();
 
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 2,
-            number_of_documents: 1,
-        }
-        "###);
+        pool.install(|| {
+            indexer::index(
+                &mut wtxn,
+                &index.inner,
+                indexer_config.grenad_parameters(),
+                &db_fields_ids_map,
+                new_fields_ids_map,
+                primary_key,
+                &document_changes,
+                embedders,
+                &|| false,
+                &|_| (),
+            )
+        })
+        .unwrap()
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -1930,36 +2350,53 @@ mod tests {
     #[test]
     fn delete_document_and_then_add_documents_in_the_same_transform() {
         let mut index = TempIndex::new();
-        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         let mut wtxn = index.write_txn().unwrap();
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let local_pool;
+        let indexer_config = &index.indexer_config;
+        let pool = match &indexer_config.thread_pool {
+            Some(pool) => pool,
+            None => {
+                local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
+                &local_pool
+            }
+        };
 
-        let (builder, removed) = builder.remove_documents(vec![S("1"), S("2")]).unwrap();
-        insta::assert_snapshot!(removed.unwrap(), @"0");
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
+        indexer.delete_documents(&["1", "2"]);
 
         let documents = documents!([
             { "id": 2, "doggo": { "name": "jean", "age": 20 } },
             { "id": 3, "name": "bob", "age": 25 },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"2");
+        indexer.add_documents(&documents);
 
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 2,
-            number_of_documents: 2,
-        }
-        "###);
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .unwrap();
+
+        pool.install(|| {
+            indexer::index(
+                &mut wtxn,
+                &index.inner,
+                indexer_config.grenad_parameters(),
+                &db_fields_ids_map,
+                new_fields_ids_map,
+                primary_key,
+                &document_changes,
+                embedders,
+                &|| false,
+                &|_| (),
+            )
+        })
+        .unwrap()
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -1971,42 +2408,57 @@ mod tests {
     #[test]
     fn delete_the_same_document_multiple_time() {
         let mut index = TempIndex::new();
-        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         let mut wtxn = index.write_txn().unwrap();
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let local_pool;
+        let indexer_config = &index.indexer_config;
+        let pool = match &indexer_config.thread_pool {
+            Some(pool) => pool,
+            None => {
+                local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
+                &local_pool
+            }
+        };
 
-        let (builder, removed) =
-            builder.remove_documents(vec![S("1"), S("2"), S("1"), S("2")]).unwrap();
-        insta::assert_snapshot!(removed.unwrap(), @"0");
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
+
+        indexer.delete_documents(&["1", "2", "1", "2"]);
 
         let documents = documents!([
             { "id": 1, "doggo": "kevin" },
             { "id": 2, "doggo": { "name": "jean", "age": 20 } },
             { "id": 3, "name": "bob", "age": 25 },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"3");
+        indexer.add_documents(&documents);
 
-        let (builder, removed) =
-            builder.remove_documents(vec![S("1"), S("2"), S("1"), S("2")]).unwrap();
-        insta::assert_snapshot!(removed.unwrap(), @"2");
+        indexer.delete_documents(&["1", "2", "1", "2"]);
 
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 3,
-            number_of_documents: 1,
-        }
-        "###);
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .unwrap();
+
+        pool.install(|| {
+            indexer::index(
+                &mut wtxn,
+                &index.inner,
+                indexer_config.grenad_parameters(),
+                &db_fields_ids_map,
+                new_fields_ids_map,
+                primary_key,
+                &document_changes,
+                embedders,
+                &|| false,
+                &|_| (),
+            )
+        })
+        .unwrap()
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -2017,32 +2469,51 @@ mod tests {
     #[test]
     fn add_document_and_in_another_transform_delete_the_document_then_add_it_again() {
         let mut index = TempIndex::new();
-        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         let mut wtxn = index.write_txn().unwrap();
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let local_pool;
+        let indexer_config = &index.indexer_config;
+        let pool = match &indexer_config.thread_pool {
+            Some(pool) => pool,
+            None => {
+                local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
+                &local_pool
+            }
+        };
+
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
 
         let documents = documents!([
             { "id": 1, "doggo": "kevin" },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"1");
+        indexer.add_documents(&documents);
 
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 1,
-            number_of_documents: 1,
-        }
-        "###);
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .unwrap();
+
+        pool.install(|| {
+            indexer::index(
+                &mut wtxn,
+                &index.inner,
+                indexer_config.grenad_parameters(),
+                &db_fields_ids_map,
+                new_fields_ids_map,
+                primary_key,
+                &document_changes,
+                embedders,
+                &|| false,
+                &|_| (),
+            )
+        })
+        .unwrap()
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -2052,32 +2523,43 @@ mod tests {
         // A first batch of documents has been inserted
 
         let mut wtxn = index.write_txn().unwrap();
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
 
-        let (builder, removed) = builder.remove_documents(vec![S("1")]).unwrap();
-        insta::assert_snapshot!(removed.unwrap(), @"1");
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+
+        indexer.delete_documents(&["1"]);
 
         let documents = documents!([
             { "id": 1, "catto": "jorts" },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"1");
 
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 1,
-            number_of_documents: 1,
-        }
-        "###);
+        indexer.add_documents(&documents);
+
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .unwrap();
+
+        pool.install(|| {
+            indexer::index(
+                &mut wtxn,
+                &index.inner,
+                indexer_config.grenad_parameters(),
+                &db_fields_ids_map,
+                new_fields_ids_map,
+                primary_key,
+                &document_changes,
+                embedders,
+                &|| false,
+                &|_| (),
+            )
+        })
+        .unwrap()
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -2230,32 +2712,52 @@ mod tests {
 
         let mut wtxn = index.write_txn().unwrap();
 
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let local_pool;
+        let indexer_config = &index.indexer_config;
+        let pool = match &indexer_config.thread_pool {
+            Some(pool) => pool,
+            None => {
+                local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
+                &local_pool
+            }
+        };
+
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
 
         // OP
 
         let documents = documents!([
             { "id": 1, "doggo": "bernese" },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"1");
+        indexer.add_documents(&documents).unwrap();
 
         // FINISHING
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 1,
-            number_of_documents: 1,
-        }
-        "###);
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .unwrap();
+
+        pool.install(|| {
+            indexer::index(
+                &mut wtxn,
+                &index.inner,
+                indexer_config.grenad_parameters(),
+                &db_fields_ids_map,
+                new_fields_ids_map,
+                primary_key,
+                &document_changes,
+                embedders,
+                &|| false,
+                &|_| (),
+            )
+        })
+        .unwrap()
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -2274,32 +2776,41 @@ mod tests {
 
         let mut wtxn = index.write_txn().unwrap();
 
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let (builder, removed) = builder.remove_documents(vec![S("1")]).unwrap();
-        insta::assert_snapshot!(removed.unwrap(), @"1");
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+
+        indexer.delete_documents(&["1"]);
 
         let documents = documents!([
             { "id": 0, "catto": "jorts" },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"1");
+        indexer.add_documents(&documents).unwrap();
 
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 1,
-            number_of_documents: 1,
-        }
-        "###);
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .unwrap();
+
+        pool.install(|| {
+            indexer::index(
+                &mut wtxn,
+                &index.inner,
+                indexer_config.grenad_parameters(),
+                &db_fields_ids_map,
+                new_fields_ids_map,
+                primary_key,
+                &document_changes,
+                embedders,
+                &|| false,
+                &|_| (),
+            )
+        })
+        .unwrap()
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -2317,29 +2828,39 @@ mod tests {
 
         let mut wtxn = index.write_txn().unwrap();
 
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
 
         let documents = documents!([
             { "id": 1, "catto": "jorts" },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"1");
+        indexer.add_documents(&documents).unwrap();
 
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 1,
-            number_of_documents: 2,
-        }
-        "###);
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .unwrap();
+
+        pool.install(|| {
+            indexer::index(
+                &mut wtxn,
+                &index.inner,
+                indexer_config.grenad_parameters(),
+                &db_fields_ids_map,
+                new_fields_ids_map,
+                primary_key,
+                &document_changes,
+                embedders,
+                &|| false,
+                &|_| (),
+            )
+        })
+        .unwrap()
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -2365,10 +2886,12 @@ mod tests {
             .collect();
 
         // Delete some documents.
-        index.delete_documents_using_wtxn(
-            wtxn,
-            external_ids.iter().map(ToString::to_string).collect(),
-        );
+        index
+            .delete_documents_using_wtxn(
+                wtxn,
+                external_ids.iter().map(ToString::to_string).collect(),
+            )
+            .unwrap();
 
         ids_to_delete
     }
@@ -2388,10 +2911,11 @@ mod tests {
                 ]),
             )
             .unwrap();
+        wtxn.commit().unwrap();
 
+        let mut wtxn = index.write_txn().unwrap();
         // delete those documents, ids are synchronous therefore 0, 1, and 2.
-        index.delete_documents_using_wtxn(&mut wtxn, vec![S("0"), S("1"), S("2")]);
-
+        index.delete_documents_using_wtxn(&mut wtxn, vec![S("0"), S("1"), S("2")]).unwrap();
         wtxn.commit().unwrap();
 
         // All these snapshots should be empty since the database was cleared
@@ -2429,7 +2953,7 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
 
         // Delete not all of the documents but some of them.
-        index.delete_documents_using_wtxn(&mut wtxn, vec![S("0"), S("1")]);
+        index.delete_documents_using_wtxn(&mut wtxn, vec![S("0"), S("1")]).unwrap();
 
         wtxn.commit().unwrap();
 
@@ -2443,14 +2967,15 @@ mod tests {
         let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
-
         index
             .update_settings_using_wtxn(&mut wtxn, |settings| {
                 settings.set_primary_key(S("docid"));
                 settings.set_filterable_fields(hashset! { S("label"), S("label2") });
             })
             .unwrap();
+        wtxn.commit().unwrap();
 
+        let mut wtxn = index.write_txn().unwrap();
         index
             .add_documents_using_wtxn(
                 &mut wtxn,
@@ -2482,14 +3007,15 @@ mod tests {
             )
             .unwrap();
 
+        wtxn.commit().unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
         delete_documents(&mut wtxn, &index, &["1_4", "1_70", "1_72"]);
 
         // Placeholder search with filter
         let filter = Filter::from_str("label = sign").unwrap().unwrap();
         let results = index.search(&wtxn).filter(filter).execute().unwrap();
         assert!(results.documents_ids.is_empty());
-
-        wtxn.commit().unwrap();
 
         db_snap!(index, word_docids);
         db_snap!(index, facet_id_f64_docids);
@@ -2626,7 +3152,9 @@ mod tests {
                 settings.set_sortable_fields(hashset!(S("_geo")));
             })
             .unwrap();
+        wtxn.commit().unwrap();
 
+        let mut wtxn = index.write_txn().unwrap();
         index.add_documents_using_wtxn(&mut wtxn, documents!([
             { "id": "1",  "city": "Lille",             "_geo": { "lat": 50.6299, "lng": 3.0569 } },
             { "id": "2",  "city": "Mons-en-Barœul",    "_geo": { "lat": 50.6415, "lng": 3.1106 } },
@@ -2649,7 +3177,9 @@ mod tests {
             { "id": "19", "city": "Compiègne",         "_geo": { "lat": 49.4449, "lng": 2.7913 } },
             { "id": "20", "city": "Paris",             "_geo": { "lat": 48.9021, "lng": 2.3708 } }
         ])).unwrap();
+        wtxn.commit().unwrap();
 
+        let mut wtxn = index.write_txn().unwrap();
         let external_ids_to_delete = ["5", "6", "7", "12", "17", "19"];
         let deleted_internal_ids = delete_documents(&mut wtxn, &index, &external_ids_to_delete);
 

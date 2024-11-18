@@ -2041,7 +2041,9 @@ name = "fuzzers"
 version = "1.11.0"
 dependencies = [
  "arbitrary",
+ "bumpalo",
  "clap",
+ "either",
  "fastrand",
  "milli",
  "serde",
