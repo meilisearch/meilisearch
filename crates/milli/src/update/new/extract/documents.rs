@@ -43,10 +43,12 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a> {
         let mut document_buffer = bumpalo::collections::Vec::new_in(&context.doc_alloc);
         let mut document_extractor_data = context.data.0.borrow_mut_or_yield();
 
-        let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut_or_yield();
-
         for change in changes {
             let change = change?;
+            // **WARNING**: the exclusive borrow on `new_fields_ids_map` needs to be taken **inside** of the `for change in changes` loop
+            // Otherwise, `BorrowMutError` will occur for document changes that also need the new_fields_ids_map (e.g.: UpdateByFunction)
+            let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut_or_yield();
+
             let external_docid = change.external_docid().to_owned();
 
             // document but we need to create a function that collects and compresses documents.
