@@ -70,28 +70,30 @@ impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
     fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'t str, &'t RawValue)>> {
         let mut it = self.content.iter();
 
-        std::iter::from_fn(move || {
+        std::iter::from_fn(move || loop {
             let (fid, value) = it.next()?;
+            let name = match self.fields_ids_map.name(fid).ok_or(
+                InternalError::FieldIdMapMissingEntry(crate::FieldIdMapMissingEntry::FieldId {
+                    field_id: fid,
+                    process: "getting current document",
+                }),
+            ) {
+                Ok(name) => name,
+                Err(error) => return Some(Err(error.into())),
+            };
 
-            let res = (|| loop {
-                let name = self.fields_ids_map.name(fid).ok_or(
-                    InternalError::FieldIdMapMissingEntry(crate::FieldIdMapMissingEntry::FieldId {
-                        field_id: fid,
-                        process: "getting current document",
-                    }),
-                )?;
+            if name == RESERVED_VECTORS_FIELD_NAME || name == "_geo" {
+                continue;
+            }
 
-                if name == RESERVED_VECTORS_FIELD_NAME || name == "_geo" {
-                    continue;
-                }
-
+            let res = (|| {
                 let value =
                     serde_json::from_slice(value).map_err(crate::InternalError::SerdeJson)?;
 
-                return Ok((name, value));
+                Ok((name, value))
             })();
 
-            Some(res)
+            return Some(res);
         })
     }
 
