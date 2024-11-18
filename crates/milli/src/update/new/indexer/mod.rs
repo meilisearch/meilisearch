@@ -68,6 +68,7 @@ mod steps {
     ];
 
     const fn step(step: u16) -> (u16, &'static str) {
+        /// TODO: convert to an enum_iterator enum of steps
         (step, STEPS[step as usize])
     }
 
