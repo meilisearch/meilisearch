@@ -106,6 +106,7 @@ impl<'pl> DocumentOperation<'pl> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn extract_addition_payload_changes<'r, 'pl: 'r>(
     indexer: &'pl Bump,
     index: &Index,

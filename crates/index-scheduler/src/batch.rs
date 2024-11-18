@@ -1395,15 +1395,17 @@ impl IndexScheduler {
                 Ok(tasks)
             }
             IndexOperation::DocumentEdition { mut task, .. } => {
-                let (filter, context, code) =
-                    if let KindWithContent::DocumentEdition {
-                        filter_expr, context, function, ..
-                    } = &task.kind
-                    {
-                        (filter_expr, context, function)
-                    } else {
-                        unreachable!()
-                    };
+                let (filter, code) = if let KindWithContent::DocumentEdition {
+                    filter_expr,
+                    context: _,
+                    function,
+                    ..
+                } = &task.kind
+                {
+                    (filter_expr, function)
+                } else {
+                    unreachable!()
+                };
 
                 let candidates = match filter.as_ref().map(Filter::from_json) {
                     Some(Ok(Some(filter))) => {

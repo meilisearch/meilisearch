@@ -156,6 +156,7 @@ impl FacetedDocidsExtractor {
         res
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn facet_fn_with_options<'extractor, 'doc>(
         doc_alloc: &'doc Bump,
         cached_sorter: &mut BalancedCaches<'extractor>,
@@ -336,6 +337,7 @@ fn truncate_str(s: &str) -> &str {
 }
 
 impl FacetedDocidsExtractor {
+    #[allow(clippy::too_many_arguments)]
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::extract::faceted")]
     pub fn run_extraction<
         'pl,

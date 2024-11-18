@@ -971,6 +971,8 @@ impl IndexScheduler {
         let ProcessingTasks { started_at, processing, progress, .. } =
             self.processing_tasks.read().map_err(|_| Error::CorruptedTaskQueue)?.clone();
 
+        let _ = progress;
+
         let ret = tasks.into_iter();
         if processing.is_empty() {
             Ok((ret.collect(), total))

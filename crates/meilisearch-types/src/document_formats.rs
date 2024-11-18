@@ -220,11 +220,12 @@ pub fn read_json(input: &File, output: impl io::Write) -> Result<u64> {
 
     let mut out = BufWriter::new(output);
     let mut deserializer = serde_json::Deserializer::from_slice(&input);
-    let count = match array_each(&mut deserializer, |obj: &RawValue| {
+    let res = array_each(&mut deserializer, |obj: &RawValue| {
         doc_alloc.reset();
         let map = RawMap::from_raw_value(obj, &doc_alloc)?;
         to_writer(&mut out, &map)
-    }) {
+    });
+    let count = match res {
         // The json data has been deserialized and does not need to be processed again.
         // The data has been transferred to the writer during the deserialization process.
         Ok(Ok(count)) => count,
