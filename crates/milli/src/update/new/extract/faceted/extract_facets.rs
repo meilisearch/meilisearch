@@ -15,10 +15,10 @@ use crate::heed_codec::facet::OrderedF64Codec;
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::FieldIdDocidFacetSender;
 use crate::update::new::indexer::document_changes::{
-    extract, DocumentChangeContext, DocumentChanges, Extractor, FullySend, IndexingContext,
-    Progress, ThreadLocal,
+    extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext, Progress,
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
+use crate::update::new::thread_local::{FullySend, ThreadLocal};
 use crate::update::new::DocumentChange;
 use crate::update::GrenadParameters;
 use crate::{DocumentId, FieldId, Index, Result, MAX_FACET_VALUE_LENGTH};

@@ -8,7 +8,8 @@ use super::cache::DelAddRoaringBitmap;
 use crate::error::FaultSource;
 use crate::prompt::Prompt;
 use crate::update::new::channel::EmbeddingSender;
-use crate::update::new::indexer::document_changes::{DocumentChangeContext, Extractor, MostlySend};
+use crate::update::new::indexer::document_changes::{DocumentChangeContext, Extractor};
+use crate::update::new::thread_local::MostlySend;
 use crate::update::new::vector_document::VectorDocument;
 use crate::update::new::DocumentChange;
 use crate::vector::error::{

@@ -3,7 +3,7 @@ use std::sync::{OnceLock, RwLock};
 use std::thread::{self, Builder};
 
 use big_s::S;
-use document_changes::{extract, DocumentChanges, IndexingContext, Progress, ThreadLocal};
+use document_changes::{extract, DocumentChanges, IndexingContext, Progress};
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::{DocumentOperation, PayloadStats};
 use hashbrown::HashMap;
@@ -20,6 +20,7 @@ use super::channel::*;
 use super::extract::*;
 use super::facet_search_builder::FacetSearchBuilder;
 use super::merger::FacetFieldIdsDelta;
+use super::thread_local::ThreadLocal;
 use super::word_fst_builder::{PrefixData, PrefixDelta, WordFstBuilder};
 use super::words_prefix_docids::{
     compute_word_prefix_docids, compute_word_prefix_fid_docids, compute_word_prefix_position_docids,

@@ -13,9 +13,8 @@ pub use geo::*;
 pub use searchable::*;
 pub use vectors::EmbeddingExtractor;
 
-use super::indexer::document_changes::{
-    DocumentChanges, FullySend, IndexingContext, Progress, ThreadLocal,
-};
+use super::indexer::document_changes::{DocumentChanges, IndexingContext, Progress};
+use super::thread_local::{FullySend, ThreadLocal};
 use crate::update::GrenadParameters;
 use crate::Result;
 

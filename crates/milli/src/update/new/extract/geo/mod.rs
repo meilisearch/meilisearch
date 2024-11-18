@@ -11,8 +11,9 @@ use serde_json::Value;
 
 use crate::error::GeoError;
 use crate::update::new::document::Document;
-use crate::update::new::indexer::document_changes::{DocumentChangeContext, Extractor, MostlySend};
+use crate::update::new::indexer::document_changes::{DocumentChangeContext, Extractor};
 use crate::update::new::ref_cell_ext::RefCellExt as _;
+use crate::update::new::thread_local::MostlySend;
 use crate::update::new::DocumentChange;
 use crate::update::GrenadParameters;
 use crate::{lat_lng_to_xyz, DocumentId, GeoPoint, Index, InternalError, Result};

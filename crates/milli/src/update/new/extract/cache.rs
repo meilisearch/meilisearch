@@ -79,7 +79,7 @@ use roaring::RoaringBitmap;
 use rustc_hash::FxBuildHasher;
 
 use crate::update::del_add::{DelAdd, KvWriterDelAdd};
-use crate::update::new::indexer::document_changes::MostlySend;
+use crate::update::new::thread_local::MostlySend;
 use crate::update::new::KvReaderDelAdd;
 use crate::update::MergeDeladdCboRoaringBitmaps;
 use crate::{CboRoaringBitmapCodec, Result};

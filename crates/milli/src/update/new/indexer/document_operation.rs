@@ -9,10 +9,11 @@ use serde_json::value::RawValue;
 use serde_json::Deserializer;
 
 use super::super::document_change::DocumentChange;
-use super::document_changes::{DocumentChangeContext, DocumentChanges, MostlySend};
+use super::document_changes::{DocumentChangeContext, DocumentChanges};
 use super::retrieve_or_guess_primary_key;
 use crate::documents::PrimaryKey;
 use crate::update::new::document::Versions;
+use crate::update::new::thread_local::MostlySend;
 use crate::update::new::{Deletion, Insertion, Update};
 use crate::update::{AvailableIds, IndexDocumentsMethod};
 use crate::{DocumentId, Error, FieldsIdsMap, Index, InternalError, Result, UserError};

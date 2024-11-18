@@ -4,8 +4,9 @@ use rayon::iter::IndexedParallelIterator;
 use rayon::slice::ParallelSlice as _;
 use roaring::RoaringBitmap;
 
-use super::document_changes::{DocumentChangeContext, DocumentChanges, MostlySend};
+use super::document_changes::{DocumentChangeContext, DocumentChanges};
 use crate::documents::PrimaryKey;
+use crate::update::new::thread_local::MostlySend;
 use crate::update::new::{Deletion, DocumentChange};
 use crate::{DocumentId, Result};
 
@@ -92,9 +93,10 @@ mod test {
     use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
     use crate::index::tests::TempIndex;
     use crate::update::new::indexer::document_changes::{
-        extract, DocumentChangeContext, Extractor, IndexingContext, MostlySend, ThreadLocal,
+        extract, DocumentChangeContext, Extractor, IndexingContext,
     };
     use crate::update::new::indexer::DocumentDeletion;
+    use crate::update::new::thread_local::{MostlySend, ThreadLocal};
     use crate::update::new::DocumentChange;
     use crate::DocumentId;
 

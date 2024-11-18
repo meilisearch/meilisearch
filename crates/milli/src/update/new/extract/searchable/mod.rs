@@ -14,9 +14,9 @@ use tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use super::cache::BalancedCaches;
 use super::DocidsExtractor;
 use crate::update::new::indexer::document_changes::{
-    extract, DocumentChangeContext, DocumentChanges, Extractor, FullySend, IndexingContext,
-    Progress, ThreadLocal,
+    extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext, Progress,
 };
+use crate::update::new::thread_local::{FullySend, ThreadLocal};
 use crate::update::new::DocumentChange;
 use crate::update::GrenadParameters;
 use crate::{Index, Result, MAX_POSITION_PER_ATTRIBUTE};
