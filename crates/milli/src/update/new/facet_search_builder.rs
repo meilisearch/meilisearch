@@ -1,3 +1,4 @@
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeSet, HashMap};
 
 use charabia::normalizer::NormalizerOption;
@@ -83,9 +84,9 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
     }
 
     fn locales(&mut self, field_id: FieldId) -> Option<&[Language]> {
-        if !self.localized_field_ids.contains_key(&field_id) {
+        if let Entry::Vacant(e) = self.localized_field_ids.entry(field_id) {
             let Some(field_name) = self.global_fields_ids_map.name(field_id) else {
-                unreachable!("Field id {} not found in the global fields ids map", field_id);
+                unreachable!("Field id {field_id} not found in the global fields ids map");
             };
 
             let locales = self
@@ -94,7 +95,7 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
                 .find(|rule| rule.match_str(field_name))
                 .map(|rule| rule.locales.clone());
 
-            self.localized_field_ids.insert(field_id, locales);
+            e.insert(locales);
         }
 
         self.localized_field_ids.get(&field_id).unwrap().as_deref()

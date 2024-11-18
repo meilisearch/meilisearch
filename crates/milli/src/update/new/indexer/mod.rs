@@ -20,6 +20,7 @@ use super::channel::*;
 use super::extract::*;
 use super::facet_search_builder::FacetSearchBuilder;
 use super::merger::FacetFieldIdsDelta;
+use super::steps::Step;
 use super::thread_local::ThreadLocal;
 use super::word_fst_builder::{PrefixData, PrefixDelta, WordFstBuilder};
 use super::words_prefix_docids::{
@@ -50,80 +51,6 @@ mod document_deletion;
 mod document_operation;
 mod partial_dump;
 mod update_by_function;
-
-mod steps {
-    pub const STEPS: &[&str] = &[
-        "extracting documents",
-        "extracting facets",
-        "extracting words",
-        "extracting word proximity",
-        "extracting embeddings",
-        "writing geo points",
-        "writing to database",
-        "writing embeddings to database",
-        "waiting for extractors",
-        "post-processing facets",
-        "post-processing words",
-        "finalizing",
-    ];
-
-    const fn step(step: u16) -> (u16, &'static str) {
-        /// TODO: convert to an enum_iterator enum of steps
-        (step, STEPS[step as usize])
-    }
-
-    pub const fn total_steps() -> u16 {
-        STEPS.len() as u16
-    }
-
-    pub const fn extract_documents() -> (u16, &'static str) {
-        step(0)
-    }
-
-    pub const fn extract_facets() -> (u16, &'static str) {
-        step(1)
-    }
-
-    pub const fn extract_words() -> (u16, &'static str) {
-        step(2)
-    }
-
-    pub const fn extract_word_proximity() -> (u16, &'static str) {
-        step(3)
-    }
-
-    pub const fn extract_embeddings() -> (u16, &'static str) {
-        step(4)
-    }
-
-    pub const fn extract_geo_points() -> (u16, &'static str) {
-        step(5)
-    }
-
-    pub const fn write_db() -> (u16, &'static str) {
-        step(6)
-    }
-
-    pub const fn write_embedding_db() -> (u16, &'static str) {
-        step(7)
-    }
-
-    pub const fn waiting_extractors() -> (u16, &'static str) {
-        step(8)
-    }
-
-    pub const fn post_processing_facets() -> (u16, &'static str) {
-        step(9)
-    }
-
-    pub const fn post_processing_words() -> (u16, &'static str) {
-        step(10)
-    }
-
-    pub const fn finalizing() -> (u16, &'static str) {
-        step(11)
-    }
-}
 
 /// This is the main function of this crate.
 ///
@@ -167,8 +94,6 @@ where
         send_progress,
     };
 
-    let total_steps = steps::total_steps();
-
     let mut field_distribution = index.field_distribution(wtxn)?;
     let mut document_ids = index.documents_ids(wtxn)?;
 
@@ -189,15 +114,13 @@ where
             let document_sender = extractor_sender.documents();
             let document_extractor = DocumentsExtractor::new(&document_sender, embedders);
             let datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
-            let (finished_steps, step_name) = steps::extract_documents();
+
             extract(document_changes,
                 &document_extractor,
                 indexing_context,
                 &mut extractor_allocs,
                 &datastore,
-                finished_steps,
-                total_steps,
-                step_name,
+                Step::ExtractingDocuments,
             )?;
 
             for document_extractor_data in datastore {
@@ -218,8 +141,6 @@ where
                 let span = tracing::trace_span!(target: "indexing::documents::extract", "faceted");
                 let _entered = span.enter();
 
-                let (finished_steps, step_name) = steps::extract_facets();
-
                 facet_field_ids_delta = merge_and_send_facet_docids(
                     FacetedDocidsExtractor::run_extraction(
                         grenad_parameters,
@@ -227,9 +148,7 @@ where
                         indexing_context,
                         &mut extractor_allocs,
                         &extractor_sender.field_id_docid_facet_sender(),
-                        finished_steps,
-                        total_steps,
-                        step_name,
+                        Step::ExtractingFacets
                     )?,
                     FacetDatabases::new(index),
                     index,
@@ -240,7 +159,7 @@ where
             {
                 let span = tracing::trace_span!(target: "indexing::documents::extract", "word_docids");
                 let _entered = span.enter();
-                let (finished_steps, step_name) = steps::extract_words();
+
 
                 let WordDocidsCaches {
                     word_docids,
@@ -253,9 +172,7 @@ where
                     document_changes,
                     indexing_context,
                     &mut extractor_allocs,
-                    finished_steps,
-                    total_steps,
-                    step_name,
+                    Step::ExtractingWords
                 )?;
 
                 // TODO Word Docids Merger
@@ -336,16 +253,13 @@ where
                 let span = tracing::trace_span!(target: "indexing::documents::extract", "word_pair_proximity_docids");
                 let _entered = span.enter();
 
-                let (finished_steps, step_name) = steps::extract_word_proximity();
 
                 let caches = <WordPairProximityDocidsExtractor as DocidsExtractor>::run_extraction(
                     grenad_parameters,
                     document_changes,
                     indexing_context,
                     &mut extractor_allocs,
-                    finished_steps,
-                    total_steps,
-                    step_name,
+                    Step::ExtractingWordProximity,
                 )?;
 
                 merge_and_send_docids(
@@ -369,8 +283,7 @@ where
                 let embedding_sender = extractor_sender.embeddings();
                 let extractor = EmbeddingExtractor::new(embedders, &embedding_sender, field_distribution, request_threads());
                 let mut datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
-                let (finished_steps, step_name) = steps::extract_embeddings();
-                extract(document_changes, &extractor, indexing_context, &mut extractor_allocs, &datastore, finished_steps, total_steps, step_name)?;
+                extract(document_changes, &extractor, indexing_context, &mut extractor_allocs, &datastore, Step::ExtractingEmbeddings)?;
 
                 for config in &mut index_embeddings {
                     'data: for data in datastore.iter_mut() {
@@ -392,16 +305,13 @@ where
                     break 'geo;
                 };
                 let datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
-                let (finished_steps, step_name) = steps::extract_geo_points();
                 extract(
                     document_changes,
                     &extractor,
                     indexing_context,
                     &mut extractor_allocs,
                     &datastore,
-                    finished_steps,
-                    total_steps,
-                    step_name,
+                    Step::WritingGeoPoints
                 )?;
 
                 merge_and_send_rtree(
@@ -431,8 +341,7 @@ where
             {
                 let span = tracing::trace_span!(target: "indexing::documents::extract", "FINISH");
                 let _entered = span.enter();
-                let (finished_steps, step_name) = steps::write_db();
-                (indexing_context.send_progress)(Progress { finished_steps, total_steps, step_name, finished_total_documents: None });
+                (indexing_context.send_progress)(Progress::from_step(Step::WritingToDatabase));
             }
 
             Result::Ok(facet_field_ids_delta)
@@ -513,13 +422,9 @@ where
                         let span = tracing::trace_span!(target: "indexing::vectors", parent: &indexer_span, "build");
                         let _entered = span.enter();
 
-                        let (finished_steps, step_name) = steps::write_embedding_db();
-                        (indexing_context.send_progress)(Progress {
-                            finished_steps,
-                            total_steps,
-                            step_name,
-                            finished_total_documents: None,
-                        });
+                        (indexing_context.send_progress)(Progress::from_step(
+                            Step::WritingEmbeddingsToDatabase,
+                        ));
 
                         for (_embedder_index, (_embedder_name, _embedder, writer, dimensions)) in
                             &mut arroy_writers
@@ -540,46 +445,21 @@ where
             }
         }
 
-        let (finished_steps, step_name) = steps::waiting_extractors();
-        (indexing_context.send_progress)(Progress {
-            finished_steps,
-            total_steps,
-            step_name,
-            finished_total_documents: None,
-        });
+        (indexing_context.send_progress)(Progress::from_step(Step::WaitingForExtractors));
 
         let facet_field_ids_delta = extractor_handle.join().unwrap()?;
 
-        let (finished_steps, step_name) = steps::post_processing_facets();
-        (indexing_context.send_progress)(Progress {
-            finished_steps,
-            total_steps,
-            step_name,
-            finished_total_documents: None,
-        });
+        (indexing_context.send_progress)(Progress::from_step(Step::PostProcessingFacets));
 
         compute_facet_search_database(index, wtxn, global_fields_ids_map)?;
         compute_facet_level_database(index, wtxn, facet_field_ids_delta)?;
 
-        let (finished_steps, step_name) = steps::post_processing_words();
-        (indexing_context.send_progress)(Progress {
-            finished_steps,
-            total_steps,
-            step_name,
-            finished_total_documents: None,
-        });
+        (indexing_context.send_progress)(Progress::from_step(Step::PostProcessingWords));
 
         if let Some(prefix_delta) = compute_word_fst(index, wtxn)? {
             compute_prefix_database(index, wtxn, prefix_delta)?;
         }
-
-        let (finished_steps, step_name) = steps::finalizing();
-        (indexing_context.send_progress)(Progress {
-            finished_steps,
-            total_steps,
-            step_name,
-            finished_total_documents: None,
-        });
+        (indexing_context.send_progress)(Progress::from_step(Step::Finalizing));
 
         Ok(()) as Result<_>
     })?;

@@ -14,6 +14,7 @@ use crate::update::new::indexer::document_changes::{
     extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext, Progress,
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
+use crate::update::new::steps::Step;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
 use crate::update::new::DocumentChange;
 use crate::update::GrenadParameters;
@@ -249,9 +250,7 @@ impl WordDocidsExtractors {
         document_changes: &DC,
         indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP, SP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
-        finished_steps: u16,
-        total_steps: u16,
-        step_name: &'static str,
+        step: Step,
     ) -> Result<WordDocidsCaches<'extractor>>
     where
         MSP: Fn() -> bool + Sync,
@@ -306,9 +305,7 @@ impl WordDocidsExtractors {
                 indexing_context,
                 extractor_allocs,
                 &datastore,
-                finished_steps,
-                total_steps,
-                step_name,
+                step,
             )?;
         }
 

@@ -96,6 +96,7 @@ mod test {
         extract, DocumentChangeContext, Extractor, IndexingContext,
     };
     use crate::update::new::indexer::DocumentDeletion;
+    use crate::update::new::steps::Step;
     use crate::update::new::thread_local::{MostlySend, ThreadLocal};
     use crate::update::new::DocumentChange;
     use crate::DocumentId;
@@ -175,9 +176,7 @@ mod test {
                 context,
                 &mut extractor_allocs,
                 &datastore,
-                0,
-                1,
-                "test",
+                Step::ExtractingDocuments,
             )
             .unwrap();
 

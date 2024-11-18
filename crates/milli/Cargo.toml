@@ -101,6 +101,7 @@ thread_local = "1.1.8"
 allocator-api2 = "0.2.18"
 rustc-hash = "2.0.0"
 uell = "0.1.0"
+enum-iterator = "2.1.0"
 
 [dev-dependencies]
 mimalloc = { version = "0.1.43", default-features = false }

@@ -14,6 +14,7 @@ pub use searchable::*;
 pub use vectors::EmbeddingExtractor;
 
 use super::indexer::document_changes::{DocumentChanges, IndexingContext, Progress};
+use super::steps::Step;
 use super::thread_local::{FullySend, ThreadLocal};
 use crate::update::GrenadParameters;
 use crate::Result;
@@ -24,9 +25,7 @@ pub trait DocidsExtractor {
         document_changes: &DC,
         indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP, SP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
-        finished_steps: u16,
-        total_steps: u16,
-        step_name: &'static str,
+        step: Step,
     ) -> Result<Vec<BalancedCaches<'extractor>>>
     where
         MSP: Fn() -> bool + Sync,

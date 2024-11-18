@@ -8,6 +8,7 @@ use rayon::iter::IndexedParallelIterator;
 use super::super::document_change::DocumentChange;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt as _;
+use crate::update::new::steps::Step;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result};
 
@@ -191,7 +192,6 @@ where
 
 const CHUNK_SIZE: usize = 100;
 
-#[allow(clippy::too_many_arguments)]
 pub fn extract<
     'pl,        // covariant lifetime of the underlying payload
     'extractor, // invariant lifetime of extractor_alloc
@@ -217,9 +217,7 @@ pub fn extract<
     }: IndexingContext<'fid, 'indexer, 'index, MSP, SP>,
     extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
     datastore: &'data ThreadLocal<EX::Data>,
-    finished_steps: u16,
-    total_steps: u16,
-    step_name: &'static str,
+    step: Step,
 ) -> Result<()>
 where
     EX: Extractor<'extractor>,
@@ -233,7 +231,7 @@ where
         extractor_alloc.0.reset();
     }
 
-    let total_documents = document_changes.len();
+    let total_documents = document_changes.len() as u32;
 
     let pi = document_changes.iter(CHUNK_SIZE);
     pi.enumerate().try_arc_for_each_try_init(
@@ -253,14 +251,13 @@ where
             if (must_stop_processing)() {
                 return Err(Arc::new(InternalError::AbortedIndexation.into()));
             }
-            let finished_documents = finished_documents * CHUNK_SIZE;
+            let finished_documents = (finished_documents * CHUNK_SIZE) as u32;
 
-            (send_progress)(Progress {
-                finished_steps,
-                total_steps,
-                step_name,
-                finished_total_documents: Some((finished_documents as u32, total_documents as u32)),
-            });
+            (send_progress)(Progress::from_step_documents(
+                step,
+                finished_documents,
+                total_documents,
+            ));
 
             // Clean up and reuse the document-specific allocator
             context.doc_alloc.reset();
@@ -279,12 +276,7 @@ where
         },
     )?;
 
-    (send_progress)(Progress {
-        finished_steps,
-        total_steps,
-        step_name,
-        finished_total_documents: Some((total_documents as u32, total_documents as u32)),
-    });
+    (send_progress)(Progress::from_step_documents(step, total_documents, total_documents));
 
     Ok(())
 }
@@ -294,4 +286,21 @@ pub struct Progress {
     pub total_steps: u16,
     pub step_name: &'static str,
     pub finished_total_documents: Option<(u32, u32)>,
+}
+
+impl Progress {
+    pub fn from_step(step: Step) -> Self {
+        Self {
+            finished_steps: step.finished_steps(),
+            total_steps: Step::total_steps(),
+            step_name: step.name(),
+            finished_total_documents: None,
+        }
+    }
+    pub fn from_step_documents(step: Step, finished_documents: u32, total_documents: u32) -> Self {
+        Self {
+            finished_total_documents: Some((finished_documents, total_documents)),
+            ..Progress::from_step(step)
+        }
+    }
 }

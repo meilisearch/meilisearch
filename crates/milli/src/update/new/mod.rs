@@ -17,6 +17,7 @@ pub mod indexer;
 mod merger;
 mod parallel_iterator_ext;
 mod ref_cell_ext;
+pub(crate) mod steps;
 pub(crate) mod thread_local;
 mod top_level_map;
 pub mod vector_document;

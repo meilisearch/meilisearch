@@ -18,6 +18,7 @@ use crate::update::new::indexer::document_changes::{
     extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext, Progress,
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
+use crate::update::new::steps::Step;
 use crate::update::new::thread_local::{FullySend, ThreadLocal};
 use crate::update::new::DocumentChange;
 use crate::update::GrenadParameters;
@@ -337,7 +338,6 @@ fn truncate_str(s: &str) -> &str {
 }
 
 impl FacetedDocidsExtractor {
-    #[allow(clippy::too_many_arguments)]
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::extract::faceted")]
     pub fn run_extraction<
         'pl,
@@ -354,9 +354,7 @@ impl FacetedDocidsExtractor {
         indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP, SP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
         sender: &FieldIdDocidFacetSender,
-        finished_steps: u16,
-        total_steps: u16,
-        step_name: &'static str,
+        step: Step,
     ) -> Result<Vec<BalancedCaches<'extractor>>>
     where
         MSP: Fn() -> bool + Sync,
@@ -386,9 +384,7 @@ impl FacetedDocidsExtractor {
                 indexing_context,
                 extractor_allocs,
                 &datastore,
-                finished_steps,
-                total_steps,
-                step_name,
+                step,
             )?;
         }
 

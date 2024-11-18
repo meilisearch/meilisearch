@@ -3619,6 +3619,7 @@ dependencies = [
  "csv",
  "deserr",
  "either",
+ "enum-iterator",
  "filter-parser",
  "flatten-serde-json",
  "fst",
