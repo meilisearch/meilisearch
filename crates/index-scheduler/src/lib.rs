@@ -4601,7 +4601,7 @@ mod tests {
         snapshot!(primary_key.is_none(), @"false");
 
         // The second batch should contains only one task that fails because it tries to update the primary key to `bork`.
-        handle.advance_one_failed_batch();
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_task_fails");
 
         // The third batch should succeed and only contains one task.

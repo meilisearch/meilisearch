@@ -777,15 +777,9 @@ pub fn retrieve_or_guess_primary_key<'a>(
         match primary_key_from_op {
             // we did, and it is different from the DB one
             Some(primary_key_from_op) if primary_key_from_op != primary_key_from_db => {
-                // is the index empty?
-                if index.number_of_documents(rtxn)? == 0 {
-                    // change primary key
-                    (primary_key_from_op, true)
-                } else {
-                    return Ok(Err(UserError::PrimaryKeyCannotBeChanged(
-                        primary_key_from_db.to_string(),
-                    )));
-                }
+                return Ok(Err(UserError::PrimaryKeyCannotBeChanged(
+                    primary_key_from_db.to_string(),
+                )));
             }
             _ => (primary_key_from_db, false),
         }
