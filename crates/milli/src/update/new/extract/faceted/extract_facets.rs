@@ -36,7 +36,7 @@ impl<'a, 'extractor> Extractor<'extractor> for FacetedExtractorData<'a> {
     fn init_data(&self, extractor_alloc: &'extractor Bump) -> Result<Self::Data> {
         Ok(RefCell::new(BalancedCaches::new_in(
             self.buckets,
-            self.grenad_parameters.max_memory,
+            self.grenad_parameters.max_memory_by_thread(),
             extractor_alloc,
         )))
     }

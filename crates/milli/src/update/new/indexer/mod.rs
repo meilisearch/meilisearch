@@ -132,6 +132,7 @@ mod steps {
 pub fn index<'pl, 'indexer, 'index, DC, MSP, SP>(
     wtxn: &mut RwTxn,
     index: &'index Index,
+    grenad_parameters: GrenadParameters,
     db_fields_ids_map: &'indexer FieldsIdsMap,
     new_fields_ids_map: FieldsIdsMap,
     new_primary_key: Option<PrimaryKey<'pl>>,
@@ -209,16 +210,6 @@ where
 
             field_distribution.retain(|_, v| *v != 0);
 
-            const TEN_GIB: usize = 10 * 1024 * 1024 * 1024;
-            let current_num_threads = rayon::current_num_threads();
-            let max_memory = TEN_GIB / current_num_threads;
-            eprintln!("A maximum of {max_memory} bytes will be used for each of the {current_num_threads} threads");
-
-            let grenad_parameters = GrenadParameters {
-                max_memory: Some(max_memory),
-                ..GrenadParameters::default()
-            };
-
             let facet_field_ids_delta;
 
             {
@@ -228,7 +219,8 @@ where
                 let (finished_steps, step_name) = steps::extract_facets();
 
                 facet_field_ids_delta = merge_and_send_facet_docids(
-                    FacetedDocidsExtractor::run_extraction(grenad_parameters,
+                    FacetedDocidsExtractor::run_extraction(
+                        grenad_parameters,
                         document_changes,
                         indexing_context,
                         &mut extractor_allocs,
@@ -344,7 +336,8 @@ where
 
                 let (finished_steps, step_name) = steps::extract_word_proximity();
 
-                let caches = <WordPairProximityDocidsExtractor as DocidsExtractor>::run_extraction(grenad_parameters,
+                let caches = <WordPairProximityDocidsExtractor as DocidsExtractor>::run_extraction(
+                    grenad_parameters,
                     document_changes,
                     indexing_context,
                     &mut extractor_allocs,
@@ -398,7 +391,8 @@ where
                 };
                 let datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
                 let (finished_steps, step_name) = steps::extract_geo_points();
-                extract(document_changes,
+                extract(
+                    document_changes,
                     &extractor,
                     indexing_context,
                     &mut extractor_allocs,

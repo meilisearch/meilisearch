@@ -1290,7 +1290,6 @@ impl IndexScheduler {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn)?;
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let indexer_config = self.index_mapper.indexer_config();
                 let mut content_files_iter = content_files.iter();
                 let mut indexer = indexer::DocumentOperation::new(method);
                 let embedders = index.embedding_configs(index_wtxn)?;
@@ -1313,6 +1312,7 @@ impl IndexScheduler {
                 }
 
                 let local_pool;
+                let indexer_config = self.index_mapper.indexer_config();
                 let pool = match &indexer_config.thread_pool {
                     Some(pool) => pool,
                     None => {
@@ -1366,6 +1366,7 @@ impl IndexScheduler {
                         indexer::index(
                             index_wtxn,
                             index,
+                            indexer_config.grenad_parameters(),
                             &db_fields_ids_map,
                             new_fields_ids_map,
                             primary_key,
@@ -1456,7 +1457,8 @@ impl IndexScheduler {
 
                 if task.error.is_none() {
                     let local_pool;
-                    let pool = match &self.index_mapper.indexer_config().thread_pool {
+                    let indexer_config = self.index_mapper.indexer_config();
+                    let pool = match &indexer_config.thread_pool {
                         Some(pool) => pool,
                         None => {
                             local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
@@ -1474,6 +1476,7 @@ impl IndexScheduler {
                         indexer::index(
                             index_wtxn,
                             index,
+                            indexer_config.grenad_parameters(),
                             &db_fields_ids_map,
                             new_fields_ids_map,
                             None, // cannot change primary key in DocumentEdition
@@ -1606,7 +1609,8 @@ impl IndexScheduler {
 
                 if !tasks.iter().all(|res| res.error.is_some()) {
                     let local_pool;
-                    let pool = match &self.index_mapper.indexer_config().thread_pool {
+                    let indexer_config = self.index_mapper.indexer_config();
+                    let pool = match &indexer_config.thread_pool {
                         Some(pool) => pool,
                         None => {
                             local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
@@ -1624,6 +1628,7 @@ impl IndexScheduler {
                         indexer::index(
                             index_wtxn,
                             index,
+                            indexer_config.grenad_parameters(),
                             &db_fields_ids_map,
                             new_fields_ids_map,
                             None, // document deletion never changes primary key

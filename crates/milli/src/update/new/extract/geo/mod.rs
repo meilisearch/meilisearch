@@ -150,7 +150,7 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
     ) -> Result<()> {
         let rtxn = &context.rtxn;
         let index = context.index;
-        let max_memory = self.grenad_parameters.max_memory;
+        let max_memory = self.grenad_parameters.max_memory_by_thread();
         let db_fields_ids_map = context.db_fields_ids_map;
         let mut data_ref = context.data.borrow_mut_or_yield();
 
