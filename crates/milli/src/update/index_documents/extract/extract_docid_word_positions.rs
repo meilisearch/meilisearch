@@ -57,9 +57,9 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         .map(|s| s.iter().map(String::as_str).collect());
     let old_dictionary: Option<Vec<_>> =
         settings_diff.old.dictionary.as_ref().map(|s| s.iter().map(String::as_str).collect());
-    let del_builder =
+    let mut del_builder =
         tokenizer_builder(old_stop_words, old_separators.as_deref(), old_dictionary.as_deref());
-    let del_tokenizer = del_builder.into_tokenizer();
+    let del_tokenizer = del_builder.build();
 
     let new_stop_words = settings_diff.new.stop_words.as_ref();
     let new_separators: Option<Vec<_>> = settings_diff
@@ -69,9 +69,9 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         .map(|s| s.iter().map(String::as_str).collect());
     let new_dictionary: Option<Vec<_>> =
         settings_diff.new.dictionary.as_ref().map(|s| s.iter().map(String::as_str).collect());
-    let add_builder =
+    let mut add_builder =
         tokenizer_builder(new_stop_words, new_separators.as_deref(), new_dictionary.as_deref());
-    let add_tokenizer = add_builder.into_tokenizer();
+    let add_tokenizer = add_builder.build();
 
     // iterate over documents.
     let mut cursor = obkv_documents.into_cursor()?;

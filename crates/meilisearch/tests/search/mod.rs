@@ -69,8 +69,9 @@ async fn search_with_stop_word() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let (_, code) =
-        index.update_settings(json!({"stopWords": ["the", "a", "an", "to", "in", "of"]})).await;
+    let (_, code) = index
+        .update_settings(json!({"stopWords": ["the", "The", "a", "an", "to", "in", "of"]}))
+        .await;
     meili_snap::snapshot!(code, @"202 Accepted");
 
     let documents = DOCUMENTS.clone();
@@ -81,16 +82,7 @@ async fn search_with_stop_word() {
     index
         .search(json!({"q": "to the", "attributesToHighlight": ["title"], "attributesToRetrieve": ["title"] }), |response, code| {
             assert_eq!(code, 200, "{}", response);
-            snapshot!(json_string!(response["hits"]), @r###"
-            [
-              {
-                "title": "How to Train Your Dragon: The Hidden World",
-                "_formatted": {
-                  "title": "How to Train Your Dragon: <em>The</em> Hidden World"
-                }
-              }
-            ]
-            "###);
+            snapshot!(json_string!(response["hits"]), @"[]");
         })
         .await;
 
