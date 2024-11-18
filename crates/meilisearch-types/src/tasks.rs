@@ -62,11 +62,6 @@ impl Task {
         }
     }
 
-    pub fn with_batch_id(mut self, batch_id: TaskId) -> Self {
-        self.batch_uid = Some(batch_id);
-        self
-    }
-
     /// Return the list of indexes updated by this tasks.
     pub fn indexes(&self) -> Vec<&str> {
         self.kind.indexes()

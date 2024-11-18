@@ -11,52 +11,65 @@ use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status
 use roaring::{MultiOps, RoaringBitmap};
 use time::OffsetDateTime;
 
-use crate::{Error, IndexScheduler, ProcessingTasks, Result, Task, TaskId, BEI128};
+use crate::{Error, IndexScheduler, Result, Task, TaskId, BEI128};
 
 /// This structure contains all the information required to write a batch in the database without reading the tasks.
 /// It'll stay in RAM so it must be small.
-pub(crate) struct CachedBatch {
-    uid: BatchId,
-    statuses: HashSet<Status>,
-    kinds: HashSet<Kind>,
-    indexes: HashSet<String>,
-    canceled_by: HashSet<TaskId>,
-    oldest_enqueued_at: Option<OffsetDateTime>,
-    earliest_enqueued_at: Option<OffsetDateTime>,
-    started_at: OffsetDateTime,
-    finished_at: OffsetDateTime,
+#[derive(Debug, Clone)]
+pub(crate) struct ProcessingBatch {
+    pub uid: BatchId,
+    pub statuses: HashSet<Status>,
+    pub kinds: HashSet<Kind>,
+    pub indexes: HashSet<String>,
+    pub canceled_by: HashSet<TaskId>,
+    pub oldest_enqueued_at: Option<OffsetDateTime>,
+    pub earliest_enqueued_at: Option<OffsetDateTime>,
+    pub started_at: OffsetDateTime,
 }
 
-impl CachedBatch {
-    pub fn new(uid: BatchId, started_at: OffsetDateTime, finished_at: OffsetDateTime) -> Self {
+impl ProcessingBatch {
+    pub fn new(uid: BatchId) -> Self {
+        // At the beginning, all the tasks are processing
+        let mut statuses = HashSet::default();
+        statuses.insert(Status::Processing);
+
         Self {
             uid,
-            statuses: HashSet::default(),
+            statuses,
             kinds: HashSet::default(),
             indexes: HashSet::default(),
             canceled_by: HashSet::default(),
             oldest_enqueued_at: None,
             earliest_enqueued_at: None,
-            started_at,
-            finished_at,
+            started_at: OffsetDateTime::now_utc(),
         }
     }
 
+    /// Remove the Processing status and update the real statuses of the tasks.
     pub fn update(&mut self, task: &Task) {
+        self.statuses.clear();
         self.statuses.insert(task.status);
-        self.kinds.insert(task.kind.as_kind());
-        self.indexes.extend(task.indexes().iter().map(|s| s.to_string()));
-        if let Some(canceled_by) = task.canceled_by {
-            self.canceled_by.insert(canceled_by);
+    }
+
+    /// Update itself with the content of the task and update the batch id in the task.
+    pub fn processing<'a>(&mut self, tasks: impl IntoIterator<Item = &'a mut Task>) {
+        for task in tasks.into_iter() {
+            task.batch_uid = Some(self.uid);
+            // We don't store the statuses since they're all enqueued.
+            self.kinds.insert(task.kind.as_kind());
+            self.indexes.extend(task.indexes().iter().map(|s| s.to_string()));
+            if let Some(canceled_by) = task.canceled_by {
+                self.canceled_by.insert(canceled_by);
+            }
+            self.oldest_enqueued_at =
+                Some(self.oldest_enqueued_at.map_or(task.enqueued_at, |oldest_enqueued_at| {
+                    task.enqueued_at.min(oldest_enqueued_at)
+                }));
+            self.earliest_enqueued_at =
+                Some(self.earliest_enqueued_at.map_or(task.enqueued_at, |earliest_enqueued_at| {
+                    task.enqueued_at.max(earliest_enqueued_at)
+                }));
         }
-        self.oldest_enqueued_at =
-            Some(self.oldest_enqueued_at.map_or(task.enqueued_at, |oldest_enqueued_at| {
-                task.enqueued_at.min(oldest_enqueued_at)
-            }));
-        self.earliest_enqueued_at =
-            Some(self.earliest_enqueued_at.map_or(task.enqueued_at, |earliest_enqueued_at| {
-                task.enqueued_at.max(earliest_enqueued_at)
-            }));
     }
 }
 
@@ -97,17 +110,14 @@ impl IndexScheduler {
     pub(crate) fn write_batch(
         &self,
         wtxn: &mut RwTxn,
-        batch: CachedBatch,
+        batch: ProcessingBatch,
         tasks: &RoaringBitmap,
+        finished_at: OffsetDateTime,
     ) -> Result<()> {
         self.all_batches.put(
             wtxn,
             &batch.uid,
-            &Batch {
-                uid: batch.uid,
-                started_at: batch.started_at,
-                finished_at: Some(batch.finished_at),
-            },
+            &Batch { uid: batch.uid, started_at: batch.started_at, finished_at: Some(finished_at) },
         )?;
         self.batch_to_tasks_mapping.put(wtxn, &batch.uid, tasks)?;
 
@@ -135,25 +145,27 @@ impl IndexScheduler {
             insert_task_datetime(wtxn, self.batch_enqueued_at, enqueued_at, batch.uid)?;
         }
         insert_task_datetime(wtxn, self.batch_started_at, batch.started_at, batch.uid)?;
-        insert_task_datetime(wtxn, self.batch_finished_at, batch.finished_at, batch.uid)?;
+        insert_task_datetime(wtxn, self.batch_finished_at, finished_at, batch.uid)?;
 
         Ok(())
     }
 
     /// Convert an iterator to a `Vec` of tasks. The tasks MUST exist or a
     /// `CorruptedTaskQueue` error will be throwed.
-    pub(crate) fn get_existing_tasks_with_batch_id(
+    pub(crate) fn get_existing_tasks_with_processing_batch(
         &self,
         rtxn: &RoTxn,
-        batch_id: BatchId,
+        processing_batch: &mut ProcessingBatch,
         tasks: impl IntoIterator<Item = TaskId>,
     ) -> Result<Vec<Task>> {
         tasks
             .into_iter()
             .map(|task_id| {
-                self.get_task(rtxn, task_id)
-                    .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))
-                    .map(|task| task.with_batch_id(batch_id))
+                let mut task = self
+                    .get_task(rtxn, task_id)
+                    .and_then(|task| task.ok_or(Error::CorruptedTaskQueue));
+                processing_batch.processing(&mut task);
+                task
             })
             .collect::<Result<_>>()
     }

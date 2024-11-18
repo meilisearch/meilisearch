@@ -68,7 +68,10 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
 
     let processing = processing_tasks.read().unwrap().clone();
     snap.push_str(&format!("### Autobatching Enabled = {autobatching_enabled}\n"));
-    snap.push_str(&format!("### Processing batch {:?}:\n", processing.batch_id));
+    snap.push_str(&format!(
+        "### Processing batch {:?}:\n",
+        processing.batch.map(|batch| batch.uid)
+    ));
     snap.push_str(&snapshot_bitmap(&processing.processing));
     snap.push_str("\n----------------------------------------------------------------------\n");
 
