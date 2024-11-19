@@ -1905,8 +1905,7 @@ mod tests {
 
     #[test]
     fn mixup_searchable_with_displayed_fields() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.autogenerate_docids = true;
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
         // First we send 3 documents with ids from 1 to 3.
@@ -1914,9 +1913,9 @@ mod tests {
             .add_documents_using_wtxn(
                 &mut wtxn,
                 documents!([
-                    { "name": "kevin", "age": 23},
-                    { "name": "kevina", "age": 21 },
-                    { "name": "benoit", "age": 34 }
+                    { "id": 0, "name": "kevin", "age": 23},
+                    { "id": 1, "name": "kevina", "age": 21 },
+                    { "id": 2, "name": "benoit", "age": 34 }
                 ]),
             )
             .unwrap();
@@ -1952,15 +1951,14 @@ mod tests {
 
     #[test]
     fn default_displayed_fields() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.autogenerate_docids = true;
+        let index = TempIndex::new();
 
         // First we send 3 documents with ids from 1 to 3.
         index
             .add_documents(documents!([
-                { "name": "kevin", "age": 23},
-                { "name": "kevina", "age": 21 },
-                { "name": "benoit", "age": 34 }
+                { "id": 0, "name": "kevin", "age": 23},
+                { "id": 1, "name": "kevina", "age": 21 },
+                { "id": 2, "name": "benoit", "age": 34 }
             ]))
             .unwrap();
 
@@ -1972,17 +1970,16 @@ mod tests {
 
     #[test]
     fn set_and_reset_displayed_field() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.autogenerate_docids = true;
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
         index
             .add_documents_using_wtxn(
                 &mut wtxn,
                 documents!([
-                    { "name": "kevin", "age": 23},
-                    { "name": "kevina", "age": 21 },
-                    { "name": "benoit", "age": 34 }
+                    { "id": 0, "name": "kevin", "age": 23},
+                    { "id": 1, "name": "kevina", "age": 21 },
+                    { "id": 2, "name": "benoit", "age": 34 }
                 ]),
             )
             .unwrap();
@@ -2014,8 +2011,7 @@ mod tests {
 
     #[test]
     fn set_filterable_fields() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.autogenerate_docids = true;
+        let index = TempIndex::new();
 
         // Set the filterable fields to be the age.
         index
@@ -2027,9 +2023,9 @@ mod tests {
         // Then index some documents.
         index
             .add_documents(documents!([
-                { "name": "kevin", "age": 23},
-                { "name": "kevina", "age": 21 },
-                { "name": "benoit", "age": 34 }
+                { "id": 0, "name": "kevin", "age": 23},
+                { "id": 1, "name": "kevina", "age": 21 },
+                { "id": 2, "name": "benoit", "age": 34 }
             ]))
             .unwrap();
 
@@ -2049,8 +2045,8 @@ mod tests {
         let count = index
             .facet_id_f64_docids
             .remap_key_type::<Bytes>()
-            // The faceted field id is 1u16
-            .prefix_iter(&rtxn, &[0, 1, 0])
+            // The faceted field id is 2u16
+            .prefix_iter(&rtxn, &[0, 2, 0])
             .unwrap()
             .count();
         assert_eq!(count, 3);
@@ -2059,9 +2055,9 @@ mod tests {
         // Index a little more documents with new and current facets values.
         index
             .add_documents(documents!([
-                { "name": "kevin2", "age": 23},
-                { "name": "kevina2", "age": 21 },
-                { "name": "benoit", "age": 35 }
+                { "id": 3, "name": "kevin2", "age": 23},
+                { "id": 4, "name": "kevina2", "age": 21 },
+                { "id": 5, "name": "benoit", "age": 35 }
             ]))
             .unwrap();
 
@@ -2070,7 +2066,7 @@ mod tests {
         let count = index
             .facet_id_f64_docids
             .remap_key_type::<Bytes>()
-            .prefix_iter(&rtxn, &[0, 1, 0])
+            .prefix_iter(&rtxn, &[0, 2, 0])
             .unwrap()
             .count();
         assert_eq!(count, 4);
@@ -2088,21 +2084,21 @@ mod tests {
         assert_eq!(fields_ids, hashset! { S("age"),  S("name") });
 
         let rtxn = index.read_txn().unwrap();
-        // Only count the field_id 0 and level 0 facet values.
+        // Only count the field_id 2 and level 0 facet values.
         let count = index
             .facet_id_f64_docids
             .remap_key_type::<Bytes>()
-            .prefix_iter(&rtxn, &[0, 1, 0])
+            .prefix_iter(&rtxn, &[0, 2, 0])
             .unwrap()
             .count();
         assert_eq!(count, 4);
 
         let rtxn = index.read_txn().unwrap();
-        // Only count the field_id 0 and level 0 facet values.
+        // Only count the field_id 1 and level 0 facet values.
         let count = index
             .facet_id_string_docids
             .remap_key_type::<Bytes>()
-            .prefix_iter(&rtxn, &[0, 0])
+            .prefix_iter(&rtxn, &[0, 1])
             .unwrap()
             .count();
         assert_eq!(count, 5);
@@ -2120,21 +2116,21 @@ mod tests {
         assert_eq!(fields_ids, hashset! { S("name") });
 
         let rtxn = index.read_txn().unwrap();
-        // Only count the field_id 0 and level 0 facet values.
+        // Only count the field_id 2 and level 0 facet values.
         let count = index
             .facet_id_f64_docids
             .remap_key_type::<Bytes>()
-            .prefix_iter(&rtxn, &[0, 1, 0])
+            .prefix_iter(&rtxn, &[0, 2, 0])
             .unwrap()
             .count();
         assert_eq!(count, 0);
 
         let rtxn = index.read_txn().unwrap();
-        // Only count the field_id 0 and level 0 facet values.
+        // Only count the field_id 1 and level 0 facet values.
         let count = index
             .facet_id_string_docids
             .remap_key_type::<Bytes>()
-            .prefix_iter(&rtxn, &[0, 0])
+            .prefix_iter(&rtxn, &[0, 1])
             .unwrap()
             .count();
         assert_eq!(count, 5);
@@ -2142,8 +2138,7 @@ mod tests {
 
     #[test]
     fn set_asc_desc_field() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.autogenerate_docids = true;
+        let index = TempIndex::new();
 
         // Set the filterable fields to be the age.
         index
@@ -2156,9 +2151,9 @@ mod tests {
         // Then index some documents.
         index
             .add_documents(documents!([
-                { "name": "kevin", "age": 23},
-                { "name": "kevina", "age": 21 },
-                { "name": "benoit", "age": 34 }
+                { "id": 0, "name": "kevin", "age": 23},
+                { "id": 1, "name": "kevina", "age": 21 },
+                { "id": 2, "name": "benoit", "age": 34 }
             ]))
             .unwrap();
 
@@ -2180,8 +2175,7 @@ mod tests {
 
     #[test]
     fn set_distinct_field() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.autogenerate_docids = true;
+        let index = TempIndex::new();
 
         // Set the filterable fields to be the age.
         index
@@ -2195,13 +2189,13 @@ mod tests {
         // Then index some documents.
         index
             .add_documents(documents!([
-                { "name": "kevin",  "age": 23 },
-                { "name": "kevina", "age": 21 },
-                { "name": "benoit", "age": 34 },
-                { "name": "bernard", "age": 34 },
-                { "name": "bertrand", "age": 34 },
-                { "name": "bernie", "age": 34 },
-                { "name": "ben", "age": 34 }
+                { "id": 0, "name": "kevin",  "age": 23 },
+                { "id": 1, "name": "kevina", "age": 21 },
+                { "id": 2, "name": "benoit", "age": 34 },
+                { "id": 3, "name": "bernard", "age": 34 },
+                { "id": 4, "name": "bertrand", "age": 34 },
+                { "id": 5, "name": "bernie", "age": 34 },
+                { "id": 6, "name": "ben", "age": 34 }
             ]))
             .unwrap();
 
@@ -2215,8 +2209,7 @@ mod tests {
 
     #[test]
     fn set_nested_distinct_field() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.autogenerate_docids = true;
+        let index = TempIndex::new();
 
         // Set the filterable fields to be the age.
         index
@@ -2230,13 +2223,13 @@ mod tests {
         // Then index some documents.
         index
             .add_documents(documents!([
-                { "person": { "name": "kevin", "age": 23 }},
-                { "person": { "name": "kevina", "age": 21 }},
-                { "person": { "name": "benoit", "age": 34 }},
-                { "person": { "name": "bernard", "age": 34 }},
-                { "person": { "name": "bertrand", "age": 34 }},
-                { "person": { "name": "bernie", "age": 34 }},
-                { "person": { "name": "ben", "age": 34 }}
+                { "id": 0, "person": { "name": "kevin", "age": 23 }},
+                { "id": 1, "person": { "name": "kevina", "age": 21 }},
+                { "id": 2, "person": { "name": "benoit", "age": 34 }},
+                { "id": 3, "person": { "name": "bernard", "age": 34 }},
+                { "id": 4, "person": { "name": "bertrand", "age": 34 }},
+                { "id": 5, "person": { "name": "bernie", "age": 34 }},
+                { "id": 6, "person": { "name": "ben", "age": 34 }}
             ]))
             .unwrap();
 
@@ -2250,15 +2243,14 @@ mod tests {
 
     #[test]
     fn default_stop_words() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.autogenerate_docids = true;
+        let index = TempIndex::new();
 
         // First we send 3 documents with ids from 1 to 3.
         index
             .add_documents(documents!([
-                { "name": "kevin", "age": 23},
-                { "name": "kevina", "age": 21 },
-                { "name": "benoit", "age": 34 }
+                { "id": 0, "name": "kevin", "age": 23},
+                { "id": 1, "name": "kevina", "age": 21 },
+                { "id": 2, "name": "benoit", "age": 34 }
             ]))
             .unwrap();
 
@@ -2270,8 +2262,7 @@ mod tests {
 
     #[test]
     fn set_and_reset_stop_words() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.autogenerate_docids = true;
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
         // First we send 3 documents with ids from 1 to 3.
@@ -2279,9 +2270,9 @@ mod tests {
             .add_documents_using_wtxn(
                 &mut wtxn,
                 documents!([
-                    { "name": "kevin", "age": 23, "maxim": "I love dogs" },
-                    { "name": "kevina", "age": 21, "maxim": "Doggos are the best" },
-                    { "name": "benoit", "age": 34, "maxim": "The crepes are really good" },
+                    { "id": 0, "name": "kevin", "age": 23, "maxim": "I love dogs" },
+                    { "id": 1, "name": "kevina", "age": 21, "maxim": "Doggos are the best" },
+                    { "id": 2, "name": "benoit", "age": 34, "maxim": "The crepes are really good" },
                 ]),
             )
             .unwrap();
@@ -2347,8 +2338,7 @@ mod tests {
 
     #[test]
     fn set_and_reset_synonyms() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.autogenerate_docids = true;
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
         // Send 3 documents with ids from 1 to 3.
@@ -2356,9 +2346,9 @@ mod tests {
             .add_documents_using_wtxn(
                 &mut wtxn,
                 documents!([
-                    { "name": "kevin", "age": 23, "maxim": "I love dogs"},
-                    { "name": "kevina", "age": 21, "maxim": "Doggos are the best"},
-                    { "name": "benoit", "age": 34, "maxim": "The crepes are really good"},
+                    { "id": 0, "name": "kevin", "age": 23, "maxim": "I love dogs"},
+                    { "id": 1, "name": "kevina", "age": 21, "maxim": "Doggos are the best"},
+                    { "id": 2, "name": "benoit", "age": 34, "maxim": "The crepes are really good"},
                 ]),
             )
             .unwrap();
@@ -2411,8 +2401,7 @@ mod tests {
 
     #[test]
     fn thai_synonyms() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.autogenerate_docids = true;
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
         // Send 3 documents with ids from 1 to 3.
@@ -2420,8 +2409,8 @@ mod tests {
             .add_documents_using_wtxn(
                 &mut wtxn,
                 documents!([
-                    { "name": "ยี่ปุ่น" },
-                    { "name": "ญี่ปุ่น" },
+                    { "id": 0, "name": "ยี่ปุ่น" },
+                    { "id": 1, "name": "ญี่ปุ่น" },
                 ]),
             )
             .unwrap();
@@ -2500,8 +2489,7 @@ mod tests {
 
     #[test]
     fn setting_primary_key() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.autogenerate_docids = true;
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
         // Set the primary key settings
@@ -2510,6 +2498,8 @@ mod tests {
                 settings.set_primary_key(S("mykey"));
             })
             .unwrap();
+        wtxn.commit().unwrap();
+        let mut wtxn = index.write_txn().unwrap();
         assert_eq!(index.primary_key(&wtxn).unwrap(), Some("mykey"));
 
         // Then index some documents with the "mykey" primary key.
@@ -2565,8 +2555,7 @@ mod tests {
 
     #[test]
     fn setting_impact_relevancy() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.autogenerate_docids = true;
+        let index = TempIndex::new();
 
         // Set the genres setting
         index
