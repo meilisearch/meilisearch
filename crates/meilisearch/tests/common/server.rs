@@ -330,6 +330,10 @@ impl<State> Server<State> {
         self.service.get(format!("/tasks?{}", filter)).await
     }
 
+    pub async fn batches_filter(&self, filter: &str) -> (Value, StatusCode) {
+        self.service.get(format!("/batches?{}", filter)).await
+    }
+
     pub async fn version(&self) -> (Value, StatusCode) {
         self.service.get("/version").await
     }
@@ -373,6 +377,11 @@ impl<State> Server<State> {
 
     pub async fn get_task(&self, update_id: u64) -> (Value, StatusCode) {
         let url = format!("/tasks/{}", update_id);
+        self.service.get(url).await
+    }
+
+    pub async fn get_batch(&self, batch_id: u32) -> (Value, StatusCode) {
+        let url = format!("/batches/{}", batch_id);
         self.service.get(url).await
     }
 
