@@ -182,8 +182,8 @@ impl ProcessingTasks {
         self.processing = processing;
     }
 
-    fn update_progress(&mut self, progress: Progress) {
-        self.progress.get_or_insert_with(TaskProgress::default).update(progress);
+    fn update_progress(&mut self, progress: Progress) -> TaskProgress {
+        self.progress.get_or_insert_with(TaskProgress::default).update(progress)
     }
 
     /// Set the processing tasks to an empty list

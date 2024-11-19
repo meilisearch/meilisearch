@@ -39,10 +39,10 @@ pub struct Task {
     pub kind: KindWithContent,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskProgress {
-    pub current_step: String,
+    pub current_step: &'static str,
     pub finished_steps: u16,
     pub total_steps: u16,
     pub finished_documents: Option<u32>,
@@ -58,7 +58,7 @@ impl Default for TaskProgress {
 impl TaskProgress {
     pub fn new() -> Self {
         Self {
-            current_step: String::new(),
+            current_step: "start",
             finished_steps: 0,
             total_steps: 1,
             finished_documents: None,
@@ -66,15 +66,17 @@ impl TaskProgress {
         }
     }
 
-    pub fn update(&mut self, progress: Progress) {
-        if self.current_step != progress.step_name {
-            self.current_step.clear();
-            self.current_step.push_str(progress.step_name);
-        }
-        self.total_steps = progress.total_steps;
+    pub fn update(&mut self, progress: Progress) -> TaskProgress {
         if self.finished_steps > progress.finished_steps {
-            return;
+            return *self;
         }
+
+        if self.current_step != progress.step_name {
+            self.current_step = progress.step_name
+        }
+
+        self.total_steps = progress.total_steps;
+
         if self.finished_steps < progress.finished_steps {
             self.finished_documents = None;
             self.total_documents = None;
@@ -83,12 +85,13 @@ impl TaskProgress {
         if let Some((finished_documents, total_documents)) = progress.finished_total_documents {
             if let Some(task_finished_documents) = self.finished_documents {
                 if task_finished_documents > finished_documents {
-                    return;
+                    return *self;
                 }
             }
             self.finished_documents = Some(finished_documents);
             self.total_documents = Some(total_documents);
         }
+        *self
     }
 }
 

@@ -39,7 +39,9 @@ use meilisearch_types::milli::vector::parsed_vectors::{
 };
 use meilisearch_types::milli::{self, Filter, ThreadPoolNoAbortBuilder};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
-use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
+use meilisearch_types::tasks::{
+    Details, IndexSwap, Kind, KindWithContent, Status, Task, TaskProgress,
+};
 use meilisearch_types::{compression, Index, VERSION_FILE_NAME};
 use roaring::RoaringBitmap;
 use time::macros::format_description;
@@ -1240,7 +1242,21 @@ impl IndexScheduler {
             secs_since_started_processing_at
                 .store((now - started_processing_at).as_secs(), atomic::Ordering::Relaxed);
 
-            processing_tasks.write().unwrap().update_progress(progress);
+            let TaskProgress {
+                current_step,
+                finished_steps,
+                total_steps,
+                finished_documents,
+                total_documents,
+            } = processing_tasks.write().unwrap().update_progress(progress);
+
+            tracing::info!(
+                current_step,
+                finished_steps,
+                total_steps,
+                finished_documents,
+                total_documents
+            );
         };
 
         match operation {
