@@ -4,7 +4,7 @@ use bumpalo::Bump;
 use heed::EnvOpenOptions;
 use milli::documents::mmap_from_objects;
 use milli::update::new::indexer;
-use milli::update::{IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings};
+use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
 use milli::{Criterion, Index, Object, Search, TermsMatchingStrategy};
 use serde_json::from_value;

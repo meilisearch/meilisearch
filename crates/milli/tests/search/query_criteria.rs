@@ -1,16 +1,12 @@
 use std::cmp::Reverse;
-use std::io::Cursor;
 
 use big_s::S;
 use bumpalo::Bump;
 use heed::EnvOpenOptions;
 use itertools::Itertools;
 use maplit::hashset;
-use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use milli::update::new::indexer;
-use milli::update::{
-    IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings,
-};
+use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
 use milli::{AscDesc, Criterion, Index, Member, Search, SearchResult, TermsMatchingStrategy};
 use rand::Rng;

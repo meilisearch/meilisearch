@@ -1,17 +1,13 @@
-use std::io::Cursor;
-
 use big_s::S;
 use bumpalo::Bump;
 use heed::EnvOpenOptions;
 use maplit::hashset;
-use milli::documents::{mmap_from_objects, DocumentsBatchBuilder, DocumentsBatchReader};
+use milli::documents::mmap_from_objects;
 use milli::update::new::indexer;
-use milli::update::{
-    IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings,
-};
+use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
 use milli::{FacetDistribution, Index, Object, OrderBy};
-use serde_json::{from_value, json, Deserializer};
+use serde_json::{from_value, json};
 
 #[test]
 fn test_facet_distribution_with_no_facet_values() {

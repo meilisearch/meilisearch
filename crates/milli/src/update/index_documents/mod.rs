@@ -5,11 +5,13 @@ mod transform;
 mod typed_chunk;
 
 use std::collections::HashSet;
+use std::io::{Read, Seek};
 use std::iter;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use crossbeam_channel::{Receiver, Sender};
+use enrich::enrich_documents_batch;
 use grenad::{Merger, MergerBuilder};
 use hashbrown::HashMap;
 use heed::types::Str;
@@ -24,7 +26,8 @@ use typed_chunk::{write_typed_chunk_into_index, ChunkAccumulator, TypedChunk};
 pub use self::enrich::{extract_finite_float_from_value, DocumentId};
 pub use self::helpers::*;
 pub use self::transform::{Transform, TransformOutput};
-use crate::documents::obkv_to_object;
+use super::new::StdResult;
+use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError};
 use crate::thread_pool_no_abort::ThreadPoolNoAbortBuilder;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
@@ -32,7 +35,7 @@ use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
 use crate::vector::{ArroyWrapper, EmbeddingConfigs};
-use crate::{CboRoaringBitmapCodec, Index, Result};
+use crate::{CboRoaringBitmapCodec, Index, Result, UserError};
 
 static MERGED_DATABASE_COUNT: usize = 7;
 static PREFIX_DATABASE_COUNT: usize = 4;
@@ -122,9 +125,74 @@ where
         })
     }
 
+    /// Adds a batch of documents to the current builder.
+    ///
+    /// Since the documents are progressively added to the writer, a failure will cause only
+    /// return an error and not the `IndexDocuments` struct as it is invalid to use it afterward.
+    ///
+    /// Returns the number of documents added to the builder.
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents")]
+    pub fn add_documents<R: Read + Seek>(
+        mut self,
+        reader: DocumentsBatchReader<R>,
+    ) -> Result<(Self, StdResult<u64, UserError>)> {
+        // Early return when there is no document to add
+        if reader.is_empty() {
+            return Ok((self, Ok(0)));
+        }
+
+        // We check for user errors in this validator and if there is one, we can return
+        // the `IndexDocument` struct as it is valid to send more documents into it.
+        // However, if there is an internal error we throw it away!
+        let enriched_documents_reader = match enrich_documents_batch(
+            self.wtxn,
+            self.index,
+            self.config.autogenerate_docids,
+            reader,
+        )? {
+            Ok(reader) => reader,
+            Err(user_error) => return Ok((self, Err(user_error))),
+        };
+
+        let indexed_documents =
+            self.transform.as_mut().expect("Invalid document addition state").read_documents(
+                enriched_documents_reader,
+                self.wtxn,
+                &self.progress,
+                &self.should_abort,
+            )? as u64;
+
+        self.added_documents += indexed_documents;
+
+        Ok((self, Ok(indexed_documents)))
+    }
+
     pub fn with_embedders(mut self, embedders: EmbeddingConfigs) -> Self {
         self.embedders = embedders;
         self
+    }
+
+    #[tracing::instrument(
+        level = "trace"
+        skip_all,
+        target = "indexing::documents",
+        name = "index_documents"
+    )]
+    pub fn execute(mut self) -> Result<DocumentAdditionResult> {
+        if self.added_documents == 0 && self.deleted_documents == 0 {
+            let number_of_documents = self.index.number_of_documents(self.wtxn)?;
+            return Ok(DocumentAdditionResult { indexed_documents: 0, number_of_documents });
+        }
+        let output = self
+            .transform
+            .take()
+            .expect("Invalid document addition state")
+            .output_from_sorter(self.wtxn, &self.progress)?;
+
+        let indexed_documents = output.documents_count as u64;
+        let number_of_documents = self.execute_raw(output)?;
+
+        Ok(DocumentAdditionResult { indexed_documents, number_of_documents })
     }
 
     /// Returns the total number of documents in the index after the update.
@@ -678,7 +746,7 @@ mod tests {
     use maplit::hashset;
 
     use super::*;
-    use crate::documents::{documents_batch_reader_from_objects, mmap_from_objects};
+    use crate::documents::mmap_from_objects;
     use crate::index::tests::TempIndex;
     use crate::index::IndexEmbeddingConfig;
     use crate::search::TermsMatchingStrategy;
@@ -2119,16 +2187,7 @@ mod tests {
         index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         let mut wtxn = index.write_txn().unwrap();
-        let local_pool;
         let indexer_config = &index.indexer_config;
-        let pool = match &indexer_config.thread_pool {
-            Some(pool) => pool,
-            None => {
-                local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
-                &local_pool
-            }
-        };
-
         let rtxn = index.inner.read_txn().unwrap();
         let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
         let mut new_fields_ids_map = db_fields_ids_map.clone();
@@ -2142,27 +2201,24 @@ mod tests {
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
         let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
-        indexer.add_documents(&documents);
+        indexer.add_documents(&documents).unwrap();
         indexer.delete_documents(&["2"]);
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
             .unwrap();
 
-        pool.install(|| {
-            indexer::index(
-                &mut wtxn,
-                &index.inner,
-                indexer_config.grenad_parameters(),
-                &db_fields_ids_map,
-                new_fields_ids_map,
-                primary_key,
-                &document_changes,
-                embedders,
-                &|| false,
-                &|_| (),
-            )
-        })
-        .unwrap()
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
         .unwrap();
         wtxn.commit().unwrap();
 
@@ -2178,16 +2234,7 @@ mod tests {
         index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         let mut wtxn = index.write_txn().unwrap();
-        let local_pool;
         let indexer_config = &index.indexer_config;
-        let pool = match &indexer_config.thread_pool {
-            Some(pool) => pool,
-            None => {
-                local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
-                &local_pool
-            }
-        };
-
         let rtxn = index.inner.read_txn().unwrap();
         let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
         let mut new_fields_ids_map = db_fields_ids_map.clone();
@@ -2213,21 +2260,18 @@ mod tests {
             .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
             .unwrap();
 
-        pool.install(|| {
-            indexer::index(
-                &mut wtxn,
-                &index.inner,
-                indexer_config.grenad_parameters(),
-                &db_fields_ids_map,
-                new_fields_ids_map,
-                primary_key,
-                &document_changes,
-                embedders,
-                &|| false,
-                &|_| (),
-            )
-        })
-        .unwrap()
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
         .unwrap();
         wtxn.commit().unwrap();
 
@@ -2238,19 +2282,10 @@ mod tests {
 
     #[test]
     fn add_document_and_in_another_transform_update_and_delete_documents() {
-        let mut index = TempIndex::new();
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
-        let local_pool;
         let indexer_config = &index.indexer_config;
-        let pool = match &indexer_config.thread_pool {
-            Some(pool) => pool,
-            None => {
-                local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
-                &local_pool
-            }
-        };
-
         let rtxn = index.inner.read_txn().unwrap();
         let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
         let mut new_fields_ids_map = db_fields_ids_map.clone();
@@ -2263,27 +2298,24 @@ mod tests {
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
         let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
-        indexer.add_documents(&documents);
+        indexer.add_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
             .unwrap();
 
-        pool.install(|| {
-            indexer::index(
-                &mut wtxn,
-                &index.inner,
-                indexer_config.grenad_parameters(),
-                &db_fields_ids_map,
-                new_fields_ids_map,
-                primary_key,
-                &document_changes,
-                embedders,
-                &|| false,
-                &|_| (),
-            )
-        })
-        .unwrap()
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
         .unwrap();
         wtxn.commit().unwrap();
 
@@ -2296,16 +2328,7 @@ mod tests {
         // A first batch of documents has been inserted
 
         let mut wtxn = index.write_txn().unwrap();
-        let local_pool;
         let indexer_config = &index.indexer_config;
-        let pool = match &indexer_config.thread_pool {
-            Some(pool) => pool,
-            None => {
-                local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
-                &local_pool
-            }
-        };
-
         let rtxn = index.inner.read_txn().unwrap();
         let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
         let mut new_fields_ids_map = db_fields_ids_map.clone();
@@ -2317,28 +2340,25 @@ mod tests {
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
         let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
-        indexer.add_documents(&documents);
+        indexer.add_documents(&documents).unwrap();
         indexer.delete_documents(&["1", "2"]);
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
             .unwrap();
 
-        pool.install(|| {
-            indexer::index(
-                &mut wtxn,
-                &index.inner,
-                indexer_config.grenad_parameters(),
-                &db_fields_ids_map,
-                new_fields_ids_map,
-                primary_key,
-                &document_changes,
-                embedders,
-                &|| false,
-                &|_| (),
-            )
-        })
-        .unwrap()
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
         .unwrap();
         wtxn.commit().unwrap();
 
@@ -2349,19 +2369,10 @@ mod tests {
 
     #[test]
     fn delete_document_and_then_add_documents_in_the_same_transform() {
-        let mut index = TempIndex::new();
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
-        let local_pool;
         let indexer_config = &index.indexer_config;
-        let pool = match &indexer_config.thread_pool {
-            Some(pool) => pool,
-            None => {
-                local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
-                &local_pool
-            }
-        };
-
         let rtxn = index.inner.read_txn().unwrap();
         let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
         let mut new_fields_ids_map = db_fields_ids_map.clone();
@@ -2375,27 +2386,24 @@ mod tests {
             { "id": 2, "doggo": { "name": "jean", "age": 20 } },
             { "id": 3, "name": "bob", "age": 25 },
         ]);
-        indexer.add_documents(&documents);
+        indexer.add_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
             .unwrap();
 
-        pool.install(|| {
-            indexer::index(
-                &mut wtxn,
-                &index.inner,
-                indexer_config.grenad_parameters(),
-                &db_fields_ids_map,
-                new_fields_ids_map,
-                primary_key,
-                &document_changes,
-                embedders,
-                &|| false,
-                &|_| (),
-            )
-        })
-        .unwrap()
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
         .unwrap();
         wtxn.commit().unwrap();
 
@@ -2407,19 +2415,10 @@ mod tests {
 
     #[test]
     fn delete_the_same_document_multiple_time() {
-        let mut index = TempIndex::new();
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
-        let local_pool;
         let indexer_config = &index.indexer_config;
-        let pool = match &indexer_config.thread_pool {
-            Some(pool) => pool,
-            None => {
-                local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
-                &local_pool
-            }
-        };
-
         let rtxn = index.inner.read_txn().unwrap();
         let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
         let mut new_fields_ids_map = db_fields_ids_map.clone();
@@ -2435,7 +2434,7 @@ mod tests {
             { "id": 2, "doggo": { "name": "jean", "age": 20 } },
             { "id": 3, "name": "bob", "age": 25 },
         ]);
-        indexer.add_documents(&documents);
+        indexer.add_documents(&documents).unwrap();
 
         indexer.delete_documents(&["1", "2", "1", "2"]);
 
@@ -2443,21 +2442,18 @@ mod tests {
             .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
             .unwrap();
 
-        pool.install(|| {
-            indexer::index(
-                &mut wtxn,
-                &index.inner,
-                indexer_config.grenad_parameters(),
-                &db_fields_ids_map,
-                new_fields_ids_map,
-                primary_key,
-                &document_changes,
-                embedders,
-                &|| false,
-                &|_| (),
-            )
-        })
-        .unwrap()
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
         .unwrap();
         wtxn.commit().unwrap();
 
@@ -2468,19 +2464,10 @@ mod tests {
 
     #[test]
     fn add_document_and_in_another_transform_delete_the_document_then_add_it_again() {
-        let mut index = TempIndex::new();
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
-        let local_pool;
         let indexer_config = &index.indexer_config;
-        let pool = match &indexer_config.thread_pool {
-            Some(pool) => pool,
-            None => {
-                local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
-                &local_pool
-            }
-        };
-
         let rtxn = index.inner.read_txn().unwrap();
         let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
         let mut new_fields_ids_map = db_fields_ids_map.clone();
@@ -2492,27 +2479,24 @@ mod tests {
         let documents = documents!([
             { "id": 1, "doggo": "kevin" },
         ]);
-        indexer.add_documents(&documents);
+        indexer.add_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
             .unwrap();
 
-        pool.install(|| {
-            indexer::index(
-                &mut wtxn,
-                &index.inner,
-                indexer_config.grenad_parameters(),
-                &db_fields_ids_map,
-                new_fields_ids_map,
-                primary_key,
-                &document_changes,
-                embedders,
-                &|| false,
-                &|_| (),
-            )
-        })
-        .unwrap()
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
         .unwrap();
         wtxn.commit().unwrap();
 
@@ -2523,7 +2507,7 @@ mod tests {
         // A first batch of documents has been inserted
 
         let mut wtxn = index.write_txn().unwrap();
-
+        let indexer_config = &index.indexer_config;
         let rtxn = index.inner.read_txn().unwrap();
         let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
         let mut new_fields_ids_map = db_fields_ids_map.clone();
@@ -2538,27 +2522,24 @@ mod tests {
             { "id": 1, "catto": "jorts" },
         ]);
 
-        indexer.add_documents(&documents);
+        indexer.add_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
             .unwrap();
 
-        pool.install(|| {
-            indexer::index(
-                &mut wtxn,
-                &index.inner,
-                indexer_config.grenad_parameters(),
-                &db_fields_ids_map,
-                new_fields_ids_map,
-                primary_key,
-                &document_changes,
-                embedders,
-                &|| false,
-                &|_| (),
-            )
-        })
-        .unwrap()
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
         .unwrap();
         wtxn.commit().unwrap();
 
@@ -2711,17 +2692,7 @@ mod tests {
         println!("--- ENTERING BATCH 1");
 
         let mut wtxn = index.write_txn().unwrap();
-
-        let local_pool;
         let indexer_config = &index.indexer_config;
-        let pool = match &indexer_config.thread_pool {
-            Some(pool) => pool,
-            None => {
-                local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
-                &local_pool
-            }
-        };
-
         let rtxn = index.inner.read_txn().unwrap();
         let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
         let mut new_fields_ids_map = db_fields_ids_map.clone();
@@ -2742,21 +2713,18 @@ mod tests {
             .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
             .unwrap();
 
-        pool.install(|| {
-            indexer::index(
-                &mut wtxn,
-                &index.inner,
-                indexer_config.grenad_parameters(),
-                &db_fields_ids_map,
-                new_fields_ids_map,
-                primary_key,
-                &document_changes,
-                embedders,
-                &|| false,
-                &|_| (),
-            )
-        })
-        .unwrap()
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
         .unwrap();
         wtxn.commit().unwrap();
 
@@ -2775,7 +2743,7 @@ mod tests {
         println!("--- ENTERING BATCH 2");
 
         let mut wtxn = index.write_txn().unwrap();
-
+        let indexer_config = &index.indexer_config;
         let rtxn = index.inner.read_txn().unwrap();
         let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
         let mut new_fields_ids_map = db_fields_ids_map.clone();
@@ -2795,21 +2763,18 @@ mod tests {
             .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
             .unwrap();
 
-        pool.install(|| {
-            indexer::index(
-                &mut wtxn,
-                &index.inner,
-                indexer_config.grenad_parameters(),
-                &db_fields_ids_map,
-                new_fields_ids_map,
-                primary_key,
-                &document_changes,
-                embedders,
-                &|| false,
-                &|_| (),
-            )
-        })
-        .unwrap()
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
         .unwrap();
         wtxn.commit().unwrap();
 
@@ -2827,7 +2792,7 @@ mod tests {
         println!("--- ENTERING BATCH 3");
 
         let mut wtxn = index.write_txn().unwrap();
-
+        let indexer_config = &index.indexer_config;
         let rtxn = index.inner.read_txn().unwrap();
         let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
         let mut new_fields_ids_map = db_fields_ids_map.clone();
@@ -2845,21 +2810,18 @@ mod tests {
             .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
             .unwrap();
 
-        pool.install(|| {
-            indexer::index(
-                &mut wtxn,
-                &index.inner,
-                indexer_config.grenad_parameters(),
-                &db_fields_ids_map,
-                new_fields_ids_map,
-                primary_key,
-                &document_changes,
-                embedders,
-                &|| false,
-                &|_| (),
-            )
-        })
-        .unwrap()
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
         .unwrap();
         wtxn.commit().unwrap();
 
@@ -2913,8 +2875,7 @@ mod tests {
             .unwrap();
         wtxn.commit().unwrap();
 
-        let mut wtxn = index.write_txn().unwrap();
-        // delete those documents, ids are synchronous therefore 0, 1, and 2.
+        let mut wtxn = index.write_txn().unwrap(); // delete those documents, ids are synchronous therefore 0, 1, and 2.
         index.delete_documents_using_wtxn(&mut wtxn, vec![S("0"), S("1"), S("2")]).unwrap();
         wtxn.commit().unwrap();
 
@@ -2951,7 +2912,6 @@ mod tests {
         wtxn.commit().unwrap();
 
         let mut wtxn = index.write_txn().unwrap();
-
         // Delete not all of the documents but some of them.
         index.delete_documents_using_wtxn(&mut wtxn, vec![S("0"), S("1")]).unwrap();
 
@@ -3287,7 +3247,6 @@ mod tests {
         let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
-
         index
             .update_settings_using_wtxn(&mut wtxn, |settings| {
                 settings.set_primary_key(S("docid"));

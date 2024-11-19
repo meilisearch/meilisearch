@@ -1907,7 +1907,7 @@ pub(crate) mod tests {
             { "id": 2, "name": "bob", "age": 20 },
             { "id": 2, "name": "bob", "age": 20 },
         ]);
-        indexer.add_documents(&payload);
+        indexer.add_documents(&payload).unwrap();
 
         let indexer_alloc = Bump::new();
         let (document_changes, _operation_stats, primary_key) = indexer

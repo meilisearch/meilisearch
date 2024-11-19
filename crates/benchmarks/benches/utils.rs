@@ -2,9 +2,8 @@
 
 use std::fs::{create_dir_all, remove_dir_all, File};
 use std::io::{self, BufReader, BufWriter, Read};
-use std::num::ParseFloatError;
 use std::path::Path;
-use std::str::FromStr;
+use std::str::FromStr as _;
 
 use anyhow::Context;
 use bumpalo::Bump;

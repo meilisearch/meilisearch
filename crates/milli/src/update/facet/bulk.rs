@@ -493,7 +493,7 @@ mod tests {
         }
 
         let documents = mmap_from_objects(documents);
-        index.add_documents(documents);
+        index.add_documents(documents).unwrap();
 
         db_snap!(index, facet_id_f64_docids, "initial", @"c34f499261f3510d862fa0283bbe843a");
     }

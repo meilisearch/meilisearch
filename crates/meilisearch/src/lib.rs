@@ -448,12 +448,11 @@ fn import_dump(
 
         let builder = builder.with_embedders(embedders);
 
-        todo!("please plug the dump load of main");
-        // let (builder, user_result) = builder.add_documents(reader)?;
-        // let user_result = user_result?;
-        // tracing::info!(documents_found = user_result, "{} documents found.", user_result);
-        // builder.execute()?;
-        // wtxn.commit()?;
+        let (builder, user_result) = builder.add_documents(reader)?;
+        let user_result = user_result?;
+        tracing::info!(documents_found = user_result, "{} documents found.", user_result);
+        builder.execute()?;
+        wtxn.commit()?;
         tracing::info!("All documents successfully imported.");
     }
 
