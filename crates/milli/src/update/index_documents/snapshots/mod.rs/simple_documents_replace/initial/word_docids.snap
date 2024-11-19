@@ -1,21 +1,15 @@
 ---
-source: milli/src/update/index_documents/mod.rs
+source: crates/milli/src/update/index_documents/mod.rs
 ---
-0                [1, ]
 1                [2, ]
-10               [1, ]
-12               [0, ]
+10.0             [1, ]
 1344             [3, ]
 2                [0, ]
-23               [5, ]
-25               [2, ]
-3                [0, ]
-35               [5, ]
+25.99            [2, ]
+3.5              [0, ]
 4                [4, ]
-42               [0, 5, ]
+42               [5, ]
 456              [1, ]
-5                [0, ]
-99               [2, ]
 adams            [5, ]
 adventure        [1, ]
 alice            [2, ]
@@ -54,4 +48,3 @@ the              [3, 4, 5, ]
 to               [5, ]
 tolkien          [3, ]
 wonderland       [2, ]
-

@@ -2877,10 +2877,12 @@ mod tests {
 
         let mut wtxn = index.write_txn().unwrap();
         delete_documents(&mut wtxn, &index, &["1_4", "1_70", "1_72"]);
+        wtxn.commit().unwrap();
 
+        let rtxn = index.read_txn().unwrap();
         // Placeholder search with filter
         let filter = Filter::from_str("label = sign").unwrap().unwrap();
-        let results = index.search(&wtxn).filter(filter).execute().unwrap();
+        let results = index.search(&rtxn).filter(filter).execute().unwrap();
         assert!(results.documents_ids.is_empty());
 
         db_snap!(index, word_docids);

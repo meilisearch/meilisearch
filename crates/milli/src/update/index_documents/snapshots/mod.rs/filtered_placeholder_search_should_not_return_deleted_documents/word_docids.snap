@@ -1,8 +1,8 @@
 ---
-source: milli/src/update/index_documents/mod.rs
+source: crates/milli/src/update/index_documents/mod.rs
 ---
 1                [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, ]
-2                [21, ]
+2.2              [21, ]
 36               [3, ]
 37               [4, ]
 38               [5, ]
@@ -35,4 +35,3 @@ letter           [1, ]
 outdoor          [4, ]
 painting         [3, ]
 pattern          [2, 3, 9, 10, 13, 14, 16, ]
-
