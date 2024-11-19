@@ -183,7 +183,7 @@ pub fn documents_batch_reader_from_objects(
 mod test {
     use std::io::Cursor;
 
-    use serde_json::{json, Value};
+    use serde_json::json;
 
     use super::*;
 

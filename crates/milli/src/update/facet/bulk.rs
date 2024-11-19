@@ -369,7 +369,7 @@ mod tests {
     use maplit::hashset;
     use roaring::RoaringBitmap;
 
-    use crate::documents::{documents_batch_reader_from_objects, mmap_from_objects};
+    use crate::documents::mmap_from_objects;
     use crate::heed_codec::facet::OrderedF64Codec;
     use crate::heed_codec::StrRefCodec;
     use crate::index::tests::TempIndex;

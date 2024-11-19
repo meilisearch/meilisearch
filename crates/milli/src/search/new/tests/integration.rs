@@ -5,13 +5,10 @@ use bumpalo::Bump;
 use heed::EnvOpenOptions;
 use maplit::{btreemap, hashset};
 
-use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use crate::update::new::indexer;
-use crate::update::{
-    IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings,
-};
+use crate::update::{IndexDocumentsMethod, IndexerConfig, Settings};
 use crate::vector::EmbeddingConfigs;
-use crate::{db_snap, Criterion, Index, Object};
+use crate::{db_snap, Criterion, Index};
 pub const CONTENT: &str = include_str!("../../../../tests/assets/test_set.ndjson");
 
 pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
