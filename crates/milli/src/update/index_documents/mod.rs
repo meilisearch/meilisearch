@@ -1005,7 +1005,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             &error.to_string(),
-            r#"Could not find latitude in the document with the id: `0`. Was expecting a `_geo.lat` field."#
+            r#"Could not find latitude in the document with the id: `"0"`. Was expecting a `_geo.lat` field."#
         );
 
         let error = index
@@ -1015,7 +1015,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             &error.to_string(),
-            r#"Could not find longitude in the document with the id: `0`. Was expecting a `_geo.lng` field."#
+            r#"Could not find longitude in the document with the id: `"0"`. Was expecting a `_geo.lng` field."#
         );
 
         let error = index
@@ -1025,7 +1025,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             &error.to_string(),
-            r#"Could not parse latitude in the document with the id: `0`. Was expecting a finite number but instead got `"lol"`."#
+            r#"Could not parse latitude in the document with the id: `"0"`. Was expecting a finite number but instead got `"lol"`."#
         );
 
         let error = index
@@ -1035,7 +1035,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             &error.to_string(),
-            r#"Could not parse latitude in the document with the id: `0`. Was expecting a finite number but instead got `[12,13]`."#
+            r#"Could not parse latitude in the document with the id: `"0"`. Was expecting a finite number but instead got `[12,13]`."#
         );
 
         let error = index
@@ -1045,7 +1045,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             &error.to_string(),
-            r#"Could not parse longitude in the document with the id: `0`. Was expecting a finite number but instead got `"hello"`."#
+            r#"Could not parse longitude in the document with the id: `"0"`. Was expecting a finite number but instead got `"hello"`."#
         );
     }
 
