@@ -1749,7 +1749,8 @@ pub(crate) mod tests {
             let db_fields_ids_map = self.inner.fields_ids_map(&rtxn)?;
             let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-            let embedders = EmbeddingConfigs::default(); /// TODO: fetch configs from the index
+            let embedders = EmbeddingConfigs::default();
+            /// TODO: fetch configs from the index
             let mut indexer =
                 indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
             indexer.add_documents(&documents).unwrap();

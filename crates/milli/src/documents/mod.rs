@@ -151,8 +151,17 @@ macro_rules! documents {
     ($data:tt) => {{
         let documents = serde_json::json!($data);
         let mut file = tempfile::tempfile().unwrap();
-        for document in documents.as_array().unwrap() {
-            serde_json::to_writer(&mut file, &document).unwrap();
+
+        match documents {
+            serde_json::Value::Array(vec) => {
+                for document in vec {
+                    serde_json::to_writer(&mut file, &document).unwrap();
+                }
+            }
+            serde_json::Value::Object(document) => {
+                serde_json::to_writer(&mut file, &document).unwrap();
+            }
+            _ => unimplemented!("The `documents!` macro only support Objects and Array"),
         }
         file.sync_all().unwrap();
         unsafe { memmap2::Mmap::map(&file).unwrap() }
