@@ -1169,7 +1169,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     {
         self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
-        let old_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn)?;
+        let old_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
 
         // never trigger re-indexing
         self.update_displayed()?;
@@ -1199,7 +1199,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
         let embedding_config_updates = self.update_embedding_configs()?;
 
-        let mut new_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn)?;
+        let mut new_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
         new_inner_settings.recompute_facets(self.wtxn, self.index)?;
 
         let primary_key_id = self
@@ -1427,7 +1427,11 @@ pub(crate) struct InnerIndexSettings {
 }
 
 impl InnerIndexSettings {
-    pub fn from_index(index: &Index, rtxn: &heed::RoTxn<'_>) -> Result<Self> {
+    pub fn from_index(
+        index: &Index,
+        rtxn: &heed::RoTxn<'_>,
+        embedding_configs: Option<EmbeddingConfigs>,
+    ) -> Result<Self> {
         let stop_words = index.stop_words(rtxn)?;
         let stop_words = stop_words.map(|sw| sw.map_data(Vec::from).unwrap());
         let allowed_separators = index.allowed_separators(rtxn)?;
@@ -1441,7 +1445,10 @@ impl InnerIndexSettings {
         let mut faceted_fields_ids = index.faceted_fields_ids(rtxn)?;
         let exact_attributes = index.exact_attributes_ids(rtxn)?;
         let proximity_precision = index.proximity_precision(rtxn)?.unwrap_or_default();
-        let embedding_configs = embedders(index.embedding_configs(rtxn)?)?;
+        let embedding_configs = match embedding_configs {
+            Some(embedding_configs) => embedding_configs,
+            None => embedders(index.embedding_configs(rtxn)?)?,
+        };
         let existing_fields: HashSet<_> = index
             .field_distribution(rtxn)?
             .into_iter()

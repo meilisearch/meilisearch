@@ -475,7 +475,7 @@ where
     }
 
     // used to update the localized and weighted maps while sharing the update code with the settings pipeline.
-    let mut inner_index_settings = InnerIndexSettings::from_index(index, wtxn)?;
+    let mut inner_index_settings = InnerIndexSettings::from_index(index, wtxn, Some(embedders))?;
     inner_index_settings.recompute_facets(wtxn, index)?;
     inner_index_settings.recompute_searchables(wtxn, index)?;
     index.put_field_distribution(wtxn, &field_distribution)?;

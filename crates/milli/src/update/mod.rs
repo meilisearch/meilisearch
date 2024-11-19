@@ -19,7 +19,7 @@ pub(crate) mod facet;
 mod index_documents;
 mod indexer_config;
 pub mod new;
-mod settings;
+pub(crate) mod settings;
 mod update_step;
 mod word_prefix_docids;
 mod words_prefix_integer_docids;

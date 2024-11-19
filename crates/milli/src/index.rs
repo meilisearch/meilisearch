@@ -1689,6 +1689,7 @@ pub(crate) mod tests {
     use crate::error::{Error, InternalError};
     use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
     use crate::update::new::indexer;
+    use crate::update::settings::InnerIndexSettings;
     use crate::update::{
         self, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Setting, Settings,
     };
@@ -1749,8 +1750,8 @@ pub(crate) mod tests {
             let db_fields_ids_map = self.inner.fields_ids_map(&rtxn)?;
             let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-            let embedders = EmbeddingConfigs::default();
-            /// TODO: fetch configs from the index
+            let embedders =
+                InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.embedding_configs;
             let mut indexer =
                 indexer::DocumentOperation::new(self.index_documents_config.update_method);
             indexer.add_documents(&documents).unwrap();
@@ -1830,7 +1831,9 @@ pub(crate) mod tests {
             let db_fields_ids_map = self.inner.fields_ids_map(&rtxn)?;
             let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-            let embedders = EmbeddingConfigs::default();
+            let embedders =
+                InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.embedding_configs;
+
             let mut indexer =
                 indexer::DocumentOperation::new(self.index_documents_config.update_method);
             let external_document_ids: Vec<_> =
