@@ -82,8 +82,10 @@ impl<'pl> DocumentOperation<'pl> {
                 ),
             };
 
+            let mut document_count = 0;
             let error = match result {
                 Ok(new_docids_version_offsets) => {
+                    document_count = new_docids_version_offsets.len() as u64;
                     // If we don't have any error then we can merge the content of this payload
                     // into to main payload. Else we just drop this payload extraction.
                     merge_version_offsets(&mut docids_version_offsets, new_docids_version_offsets);
@@ -93,11 +95,7 @@ impl<'pl> DocumentOperation<'pl> {
                 Err(e) => return Err(e),
             };
 
-            operations_stats.push(PayloadStats {
-                document_count: docids_version_offsets.len() as u64,
-                bytes,
-                error,
-            });
+            operations_stats.push(PayloadStats { document_count, bytes, error });
         }
 
         // TODO We must drain the HashMap into a Vec because rayon::hash_map::IntoIter: !Clone
