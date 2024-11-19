@@ -149,6 +149,15 @@ fn word_positions_into_word_pair_proximity(
     }
 }
 
+fn drain_word_positions(
+    word_positions: &mut VecDeque<(Rc<str>, u16)>,
+    word_pair_proximity: &mut impl FnMut((Rc<str>, Rc<str>), u8),
+) {
+    while !word_positions.is_empty() {
+        word_positions_into_word_pair_proximity(word_positions, word_pair_proximity);
+    }
+}
+
 fn process_document_tokens<'doc>(
     document: impl Document<'doc>,
     document_tokenizer: &DocumentTokenizer,
@@ -156,7 +165,12 @@ fn process_document_tokens<'doc>(
     word_positions: &mut VecDeque<(Rc<str>, u16)>,
     word_pair_proximity: &mut impl FnMut((Rc<str>, Rc<str>), u8),
 ) -> Result<()> {
-    let mut token_fn = |_fname: &str, _fid: FieldId, pos: u16, word: &str| {
+    let mut field_id = None;
+    let mut token_fn = |_fname: &str, fid: FieldId, pos: u16, word: &str| {
+        if field_id != Some(fid) {
+            field_id = Some(fid);
+            drain_word_positions(word_positions, word_pair_proximity);
+        }
         // drain the proximity window until the head word is considered close to the word we are inserting.
         while word_positions
             .front()
@@ -171,9 +185,6 @@ fn process_document_tokens<'doc>(
     };
     document_tokenizer.tokenize_document(document, fields_ids_map, &mut token_fn)?;
 
-    while !word_positions.is_empty() {
-        word_positions_into_word_pair_proximity(word_positions, word_pair_proximity);
-    }
-
+    drain_word_positions(word_positions, word_pair_proximity);
     Ok(())
 }
