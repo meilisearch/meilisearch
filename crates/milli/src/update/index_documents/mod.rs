@@ -1698,6 +1698,8 @@ mod tests {
 
             let colour_id = index.fields_ids_map(&rtxn).unwrap().id("colour").unwrap();
             let colour_green_id = index.fields_ids_map(&rtxn).unwrap().id("colour.green").unwrap();
+            let colour_green_blue_id =
+                index.fields_ids_map(&rtxn).unwrap().id("colour.green.blue").unwrap();
 
             let bitmap_colour =
                 index.facet_id_exists_docids.get(&rtxn, &colour_id).unwrap().unwrap();
@@ -1706,6 +1708,10 @@ mod tests {
             let bitmap_colour_green =
                 index.facet_id_exists_docids.get(&rtxn, &colour_green_id).unwrap().unwrap();
             assert_eq!(bitmap_colour_green.into_iter().collect::<Vec<_>>(), vec![6, 7]);
+
+            let bitmap_colour_blue =
+                index.facet_id_exists_docids.get(&rtxn, &colour_green_blue_id).unwrap().unwrap();
+            assert_eq!(bitmap_colour_blue.into_iter().collect::<Vec<_>>(), vec![7]);
         };
 
         let faceted_fields = hashset!(S("colour"));
