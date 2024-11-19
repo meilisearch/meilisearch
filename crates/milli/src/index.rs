@@ -1752,7 +1752,7 @@ pub(crate) mod tests {
             let embedders = EmbeddingConfigs::default();
             /// TODO: fetch configs from the index
             let mut indexer =
-                indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                indexer::DocumentOperation::new(self.index_documents_config.update_method);
             indexer.add_documents(&documents).unwrap();
 
             let indexer_alloc = Bump::new();
@@ -1832,7 +1832,7 @@ pub(crate) mod tests {
 
             let embedders = EmbeddingConfigs::default();
             let mut indexer =
-                indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                indexer::DocumentOperation::new(self.index_documents_config.update_method);
             let external_document_ids: Vec<_> =
                 external_document_ids.iter().map(AsRef::as_ref).collect();
             indexer.delete_documents(external_document_ids.as_slice());
@@ -2429,7 +2429,16 @@ pub(crate) mod tests {
 
         // And adding lots of documents afterwards instead of just one.
         // These extra subtests don't add much, but it's better than nothing.
-        index.add_documents(documents!([{ "primary_key": 38 }, { "primary_key": 39 }, { "primary_key": 41 }, { "primary_key": 40 }, { "primary_key": 41 }, { "primary_key": 42 }])).unwrap();
+        index
+            .add_documents(documents!([
+                { "primary_key": 38 },
+                { "primary_key": 39 },
+                { "primary_key": 41 },
+                { "primary_key": 40 },
+                { "primary_key": 41 },
+                { "primary_key": 42 },
+            ]))
+            .unwrap();
 
         db_snap!(index, documents_ids, @"[0, 1, 2, 3, 4, 5, ]");
         db_snap!(index, external_documents_ids, 7, @r###"
