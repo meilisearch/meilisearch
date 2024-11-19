@@ -1,5 +1,6 @@
 ---
 source: crates/index-scheduler/src/lib.rs
+snapshot_kind: text
 ---
 ### Autobatching Enabled = false
 ### Processing batch None:
@@ -44,9 +45,6 @@ doggos [0,1,2,]
 ### Batches Kind:
 ----------------------------------------------------------------------
 ### Batches Index Tasks:
-----------------------------------------------------------------------
-### Batches Canceled By:
-
 ----------------------------------------------------------------------
 ### Batches Enqueued At:
 ----------------------------------------------------------------------

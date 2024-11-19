@@ -1,5 +1,6 @@
 ---
 source: crates/index-scheduler/src/lib.rs
+snapshot_kind: text
 ---
 ### Autobatching Enabled = true
 ### Processing batch Some(0):
@@ -41,9 +42,6 @@ enqueued [0,1,]
 ### Batches Kind:
 ----------------------------------------------------------------------
 ### Batches Index Tasks:
-----------------------------------------------------------------------
-### Batches Canceled By:
-
 ----------------------------------------------------------------------
 ### Batches Enqueued At:
 ----------------------------------------------------------------------

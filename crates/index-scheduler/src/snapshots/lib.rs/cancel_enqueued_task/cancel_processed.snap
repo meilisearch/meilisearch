@@ -1,13 +1,14 @@
 ---
-source: index-scheduler/src/lib.rs
+source: crates/index-scheduler/src/lib.rs
+snapshot_kind: text
 ---
 ### Autobatching Enabled = true
-### Processing Tasks:
+### Processing batch None:
 []
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, status: canceled, canceled_by: 1, details: { received_documents: 1, indexed_documents: Some(0) }, kind: DocumentAdditionOrUpdate { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
-1 {uid: 1, status: succeeded, details: { matched_tasks: 1, canceled_tasks: Some(1), original_filter: "test_query" }, kind: TaskCancelation { query: "test_query", tasks: RoaringBitmap<[0]> }}
+0 {uid: 0, batch_uid: 0, status: canceled, canceled_by: 1, details: { received_documents: 1, indexed_documents: Some(0) }, kind: DocumentAdditionOrUpdate { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
+1 {uid: 1, batch_uid: 0, status: succeeded, details: { matched_tasks: 1, canceled_tasks: Some(1), original_filter: "test_query" }, kind: TaskCancelation { query: "test_query", tasks: RoaringBitmap<[0]> }}
 ----------------------------------------------------------------------
 ### Status:
 enqueued []
@@ -36,10 +37,35 @@ catto [0,]
 [timestamp] [1,]
 ----------------------------------------------------------------------
 ### Finished At:
-[timestamp] [0,]
 [timestamp] [1,]
 ----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [1,]
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,]
+----------------------------------------------------------------------
+### Batches Kind:
+"documentAdditionOrUpdate" [0,]
+"taskCancelation" [0,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+catto [0,]
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+----------------------------------------------------------------------
 ### File Store:
+00000000-0000-0000-0000-000000000000
 
 ----------------------------------------------------------------------
-

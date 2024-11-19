@@ -667,7 +667,11 @@ impl IndexScheduler {
     /// list is updated accordingly, with the exception of the its date fields
     /// [`finished_at`](meilisearch_types::tasks::Task::finished_at) and [`started_at`](meilisearch_types::tasks::Task::started_at).
     #[tracing::instrument(level = "trace", skip(self, batch), target = "indexing::scheduler", fields(batch=batch.to_string()))]
-    pub(crate) fn process_batch(&self, batch: Batch) -> Result<Vec<Task>> {
+    pub(crate) fn process_batch(
+        &self,
+        batch: Batch,
+        current_batch: &mut ProcessingBatch,
+    ) -> Result<Vec<Task>> {
         #[cfg(test)]
         {
             self.maybe_fail(crate::tests::FailureLocation::InsideProcessBatch)?;
@@ -685,47 +689,25 @@ impl IndexScheduler {
                         unreachable!()
                     };
 
-                let mut wtxn = self.env.write_txn()?;
-                let canceled_tasks_content_uuids = self.cancel_matched_tasks(
-                    &mut wtxn,
-                    task.uid,
-                    matched_tasks,
-                    previous_started_at,
-                    &previous_processing_tasks,
-                )?;
+                let rtxn = self.env.read_txn()?;
+                let mut canceled_tasks =
+                    self.cancel_matched_tasks(&rtxn, task.uid, current_batch, matched_tasks)?;
 
                 task.status = Status::Succeeded;
                 match &mut task.details {
                     Some(Details::TaskCancelation {
                         matched_tasks: _,
-                        canceled_tasks,
+                        canceled_tasks: canceled_tasks_details,
                         original_filter: _,
                     }) => {
-                        *canceled_tasks = Some(canceled_tasks_content_uuids.len() as u64);
+                        *canceled_tasks_details = Some(canceled_tasks.len() as u64);
                     }
                     _ => unreachable!(),
                 }
 
-                // We must only remove the content files if the transaction is successfully committed
-                // and if errors occurs when we are deleting files we must do our best to delete
-                // everything. We do not return the encountered errors when deleting the content
-                // files as it is not a breaking operation and we can safely continue our job.
-                match wtxn.commit() {
-                    Ok(()) => {
-                        for content_uuid in canceled_tasks_content_uuids {
-                            if let Err(error) = self.delete_update_file(content_uuid) {
-                                tracing::error!(
-                                    file_content_uuid = %content_uuid,
-                                    %error,
-                                    "Failed deleting content file"
-                                )
-                            }
-                        }
-                    }
-                    Err(e) => return Err(e.into()),
-                }
+                canceled_tasks.push(task);
 
-                Ok(vec![task])
+                Ok(canceled_tasks)
             }
             Batch::TaskDeletions(mut tasks) => {
                 // 1. Retrieve the tasks that matched the query at enqueue-time.
@@ -1090,7 +1072,10 @@ impl IndexScheduler {
                 }
                 self.index_mapper.create_index(wtxn, &index_uid, None)?;
 
-                self.process_batch(Batch::IndexUpdate { index_uid, primary_key, task })
+                self.process_batch(
+                    Batch::IndexUpdate { index_uid, primary_key, task },
+                    current_batch,
+                )
             }
             Batch::IndexUpdate { index_uid, primary_key, mut task } => {
                 let rtxn = self.env.read_txn()?;
@@ -1744,41 +1729,31 @@ impl IndexScheduler {
 
     /// Cancel each given task from all the databases (if it is cancelable).
     ///
-    /// Returns the content files that the transaction owner must delete if the commit is successful.
+    /// Returns the list of tasks that matched the filter and must be written in the database.
     fn cancel_matched_tasks(
         &self,
-        wtxn: &mut RwTxn,
+        rtxn: &RoTxn,
         cancel_task_id: TaskId,
+        current_batch: &mut ProcessingBatch,
         matched_tasks: &RoaringBitmap,
-        previous_started_at: OffsetDateTime,
-        previous_processing_tasks: &RoaringBitmap,
-    ) -> Result<Vec<Uuid>> {
-        let now = OffsetDateTime::now_utc();
-
+    ) -> Result<Vec<Task>> {
         // 1. Remove from this list the tasks that we are not allowed to cancel
         //    Notice that only the _enqueued_ ones are cancelable and we should
         //    have already aborted the indexation of the _processing_ ones
-        let cancelable_tasks = self.get_status(wtxn, Status::Enqueued)?;
+        let cancelable_tasks = self.get_status(rtxn, Status::Enqueued)?;
         let tasks_to_cancel = cancelable_tasks & matched_tasks;
 
         // 2. We now have a list of tasks to cancel, cancel them
-        let mut content_files_to_delete = Vec::new();
-        for mut task in self.get_existing_tasks(wtxn, tasks_to_cancel.iter())? {
-            if let Some(uuid) = task.content_uuid() {
-                content_files_to_delete.push(uuid);
-            }
-            if previous_processing_tasks.contains(task.uid) {
-                task.started_at = Some(previous_started_at);
-            }
+        let mut tasks = self.get_existing_tasks(rtxn, tasks_to_cancel.iter())?;
+
+        for task in tasks.iter_mut() {
             task.status = Status::Canceled;
             task.canceled_by = Some(cancel_task_id);
-            task.finished_at = Some(now);
-            task.details = task.details.map(|d| d.to_failed());
-            self.update_task(wtxn, &task)?;
+            task.details = task.details.as_ref().map(|d| d.to_failed());
+            current_batch.processing(Some(task));
         }
-        self.canceled_by.put(wtxn, &cancel_task_id, &tasks_to_cancel)?;
 
-        Ok(content_files_to_delete)
+        Ok(tasks)
     }
 }
 

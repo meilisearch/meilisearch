@@ -40,7 +40,6 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         batch_status,
         batch_kind,
         batch_index_tasks,
-        batch_canceled_by,
         batch_enqueued_at,
         batch_started_at,
         batch_finished_at,
@@ -130,10 +129,6 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     snap.push_str("### Batches Index Tasks:\n");
     snap.push_str(&snapshot_index_tasks(&rtxn, *batch_index_tasks));
     snap.push_str("----------------------------------------------------------------------\n");
-
-    snap.push_str("### Batches Canceled By:\n");
-    snap.push_str(&snapshot_canceled_by(&rtxn, *batch_canceled_by));
-    snap.push_str("\n----------------------------------------------------------------------\n");
 
     snap.push_str("### Batches Enqueued At:\n");
     snap.push_str(&snapshot_date_db(&rtxn, *batch_enqueued_at));

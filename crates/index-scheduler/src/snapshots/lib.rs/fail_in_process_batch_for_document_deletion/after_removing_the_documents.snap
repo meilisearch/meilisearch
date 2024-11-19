@@ -1,5 +1,6 @@
 ---
 source: crates/index-scheduler/src/lib.rs
+snapshot_kind: text
 ---
 ### Autobatching Enabled = true
 ### Processing batch None:
@@ -63,7 +64,6 @@ doggos: { number_of_documents: 1, field_distribution: {"doggo": 1, "id": 1} }
 ----------------------------------------------------------------------
 ### Batches Status:
 succeeded [0,1,2,]
-failed [2,]
 ----------------------------------------------------------------------
 ### Batches Kind:
 "documentAdditionOrUpdate" [1,]
@@ -72,9 +72,6 @@ failed [2,]
 ----------------------------------------------------------------------
 ### Batches Index Tasks:
 doggos [0,1,2,]
-----------------------------------------------------------------------
-### Batches Canceled By:
-
 ----------------------------------------------------------------------
 ### Batches Enqueued At:
 [timestamp] [0,]

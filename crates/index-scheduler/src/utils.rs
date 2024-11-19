@@ -138,6 +138,7 @@ impl IndexScheduler {
                 bitmap.insert(batch.uid);
             })?;
         }
+
         if let Some(enqueued_at) = batch.oldest_enqueued_at {
             insert_task_datetime(wtxn, self.batch_enqueued_at, enqueued_at, batch.uid)?;
         }
@@ -203,6 +204,8 @@ impl IndexScheduler {
 
     pub(crate) fn update_task(&self, wtxn: &mut RwTxn, task: &Task) -> Result<()> {
         let old_task = self.get_task(wtxn, task.uid)?.ok_or(Error::CorruptedTaskQueue)?;
+
+        dbg!(&task);
 
         debug_assert_eq!(old_task.uid, task.uid);
         debug_assert!(old_task.batch_uid.is_none() && task.batch_uid.is_some());

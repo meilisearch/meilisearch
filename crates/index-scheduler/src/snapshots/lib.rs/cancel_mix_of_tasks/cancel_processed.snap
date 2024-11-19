@@ -1,15 +1,16 @@
 ---
-source: index-scheduler/src/lib.rs
+source: crates/index-scheduler/src/lib.rs
+snapshot_kind: text
 ---
 ### Autobatching Enabled = true
-### Processing Tasks:
+### Processing batch None:
 []
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
-1 {uid: 1, status: canceled, canceled_by: 3, details: { received_documents: 1, indexed_documents: Some(0) }, kind: DocumentAdditionOrUpdate { index_uid: "beavero", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 1, allow_index_creation: true }}
-2 {uid: 2, status: canceled, canceled_by: 3, details: { received_documents: 1, indexed_documents: Some(0) }, kind: DocumentAdditionOrUpdate { index_uid: "wolfo", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000002, documents_count: 1, allow_index_creation: true }}
-3 {uid: 3, status: succeeded, details: { matched_tasks: 3, canceled_tasks: Some(2), original_filter: "test_query" }, kind: TaskCancelation { query: "test_query", tasks: RoaringBitmap<[0, 1, 2]> }}
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
+1 {uid: 1, batch_uid: 1, status: canceled, canceled_by: 3, details: { received_documents: 1, indexed_documents: Some(0) }, kind: DocumentAdditionOrUpdate { index_uid: "beavero", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 1, allow_index_creation: true }}
+2 {uid: 2, batch_uid: 1, status: canceled, canceled_by: 3, details: { received_documents: 1, indexed_documents: Some(0) }, kind: DocumentAdditionOrUpdate { index_uid: "wolfo", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000002, documents_count: 1, allow_index_creation: true }}
+3 {uid: 3, batch_uid: 1, status: succeeded, details: { matched_tasks: 3, canceled_tasks: Some(2), original_filter: "test_query" }, kind: TaskCancelation { query: "test_query", tasks: RoaringBitmap<[0, 1, 2]> }}
 ----------------------------------------------------------------------
 ### Status:
 enqueued []
@@ -42,15 +43,47 @@ catto: { number_of_documents: 1, field_distribution: {"id": 1} }
 ----------------------------------------------------------------------
 ### Started At:
 [timestamp] [0,]
-[timestamp] [1,]
 [timestamp] [3,]
 ----------------------------------------------------------------------
 ### Finished At:
 [timestamp] [0,]
-[timestamp] [1,2,]
 [timestamp] [3,]
 ----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, }
+1 {uid: 1, }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,]
+1 [3,]
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,1,]
+----------------------------------------------------------------------
+### Batches Kind:
+"documentAdditionOrUpdate" [0,1,]
+"taskCancelation" [1,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+beavero [1,]
+catto [0,]
+wolfo [1,]
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
 ### File Store:
+00000000-0000-0000-0000-000000000001
+00000000-0000-0000-0000-000000000002
 
 ----------------------------------------------------------------------
-

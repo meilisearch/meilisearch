@@ -1,5 +1,6 @@
 ---
 source: crates/index-scheduler/src/lib.rs
+snapshot_kind: text
 ---
 ### Autobatching Enabled = true
 ### Processing batch None:
@@ -25,7 +26,6 @@ catto: { number_of_documents: 1, field_distribution: {"id": 1} }
 
 ----------------------------------------------------------------------
 ### Canceled By:
-1 []
 
 ----------------------------------------------------------------------
 ### Enqueued At:
@@ -57,9 +57,6 @@ succeeded [0,1,]
 ----------------------------------------------------------------------
 ### Batches Index Tasks:
 catto [0,]
-----------------------------------------------------------------------
-### Batches Canceled By:
-
 ----------------------------------------------------------------------
 ### Batches Enqueued At:
 [timestamp] [0,]
