@@ -1757,13 +1757,17 @@ pub(crate) mod tests {
             indexer.add_documents(&documents).unwrap();
 
             let indexer_alloc = Bump::new();
-            let (document_changes, _operation_stats, primary_key) = indexer.into_changes(
+            let (document_changes, operation_stats, primary_key) = indexer.into_changes(
                 &indexer_alloc,
                 &self.inner,
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
             )?;
+
+            if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
+                return Err(error.into());
+            }
 
             pool.install(|| {
                 indexer::index(
@@ -1841,13 +1845,17 @@ pub(crate) mod tests {
             indexer.delete_documents(external_document_ids.as_slice());
 
             let indexer_alloc = Bump::new();
-            let (document_changes, _operation_stats, primary_key) = indexer.into_changes(
+            let (document_changes, operation_stats, primary_key) = indexer.into_changes(
                 &indexer_alloc,
                 &self.inner,
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
             )?;
+
+            if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
+                return Err(error.into());
+            }
 
             pool.install(|| {
                 indexer::index(
