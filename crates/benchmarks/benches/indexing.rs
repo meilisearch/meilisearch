@@ -35,7 +35,7 @@ fn setup_index() -> Index {
     setup_dir(path);
     let mut options = EnvOpenOptions::new();
     options.map_size(100 * 1024 * 1024 * 1024); // 100 GB
-    options.max_readers(10);
+    options.max_readers(100);
     Index::new(options, path).unwrap()
 }
 
