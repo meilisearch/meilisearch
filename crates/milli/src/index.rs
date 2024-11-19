@@ -2945,7 +2945,6 @@ pub(crate) mod tests {
         db_snap!(index, fields_ids_map, @r###"
         0   id               |
         1   _vectors         |
-        2   _vectors.doggo   |
         "###);
         db_snap!(index, searchable_fields, @r###"["id"]"###);
         db_snap!(index, fieldids_weights_map, @r###"
