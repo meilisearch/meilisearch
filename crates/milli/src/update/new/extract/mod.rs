@@ -59,15 +59,24 @@ pub mod perm_json_p {
             && selector[key.len()..].chars().next().map(|c| c == SPLIT_SYMBOL).unwrap_or(true)
     }
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum Depth {
+        /// The perm json ptr is currently on the field of an object
+        OnBaseKey,
+        /// The perm json ptr is currently inside of an array
+        InsideArray,
+    }
+
     pub fn seek_leaf_values_in_object(
         value: &Map<String, Value>,
         selectors: Option<&[&str]>,
         skip_selectors: &[&str],
         base_key: &str,
-        seeker: &mut impl FnMut(&str, &Value) -> Result<()>,
+        base_depth: Depth,
+        seeker: &mut impl FnMut(&str, Depth, &Value) -> Result<()>,
     ) -> Result<()> {
         if value.is_empty() {
-            seeker(base_key, &Value::Object(Map::with_capacity(0)))?;
+            seeker(base_key, base_depth, &Value::Object(Map::with_capacity(0)))?;
         }
 
         for (key, value) in value.iter() {
@@ -87,6 +96,7 @@ pub mod perm_json_p {
                         selectors,
                         skip_selectors,
                         &base_key,
+                        Depth::OnBaseKey,
                         seeker,
                     ),
                     Value::Array(array) => seek_leaf_values_in_array(
@@ -94,9 +104,10 @@ pub mod perm_json_p {
                         selectors,
                         skip_selectors,
                         &base_key,
+                        Depth::OnBaseKey,
                         seeker,
                     ),
-                    value => seeker(&base_key, value),
+                    value => seeker(&base_key, Depth::OnBaseKey, value),
                 }?;
             }
         }
@@ -109,21 +120,32 @@ pub mod perm_json_p {
         selectors: Option<&[&str]>,
         skip_selectors: &[&str],
         base_key: &str,
-        seeker: &mut impl FnMut(&str, &Value) -> Result<()>,
+        base_depth: Depth,
+        seeker: &mut impl FnMut(&str, Depth, &Value) -> Result<()>,
     ) -> Result<()> {
         if values.is_empty() {
-            seeker(base_key, &Value::Array(vec![]))?;
+            seeker(base_key, base_depth, &Value::Array(vec![]))?;
         }
 
         for value in values {
             match value {
-                Value::Object(object) => {
-                    seek_leaf_values_in_object(object, selectors, skip_selectors, base_key, seeker)
-                }
-                Value::Array(array) => {
-                    seek_leaf_values_in_array(array, selectors, skip_selectors, base_key, seeker)
-                }
-                value => seeker(base_key, value),
+                Value::Object(object) => seek_leaf_values_in_object(
+                    object,
+                    selectors,
+                    skip_selectors,
+                    base_key,
+                    Depth::InsideArray,
+                    seeker,
+                ),
+                Value::Array(array) => seek_leaf_values_in_array(
+                    array,
+                    selectors,
+                    skip_selectors,
+                    base_key,
+                    Depth::InsideArray,
+                    seeker,
+                ),
+                value => seeker(base_key, Depth::InsideArray, value),
             }?;
         }
 

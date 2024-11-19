@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::update::new::document::Document;
 use crate::update::new::extract::perm_json_p::{
-    seek_leaf_values_in_array, seek_leaf_values_in_object, select_field,
+    seek_leaf_values_in_array, seek_leaf_values_in_object, select_field, Depth,
 };
 use crate::{
     FieldId, GlobalFieldsIdsMap, InternalError, LocalizedAttributesRule, Result, UserError,
@@ -35,7 +35,7 @@ impl<'a> DocumentTokenizer<'a> {
         for entry in document.iter_top_level_fields() {
             let (field_name, value) = entry?;
 
-            let mut tokenize_field = |field_name: &str, value: &Value| {
+            let mut tokenize_field = |field_name: &str, _depth, value: &Value| {
                 let Some(field_id) = field_id_map.id_or_insert(field_name) else {
                     return Err(UserError::AttributeLimitReached.into());
                 };
@@ -96,6 +96,7 @@ impl<'a> DocumentTokenizer<'a> {
                         self.attribute_to_extract,
                         self.attribute_to_skip,
                         field_name,
+                        Depth::OnBaseKey,
                         &mut tokenize_field,
                     )?,
                     Value::Array(array) => seek_leaf_values_in_array(
@@ -103,9 +104,10 @@ impl<'a> DocumentTokenizer<'a> {
                         self.attribute_to_extract,
                         self.attribute_to_skip,
                         field_name,
+                        Depth::OnBaseKey,
                         &mut tokenize_field,
                     )?,
-                    value => tokenize_field(field_name, &value)?,
+                    value => tokenize_field(field_name, Depth::OnBaseKey, &value)?,
                 }
             }
         }

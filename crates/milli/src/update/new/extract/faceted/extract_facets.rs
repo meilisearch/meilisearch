@@ -14,6 +14,7 @@ use super::FacetKind;
 use crate::heed_codec::facet::OrderedF64Codec;
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::FieldIdDocidFacetSender;
+use crate::update::new::extract::perm_json_p;
 use crate::update::new::indexer::document_changes::{
     extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext, Progress,
 };
@@ -81,7 +82,7 @@ impl FacetedDocidsExtractor {
                 inner.current(rtxn, index, context.db_fields_ids_map)?,
                 inner.external_document_id(),
                 new_fields_ids_map.deref_mut(),
-                &mut |fid, value| {
+                &mut |fid, depth, value| {
                     Self::facet_fn_with_options(
                         &context.doc_alloc,
                         cached_sorter.deref_mut(),
@@ -90,6 +91,7 @@ impl FacetedDocidsExtractor {
                         DelAddFacetValue::insert_del,
                         docid,
                         fid,
+                        depth,
                         value,
                     )
                 },
@@ -100,7 +102,7 @@ impl FacetedDocidsExtractor {
                     inner.current(rtxn, index, context.db_fields_ids_map)?,
                     inner.external_document_id(),
                     new_fields_ids_map.deref_mut(),
-                    &mut |fid, value| {
+                    &mut |fid, depth, value| {
                         Self::facet_fn_with_options(
                             &context.doc_alloc,
                             cached_sorter.deref_mut(),
@@ -109,6 +111,7 @@ impl FacetedDocidsExtractor {
                             DelAddFacetValue::insert_del,
                             docid,
                             fid,
+                            depth,
                             value,
                         )
                     },
@@ -119,7 +122,7 @@ impl FacetedDocidsExtractor {
                     inner.merged(rtxn, index, context.db_fields_ids_map)?,
                     inner.external_document_id(),
                     new_fields_ids_map.deref_mut(),
-                    &mut |fid, value| {
+                    &mut |fid, depth, value| {
                         Self::facet_fn_with_options(
                             &context.doc_alloc,
                             cached_sorter.deref_mut(),
@@ -128,6 +131,7 @@ impl FacetedDocidsExtractor {
                             DelAddFacetValue::insert_add,
                             docid,
                             fid,
+                            depth,
                             value,
                         )
                     },
@@ -138,7 +142,7 @@ impl FacetedDocidsExtractor {
                 inner.inserted(),
                 inner.external_document_id(),
                 new_fields_ids_map.deref_mut(),
-                &mut |fid, value| {
+                &mut |fid, depth, value| {
                     Self::facet_fn_with_options(
                         &context.doc_alloc,
                         cached_sorter.deref_mut(),
@@ -147,6 +151,7 @@ impl FacetedDocidsExtractor {
                         DelAddFacetValue::insert_add,
                         docid,
                         fid,
+                        depth,
                         value,
                     )
                 },
@@ -166,6 +171,7 @@ impl FacetedDocidsExtractor {
         facet_fn: impl Fn(&mut DelAddFacetValue<'doc>, FieldId, BVec<'doc, u8>, FacetKind),
         docid: DocumentId,
         fid: FieldId,
+        depth: perm_json_p::Depth,
         value: &Value,
     ) -> Result<()> {
         let mut buffer = BVec::new_in(doc_alloc);
@@ -217,7 +223,7 @@ impl FacetedDocidsExtractor {
             }
             // Null
             // key: fid
-            Value::Null => {
+            Value::Null if depth == perm_json_p::Depth::OnBaseKey => {
                 buffer.clear();
                 buffer.push(FacetKind::Null as u8);
                 buffer.extend_from_slice(&fid.to_be_bytes());
@@ -225,13 +231,13 @@ impl FacetedDocidsExtractor {
             }
             // Empty
             // key: fid
-            Value::Array(a) if a.is_empty() => {
+            Value::Array(a) if a.is_empty() && depth == perm_json_p::Depth::OnBaseKey => {
                 buffer.clear();
                 buffer.push(FacetKind::Empty as u8);
                 buffer.extend_from_slice(&fid.to_be_bytes());
                 cache_fn(cached_sorter, &buffer, docid)
             }
-            Value::Object(o) if o.is_empty() => {
+            Value::Object(o) if o.is_empty() && depth == perm_json_p::Depth::OnBaseKey => {
                 buffer.clear();
                 buffer.push(FacetKind::Empty as u8);
                 buffer.extend_from_slice(&fid.to_be_bytes());
