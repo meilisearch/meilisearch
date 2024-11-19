@@ -28,6 +28,7 @@ pub fn located_query_terms_from_tokens(
     words_limit: Option<usize>,
 ) -> Result<ExtractedTokens> {
     let nbr_typos = number_of_typos_allowed(ctx)?;
+    let allow_prefix_search = ctx.is_prefix_search_allowed();
 
     let mut query_terms = Vec::new();
 
@@ -94,7 +95,7 @@ pub fn located_query_terms_from_tokens(
                         ctx,
                         word,
                         nbr_typos(word),
-                        true,
+                        allow_prefix_search,
                         false,
                     )?;
                     let located_term = LocatedQueryTerm {

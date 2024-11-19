@@ -173,6 +173,13 @@ impl<'i> FacetsUpdate<'i> {
         }
 
         match self.normalized_delta_data {
+            _ if !self.index.facet_search(wtxn)? => {
+                // If facet search is disabled, we don't need to compute facet search databases.
+                // We clear the facet search databases.
+                self.index.facet_id_string_fst.clear(wtxn)?;
+                self.index.facet_id_normalized_string_strings.clear(wtxn)?;
+                return Ok(());
+            }
             Some(data) => index_facet_search(wtxn, data, self.index),
             None => Ok(()),
         }

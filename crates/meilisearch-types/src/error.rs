@@ -290,6 +290,8 @@ InvalidSearchDistinct                 , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDisplayedAttributes    , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDistinctAttribute      , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsProximityPrecision     , InvalidRequest       , BAD_REQUEST ;
+InvalidSettingsFacetSearch            , InvalidRequest       , BAD_REQUEST ;
+InvalidSettingsPrefixSearch           , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFaceting               , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFilterableAttributes   , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsPagination             , InvalidRequest       , BAD_REQUEST ;

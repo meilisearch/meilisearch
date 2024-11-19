@@ -369,6 +369,30 @@ make_setting_route!(
     SearchCutoffMsAnalytics
 );
 
+make_setting_route!(
+    "/facet-search",
+    put,
+    bool,
+    meilisearch_types::deserr::DeserrJsonError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsFacetSearch,
+    >,
+    facet_search,
+    "facetSearch",
+    FacetSearchAnalytics
+);
+
+make_setting_route!(
+    "/prefix-search",
+    put,
+    meilisearch_types::settings::PrefixSearchSettings,
+    meilisearch_types::deserr::DeserrJsonError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsPrefixSearch,
+    >,
+    prefix_search,
+    "prefixSearch",
+    PrefixSearchAnalytics
+);
+
 macro_rules! generate_configure {
     ($($mod:ident),*) => {
         pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -456,6 +480,8 @@ pub async fn update_all(
             non_separator_tokens: NonSeparatorTokensAnalytics::new(
                 new_settings.non_separator_tokens.as_ref().set(),
             ),
+            facet_search: FacetSearchAnalytics::new(new_settings.facet_search.as_ref().set()),
+            prefix_search: PrefixSearchAnalytics::new(new_settings.prefix_search.as_ref().set()),
         },
         &req,
     );

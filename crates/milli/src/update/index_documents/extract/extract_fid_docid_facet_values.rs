@@ -80,7 +80,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     let new_faceted_fids: BTreeSet<_> =
         settings_diff.new.faceted_fields_ids.iter().copied().collect();
 
-    if !settings_diff.settings_update_only || old_faceted_fids != new_faceted_fids {
+    if !settings_diff.settings_update_only || settings_diff.reindex_facets() {
         let mut cursor = obkv_documents.into_cursor()?;
         while let Some((docid_bytes, value)) = cursor.move_on_next()? {
             let obkv = obkv::KvReader::from_slice(value);
@@ -112,8 +112,10 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
                         (field_id, None, add_value)
                     }
                     EitherOrBoth::Both(&field_id, _) => {
-                        // during settings update, recompute the changing settings only.
-                        if settings_diff.settings_update_only {
+                        // during settings update, recompute the changing settings only unless a global change is detected.
+                        if settings_diff.settings_update_only
+                            && !settings_diff.global_facet_settings_changed()
+                        {
                             continue;
                         }
 

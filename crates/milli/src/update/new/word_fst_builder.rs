@@ -80,12 +80,12 @@ pub struct PrefixDelta {
 }
 
 struct PrefixFstBuilder {
-    prefix_count_threshold: u64,
+    prefix_count_threshold: usize,
     max_prefix_length: usize,
     /// TODO: Replace the full memory allocation
     prefix_fst_builders: Vec<SetBuilder<Vec<u8>>>,
     current_prefix: Vec<Prefix>,
-    current_prefix_count: Vec<u64>,
+    current_prefix_count: Vec<usize>,
     modified_prefixes: HashSet<Prefix>,
     current_prefix_is_modified: Vec<bool>,
 }
@@ -95,7 +95,7 @@ impl PrefixFstBuilder {
         let PrefixSettings { prefix_count_threshold, max_prefix_length, compute_prefixes } =
             prefix_settings;
 
-        if !compute_prefixes {
+        if compute_prefixes != crate::index::PrefixSearch::IndexingTime {
             return None;
         }
 
