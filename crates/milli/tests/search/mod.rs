@@ -36,7 +36,6 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let index = Index::new(options, &path).unwrap();
 
     let mut wtxn = index.write_txn().unwrap();
-    let rtxn = index.read_txn().unwrap();
     let config = IndexerConfig::default();
 
     let mut builder = Settings::new(&mut wtxn, &index, &config);
@@ -61,9 +60,13 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     });
     builder.set_searchable_fields(vec![S("title"), S("description")]);
     builder.execute(|_| (), || false).unwrap();
+    wtxn.commit().unwrap();
 
     // index documents
     let config = IndexerConfig { max_memory: Some(10 * 1024 * 1024), ..Default::default() };
+    let rtxn = index.read_txn().unwrap();
+    let mut wtxn = index.write_txn().unwrap();
+
     let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
@@ -73,15 +76,18 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let mut file = tempfile::tempfile().unwrap();
     file.write_all(CONTENT.as_bytes()).unwrap();
     file.sync_all().unwrap();
-
     let payload = unsafe { memmap2::Mmap::map(&file).unwrap() };
 
     // index documents
     indexer.add_documents(&payload).unwrap();
 
     let indexer_alloc = Bump::new();
-    let (document_changes, _operation_stats, primary_key) =
+    let (document_changes, operation_stats, primary_key) =
         indexer.into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map).unwrap();
+
+    if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
+        panic!("{error}");
+    }
 
     indexer::index(
         &mut wtxn,

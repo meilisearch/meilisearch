@@ -46,8 +46,8 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
 
     // index documents
     let config = IndexerConfig { max_memory: Some(10 * 1024 * 1024), ..Default::default() };
-    let mut wtxn = index.write_txn().unwrap();
     let rtxn = index.read_txn().unwrap();
+    let mut wtxn = index.write_txn().unwrap();
 
     let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let mut new_fields_ids_map = db_fields_ids_map.clone();
