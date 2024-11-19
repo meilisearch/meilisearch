@@ -3,6 +3,7 @@ use time::{Duration, OffsetDateTime};
 
 use crate::{
     batches::{Batch, BatchId},
+    task_view::DetailsView,
     tasks::serialize_duration,
 };
 
@@ -10,6 +11,7 @@ use crate::{
 #[serde(rename_all = "camelCase")]
 pub struct BatchView {
     pub uid: BatchId,
+    pub details: DetailsView,
     #[serde(serialize_with = "serialize_duration", default)]
     pub duration: Option<Duration>,
     #[serde(with = "time::serde::rfc3339", default)]
@@ -22,6 +24,7 @@ impl BatchView {
     pub fn from_batch(batch: &Batch) -> Self {
         Self {
             uid: batch.uid,
+            details: batch.details.clone(),
             duration: batch.finished_at.map(|finished_at| finished_at - batch.started_at),
             started_at: batch.started_at,
             finished_at: batch.finished_at,

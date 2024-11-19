@@ -41,8 +41,8 @@ catto: { number_of_documents: 1, field_distribution: {"id": 1} }
 [timestamp] [1,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, }
-1 {uid: 1, }
+0 {uid: 0, details: {"receivedDocuments":1,"indexedDocuments":1}, }
+1 {uid: 1, details: {"matchedTasks":1,"canceledTasks":0,"originalFilter":"test_query"}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

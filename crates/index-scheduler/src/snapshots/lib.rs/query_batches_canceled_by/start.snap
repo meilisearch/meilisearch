@@ -49,8 +49,8 @@ catto: { number_of_documents: 0, field_distribution: {} }
 [timestamp] [3,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, }
-1 {uid: 1, }
+0 {uid: 0, details: {"primaryKey":"mouse"}, }
+1 {uid: 1, details: {"primaryKey":"sheep","matchedTasks":3,"canceledTasks":2,"originalFilter":"test_query","swaps":[{"indexes":["catto","doggo"]}]}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

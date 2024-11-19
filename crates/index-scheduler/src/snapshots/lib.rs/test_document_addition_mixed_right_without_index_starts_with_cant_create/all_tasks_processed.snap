@@ -57,8 +57,8 @@ doggos: { number_of_documents: 9, field_distribution: {"doggo": 9, "id": 9} }
 [timestamp] [1,2,3,4,5,6,7,8,9,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, }
-1 {uid: 1, }
+0 {uid: 0, details: {}, }
+1 {uid: 1, details: {"receivedDocuments":9,"indexedDocuments":9}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

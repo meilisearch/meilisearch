@@ -7,6 +7,7 @@ use meilisearch_types::batches::{Batch, BatchId};
 use meilisearch_types::heed::types::DecodeIgnore;
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
 use meilisearch_types::milli::CboRoaringBitmapCodec;
+use meilisearch_types::task_view::DetailsView;
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status};
 use roaring::{MultiOps, RoaringBitmap};
 use time::OffsetDateTime;
@@ -18,6 +19,8 @@ use crate::{Error, IndexScheduler, Result, Task, TaskId, BEI128};
 #[derive(Debug, Clone)]
 pub(crate) struct ProcessingBatch {
     pub uid: BatchId,
+    pub details: DetailsView,
+
     pub statuses: HashSet<Status>,
     pub kinds: HashSet<Kind>,
     pub indexes: HashSet<String>,
@@ -35,6 +38,8 @@ impl ProcessingBatch {
 
         Self {
             uid,
+            details: DetailsView::default(),
+
             statuses,
             kinds: HashSet::default(),
             indexes: HashSet::default(),
@@ -47,6 +52,12 @@ impl ProcessingBatch {
 
     /// Remove the Processing status and update the real statuses of the tasks.
     pub fn update(&mut self, task: &Task) {
+        // Craft an aggregation of the details of all the tasks encountered in this batch.
+        if task.status != Status::Failed {
+            if let Some(ref details) = task.details {
+                self.details.accumulate(&DetailsView::from(details.clone()));
+            }
+        }
         self.statuses.clear();
         self.statuses.insert(task.status);
     }
@@ -117,7 +128,12 @@ impl IndexScheduler {
         self.all_batches.put(
             wtxn,
             &batch.uid,
-            &Batch { uid: batch.uid, started_at: batch.started_at, finished_at: Some(finished_at) },
+            &Batch {
+                uid: batch.uid,
+                details: batch.details,
+                started_at: batch.started_at,
+                finished_at: Some(finished_at),
+            },
         )?;
         self.batch_to_tasks_mapping.put(wtxn, &batch.uid, tasks)?;
 

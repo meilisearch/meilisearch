@@ -62,11 +62,11 @@ d: { number_of_documents: 0, field_distribution: {} }
 [timestamp] [4,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, }
-1 {uid: 1, }
-2 {uid: 2, }
-3 {uid: 3, }
-4 {uid: 4, }
+0 {uid: 0, details: {"primaryKey":"id"}, }
+1 {uid: 1, details: {"primaryKey":"id"}, }
+2 {uid: 2, details: {"primaryKey":"id"}, }
+3 {uid: 3, details: {"primaryKey":"id"}, }
+4 {uid: 4, details: {}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

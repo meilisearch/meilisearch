@@ -1,5 +1,5 @@
 use milli::Object;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use time::{Duration, OffsetDateTime};
 
 use crate::batches::BatchId;
@@ -50,7 +50,7 @@ impl TaskView {
     }
 }
 
-#[derive(Default, Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DetailsView {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -84,6 +84,128 @@ pub struct DetailsView {
     pub settings: Option<Box<Settings<Unchecked>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub swaps: Option<Vec<IndexSwap>>,
+}
+
+impl DetailsView {
+    pub fn accumulate(&mut self, other: &Self) {
+        *self = Self {
+            received_documents: match (self.received_documents, other.received_documents) {
+                (None, None) => None,
+                (None, Some(doc)) | (Some(doc), None) => Some(doc),
+                (Some(left), Some(right)) => Some(left + right),
+            },
+            indexed_documents: match (self.indexed_documents, other.indexed_documents) {
+                (None, None) => None,
+                (None, Some(None)) | (Some(None), None) | (Some(None), Some(None)) => Some(None),
+                (None | Some(None), Some(Some(doc))) | (Some(Some(doc)), None | Some(None)) => {
+                    Some(Some(doc))
+                }
+                (Some(Some(left)), Some(Some(right))) => Some(Some(left + right)),
+            },
+            edited_documents: match (self.edited_documents, other.edited_documents) {
+                (None, None) => None,
+                (None, Some(None)) | (Some(None), None) | (Some(None), Some(None)) => Some(None),
+                (None | Some(None), Some(Some(doc))) | (Some(Some(doc)), None | Some(None)) => {
+                    Some(Some(doc))
+                }
+                (Some(Some(left)), Some(Some(right))) => Some(Some(left + right)),
+            },
+            primary_key: match (&self.primary_key, &other.primary_key) {
+                (None, None) => None,
+                (None, Some(None)) | (Some(None), None) | (Some(None), Some(None)) => Some(None),
+                (None | Some(None), Some(Some(doc))) | (Some(Some(doc)), None | Some(None)) => {
+                    Some(Some(doc.to_string()))
+                }
+                // In the case we receive multiple primary keys (which shouldn't happens) we only return the first one encountered.
+                (Some(Some(left)), Some(Some(_right))) => Some(Some(left.to_string())),
+            },
+            provided_ids: match (self.provided_ids, other.provided_ids) {
+                (None, None) => None,
+                (None, Some(ids)) | (Some(ids), None) => Some(ids),
+                (Some(left), Some(right)) => Some(left + right),
+            },
+            deleted_documents: match (self.deleted_documents, other.deleted_documents) {
+                (None, None) => None,
+                (None, Some(None)) | (Some(None), None) | (Some(None), Some(None)) => Some(None),
+                (None | Some(None), Some(Some(doc))) | (Some(Some(doc)), None | Some(None)) => {
+                    Some(Some(doc))
+                }
+                (Some(Some(left)), Some(Some(right))) => Some(Some(left + right)),
+            },
+            matched_tasks: match (self.matched_tasks, other.matched_tasks) {
+                (None, None) => None,
+                (None, Some(task)) | (Some(task), None) => Some(task),
+                (Some(left), Some(right)) => Some(left + right),
+            },
+            canceled_tasks: match (self.canceled_tasks, other.canceled_tasks) {
+                (None, None) => None,
+                (None, Some(None)) | (Some(None), None) | (Some(None), Some(None)) => Some(None),
+                (None | Some(None), Some(Some(task))) | (Some(Some(task)), None | Some(None)) => {
+                    Some(Some(task))
+                }
+                (Some(Some(left)), Some(Some(right))) => Some(Some(left + right)),
+            },
+            deleted_tasks: match (self.deleted_tasks, other.deleted_tasks) {
+                (None, None) => None,
+                (None, Some(None)) | (Some(None), None) | (Some(None), Some(None)) => Some(None),
+                (None | Some(None), Some(Some(task))) | (Some(Some(task)), None | Some(None)) => {
+                    Some(Some(task))
+                }
+                (Some(Some(left)), Some(Some(right))) => Some(Some(left + right)),
+            },
+            original_filter: match (&self.original_filter, &other.original_filter) {
+                (None, None) => None,
+                (None, Some(None)) | (Some(None), None) | (Some(None), Some(None)) => Some(None),
+                (None | Some(None), Some(Some(filter)))
+                | (Some(Some(filter)), None | Some(None)) => Some(Some(filter.to_string())),
+                // In this case, we cannot really merge both filters or return an array so we're going to return
+                // all the conditions one after the other.
+                (Some(Some(left)), Some(Some(right))) => Some(Some(format!("{left}&{right}"))),
+            },
+            dump_uid: match (&self.dump_uid, &other.dump_uid) {
+                (None, None) => None,
+                (None, Some(None)) | (Some(None), None) | (Some(None), Some(None)) => Some(None),
+                (None | Some(None), Some(Some(dump_uid)))
+                | (Some(Some(dump_uid)), None | Some(None)) => Some(Some(dump_uid.to_string())),
+                // We should never be able to batch multiple dumps at the same time. So we return
+                // the first one we encounter but that shouldn't be an issue anyway.
+                (Some(Some(left)), Some(Some(_right))) => Some(Some(left.to_string())),
+            },
+            context: match (&self.context, &other.context) {
+                (None, None) => None,
+                (None, Some(None)) | (Some(None), None) | (Some(None), Some(None)) => Some(None),
+                (None | Some(None), Some(Some(ctx))) | (Some(Some(ctx)), None | Some(None)) => {
+                    Some(Some(ctx.clone()))
+                }
+                // We should never be able to batch multiple documents edited at the same time. So we return
+                // the first one we encounter but that shouldn't be an issue anyway.
+                (Some(Some(left)), Some(Some(_right))) => Some(Some(left.clone())),
+            },
+            function: match (&self.function, &other.function) {
+                (None, None) => None,
+                (None, Some(fun)) | (Some(fun), None) => Some(fun.to_string()),
+                // We should never be able to batch multiple documents edited at the same time. So we return
+                // the first one we encounter but that shouldn't be an issue anyway.
+                (Some(left), Some(_right)) => Some(left.to_string()),
+            },
+            settings: match (self.settings.clone(), other.settings.clone()) {
+                (None, None) => None,
+                (None, Some(settings)) | (Some(settings), None) => Some(settings),
+                (Some(mut left), Some(right)) => {
+                    left.merge(&right);
+                    Some(left)
+                }
+            },
+            swaps: match (self.swaps.clone(), other.swaps.clone()) {
+                (None, None) => None,
+                (None, Some(swaps)) | (Some(swaps), None) => Some(swaps),
+                (Some(mut left), Some(mut right)) => {
+                    left.append(&mut right);
+                    Some(left)
+                }
+            },
+        }
+    }
 }
 
 impl From<Details> for DetailsView {

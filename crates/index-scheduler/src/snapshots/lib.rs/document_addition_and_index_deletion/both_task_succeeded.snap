@@ -43,8 +43,8 @@ doggos [0,1,2,]
 [timestamp] [1,2,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, }
-1 {uid: 1, }
+0 {uid: 0, details: {}, }
+1 {uid: 1, details: {"receivedDocuments":1,"indexedDocuments":0,"deletedDocuments":0}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

@@ -39,7 +39,7 @@ canceled [0,]
 [timestamp] [1,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, }
+0 {uid: 0, details: {"matchedTasks":1,"canceledTasks":1,"originalFilter":"cancel dump"}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [1,]

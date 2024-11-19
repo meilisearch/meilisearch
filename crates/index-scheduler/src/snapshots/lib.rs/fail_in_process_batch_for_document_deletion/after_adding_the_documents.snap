@@ -41,8 +41,8 @@ doggos: { number_of_documents: 3, field_distribution: {"catto": 1, "doggo": 2, "
 [timestamp] [1,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, }
-1 {uid: 1, }
+0 {uid: 0, details: {"filterableAttributes":["catto"]}, }
+1 {uid: 1, details: {"receivedDocuments":3,"indexedDocuments":3}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

@@ -53,9 +53,9 @@ doggos: { number_of_documents: 1, field_distribution: {"doggo": 1, "id": 1} }
 [timestamp] [2,3,4,5,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, }
-1 {uid: 1, }
-2 {uid: 2, }
+0 {uid: 0, details: {"filterableAttributes":["catto"]}, }
+1 {uid: 1, details: {"receivedDocuments":3,"indexedDocuments":3}, }
+2 {uid: 2, details: {"providedIds":1,"deletedDocuments":2,"originalFilter":"\"catto EXISTS\""}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

@@ -71,16 +71,16 @@ doggos [0,1,2,3,4,5,6,7,8,9,]
 [timestamp] [9,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, }
-1 {uid: 1, }
-2 {uid: 2, }
-3 {uid: 3, }
-4 {uid: 4, }
-5 {uid: 5, }
-6 {uid: 6, }
-7 {uid: 7, }
-8 {uid: 8, }
-9 {uid: 9, }
+0 {uid: 0, details: {}, }
+1 {uid: 1, details: {}, }
+2 {uid: 2, details: {}, }
+3 {uid: 3, details: {}, }
+4 {uid: 4, details: {}, }
+5 {uid: 5, details: {}, }
+6 {uid: 6, details: {}, }
+7 {uid: 7, details: {}, }
+8 {uid: 8, details: {}, }
+9 {uid: 9, details: {}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

@@ -61,12 +61,12 @@ girafos: { number_of_documents: 0, field_distribution: {} }
 [timestamp] [5,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, }
-1 {uid: 1, }
-2 {uid: 2, }
-3 {uid: 3, }
-4 {uid: 4, }
-5 {uid: 5, }
+0 {uid: 0, details: {}, }
+1 {uid: 1, details: {}, }
+2 {uid: 2, details: {}, }
+3 {uid: 3, details: {"deletedDocuments":0}, }
+4 {uid: 4, details: {"deletedDocuments":0}, }
+5 {uid: 5, details: {"deletedDocuments":0}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

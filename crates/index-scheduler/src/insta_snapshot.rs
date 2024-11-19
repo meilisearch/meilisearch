@@ -349,12 +349,13 @@ pub fn snapshot_canceled_by(rtxn: &RoTxn, db: Database<BEU32, RoaringBitmapCodec
 
 pub fn snapshot_batch(batch: &Batch) -> String {
     let mut snap = String::new();
-    let Batch { uid, started_at, finished_at } = batch;
+    let Batch { uid, details, started_at, finished_at } = batch;
     if let Some(finished_at) = finished_at {
         assert!(finished_at > started_at);
     }
     snap.push('{');
     snap.push_str(&format!("uid: {uid}, "));
+    snap.push_str(&format!("details: {}, ", serde_json::to_string(details).unwrap()));
     snap.push('}');
     snap
 }
