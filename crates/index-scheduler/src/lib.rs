@@ -1589,9 +1589,9 @@ impl IndexScheduler {
         #[cfg(test)]
         self.maybe_fail(tests::FailureLocation::AcquiringWtxn)?;
 
+        processing_batch.finished();
         let mut wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
 
-        let finished_at = OffsetDateTime::now_utc();
         match res {
             Ok(tasks) => {
                 #[cfg(test)]
@@ -1602,14 +1602,10 @@ impl IndexScheduler {
                 let mut canceled_by = None;
                 let mut canceled = RoaringBitmap::new();
 
-                dbg!(&tasks);
-
                 #[allow(unused_variables)]
                 for (i, mut task) in tasks.into_iter().enumerate() {
-                    if task.status != Status::Canceled {
-                        task.started_at = Some(processing_batch.started_at);
-                        task.finished_at = Some(finished_at);
-                    } else {
+                    processing_batch.update(&mut task);
+                    if task.status == Status::Canceled {
                         canceled.insert(task.uid);
                         canceled_by = task.canceled_by;
                     }
@@ -1628,10 +1624,8 @@ impl IndexScheduler {
 
                     self.update_task(&mut wtxn, &task)
                         .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?;
-                    processing_batch.update(&task);
                 }
                 if let Some(canceled_by) = canceled_by {
-                    println!("inserting the canceled by {canceled_by}: {canceled:?}");
                     self.canceled_by.put(&mut wtxn, &canceled_by, &canceled)?;
                 }
                 tracing::info!("A batch of tasks was successfully completed with {success} successful tasks and {failure} failed tasks.");
@@ -1681,12 +1675,10 @@ impl IndexScheduler {
                         .get_task(&wtxn, id)
                         .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?
                         .ok_or(Error::CorruptedTaskQueue)?;
-                    task.batch_uid = Some(processing_batch.uid);
-                    task.started_at = Some(processing_batch.started_at);
-                    task.finished_at = Some(finished_at);
                     task.status = Status::Failed;
                     task.error = Some(error.clone());
                     task.details = task.details.map(|d| d.to_failed());
+                    processing_batch.update(&mut task);
 
                     #[cfg(test)]
                     self.maybe_fail(tests::FailureLocation::UpdatingTaskAfterProcessBatchFailure)?;
@@ -1695,14 +1687,13 @@ impl IndexScheduler {
 
                     self.update_task(&mut wtxn, &task)
                         .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?;
-                    processing_batch.update(&task);
                 }
             }
         }
 
         let processed = self.processing_tasks.write().unwrap().stop_processing();
 
-        self.write_batch(&mut wtxn, processing_batch, &processed.processing, finished_at)?;
+        self.write_batch(&mut wtxn, processing_batch, &processed.processing)?;
 
         #[cfg(test)]
         self.maybe_fail(tests::FailureLocation::CommittingWtxn)?;

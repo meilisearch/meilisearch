@@ -35,7 +35,7 @@ doggos [0,]
 [timestamp] [0,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {}, }
+0 {uid: 0, details: {}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

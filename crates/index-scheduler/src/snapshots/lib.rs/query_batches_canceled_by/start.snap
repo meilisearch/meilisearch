@@ -42,15 +42,15 @@ catto: { number_of_documents: 0, field_distribution: {} }
 ----------------------------------------------------------------------
 ### Started At:
 [timestamp] [0,]
-[timestamp] [3,]
+[timestamp] [1,2,3,]
 ----------------------------------------------------------------------
 ### Finished At:
 [timestamp] [0,]
-[timestamp] [3,]
+[timestamp] [1,2,3,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"primaryKey":"mouse"}, }
-1 {uid: 1, details: {"primaryKey":"sheep","matchedTasks":3,"canceledTasks":2,"originalFilter":"test_query","swaps":[{"indexes":["catto","doggo"]}]}, }
+0 {uid: 0, details: {"primaryKey":"mouse"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"catto":1}}, }
+1 {uid: 1, details: {"primaryKey":"sheep","matchedTasks":3,"canceledTasks":2,"originalFilter":"test_query","swaps":[{"indexes":["catto","doggo"]}]}, stats: {"totalNbTasks":3,"status":{"succeeded":1,"canceled":2},"types":{"indexCreation":1,"indexSwap":1,"taskCancelation":1},"indexUids":{"doggo":1}}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]
@@ -58,6 +58,7 @@ catto: { number_of_documents: 0, field_distribution: {} }
 ----------------------------------------------------------------------
 ### Batches Status:
 succeeded [0,1,]
+canceled [1,]
 ----------------------------------------------------------------------
 ### Batches Kind:
 "indexCreation" [0,1,]

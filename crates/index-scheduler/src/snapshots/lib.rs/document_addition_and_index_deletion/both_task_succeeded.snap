@@ -43,8 +43,8 @@ doggos [0,1,2,]
 [timestamp] [1,2,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {}, }
-1 {uid: 1, details: {"receivedDocuments":1,"indexedDocuments":0,"deletedDocuments":0}, }
+0 {uid: 0, details: {}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"doggos":1}}, }
+1 {uid: 1, details: {"receivedDocuments":1,"indexedDocuments":0,"deletedDocuments":0}, stats: {"totalNbTasks":2,"status":{"succeeded":2},"types":{"documentAdditionOrUpdate":1,"indexDeletion":1},"indexUids":{"doggos":2}}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

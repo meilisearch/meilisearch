@@ -43,8 +43,8 @@ doggos: { number_of_documents: 1, field_distribution: {"_vectors": 1, "breed": 1
 [timestamp] [1,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"embedders":{"A_fakerest":{"source":"rest","apiKey":"MyXXXX...","dimensions":384,"url":"http://localhost:7777","request":"{{text}}","response":"{{embedding}}"},"B_small_hf":{"source":"huggingFace","model":"sentence-transformers/all-MiniLM-L6-v2","revision":"e4ce9877abf3edfe10b0d82785e83bdcb973e22e","documentTemplate":"{{doc.doggo}} the {{doc.breed}} best doggo"}}}, }
-1 {uid: 1, details: {"receivedDocuments":1,"indexedDocuments":1}, }
+0 {uid: 0, details: {"embedders":{"A_fakerest":{"source":"rest","apiKey":"MyXXXX...","dimensions":384,"url":"http://localhost:7777","request":"{{text}}","response":"{{embedding}}"},"B_small_hf":{"source":"huggingFace","model":"sentence-transformers/all-MiniLM-L6-v2","revision":"e4ce9877abf3edfe10b0d82785e83bdcb973e22e","documentTemplate":"{{doc.doggo}} the {{doc.breed}} best doggo"}}}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"settingsUpdate":1},"indexUids":{"doggos":1}}, }
+1 {uid: 1, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

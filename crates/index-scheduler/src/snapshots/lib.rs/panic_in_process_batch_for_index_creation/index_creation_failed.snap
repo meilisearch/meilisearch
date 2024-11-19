@@ -35,7 +35,7 @@ catto [0,]
 [timestamp] [0,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {}, }
+0 {uid: 0, details: {}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"indexCreation":1},"indexUids":{"catto":1}}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

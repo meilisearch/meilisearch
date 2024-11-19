@@ -45,7 +45,7 @@ a: { number_of_documents: 0, field_distribution: {} }
 [timestamp] [0,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"primaryKey":"id"}, }
+0 {uid: 0, details: {"primaryKey":"id"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"a":1}}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

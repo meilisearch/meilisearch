@@ -296,6 +296,22 @@ async fn test_summarized_document_addition_or_update() {
         @r#"
     {
       "uid": 0,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "documentAdditionOrUpdate": 1
+        },
+        "indexUids": {
+          "test": 1
+        }
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
@@ -310,6 +326,22 @@ async fn test_summarized_document_addition_or_update() {
         @r#"
     {
       "uid": 1,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "documentAdditionOrUpdate": 1
+        },
+        "indexUids": {
+          "test": 1
+        }
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
@@ -329,6 +361,19 @@ async fn test_summarized_delete_documents_by_batch() {
         @r#"
     {
       "uid": 0,
+      "details": {},
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "failed": 1
+        },
+        "types": {
+          "documentDeletion": 1
+        },
+        "indexUids": {
+          "test": 1
+        }
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
@@ -344,6 +389,22 @@ async fn test_summarized_delete_documents_by_batch() {
         @r#"
     {
       "uid": 2,
+      "details": {
+        "providedIds": 1,
+        "deletedDocuments": 0
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "documentDeletion": 1
+        },
+        "indexUids": {
+          "test": 1
+        }
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
@@ -364,6 +425,19 @@ async fn test_summarized_delete_documents_by_filter() {
         @r#"
     {
       "uid": 0,
+      "details": {},
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "failed": 1
+        },
+        "types": {
+          "documentDeletion": 1
+        },
+        "indexUids": {
+          "test": 1
+        }
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
@@ -379,6 +453,19 @@ async fn test_summarized_delete_documents_by_filter() {
         @r#"
     {
       "uid": 2,
+      "details": {},
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "failed": 1
+        },
+        "types": {
+          "documentDeletion": 1
+        },
+        "indexUids": {
+          "test": 1
+        }
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
@@ -394,6 +481,23 @@ async fn test_summarized_delete_documents_by_filter() {
         @r#"
     {
       "uid": 4,
+      "details": {
+        "providedIds": 0,
+        "deletedDocuments": 0,
+        "originalFilter": "\"doggo = bernese\""
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "documentDeletion": 1
+        },
+        "indexUids": {
+          "test": 1
+        }
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
@@ -413,6 +517,19 @@ async fn test_summarized_delete_document_by_id() {
         @r#"
     {
       "uid": 0,
+      "details": {},
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "failed": 1
+        },
+        "types": {
+          "documentDeletion": 1
+        },
+        "indexUids": {
+          "test": 1
+        }
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
@@ -428,6 +545,22 @@ async fn test_summarized_delete_document_by_id() {
         @r#"
     {
       "uid": 2,
+      "details": {
+        "providedIds": 1,
+        "deletedDocuments": 0
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "documentDeletion": 1
+        },
+        "indexUids": {
+          "test": 1
+        }
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
@@ -459,6 +592,31 @@ async fn test_summarized_settings_update() {
         @r#"
     {
       "uid": 0,
+      "details": {
+        "displayedAttributes": [
+          "doggos",
+          "name"
+        ],
+        "filterableAttributes": [
+          "age",
+          "nb_paw_pads"
+        ],
+        "sortableAttributes": [
+          "iq"
+        ]
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "settingsUpdate": 1
+        },
+        "indexUids": {
+          "test": 1
+        }
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
@@ -478,6 +636,19 @@ async fn test_summarized_index_creation() {
         @r#"
     {
       "uid": 0,
+      "details": {},
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "indexCreation": 1
+        },
+        "indexUids": {
+          "test": 1
+        }
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
@@ -492,6 +663,19 @@ async fn test_summarized_index_creation() {
         @r#"
     {
       "uid": 1,
+      "details": {},
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "failed": 1
+        },
+        "types": {
+          "indexCreation": 1
+        },
+        "indexUids": {
+          "test": 1
+        }
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
@@ -621,6 +805,19 @@ async fn test_summarized_index_update() {
         @r#"
     {
       "uid": 0,
+      "details": {},
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "failed": 1
+        },
+        "types": {
+          "indexUpdate": 1
+        },
+        "indexUids": {
+          "test": 1
+        }
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
@@ -635,6 +832,19 @@ async fn test_summarized_index_update() {
         @r#"
     {
       "uid": 1,
+      "details": {},
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "failed": 1
+        },
+        "types": {
+          "indexUpdate": 1
+        },
+        "indexUids": {
+          "test": 1
+        }
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
@@ -652,6 +862,19 @@ async fn test_summarized_index_update() {
         @r#"
     {
       "uid": 3,
+      "details": {},
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "indexUpdate": 1
+        },
+        "indexUids": {
+          "test": 1
+        }
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
@@ -666,6 +889,21 @@ async fn test_summarized_index_update() {
         @r#"
     {
       "uid": 4,
+      "details": {
+        "primaryKey": "bones"
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "indexUpdate": 1
+        },
+        "indexUids": {
+          "test": 1
+        }
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
@@ -688,6 +926,17 @@ async fn test_summarized_index_swap() {
         @r#"
     {
       "uid": 0,
+      "details": {},
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "failed": 1
+        },
+        "types": {
+          "indexSwap": 1
+        },
+        "indexUids": {}
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
@@ -708,6 +957,26 @@ async fn test_summarized_index_swap() {
         @r#"
     {
       "uid": 3,
+      "details": {
+        "swaps": [
+          {
+            "indexes": [
+              "doggos",
+              "cattos"
+            ]
+          }
+        ]
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "indexSwap": 1
+        },
+        "indexUids": {}
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
@@ -730,6 +999,21 @@ async fn test_summarized_batch_cancelation() {
         @r#"
     {
       "uid": 1,
+      "details": {
+        "matchedTasks": 1,
+        "canceledTasks": 0,
+        "originalFilter": "?uids=0"
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "taskCancelation": 1
+        },
+        "indexUids": {}
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
@@ -752,6 +1036,21 @@ async fn test_summarized_batch_deletion() {
         @r#"
     {
       "uid": 1,
+      "details": {
+        "matchedTasks": 1,
+        "deletedTasks": 1,
+        "originalFilter": "?uids=0"
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "taskDeletion": 1
+        },
+        "indexUids": {}
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
@@ -770,6 +1069,19 @@ async fn test_summarized_dump_creation() {
         @r#"
     {
       "uid": 0,
+      "details": {
+        "dumpUid": "[dumpUid]"
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "dumpCreation": 1
+        },
+        "indexUids": {}
+      },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"

@@ -43,15 +43,15 @@ catto: { number_of_documents: 1, field_distribution: {"id": 1} }
 ----------------------------------------------------------------------
 ### Started At:
 [timestamp] [0,]
-[timestamp] [3,]
+[timestamp] [1,2,3,]
 ----------------------------------------------------------------------
 ### Finished At:
 [timestamp] [0,]
-[timestamp] [3,]
+[timestamp] [1,2,3,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"receivedDocuments":1,"indexedDocuments":1}, }
-1 {uid: 1, details: {"receivedDocuments":2,"indexedDocuments":0,"matchedTasks":3,"canceledTasks":2,"originalFilter":"test_query"}, }
+0 {uid: 0, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"catto":1}}, }
+1 {uid: 1, details: {"receivedDocuments":2,"indexedDocuments":0,"matchedTasks":3,"canceledTasks":2,"originalFilter":"test_query"}, stats: {"totalNbTasks":3,"status":{"succeeded":1,"canceled":2},"types":{"documentAdditionOrUpdate":2,"taskCancelation":1},"indexUids":{"beavero":1,"wolfo":1}}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]
@@ -59,6 +59,7 @@ catto: { number_of_documents: 1, field_distribution: {"id": 1} }
 ----------------------------------------------------------------------
 ### Batches Status:
 succeeded [0,1,]
+canceled [1,]
 ----------------------------------------------------------------------
 ### Batches Kind:
 "documentAdditionOrUpdate" [0,1,]

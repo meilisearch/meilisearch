@@ -44,7 +44,7 @@ doggo [2,]
 [timestamp] [3,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"matchedTasks":2,"deletedTasks":0,"originalFilter":"test_query"}, }
+0 {uid: 0, details: {"matchedTasks":2,"deletedTasks":0,"originalFilter":"test_query"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"taskDeletion":1},"indexUids":{}}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [3,]

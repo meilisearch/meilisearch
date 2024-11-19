@@ -48,9 +48,9 @@ doggo: { number_of_documents: 0, field_distribution: {} }
 [timestamp] [2,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"primaryKey":"mouse"}, }
-1 {uid: 1, details: {"primaryKey":"sheep"}, }
-2 {uid: 2, details: {}, }
+0 {uid: 0, details: {"primaryKey":"mouse"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"catto":1}}, }
+1 {uid: 1, details: {"primaryKey":"sheep"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"doggo":1}}, }
+2 {uid: 2, details: {}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"indexCreation":1},"indexUids":{"whalo":1}}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

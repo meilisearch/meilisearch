@@ -363,7 +363,9 @@ impl From<&KindWithContent> for Option<Details> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence, PartialOrd, Ord,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum Status {
     Enqueued,
@@ -422,7 +424,9 @@ impl fmt::Display for ParseTaskStatusError {
 }
 impl std::error::Error for ParseTaskStatusError {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence, PartialOrd, Ord,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum Kind {
     DocumentAdditionOrUpdate,

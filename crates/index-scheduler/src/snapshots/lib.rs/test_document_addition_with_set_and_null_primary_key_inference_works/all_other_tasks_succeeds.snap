@@ -53,10 +53,10 @@ doggos: { number_of_documents: 5, field_distribution: {"doggo": 5, "doggoid": 5}
 [timestamp] [3,4,5,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"receivedDocuments":1,"indexedDocuments":1}, }
-1 {uid: 1, details: {}, }
-2 {uid: 2, details: {"receivedDocuments":1,"indexedDocuments":1}, }
-3 {uid: 3, details: {"receivedDocuments":3,"indexedDocuments":3}, }
+0 {uid: 0, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, }
+1 {uid: 1, details: {}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, }
+2 {uid: 2, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, }
+3 {uid: 3, details: {"receivedDocuments":3,"indexedDocuments":3}, stats: {"totalNbTasks":3,"status":{"succeeded":3},"types":{"documentAdditionOrUpdate":3},"indexUids":{"doggos":3}}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]
