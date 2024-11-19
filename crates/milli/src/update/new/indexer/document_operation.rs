@@ -58,7 +58,6 @@ impl<'pl> DocumentOperation<'pl> {
 
         for operation in operations {
             let mut bytes = 0;
-            let mut document_count = 0;
             let result = match operation {
                 Payload::Addition(payload) => extract_addition_payload_changes(
                     indexer,
@@ -69,7 +68,6 @@ impl<'pl> DocumentOperation<'pl> {
                     new_fields_ids_map,
                     &mut available_docids,
                     &mut bytes,
-                    &mut document_count,
                     &docids_version_offsets,
                     method,
                     payload,
@@ -78,7 +76,6 @@ impl<'pl> DocumentOperation<'pl> {
                     index,
                     rtxn,
                     &mut available_docids,
-                    &mut document_count,
                     &docids_version_offsets,
                     method,
                     to_delete,
@@ -96,7 +93,11 @@ impl<'pl> DocumentOperation<'pl> {
                 Err(e) => return Err(e),
             };
 
-            operations_stats.push(PayloadStats { document_count, bytes, error });
+            operations_stats.push(PayloadStats {
+                document_count: docids_version_offsets.len() as u64,
+                bytes,
+                error,
+            });
         }
 
         // TODO We must drain the HashMap into a Vec because rayon::hash_map::IntoIter: !Clone
@@ -128,7 +129,6 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
     new_fields_ids_map: &mut FieldsIdsMap,
     available_docids: &mut AvailableIds,
     bytes: &mut u64,
-    number_of_documents: &mut u64,
     main_docids_version_offsets: &hashbrown::HashMap<&'pl str, PayloadOperations<'pl>>,
     method: MergeMethod,
     payload: &'pl [u8],
@@ -140,7 +140,6 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
     let mut iter = Deserializer::from_slice(payload).into_iter::<&RawValue>();
     while let Some(doc) = iter.next().transpose().map_err(InternalError::SerdeJson)? {
         *bytes = previous_offset as u64;
-        *number_of_documents = new_docids_version_offsets.len() as u64;
 
         // Only guess the primary key if it is the first document
         let retrieved_primary_key = if previous_offset == 0 {
@@ -238,7 +237,6 @@ fn extract_deletion_payload_changes<'s, 'pl: 's>(
     index: &Index,
     rtxn: &RoTxn,
     available_docids: &mut AvailableIds,
-    number_of_documents: &mut u64,
     main_docids_version_offsets: &hashbrown::HashMap<&'s str, PayloadOperations<'pl>>,
     method: MergeMethod,
     to_delete: &'pl [&'pl str],
@@ -287,7 +285,6 @@ fn extract_deletion_payload_changes<'s, 'pl: 's>(
                 }
             },
         }
-        *number_of_documents += 1;
     }
 
     Ok(new_docids_version_offsets)
