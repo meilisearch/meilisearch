@@ -3152,14 +3152,13 @@ mod tests {
     fn stats_should_not_return_deleted_documents() {
         let index = TempIndex::new();
 
-        let mut wtxn = index.write_txn().unwrap();
         index
-            .update_settings_using_wtxn(&mut wtxn, |settings| {
+            .update_settings(|settings| {
                 settings.set_primary_key(S("docid"));
             })
             .unwrap();
 
-        index.add_documents_using_wtxn(&mut wtxn, documents!([
+        index.add_documents(documents!([
             { "docid": "1_4",  "label": ["sign"]},
             { "docid": "1_5",  "label": ["letter"]},
             { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"], "title": "Mickey Mouse"},
@@ -3182,19 +3181,24 @@ mod tests {
             { "docid": "1_69", "label": ["geometry"]}
         ])).unwrap();
 
+        let mut wtxn = index.write_txn().unwrap();
+
         delete_documents(&mut wtxn, &index, &["1_7", "1_52"]);
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
 
         // count internal documents
-        let results = index.number_of_documents(&wtxn).unwrap();
+        let results = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(18, results);
 
         // count field distribution
-        let results = index.field_distribution(&wtxn).unwrap();
+        let results = index.field_distribution(&rtxn).unwrap();
         assert_eq!(Some(&18), results.get("label"));
         assert_eq!(Some(&1), results.get("title"));
         assert_eq!(Some(&2), results.get("number"));
 
-        wtxn.commit().unwrap();
+        rtxn.commit().unwrap();
     }
 
     #[test]
