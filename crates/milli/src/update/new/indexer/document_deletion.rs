@@ -12,7 +12,7 @@ use crate::{DocumentId, Result};
 
 #[derive(Default)]
 pub struct DocumentDeletion {
-    pub to_delete: RoaringBitmap,
+    to_delete: RoaringBitmap,
 }
 
 impl DocumentDeletion {
@@ -26,11 +26,11 @@ impl DocumentDeletion {
 
     pub fn into_changes<'indexer>(
         self,
-        indexer: &'indexer Bump,
+        indexer_alloc: &'indexer Bump,
         primary_key: PrimaryKey<'indexer>,
     ) -> DocumentDeletionChanges<'indexer> {
         let to_delete: bumpalo::collections::Vec<_> =
-            self.to_delete.into_iter().collect_in(indexer);
+            self.to_delete.into_iter().collect_in(indexer_alloc);
 
         let to_delete = to_delete.into_bump_slice();
 

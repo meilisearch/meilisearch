@@ -107,6 +107,12 @@ impl<'pl> DocumentOperation<'pl> {
     }
 }
 
+impl Default for DocumentOperation<'_> {
+    fn default() -> Self {
+        DocumentOperation::new(IndexDocumentsMethod::default())
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn extract_addition_payload_changes<'r, 'pl: 'r>(
     indexer: &'pl Bump,

@@ -4,9 +4,13 @@ mod utils;
 use std::fs::{create_dir_all, remove_dir_all};
 use std::path::Path;
 
+use bumpalo::Bump;
 use criterion::{criterion_group, criterion_main, Criterion};
+use milli::documents::PrimaryKey;
 use milli::heed::{EnvOpenOptions, RwTxn};
-use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
+use milli::update::new::indexer;
+use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
+use milli::vector::EmbeddingConfigs;
 use milli::Index;
 use rand::seq::SliceRandom;
 use rand_chacha::rand_core::SeedableRng;
@@ -127,23 +131,37 @@ fn indexing_songs_default(c: &mut Criterion) {
             },
             move |index| {
                 let config = IndexerConfig::default();
-                let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
 
-                let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index.prepare_for_closing().wait();
             },
@@ -171,45 +189,73 @@ fn reindexing_songs_default(c: &mut Criterion) {
                 );
 
                 let config = IndexerConfig::default();
-                let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
 
-                let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index
             },
             move |index| {
                 let config = IndexerConfig::default();
-                let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
 
-                let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index.prepare_for_closing().wait();
             },
@@ -240,21 +286,36 @@ fn deleting_songs_in_batches_default(c: &mut Criterion) {
                 // as we don't care about the time it takes.
                 let config = IndexerConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let indexing_config = IndexDocumentsConfig::default();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
-                let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
+
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 let count = 1250;
                 let batch_size = 250;
@@ -293,59 +354,104 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                 // as we don't care about the time it takes.
                 let config = IndexerConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let indexing_config = IndexDocumentsConfig::default();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::SMOL_SONGS_1_2, "csv");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
-                let documents = utils::documents_from(datasets_paths::SMOL_SONGS_1_2, "csv");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
 
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index
             },
             move |index| {
                 let config = IndexerConfig::default();
-                let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = IndexDocuments::new(
-                    &mut wtxn,
-                    &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
-                )
-                .unwrap();
-                let documents = utils::documents_from(datasets_paths::SMOL_SONGS_3_4, "csv");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let indexing_config = IndexDocumentsConfig::default();
-                let builder = IndexDocuments::new(
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::SMOL_SONGS_3_4, "csv");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
-                let documents = utils::documents_from(datasets_paths::SMOL_SONGS_4_4, "csv");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
 
                 wtxn.commit().unwrap();
+                drop(rtxn);
+
+                let mut wtxn = index.write_txn().unwrap();
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::SMOL_SONGS_4_4, "csv");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
+                    &mut wtxn,
+                    &index,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
+                )
+                .unwrap();
+
+                wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index.prepare_for_closing().wait();
             },
@@ -373,24 +479,38 @@ fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
             },
             move |index| {
                 let config = IndexerConfig::default();
-                let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
+
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
 
-                let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index.prepare_for_closing().wait();
             },
@@ -418,23 +538,37 @@ fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
             },
             move |index| {
                 let config = IndexerConfig::default();
-                let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
 
-                let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index.prepare_for_closing().wait();
             },
@@ -462,24 +596,37 @@ fn indexing_wiki(c: &mut Criterion) {
             },
             move |index| {
                 let config = IndexerConfig::default();
-                let indexing_config =
-                    IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
 
-                let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index.prepare_for_closing().wait();
             },
@@ -506,47 +653,73 @@ fn reindexing_wiki(c: &mut Criterion) {
                 );
 
                 let config = IndexerConfig::default();
-                let indexing_config =
-                    IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
 
-                let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index
             },
             move |index| {
                 let config = IndexerConfig::default();
-                let indexing_config =
-                    IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
 
-                let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index.prepare_for_closing().wait();
             },
@@ -576,22 +749,36 @@ fn deleting_wiki_in_batches_default(c: &mut Criterion) {
                 // as we don't care about the time it takes.
                 let config = IndexerConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let indexing_config =
-                    IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
-                let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
+
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 let count = 1250;
                 let batch_size = 250;
@@ -625,72 +812,111 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                     &sortable_fields,
                 );
 
-                let mut wtxn = index.write_txn().unwrap();
-
                 // We index only one half of the dataset in the setup part
                 // as we don't care about the time it takes.
                 let config = IndexerConfig::default();
-                let indexing_config =
-                    IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-                let builder = IndexDocuments::new(
-                    &mut wtxn,
-                    &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
-                )
-                .unwrap();
+                let mut wtxn = index.write_txn().unwrap();
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
                 let documents =
                     utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES_1_2, "csv");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
+                    &mut wtxn,
+                    &index,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
+                )
+                .unwrap();
 
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index
             },
             move |index| {
                 let config = IndexerConfig::default();
-                let indexing_config =
-                    IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = IndexDocuments::new(
-                    &mut wtxn,
-                    &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
-                )
-                .unwrap();
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
 
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
                 let documents =
                     utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES_3_4, "csv");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
+                indexer.add_documents(&documents).unwrap();
 
-                let indexing_config =
-                    IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-                let builder = IndexDocuments::new(
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
 
+                wtxn.commit().unwrap();
+                drop(rtxn);
+
+                let mut wtxn = index.write_txn().unwrap();
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
                 let documents =
                     utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES_4_4, "csv");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
+                    &mut wtxn,
+                    &index,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
+                )
+                .unwrap();
 
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index.prepare_for_closing().wait();
             },
@@ -718,23 +944,37 @@ fn indexing_movies_default(c: &mut Criterion) {
             },
             move |index| {
                 let config = IndexerConfig::default();
-                let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::MOVIES, "json");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
 
-                let documents = utils::documents_from(datasets_paths::MOVIES, "json");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index.prepare_for_closing().wait();
             },
@@ -761,45 +1001,73 @@ fn reindexing_movies_default(c: &mut Criterion) {
                 );
 
                 let config = IndexerConfig::default();
-                let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::MOVIES, "json");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
 
-                let documents = utils::documents_from(datasets_paths::MOVIES, "json");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index
             },
             move |index| {
                 let config = IndexerConfig::default();
-                let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::MOVIES, "json");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
 
-                let documents = utils::documents_from(datasets_paths::MOVIES, "json");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index.prepare_for_closing().wait();
             },
@@ -829,21 +1097,36 @@ fn deleting_movies_in_batches_default(c: &mut Criterion) {
                 // as we don't care about the time it takes.
                 let config = IndexerConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let indexing_config = IndexDocumentsConfig::default();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::MOVIES, "json");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
-                let documents = utils::documents_from(datasets_paths::MOVIES, "json");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
+
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 let count = 1250;
                 let batch_size = 250;
@@ -860,20 +1143,37 @@ fn deleting_movies_in_batches_default(c: &mut Criterion) {
 }
 
 fn delete_documents_from_ids(index: Index, document_ids_to_delete: Vec<RoaringBitmap>) {
-    let mut wtxn = index.write_txn().unwrap();
-
-    let indexer_config = IndexerConfig::default();
+    let config = IndexerConfig::default();
     for ids in document_ids_to_delete {
-        let config = IndexDocumentsConfig::default();
+        let mut wtxn = index.write_txn().unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let new_fields_ids_map = db_fields_ids_map.clone();
+        let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
+        let primary_key = PrimaryKey::new(primary_key, &db_fields_ids_map).unwrap();
 
-        let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &indexer_config, config, |_| (), || false)
-                .unwrap();
-        (builder, _) = builder.remove_documents_from_db_no_batch(&ids).unwrap();
-        builder.execute().unwrap();
+        let mut indexer = indexer::DocumentDeletion::new();
+        indexer.delete_documents_by_docids(ids);
+
+        let indexer_alloc = Bump::new();
+        let document_changes = indexer.into_changes(&indexer_alloc, primary_key);
+
+        indexer::index(
+            &mut wtxn,
+            &index,
+            config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            Some(primary_key),
+            &document_changes,
+            EmbeddingConfigs::default(),
+            &|| false,
+            &|_| (),
+        )
+        .unwrap();
+
+        wtxn.commit().unwrap();
     }
-
-    wtxn.commit().unwrap();
 
     index.prepare_for_closing().wait();
 }
@@ -896,66 +1196,108 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                     &sortable_fields,
                 );
 
-                let mut wtxn = index.write_txn().unwrap();
                 // We index only one half of the dataset in the setup part
                 // as we don't care about the time it takes.
                 let config = IndexerConfig::default();
-                let indexing_config = IndexDocumentsConfig::default();
-                let builder = IndexDocuments::new(
+                let mut wtxn = index.write_txn().unwrap();
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::MOVIES_1_2, "json");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
 
-                let documents = utils::documents_from(datasets_paths::MOVIES_1_2, "json");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
-
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index
             },
             move |index| {
                 let config = IndexerConfig::default();
-                let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = IndexDocuments::new(
-                    &mut wtxn,
-                    &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
-                )
-                .unwrap();
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
 
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
                 let documents = utils::documents_from(datasets_paths::MOVIES_3_4, "json");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
+                indexer.add_documents(&documents).unwrap();
 
-                let indexing_config = IndexDocumentsConfig::default();
-                let builder = IndexDocuments::new(
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
-
-                let documents = utils::documents_from(datasets_paths::MOVIES_4_4, "json");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
 
                 wtxn.commit().unwrap();
+                drop(rtxn);
+
+                let mut wtxn = index.write_txn().unwrap();
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::MOVIES_4_4, "json");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
+                    &mut wtxn,
+                    &index,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
+                )
+                .unwrap();
+
+                wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index.prepare_for_closing().wait();
             },
@@ -1006,23 +1348,37 @@ fn indexing_nested_movies_default(c: &mut Criterion) {
             },
             move |index| {
                 let config = IndexerConfig::default();
-                let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::NESTED_MOVIES, "json");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
 
-                let documents = utils::documents_from(datasets_paths::NESTED_MOVIES, "json");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index.prepare_for_closing().wait();
             },
@@ -1075,21 +1431,36 @@ fn deleting_nested_movies_in_batches_default(c: &mut Criterion) {
                 // as we don't care about the time it takes.
                 let config = IndexerConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let indexing_config = IndexDocumentsConfig::default();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::NESTED_MOVIES, "json");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
-                let documents = utils::documents_from(datasets_paths::NESTED_MOVIES, "json");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
+
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 let count = 1250;
                 let batch_size = 250;
@@ -1133,23 +1504,37 @@ fn indexing_nested_movies_without_faceted_fields(c: &mut Criterion) {
             },
             move |index| {
                 let config = IndexerConfig::default();
-                let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::NESTED_MOVIES, "json");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
 
-                let documents = utils::documents_from(datasets_paths::NESTED_MOVIES, "json");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index.prepare_for_closing().wait();
             },
@@ -1177,24 +1562,37 @@ fn indexing_geo(c: &mut Criterion) {
             },
             move |index| {
                 let config = IndexerConfig::default();
-                let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
 
-                let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
-
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index.prepare_for_closing().wait();
             },
@@ -1221,47 +1619,73 @@ fn reindexing_geo(c: &mut Criterion) {
                 );
 
                 let config = IndexerConfig::default();
-                let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
 
-                let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
-
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index
             },
             move |index| {
                 let config = IndexerConfig::default();
-                let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
 
-                let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
-
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 index.prepare_for_closing().wait();
             },
@@ -1291,21 +1715,36 @@ fn deleting_geo_in_batches_default(c: &mut Criterion) {
                 // as we don't care about the time it takes.
                 let config = IndexerConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let indexing_config = IndexDocumentsConfig::default();
-                let builder = IndexDocuments::new(
+                let rtxn = index.read_txn().unwrap();
+                let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+                let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+                let mut indexer =
+                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
+                indexer.add_documents(&documents).unwrap();
+
+                let indexer_alloc = Bump::new();
+                let (document_changes, _operation_stats, primary_key) = indexer
+                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .unwrap();
+
+                indexer::index(
                     &mut wtxn,
                     &index,
-                    &config,
-                    indexing_config,
-                    |_| (),
-                    || false,
+                    config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    EmbeddingConfigs::default(),
+                    &|| false,
+                    &|_| (),
                 )
                 .unwrap();
-                let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
-                let (builder, user_error) = builder.add_documents(documents).unwrap();
-                user_error.unwrap();
-                builder.execute().unwrap();
+
                 wtxn.commit().unwrap();
+                drop(rtxn);
 
                 let count = 1250;
                 let batch_size = 250;
