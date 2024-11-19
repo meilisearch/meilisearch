@@ -3110,12 +3110,16 @@ mod tests {
                 ]),
             )
             .unwrap();
+        wtxn.commit().unwrap();
 
+        let mut wtxn = index.write_txn().unwrap();
         let deleted_external_ids = ["1_7", "1_52"];
         let deleted_internal_ids = delete_documents(&mut wtxn, &index, &deleted_external_ids);
+        wtxn.commit().unwrap();
 
+        let rtxn = index.read_txn().unwrap();
         // list all documents
-        let results = index.all_documents(&wtxn).unwrap();
+        let results = index.all_documents(&rtxn).unwrap();
         for result in results {
             let (id, _) = result.unwrap();
             assert!(
@@ -3126,7 +3130,7 @@ mod tests {
         }
 
         // list internal document ids
-        let results = index.documents_ids(&wtxn).unwrap();
+        let results = index.documents_ids(&rtxn).unwrap();
         for id in results {
             assert!(
                 !deleted_internal_ids.contains(&id),
@@ -3134,9 +3138,6 @@ mod tests {
                 id
             );
         }
-        wtxn.commit().unwrap();
-
-        let rtxn = index.read_txn().unwrap();
 
         // get internal docids from deleted external document ids
         let results = index.external_documents_ids();
