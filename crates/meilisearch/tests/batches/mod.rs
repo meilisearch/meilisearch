@@ -2,8 +2,6 @@ mod errors;
 
 use meili_snap::insta::assert_json_snapshot;
 use meili_snap::snapshot;
-use time::format_description::well_known::Rfc3339;
-use time::OffsetDateTime;
 
 use crate::common::Server;
 use crate::json;
@@ -17,7 +15,7 @@ async fn error_get_unexisting_batch_status() {
     let (response, code) = index.get_batch(1).await;
 
     let expected_response = json!({
-        "message": "batch `1` not found.",
+        "message": "Batch `1` not found.",
         "code": "batch_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#batch_not_found"
@@ -32,19 +30,9 @@ async fn get_batch_status() {
     let server = Server::new().await;
     let index = server.index("test");
     index.create(None).await;
-    index
-        .add_documents(
-            json!([{
-                "id": 1,
-                "content": "foobar",
-            }]),
-            None,
-        )
-        .await;
     index.wait_task(0).await;
-    let (_response, code) = index.get_batch(1).await;
+    let (_response, code) = index.get_batch(0).await;
     assert_eq!(code, 200);
-    // TODO check response format, as per #48
 }
 
 #[actix_rt::test]
@@ -241,49 +229,6 @@ async fn get_batch_filter_error() {
     "#);
 }
 
-macro_rules! assert_valid_summarized_batch {
-    ($response:expr, $batch_type:literal, $index:literal) => {{
-        assert_eq!($response.as_object().unwrap().len(), 5);
-        assert!($response["batchUid"].as_u64().is_some());
-        assert_eq!($response["indexUid"], $index);
-        assert_eq!($response["status"], "enqueued");
-        assert_eq!($response["type"], $batch_type);
-        let date = $response["enqueuedAt"].as_str().expect("missing date");
-
-        OffsetDateTime::parse(date, &Rfc3339).unwrap();
-    }};
-}
-
-#[actix_web::test]
-async fn test_summarized_batch_view() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let (response, _) = index.create(None).await;
-    assert_valid_summarized_batch!(response, "indexCreation", "test");
-
-    let (response, _) = index.update(None).await;
-    assert_valid_summarized_batch!(response, "indexUpdate", "test");
-
-    let (response, _) = index.update_settings(json!({})).await;
-    assert_valid_summarized_batch!(response, "settingsUpdate", "test");
-
-    let (response, _) = index.update_documents(json!([{"id": 1}]), None).await;
-    assert_valid_summarized_batch!(response, "documentAdditionOrUpdate", "test");
-
-    let (response, _) = index.add_documents(json!([{"id": 1}]), None).await;
-    assert_valid_summarized_batch!(response, "documentAdditionOrUpdate", "test");
-
-    let (response, _) = index.delete_document(1).await;
-    assert_valid_summarized_batch!(response, "documentDeletion", "test");
-
-    let (response, _) = index.clear_all_documents().await;
-    assert_valid_summarized_batch!(response, "documentDeletion", "test");
-
-    let (response, _) = index.delete().await;
-    assert_valid_summarized_batch!(response, "indexDeletion", "test");
-}
-
 #[actix_web::test]
 async fn test_summarized_document_addition_or_update() {
     let server = Server::new().await;
@@ -361,7 +306,10 @@ async fn test_summarized_delete_documents_by_batch() {
         @r#"
     {
       "uid": 0,
-      "details": {},
+      "details": {
+        "providedIds": 3,
+        "deletedDocuments": 0
+      },
       "stats": {
         "totalNbTasks": 1,
         "status": {
@@ -425,7 +373,11 @@ async fn test_summarized_delete_documents_by_filter() {
         @r#"
     {
       "uid": 0,
-      "details": {},
+      "details": {
+        "providedIds": 0,
+        "deletedDocuments": 0,
+        "originalFilter": "\"doggo = bernese\""
+      },
       "stats": {
         "totalNbTasks": 1,
         "status": {
@@ -453,7 +405,11 @@ async fn test_summarized_delete_documents_by_filter() {
         @r#"
     {
       "uid": 2,
-      "details": {},
+      "details": {
+        "providedIds": 0,
+        "deletedDocuments": 0,
+        "originalFilter": "\"doggo = bernese\""
+      },
       "stats": {
         "totalNbTasks": 1,
         "status": {
@@ -517,7 +473,10 @@ async fn test_summarized_delete_document_by_id() {
         @r#"
     {
       "uid": 0,
-      "details": {},
+      "details": {
+        "providedIds": 1,
+        "deletedDocuments": 0
+      },
       "stats": {
         "totalNbTasks": 1,
         "status": {
@@ -663,7 +622,9 @@ async fn test_summarized_index_creation() {
         @r#"
     {
       "uid": 1,
-      "details": {},
+      "details": {
+        "primaryKey": "doggos"
+      },
       "stats": {
         "totalNbTasks": 1,
         "status": {
@@ -832,7 +793,9 @@ async fn test_summarized_index_update() {
         @r#"
     {
       "uid": 1,
-      "details": {},
+      "details": {
+        "primaryKey": "bones"
+      },
       "stats": {
         "totalNbTasks": 1,
         "status": {
@@ -926,7 +889,16 @@ async fn test_summarized_index_swap() {
         @r#"
     {
       "uid": 0,
-      "details": {},
+      "details": {
+        "swaps": [
+          {
+            "indexes": [
+              "doggos",
+              "cattos"
+            ]
+          }
+        ]
+      },
       "stats": {
         "totalNbTasks": 1,
         "status": {

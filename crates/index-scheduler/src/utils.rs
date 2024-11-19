@@ -12,7 +12,7 @@ use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status
 use roaring::{MultiOps, RoaringBitmap};
 use time::OffsetDateTime;
 
-use crate::{Error, IndexScheduler, Result, Task, TaskId, BEI128};
+use crate::{Error, IndexScheduler, ProcessingTasks, Result, Task, TaskId, BEI128};
 
 /// This structure contains all the information required to write a batch in the database without reading the tasks.
 /// It'll stay in RAM so it must be small.
@@ -106,16 +106,24 @@ impl ProcessingBatch {
         self.statuses.insert(task.status);
 
         // Craft an aggregation of the details of all the tasks encountered in this batch.
-        if task.status != Status::Failed {
-            if let Some(ref details) = task.details {
-                self.details.accumulate(&DetailsView::from(details.clone()));
-            }
+        if let Some(ref details) = task.details {
+            self.details.accumulate(&DetailsView::from(details.clone()));
         }
         self.stats.total_nb_tasks += 1;
         *self.stats.status.entry(task.status).or_default() += 1;
         *self.stats.types.entry(task.kind.as_kind()).or_default() += 1;
         if let Some(index_uid) = task.index_uid() {
             *self.stats.index_uids.entry(index_uid.to_string()).or_default() += 1;
+        }
+    }
+
+    pub fn to_batch(&self) -> Batch {
+        Batch {
+            uid: self.uid,
+            details: self.details.clone(),
+            stats: self.stats.clone(),
+            started_at: self.started_at,
+            finished_at: self.finished_at,
         }
     }
 }
@@ -243,13 +251,18 @@ impl IndexScheduler {
     pub(crate) fn get_existing_batches(
         &self,
         rtxn: &RoTxn,
+        processing: &ProcessingTasks,
         tasks: impl IntoIterator<Item = BatchId>,
     ) -> Result<Vec<Batch>> {
         tasks
             .into_iter()
             .map(|batch_id| {
-                self.get_batch(rtxn, batch_id)
-                    .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))
+                if Some(batch_id) == processing.batch.as_ref().map(|batch| batch.uid) {
+                    Ok(processing.batch.as_ref().unwrap().to_batch())
+                } else {
+                    self.get_batch(rtxn, batch_id)
+                        .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))
+                }
             })
             .collect::<Result<_>>()
     }

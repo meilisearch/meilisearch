@@ -42,7 +42,7 @@ async fn get_batch(
         let task_view = BatchView::from_batch(batch);
         Ok(HttpResponse::Ok().json(task_view))
     } else {
-        Err(index_scheduler::Error::TaskNotFound(batch_uid).into())
+        Err(index_scheduler::Error::BatchNotFound(batch_uid).into())
     }
 }
 

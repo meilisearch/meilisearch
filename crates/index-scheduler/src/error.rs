@@ -230,7 +230,7 @@ impl ErrorCode for Error {
             Error::InvalidTaskCanceledBy { .. } => Code::InvalidTaskCanceledBy,
             Error::InvalidIndexUid { .. } => Code::InvalidIndexUid,
             Error::TaskNotFound(_) => Code::TaskNotFound,
-            Error::BatchNotFound(_) => Code::TaskNotFound,
+            Error::BatchNotFound(_) => Code::BatchNotFound,
             Error::TaskDeletionWithEmptyQuery => Code::MissingTaskFilters,
             Error::TaskCancelationWithEmptyQuery => Code::MissingTaskFilters,
             // TODO: not sure of the Code to use

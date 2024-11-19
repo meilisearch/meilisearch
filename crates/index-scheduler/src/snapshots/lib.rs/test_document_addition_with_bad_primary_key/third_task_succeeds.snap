@@ -47,7 +47,7 @@ doggos: { number_of_documents: 1, field_distribution: {"doggo": 1, "id": 1} }
 [timestamp] [2,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {}, stats: {"totalNbTasks":2,"status":{"failed":2},"types":{"documentAdditionOrUpdate":2},"indexUids":{"doggos":2}}, }
+0 {uid: 0, details: {"receivedDocuments":2,"indexedDocuments":0}, stats: {"totalNbTasks":2,"status":{"failed":2},"types":{"documentAdditionOrUpdate":2},"indexUids":{"doggos":2}}, }
 1 {uid: 1, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
