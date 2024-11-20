@@ -2302,7 +2302,7 @@ mod tests {
                 dumps_path: tempdir.path().join("dumps"),
                 webhook_url: None,
                 webhook_authorization_header: None,
-                task_db_size: 1000 * 1000, // 1 MB, we don't use MiB on purpose.
+                task_db_size: 1000 * 1000 * 10, // 10 MB, we don't use MiB on purpose.
                 index_base_map_size: 1000 * 1000, // 1 MB, we don't use MiB on purpose.
                 enable_mdb_writemap: false,
                 index_growth_amount: 1000 * 1000 * 1000 * 1000, // 1 TB
