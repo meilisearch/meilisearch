@@ -46,7 +46,7 @@ use uuid::Uuid;
 
 use crate::autobatcher::{self, BatchKind};
 use crate::utils::{self, swap_index_uid_in_task, ProcessingBatch};
-use crate::{Error, IndexScheduler, MustStopProcessing, ProcessingTasks, Result, TaskId};
+use crate::{Error, IndexScheduler, MustStopProcessing, Result, TaskId};
 
 /// Represents a combination of tasks that can all be processed at the same time.
 ///
@@ -58,10 +58,6 @@ pub(crate) enum Batch {
     TaskCancelation {
         /// The task cancelation itself.
         task: Task,
-        /// The date and time at which the previously processing tasks started.
-        previous_started_at: OffsetDateTime,
-        /// The list of tasks that were processing when this task cancelation appeared.
-        previous_processing_tasks: RoaringBitmap,
     },
     TaskDeletions(Vec<Task>),
     SnapshotCreation(Vec<Task>),
@@ -556,25 +552,9 @@ impl IndexScheduler {
 
         // 1. we get the last task to cancel.
         if let Some(task_id) = to_cancel.max() {
-            // We retrieve the tasks that were processing before this tasks cancelation started.
-            // We must *not* reset the processing tasks before calling this method.
-            // Displaying the `batch_id` would make a strange error message since this task cancelation is going to
-            // replace the canceled batch. It's better to avoid mentioning it in the error message.
-            let ProcessingTasks { batch: previous_batch, processing } =
-                &*self.processing_tasks.read().unwrap();
             let mut task = self.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
             current_batch.processing(Some(&mut task));
-            return Ok(Some((
-                Batch::TaskCancelation {
-                    task,
-                    // We should never be in a case where we don't have a previous_batch, but let's not crash if it happens
-                    previous_started_at: previous_batch
-                        .as_ref()
-                        .map_or_else(OffsetDateTime::now_utc, |batch| batch.started_at),
-                    previous_processing_tasks: processing.clone(),
-                },
-                current_batch,
-            )));
+            return Ok(Some((Batch::TaskCancelation { task }, current_batch)));
         }
 
         // 2. we get the next task to delete
@@ -681,7 +661,7 @@ impl IndexScheduler {
         }
 
         match batch {
-            Batch::TaskCancelation { mut task, previous_started_at, previous_processing_tasks } => {
+            Batch::TaskCancelation { mut task } => {
                 // 1. Retrieve the tasks that matched the query at enqueue-time.
                 let matched_tasks =
                     if let KindWithContent::TaskCancelation { tasks, query: _ } = &task.kind {
