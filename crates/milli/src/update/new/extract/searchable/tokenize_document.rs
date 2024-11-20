@@ -48,43 +48,43 @@ impl<'a> DocumentTokenizer<'a> {
                     return Ok(());
                 }
 
-                match value {
+                let text;
+                let tokens = match value {
                     Value::Number(n) => {
-                        let token = n.to_string();
-                        if let Ok(position) = (*position).try_into() {
-                            token_fn(field_name, field_id, position, token.as_str())?;
-                        }
-
-                        Ok(())
+                        text = n.to_string();
+                        self.tokenizer.tokenize(text.as_str())
+                    }
+                    Value::Bool(b) => {
+                        text = b.to_string();
+                        self.tokenizer.tokenize(text.as_str())
                     }
                     Value::String(text) => {
-                        // create an iterator of token with their positions.
                         let locales = self
                             .localized_attributes_rules
                             .iter()
                             .find(|rule| rule.match_str(field_name))
                             .map(|rule| rule.locales());
-                        let tokens = process_tokens(
-                            *position,
-                            self.tokenizer.tokenize_with_allow_list(text.as_str(), locales),
-                        )
-                        .take_while(|(p, _)| *p < self.max_positions_per_attributes);
-
-                        for (index, token) in tokens {
-                            // keep a word only if it is not empty and fit in a LMDB key.
-                            let token = token.lemma().trim();
-                            if !token.is_empty() && token.len() <= MAX_WORD_LENGTH {
-                                *position = index;
-                                if let Ok(position) = (*position).try_into() {
-                                    token_fn(field_name, field_id, position, token)?;
-                                }
-                            }
-                        }
-
-                        Ok(())
+                        self.tokenizer.tokenize_with_allow_list(text.as_str(), locales)
                     }
-                    _ => Ok(()),
+                    _ => return Ok(()),
+                };
+
+                // create an iterator of token with their positions.
+                let tokens = process_tokens(*position, tokens)
+                    .take_while(|(p, _)| *p < self.max_positions_per_attributes);
+
+                for (index, token) in tokens {
+                    // keep a word only if it is not empty and fit in a LMDB key.
+                    let token = token.lemma().trim();
+                    if !token.is_empty() && token.len() <= MAX_WORD_LENGTH {
+                        *position = index;
+                        if let Ok(position) = (*position).try_into() {
+                            token_fn(field_name, field_id, position, token)?;
+                        }
+                    }
                 }
+
+                Ok(())
             };
 
             // if the current field is searchable or contains a searchable attribute
