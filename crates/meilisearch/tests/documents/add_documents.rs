@@ -1369,6 +1369,7 @@ async fn error_document_field_limit_reached_in_one_document() {
         @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
