@@ -73,7 +73,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     ));
     snap.push_str(&snapshot_bitmap(&processing.processing));
     if let Some(ref batch) = processing.batch {
-        snap.push_str("\n");
+        snap.push('\n');
         snap.push_str(&snapshot_batch(&batch.to_batch()));
     }
     snap.push_str("\n----------------------------------------------------------------------\n");
