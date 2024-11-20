@@ -67,7 +67,7 @@ use roaring::RoaringBitmap;
 use synchronoise::SignalEvent;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
-use utils::{filter_out_references_to_newer_tasks, keep_tasks_within_datetimes, map_bound};
+use utils::{filter_out_references_to_newer_tasks, keep_ids_within_datetimes, map_bound};
 use uuid::Uuid;
 
 use crate::index_mapper::IndexMapper;
@@ -904,7 +904,7 @@ impl IndexScheduler {
                 ),
             };
 
-            keep_tasks_within_datetimes(
+            keep_ids_within_datetimes(
                 rtxn,
                 &mut filtered_non_processing_tasks,
                 self.started_at,
@@ -914,7 +914,7 @@ impl IndexScheduler {
             filtered_non_processing_tasks | filtered_processing_tasks
         };
 
-        keep_tasks_within_datetimes(
+        keep_ids_within_datetimes(
             rtxn,
             &mut tasks,
             self.enqueued_at,
@@ -922,7 +922,7 @@ impl IndexScheduler {
             *before_enqueued_at,
         )?;
 
-        keep_tasks_within_datetimes(
+        keep_ids_within_datetimes(
             rtxn,
             &mut tasks,
             self.finished_at,
@@ -1092,7 +1092,7 @@ impl IndexScheduler {
                 ),
             };
 
-            keep_tasks_within_datetimes(
+            keep_ids_within_datetimes(
                 rtxn,
                 &mut filtered_non_processing_batches,
                 self.batch_started_at,
@@ -1102,7 +1102,7 @@ impl IndexScheduler {
             filtered_non_processing_batches | filtered_processing_batches
         };
 
-        keep_tasks_within_datetimes(
+        keep_ids_within_datetimes(
             rtxn,
             &mut batches,
             self.batch_enqueued_at,
@@ -1110,7 +1110,7 @@ impl IndexScheduler {
             query.before_enqueued_at,
         )?;
 
-        keep_tasks_within_datetimes(
+        keep_ids_within_datetimes(
             rtxn,
             &mut batches,
             self.batch_finished_at,

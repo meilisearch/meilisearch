@@ -270,15 +270,9 @@ impl IndexScheduler {
     pub(crate) fn update_task(&self, wtxn: &mut RwTxn, task: &Task) -> Result<()> {
         let old_task = self.get_task(wtxn, task.uid)?.ok_or(Error::CorruptedTaskQueue)?;
 
-        dbg!(&task);
-
+        debug_assert!(old_task != *task);
         debug_assert_eq!(old_task.uid, task.uid);
         debug_assert!(old_task.batch_uid.is_none() && task.batch_uid.is_some());
-
-        // TODO: This shouldn't ever happen, we should assert it
-        if old_task == *task {
-            return Ok(());
-        }
 
         if old_task.status != task.status {
             self.update_status(wtxn, old_task.status, |bitmap| {
@@ -505,10 +499,9 @@ pub(crate) fn remove_task_datetime(
     Ok(())
 }
 
-// TODO: Rename the function since it also applies to batches
-pub(crate) fn keep_tasks_within_datetimes(
+pub(crate) fn keep_ids_within_datetimes(
     rtxn: &RoTxn,
-    tasks: &mut RoaringBitmap,
+    ids: &mut RoaringBitmap,
     database: Database<BEI128, CboRoaringBitmapCodec>,
     after: Option<OffsetDateTime>,
     before: Option<OffsetDateTime>,
@@ -519,15 +512,15 @@ pub(crate) fn keep_tasks_within_datetimes(
         (Some(after), None) => (Bound::Excluded(*after), Bound::Unbounded),
         (Some(after), Some(before)) => (Bound::Excluded(*after), Bound::Excluded(*before)),
     };
-    let mut collected_task_ids = RoaringBitmap::new();
+    let mut collected_ids = RoaringBitmap::new();
     let start = map_bound(start, |b| b.unix_timestamp_nanos());
     let end = map_bound(end, |b| b.unix_timestamp_nanos());
     let iter = database.range(rtxn, &(start, end))?;
     for r in iter {
-        let (_timestamp, task_ids) = r?;
-        collected_task_ids |= task_ids;
+        let (_timestamp, ids) = r?;
+        collected_ids |= ids;
     }
-    *tasks &= collected_task_ids;
+    *ids &= collected_ids;
     Ok(())
 }
 
