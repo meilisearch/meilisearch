@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use meilisearch_types::batches::BatchId;
 use meilisearch_types::error::{Code, ErrorCode};
 use meilisearch_types::tasks::{Kind, Status};
 use meilisearch_types::{heed, milli};
@@ -79,7 +80,9 @@ pub enum Error {
     )]
     InvalidTaskDate { field: DateField, date: String },
     #[error("Task uid `{task_uid}` is invalid. It should only contain numeric characters.")]
-    InvalidTaskUids { task_uid: String },
+    InvalidTaskUid { task_uid: String },
+    #[error("Batch uid `{batch_uid}` is invalid. It should only contain numeric characters.")]
+    InvalidBatchUid { batch_uid: String },
     #[error(
         "Task status `{status}` is invalid. Available task statuses are {}.",
             enum_iterator::all::<Status>()
@@ -106,6 +109,8 @@ pub enum Error {
     InvalidIndexUid { index_uid: String },
     #[error("Task `{0}` not found.")]
     TaskNotFound(TaskId),
+    #[error("Batch `{0}` not found.")]
+    BatchNotFound(BatchId),
     #[error("Query parameters to filter the tasks to delete are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.")]
     TaskDeletionWithEmptyQuery,
     #[error("Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.")]
@@ -172,12 +177,14 @@ impl Error {
             | Error::SwapIndexesNotFound(_)
             | Error::CorruptedDump
             | Error::InvalidTaskDate { .. }
-            | Error::InvalidTaskUids { .. }
+            | Error::InvalidTaskUid { .. }
+            | Error::InvalidBatchUid { .. }
             | Error::InvalidTaskStatuses { .. }
             | Error::InvalidTaskTypes { .. }
             | Error::InvalidTaskCanceledBy { .. }
             | Error::InvalidIndexUid { .. }
             | Error::TaskNotFound(_)
+            | Error::BatchNotFound(_)
             | Error::TaskDeletionWithEmptyQuery
             | Error::TaskCancelationWithEmptyQuery
             | Error::AbortedTask
@@ -216,12 +223,14 @@ impl ErrorCode for Error {
             Error::SwapIndexNotFound(_) => Code::IndexNotFound,
             Error::SwapIndexesNotFound(_) => Code::IndexNotFound,
             Error::InvalidTaskDate { field, .. } => (*field).into(),
-            Error::InvalidTaskUids { .. } => Code::InvalidTaskUids,
+            Error::InvalidTaskUid { .. } => Code::InvalidTaskUids,
+            Error::InvalidBatchUid { .. } => Code::InvalidBatchUids,
             Error::InvalidTaskStatuses { .. } => Code::InvalidTaskStatuses,
             Error::InvalidTaskTypes { .. } => Code::InvalidTaskTypes,
             Error::InvalidTaskCanceledBy { .. } => Code::InvalidTaskCanceledBy,
             Error::InvalidIndexUid { .. } => Code::InvalidIndexUid,
             Error::TaskNotFound(_) => Code::TaskNotFound,
+            Error::BatchNotFound(_) => Code::BatchNotFound,
             Error::TaskDeletionWithEmptyQuery => Code::MissingTaskFilters,
             Error::TaskCancelationWithEmptyQuery => Code::MissingTaskFilters,
             // TODO: not sure of the Code to use

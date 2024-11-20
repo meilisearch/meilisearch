@@ -96,6 +96,14 @@ impl<T> Setting<T> {
         }
     }
 
+    /// Returns other if self is not set.
+    pub fn or(self, other: Self) -> Self {
+        match self {
+            Setting::Set(_) | Setting::Reset => self,
+            Setting::NotSet => other,
+        }
+    }
+
     /// Returns `true` if applying the new setting changed this setting
     pub fn apply(&mut self, new: Self) -> bool
     where

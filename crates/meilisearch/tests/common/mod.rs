@@ -99,6 +99,7 @@ impl Display for Value {
             "{}",
             json_string!(self, {
                 ".uid" => "[uid]",
+                ".batchUid" => "[batch_uid]",
                 ".enqueuedAt" => "[date]",
                 ".startedAt" => "[date]",
                 ".finishedAt" => "[date]",
@@ -389,3 +390,25 @@ pub static VECTOR_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
       },
     ])
 });
+
+pub async fn shared_index_with_test_set() -> &'static Index<'static, Shared> {
+    static INDEX: OnceCell<Index<'static, Shared>> = OnceCell::const_new();
+    INDEX
+        .get_or_init(|| async {
+            let server = Server::new_shared();
+            let index = server._index("SHARED_TEST_SET").to_shared();
+            let url = format!("/indexes/{}/documents", urlencoding::encode(index.uid.as_ref()));
+            let (response, code) = index
+                .service
+                .post_str(
+                    url,
+                    include_str!("../assets/test_set.json"),
+                    vec![("content-type", "application/json")],
+                )
+                .await;
+            assert_eq!(code, 202);
+            index.wait_task(response.uid()).await;
+            index
+        })
+        .await
+}

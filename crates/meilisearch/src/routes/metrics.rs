@@ -10,6 +10,7 @@ use prometheus::{Encoder, TextEncoder};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::routes::create_all_stats;
+use crate::search_queue::SearchQueue;
 
 pub fn configure(config: &mut web::ServiceConfig) {
     config.service(web::resource("").route(web::get().to(get_metrics)));
@@ -18,6 +19,7 @@ pub fn configure(config: &mut web::ServiceConfig) {
 pub async fn get_metrics(
     index_scheduler: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, Data<IndexScheduler>>,
     auth_controller: Data<AuthController>,
+    search_queue: web::Data<SearchQueue>,
 ) -> Result<HttpResponse, ResponseError> {
     index_scheduler.features().check_metrics()?;
     let auth_filters = index_scheduler.filters();
@@ -34,6 +36,11 @@ pub async fn get_metrics(
     crate::metrics::MEILISEARCH_DB_SIZE_BYTES.set(response.database_size as i64);
     crate::metrics::MEILISEARCH_USED_DB_SIZE_BYTES.set(response.used_database_size as i64);
     crate::metrics::MEILISEARCH_INDEX_COUNT.set(response.indexes.len() as i64);
+
+    crate::metrics::MEILISEARCH_SEARCH_QUEUE_SIZE.set(search_queue.capacity() as i64);
+    crate::metrics::MEILISEARCH_SEARCHES_RUNNING.set(search_queue.searches_running() as i64);
+    crate::metrics::MEILISEARCH_SEARCHES_WAITING_TO_BE_PROCESSED
+        .set(search_queue.searches_waiting() as i64);
 
     for (index, value) in response.indexes.iter() {
         crate::metrics::MEILISEARCH_INDEX_DOCS_COUNT

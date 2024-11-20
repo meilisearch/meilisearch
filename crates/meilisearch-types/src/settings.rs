@@ -378,6 +378,64 @@ impl Settings<Unchecked> {
         self.embedders = Setting::Set(configs);
         Ok(self)
     }
+
+    pub fn merge(&mut self, other: &Self) {
+        // For most settings only the latest version is kept
+        *self = Self {
+            displayed_attributes: other
+                .displayed_attributes
+                .clone()
+                .or(self.displayed_attributes.clone()),
+            searchable_attributes: other
+                .searchable_attributes
+                .clone()
+                .or(self.searchable_attributes.clone()),
+            filterable_attributes: other
+                .filterable_attributes
+                .clone()
+                .or(self.filterable_attributes.clone()),
+            sortable_attributes: other
+                .sortable_attributes
+                .clone()
+                .or(self.sortable_attributes.clone()),
+            ranking_rules: other.ranking_rules.clone().or(self.ranking_rules.clone()),
+            stop_words: other.stop_words.clone().or(self.stop_words.clone()),
+            non_separator_tokens: other
+                .non_separator_tokens
+                .clone()
+                .or(self.non_separator_tokens.clone()),
+            separator_tokens: other.separator_tokens.clone().or(self.separator_tokens.clone()),
+            dictionary: other.dictionary.clone().or(self.dictionary.clone()),
+            synonyms: other.synonyms.clone().or(self.synonyms.clone()),
+            distinct_attribute: other
+                .distinct_attribute
+                .clone()
+                .or(self.distinct_attribute.clone()),
+            proximity_precision: other.proximity_precision.or(self.proximity_precision),
+            typo_tolerance: other.typo_tolerance.clone().or(self.typo_tolerance.clone()),
+            faceting: other.faceting.clone().or(self.faceting.clone()),
+            pagination: other.pagination.clone().or(self.pagination.clone()),
+            search_cutoff_ms: other.search_cutoff_ms.or(self.search_cutoff_ms),
+            localized_attributes: other
+                .localized_attributes
+                .clone()
+                .or(self.localized_attributes.clone()),
+            embedders: match (self.embedders.clone(), other.embedders.clone()) {
+                (Setting::NotSet, set) | (set, Setting::NotSet) => set,
+                (Setting::Set(_) | Setting::Reset, Setting::Reset) => Setting::Reset,
+                (Setting::Reset, Setting::Set(embedder)) => Setting::Set(embedder),
+
+                // If both are set we must merge the embeddings settings
+                (Setting::Set(mut this), Setting::Set(other)) => {
+                    for (k, v) in other {
+                        this.insert(k, v);
+                    }
+                    Setting::Set(this)
+                }
+            },
+            _kind: PhantomData,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -867,6 +925,12 @@ impl From<ProximityPrecisionView> for ProximityPrecision {
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 pub struct WildcardSetting(Setting<Vec<String>>);
+
+impl WildcardSetting {
+    pub fn or(self, other: Self) -> Self {
+        Self(self.0.or(other.0))
+    }
+}
 
 impl From<Setting<Vec<String>>> for WildcardSetting {
     fn from(setting: Setting<Vec<String>>) -> Self {

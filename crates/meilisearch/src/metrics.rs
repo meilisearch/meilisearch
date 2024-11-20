@@ -49,4 +49,18 @@ lazy_static! {
     pub static ref MEILISEARCH_IS_INDEXING: IntGauge =
         register_int_gauge!(opts!("meilisearch_is_indexing", "Meilisearch Is Indexing"))
             .expect("Can't create a metric");
+    pub static ref MEILISEARCH_SEARCH_QUEUE_SIZE: IntGauge = register_int_gauge!(opts!(
+        "meilisearch_search_queue_size",
+        "Meilisearch Search Queue Size"
+    ))
+    .expect("Can't create a metric");
+    pub static ref MEILISEARCH_SEARCHES_RUNNING: IntGauge =
+        register_int_gauge!(opts!("meilisearch_searches_running", "Meilisearch Searches Running"))
+            .expect("Can't create a metric");
+    pub static ref MEILISEARCH_SEARCHES_WAITING_TO_BE_PROCESSED: IntGauge =
+        register_int_gauge!(opts!(
+            "meilisearch_searches_waiting_to_be_processed",
+            "Meilisearch Searches Being Processed"
+        ))
+        .expect("Can't create a metric");
 }

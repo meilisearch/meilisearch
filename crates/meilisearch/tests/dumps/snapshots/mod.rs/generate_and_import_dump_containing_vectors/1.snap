@@ -1,8 +1,9 @@
 ---
-source: meilisearch/tests/dumps/mod.rs
+source: crates/meilisearch/tests/dumps/mod.rs
 ---
 {
   "uid": "[uid]",
+  "batchUid": "[batch_uid]",
   "indexUid": "pets",
   "status": "succeeded",
   "type": "settingsUpdate",

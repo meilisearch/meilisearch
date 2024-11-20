@@ -184,6 +184,7 @@ async fn delete_document_by_filter() {
     snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
       "uid": 2,
+      "batchUid": 2,
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentDeletion",
@@ -249,6 +250,7 @@ async fn delete_document_by_filter() {
     snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
       "uid": 3,
+      "batchUid": 3,
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentDeletion",
@@ -333,6 +335,7 @@ async fn delete_document_by_complex_filter() {
     snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
       "uid": 2,
+      "batchUid": 2,
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentDeletion",
@@ -391,6 +394,7 @@ async fn delete_document_by_complex_filter() {
     snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
       "uid": 3,
+      "batchUid": 3,
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentDeletion",

@@ -293,6 +293,7 @@ async fn add_csv_document() {
     snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
       "uid": 0,
+      "batchUid": 0,
       "indexUid": "pets",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -357,6 +358,7 @@ async fn add_csv_document_with_types() {
     snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
       "uid": 0,
+      "batchUid": 0,
       "indexUid": "pets",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -432,6 +434,7 @@ async fn add_csv_document_with_custom_delimiter() {
     snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
       "uid": 0,
+      "batchUid": 0,
       "indexUid": "pets",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -985,6 +988,7 @@ async fn add_documents_no_index_creation() {
         @r###"
     {
       "uid": 0,
+      "batchUid": 0,
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1063,6 +1067,7 @@ async fn document_addition_with_primary_key() {
         @r###"
     {
       "uid": 0,
+      "batchUid": 0,
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1111,6 +1116,7 @@ async fn document_addition_with_huge_int_primary_key() {
         @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1183,6 +1189,7 @@ async fn replace_document() {
         @r###"
     {
       "uid": 1,
+      "batchUid": 1,
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1271,6 +1278,7 @@ async fn error_add_documents_bad_document_id() {
         @r###"
     {
       "uid": 1,
+      "batchUid": 1,
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -1312,6 +1320,7 @@ async fn error_add_documents_missing_document_id() {
         @r###"
     {
       "uid": 1,
+      "batchUid": 1,
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -1407,6 +1416,7 @@ async fn error_document_field_limit_reached_over_multiple_documents() {
         @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1441,6 +1451,7 @@ async fn error_document_field_limit_reached_over_multiple_documents() {
         @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -1490,6 +1501,7 @@ async fn error_document_field_limit_reached_in_one_nested_document() {
         @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1533,6 +1545,7 @@ async fn error_document_field_limit_reached_over_multiple_documents_with_nested_
         @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1568,6 +1581,7 @@ async fn error_document_field_limit_reached_over_multiple_documents_with_nested_
         @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1615,6 +1629,7 @@ async fn add_documents_with_geo_field() {
         @r###"
     {
       "uid": 1,
+      "batchUid": 1,
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1655,6 +1670,7 @@ async fn add_documents_invalid_geo_field() {
         @r###"
     {
       "uid": 2,
+      "batchUid": 2,
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -1692,6 +1708,7 @@ async fn add_documents_invalid_geo_field() {
         @r###"
     {
       "uid": 3,
+      "batchUid": 3,
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -1729,6 +1746,7 @@ async fn add_documents_invalid_geo_field() {
         @r###"
     {
       "uid": 4,
+      "batchUid": 4,
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -1766,6 +1784,7 @@ async fn add_documents_invalid_geo_field() {
         @r###"
     {
       "uid": 5,
+      "batchUid": 5,
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -1803,6 +1822,7 @@ async fn add_documents_invalid_geo_field() {
         @r###"
     {
       "uid": 6,
+      "batchUid": 6,
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -1840,6 +1860,7 @@ async fn add_documents_invalid_geo_field() {
         @r###"
     {
       "uid": 7,
+      "batchUid": 7,
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -1877,6 +1898,7 @@ async fn add_documents_invalid_geo_field() {
         @r###"
     {
       "uid": 8,
+      "batchUid": 8,
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -1914,6 +1936,7 @@ async fn add_documents_invalid_geo_field() {
         @r###"
     {
       "uid": 9,
+      "batchUid": 9,
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -1951,6 +1974,7 @@ async fn add_documents_invalid_geo_field() {
         @r###"
     {
       "uid": 10,
+      "batchUid": 10,
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -1988,6 +2012,7 @@ async fn add_documents_invalid_geo_field() {
         @r###"
     {
       "uid": 11,
+      "batchUid": 11,
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2025,6 +2050,7 @@ async fn add_documents_invalid_geo_field() {
         @r###"
     {
       "uid": 12,
+      "batchUid": 12,
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2062,6 +2088,7 @@ async fn add_documents_invalid_geo_field() {
         @r###"
     {
       "uid": 13,
+      "batchUid": 13,
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2100,6 +2127,7 @@ async fn add_documents_invalid_geo_field() {
         @r###"
     {
       "uid": 14,
+      "batchUid": 14,
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2136,6 +2164,7 @@ async fn add_documents_invalid_geo_field() {
         @r###"
     {
       "uid": 15,
+      "batchUid": 15,
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2172,6 +2201,7 @@ async fn add_documents_invalid_geo_field() {
         @r###"
     {
       "uid": 16,
+      "batchUid": 16,
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2214,6 +2244,7 @@ async fn add_invalid_geo_and_then_settings() {
     snapshot!(ret, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -2236,6 +2267,7 @@ async fn add_invalid_geo_and_then_settings() {
     snapshot!(ret, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "test",
       "status": "failed",
       "type": "settingsUpdate",
@@ -2307,6 +2339,7 @@ async fn error_primary_key_inference() {
     @r###"
     {
       "uid": 0,
+      "batchUid": 0,
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2347,6 +2380,7 @@ async fn error_primary_key_inference() {
     @r###"
     {
       "uid": 1,
+      "batchUid": 1,
       "indexUid": "test",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2385,6 +2419,7 @@ async fn error_primary_key_inference() {
     @r###"
     {
       "uid": 2,
+      "batchUid": 2,
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",

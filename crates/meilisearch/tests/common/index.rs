@@ -136,6 +136,11 @@ impl<'a> Index<'a, Owned> {
         self.service.get(url).await
     }
 
+    pub async fn list_batches(&self) -> (Value, StatusCode) {
+        let url = format!("/batches?indexUids={}", self.uid);
+        self.service.get(url).await
+    }
+
     pub async fn delete_document(&self, id: u64) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/documents/{}", urlencode(self.uid.as_ref()), id);
         self.service.delete(url).await
@@ -362,6 +367,30 @@ impl<State> Index<'_, State> {
         canceled_by: &[&str],
     ) -> (Value, StatusCode) {
         let mut url = format!("/tasks?indexUids={}", self.uid);
+        if !types.is_empty() {
+            let _ = write!(url, "&types={}", types.join(","));
+        }
+        if !statuses.is_empty() {
+            let _ = write!(url, "&statuses={}", statuses.join(","));
+        }
+        if !canceled_by.is_empty() {
+            let _ = write!(url, "&canceledBy={}", canceled_by.join(","));
+        }
+        self.service.get(url).await
+    }
+
+    pub async fn get_batch(&self, batch_id: u32) -> (Value, StatusCode) {
+        let url = format!("/batches/{}", batch_id);
+        self.service.get(url).await
+    }
+
+    pub async fn filtered_batches(
+        &self,
+        types: &[&str],
+        statuses: &[&str],
+        canceled_by: &[&str],
+    ) -> (Value, StatusCode) {
+        let mut url = format!("/batches?indexUids={}", self.uid);
         if !types.is_empty() {
             let _ = write!(url, "&types={}", types.join(","));
         }

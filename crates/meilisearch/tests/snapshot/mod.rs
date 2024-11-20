@@ -65,7 +65,6 @@ async fn perform_snapshot() {
     let next_task = task.uid() + 1;
     loop {
         let (value, code) = index.get_task(next_task).await;
-        dbg!(&value);
         if code != 404 && value["status"].as_str() == Some("succeeded") {
             break;
         }
@@ -151,6 +150,7 @@ async fn perform_on_demand_snapshot() {
     snapshot!(json_string!(task, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
       "uid": 4,
+      "batchUid": 4,
       "indexUid": null,
       "status": "succeeded",
       "type": "snapshotCreation",

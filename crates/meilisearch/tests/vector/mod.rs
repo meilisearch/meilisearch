@@ -240,6 +240,7 @@ async fn user_provided_embeddings_error() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -269,6 +270,7 @@ async fn user_provided_embeddings_error() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -299,6 +301,7 @@ async fn user_provided_embeddings_error() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -327,6 +330,7 @@ async fn user_provided_embeddings_error() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -355,6 +359,7 @@ async fn user_provided_embeddings_error() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -383,6 +388,7 @@ async fn user_provided_embeddings_error() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -424,6 +430,7 @@ async fn user_provided_embeddings_error() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -452,6 +459,7 @@ async fn user_provided_embeddings_error() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -480,6 +488,7 @@ async fn user_provided_embeddings_error() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -520,6 +529,7 @@ async fn user_provided_vectors_error() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -549,6 +559,7 @@ async fn user_provided_vectors_error() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -578,6 +589,7 @@ async fn user_provided_vectors_error() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",

@@ -3,18 +3,138 @@
 use std::collections::{BTreeSet, HashSet};
 use std::ops::Bound;
 
+use meilisearch_types::batches::{Batch, BatchId, BatchStats};
 use meilisearch_types::heed::types::DecodeIgnore;
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
 use meilisearch_types::milli::CboRoaringBitmapCodec;
+use meilisearch_types::task_view::DetailsView;
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status};
 use roaring::{MultiOps, RoaringBitmap};
 use time::OffsetDateTime;
 
-use crate::{Error, IndexScheduler, Result, Task, TaskId, BEI128};
+use crate::{Error, IndexScheduler, ProcessingTasks, Result, Task, TaskId, BEI128};
+
+/// This structure contains all the information required to write a batch in the database without reading the tasks.
+/// It'll stay in RAM so it must be small.
+/// The usage is the following:
+/// 1. Create the structure with its batch id.
+/// 2. Call `processing` on all the task that we know are currently processing in the batch (it can change in the future)
+/// 3. Call `finished` once the batch has been processed.
+/// 4. Call `update` on all the tasks.
+#[derive(Debug, Clone)]
+pub(crate) struct ProcessingBatch {
+    pub uid: BatchId,
+    pub details: DetailsView,
+    pub stats: BatchStats,
+
+    pub statuses: HashSet<Status>,
+    pub kinds: HashSet<Kind>,
+    pub indexes: HashSet<String>,
+    pub canceled_by: HashSet<TaskId>,
+    pub oldest_enqueued_at: Option<OffsetDateTime>,
+    pub earliest_enqueued_at: Option<OffsetDateTime>,
+    pub started_at: OffsetDateTime,
+    pub finished_at: Option<OffsetDateTime>,
+}
+
+impl ProcessingBatch {
+    pub fn new(uid: BatchId) -> Self {
+        // At the beginning, all the tasks are processing
+        let mut statuses = HashSet::default();
+        statuses.insert(Status::Processing);
+
+        Self {
+            uid,
+            details: DetailsView::default(),
+            stats: BatchStats::default(),
+
+            statuses,
+            kinds: HashSet::default(),
+            indexes: HashSet::default(),
+            canceled_by: HashSet::default(),
+            oldest_enqueued_at: None,
+            earliest_enqueued_at: None,
+            started_at: OffsetDateTime::now_utc(),
+            finished_at: None,
+        }
+    }
+
+    /// Update itself with the content of the task and update the batch id in the task.
+    pub fn processing<'a>(&mut self, tasks: impl IntoIterator<Item = &'a mut Task>) {
+        for task in tasks.into_iter() {
+            task.batch_uid = Some(self.uid);
+            // We don't store the statuses since they're all enqueued.
+            self.kinds.insert(task.kind.as_kind());
+            self.indexes.extend(task.indexes().iter().map(|s| s.to_string()));
+            if let Some(canceled_by) = task.canceled_by {
+                self.canceled_by.insert(canceled_by);
+            }
+            self.oldest_enqueued_at =
+                Some(self.oldest_enqueued_at.map_or(task.enqueued_at, |oldest_enqueued_at| {
+                    task.enqueued_at.min(oldest_enqueued_at)
+                }));
+            self.earliest_enqueued_at =
+                Some(self.earliest_enqueued_at.map_or(task.enqueued_at, |earliest_enqueued_at| {
+                    task.enqueued_at.max(earliest_enqueued_at)
+                }));
+        }
+    }
+
+    /// Must be called once the batch has finished processing.
+    pub fn finished(&mut self) {
+        self.finished_at = Some(OffsetDateTime::now_utc());
+
+        // Initially we inserted ourselves as a processing batch, that's not the case anymore.
+        self.statuses.clear();
+
+        // We're going to recount the number of tasks AFTER processing the batch because
+        // tasks may add themselves to a batch while its processing.
+        self.stats.total_nb_tasks = 0;
+    }
+
+    /// Update the timestamp of the tasks and the inner structure of this sturcture.
+    pub fn update(&mut self, task: &mut Task) {
+        // We must re-set this value in case we're dealing with a task that has been added between
+        // the `processing` and `finished` state
+        // We must re-set this value in case we're dealing with a task that has been added between
+        // the `processing` and `finished` state or that failed.
+        task.batch_uid = Some(self.uid);
+        // Same
+        task.started_at = Some(self.started_at);
+        task.finished_at = self.finished_at;
+
+        self.statuses.insert(task.status);
+
+        // Craft an aggregation of the details of all the tasks encountered in this batch.
+        if let Some(ref details) = task.details {
+            self.details.accumulate(&DetailsView::from(details.clone()));
+        }
+        self.stats.total_nb_tasks += 1;
+        *self.stats.status.entry(task.status).or_default() += 1;
+        *self.stats.types.entry(task.kind.as_kind()).or_default() += 1;
+        if let Some(index_uid) = task.index_uid() {
+            *self.stats.index_uids.entry(index_uid.to_string()).or_default() += 1;
+        }
+    }
+
+    pub fn to_batch(&self) -> Batch {
+        Batch {
+            uid: self.uid,
+            details: self.details.clone(),
+            stats: self.stats.clone(),
+            started_at: self.started_at,
+            finished_at: self.finished_at,
+        }
+    }
+}
 
 impl IndexScheduler {
     pub(crate) fn all_task_ids(&self, rtxn: &RoTxn) -> Result<RoaringBitmap> {
         enum_iterator::all().map(|s| self.get_status(rtxn, s)).union()
+    }
+
+    pub(crate) fn all_batch_ids(&self, rtxn: &RoTxn) -> Result<RoaringBitmap> {
+        enum_iterator::all().map(|s| self.get_batch_status(rtxn, s)).union()
     }
 
     pub(crate) fn last_task_id(&self, rtxn: &RoTxn) -> Result<Option<TaskId>> {
@@ -25,12 +145,95 @@ impl IndexScheduler {
         Ok(self.last_task_id(rtxn)?.unwrap_or_default())
     }
 
+    pub(crate) fn next_batch_id(&self, rtxn: &RoTxn) -> Result<BatchId> {
+        Ok(self
+            .all_batches
+            .remap_data_type::<DecodeIgnore>()
+            .last(rtxn)?
+            .map(|(k, _)| k + 1)
+            .unwrap_or_default())
+    }
+
     pub(crate) fn get_task(&self, rtxn: &RoTxn, task_id: TaskId) -> Result<Option<Task>> {
         Ok(self.all_tasks.get(rtxn, &task_id)?)
     }
 
+    pub(crate) fn get_batch(&self, rtxn: &RoTxn, batch_id: BatchId) -> Result<Option<Batch>> {
+        Ok(self.all_batches.get(rtxn, &batch_id)?)
+    }
+
+    pub(crate) fn write_batch(
+        &self,
+        wtxn: &mut RwTxn,
+        batch: ProcessingBatch,
+        tasks: &RoaringBitmap,
+    ) -> Result<()> {
+        self.all_batches.put(
+            wtxn,
+            &batch.uid,
+            &Batch {
+                uid: batch.uid,
+                details: batch.details,
+                stats: batch.stats,
+                started_at: batch.started_at,
+                finished_at: batch.finished_at,
+            },
+        )?;
+        self.batch_to_tasks_mapping.put(wtxn, &batch.uid, tasks)?;
+
+        for status in batch.statuses {
+            self.update_batch_status(wtxn, status, |bitmap| {
+                bitmap.insert(batch.uid);
+            })?;
+        }
+
+        for kind in batch.kinds {
+            self.update_batch_kind(wtxn, kind, |bitmap| {
+                bitmap.insert(batch.uid);
+            })?;
+        }
+
+        for index in batch.indexes {
+            self.update_batch_index(wtxn, &index, |bitmap| {
+                bitmap.insert(batch.uid);
+            })?;
+        }
+
+        if let Some(enqueued_at) = batch.oldest_enqueued_at {
+            insert_task_datetime(wtxn, self.batch_enqueued_at, enqueued_at, batch.uid)?;
+        }
+        if let Some(enqueued_at) = batch.earliest_enqueued_at {
+            insert_task_datetime(wtxn, self.batch_enqueued_at, enqueued_at, batch.uid)?;
+        }
+        insert_task_datetime(wtxn, self.batch_started_at, batch.started_at, batch.uid)?;
+        insert_task_datetime(wtxn, self.batch_finished_at, batch.finished_at.unwrap(), batch.uid)?;
+
+        Ok(())
+    }
+
+    /// Convert an iterator to a `Vec` of tasks and edit the `ProcessingBatch` to add the given tasks.
+    ///
+    /// The tasks MUST exist, or a `CorruptedTaskQueue` error will be thrown.
+    pub(crate) fn get_existing_tasks_for_processing_batch(
+        &self,
+        rtxn: &RoTxn,
+        processing_batch: &mut ProcessingBatch,
+        tasks: impl IntoIterator<Item = TaskId>,
+    ) -> Result<Vec<Task>> {
+        tasks
+            .into_iter()
+            .map(|task_id| {
+                let mut task = self
+                    .get_task(rtxn, task_id)
+                    .and_then(|task| task.ok_or(Error::CorruptedTaskQueue));
+                processing_batch.processing(&mut task);
+                task
+            })
+            .collect::<Result<_>>()
+    }
+
     /// Convert an iterator to a `Vec` of tasks. The tasks MUST exist or a
-    /// `CorruptedTaskQueue` error will be throwed.
+    /// `CorruptedTaskQueue` error will be thrown.
     pub(crate) fn get_existing_tasks(
         &self,
         rtxn: &RoTxn,
@@ -44,14 +247,33 @@ impl IndexScheduler {
             .collect::<Result<_>>()
     }
 
+    /// Convert an iterator to a `Vec` of batches. The batches MUST exist or a
+    /// `CorruptedTaskQueue` error will be thrown.
+    pub(crate) fn get_existing_batches(
+        &self,
+        rtxn: &RoTxn,
+        processing: &ProcessingTasks,
+        tasks: impl IntoIterator<Item = BatchId>,
+    ) -> Result<Vec<Batch>> {
+        tasks
+            .into_iter()
+            .map(|batch_id| {
+                if Some(batch_id) == processing.batch.as_ref().map(|batch| batch.uid) {
+                    Ok(processing.batch.as_ref().unwrap().to_batch())
+                } else {
+                    self.get_batch(rtxn, batch_id)
+                        .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))
+                }
+            })
+            .collect::<Result<_>>()
+    }
+
     pub(crate) fn update_task(&self, wtxn: &mut RwTxn, task: &Task) -> Result<()> {
         let old_task = self.get_task(wtxn, task.uid)?.ok_or(Error::CorruptedTaskQueue)?;
 
+        debug_assert!(old_task != *task);
         debug_assert_eq!(old_task.uid, task.uid);
-
-        if old_task == *task {
-            return Ok(());
-        }
+        debug_assert!(old_task.batch_uid.is_none() && task.batch_uid.is_some());
 
         if old_task.status != task.status {
             self.update_status(wtxn, old_task.status, |bitmap| {
@@ -92,6 +314,11 @@ impl IndexScheduler {
         Ok(())
     }
 
+    /// Returns the whole set of tasks that belongs to this batch.
+    pub(crate) fn tasks_in_batch(&self, rtxn: &RoTxn, batch_id: BatchId) -> Result<RoaringBitmap> {
+        Ok(self.batch_to_tasks_mapping.get(rtxn, &batch_id)?.unwrap_or_default())
+    }
+
     /// Returns the whole set of tasks that belongs to this index.
     pub(crate) fn index_tasks(&self, rtxn: &RoTxn, index: &str) -> Result<RoaringBitmap> {
         Ok(self.index_tasks.get(rtxn, index)?.unwrap_or_default())
@@ -109,6 +336,28 @@ impl IndexScheduler {
             self.index_tasks.delete(wtxn, index)?;
         } else {
             self.index_tasks.put(wtxn, index, &tasks)?;
+        }
+
+        Ok(())
+    }
+
+    /// Returns the whole set of batches that belongs to this index.
+    pub(crate) fn index_batches(&self, rtxn: &RoTxn, index: &str) -> Result<RoaringBitmap> {
+        Ok(self.batch_index_tasks.get(rtxn, index)?.unwrap_or_default())
+    }
+
+    pub(crate) fn update_batch_index(
+        &self,
+        wtxn: &mut RwTxn,
+        index: &str,
+        f: impl Fn(&mut RoaringBitmap),
+    ) -> Result<()> {
+        let mut batches = self.index_batches(wtxn, index)?;
+        f(&mut batches);
+        if batches.is_empty() {
+            self.batch_index_tasks.delete(wtxn, index)?;
+        } else {
+            self.batch_index_tasks.put(wtxn, index, &batches)?;
         }
 
         Ok(())
@@ -140,6 +389,32 @@ impl IndexScheduler {
         Ok(())
     }
 
+    pub(crate) fn get_batch_status(&self, rtxn: &RoTxn, status: Status) -> Result<RoaringBitmap> {
+        Ok(self.batch_status.get(rtxn, &status)?.unwrap_or_default())
+    }
+
+    pub(crate) fn put_batch_status(
+        &self,
+        wtxn: &mut RwTxn,
+        status: Status,
+        bitmap: &RoaringBitmap,
+    ) -> Result<()> {
+        Ok(self.batch_status.put(wtxn, &status, bitmap)?)
+    }
+
+    pub(crate) fn update_batch_status(
+        &self,
+        wtxn: &mut RwTxn,
+        status: Status,
+        f: impl Fn(&mut RoaringBitmap),
+    ) -> Result<()> {
+        let mut tasks = self.get_batch_status(wtxn, status)?;
+        f(&mut tasks);
+        self.put_batch_status(wtxn, status, &tasks)?;
+
+        Ok(())
+    }
+
     pub(crate) fn get_kind(&self, rtxn: &RoTxn, kind: Kind) -> Result<RoaringBitmap> {
         Ok(self.kind.get(rtxn, &kind)?.unwrap_or_default())
     }
@@ -162,6 +437,32 @@ impl IndexScheduler {
         let mut tasks = self.get_kind(wtxn, kind)?;
         f(&mut tasks);
         self.put_kind(wtxn, kind, &tasks)?;
+
+        Ok(())
+    }
+
+    pub(crate) fn get_batch_kind(&self, rtxn: &RoTxn, kind: Kind) -> Result<RoaringBitmap> {
+        Ok(self.batch_kind.get(rtxn, &kind)?.unwrap_or_default())
+    }
+
+    pub(crate) fn put_batch_kind(
+        &self,
+        wtxn: &mut RwTxn,
+        kind: Kind,
+        bitmap: &RoaringBitmap,
+    ) -> Result<()> {
+        Ok(self.batch_kind.put(wtxn, &kind, bitmap)?)
+    }
+
+    pub(crate) fn update_batch_kind(
+        &self,
+        wtxn: &mut RwTxn,
+        kind: Kind,
+        f: impl Fn(&mut RoaringBitmap),
+    ) -> Result<()> {
+        let mut tasks = self.get_batch_kind(wtxn, kind)?;
+        f(&mut tasks);
+        self.put_batch_kind(wtxn, kind, &tasks)?;
 
         Ok(())
     }
@@ -199,9 +500,9 @@ pub(crate) fn remove_task_datetime(
     Ok(())
 }
 
-pub(crate) fn keep_tasks_within_datetimes(
+pub(crate) fn keep_ids_within_datetimes(
     rtxn: &RoTxn,
-    tasks: &mut RoaringBitmap,
+    ids: &mut RoaringBitmap,
     database: Database<BEI128, CboRoaringBitmapCodec>,
     after: Option<OffsetDateTime>,
     before: Option<OffsetDateTime>,
@@ -212,15 +513,15 @@ pub(crate) fn keep_tasks_within_datetimes(
         (Some(after), None) => (Bound::Excluded(*after), Bound::Unbounded),
         (Some(after), Some(before)) => (Bound::Excluded(*after), Bound::Excluded(*before)),
     };
-    let mut collected_task_ids = RoaringBitmap::new();
+    let mut collected_ids = RoaringBitmap::new();
     let start = map_bound(start, |b| b.unix_timestamp_nanos());
     let end = map_bound(end, |b| b.unix_timestamp_nanos());
     let iter = database.range(rtxn, &(start, end))?;
     for r in iter {
-        let (_timestamp, task_ids) = r?;
-        collected_task_ids |= task_ids;
+        let (_timestamp, ids) = r?;
+        collected_ids |= ids;
     }
-    *tasks &= collected_task_ids;
+    *ids &= collected_ids;
     Ok(())
 }
 
@@ -342,6 +643,7 @@ impl IndexScheduler {
 
             let Task {
                 uid,
+                batch_uid,
                 enqueued_at,
                 started_at,
                 finished_at,
@@ -352,6 +654,14 @@ impl IndexScheduler {
                 kind,
             } = task;
             assert_eq!(uid, task.uid);
+            if let Some(ref batch) = batch_uid {
+                assert!(self
+                    .batch_to_tasks_mapping
+                    .get(&rtxn, batch)
+                    .unwrap()
+                    .unwrap()
+                    .contains(uid));
+            }
             if let Some(task_index_uid) = &task_index_uid {
                 assert!(self
                     .index_tasks

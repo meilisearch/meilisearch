@@ -48,6 +48,7 @@ pub use features::RoFeatures;
 use file_store::FileStore;
 use flate2::bufread::GzEncoder;
 use flate2::Compression;
+use meilisearch_types::batches::{Batch, BatchId};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
 use meilisearch_types::heed::byteorder::BE;
@@ -67,11 +68,11 @@ use roaring::RoaringBitmap;
 use synchronoise::SignalEvent;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
-use utils::{filter_out_references_to_newer_tasks, keep_tasks_within_datetimes, map_bound};
+use utils::{filter_out_references_to_newer_tasks, keep_ids_within_datetimes, map_bound};
 use uuid::Uuid;
 
 use crate::index_mapper::IndexMapper;
-use crate::utils::{check_index_swap_validity, clamp_to_page_size};
+use crate::utils::{check_index_swap_validity, clamp_to_page_size, ProcessingBatch};
 
 pub(crate) type BEI128 = I128<BE>;
 
@@ -85,6 +86,12 @@ pub struct Query {
     pub limit: Option<u32>,
     /// The minimum [task id](`meilisearch_types::tasks::Task::uid`) to be matched
     pub from: Option<u32>,
+    /// The order used to return the tasks. By default the newest tasks are returned first and the boolean is `false`.
+    pub reverse: Option<bool>,
+    /// The [task ids](`meilisearch_types::tasks::Task::uid`) to be matched
+    pub uids: Option<Vec<TaskId>>,
+    /// The [batch ids](`meilisearch_types::batches::Batch::uid`) to be matched
+    pub batch_uids: Option<Vec<BatchId>>,
     /// The allowed [statuses](`meilisearch_types::tasks::Task::status`) of the matched tasls
     pub statuses: Option<Vec<Status>>,
     /// The allowed [kinds](meilisearch_types::tasks::Kind) of the matched tasks.
@@ -99,8 +106,6 @@ pub struct Query {
     pub types: Option<Vec<Kind>>,
     /// The allowed [index ids](meilisearch_types::tasks::Task::index_uid) of the matched tasks
     pub index_uids: Option<Vec<String>>,
-    /// The [task ids](`meilisearch_types::tasks::Task::uid`) to be matched
-    pub uids: Option<Vec<TaskId>>,
     /// The [task ids](`meilisearch_types::tasks::Task::uid`) of the [`TaskCancelation`](meilisearch_types::tasks::Task::Kind::TaskCancelation) tasks
     /// that canceled the matched tasks.
     pub canceled_by: Option<Vec<TaskId>>,
@@ -127,10 +132,12 @@ impl Query {
             Query {
                 limit: None,
                 from: None,
+                reverse: None,
+                uids: None,
+                batch_uids: None,
                 statuses: None,
                 types: None,
                 index_uids: None,
-                uids: None,
                 canceled_by: None,
                 before_enqueued_at: None,
                 after_enqueued_at: None,
@@ -157,9 +164,8 @@ impl Query {
 }
 
 #[derive(Debug, Clone)]
-struct ProcessingTasks {
-    /// The date and time at which the indexation started.
-    started_at: OffsetDateTime,
+pub struct ProcessingTasks {
+    batch: Option<ProcessingBatch>,
     /// The list of tasks ids that are currently running.
     processing: RoaringBitmap,
     /// The progress on processing tasks
@@ -169,16 +175,12 @@ struct ProcessingTasks {
 impl ProcessingTasks {
     /// Creates an empty `ProcessingAt` struct.
     fn new() -> ProcessingTasks {
-        ProcessingTasks {
-            started_at: OffsetDateTime::now_utc(),
-            processing: RoaringBitmap::new(),
-            progress: None,
-        }
+        ProcessingTasks { batch: None, processing: RoaringBitmap::new(), progress: None }
     }
 
     /// Stores the currently processing tasks, and the date time at which it started.
-    fn start_processing_at(&mut self, started_at: OffsetDateTime, processing: RoaringBitmap) {
-        self.started_at = started_at;
+    fn start_processing(&mut self, processing_batch: ProcessingBatch, processing: RoaringBitmap) {
+        self.batch = Some(processing_batch);
         self.processing = processing;
     }
 
@@ -187,9 +189,14 @@ impl ProcessingTasks {
     }
 
     /// Set the processing tasks to an empty list
-    fn stop_processing(&mut self) -> RoaringBitmap {
+    fn stop_processing(&mut self) -> Self {
         self.progress = None;
-        std::mem::take(&mut self.processing)
+
+        Self {
+            batch: std::mem::take(&mut self.batch),
+            processing: std::mem::take(&mut self.processing),
+            progress: None,
+        }
     }
 
     /// Returns `true` if there, at least, is one task that is currently processing that we must stop.
@@ -218,6 +225,8 @@ impl MustStopProcessing {
 /// Database const names for the `IndexScheduler`.
 mod db_name {
     pub const ALL_TASKS: &str = "all-tasks";
+    pub const ALL_BATCHES: &str = "all-batches";
+    pub const BATCH_TO_TASKS_MAPPING: &str = "batch-to-tasks-mapping";
     pub const STATUS: &str = "status";
     pub const KIND: &str = "kind";
     pub const INDEX_TASKS: &str = "index-tasks";
@@ -225,6 +234,13 @@ mod db_name {
     pub const ENQUEUED_AT: &str = "enqueued-at";
     pub const STARTED_AT: &str = "started-at";
     pub const FINISHED_AT: &str = "finished-at";
+
+    pub const BATCH_STATUS: &str = "batch-status";
+    pub const BATCH_KIND: &str = "batch-kind";
+    pub const BATCH_INDEX_TASKS: &str = "batch-index-tasks";
+    pub const BATCH_ENQUEUED_AT: &str = "batch-enqueued-at";
+    pub const BATCH_STARTED_AT: &str = "batch-started-at";
+    pub const BATCH_FINISHED_AT: &str = "batch-finished-at";
 }
 
 #[cfg(test)]
@@ -306,8 +322,14 @@ pub struct IndexScheduler {
     /// The list of files referenced by the tasks
     pub(crate) file_store: FileStore,
 
-    // The main database, it contains all the tasks accessible by their Id.
+    /// The main database, it contains all the tasks accessible by their Id.
     pub(crate) all_tasks: Database<BEU32, SerdeJson<Task>>,
+
+    /// Contains all the batches accessible by their Id.
+    pub(crate) all_batches: Database<BEU32, SerdeJson<Batch>>,
+
+    /// Matches a batch id with the associated task ids.
+    pub(crate) batch_to_tasks_mapping: Database<BEU32, CboRoaringBitmapCodec>,
 
     /// All the tasks ids grouped by their status.
     // TODO we should not be able to serialize a `Status::Processing` in this database.
@@ -316,18 +338,27 @@ pub struct IndexScheduler {
     pub(crate) kind: Database<SerdeBincode<Kind>, RoaringBitmapCodec>,
     /// Store the tasks associated to an index.
     pub(crate) index_tasks: Database<Str, RoaringBitmapCodec>,
-
     /// Store the tasks that were canceled by a task uid
     pub(crate) canceled_by: Database<BEU32, RoaringBitmapCodec>,
-
     /// Store the task ids of tasks which were enqueued at a specific date
     pub(crate) enqueued_at: Database<BEI128, CboRoaringBitmapCodec>,
-
     /// Store the task ids of finished tasks which started being processed at a specific date
     pub(crate) started_at: Database<BEI128, CboRoaringBitmapCodec>,
-
     /// Store the task ids of tasks which finished at a specific date
     pub(crate) finished_at: Database<BEI128, CboRoaringBitmapCodec>,
+
+    /// All the batches containing a task matching the selected status.
+    pub(crate) batch_status: Database<SerdeBincode<Status>, RoaringBitmapCodec>,
+    /// All the batches ids grouped by the kind of their task.
+    pub(crate) batch_kind: Database<SerdeBincode<Kind>, RoaringBitmapCodec>,
+    /// Store the batches associated to an index.
+    pub(crate) batch_index_tasks: Database<Str, RoaringBitmapCodec>,
+    /// Store the batches containing tasks which were enqueued at a specific date
+    pub(crate) batch_enqueued_at: Database<BEI128, CboRoaringBitmapCodec>,
+    /// Store the batches containing finished tasks started at a specific date
+    pub(crate) batch_started_at: Database<BEI128, CboRoaringBitmapCodec>,
+    /// Store the batches containing tasks finished at a specific date
+    pub(crate) batch_finished_at: Database<BEI128, CboRoaringBitmapCodec>,
 
     /// In charge of creating, opening, storing and returning indexes.
     pub(crate) index_mapper: IndexMapper,
@@ -397,6 +428,10 @@ impl IndexScheduler {
             processing_tasks: self.processing_tasks.clone(),
             file_store: self.file_store.clone(),
             all_tasks: self.all_tasks,
+            all_batches: self.all_batches,
+            batch_to_tasks_mapping: self.batch_to_tasks_mapping,
+
+            // Tasks reverse index
             status: self.status,
             kind: self.kind,
             index_tasks: self.index_tasks,
@@ -404,6 +439,15 @@ impl IndexScheduler {
             enqueued_at: self.enqueued_at,
             started_at: self.started_at,
             finished_at: self.finished_at,
+
+            // Batches reverse index
+            batch_status: self.batch_status,
+            batch_kind: self.batch_kind,
+            batch_index_tasks: self.batch_index_tasks,
+            batch_enqueued_at: self.batch_enqueued_at,
+            batch_started_at: self.batch_started_at,
+            batch_finished_at: self.batch_finished_at,
+
             index_mapper: self.index_mapper.clone(),
             wake_up: self.wake_up.clone(),
             autobatching_enabled: self.autobatching_enabled,
@@ -463,7 +507,7 @@ impl IndexScheduler {
 
         let env = unsafe {
             heed::EnvOpenOptions::new()
-                .max_dbs(11)
+                .max_dbs(19)
                 .map_size(budget.task_db_size)
                 .open(options.tasks_path)
         }?;
@@ -474,6 +518,10 @@ impl IndexScheduler {
 
         let mut wtxn = env.write_txn()?;
         let all_tasks = env.create_database(&mut wtxn, Some(db_name::ALL_TASKS))?;
+        let all_batches = env.create_database(&mut wtxn, Some(db_name::ALL_BATCHES))?;
+        let batch_to_tasks_mapping =
+            env.create_database(&mut wtxn, Some(db_name::BATCH_TO_TASKS_MAPPING))?;
+
         let status = env.create_database(&mut wtxn, Some(db_name::STATUS))?;
         let kind = env.create_database(&mut wtxn, Some(db_name::KIND))?;
         let index_tasks = env.create_database(&mut wtxn, Some(db_name::INDEX_TASKS))?;
@@ -481,6 +529,13 @@ impl IndexScheduler {
         let enqueued_at = env.create_database(&mut wtxn, Some(db_name::ENQUEUED_AT))?;
         let started_at = env.create_database(&mut wtxn, Some(db_name::STARTED_AT))?;
         let finished_at = env.create_database(&mut wtxn, Some(db_name::FINISHED_AT))?;
+
+        let batch_status = env.create_database(&mut wtxn, Some(db_name::BATCH_STATUS))?;
+        let batch_kind = env.create_database(&mut wtxn, Some(db_name::BATCH_KIND))?;
+        let batch_index_tasks = env.create_database(&mut wtxn, Some(db_name::BATCH_INDEX_TASKS))?;
+        let batch_enqueued_at = env.create_database(&mut wtxn, Some(db_name::BATCH_ENQUEUED_AT))?;
+        let batch_started_at = env.create_database(&mut wtxn, Some(db_name::BATCH_STARTED_AT))?;
+        let batch_finished_at = env.create_database(&mut wtxn, Some(db_name::BATCH_FINISHED_AT))?;
         wtxn.commit()?;
 
         // allow unreachable_code to get rids of the warning in the case of a test build.
@@ -489,6 +544,9 @@ impl IndexScheduler {
             processing_tasks: Arc::new(RwLock::new(ProcessingTasks::new())),
             file_store,
             all_tasks,
+            all_batches,
+            batch_to_tasks_mapping,
+            // Task reverse indexes
             status,
             kind,
             index_tasks,
@@ -496,6 +554,15 @@ impl IndexScheduler {
             enqueued_at,
             started_at,
             finished_at,
+
+            // Batch reverse indexes
+            batch_status,
+            batch_kind,
+            batch_index_tasks,
+            batch_enqueued_at,
+            batch_started_at,
+            batch_finished_at,
+
             index_mapper: IndexMapper::new(
                 &env,
                 options.indexes_path,
@@ -711,17 +778,50 @@ impl IndexScheduler {
 
     /// Return the task ids matched by the given query from the index scheduler's point of view.
     pub(crate) fn get_task_ids(&self, rtxn: &RoTxn, query: &Query) -> Result<RoaringBitmap> {
-        let ProcessingTasks {
-            started_at: started_at_processing, processing: processing_tasks, ..
-        } = self.processing_tasks.read().unwrap().clone();
+        let ProcessingTasks { batch: processing_batch, processing: processing_tasks, progress: _ } =
+            self.processing_tasks.read().unwrap().clone();
+        let Query {
+            limit,
+            from,
+            reverse,
+            uids,
+            batch_uids,
+            statuses,
+            types,
+            index_uids,
+            canceled_by,
+            before_enqueued_at,
+            after_enqueued_at,
+            before_started_at,
+            after_started_at,
+            before_finished_at,
+            after_finished_at,
+        } = query;
 
         let mut tasks = self.all_task_ids(rtxn)?;
 
-        if let Some(from) = &query.from {
-            tasks.remove_range(from.saturating_add(1)..);
+        if let Some(from) = from {
+            let range = if reverse.unwrap_or_default() {
+                u32::MIN..*from
+            } else {
+                from.saturating_add(1)..u32::MAX
+            };
+            tasks.remove_range(range);
         }
 
-        if let Some(status) = &query.statuses {
+        if let Some(batch_uids) = batch_uids {
+            let mut batch_tasks = RoaringBitmap::new();
+            for batch_uid in batch_uids {
+                if processing_batch.as_ref().map_or(false, |batch| batch.uid == *batch_uid) {
+                    batch_tasks |= &processing_tasks;
+                } else {
+                    batch_tasks |= self.tasks_in_batch(rtxn, *batch_uid)?;
+                }
+            }
+            tasks &= batch_tasks;
+        }
+
+        if let Some(status) = statuses {
             let mut status_tasks = RoaringBitmap::new();
             for status in status {
                 match status {
@@ -738,12 +838,12 @@ impl IndexScheduler {
             tasks &= status_tasks;
         }
 
-        if let Some(uids) = &query.uids {
+        if let Some(uids) = uids {
             let uids = RoaringBitmap::from_iter(uids);
             tasks &= &uids;
         }
 
-        if let Some(canceled_by) = &query.canceled_by {
+        if let Some(canceled_by) = canceled_by {
             let mut all_canceled_tasks = RoaringBitmap::new();
             for cancel_task_uid in canceled_by {
                 if let Some(canceled_by_uid) = self.canceled_by.get(rtxn, cancel_task_uid)? {
@@ -760,7 +860,7 @@ impl IndexScheduler {
             }
         }
 
-        if let Some(kind) = &query.types {
+        if let Some(kind) = types {
             let mut kind_tasks = RoaringBitmap::new();
             for kind in kind {
                 kind_tasks |= self.get_kind(rtxn, *kind)?;
@@ -768,7 +868,7 @@ impl IndexScheduler {
             tasks &= &kind_tasks;
         }
 
-        if let Some(index) = &query.index_uids {
+        if let Some(index) = index_uids {
             let mut index_tasks = RoaringBitmap::new();
             for index in index {
                 index_tasks |= self.index_tasks(rtxn, index)?;
@@ -786,62 +886,279 @@ impl IndexScheduler {
 
             // special case for Processing tasks
             // A closure that clears the filtered_processing_tasks if their started_at date falls outside the given bounds
-            let mut clear_filtered_processing_tasks =
+            let clear_filtered_processing_tasks =
                 |start: Bound<OffsetDateTime>, end: Bound<OffsetDateTime>| {
                     let start = map_bound(start, |b| b.unix_timestamp_nanos());
                     let end = map_bound(end, |b| b.unix_timestamp_nanos());
                     let is_within_dates = RangeBounds::contains(
                         &(start, end),
-                        &started_at_processing.unix_timestamp_nanos(),
+                        &processing_batch
+                            .map_or_else(OffsetDateTime::now_utc, |batch| batch.started_at)
+                            .unix_timestamp_nanos(),
                     );
                     if !is_within_dates {
                         filtered_processing_tasks.clear();
                     }
                 };
-            match (query.after_started_at, query.before_started_at) {
+            match (after_started_at, before_started_at) {
                 (None, None) => (),
                 (None, Some(before)) => {
-                    clear_filtered_processing_tasks(Bound::Unbounded, Bound::Excluded(before))
+                    clear_filtered_processing_tasks(Bound::Unbounded, Bound::Excluded(*before))
                 }
                 (Some(after), None) => {
-                    clear_filtered_processing_tasks(Bound::Excluded(after), Bound::Unbounded)
+                    clear_filtered_processing_tasks(Bound::Excluded(*after), Bound::Unbounded)
                 }
-                (Some(after), Some(before)) => {
-                    clear_filtered_processing_tasks(Bound::Excluded(after), Bound::Excluded(before))
-                }
+                (Some(after), Some(before)) => clear_filtered_processing_tasks(
+                    Bound::Excluded(*after),
+                    Bound::Excluded(*before),
+                ),
             };
 
-            keep_tasks_within_datetimes(
+            keep_ids_within_datetimes(
                 rtxn,
                 &mut filtered_non_processing_tasks,
                 self.started_at,
-                query.after_started_at,
-                query.before_started_at,
+                *after_started_at,
+                *before_started_at,
             )?;
             filtered_non_processing_tasks | filtered_processing_tasks
         };
 
-        keep_tasks_within_datetimes(
+        keep_ids_within_datetimes(
             rtxn,
             &mut tasks,
             self.enqueued_at,
-            query.after_enqueued_at,
-            query.before_enqueued_at,
+            *after_enqueued_at,
+            *before_enqueued_at,
         )?;
 
-        keep_tasks_within_datetimes(
+        keep_ids_within_datetimes(
             rtxn,
             &mut tasks,
             self.finished_at,
-            query.after_finished_at,
-            query.before_finished_at,
+            *after_finished_at,
+            *before_finished_at,
         )?;
 
-        if let Some(limit) = query.limit {
-            tasks = tasks.into_iter().rev().take(limit as usize).collect();
+        if let Some(limit) = limit {
+            tasks = if query.reverse.unwrap_or_default() {
+                tasks.into_iter().take(*limit as usize).collect()
+            } else {
+                tasks.into_iter().rev().take(*limit as usize).collect()
+            };
         }
 
         Ok(tasks)
+    }
+
+    /// Return the batch ids matched by the given query from the index scheduler's point of view.
+    pub(crate) fn get_batch_ids(
+        &self,
+        rtxn: &RoTxn,
+        processing: &ProcessingTasks,
+        query: &Query,
+    ) -> Result<RoaringBitmap> {
+        let Query {
+            limit,
+            from,
+            reverse,
+            uids,
+            batch_uids,
+            statuses,
+            types,
+            index_uids,
+            canceled_by,
+            before_enqueued_at,
+            after_enqueued_at,
+            before_started_at,
+            after_started_at,
+            before_finished_at,
+            after_finished_at,
+        } = query;
+
+        let mut batches = self.all_batch_ids(rtxn)?;
+        if let Some(batch_id) = processing.batch.as_ref().map(|batch| batch.uid) {
+            batches.insert(batch_id);
+        }
+
+        if let Some(from) = from {
+            let range = if reverse.unwrap_or_default() {
+                u32::MIN..*from
+            } else {
+                from.saturating_add(1)..u32::MAX
+            };
+            batches.remove_range(range);
+        }
+
+        if let Some(batch_uids) = &batch_uids {
+            let batches_uids = RoaringBitmap::from_iter(batch_uids);
+            batches &= batches_uids;
+        }
+
+        if let Some(status) = &statuses {
+            let mut status_batches = RoaringBitmap::new();
+            for status in status {
+                match status {
+                    // special case for Processing batches
+                    Status::Processing => {
+                        if let Some(batch_id) = processing.batch.as_ref().map(|batch| batch.uid) {
+                            status_batches.insert(batch_id);
+                        }
+                    }
+                    // Enqueued tasks are not stored in batches
+                    Status::Enqueued => (),
+                    status => status_batches |= &self.get_batch_status(rtxn, *status)?,
+                };
+            }
+            if !status.contains(&Status::Processing) {
+                if let Some(ref batch) = processing.batch {
+                    batches.remove(batch.uid);
+                }
+            }
+            batches &= status_batches;
+        }
+
+        if let Some(task_uids) = &uids {
+            let mut batches_by_task_uids = RoaringBitmap::new();
+            for task_uid in task_uids {
+                if let Some(task) = self.get_task(rtxn, *task_uid)? {
+                    if let Some(batch_uid) = task.batch_uid {
+                        batches_by_task_uids.insert(batch_uid);
+                    }
+                }
+            }
+            batches &= batches_by_task_uids;
+        }
+
+        // There is no database for this query, we must retrieve the task queried by the client and ensure it's valid
+        if let Some(canceled_by) = &canceled_by {
+            let mut all_canceled_batches = RoaringBitmap::new();
+            for cancel_uid in canceled_by {
+                if let Some(task) = self.get_task(rtxn, *cancel_uid)? {
+                    if task.kind.as_kind() == Kind::TaskCancelation
+                        && task.status == Status::Succeeded
+                    {
+                        if let Some(batch_uid) = task.batch_uid {
+                            all_canceled_batches.insert(batch_uid);
+                        }
+                    }
+                }
+            }
+
+            // if the canceled_by has been specified but no batch
+            // matches then we prefer matching zero than all batches.
+            if all_canceled_batches.is_empty() {
+                return Ok(RoaringBitmap::new());
+            } else {
+                batches &= all_canceled_batches;
+            }
+        }
+
+        if let Some(kind) = &types {
+            let mut kind_batches = RoaringBitmap::new();
+            for kind in kind {
+                kind_batches |= self.get_batch_kind(rtxn, *kind)?;
+                if let Some(uid) = processing
+                    .batch
+                    .as_ref()
+                    .and_then(|batch| batch.kinds.contains(kind).then_some(batch.uid))
+                {
+                    kind_batches.insert(uid);
+                }
+            }
+            batches &= &kind_batches;
+        }
+
+        if let Some(index) = &index_uids {
+            let mut index_batches = RoaringBitmap::new();
+            for index in index {
+                index_batches |= self.index_batches(rtxn, index)?;
+                if let Some(uid) = processing
+                    .batch
+                    .as_ref()
+                    .and_then(|batch| batch.indexes.contains(index).then_some(batch.uid))
+                {
+                    index_batches.insert(uid);
+                }
+            }
+            batches &= &index_batches;
+        }
+
+        // For the started_at filter, we need to treat the part of the batches that are processing from the part of the
+        // batches that are not processing. The non-processing ones are filtered normally while the processing ones
+        // are entirely removed unless the in-memory startedAt variable falls within the date filter.
+        // Once we have filtered the two subsets, we put them back together and assign it back to `batches`.
+        batches = {
+            let (mut filtered_non_processing_batches, mut filtered_processing_batches) =
+                (&batches - &processing.processing, &batches & &processing.processing);
+
+            // special case for Processing batches
+            // A closure that clears the filtered_processing_batches if their started_at date falls outside the given bounds
+            let mut clear_filtered_processing_batches =
+                |start: Bound<OffsetDateTime>, end: Bound<OffsetDateTime>| {
+                    let start = map_bound(start, |b| b.unix_timestamp_nanos());
+                    let end = map_bound(end, |b| b.unix_timestamp_nanos());
+                    let is_within_dates = RangeBounds::contains(
+                        &(start, end),
+                        &processing
+                            .batch
+                            .as_ref()
+                            .map_or_else(OffsetDateTime::now_utc, |batch| batch.started_at)
+                            .unix_timestamp_nanos(),
+                    );
+                    if !is_within_dates {
+                        filtered_processing_batches.clear();
+                    }
+                };
+            match (after_started_at, before_started_at) {
+                (None, None) => (),
+                (None, Some(before)) => {
+                    clear_filtered_processing_batches(Bound::Unbounded, Bound::Excluded(*before))
+                }
+                (Some(after), None) => {
+                    clear_filtered_processing_batches(Bound::Excluded(*after), Bound::Unbounded)
+                }
+                (Some(after), Some(before)) => clear_filtered_processing_batches(
+                    Bound::Excluded(*after),
+                    Bound::Excluded(*before),
+                ),
+            };
+
+            keep_ids_within_datetimes(
+                rtxn,
+                &mut filtered_non_processing_batches,
+                self.batch_started_at,
+                *after_started_at,
+                *before_started_at,
+            )?;
+            filtered_non_processing_batches | filtered_processing_batches
+        };
+
+        keep_ids_within_datetimes(
+            rtxn,
+            &mut batches,
+            self.batch_enqueued_at,
+            *after_enqueued_at,
+            *before_enqueued_at,
+        )?;
+
+        keep_ids_within_datetimes(
+            rtxn,
+            &mut batches,
+            self.batch_finished_at,
+            *after_finished_at,
+            *before_finished_at,
+        )?;
+
+        if let Some(limit) = limit {
+            batches = if query.reverse.unwrap_or_default() {
+                batches.into_iter().take(*limit as usize).collect()
+            } else {
+                batches.into_iter().rev().take(*limit as usize).collect()
+            };
+        }
+
+        Ok(batches)
     }
 
     /// The returned structure contains:
@@ -946,6 +1263,80 @@ impl IndexScheduler {
         Ok((tasks, total_tasks.len()))
     }
 
+    /// Return the batch ids matching the query along with the total number of batches
+    /// by ignoring the from and limit parameters from the user's point of view.
+    ///
+    /// There are two differences between an internal query and a query executed by
+    /// the user.
+    ///
+    /// 1. IndexSwap tasks are not publicly associated with any index, but they are associated
+    /// with many indexes internally.
+    /// 2. The user may not have the rights to access the tasks (internally) associated with all indexes.
+    fn get_batch_ids_from_authorized_indexes(
+        &self,
+        rtxn: &RoTxn,
+        processing: &ProcessingTasks,
+        query: &Query,
+        filters: &meilisearch_auth::AuthFilter,
+    ) -> Result<(RoaringBitmap, u64)> {
+        // compute all batches matching the filter by ignoring the limits, to find the number of batches matching
+        // the filter.
+        // As this causes us to compute the filter twice it is slightly inefficient, but doing it this way spares
+        // us from modifying the underlying implementation, and the performance remains sufficient.
+        // Should this change, we would modify `get_batch_ids` to directly return the number of matching batches.
+        let total_batches =
+            self.get_batch_ids(rtxn, processing, &query.clone().without_limits())?;
+        let mut batches = self.get_batch_ids(rtxn, processing, query)?;
+
+        // If the query contains a list of index uid or there is a finite list of authorized indexes,
+        // then we must exclude all the batches that only contains tasks associated to multiple indexes.
+        // This works because we don't autobatch tasks associated to multiple indexes with tasks associated
+        // to a single index. e.g: IndexSwap cannot be batched with IndexCreation.
+        if query.index_uids.is_some() || !filters.all_indexes_authorized() {
+            for kind in enum_iterator::all::<Kind>().filter(|kind| !kind.related_to_one_index()) {
+                batches -= self.get_kind(rtxn, kind)?;
+                if let Some(batch) = processing.batch.as_ref() {
+                    if batch.kinds.contains(&kind) {
+                        batches.remove(batch.uid);
+                    }
+                }
+            }
+        }
+
+        // Any batch that is internally associated with at least one authorized index
+        // must be returned.
+        if !filters.all_indexes_authorized() {
+            let mut valid_indexes = RoaringBitmap::new();
+            let mut forbidden_indexes = RoaringBitmap::new();
+
+            let all_indexes_iter = self.batch_index_tasks.iter(rtxn)?;
+            for result in all_indexes_iter {
+                let (index, index_tasks) = result?;
+                if filters.is_index_authorized(index) {
+                    valid_indexes |= index_tasks;
+                } else {
+                    forbidden_indexes |= index_tasks;
+                }
+            }
+            if let Some(batch) = processing.batch.as_ref() {
+                for index in &batch.indexes {
+                    if filters.is_index_authorized(index) {
+                        valid_indexes.insert(batch.uid);
+                    } else {
+                        forbidden_indexes.insert(batch.uid);
+                    }
+                }
+            }
+
+            // If a batch had ONE valid task then it should be returned
+            let invalid_batches = forbidden_indexes - valid_indexes;
+
+            batches -= invalid_batches;
+        }
+
+        Ok((batches, total_batches.len()))
+    }
+
     /// Return the tasks matching the query from the user's point of view along
     /// with the total number of tasks matching the query, ignoring from and limit.
     ///
@@ -963,24 +1354,34 @@ impl IndexScheduler {
         let rtxn = self.env.read_txn()?;
 
         let (tasks, total) = self.get_task_ids_from_authorized_indexes(&rtxn, &query, filters)?;
-        let tasks = self.get_existing_tasks(
-            &rtxn,
-            tasks.into_iter().rev().take(query.limit.unwrap_or(u32::MAX) as usize),
-        )?;
+        let tasks = if query.reverse.unwrap_or_default() {
+            Box::new(tasks.into_iter()) as Box<dyn Iterator<Item = u32>>
+        } else {
+            Box::new(tasks.into_iter().rev()) as Box<dyn Iterator<Item = u32>>
+        };
+        let tasks =
+            self.get_existing_tasks(&rtxn, tasks.take(query.limit.unwrap_or(u32::MAX) as usize))?;
 
-        let ProcessingTasks { started_at, processing, progress, .. } =
+        let ProcessingTasks { batch, processing, progress } =
             self.processing_tasks.read().map_err(|_| Error::CorruptedTaskQueue)?.clone();
 
         let _ = progress;
 
         let ret = tasks.into_iter();
-        if processing.is_empty() {
+        if processing.is_empty() || batch.is_none() {
             Ok((ret.collect(), total))
         } else {
+            // Safe because we ensured there was a batch in the previous branch
+            let batch = batch.unwrap();
             Ok((
                 ret.map(|task| {
                     if processing.contains(task.uid) {
-                        Task { status: Status::Processing, started_at: Some(started_at), ..task }
+                        Task {
+                            status: Status::Processing,
+                            batch_uid: Some(batch.uid),
+                            started_at: Some(batch.started_at),
+                            ..task
+                        }
                     } else {
                         task
                     }
@@ -989,6 +1390,40 @@ impl IndexScheduler {
                 total,
             ))
         }
+    }
+
+    /// Return the batches matching the query from the user's point of view along
+    /// with the total number of batches matching the query, ignoring from and limit.
+    ///
+    /// There are two differences between an internal query and a query executed by
+    /// the user.
+    ///
+    /// 1. IndexSwap tasks are not publicly associated with any index, but they are associated
+    /// with many indexes internally.
+    /// 2. The user may not have the rights to access the tasks (internally) associated with all indexes.
+    pub fn get_batches_from_authorized_indexes(
+        &self,
+        query: Query,
+        filters: &meilisearch_auth::AuthFilter,
+    ) -> Result<(Vec<Batch>, u64)> {
+        let rtxn = self.env.read_txn()?;
+        let processing = self.processing_tasks.read().unwrap().clone();
+
+        let (batches, total) =
+            self.get_batch_ids_from_authorized_indexes(&rtxn, &processing, &query, filters)?;
+        let batches = if query.reverse.unwrap_or_default() {
+            Box::new(batches.into_iter()) as Box<dyn Iterator<Item = u32>>
+        } else {
+            Box::new(batches.into_iter().rev()) as Box<dyn Iterator<Item = u32>>
+        };
+
+        let batches = self.get_existing_batches(
+            &rtxn,
+            &processing,
+            batches.take(query.limit.unwrap_or(u32::MAX) as usize),
+        )?;
+
+        Ok((batches, total))
     }
 
     /// Register a new task in the scheduler.
@@ -1019,6 +1454,8 @@ impl IndexScheduler {
 
         let mut task = Task {
             uid: task_id.unwrap_or(next_task_id),
+            // The batch is defined once we starts processing the task
+            batch_uid: None,
             enqueued_at: OffsetDateTime::now_utc(),
             started_at: None,
             finished_at: None,
@@ -1154,7 +1591,7 @@ impl IndexScheduler {
         }
 
         let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
-        let batch =
+        let (batch, mut processing_batch) =
             match self.create_next_batch(&rtxn).map_err(|e| Error::CreateBatch(Box::new(e)))? {
                 Some(batch) => batch,
                 None => return Ok(TickOutcome::WaitForSignal),
@@ -1163,13 +1600,16 @@ impl IndexScheduler {
         drop(rtxn);
 
         // 1. store the starting date with the bitmap of processing tasks.
-        let ids = batch.ids();
+        let mut ids = batch.ids();
         let processed_tasks = ids.len();
-        let started_at = OffsetDateTime::now_utc();
 
         // We reset the must_stop flag to be sure that we don't stop processing tasks
         self.must_stop_processing.reset();
-        self.processing_tasks.write().unwrap().start_processing_at(started_at, ids.clone());
+        self.processing_tasks
+            .write()
+            .unwrap()
+            // We can clone the processing batch here because we don't want its modification to affect the view of the processing batches
+            .start_processing(processing_batch.clone(), ids.clone());
 
         #[cfg(test)]
         self.breakpoint(Breakpoint::BatchCreated);
@@ -1177,11 +1617,16 @@ impl IndexScheduler {
         // 2. Process the tasks
         let res = {
             let cloned_index_scheduler = self.private_clone();
-            let handle = std::thread::Builder::new()
-                .name(String::from("batch-operation"))
-                .spawn(move || cloned_index_scheduler.process_batch(batch))
-                .unwrap();
-            handle.join().unwrap_or(Err(Error::ProcessBatchPanicked))
+            let processing_batch = &mut processing_batch;
+            std::thread::scope(|s| {
+                let handle = std::thread::Builder::new()
+                    .name(String::from("batch-operation"))
+                    .spawn_scoped(s, move || {
+                        cloned_index_scheduler.process_batch(batch, processing_batch)
+                    })
+                    .unwrap();
+                handle.join().unwrap_or(Err(Error::ProcessBatchPanicked))
+            })
         };
 
         // Reset the currently updating index to relinquish the index handle
@@ -1190,9 +1635,10 @@ impl IndexScheduler {
         #[cfg(test)]
         self.maybe_fail(tests::FailureLocation::AcquiringWtxn)?;
 
+        processing_batch.finished();
         let mut wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
+        let mut canceled = RoaringBitmap::new();
 
-        let finished_at = OffsetDateTime::now_utc();
         match res {
             Ok(tasks) => {
                 #[cfg(test)]
@@ -1200,11 +1646,15 @@ impl IndexScheduler {
 
                 let mut success = 0;
                 let mut failure = 0;
+                let mut canceled_by = None;
 
                 #[allow(unused_variables)]
                 for (i, mut task) in tasks.into_iter().enumerate() {
-                    task.started_at = Some(started_at);
-                    task.finished_at = Some(finished_at);
+                    processing_batch.update(&mut task);
+                    if task.status == Status::Canceled {
+                        canceled.insert(task.uid);
+                        canceled_by = task.canceled_by;
+                    }
 
                     #[cfg(test)]
                     self.maybe_fail(
@@ -1220,6 +1670,9 @@ impl IndexScheduler {
 
                     self.update_task(&mut wtxn, &task)
                         .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?;
+                }
+                if let Some(canceled_by) = canceled_by {
+                    self.canceled_by.put(&mut wtxn, &canceled_by, &canceled)?;
                 }
                 tracing::info!("A batch of tasks was successfully completed with {success} successful tasks and {failure} failed tasks.");
             }
@@ -1268,11 +1721,10 @@ impl IndexScheduler {
                         .get_task(&wtxn, id)
                         .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?
                         .ok_or(Error::CorruptedTaskQueue)?;
-                    task.started_at = Some(started_at);
-                    task.finished_at = Some(finished_at);
                     task.status = Status::Failed;
                     task.error = Some(error.clone());
                     task.details = task.details.map(|d| d.to_failed());
+                    processing_batch.update(&mut task);
 
                     #[cfg(test)]
                     self.maybe_fail(tests::FailureLocation::UpdatingTaskAfterProcessBatchFailure)?;
@@ -1285,7 +1737,12 @@ impl IndexScheduler {
             }
         }
 
-        let processed = self.processing_tasks.write().unwrap().stop_processing();
+        self.processing_tasks.write().unwrap().stop_processing();
+        // We must re-add the canceled task so they're part of the same batch.
+        // processed.processing |= canceled;
+        ids |= canceled;
+
+        self.write_batch(&mut wtxn, processing_batch, &ids)?;
 
         #[cfg(test)]
         self.maybe_fail(tests::FailureLocation::CommittingWtxn)?;
@@ -1315,7 +1772,7 @@ impl IndexScheduler {
         })?;
 
         // We shouldn't crash the tick function if we can't send data to the webhook.
-        let _ = self.notify_webhook(&processed);
+        let _ = self.notify_webhook(&ids);
 
         #[cfg(test)]
         self.breakpoint(Breakpoint::AfterProcessing);
@@ -1599,6 +2056,7 @@ impl<'a> Dump<'a> {
 
         let task = Task {
             uid: task.uid,
+            batch_uid: task.batch_uid,
             enqueued_at: task.enqueued_at,
             started_at: task.started_at,
             finished_at: task.finished_at,
@@ -3776,6 +4234,449 @@ mod tests {
     }
 
     #[test]
+    fn query_batches_from_and_limit() {
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        let kind = index_creation_task("doggo", "bone");
+        let _task = index_scheduler.register(kind, None, false).unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
+        let kind = index_creation_task("whalo", "plankton");
+        let _task = index_scheduler.register(kind, None, false).unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
+        let kind = index_creation_task("catto", "his_own_vomit");
+        let _task = index_scheduler.register(kind, None, false).unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_third_task");
+
+        handle.advance_n_successful_batches(3);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "processed_all_tasks");
+
+        let proc = index_scheduler.processing_tasks.read().unwrap().clone();
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+        let query = Query { limit: Some(0), ..Default::default() };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        snapshot!(snapshot_bitmap(&batches), @"[]");
+
+        let query = Query { limit: Some(1), ..Default::default() };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        snapshot!(snapshot_bitmap(&batches), @"[2,]");
+
+        let query = Query { limit: Some(2), ..Default::default() };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        snapshot!(snapshot_bitmap(&batches), @"[1,2,]");
+
+        let query = Query { from: Some(1), ..Default::default() };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        snapshot!(snapshot_bitmap(&batches), @"[0,1,]");
+
+        let query = Query { from: Some(2), ..Default::default() };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        snapshot!(snapshot_bitmap(&batches), @"[0,1,2,]");
+
+        let query = Query { from: Some(1), limit: Some(1), ..Default::default() };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        snapshot!(snapshot_bitmap(&batches), @"[1,]");
+
+        let query = Query { from: Some(1), limit: Some(2), ..Default::default() };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        snapshot!(snapshot_bitmap(&batches), @"[0,1,]");
+    }
+
+    #[test]
+    fn query_batches_simple() {
+        let start_time = OffsetDateTime::now_utc();
+
+        let (index_scheduler, mut handle) =
+            IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
+
+        let kind = index_creation_task("catto", "mouse");
+        let _task = index_scheduler.register(kind, None, false).unwrap();
+        let kind = index_creation_task("doggo", "sheep");
+        let _task = index_scheduler.register(kind, None, false).unwrap();
+        let kind = index_creation_task("whalo", "fish");
+        let _task = index_scheduler.register(kind, None, false).unwrap();
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
+
+        handle.advance_till([Start, BatchCreated]);
+
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+        let proc = index_scheduler.processing_tasks.read().unwrap().clone();
+
+        let query = Query { statuses: Some(vec![Status::Processing]), ..Default::default() };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        snapshot!(snapshot_bitmap(&batches), @"[0,]"); // only the processing batch in the first tick
+
+        let query = Query { statuses: Some(vec![Status::Enqueued]), ..Default::default() };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        snapshot!(snapshot_bitmap(&batches), @"[]"); // The batches don't contains any enqueued tasks
+
+        let query = Query {
+            statuses: Some(vec![Status::Enqueued, Status::Processing]),
+            ..Default::default()
+        };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        snapshot!(snapshot_bitmap(&batches), @"[0,]"); // both enqueued and processing tasks in the first tick
+
+        let query = Query {
+            statuses: Some(vec![Status::Enqueued, Status::Processing]),
+            after_started_at: Some(start_time),
+            ..Default::default()
+        };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        // both enqueued and processing tasks in the first tick, but limited to those with a started_at
+        // that comes after the start of the test, which should excludes the enqueued tasks
+        snapshot!(snapshot_bitmap(&batches), @"[0,]");
+
+        let query = Query {
+            statuses: Some(vec![Status::Enqueued, Status::Processing]),
+            before_started_at: Some(start_time),
+            ..Default::default()
+        };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        // both enqueued and processing tasks in the first tick, but limited to those with a started_at
+        // that comes before the start of the test, which should excludes all of them
+        snapshot!(snapshot_bitmap(&batches), @"[]");
+
+        let query = Query {
+            statuses: Some(vec![Status::Enqueued, Status::Processing]),
+            after_started_at: Some(start_time),
+            before_started_at: Some(start_time + Duration::minutes(1)),
+            ..Default::default()
+        };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        // both enqueued and processing tasks in the first tick, but limited to those with a started_at
+        // that comes after the start of the test and before one minute after the start of the test,
+        // which should exclude the enqueued tasks and include the only processing task
+        snapshot!(snapshot_bitmap(&batches), @"[0,]");
+
+        handle.advance_till([
+            InsideProcessBatch,
+            InsideProcessBatch,
+            ProcessBatchSucceeded,
+            AfterProcessing,
+            Start,
+            BatchCreated,
+        ]);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after-advancing-a-bit");
+
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+        let proc = index_scheduler.processing_tasks.read().unwrap().clone();
+
+        let second_start_time = OffsetDateTime::now_utc();
+
+        let query = Query {
+            statuses: Some(vec![Status::Succeeded, Status::Processing]),
+            after_started_at: Some(start_time),
+            before_started_at: Some(start_time + Duration::minutes(1)),
+            ..Default::default()
+        };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        // both succeeded and processing tasks in the first tick, but limited to those with a started_at
+        // that comes after the start of the test and before one minute after the start of the test,
+        // which should include all tasks
+        snapshot!(snapshot_bitmap(&batches), @"[0,1,]");
+
+        let query = Query {
+            statuses: Some(vec![Status::Succeeded, Status::Processing]),
+            before_started_at: Some(start_time),
+            ..Default::default()
+        };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        // both succeeded and processing tasks in the first tick, but limited to those with a started_at
+        // that comes before the start of the test, which should exclude all tasks
+        snapshot!(snapshot_bitmap(&batches), @"[]");
+
+        let query = Query {
+            statuses: Some(vec![Status::Enqueued, Status::Succeeded, Status::Processing]),
+            after_started_at: Some(second_start_time),
+            before_started_at: Some(second_start_time + Duration::minutes(1)),
+            ..Default::default()
+        };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        // both succeeded and processing tasks in the first tick, but limited to those with a started_at
+        // that comes after the start of the second part of the test and before one minute after the
+        // second start of the test, which should exclude all tasks
+        snapshot!(snapshot_bitmap(&batches), @"[]");
+
+        // now we make one more batch, the started_at field of the new tasks will be past `second_start_time`
+        handle.advance_till([
+            InsideProcessBatch,
+            InsideProcessBatch,
+            ProcessBatchSucceeded,
+            AfterProcessing,
+            Start,
+            BatchCreated,
+        ]);
+
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+        let proc = index_scheduler.processing_tasks.read().unwrap().clone();
+
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        // we run the same query to verify that, and indeed find that the last task is matched
+        snapshot!(snapshot_bitmap(&batches), @"[2,]");
+
+        let query = Query {
+            statuses: Some(vec![Status::Enqueued, Status::Succeeded, Status::Processing]),
+            after_started_at: Some(second_start_time),
+            before_started_at: Some(second_start_time + Duration::minutes(1)),
+            ..Default::default()
+        };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        // enqueued, succeeded, or processing tasks started after the second part of the test, should
+        // again only return the last task
+        snapshot!(snapshot_bitmap(&batches), @"[2,]");
+
+        handle.advance_till([ProcessBatchFailed, AfterProcessing]);
+        let rtxn = index_scheduler.read_txn().unwrap();
+        let proc = index_scheduler.processing_tasks.read().unwrap().clone();
+
+        // now the last task should have failed
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "end");
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        // so running the last query should return nothing
+        snapshot!(snapshot_bitmap(&batches), @"[]");
+
+        let query = Query {
+            statuses: Some(vec![Status::Failed]),
+            after_started_at: Some(second_start_time),
+            before_started_at: Some(second_start_time + Duration::minutes(1)),
+            ..Default::default()
+        };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        // but the same query on failed tasks should return the last task
+        snapshot!(snapshot_bitmap(&batches), @"[2,]");
+
+        let query = Query {
+            statuses: Some(vec![Status::Failed]),
+            after_started_at: Some(second_start_time),
+            before_started_at: Some(second_start_time + Duration::minutes(1)),
+            ..Default::default()
+        };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        // but the same query on failed tasks should return the last task
+        snapshot!(snapshot_bitmap(&batches), @"[2,]");
+
+        let query = Query {
+            statuses: Some(vec![Status::Failed]),
+            uids: Some(vec![1]),
+            after_started_at: Some(second_start_time),
+            before_started_at: Some(second_start_time + Duration::minutes(1)),
+            ..Default::default()
+        };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        // same query but with an invalid uid
+        snapshot!(snapshot_bitmap(&batches), @"[]");
+
+        let query = Query {
+            statuses: Some(vec![Status::Failed]),
+            uids: Some(vec![2]),
+            after_started_at: Some(second_start_time),
+            before_started_at: Some(second_start_time + Duration::minutes(1)),
+            ..Default::default()
+        };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        // same query but with a valid uid
+        snapshot!(snapshot_bitmap(&batches), @"[2,]");
+    }
+
+    #[test]
+    fn query_batches_special_rules() {
+        let (index_scheduler, mut handle) =
+            IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
+
+        let kind = index_creation_task("catto", "mouse");
+        let _task = index_scheduler.register(kind, None, false).unwrap();
+        let kind = index_creation_task("doggo", "sheep");
+        let _task = index_scheduler.register(kind, None, false).unwrap();
+        let kind = KindWithContent::IndexSwap {
+            swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "doggo".to_owned()) }],
+        };
+        let _task = index_scheduler.register(kind, None, false).unwrap();
+        let kind = KindWithContent::IndexSwap {
+            swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "whalo".to_owned()) }],
+        };
+        let _task = index_scheduler.register(kind, None, false).unwrap();
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
+
+        handle.advance_till([Start, BatchCreated]);
+
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+        let proc = index_scheduler.processing_tasks.read().unwrap().clone();
+
+        let query = Query { index_uids: Some(vec!["catto".to_owned()]), ..Default::default() };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        // only the first task associated with catto is returned, the indexSwap tasks are excluded!
+        snapshot!(snapshot_bitmap(&batches), @"[0,]");
+
+        let query = Query { index_uids: Some(vec!["catto".to_owned()]), ..Default::default() };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(
+                &rtxn,
+                &proc,
+                &query,
+                &AuthFilter::with_allowed_indexes(
+                    vec![IndexUidPattern::new_unchecked("doggo")].into_iter().collect(),
+                ),
+            )
+            .unwrap();
+        // we have asked for only the tasks associated with catto, but are only authorized to retrieve the tasks
+        // associated with doggo -> empty result
+        snapshot!(snapshot_bitmap(&batches), @"[]");
+
+        drop(rtxn);
+        // We're going to advance and process all the batches for the next query to actually hit the db
+        handle.advance_till([
+            InsideProcessBatch,
+            InsideProcessBatch,
+            ProcessBatchSucceeded,
+            AfterProcessing,
+        ]);
+        handle.advance_one_successful_batch();
+        handle.advance_n_failed_batches(2);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after-processing-everything");
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+
+        let query = Query::default();
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(
+                &rtxn,
+                &proc,
+                &query,
+                &AuthFilter::with_allowed_indexes(
+                    vec![IndexUidPattern::new_unchecked("doggo")].into_iter().collect(),
+                ),
+            )
+            .unwrap();
+        // we asked for all the tasks, but we are only authorized to retrieve the doggo tasks
+        // -> only the index creation of doggo should be returned
+        snapshot!(snapshot_bitmap(&batches), @"[1,]");
+
+        let query = Query::default();
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(
+                &rtxn,
+                &proc,
+                &query,
+                &AuthFilter::with_allowed_indexes(
+                    vec![
+                        IndexUidPattern::new_unchecked("catto"),
+                        IndexUidPattern::new_unchecked("doggo"),
+                    ]
+                    .into_iter()
+                    .collect(),
+                ),
+            )
+            .unwrap();
+        // we asked for all the tasks, but we are only authorized to retrieve the doggo and catto tasks
+        // -> all tasks except the swap of catto with whalo are returned
+        snapshot!(snapshot_bitmap(&batches), @"[0,1,]");
+
+        let query = Query::default();
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        // we asked for all the tasks with all index authorized -> all tasks returned
+        snapshot!(snapshot_bitmap(&batches), @"[0,1,2,3,]");
+    }
+
+    #[test]
+    fn query_batches_canceled_by() {
+        let (index_scheduler, mut handle) =
+            IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
+
+        let kind = index_creation_task("catto", "mouse");
+        let _ = index_scheduler.register(kind, None, false).unwrap();
+        let kind = index_creation_task("doggo", "sheep");
+        let _ = index_scheduler.register(kind, None, false).unwrap();
+        let kind = KindWithContent::IndexSwap {
+            swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "doggo".to_owned()) }],
+        };
+        let _task = index_scheduler.register(kind, None, false).unwrap();
+
+        handle.advance_n_successful_batches(1);
+        let kind = KindWithContent::TaskCancelation {
+            query: "test_query".to_string(),
+            tasks: [0, 1, 2, 3].into_iter().collect(),
+        };
+        let task_cancelation = index_scheduler.register(kind, None, false).unwrap();
+        handle.advance_n_successful_batches(1);
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
+
+        let rtxn = index_scheduler.read_txn().unwrap();
+        let proc = index_scheduler.processing_tasks.read().unwrap().clone();
+        let query = Query { canceled_by: Some(vec![task_cancelation.uid]), ..Query::default() };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+            .unwrap();
+        // The batch zero was the index creation task, the 1 is the task cancellation
+        snapshot!(snapshot_bitmap(&batches), @"[1,]");
+
+        let query = Query { canceled_by: Some(vec![task_cancelation.uid]), ..Query::default() };
+        let (batches, _) = index_scheduler
+            .get_batch_ids_from_authorized_indexes(
+                &rtxn,
+                &proc,
+                &query,
+                &AuthFilter::with_allowed_indexes(
+                    vec![IndexUidPattern::new_unchecked("doggo")].into_iter().collect(),
+                ),
+            )
+            .unwrap();
+        // Return only 1 because the user is not authorized to see task 2
+        snapshot!(snapshot_bitmap(&batches), @"[1,]");
+    }
+
+    #[test]
     fn fail_in_process_batch_for_index_creation() {
         let (index_scheduler, mut handle) =
             IndexScheduler::test(true, vec![(1, FailureLocation::InsideProcessBatch)]);
@@ -5066,9 +5967,9 @@ mod tests {
         let kind = KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None };
         let task = index_scheduler.register(kind, None, true).unwrap();
         snapshot!(task.uid, @"0");
-        snapshot!(snapshot_index_scheduler(&index_scheduler), @r###"
+        snapshot!(snapshot_index_scheduler(&index_scheduler), @r"
         ### Autobatching Enabled = true
-        ### Processing Tasks:
+        ### Processing batch None:
         []
         ----------------------------------------------------------------------
         ### All Tasks:
@@ -5091,17 +5992,33 @@ mod tests {
         ----------------------------------------------------------------------
         ### Finished At:
         ----------------------------------------------------------------------
+        ### All Batches:
+        ----------------------------------------------------------------------
+        ### Batch to tasks mapping:
+        ----------------------------------------------------------------------
+        ### Batches Status:
+        ----------------------------------------------------------------------
+        ### Batches Kind:
+        ----------------------------------------------------------------------
+        ### Batches Index Tasks:
+        ----------------------------------------------------------------------
+        ### Batches Enqueued At:
+        ----------------------------------------------------------------------
+        ### Batches Started At:
+        ----------------------------------------------------------------------
+        ### Batches Finished At:
+        ----------------------------------------------------------------------
         ### File Store:
 
         ----------------------------------------------------------------------
-        "###);
+        ");
 
         let kind = KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None };
         let task = index_scheduler.register(kind, Some(12), true).unwrap();
         snapshot!(task.uid, @"12");
-        snapshot!(snapshot_index_scheduler(&index_scheduler), @r###"
+        snapshot!(snapshot_index_scheduler(&index_scheduler), @r"
         ### Autobatching Enabled = true
-        ### Processing Tasks:
+        ### Processing batch None:
         []
         ----------------------------------------------------------------------
         ### All Tasks:
@@ -5124,10 +6041,26 @@ mod tests {
         ----------------------------------------------------------------------
         ### Finished At:
         ----------------------------------------------------------------------
+        ### All Batches:
+        ----------------------------------------------------------------------
+        ### Batch to tasks mapping:
+        ----------------------------------------------------------------------
+        ### Batches Status:
+        ----------------------------------------------------------------------
+        ### Batches Kind:
+        ----------------------------------------------------------------------
+        ### Batches Index Tasks:
+        ----------------------------------------------------------------------
+        ### Batches Enqueued At:
+        ----------------------------------------------------------------------
+        ### Batches Started At:
+        ----------------------------------------------------------------------
+        ### Batches Finished At:
+        ----------------------------------------------------------------------
         ### File Store:
 
         ----------------------------------------------------------------------
-        "###);
+        ");
     }
 
     #[test]

@@ -1735,46 +1735,51 @@ fn format_fields(
     // select the attributes to retrieve
     let displayable_names =
         displayable_ids.iter().map(|&fid| field_ids_map.name(fid).expect("Missing field name"));
-    permissive_json_pointer::map_leaf_values(&mut document, displayable_names, |key, value| {
-        // To get the formatting option of each key we need to see all the rules that applies
-        // to the value and merge them together. eg. If a user said he wanted to highlight `doggo`
-        // and crop `doggo.name`. `doggo.name` needs to be highlighted + cropped while `doggo.age` is only
-        // highlighted.
-        // Warn: The time to compute the format list scales with the number of fields to format;
-        // cumulated with map_leaf_values that iterates over all the nested fields, it gives a quadratic complexity:
-        // d*f where d is the total number of fields to display and f is the total number of fields to format.
-        let format = formatting_fields_options
-            .iter()
-            .filter(|(name, _option)| {
-                milli::is_faceted_by(name, key) || milli::is_faceted_by(key, name)
-            })
-            .map(|(_, option)| **option)
-            .reduce(|acc, option| acc.merge(option));
-        let mut infos = Vec::new();
-
-        // if no locales has been provided, we try to find the locales in the localized_attributes.
-        let locales = locales.or_else(|| {
-            localized_attributes
+    permissive_json_pointer::map_leaf_values(
+        &mut document,
+        displayable_names,
+        |key, array_indices, value| {
+            // To get the formatting option of each key we need to see all the rules that applies
+            // to the value and merge them together. eg. If a user said he wanted to highlight `doggo`
+            // and crop `doggo.name`. `doggo.name` needs to be highlighted + cropped while `doggo.age` is only
+            // highlighted.
+            // Warn: The time to compute the format list scales with the number of fields to format;
+            // cumulated with map_leaf_values that iterates over all the nested fields, it gives a quadratic complexity:
+            // d*f where d is the total number of fields to display and f is the total number of fields to format.
+            let format = formatting_fields_options
                 .iter()
-                .find(|rule| rule.match_str(key))
-                .map(LocalizedAttributesRule::locales)
-        });
+                .filter(|(name, _option)| {
+                    milli::is_faceted_by(name, key) || milli::is_faceted_by(key, name)
+                })
+                .map(|(_, option)| **option)
+                .reduce(|acc, option| acc.merge(option));
+            let mut infos = Vec::new();
 
-        *value = format_value(
-            std::mem::take(value),
-            builder,
-            format,
-            &mut infos,
-            compute_matches,
-            locales,
-        );
+            // if no locales has been provided, we try to find the locales in the localized_attributes.
+            let locales = locales.or_else(|| {
+                localized_attributes
+                    .iter()
+                    .find(|rule| rule.match_str(key))
+                    .map(LocalizedAttributesRule::locales)
+            });
 
-        if let Some(matches) = matches_position.as_mut() {
-            if !infos.is_empty() {
-                matches.insert(key.to_owned(), infos);
+            *value = format_value(
+                std::mem::take(value),
+                builder,
+                format,
+                &mut infos,
+                compute_matches,
+                array_indices,
+                locales,
+            );
+
+            if let Some(matches) = matches_position.as_mut() {
+                if !infos.is_empty() {
+                    matches.insert(key.to_owned(), infos);
+                }
             }
-        }
-    });
+        },
+    );
 
     let selectors = formatted_options
         .keys()
@@ -1792,13 +1797,14 @@ fn format_value(
     format_options: Option<FormatOptions>,
     infos: &mut Vec<MatchBounds>,
     compute_matches: bool,
+    array_indices: &[usize],
     locales: Option<&[Language]>,
 ) -> Value {
     match value {
         Value::String(old_string) => {
             let mut matcher = builder.build(&old_string, locales);
             if compute_matches {
-                let matches = matcher.matches();
+                let matches = matcher.matches(array_indices);
                 infos.extend_from_slice(&matches[..]);
             }
 
@@ -1810,51 +1816,15 @@ fn format_value(
                 None => Value::String(old_string),
             }
         }
-        Value::Array(values) => Value::Array(
-            values
-                .into_iter()
-                .map(|v| {
-                    format_value(
-                        v,
-                        builder,
-                        format_options.map(|format_options| FormatOptions {
-                            highlight: format_options.highlight,
-                            crop: None,
-                        }),
-                        infos,
-                        compute_matches,
-                        locales,
-                    )
-                })
-                .collect(),
-        ),
-        Value::Object(object) => Value::Object(
-            object
-                .into_iter()
-                .map(|(k, v)| {
-                    (
-                        k,
-                        format_value(
-                            v,
-                            builder,
-                            format_options.map(|format_options| FormatOptions {
-                                highlight: format_options.highlight,
-                                crop: None,
-                            }),
-                            infos,
-                            compute_matches,
-                            locales,
-                        ),
-                    )
-                })
-                .collect(),
-        ),
+        // `map_leaf_values` makes sure this is only called for leaf fields
+        Value::Array(_) => unreachable!(),
+        Value::Object(_) => unreachable!(),
         Value::Number(number) => {
             let s = number.to_string();
 
             let mut matcher = builder.build(&s, locales);
             if compute_matches {
-                let matches = matcher.matches();
+                let matches = matcher.matches(array_indices);
                 infos.extend_from_slice(&matches[..]);
             }
 

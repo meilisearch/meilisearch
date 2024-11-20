@@ -969,6 +969,7 @@ async fn bad_settings() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -1014,6 +1015,7 @@ async fn bad_settings() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -1063,6 +1065,7 @@ async fn add_vector_and_user_provided() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1159,6 +1162,7 @@ async fn server_returns_bad_request() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -1199,6 +1203,7 @@ async fn server_returns_bad_request() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "settingsUpdate",
@@ -1232,6 +1237,7 @@ async fn server_returns_bad_request() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -1276,6 +1282,7 @@ async fn server_returns_bad_response() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -1329,6 +1336,7 @@ async fn server_returns_bad_response() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -1384,6 +1392,7 @@ async fn server_returns_bad_response() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -1439,6 +1448,7 @@ async fn server_returns_bad_response() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -1504,6 +1514,7 @@ async fn server_returns_bad_response() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -1571,6 +1582,7 @@ async fn server_returns_multiple() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1676,6 +1688,7 @@ async fn server_single_input_returns_in_array() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1781,6 +1794,7 @@ async fn server_raw() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1878,6 +1892,7 @@ async fn server_custom_header() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -1917,6 +1932,7 @@ async fn server_custom_header() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -1959,6 +1975,7 @@ async fn server_custom_header() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "settingsUpdate",
@@ -2005,6 +2022,7 @@ async fn searchable_reindex() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "settingsUpdate",
@@ -2041,6 +2059,7 @@ async fn searchable_reindex() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -2069,6 +2088,7 @@ async fn searchable_reindex() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",

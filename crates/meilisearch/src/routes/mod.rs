@@ -19,6 +19,7 @@ use crate::Opt;
 const PAGINATION_DEFAULT_LIMIT: usize = 20;
 
 mod api_key;
+pub mod batches;
 mod dump;
 pub mod features;
 pub mod indexes;
@@ -32,6 +33,7 @@ pub mod tasks;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::scope("/tasks").configure(tasks::configure))
+        .service(web::scope("/batches").configure(batches::configure))
         .service(web::resource("/health").route(web::get().to(get_health)))
         .service(web::scope("/logs").configure(logs::configure))
         .service(web::scope("/keys").configure(api_key::configure))

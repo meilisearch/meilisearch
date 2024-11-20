@@ -222,7 +222,7 @@ async fn task_bad_limit() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Unknown parameter `limit`: expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
+      "message": "Unknown parameter `limit`: expected one of `uids`, `batchUids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
@@ -233,7 +233,7 @@ async fn task_bad_limit() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Unknown parameter `limit`: expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
+      "message": "Unknown parameter `limit`: expected one of `uids`, `batchUids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
@@ -260,7 +260,7 @@ async fn task_bad_from() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Unknown parameter `from`: expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
+      "message": "Unknown parameter `from`: expected one of `uids`, `batchUids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
@@ -271,12 +271,61 @@ async fn task_bad_from() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Unknown parameter `from`: expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
+      "message": "Unknown parameter `from`: expected one of `uids`, `batchUids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
     }
     "###);
+}
+
+#[actix_rt::test]
+async fn task_bad_reverse() {
+    let server = Server::new_shared();
+
+    let (response, code) = server.tasks_filter("reverse=doggo").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Invalid value in parameter `reverse`: could not parse `doggo` as a boolean, expected either `true` or `false`",
+      "code": "invalid_task_reverse",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_task_reverse"
+    }
+    "###);
+
+    let (response, code) = server.tasks_filter("reverse=*").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Invalid value in parameter `reverse`: could not parse `*` as a boolean, expected either `true` or `false`",
+      "code": "invalid_task_reverse",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_task_reverse"
+    }
+    "###);
+
+    let (response, code) = server.cancel_tasks("reverse=doggo").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r#"
+    {
+      "message": "Unknown parameter `reverse`: expected one of `uids`, `batchUids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "#);
+
+    let (response, code) = server.delete_tasks("reverse=doggo").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r#"
+    {
+      "message": "Unknown parameter `reverse`: expected one of `uids`, `batchUids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "#);
 }
 
 #[actix_rt::test]

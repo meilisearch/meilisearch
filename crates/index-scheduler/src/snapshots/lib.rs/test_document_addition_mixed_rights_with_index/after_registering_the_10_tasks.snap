@@ -1,12 +1,13 @@
 ---
-source: index-scheduler/src/lib.rs
+source: crates/index-scheduler/src/lib.rs
+snapshot_kind: text
 ---
 ### Autobatching Enabled = true
-### Processing Tasks:
+### Processing batch None:
 []
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, status: succeeded, details: { primary_key: None }, kind: IndexCreation { index_uid: "doggos", primary_key: None }}
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: None }, kind: IndexCreation { index_uid: "doggos", primary_key: None }}
 1 {uid: 1, status: enqueued, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: false }}
 2 {uid: 2, status: enqueued, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 1, allow_index_creation: true }}
 3 {uid: 3, status: enqueued, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000002, documents_count: 1, allow_index_creation: false }}
@@ -55,6 +56,30 @@ doggos: { number_of_documents: 0, field_distribution: {} }
 ### Finished At:
 [timestamp] [0,]
 ----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, details: {}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"doggos":1}}, }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,]
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,]
+----------------------------------------------------------------------
+### Batches Kind:
+"indexCreation" [0,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+doggos [0,]
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+----------------------------------------------------------------------
 ### File Store:
 00000000-0000-0000-0000-000000000000
 00000000-0000-0000-0000-000000000001
@@ -68,4 +93,3 @@ doggos: { number_of_documents: 0, field_distribution: {} }
 00000000-0000-0000-0000-000000000009
 
 ----------------------------------------------------------------------
-
