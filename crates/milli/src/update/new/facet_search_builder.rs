@@ -204,7 +204,7 @@ fn merge_btreesets(
         result.extend(add);
     }
 
-    /// TODO remove allocation
+    // TODO remove allocation
     let result = SerdeJson::bytes_encode(&result).map_err(heed::Error::Encoding)?.into_owned();
     if Some(result.as_ref()) == current {
         Ok(Operation::Ignore)

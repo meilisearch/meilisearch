@@ -133,7 +133,6 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
 ) -> Result<hashbrown::HashMap<&'pl str, PayloadOperations<'pl>>> {
     let mut new_docids_version_offsets = hashbrown::HashMap::<&str, PayloadOperations<'pl>>::new();
 
-    /// TODO manage the error
     let mut previous_offset = 0;
     let mut iter = Deserializer::from_slice(payload).into_iter::<&RawValue>();
     while let Some(doc) = iter.next().transpose().map_err(InternalError::SerdeJson)? {
@@ -160,6 +159,7 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
 
             primary_key.get_or_insert(pk)
         } else {
+            // primary key was retrieved in the first iteration or in a previous payload
             primary_key.as_ref().unwrap()
         };
 

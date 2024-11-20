@@ -26,8 +26,8 @@ impl<I> PartialDump<I> {
         concurrent_available_ids: &'index ConcurrentAvailableIds,
         primary_key: &'index PrimaryKey,
     ) -> PartialDumpChanges<'index, I> {
-        /// Note for future self:
-        ///   - We recommend sending chunks of documents in this `PartialDumpIndexer` we therefore need to create a custom take_while_size method (that doesn't drop items).
+        // Note for future self:
+        //   - We recommend sending chunks of documents in this `PartialDumpIndexer` we therefore need to create a custom take_while_size method (that doesn't drop items).
         PartialDumpChanges { iter: self.iter, concurrent_available_ids, primary_key }
     }
 }
