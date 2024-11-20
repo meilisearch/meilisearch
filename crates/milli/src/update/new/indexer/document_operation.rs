@@ -29,8 +29,9 @@ impl<'pl> DocumentOperation<'pl> {
     }
 
     /// TODO please give me a type
-    /// The payload is expected to be in the grenad format
+    /// The payload is expected to be in the NDJSON format
     pub fn add_documents(&mut self, payload: &'pl Mmap) -> Result<()> {
+        #[cfg(unix)]
         payload.advise(memmap2::Advice::Sequential)?;
         self.operations.push(Payload::Addition(&payload[..]));
         Ok(())
